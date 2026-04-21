@@ -1,0 +1,19 @@
+# Локальные настройки Claude Code — у каждого свои
+.claude/settings.local.json
+.claude/shared/drafts/
+
+# Логи
+excalidraw.log
+*.log
+
+# macOS
+.DS_Store
+
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
