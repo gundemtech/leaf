@@ -8,11 +8,12 @@ import LeafControlCore
 
 struct MenuBarContent: View {
     @Environment(\.openSettings) private var openSettings
+    @Environment(LaunchAgentService.self) private var launchAgent
 
     var body: some View {
-        Text("LeafControl — Phase 0")
+        Text("LeafControl — Phase 1.2")
             .font(.headline)
-        Text("Scaffolding only. Real UI lands in Phase 1.")
+        Text("Agent: \(launchAgent.statusDescription)")
             .font(.caption)
             .foregroundStyle(.secondary)
 
