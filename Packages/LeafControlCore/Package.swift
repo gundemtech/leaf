@@ -6,16 +6,27 @@ let package = Package(
     name: "LeafControlCore",
     platforms: [.macOS(.v14)],
     products: [
-        .library(name: "LeafControlCore", targets: ["LeafControlCore"])
+        // Public API — линкуется всегда всеми таргетами.
+        .library(name: "LeafControlCore", targets: ["LeafControlCore"]),
+        // Moat-target — линкуется всегда, но реальные файлы (Prod/**)
+        // живут только на dev-машине (см. .gitignore). На публичном клоне
+        // содержит только Placeholder.swift → собирается без ошибок.
+        .library(name: "LeafControlCorePrivate", targets: ["LeafControlCorePrivate"])
+    ],
+    dependencies: [
+        .package(url: "https://github.com/groue/GRDB.swift", exact: "7.10.0")
     ],
     targets: [
         .target(
             name: "LeafControlCore",
-            dependencies: ["LeafControlCorePrivate"],
+            dependencies: [
+                .product(name: "GRDB", package: "GRDB.swift")
+            ],
             path: "Sources/LeafControlCore"
         ),
         .target(
             name: "LeafControlCorePrivate",
+            dependencies: ["LeafControlCore"],
             path: "Sources/LeafControlCorePrivate"
         ),
         .testTarget(

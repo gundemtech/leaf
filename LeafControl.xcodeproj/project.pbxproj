@@ -8,6 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		065215E1C75AB8E8F58D15F7 /* LeafControlMCP in Embed CLI Helpers */ = {isa = PBXBuildFile; fileRef = C8DAA11FC3F5FFF6580F491A /* LeafControlMCP */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		0B762EFD0076DDEFF0180D89 /* LeafControlCorePrivate in Frameworks */ = {isa = PBXBuildFile; productRef = 7453218574ED9E25C1E2249B /* LeafControlCorePrivate */; };
+		32811FB1AE98CCAF84012E39 /* LeafControlCorePrivate in Frameworks */ = {isa = PBXBuildFile; productRef = 8F8E34D2D7EE02F8A517B0A3 /* LeafControlCorePrivate */; };
+		4BC90D9CB73EB9BBDD60F841 /* LeafControlCorePrivate in Frameworks */ = {isa = PBXBuildFile; productRef = DADE63FF43B0419C4A7B4ABB /* LeafControlCorePrivate */; };
 		6BA6FF9CECCDF93CF297CCB0 /* LeafControlCore in Frameworks */ = {isa = PBXBuildFile; productRef = B046993ED3685984462393D9 /* LeafControlCore */; };
 		AB01C171AADFFAA2C54DC33D /* LeafControlAgent in Embed CLI Helpers */ = {isa = PBXBuildFile; fileRef = B0EC45208EBCB3682E080571 /* LeafControlAgent */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		E0192A42BE48990A6ABC3993 /* LeafControlCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5C6E93B7D5BA63F53057E5BD /* LeafControlCore */; };
@@ -50,6 +53,7 @@
 		B0EC45208EBCB3682E080571 /* LeafControlAgent */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = LeafControlAgent; sourceTree = BUILT_PRODUCTS_DIR; };
 		C8DAA11FC3F5FFF6580F491A /* LeafControlMCP */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = LeafControlMCP; sourceTree = BUILT_PRODUCTS_DIR; };
 		D81CFDB62F97B50500D2D372 /* LeafControl.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LeafControl.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F5623F079AF6FD8D42A82215 /* Base.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Config/Base.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -78,6 +82,13 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		14B6E7581FBDB34479727CBD /* Config */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
 		603A3C6446C95A90C052E05C /* LeafControlMCP */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -110,6 +121,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				6BA6FF9CECCDF93CF297CCB0 /* LeafControlCore in Frameworks */,
+				32811FB1AE98CCAF84012E39 /* LeafControlCorePrivate in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -118,6 +130,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F3E5D5DB835340572123E0D5 /* LeafControlCore in Frameworks */,
+				4BC90D9CB73EB9BBDD60F841 /* LeafControlCorePrivate in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -126,6 +139,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E0192A42BE48990A6ABC3993 /* LeafControlCore in Frameworks */,
+				0B762EFD0076DDEFF0180D89 /* LeafControlCorePrivate in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -139,6 +153,8 @@
 				D81CFDB72F97B50500D2D372 /* Products */,
 				7E3BE3513A4F5CA769F72F4A /* LeafControlAgent */,
 				603A3C6446C95A90C052E05C /* LeafControlMCP */,
+				14B6E7581FBDB34479727CBD /* Config */,
+				F5623F079AF6FD8D42A82215 /* Base.xcconfig */,
 			);
 			sourceTree = "<group>";
 		};
@@ -172,6 +188,7 @@
 			name = LeafControlMCP;
 			packageProductDependencies = (
 				B046993ED3685984462393D9 /* LeafControlCore */,
+				8F8E34D2D7EE02F8A517B0A3 /* LeafControlCorePrivate */,
 			);
 			productName = LeafControlMCP;
 			productReference = C8DAA11FC3F5FFF6580F491A /* LeafControlMCP */;
@@ -194,6 +211,7 @@
 			name = LeafControlAgent;
 			packageProductDependencies = (
 				DF87B75D3DB9208E396D0AB8 /* LeafControlCore */,
+				DADE63FF43B0419C4A7B4ABB /* LeafControlCorePrivate */,
 			);
 			productName = LeafControlAgent;
 			productReference = B0EC45208EBCB3682E080571 /* LeafControlAgent */;
@@ -220,6 +238,7 @@
 			name = LeafControl;
 			packageProductDependencies = (
 				5C6E93B7D5BA63F53057E5BD /* LeafControlCore */,
+				7453218574ED9E25C1E2249B /* LeafControlCorePrivate */,
 			);
 			productName = LeafControl;
 			productReference = D81CFDB62F97B50500D2D372 /* LeafControl.app */;
@@ -316,6 +335,7 @@
 /* Begin XCBuildConfiguration section */
 		7469B0ABD5182A68AFBC1158 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Base.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = LeafControlAgent/LeafControlAgent.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -328,6 +348,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = tech.gundem.leafcontrol.agent;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) $(LEAFCONTROL_FLAGS)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -338,6 +359,7 @@
 		};
 		79A584B58BF097FFC6663BF1 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Base.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = LeafControlAgent/LeafControlAgent.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -350,6 +372,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = tech.gundem.leafcontrol.agent;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) $(LEAFCONTROL_FLAGS)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -360,6 +383,7 @@
 		};
 		947D409C0578F1815DB64B00 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Base.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = LeafControlMCP/LeafControlMCP.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -372,6 +396,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = tech.gundem.leafcontrol.mcp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) $(LEAFCONTROL_FLAGS)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -382,6 +407,7 @@
 		};
 		C7BFE675906ED75A763CFBFC /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Base.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = LeafControlMCP/LeafControlMCP.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -394,6 +420,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = tech.gundem.leafcontrol.mcp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) $(LEAFCONTROL_FLAGS)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -404,6 +431,7 @@
 		};
 		D81CFDBF2F97B50700D2D372 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Base.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -461,13 +489,14 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG $(LEAFCONTROL_FLAGS)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
 			name = Debug;
 		};
 		D81CFDC02F97B50700D2D372 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Base.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -518,12 +547,14 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) $(LEAFCONTROL_FLAGS)";
 				SWIFT_COMPILATION_MODE = wholemodule;
 			};
 			name = Release;
 		};
 		D81CFDC22F97B50700D2D372 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Base.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -548,6 +579,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) $(LEAFCONTROL_FLAGS)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -558,6 +590,7 @@
 		};
 		D81CFDC32F97B50700D2D372 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Base.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -582,6 +615,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) $(LEAFCONTROL_FLAGS)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -644,10 +678,25 @@
 			package = 7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "LeafControlCore" */;
 			productName = LeafControlCore;
 		};
+		7453218574ED9E25C1E2249B /* LeafControlCorePrivate */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "LeafControlCore" */;
+			productName = LeafControlCorePrivate;
+		};
+		8F8E34D2D7EE02F8A517B0A3 /* LeafControlCorePrivate */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "LeafControlCore" */;
+			productName = LeafControlCorePrivate;
+		};
 		B046993ED3685984462393D9 /* LeafControlCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "LeafControlCore" */;
 			productName = LeafControlCore;
+		};
+		DADE63FF43B0419C4A7B4ABB /* LeafControlCorePrivate */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "LeafControlCore" */;
+			productName = LeafControlCorePrivate;
 		};
 		DF87B75D3DB9208E396D0AB8 /* LeafControlCore */ = {
 			isa = XCSwiftPackageProductDependency;

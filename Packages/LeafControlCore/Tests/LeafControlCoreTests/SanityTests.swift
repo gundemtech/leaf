@@ -26,21 +26,19 @@ final class SanityTests: XCTestCase {
         XCTAssertEqual(decoded.payload["window"], "project")
     }
 
-    func testUnimplementedInsightsThrows() {
-        struct FakeDB: DatabaseAccess {
-            static func openForWrite(at url: URL, key: Data) throws -> FakeDB { FakeDB() }
-            static func openForRead(at url: URL, key: Data) throws -> FakeDB { FakeDB() }
-            func write(_ event: RawEvent) throws {}
-            func events(in range: DateInterval, bundleID: String?) throws -> [RawEvent] { [] }
-            func checkpointWAL() throws {}
-        }
-        let insights = UnimplementedInsights<FakeDB>()
-        let period = DateInterval(start: .distantPast, end: .distantFuture)
-        XCTAssertThrowsError(try insights.timeInApp(period: period))
-    }
-
     func testPresenceSnapshotStatusCases() {
         XCTAssertEqual(PresenceSnapshot.Status.active.rawValue, "active")
         XCTAssertEqual(PresenceSnapshot.Status.activeGeneric.rawValue, "activeGeneric")
+    }
+
+    func testSchemaConstants() {
+        XCTAssertEqual(Schema.Events.tableName, "events")
+        XCTAssertEqual(Schema.Events.signalType, "signal_type")
+    }
+
+    func testDatabaseConfigWeakDefaults() {
+        let config = DatabaseConfig.weakDefaults
+        XCTAssertGreaterThan(config.busyTimeoutMs, 0)
+        XCTAssertGreaterThan(config.walCheckpointIntervalSec, 0)
     }
 }

@@ -1,11 +1,20 @@
 import Foundation
 
 /// 12 функций Derived Insights Engine (см. architecture.md).
-/// Phase 0 — только сигнатуры + default bodies которые throw .notImplemented.
-/// Phase 1+ — реальные SQL тела в LeafControlCorePrivate/Insights/*+Impl.swift.
+/// Phase 1.1 — сигнатуры + StubInsights что throws .notImplemented.
+/// Phase 1.3 — ProdInsights с реальными SQL (в LeafControlCorePrivate, gitignored).
+///
+/// Callsite (Agent/App/MCP) выбирает provider компиляцией:
+/// ```swift
+/// import LeafControlCore
+/// #if LEAFCONTROL_PROD
+/// import LeafControlCorePrivate
+/// let insights: any DerivedInsights = ProdInsights(database: db)
+/// #else
+/// let insights: any DerivedInsights = StubInsights(database: db)
+/// #endif
+/// ```
 public protocol DerivedInsights: Sendable {
-    associatedtype DB: DatabaseAccess
-
     // Attention / time
     func timeInApp(period: DateInterval) throws -> [AppTimeEntry]
     func focusSessions(period: DateInterval) throws -> [FocusSession]
@@ -29,10 +38,10 @@ public protocol DerivedInsights: Sendable {
     func activeDaysInRow() throws -> Int
 }
 
-/// Phase-0 заглушка: все методы бросают .notImplemented.
-/// Реальный провайдер — Phase 1, из LeafControlCorePrivate.
-public struct UnimplementedInsights<DB: DatabaseAccess>: DerivedInsights {
-    public init() {}
+/// Phase 1.1 / CI fallback. Все методы бросают .notImplemented.
+public struct StubInsights: DerivedInsights {
+    public let database: Database
+    public init(database: Database) { self.database = database }
 
     public func timeInApp(period: DateInterval) throws -> [AppTimeEntry] { throw LeafControlError.notImplemented }
     public func focusSessions(period: DateInterval) throws -> [FocusSession] { throw LeafControlError.notImplemented }

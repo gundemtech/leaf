@@ -3,12 +3,13 @@
 _Срез "где мы сейчас" за 30 секунд. Обновляется вручную._
 
 ## Последнее обновление
-2026-04-23 (Phase 0 scaffold commit)
+2026-04-24 (Phase 1.1 storage foundation)
 
 ## Где мы
 - Инфраструктура команды готова: `leaf-docs` (whitepaper v1.2) + shared memory в LeafControl-репо.
 - **Whitepaper v1.2 published** в `leaf-docs.gundem.tech`. Структура: 01-vision / 02-product / 03-architecture / 04-market / 05-reference.
 - **Phase 0 done 2026-04-23.** 3-target Xcode project (app + Agent CLI + MCP CLI), local SPM `LeafControlCore` с public API-каркасом (enums, protocols, unimplemented stubs) + moat-target `LeafControlCorePrivate` с tracked Placeholder. Все 3 таргета собираются, helper-бинари embed'нуты в `LeafControl.app/Contents/MacOS/`, CI workflow написан.
+- **Phase 1.1 done 2026-04-24.** Storage foundation: GRDB 7.10 (plain SQLite, SQLCipher → Phase 1.5), `Database` класс с writer/reader режимами через `DatabasePool`, migration M001 (events table + 2 индекса), `KeychainKeyStore` для 32-byte key (готов к использованию в 1.5), moat-injection pattern (optional `Config/Local.xcconfig` → `#if LEAFCONTROL_PROD`). 20/20 тестов зелёные.
 - **Linear переведён в режим "только таски"**. Второй мозг = whitepaper.
 
 ## Ключевые архитектурные решения (актуальный срез)
@@ -26,12 +27,12 @@ _Срез "где мы сейчас" за 30 секунд. Обновляетс�
 - **Distribution:** Sparkle 2 + EdDSA + Cloudflare R2 + notarytool.
 
 ## В работе прямо сейчас
-- Phase 1 (vertical slice): Agent собирает NSWorkspace-события в SQLCipher → MenuBar показывает `timeInApp` → MCP отдаёт `get_timeline`. **~1.5-2 недели.**
+- Phase 1.2 (Agent daemon + LaunchAgent): NSWorkspace collector + CGEventSource idle + SMAppService toggle. ~3 дня.
 
-## Следующим (top 3)
-- GRDB+SQLCipher fork pin (DuckDuckGo vs groue + manual) и schema migration 001 — `events` таблица.
-- Agent collector на NSWorkspace + CGEventSource idle + LaunchAgent через SMAppService.
-- MenuBar UI с реальными данными через Derived Insights + stdio MCP server с одним tool.
+## Следующим (Phase 1.3 → 1.4 → 1.5 → demo)
+- Phase 1.3 — Real `timeInApp` (moat SQL) + MenuBar UI с Swift Chart.
+- Phase 1.4 — stdio MCP server + `get_timeline` tool + `claude mcp add` integration.
+- Phase 1.5 — SQLCipher migration (до любой distribution).
 
 ## Open tensions
 Живут в `leaf-docs/docs/05-reference/open-tensions.md`. Топ-2:

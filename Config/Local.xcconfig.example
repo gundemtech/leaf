@@ -1,0 +1,7 @@
+// Local.xcconfig.example — скопируй в Local.xcconfig (gitignored) и раскомментируй строку,
+// чтобы включить компиляцию с production moat-реализациями (SQL тела, точные пороги и т.д.).
+//
+// Без Local.xcconfig — проект собирается со StubInsights и DatabaseConfig.weakDefaults
+// (работает, но не production-grade).
+
+// LEAFCONTROL_FLAGS = LEAFCONTROL_PROD
