@@ -17,3 +17,14 @@ xcuserdata/
 *.xcworkspace/xcuserdata/
 *.xcodeproj/xcuserdata/
 *.xcodeproj/project.xcworkspace/xcuserdata/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Packages/*/Package.resolved
+*.xcresult
+
+# LeafControlCorePrivate — implementation moat живёт локально.
+# Tracked только Placeholder.swift; все остальные swift-файлы — dev-only.
+Packages/LeafControlCore/Sources/LeafControlCorePrivate/**/*.swift
+!Packages/LeafControlCore/Sources/LeafControlCorePrivate/Placeholder.swift
