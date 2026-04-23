@@ -11,12 +11,61 @@
 ## Правила работы команды
 
 - Язык общения: русский.
-- Задачи ведём в Linear, проект `Leaf`. Есть Linear MCP — читай/создавай issue через него.
-- Второй мозг команды живёт в Linear Docs проекта `Leaf`:
-  - **Session Log** — append-only журнал саммари сессий
-  - **Architecture Decisions** — устойчивые тех-решения
-  - **Conventions** — командные соглашения (процесс, не код)
-  - **Ideas & Principles** — выжимка идей/принципов из сессий
-- Сохранение сессии — слеш-командой `/save-session` (см. `.claude/commands/save-session.md`).
+- **Linear** — только таск-трекер (проект `Leaf`). НЕ второй мозг. Никаких ADR, session logs, ideas docs там не ведём. Есть Linear MCP для работы с issues.
+- **Whitepaper (`gundemtech/leaf-docs`) — единственный второй мозг команды.** Все содержательные решения (архитектура / продукт / философия / pricing / ICP / MVP scope) живут там в public-safe формулировке.
 - Личная auto-memory каждого разработчика остаётся локально в `~/.claude/` и в репо **не** попадает.
-- **Shared memory дисциплина:** файлы `.claude/shared/*.md` грузятся в контекст каждой сессии — держим компактно (каждый ≤ 200 строк, только "текущий срез", без истории). Ревизия: `/audit-brain`. Обоснование: ADR-004 в Linear.
+- **Shared memory дисциплина:** файлы `.claude/shared/*.md` грузятся в контекст каждой сессии — держим компактно (каждый ≤ 200 строк, только "текущий срез", без истории). Ревизия: `/audit-brain`.
+
+## Whitepaper — source of truth
+
+Публичный whitepaper живёт в `gundemtech/leaf-docs` (клон в `~/Desktop/leaf-docs`). Сайт: `leaf-docs.gundem.tech`, стек — MkDocs Material, push в `main` = автодеплой.
+
+**Правила для Claude Code (обязательные, без напоминания):**
+
+1. **Читай whitepaper как источник правды.** В любой сессии где обсуждаются архитектура / продукт / философия / ICP / pricing / MVP / конкуренты / глоссарий — свериться с `~/Desktop/leaf-docs/docs/` перед ответом. Противоречие с whitepaper → whitepaper приоритетнее, явно проговори.
+2. **Синхронизируй изменения автоматически.** Принято содержательное решение уровня whitepaper — **не дожидаясь просьбы**:
+   - найти нужный раздел в `~/Desktop/leaf-docs/docs/` (структура в `leaf-docs/CLAUDE.md`),
+   - обновить markdown + admonition `!!! note "Изменение vX.Y — YYYY-MM-DD"` (раньше / теперь / причина),
+   - дописать в `docs/05-reference/changelog.md`,
+   - `git add` + коммит `docs: ...` + `git push origin main`,
+   - отчитаться: "Засинкано в leaf-docs: файлы, коммит `<hash>`".
+3. **Что синкать в whitepaper (public-safe концепты):** философия, видение, ICP, сигналы (типы/слои), архитектурный каркас, opt-in transparency, share-controls как модель, конкуренты, дифференциаторы, pricing tiers, глоссарий, won't-list, high-level changelog.
+4. **Что НЕ синкать в whitepaper (implementation moat):** SQL-запросы, точные пороги (idle, polling, heartbeat, WAL checkpoint), SQLCipher pragma values, bytes layouts crypto envelope, HKDF info strings, exact nonce generation, git log format strings, Claude Code hooks JSON parser, Share Controls preset bundle IDs, Cloudflare Worker внутренности, ship timeline, имена сотрудников, клиентские детали.
+5. **Явный триггер:** `/sync-docs <тема>` форсирует синк прямо сейчас.
+
+Branch protection на `leaf-docs` пока нет — push прямой в `main`. Когда появится — PR-flow.
+
+## Pre-push чек-лист для `gundemtech/leaf` (app-репо, ПУБЛИЧНЫЙ)
+
+App-репо **публичный**. Перед каждым `git push` в `gundemtech/leaf` Claude Code **обязательно** пробегает diff по чек-листу. Если хоть одно ❌ — **остановись, покажи юзеру, спроси**.
+
+### ❌ НЕ коммитить в `leaf`
+- **Секреты:** OAuth client secrets, EdDSA/Sparkle signing keys, Cloudflare tokens, team keys, keychain raw values, GitHub PAT. → GitHub Secrets / Keychain / `.env` (в `.gitignore`).
+- **SQL-запросы Derived Insights Engine** (тела функций `timeInApp`, `focusSessions`, `contextSwitchRate`, `teamPresenceOverlap`, `aiRatio` и т.д.) — moat. Коммить сигнатуры, тела держать в приватном модуле `LeafControlCore/Private/` (в `.gitignore`) или obfuscated.
+- **Точные пороги и числа:** idle threshold, polling intervals (5 мин Linear), heartbeat (60с), WAL checkpoint (15 мин / 4MB), SQLCipher pragma values, KDF params. → `Config.swift` с публичными именами, значения из `.env` / build settings.
+- **Share Controls preset** (bundle IDs "common dev defaults" — Xcode, Cursor, Slack…) — хардкод = reverse engineer. → runtime-конфиг с сервера при onboarding.
+- **Cloudflare Worker / relay TypeScript код** — отдельный приватный репо `gundemtech/leaf-relay`. В `leaf` только клиент WebSocket.
+- **Crypto envelope имплементация:** exact nonce generation, HKDF info strings, AAD content, byte layouts — приватный модуль.
+- **Git polling command** (exact `git log --format=...`, parsing logic) — moat над конкурентами.
+- **Claude Code hooks parser** (JSON schema, fallback `~/.claude/projects/*.jsonl` handler) — moat.
+- **Коммит-сообщения и PR descriptions:** без имён сотрудников, ship dates, внутренних дискуссий, клиентских деталей, competitive intel.
+- **TODO/FIXME c внутренним контекстом** ("hack because Linear quirk X") → Linear issue, не в код.
+
+### ✅ Можно в коммит
+- Архитектурный каркас: имена модулей (Agent / LeafControlCore / MenuBarApp / MCPServer), имена таблиц БД, имена 8 MCP tools, имена 12 функций Derived Insights Engine — это уже в whitepaper.
+- Публичные версии библиотек (GRDB 7, Sparkle 2.6+, CryptoKit, Swift 6) — видны в `Package.swift` всё равно.
+- High-level комменты со ссылками на whitepaper: `// See: leaf-docs/03-architecture/share-controls.md`.
+- Generic patterns: Keychain access errors, AX permission flow, WAL checkpoint discipline (известно в OSS), Linear now-30s clock skew.
+- UI-код: SwiftUI views, layouts, styling, Liquid Glass — витрина продукта, moat не тут.
+
+### Механизм
+
+Ручной проход diff — команда `/pre-push-leaf` (см. `.claude/commands/pre-push-leaf.md`). Запускать **перед каждым** `git push` в `gundemtech/leaf`.
+
+Автоматический: добавим `gitleaks` pre-commit hook когда появится код.
+
+## Команды
+
+- `/sync-docs <тема>` — синхронизация решения в whitepaper (leaf-docs).
+- `/pre-push-leaf` — ручная проверка diff перед пушем в публичный app-репо.
+- `/audit-brain` — ревизия shared memory (размеры `.claude/shared/*.md`).

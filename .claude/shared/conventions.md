@@ -5,31 +5,39 @@
 - Отступы: 4 пробела
 - Стиль: TBD _(дополнять по мере накопления решений)_
 
-## Git
+## Git — app-репо (`gundemtech/leaf`, ПУБЛИЧНЫЙ)
 - Репо: `git@github.com:gundemtech/leaf.git`
 - Основная ветка: `main`
-- Фича-ветки: `feature/<кратко>`
-- Багфиксы: `fix/<кратко>`
-- Коммиты: imperative, коротко
+- Фича-ветки: `feature/<кратко>`, багфиксы: `fix/<кратко>`
+- Коммиты: imperative, коротко, без внутренних имён / ship dates / клиентских деталей
+- **Перед каждым `git push`: `/pre-push-leaf`** (проверка diff на утечки moat-деталей, см. корневой `CLAUDE.md`)
+
+## Git — whitepaper (`gundemtech/leaf-docs`, ПУБЛИЧНЫЙ)
+- Клон: `~/Desktop/leaf-docs`
+- Прямой push в `main` (branch protection пока нет)
+- Коммиты: `docs: <что>`, `fix: <опечатка>`, `chore: <служебное>`
+- Триггер синка из сессии: автоматом при принятии решения уровня whitepaper, либо `/sync-docs`
+
+## Git — relay (`gundemtech/leaf-relay`, ПРИВАТНЫЙ, будет создан)
+- TypeScript / Cloudflare Workers код
+- **Не** в `gundemtech/leaf`. В `leaf` только клиент WebSocket.
 
 ## Процесс работы
-- Задачи — в Linear, проект `Leaf`
-- После содержательной сессии Claude Code — `/save-session`
-- Значимые тех-решения — в Linear Doc `Architecture Decisions`, не в коде
-- Идеи/принципы, возникшие в сессии — в Linear Doc `Ideas & Principles`
+- Задачи — в Linear, проект `Leaf` (только таски, не второй мозг)
+- Решения уровня whitepaper → автосинк в `leaf-docs` (см. корневой `CLAUDE.md`, раздел "Whitepaper — source of truth")
+- Обоснования и альтернативы решений — в whitepaper в public-safe формулировке (admonition `!!! note "Изменение vX.Y"`)
+- Implementation-детали (код, SQL, пороги) — в приватных модулях кода, НЕ в whitepaper
 
 ## Shared memory hygiene
 
 Файлы в `.claude/shared/` автоматически загружаются в контекст Claude Code при старте сессии. Чтобы не раздувать каждую сессию:
 
 - Каждый файл ≤ 200 строк (ориентир ~8-10KB)
-- `current-state.md` ≤ 50 строк (читается за 30 секунд)
-- Корневой `CLAUDE.md` ≤ 50 строк
-- Это **текущий срез**, не история. Обоснования / альтернативы / эволюция → в Linear Docs (ADR, Ideas)
-- Видишь что файл распух → предлагай рефактор. Раз в ~квартал — плановый `/audit-brain`
-
-Обоснование и trade-offs: ADR-004 в Linear.
+- `current-state.md` ≤ 50 строк
+- Корневой `CLAUDE.md` ≤ 100 строк
+- Это **текущий срез**, не история. Исторические решения — в whitepaper changelog
+- Видишь что файл распух → предлагай рефактор. Ревизия — `/audit-brain`
 
 ---
 
-> Частые правки этого файла — признак, что пора выделить решение в отдельный ADR.
+> Частые правки этого файла — признак что пора зафиксировать решение в whitepaper.
