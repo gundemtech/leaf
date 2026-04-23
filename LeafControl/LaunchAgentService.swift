@@ -56,8 +56,8 @@ final class LaunchAgentService {
     var statusDescription: String {
         switch status {
         case .enabled: "Running"
-        case .notRegistered: "Not registered"
-        case .notFound: "Agent plist missing in bundle"
+        case .notRegistered: "Not registered — toggle below to enable"
+        case .notFound: "Not registered — toggle below to enable"
         case .requiresApproval: "Requires approval in System Settings"
         @unknown default: "Unknown (\(status.rawValue))"
         }

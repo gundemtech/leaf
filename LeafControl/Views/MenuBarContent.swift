@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import AppKit
 import LeafControlCore
 
 struct MenuBarContent: View {
@@ -26,10 +27,24 @@ struct MenuBarContent: View {
 
         Divider()
 
-        Button("Settings…") { openSettings() }
-            .keyboardShortcut(",")
+        Button("Settings…") {
+            openSettingsWindow()
+        }
+        .keyboardShortcut(",")
 
         Button("Quit LeafControl") { NSApplication.shared.terminate(nil) }
             .keyboardShortcut("q")
+    }
+
+    /// LSUIElement apps не активируются автоматом при openSettings() —
+    /// окно появляется "за" другими. Сначала активируем app, затем открываем.
+    private func openSettingsWindow() {
+        NSApp.activate(ignoringOtherApps: true)
+        openSettings()
+        // Belt and suspenders: принудительно выводим Settings-окно на передний план.
+        for window in NSApp.windows where window.title.lowercased().contains("settings")
+            || window.title.lowercased().contains("leafcontrol") {
+            window.makeKeyAndOrderFront(nil)
+        }
     }
 }
