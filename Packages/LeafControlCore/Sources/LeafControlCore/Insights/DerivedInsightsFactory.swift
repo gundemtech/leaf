@@ -1,21 +1,28 @@
 import Foundation
-#if LEAFCONTROL_PROD
-import LeafControlCorePrivate
-#endif
 
 /// Единый entry point для получения `DerivedInsights` реализации.
-/// Callsite'ы (MenuBarApp, MCPServer) не должны ссылаться на конкретные
-/// типы `StubInsights` / `ProdInsights` — провайдер выбирается compile-time
-/// на основе флага `LEAFCONTROL_PROD`.
+/// Callsite'ы (MenuBarApp, MCPServer) не ссылаются на конкретные типы —
+/// provider регистрируется consumer'ом при старте (dependency injection).
 ///
-/// Без флага (публичный build / CI) → `StubInsights`, который throws на всех
-/// методах. С флагом (dev/prod) → `ProdInsights` из gitignored moat-модуля.
+/// Почему не `#if LEAFCONTROL_PROD` внутри factory: Xcode не прокидывает
+/// `SWIFT_ACTIVE_COMPILATION_CONDITIONS` внутрь SPM dependencies, поэтому
+/// conditional import здесь не сработал бы. Флаг есть только в app/agent
+/// target'ах — там и решается какую реализацию зарегистрировать.
+///
+/// Публичный build / CI без регистрации → `StubInsights` (throws на всех
+/// методах). Dev/prod → app регистрирует `ProdInsights` в `App.init()`.
 public enum DerivedInsightsFactory {
+    // Registration — единожды на старте приложения. Last-writer wins,
+    // концептуально read-many-write-once → `nonisolated(unsafe)` acceptable.
+    nonisolated(unsafe) private static var provider: (@Sendable (Database) -> any DerivedInsights)?
+
+    public static func register(
+        _ provider: @escaping @Sendable (Database) -> any DerivedInsights
+    ) {
+        Self.provider = provider
+    }
+
     public static func make(database: Database) -> any DerivedInsights {
-        #if LEAFCONTROL_PROD
-        return ProdInsights(database: database)
-        #else
-        return StubInsights(database: database)
-        #endif
+        provider?(database) ?? StubInsights(database: database)
     }
 }
