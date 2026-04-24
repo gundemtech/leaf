@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		065215E1C75AB8E8F58D15F7 /* LeafControlMCP in Embed CLI Helpers */ = {isa = PBXBuildFile; fileRef = C8DAA11FC3F5FFF6580F491A /* LeafControlMCP */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		0B762EFD0076DDEFF0180D89 /* LeafControlCorePrivate in Frameworks */ = {isa = PBXBuildFile; productRef = 7453218574ED9E25C1E2249B /* LeafControlCorePrivate */; };
+		1B977B45F3768B3750A221F9 /* LeafControlMCPProtocol in Frameworks */ = {isa = PBXBuildFile; productRef = 65BA2F4632F07A6655AE7545 /* LeafControlMCPProtocol */; };
 		32811FB1AE98CCAF84012E39 /* LeafControlCorePrivate in Frameworks */ = {isa = PBXBuildFile; productRef = 8F8E34D2D7EE02F8A517B0A3 /* LeafControlCorePrivate */; };
 		4BC90D9CB73EB9BBDD60F841 /* LeafControlCorePrivate in Frameworks */ = {isa = PBXBuildFile; productRef = DADE63FF43B0419C4A7B4ABB /* LeafControlCorePrivate */; };
 		6BA6FF9CECCDF93CF297CCB0 /* LeafControlCore in Frameworks */ = {isa = PBXBuildFile; productRef = B046993ED3685984462393D9 /* LeafControlCore */; };
@@ -112,6 +113,7 @@
 			files = (
 				6BA6FF9CECCDF93CF297CCB0 /* LeafControlCore in Frameworks */,
 				32811FB1AE98CCAF84012E39 /* LeafControlCorePrivate in Frameworks */,
+				1B977B45F3768B3750A221F9 /* LeafControlMCPProtocol in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -180,6 +182,7 @@
 			packageProductDependencies = (
 				B046993ED3685984462393D9 /* LeafControlCore */,
 				8F8E34D2D7EE02F8A517B0A3 /* LeafControlCorePrivate */,
+				65BA2F4632F07A6655AE7545 /* LeafControlMCPProtocol */,
 			);
 			productName = LeafControlMCP;
 			productReference = C8DAA11FC3F5FFF6580F491A /* LeafControlMCP */;
@@ -669,6 +672,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "Packages/LeafControlCore" */;
 			productName = LeafControlCore;
+		};
+		65BA2F4632F07A6655AE7545 /* LeafControlMCPProtocol */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "Packages/LeafControlCore" */;
+			productName = LeafControlMCPProtocol;
 		};
 		7453218574ED9E25C1E2249B /* LeafControlCorePrivate */ = {
 			isa = XCSwiftPackageProductDependency;
