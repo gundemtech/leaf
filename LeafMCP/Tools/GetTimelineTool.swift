@@ -93,15 +93,6 @@ struct GetTimelineTool: ToolExecutor {
                 ]
             }
         ]
-        let jsonData = try JSONSerialization.data(
-            withJSONObject: payload,
-            options: [.sortedKeys]
-        )
-        let jsonString = String(data: jsonData, encoding: .utf8) ?? "{}"
-
-        return ToolCallResult(
-            content: [.text(TextContent(text: jsonString))],
-            isError: false
-        )
+        return try ToolResponseBuilder.versionedJSONResult(payload)
     }
 }

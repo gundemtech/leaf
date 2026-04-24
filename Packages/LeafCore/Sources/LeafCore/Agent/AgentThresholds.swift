@@ -11,23 +11,33 @@ public struct AgentThresholds: Sendable, Hashable {
     public let eventFlushIntervalSec: TimeInterval
     /// При достижении этого размера буфер flush'ится немедленно (не ждём интервал).
     public let eventFlushBatchSize: Int
+    /// Как часто MaintenanceScheduler запускает retention sweep (DELETE старых events).
+    public let retentionSweepIntervalSec: TimeInterval
+    /// Cutoff: events с `ts < now - retentionDays * 86400s` удаляются sweep'ом.
+    public let retentionDays: Int
 
     public init(
         idlePollIntervalSec: TimeInterval,
         idleThresholdSec: TimeInterval,
         eventFlushIntervalSec: TimeInterval,
-        eventFlushBatchSize: Int
+        eventFlushBatchSize: Int,
+        retentionSweepIntervalSec: TimeInterval,
+        retentionDays: Int
     ) {
         self.idlePollIntervalSec = idlePollIntervalSec
         self.idleThresholdSec = idleThresholdSec
         self.eventFlushIntervalSec = eventFlushIntervalSec
         self.eventFlushBatchSize = eventFlushBatchSize
+        self.retentionSweepIntervalSec = retentionSweepIntervalSec
+        self.retentionDays = retentionDays
     }
 
     public static let weakDefaults = AgentThresholds(
         idlePollIntervalSec: 10,
         idleThresholdSec: 300,
         eventFlushIntervalSec: 5,
-        eventFlushBatchSize: 50
+        eventFlushBatchSize: 50,
+        retentionSweepIntervalSec: 86_400,
+        retentionDays: 365
     )
 }

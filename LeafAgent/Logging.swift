@@ -9,3 +9,4 @@ import os
 nonisolated let agentLogger = Logger(subsystem: "tech.gundem.leaf.agent", category: "core")
 nonisolated let collectorLogger = Logger(subsystem: "tech.gundem.leaf.agent", category: "collectors")
 nonisolated let writerLogger = Logger(subsystem: "tech.gundem.leaf.agent", category: "writer")
+nonisolated let maintenanceLogger = Logger(subsystem: "tech.gundem.leaf.agent", category: "maintenance")

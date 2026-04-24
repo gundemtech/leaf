@@ -1,26 +1,34 @@
 import Foundation
 import os
 
-/// Graceful shutdown: SIGTERM/SIGINT → flush EventWriter → exit(0).
+/// Graceful shutdown: SIGTERM/SIGINT → run shutdown closure → exit(0).
 /// Держим DispatchSource refs в глобалах чтобы не уехали в ARC.
 private var sigtermSource: DispatchSourceSignal?
 private var sigintSource: DispatchSourceSignal?
 
-func installSignalHandlers(writer: EventWriter) {
-    sigtermSource = makeHandler(signal: SIGTERM, name: "SIGTERM", writer: writer)
-    sigintSource = makeHandler(signal: SIGINT, name: "SIGINT", writer: writer)
+/// Устанавливает handler'ы на SIGTERM + SIGINT. `shutdown` closure вызывается
+/// сериализованно на main queue, внутри `Task { ... }` — т.е. имеет право
+/// `await` на actor'ах и БД-writes. После завершения closure — `exit(0)`.
+///
+/// Порядок shutdown задаёт caller (обычно maintenance → writer → exit).
+func installSignalHandlers(shutdown: @Sendable @escaping () async -> Void) {
+    sigtermSource = makeHandler(signal: SIGTERM, name: "SIGTERM", shutdown: shutdown)
+    sigintSource = makeHandler(signal: SIGINT, name: "SIGINT", shutdown: shutdown)
 }
 
-private func makeHandler(signal sig: Int32, name: String, writer: EventWriter) -> DispatchSourceSignal {
+private func makeHandler(
+    signal sig: Int32,
+    name: String,
+    shutdown: @Sendable @escaping () async -> Void
+) -> DispatchSourceSignal {
     // Disable default handler так чтобы наш DispatchSource поймал сигнал.
     signal(sig, SIG_IGN)
 
     let source = DispatchSource.makeSignalSource(signal: sig, queue: .main)
     source.setEventHandler {
-        agentLogger.info("Received \(name, privacy: .public) — flushing and exiting")
+        agentLogger.info("Received \(name, privacy: .public) — running shutdown")
         Task {
-            await writer.flush()
-            await writer.stop()
+            await shutdown()
             exit(0)
         }
     }

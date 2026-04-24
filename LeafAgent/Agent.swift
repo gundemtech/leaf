@@ -48,24 +48,42 @@ enum AgentMain {
             exit(1)
         }
 
-        // Writer + collectors. Retain'им в статичных globals чтобы не собралось по ARC
-        // до срабатывания SIGTERM handler'а.
+        // Writer + collectors + maintenance scheduler. Retain'им в статичных globals
+        // чтобы не собралось по ARC до срабатывания SIGTERM handler'а.
         let writer = EventWriter(database: database, thresholds: agentThresholds)
         let activeAppCollector = ActiveAppCollector(writer: writer, blocklist: Blocklist.phase1Default)
         let idleCollector = IdleCollector(writer: writer, thresholds: agentThresholds)
+        let maintenance = MaintenanceScheduler(
+            database: database,
+            walCheckpointIntervalSec: databaseConfig.walCheckpointIntervalSec,
+            retentionSweepIntervalSec: agentThresholds.retentionSweepIntervalSec,
+            retentionDays: agentThresholds.retentionDays,
+            logger: maintenanceLogger
+        )
 
         AgentLifetime.writer = writer
         AgentLifetime.activeAppCollector = activeAppCollector
         AgentLifetime.idleCollector = idleCollector
+        AgentLifetime.maintenance = maintenance
 
-        // Kick off writer + collectors.
+        // Kick off writer + collectors + scheduler.
         // `start()` на writer/idle — fire-and-forget Task внутри; на activeApp — запускаем
         // через DispatchQueue.main.async чтобы NSWorkspace observer'у был доступен main runloop.
         Task { await writer.start() }
         DispatchQueue.main.async { activeAppCollector.start() }
         idleCollector.start()
+        Task { await maintenance.start() }
 
-        installSignalHandlers(writer: writer)
+        // Shutdown порядок: maintenance → writer (flush + stop) → exit.
+        // maintenance первым — новый sweep/checkpoint не стартанёт.
+        // writer вторым — финальный drain буфера в DB.
+        installSignalHandlers {
+            if let m = AgentLifetime.maintenance { await m.stop() }
+            if let w = AgentLifetime.writer {
+                await w.flush()
+                await w.stop()
+            }
+        }
 
         agentLogger.info("Agent ready — entering main run loop")
 
@@ -82,4 +100,5 @@ enum AgentLifetime {
     nonisolated(unsafe) static var writer: EventWriter?
     nonisolated(unsafe) static var activeAppCollector: ActiveAppCollector?
     nonisolated(unsafe) static var idleCollector: IdleCollector?
+    nonisolated(unsafe) static var maintenance: MaintenanceScheduler?
 }

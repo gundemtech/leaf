@@ -118,10 +118,40 @@ public final class Database: @unchecked Sendable {
 
     // MARK: - Maintenance
 
+    /// Принудительный `PRAGMA wal_checkpoint(TRUNCATE)`.
+    /// При активных reader'ах SQLite может сделать partial checkpoint (advance только
+    /// до hwm самого отстающего reader'а) — это штатный graceful degradation, не ошибка.
+    /// В этом случае WAL-файл не усохнет до 0, но продолжит контролироваться следующим
+    /// успешным checkpoint'ом. Retry / force никакой не нужен.
     public func checkpointWAL() throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         try pool.writeWithoutTransaction { db in
             _ = try db.checkpoint(.truncate)
+        }
+    }
+
+    /// Удаляет до `limit` старейших строк из `events` со `ts < tsMs`.
+    /// Возвращает реальное количество удалённых строк (`db.changesCount`).
+    /// Используется retention sweep в `MaintenanceScheduler`; вызывается в цикле,
+    /// пока `return < limit` — чанк-за-чанком, чтобы не держать writer-транзакцию
+    /// дольше `busyTimeoutMs` при миллионных таблицах.
+    ///
+    /// Subquery-pattern (не `DELETE ... LIMIT ?`): SQLCipher build не включает
+    /// `SQLITE_ENABLE_UPDATE_DELETE_LIMIT`, поэтому `LIMIT` допустим только
+    /// во вложенном `SELECT`.
+    public func deleteEventsOlderThan(tsMs: Int64, limit: Int) throws -> Int {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        guard limit > 0 else { return 0 }
+        return try pool.write { db in
+            try db.execute(
+                sql: """
+                DELETE FROM events WHERE id IN (
+                    SELECT id FROM events WHERE ts < ? ORDER BY ts LIMIT ?
+                )
+                """,
+                arguments: [tsMs, limit]
+            )
+            return db.changesCount
         }
     }
 
