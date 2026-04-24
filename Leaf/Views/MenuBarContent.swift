@@ -96,7 +96,7 @@ struct MenuBarContent: View {
                     }
                 }
             }
-            sessionsBlock(snapshot: snapshot)
+            analyticsBlock(snapshot: snapshot)
             Chart(top, id: \.bundleID) { entry in
                 BarMark(
                     x: .value("App", AppNameResolver.shared.displayName(for: entry.bundleID)),
@@ -108,28 +108,74 @@ struct MenuBarContent: View {
         }
     }
 
+    /// Phase 2.1: sessions + switches. Phase 2.2: добавили 2 строки trends
+    /// (deep streak + peak/WoW/active days). Все 4 строки graceful к empty-state —
+    /// "—" показываем где insight не посчитался ещё (insufficient data).
     @ViewBuilder
-    private func sessionsBlock(snapshot: InsightsSnapshot) -> some View {
+    private func analyticsBlock(snapshot: InsightsSnapshot) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                sessionsLines(snapshot: snapshot)
+                trendsLines(snapshot: snapshot)
+            }
+            Spacer()
+        }
+        .padding(.top, 2)
+    }
+
+    @ViewBuilder
+    private func sessionsLines(snapshot: InsightsSnapshot) -> some View {
         if snapshot.sessions.isEmpty {
-            HStack {
-                Text("No focus sessions yet — keep working")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-            .padding(.top, 2)
+            Text("No focus sessions yet — keep working")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         } else {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Sessions: \(snapshot.sessions.count) · avg \(formatDuration(snapshot.avgSessionDuration)) · deep \(snapshot.deepSessionsCount)")
-                        .font(.caption)
-                    Text(String(format: "Switches: %.1f/h", snapshot.switchRate))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
-            .padding(.top, 2)
+            Text("Sessions: \(snapshot.sessions.count) · avg \(formatDuration(snapshot.avgSessionDuration)) · deep \(snapshot.deepSessionsCount)")
+                .font(.caption)
+            Text(String(format: "Switches: %.1f/h", snapshot.switchRate))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private func trendsLines(snapshot: InsightsSnapshot) -> some View {
+        Text(streakLine(snapshot: snapshot))
+            .font(.caption)
+        Text(trendsSummaryLine(snapshot: snapshot))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+    }
+
+    private func streakLine(snapshot: InsightsSnapshot) -> String {
+        let streak = snapshot.deepWorkStreak
+        if streak.days == 0 {
+            return "🔥 — · start a deep session to begin a streak"
+        } else {
+            let dayWord = streak.days == 1 ? "day" : "days"
+            return "🔥 \(streak.days) \(dayWord) deep · \(formatDuration(streak.totalSeconds)) total"
+        }
+    }
+
+    private func trendsSummaryLine(snapshot: InsightsSnapshot) -> String {
+        let peak = formatPeakHour(snapshot.peakProductivityHour)
+        let wow = formatWoW(snapshot.weekOverWeekDelta)
+        let dayWord = snapshot.activeDaysInRow == 1 ? "day" : "days"
+        return "Peak \(peak) · WoW \(wow) · Active \(snapshot.activeDaysInRow) \(dayWord)"
+    }
+
+    private func formatPeakHour(_ hour: Int?) -> String {
+        guard let h = hour else { return "—" }
+        return String(format: "%02d:00", h)
+    }
+
+    private func formatWoW(_ delta: Double?) -> String {
+        guard let d = delta else { return "—" }
+        let pct = Int((d * 100).rounded())
+        if pct >= 0 {
+            return "+\(pct)%"
+        } else {
+            return "\(pct)%"
         }
     }
 

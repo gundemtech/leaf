@@ -93,11 +93,26 @@ final class InsightsReader {
                         try Task.checkCancellation()
                         let switchRate = try insights.contextSwitchRate(period: today)
                         try Task.checkCancellation()
+                        // Phase 2.2 trends — 4 независимых queries, sequential
+                        // (каждый < 50ms на типичном workload'е; если p95 вырастет
+                        // под нагрузкой — оптимизируем в 2.5 wrap через shared CTE).
+                        let streak = try insights.deepWorkStreak()
+                        try Task.checkCancellation()
+                        let peakHour = try insights.peakProductivityHour()
+                        try Task.checkCancellation()
+                        let wow = try insights.weekOverWeekDelta()
+                        try Task.checkCancellation()
+                        let activeDays = try insights.activeDaysInRow()
+                        try Task.checkCancellation()
                         let snapshot = InsightsSnapshot(
                             topApps: topApps,
                             sessions: sessions,
                             switchRate: switchRate,
-                            deepSessionMinSec: deepMin
+                            deepSessionMinSec: deepMin,
+                            deepWorkStreak: streak,
+                            peakProductivityHour: peakHour,
+                            weekOverWeekDelta: wow,
+                            activeDaysInRow: activeDays
                         )
                         return .success((db, snapshot))
                     } catch {

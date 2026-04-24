@@ -22,6 +22,17 @@ public struct AgentThresholds: Sendable, Hashable {
     /// Phase 2.1: минимальная длительность session чтобы считаться "deep".
     /// Default 1500s = 25min (Pomodoro lower bound).
     public let deepSessionMinSec: TimeInterval
+    /// Phase 2.2: минимум attention-секунд в день чтобы день считался "active"
+    /// в `activeDaysInRow`. Default 1800s = 30min.
+    public let activeDayMinAttentionSec: TimeInterval
+    /// Phase 2.2: окно аггрегации `peakProductivityHour` — trailing N дней.
+    public let peakHourWindowDays: Int
+    /// Phase 2.2: минимум active-дней в окне чтобы `peakProductivityHour`
+    /// не возвращал nil. Below → insufficient data.
+    public let peakHourMinActiveDays: Int
+    /// Phase 2.2: минимум active-дней в previous-week окне чтобы
+    /// `weekOverWeekDelta` не возвращал nil.
+    public let wowBaselineMinActiveDays: Int
 
     public init(
         idlePollIntervalSec: TimeInterval,
@@ -31,7 +42,11 @@ public struct AgentThresholds: Sendable, Hashable {
         retentionSweepIntervalSec: TimeInterval,
         retentionDays: Int,
         focusSessionGapSec: TimeInterval,
-        deepSessionMinSec: TimeInterval
+        deepSessionMinSec: TimeInterval,
+        activeDayMinAttentionSec: TimeInterval,
+        peakHourWindowDays: Int,
+        peakHourMinActiveDays: Int,
+        wowBaselineMinActiveDays: Int
     ) {
         self.idlePollIntervalSec = idlePollIntervalSec
         self.idleThresholdSec = idleThresholdSec
@@ -41,6 +56,10 @@ public struct AgentThresholds: Sendable, Hashable {
         self.retentionDays = retentionDays
         self.focusSessionGapSec = focusSessionGapSec
         self.deepSessionMinSec = deepSessionMinSec
+        self.activeDayMinAttentionSec = activeDayMinAttentionSec
+        self.peakHourWindowDays = peakHourWindowDays
+        self.peakHourMinActiveDays = peakHourMinActiveDays
+        self.wowBaselineMinActiveDays = wowBaselineMinActiveDays
     }
 
     public static let weakDefaults = AgentThresholds(
@@ -51,6 +70,10 @@ public struct AgentThresholds: Sendable, Hashable {
         retentionSweepIntervalSec: 86_400,
         retentionDays: 365,
         focusSessionGapSec: 600,
-        deepSessionMinSec: 1500
+        deepSessionMinSec: 1500,
+        activeDayMinAttentionSec: 1800,
+        peakHourWindowDays: 14,
+        peakHourMinActiveDays: 7,
+        wowBaselineMinActiveDays: 2
     )
 }

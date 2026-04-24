@@ -19,7 +19,7 @@ public protocol DerivedInsights: Sendable {
     func timeInApp(period: DateInterval) throws -> [AppTimeEntry]
     func focusSessions(period: DateInterval) throws -> [FocusSession]
     func contextSwitchRate(period: DateInterval) throws -> Double
-    func deepWorkStreak() throws -> TimeInterval
+    func deepWorkStreak() throws -> DeepWorkStreak
     func peakProductivityHour() throws -> Int?
 
     // Content
@@ -34,7 +34,7 @@ public protocol DerivedInsights: Sendable {
     func teamTimeline(team: [String], period: DateInterval) throws -> [AppTimeEntry]
 
     // Trends
-    func weekOverWeekDelta() throws -> Double
+    func weekOverWeekDelta() throws -> Double?
     func activeDaysInRow() throws -> Int
 
     // Activity lookup (Phase 2.1).
@@ -52,14 +52,14 @@ public struct StubInsights: DerivedInsights {
     public func timeInApp(period: DateInterval) throws -> [AppTimeEntry] { throw LeafError.notImplemented }
     public func focusSessions(period: DateInterval) throws -> [FocusSession] { throw LeafError.notImplemented }
     public func contextSwitchRate(period: DateInterval) throws -> Double { throw LeafError.notImplemented }
-    public func deepWorkStreak() throws -> TimeInterval { throw LeafError.notImplemented }
-    public func peakProductivityHour() throws -> Int? { throw LeafError.notImplemented }
+    public func deepWorkStreak() throws -> DeepWorkStreak { throw LeafError.notImplemented }
+    public func peakProductivityHour() throws -> Int? { nil }
     public func filesTouched(period: DateInterval) throws -> [String] { throw LeafError.notImplemented }
     public func aiRatio(period: DateInterval) throws -> Double { throw LeafError.notImplemented }
     public func teamPresenceOverlap(team: [String], period: DateInterval) throws -> TimeInterval { throw LeafError.notImplemented }
     public func teamFocusAlignment(team: [String], period: DateInterval) throws -> Double { throw LeafError.notImplemented }
     public func teamTimeline(team: [String], period: DateInterval) throws -> [AppTimeEntry] { throw LeafError.notImplemented }
-    public func weekOverWeekDelta() throws -> Double { throw LeafError.notImplemented }
-    public func activeDaysInRow() throws -> Int { throw LeafError.notImplemented }
+    public func weekOverWeekDelta() throws -> Double? { nil }
+    public func activeDaysInRow() throws -> Int { 0 }
     public func lastActivity(bundleID: String?) throws -> ActivitySnapshot? { nil }
 }
