@@ -112,9 +112,12 @@ public final class Database: @unchecked Sendable {
         }
     }
 
-    /// Для тестов — предоставляет read-only GRDB handle в замыкании.
-    /// В production коде не используется.
-    internal func readRaw<T>(_ block: (GRDB.Database) throws -> T) throws -> T {
+    /// Internal-intent bridge для LeafControlCorePrivate (moat-реализация
+    /// Derived Insights), которой нужен raw GRDB handle для оконных функций
+    /// и CTE. Не использовать из публичных callsites — публичные high-level
+    /// accessors (`events(in:)`, `eventCount(in:)`) остаются primary API.
+    /// Схема таблиц в whitepaper, конкретные query — в moat.
+    public func readSQL<T>(_ block: (GRDB.Database) throws -> T) throws -> T {
         try pool.read(block)
     }
 

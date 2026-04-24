@@ -31,6 +31,11 @@ Packages/*/Package.resolved
 Packages/LeafControlCore/Sources/LeafControlCorePrivate/**/*.swift
 !Packages/LeafControlCore/Sources/LeafControlCorePrivate/Placeholder.swift
 
+# LeafControlCorePrivateTests — тесты для moat-модуля (SQL assertions и т.п.).
+# Tracked только Placeholder.swift, реальные тесты — dev-only.
+Packages/LeafControlCore/Tests/LeafControlCorePrivateTests/**/*.swift
+!Packages/LeafControlCore/Tests/LeafControlCorePrivateTests/Placeholder.swift
+
 # Local xcconfig — dev-only флаги для LeafControlCorePrivate prod-сборки.
 # Пример в Config/Local.xcconfig.example (tracked).
 Config/Local.xcconfig

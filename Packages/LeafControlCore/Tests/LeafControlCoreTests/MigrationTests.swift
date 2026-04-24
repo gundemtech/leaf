@@ -19,7 +19,7 @@ final class MigrationTests: XCTestCase {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults)
 
-        try db.readRaw { rawDB in
+        try db.readSQL { rawDB in
             let tables = try String.fetchAll(
                 rawDB,
                 sql: "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
@@ -33,7 +33,7 @@ final class MigrationTests: XCTestCase {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults)
 
-        try db.readRaw { rawDB in
+        try db.readSQL { rawDB in
             let indexes = try String.fetchAll(
                 rawDB,
                 sql: "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name=?",
@@ -55,7 +55,7 @@ final class MigrationTests: XCTestCase {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults)
 
-        try db.readRaw { rawDB in
+        try db.readSQL { rawDB in
             let columns = try Row.fetchAll(
                 rawDB,
                 sql: "PRAGMA table_info(\(Schema.Events.tableName))"

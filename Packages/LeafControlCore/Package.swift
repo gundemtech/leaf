@@ -26,13 +26,21 @@ let package = Package(
         ),
         .target(
             name: "LeafControlCorePrivate",
-            dependencies: ["LeafControlCore"],
+            dependencies: [
+                "LeafControlCore",
+                .product(name: "GRDB", package: "GRDB.swift")
+            ],
             path: "Sources/LeafControlCorePrivate"
         ),
         .testTarget(
             name: "LeafControlCoreTests",
             dependencies: ["LeafControlCore"],
             path: "Tests/LeafControlCoreTests"
+        ),
+        .testTarget(
+            name: "LeafControlCorePrivateTests",
+            dependencies: ["LeafControlCore", "LeafControlCorePrivate"],
+            path: "Tests/LeafControlCorePrivateTests"
         )
     ]
 )
