@@ -11,7 +11,10 @@ let package = Package(
         // Moat-target — линкуется всегда, но реальные файлы (Prod/**)
         // живут только на dev-машине (см. .gitignore). На публичном клоне
         // содержит только Placeholder.swift → собирается без ошибок.
-        .library(name: "LeafControlCorePrivate", targets: ["LeafControlCorePrivate"])
+        .library(name: "LeafControlCorePrivate", targets: ["LeafControlCorePrivate"]),
+        // Pure MCP protocol layer (JSON-RPC envelope + MCP types + handlers
+        // без side effects). Линкуется в LeafControlMCP binary target.
+        .library(name: "LeafControlMCPProtocol", targets: ["LeafControlMCPProtocol"])
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift", exact: "7.10.0")
@@ -41,6 +44,15 @@ let package = Package(
             name: "LeafControlCorePrivateTests",
             dependencies: ["LeafControlCore", "LeafControlCorePrivate"],
             path: "Tests/LeafControlCorePrivateTests"
+        ),
+        .target(
+            name: "LeafControlMCPProtocol",
+            path: "Sources/LeafControlMCPProtocol"
+        ),
+        .testTarget(
+            name: "LeafControlMCPProtocolTests",
+            dependencies: ["LeafControlMCPProtocol"],
+            path: "Tests/LeafControlMCPProtocolTests"
         )
     ]
 )
