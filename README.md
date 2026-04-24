@@ -1,4 +1,4 @@
-# LeafControl
+# Leaf
 
 Ambient memory layer for developer teams on macOS (далее iOS).
 
@@ -7,43 +7,43 @@ Ambient memory layer for developer teams on macOS (далее iOS).
 ## Build
 
 ```bash
-xcodebuild -project LeafControl.xcodeproj -scheme LeafControl -destination 'platform=macOS' build
+xcodebuild -project Leaf.xcodeproj -scheme Leaf -destination 'platform=macOS' build
 ```
 
 ## Structure
 
 ```
-LeafControl/               # main app target (MenuBarExtra + Settings + Sparkle owner)
-LeafControlAgent/          # launch agent CLI — event collector + SQLCipher writer
-LeafControlMCP/            # stdio MCP server — exposes insights to AI clients
-Packages/LeafControlCore/  # shared SPM library (public API, domain types)
+Leaf/               # main app target (MenuBarExtra + Settings + Sparkle owner)
+LeafAgent/          # launch agent CLI — event collector + SQLCipher writer
+LeafMCP/            # stdio MCP server — exposes insights to AI clients
+Packages/LeafCore/  # shared SPM library (public API, domain types)
 ```
 
 ## MCP integration (Claude Code)
 
-LeafControl ships a stdio MCP server (`LeafControlMCP`) embedded in the app
+Leaf ships a stdio MCP server (`LeafMCP`) embedded in the app
 bundle. After running the app and enabling background collection, register
 the server with Claude Code.
 
 **If the app is installed into `/Applications`:**
 
 ```bash
-claude mcp add --transport stdio --scope user leafcontrol -- \
-  /Applications/LeafControl.app/Contents/MacOS/LeafControlMCP
+claude mcp add --transport stdio --scope user leaf -- \
+  /Applications/Leaf.app/Contents/MacOS/LeafMCP
 ```
 
 **Dev build (DerivedData, nothing installed):**
 
 ```bash
 MCP=$(find ~/Library/Developer/Xcode/DerivedData \
-      -name LeafControlMCP -type f -path '*/LeafControl.app/*' | head -1)
-claude mcp add --transport stdio --scope user leafcontrol -- "$MCP"
+      -name LeafMCP -type f -path '*/Leaf.app/*' | head -1)
+claude mcp add --transport stdio --scope user leaf -- "$MCP"
 ```
 
 Verify:
 
 ```bash
-claude mcp list        # leafcontrol: ... ✓ Connected
+claude mcp list        # leaf: ... ✓ Connected
 ```
 
 In a new Claude Code session ask natural-language questions — e.g.

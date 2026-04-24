@@ -1,7 +1,7 @@
-# Архитектура LeafControl
+# Архитектура Leaf
 
 ## Что это
-LeafControl — ambient memory layer для macOS (далее iOS) + Native UI + MCP-сервер + team presence-relay.
+Leaf — ambient memory layer для macOS (далее iOS) + Native UI + MCP-сервер + team presence-relay.
 Фоновый агент собирает metadata о работе пользователя, отдаёт её через две поверхности и делится presence с командой end-to-end encrypted.
 Репо: `git@github.com:gundemtech/leaf.git`
 
@@ -80,12 +80,12 @@ LeafControl — ambient memory layer для macOS (далее iOS) + Native UI +
 - **GRDB 7.10+ fork** + SQLCipher через SwiftPM (официальной интеграции нет — community fork).
 - SQLite в WAL mode, три процесса (Agent writer + MCPServer reader + MenuBarApp reader) → один файл, cross-process POSIX locks, `DatabasePool` в каждом процессе.
 - Обязательные pragma: `cipher_plaintext_header_size=32` + external salt (iOS-ready), `busy_timeout=5000`, `PRAGMA key = x'HEX'` с raw keyspec (без PBKDF2 на каждом open).
-- Ключ в Keychain: `kSecClassGenericPassword`, `kSecAttrAccessGroup=$(TeamID).tech.gundem.leafcontrol`, `AccessibleAfterFirstUnlockThisDeviceOnly`, `Synchronizable=false`.
+- Ключ в Keychain: `kSecClassGenericPassword`, `kSecAttrAccessGroup=$(TeamID).tech.gundem.leaf`, `AccessibleAfterFirstUnlockThisDeviceOnly`, `Synchronizable=false`.
 - Writer запускает `PRAGMA wal_checkpoint(TRUNCATE)` раз в 15 мин / 4MB — без этого WAL распухает без границ.
-- Путь: `~/Library/Application Support/LeafControl/events.sqlite` (0600).
+- Путь: `~/Library/Application Support/Leaf/events.sqlite` (0600).
 
 ## Derived Insights Engine (ADR-019)
-Чистый Swift-модуль в shared package (`LeafControlCore`), считает метрики из SQLCipher on-demand. Zero LLM dependency. Используется MenuBarApp (для Native UI) и MCPServer (для tool responses).
+Чистый Swift-модуль в shared package (`LeafCore`), считает метрики из SQLCipher on-demand. Zero LLM dependency. Используется MenuBarApp (для Native UI) и MCPServer (для tool responses).
 
 - **API (высокоуровнево):** `timeInApp(period:)`, `focusSessions(period:)`, `contextSwitchRate(period:)`, `filesTouched(period:)`, `aiRatio(period:)`, `teamPresenceOverlap(team:, period:)`, `deepWorkStreak()`, `peakProductivityHour()`, `weekOverWeekDelta()`.
 - **Реализация:** SQL запросы через GRDB + Swift арифметика + SwiftUI Charts. Никаких LLM-вызовов.
@@ -120,7 +120,7 @@ SQLCipher таблицы:
 - **Filter применяется до encryption** в Agent: если current app не в whitelist → `presence_snapshot = {status: "active_generic"}` без app/folder; если event_type не в whitelist → не включается в snapshot. Relay никогда не видит разницу "отфильтровано vs не было события".
 - **Non-shared app default mode** = `active_generic` (команда видит что юзер работает, но не в чём). Юзер в Settings может переключить в `fully_invisible` (последний shared snapshot + "last seen N min ago") или `away_ambiguous`.
 - **Individual control > team convention**: admin не может forced-add app в share list или установить team-wide minimum visibility. Этот запрет в ADR-010 Won't-list.
-- **Privacy dashboard reverse view**: Native UI показывает юзеру "Team sees of me right now: Xcode (LeafControl/Agent), 5 min ago" + quick-toggle "Stop sharing this app now".
+- **Privacy dashboard reverse view**: Native UI показывает юзеру "Team sees of me right now: Xcode (Leaf/Agent), 5 min ago" + quick-toggle "Stop sharing this app now".
 - **Non-retroactive**: выключение sharing для app после-факта не удаляет что уже пошарено. Для полного удаления — right-to-deletion flow (ADR-013).
 
 ## Presence distribution (ADR-016)
@@ -153,7 +153,7 @@ SQLCipher таблицы:
 
 ## Ключевые подсистемы
 - **Agent** — LaunchAgent, фоновый writer SQLCipher + derive presence snapshot + **apply Share Controls filter** + encrypt + WS send
-- **LeafControlCore** (Swift module) — shared library, содержит **Derived Insights Engine** (метрики on-demand) + DB access layer (GRDB models) + CryptoKit wrappers. Линкуется в MenuBarApp и MCPServer.
+- **LeafCore** (Swift module) — shared library, содержит **Derived Insights Engine** (метрики on-demand) + DB access layer (GRDB models) + CryptoKit wrappers. Линкуется в MenuBarApp и MCPServer.
 - **MenuBarApp** — Native UI (Home / Team / Connections / Organization / Settings + Share Controls sub-screen + Privacy dashboard reverse view) + Invisible control + Sparkle update owner. Потребляет Derived Insights Engine для всех visualizations.
 - **MCPServer** — on-demand bonus channel для AI-клиентов. MVP tools: `get_timeline`, `find_last_activity`, `get_current_session`, `get_presence`, `get_team_timeline`, `get_team_focus`, `get_team_overlap`, `get_ai_activity`. Отдаёт structured JSON через Derived Insights Engine.
 - **PresenceRelay** — Cloudflare DO: broadcast encrypted blobs connected peers

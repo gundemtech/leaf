@@ -1,0 +1,709 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		065215E1C75AB8E8F58D15F7 /* LeafMCP in Embed CLI Helpers */ = {isa = PBXBuildFile; fileRef = C8DAA11FC3F5FFF6580F491A /* LeafMCP */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		0B762EFD0076DDEFF0180D89 /* LeafCorePrivate in Frameworks */ = {isa = PBXBuildFile; productRef = 7453218574ED9E25C1E2249B /* LeafCorePrivate */; };
+		1B977B45F3768B3750A221F9 /* LeafMCPProtocol in Frameworks */ = {isa = PBXBuildFile; productRef = 65BA2F4632F07A6655AE7545 /* LeafMCPProtocol */; };
+		32811FB1AE98CCAF84012E39 /* LeafCorePrivate in Frameworks */ = {isa = PBXBuildFile; productRef = 8F8E34D2D7EE02F8A517B0A3 /* LeafCorePrivate */; };
+		4BC90D9CB73EB9BBDD60F841 /* LeafCorePrivate in Frameworks */ = {isa = PBXBuildFile; productRef = DADE63FF43B0419C4A7B4ABB /* LeafCorePrivate */; };
+		6BA6FF9CECCDF93CF297CCB0 /* LeafCore in Frameworks */ = {isa = PBXBuildFile; productRef = B046993ED3685984462393D9 /* LeafCore */; };
+		AB01C171AADFFAA2C54DC33D /* LeafAgent in Embed CLI Helpers */ = {isa = PBXBuildFile; fileRef = B0EC45208EBCB3682E080571 /* LeafAgent */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		E0192A42BE48990A6ABC3993 /* LeafCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5C6E93B7D5BA63F53057E5BD /* LeafCore */; };
+		F3E5D5DB835340572123E0D5 /* LeafCore in Frameworks */ = {isa = PBXBuildFile; productRef = DF87B75D3DB9208E396D0AB8 /* LeafCore */; };
+		FBDE789863EA1EAA8C2B84B1 /* Resources/LaunchAgents/tech.gundem.leaf.agent.plist in Embed LaunchAgent Plist */ = {isa = PBXBuildFile; fileRef = AAFF44718B4072844D5C6FF3 /* Resources/LaunchAgents/tech.gundem.leaf.agent.plist */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		BED296387BAE10B3D15CFCEE /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D81CFDAE2F97B50500D2D372 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 08F4D567216872C4F40E4205;
+			remoteInfo = LeafMCP;
+		};
+		FAA42DA5E1EBF1DA403D2B1C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D81CFDAE2F97B50500D2D372 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8A2A533B0DAD02150265D101;
+			remoteInfo = LeafAgent;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		050D985F925B3A47851A11ED /* Embed LaunchAgent Plist */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = Contents/Library/LaunchAgents;
+			dstSubfolderSpec = 1;
+			files = (
+				FBDE789863EA1EAA8C2B84B1 /* Resources/LaunchAgents/tech.gundem.leaf.agent.plist in Embed LaunchAgent Plist */,
+			);
+			name = "Embed LaunchAgent Plist";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DC12C6C5E99D080321BC97CD /* Embed CLI Helpers */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 6;
+			files = (
+				AB01C171AADFFAA2C54DC33D /* LeafAgent in Embed CLI Helpers */,
+				065215E1C75AB8E8F58D15F7 /* LeafMCP in Embed CLI Helpers */,
+			);
+			name = "Embed CLI Helpers";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		AAFF44718B4072844D5C6FF3 /* Resources/LaunchAgents/tech.gundem.leaf.agent.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Resources/LaunchAgents/tech.gundem.leaf.agent.plist; sourceTree = "<group>"; };
+		B0EC45208EBCB3682E080571 /* LeafAgent */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = LeafAgent; sourceTree = BUILT_PRODUCTS_DIR; };
+		C8DAA11FC3F5FFF6580F491A /* LeafMCP */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = LeafMCP; sourceTree = BUILT_PRODUCTS_DIR; };
+		D81CFDB62F97B50500D2D372 /* Leaf.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Leaf.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F5623F079AF6FD8D42A82215 /* Config/Base.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Config/Base.xcconfig; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A3C14BDFE1D5C743A60B0B47 /* Exceptions for "Leaf" folder in "Leaf" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = D81CFDB52F97B50500D2D372 /* Leaf */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		14B6E7581FBDB34479727CBD /* Config */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Config;
+			sourceTree = "<group>";
+		};
+		603A3C6446C95A90C052E05C /* LeafMCP */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = LeafMCP;
+			sourceTree = "<group>";
+		};
+		7E3BE3513A4F5CA769F72F4A /* LeafAgent */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = LeafAgent;
+			sourceTree = "<group>";
+		};
+		D81CFDB82F97B50500D2D372 /* Leaf */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A3C14BDFE1D5C743A60B0B47 /* Exceptions for "Leaf" folder in "Leaf" target */,
+			);
+			path = Leaf;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		58A06FAF28885523B01FBCCE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6BA6FF9CECCDF93CF297CCB0 /* LeafCore in Frameworks */,
+				32811FB1AE98CCAF84012E39 /* LeafCorePrivate in Frameworks */,
+				1B977B45F3768B3750A221F9 /* LeafMCPProtocol in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7D767105D2E1906BB796CF54 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F3E5D5DB835340572123E0D5 /* LeafCore in Frameworks */,
+				4BC90D9CB73EB9BBDD60F841 /* LeafCorePrivate in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D81CFDB32F97B50500D2D372 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E0192A42BE48990A6ABC3993 /* LeafCore in Frameworks */,
+				0B762EFD0076DDEFF0180D89 /* LeafCorePrivate in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		D81CFDAD2F97B50500D2D372 = {
+			isa = PBXGroup;
+			children = (
+				D81CFDB82F97B50500D2D372 /* Leaf */,
+				D81CFDB72F97B50500D2D372 /* Products */,
+				7E3BE3513A4F5CA769F72F4A /* LeafAgent */,
+				603A3C6446C95A90C052E05C /* LeafMCP */,
+				14B6E7581FBDB34479727CBD /* Config */,
+				F5623F079AF6FD8D42A82215 /* Config/Base.xcconfig */,
+				AAFF44718B4072844D5C6FF3 /* Resources/LaunchAgents/tech.gundem.leaf.agent.plist */,
+			);
+			sourceTree = "<group>";
+		};
+		D81CFDB72F97B50500D2D372 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				D81CFDB62F97B50500D2D372 /* Leaf.app */,
+				B0EC45208EBCB3682E080571 /* LeafAgent */,
+				C8DAA11FC3F5FFF6580F491A /* LeafMCP */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		08F4D567216872C4F40E4205 /* LeafMCP */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3C337CBDE20B1831B16070A1 /* Build configuration list for PBXNativeTarget "LeafMCP" */;
+			buildPhases = (
+				07961C4213D641A5BB836E04 /* Sources */,
+				58A06FAF28885523B01FBCCE /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				603A3C6446C95A90C052E05C /* LeafMCP */,
+			);
+			name = LeafMCP;
+			packageProductDependencies = (
+				B046993ED3685984462393D9 /* LeafCore */,
+				8F8E34D2D7EE02F8A517B0A3 /* LeafCorePrivate */,
+				65BA2F4632F07A6655AE7545 /* LeafMCPProtocol */,
+			);
+			productName = LeafMCP;
+			productReference = C8DAA11FC3F5FFF6580F491A /* LeafMCP */;
+			productType = "com.apple.product-type.tool";
+		};
+		8A2A533B0DAD02150265D101 /* LeafAgent */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C440361F0C32B752633179E9 /* Build configuration list for PBXNativeTarget "LeafAgent" */;
+			buildPhases = (
+				FD9FB178595BA18D9545B400 /* Sources */,
+				7D767105D2E1906BB796CF54 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				7E3BE3513A4F5CA769F72F4A /* LeafAgent */,
+			);
+			name = LeafAgent;
+			packageProductDependencies = (
+				DF87B75D3DB9208E396D0AB8 /* LeafCore */,
+				DADE63FF43B0419C4A7B4ABB /* LeafCorePrivate */,
+			);
+			productName = LeafAgent;
+			productReference = B0EC45208EBCB3682E080571 /* LeafAgent */;
+			productType = "com.apple.product-type.tool";
+		};
+		D81CFDB52F97B50500D2D372 /* Leaf */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D81CFDC12F97B50700D2D372 /* Build configuration list for PBXNativeTarget "Leaf" */;
+			buildPhases = (
+				D81CFDB22F97B50500D2D372 /* Sources */,
+				D81CFDB32F97B50500D2D372 /* Frameworks */,
+				D81CFDB42F97B50500D2D372 /* Resources */,
+				DC12C6C5E99D080321BC97CD /* Embed CLI Helpers */,
+				050D985F925B3A47851A11ED /* Embed LaunchAgent Plist */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				2B0F2BE3624E5F09F8D90EE3 /* PBXTargetDependency */,
+				03BF5BAAA1F89267CD21720E /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				D81CFDB82F97B50500D2D372 /* Leaf */,
+			);
+			name = Leaf;
+			packageProductDependencies = (
+				5C6E93B7D5BA63F53057E5BD /* LeafCore */,
+				7453218574ED9E25C1E2249B /* LeafCorePrivate */,
+			);
+			productName = Leaf;
+			productReference = D81CFDB62F97B50500D2D372 /* Leaf.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		D81CFDAE2F97B50500D2D372 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2610;
+				LastUpgradeCheck = 2610;
+				TargetAttributes = {
+					D81CFDB52F97B50500D2D372 = {
+						CreatedOnToolsVersion = 26.1.1;
+					};
+				};
+			};
+			buildConfigurationList = D81CFDB12F97B50500D2D372 /* Build configuration list for PBXProject "Leaf" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = D81CFDAD2F97B50500D2D372;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "Packages/LeafCore" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = D81CFDB72F97B50500D2D372 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				D81CFDB52F97B50500D2D372 /* Leaf */,
+				8A2A533B0DAD02150265D101 /* LeafAgent */,
+				08F4D567216872C4F40E4205 /* LeafMCP */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		D81CFDB42F97B50500D2D372 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		07961C4213D641A5BB836E04 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D81CFDB22F97B50500D2D372 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FD9FB178595BA18D9545B400 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		03BF5BAAA1F89267CD21720E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = LeafMCP;
+			target = 08F4D567216872C4F40E4205 /* LeafMCP */;
+			targetProxy = BED296387BAE10B3D15CFCEE /* PBXContainerItemProxy */;
+		};
+		2B0F2BE3624E5F09F8D90EE3 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = LeafAgent;
+			target = 8A2A533B0DAD02150265D101 /* LeafAgent */;
+			targetProxy = FAA42DA5E1EBF1DA403D2B1C /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		7469B0ABD5182A68AFBC1158 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Config/Base.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = LeafAgent/LeafAgent.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4LZ84Z78M7;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = tech.gundem.leaf.agent;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) $(LEAF_FLAGS)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		79A584B58BF097FFC6663BF1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Config/Base.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = LeafAgent/LeafAgent.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4LZ84Z78M7;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = tech.gundem.leaf.agent;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) $(LEAF_FLAGS)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		947D409C0578F1815DB64B00 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Config/Base.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = LeafMCP/LeafMCP.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4LZ84Z78M7;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = tech.gundem.leaf.mcp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) $(LEAF_FLAGS)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		C7BFE675906ED75A763CFBFC /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Config/Base.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = LeafMCP/LeafMCP.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4LZ84Z78M7;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = tech.gundem.leaf.mcp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) $(LEAF_FLAGS)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		D81CFDBF2F97B50700D2D372 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Config/Base.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 4LZ84Z78M7;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG $(LEAF_FLAGS)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		D81CFDC02F97B50700D2D372 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Config/Base.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 4LZ84Z78M7;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) $(LEAF_FLAGS)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		D81CFDC22F97B50700D2D372 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Config/Base.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Leaf/Leaf.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4LZ84Z78M7;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Leaf/Info.plist;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = tech.gundem.leaf;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) $(LEAF_FLAGS)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		D81CFDC32F97B50700D2D372 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Config/Base.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Leaf/Leaf.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4LZ84Z78M7;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Leaf/Info.plist;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = tech.gundem.leaf;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) $(LEAF_FLAGS)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		3C337CBDE20B1831B16070A1 /* Build configuration list for PBXNativeTarget "LeafMCP" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				947D409C0578F1815DB64B00 /* Debug */,
+				C7BFE675906ED75A763CFBFC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C440361F0C32B752633179E9 /* Build configuration list for PBXNativeTarget "LeafAgent" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				79A584B58BF097FFC6663BF1 /* Debug */,
+				7469B0ABD5182A68AFBC1158 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D81CFDB12F97B50500D2D372 /* Build configuration list for PBXProject "Leaf" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D81CFDBF2F97B50700D2D372 /* Debug */,
+				D81CFDC02F97B50700D2D372 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D81CFDC12F97B50700D2D372 /* Build configuration list for PBXNativeTarget "Leaf" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D81CFDC22F97B50700D2D372 /* Debug */,
+				D81CFDC32F97B50700D2D372 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "Packages/LeafCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/LeafCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		5C6E93B7D5BA63F53057E5BD /* LeafCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "Packages/LeafCore" */;
+			productName = LeafCore;
+		};
+		65BA2F4632F07A6655AE7545 /* LeafMCPProtocol */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "Packages/LeafCore" */;
+			productName = LeafMCPProtocol;
+		};
+		7453218574ED9E25C1E2249B /* LeafCorePrivate */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "Packages/LeafCore" */;
+			productName = LeafCorePrivate;
+		};
+		8F8E34D2D7EE02F8A517B0A3 /* LeafCorePrivate */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "Packages/LeafCore" */;
+			productName = LeafCorePrivate;
+		};
+		B046993ED3685984462393D9 /* LeafCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "Packages/LeafCore" */;
+			productName = LeafCore;
+		};
+		DADE63FF43B0419C4A7B4ABB /* LeafCorePrivate */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "Packages/LeafCore" */;
+			productName = LeafCorePrivate;
+		};
+		DF87B75D3DB9208E396D0AB8 /* LeafCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "Packages/LeafCore" */;
+			productName = LeafCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = D81CFDAE2F97B50500D2D372 /* Project object */;
+}

@@ -14,7 +14,7 @@ description: Проверка diff перед пушем в публичный a
 
 1. **Определи, что будет запушено:**
    ```bash
-   cd /Users/ddemidov/Desktop/LeafControl   # или где клон leaf
+   cd <клон leaf>                            # обычно `~/Desktop/Leaf` или похожее
    git log origin/main..HEAD --oneline       # коммиты к пушу
    git diff origin/main..HEAD                # полный diff
    ```

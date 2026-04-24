@@ -4,4 +4,4 @@
 // Без Local.xcconfig — проект собирается со StubInsights и DatabaseConfig.weakDefaults
 // (работает, но не production-grade).
 
-// LEAFCONTROL_FLAGS = LEAFCONTROL_PROD
+// LEAF_FLAGS = LEAF_PROD

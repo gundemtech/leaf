@@ -1,16 +1,16 @@
 // Base.xcconfig — общий для всех target-configuration.
 // Пустой по умолчанию; всё тяжёлое сидит в project.pbxproj или per-target.
 //
-// Local.xcconfig (gitignored) переопределяет LEAFCONTROL_FLAGS, чтобы
+// Local.xcconfig (gitignored) переопределяет LEAF_FLAGS, чтобы
 // включить компиляцию с production moat-реализациями.
 // Скопируй Local.xcconfig.example → Local.xcconfig у себя и раскомментируй строку.
 
 // Default: moat-флаг не установлен → StubInsights + DatabaseConfig.weakDefaults.
 // CI билд (без Local.xcconfig) остаётся на этой ветке.
-LEAFCONTROL_FLAGS =
+LEAF_FLAGS =
 
 // Local.xcconfig (если существует) перезатирает default выше.
 #include? "Local.xcconfig"
 
 // Каждый target в project.pbxproj делает:
-//   SWIFT_ACTIVE_COMPILATION_CONDITIONS = $(inherited) $(LEAFCONTROL_FLAGS)
+//   SWIFT_ACTIVE_COMPILATION_CONDITIONS = $(inherited) $(LEAF_FLAGS)

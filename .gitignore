@@ -26,16 +26,16 @@ Packages/*/Package.resolved
 # Workspace-level SPM state (user-specific for local packages)
 *.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
 
-# LeafControlCorePrivate — implementation moat живёт локально.
+# LeafCorePrivate — implementation moat живёт локально.
 # Tracked только Placeholder.swift; все остальные swift-файлы — dev-only.
-Packages/LeafControlCore/Sources/LeafControlCorePrivate/**/*.swift
-!Packages/LeafControlCore/Sources/LeafControlCorePrivate/Placeholder.swift
+Packages/LeafCore/Sources/LeafCorePrivate/**/*.swift
+!Packages/LeafCore/Sources/LeafCorePrivate/Placeholder.swift
 
-# LeafControlCorePrivateTests — тесты для moat-модуля (SQL assertions и т.п.).
+# LeafCorePrivateTests — тесты для moat-модуля (SQL assertions и т.п.).
 # Tracked только Placeholder.swift, реальные тесты — dev-only.
-Packages/LeafControlCore/Tests/LeafControlCorePrivateTests/**/*.swift
-!Packages/LeafControlCore/Tests/LeafControlCorePrivateTests/Placeholder.swift
+Packages/LeafCore/Tests/LeafCorePrivateTests/**/*.swift
+!Packages/LeafCore/Tests/LeafCorePrivateTests/Placeholder.swift
 
-# Local xcconfig — dev-only флаги для LeafControlCorePrivate prod-сборки.
+# Local xcconfig — dev-only флаги для LeafCorePrivate prod-сборки.
 # Пример в Config/Local.xcconfig.example (tracked).
 Config/Local.xcconfig
