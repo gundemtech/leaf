@@ -23,23 +23,40 @@ enum MCPMain {
                 postKeyPragmas: ProdConfigs.sqlcipherPragmasPostKey
             )
         }()
+        let focusSessionGapSec: TimeInterval = ProdConfigs.agent.focusSessionGapSec
         #else
         let dbConfig = DatabaseConfig.weakDefaults
         let prodMode = false
         let dbEncryption: EncryptionOptions? = nil
+        let focusSessionGapSec: TimeInterval = AgentThresholds.weakDefaults.focusSessionGapSec
         #endif
 
         MCPLog.info("leaf-mcp v\(MCPConstants.serverVersion) starting (prod=\(prodMode))")
 
         let dbURL = DatabasePath.defaultURL()
         let timelineTool = GetTimelineTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
+        let findLastActivityTool = FindLastActivityTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
+        let currentSessionTool = GetCurrentSessionTool(
+            dbURL: dbURL,
+            dbConfig: dbConfig,
+            dbEncryption: dbEncryption,
+            focusSessionGapSec: focusSessionGapSec
+        )
 
         // Notifications (`notifications/*`) обрабатываются Dispatcher'ом через
         // id == nil short-circuit — отдельный handler регистрировать не нужно.
         let dispatcher = Dispatcher(handlers: [
             "initialize": InitializeHandler(),
-            "tools/list": ToolsListHandler(tools: [GetTimelineTool.definition]),
-            "tools/call": ToolsCallHandler(registry: ["get_timeline": timelineTool])
+            "tools/list": ToolsListHandler(tools: [
+                GetTimelineTool.definition,
+                FindLastActivityTool.definition,
+                GetCurrentSessionTool.definition
+            ]),
+            "tools/call": ToolsCallHandler(registry: [
+                "get_timeline": timelineTool,
+                "find_last_activity": findLastActivityTool,
+                "get_current_session": currentSessionTool
+            ])
         ])
 
         let transport = StdioTransport(dispatcher: dispatcher)

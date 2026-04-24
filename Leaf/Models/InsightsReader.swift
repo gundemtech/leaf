@@ -26,7 +26,7 @@ final class InsightsReader {
     enum State {
         case notConfigured(message: String)
         case loading
-        case loaded(entries: [AppTimeEntry], updated: Date)
+        case loaded(snapshot: InsightsSnapshot, updated: Date)
         case empty(message: String)
         case error(message: String)
     }
@@ -39,16 +39,21 @@ final class InsightsReader {
     private let databaseURL: URL
     private let databaseConfig: DatabaseConfig
     private let databaseEncryption: EncryptionOptions?
+    /// Threshold "deep" — берётся из ProdConfigs (LEAF_PROD) или weakDefaults.
+    /// Применяется на producer-side при сборке snapshot, UI не пересчитывает.
+    private let deepSessionMinSec: TimeInterval
     private let logger = Logger(subsystem: "tech.gundem.leaf.app", category: "insights")
 
     init(
         databaseURL: URL = DatabasePath.defaultURL(),
         databaseConfig: DatabaseConfig = InsightsReader.defaultConfig(),
-        databaseEncryption: EncryptionOptions? = InsightsReader.defaultEncryption()
+        databaseEncryption: EncryptionOptions? = InsightsReader.defaultEncryption(),
+        deepSessionMinSec: TimeInterval = InsightsReader.defaultDeepSessionMinSec()
     ) {
         self.databaseURL = databaseURL
         self.databaseConfig = databaseConfig
         self.databaseEncryption = databaseEncryption
+        self.deepSessionMinSec = deepSessionMinSec
     }
 
     func refresh() {
@@ -70,20 +75,31 @@ final class InsightsReader {
         let cfg = databaseConfig
         let enc = databaseEncryption
         let cachedDB = database
+        let deepMin = deepSessionMinSec
 
         currentTask = Task { [self] in
-            // Database (@unchecked Sendable) and entries ([AppTimeEntry]) are
-            // Sendable, so hopping through MainActor.run after a detached
-            // background compute is race-safe.
-            let result: Result<(LeafCore.Database, [AppTimeEntry]), Error> =
+            // Database (@unchecked Sendable) и InsightsSnapshot (Sendable) —
+            // hopping через MainActor.run после background compute race-safe.
+            let result: Result<(LeafCore.Database, InsightsSnapshot), Error> =
                 await Task.detached(priority: .userInitiated) {
                     do {
                         let db = try cachedDB ?? LeafCore.Database.openForRead(at: url, config: cfg, encryption: enc)
                         let insights = DerivedInsightsFactory.make(database: db)
                         let today = InsightsReader.todayInterval()
-                        let entries = try insights.timeInApp(period: today)
+                        // Sequential calls — async overhead неоправдан, SQL-reads <50ms.
+                        let topApps = try insights.timeInApp(period: today)
                         try Task.checkCancellation()
-                        return .success((db, entries))
+                        let sessions = try insights.focusSessions(period: today)
+                        try Task.checkCancellation()
+                        let switchRate = try insights.contextSwitchRate(period: today)
+                        try Task.checkCancellation()
+                        let snapshot = InsightsSnapshot(
+                            topApps: topApps,
+                            sessions: sessions,
+                            switchRate: switchRate,
+                            deepSessionMinSec: deepMin
+                        )
+                        return .success((db, snapshot))
                     } catch {
                         return .failure(error)
                     }
@@ -92,20 +108,20 @@ final class InsightsReader {
             if Task.isCancelled { return }
 
             switch result {
-            case .success(let (db, entries)):
+            case .success(let (db, snapshot)):
                 self.database = db
-                if entries.isEmpty {
+                if snapshot.isEmpty {
                     self.state = .empty(
                         message: "Collecting… activity will appear after a few app switches."
                     )
                 } else {
-                    self.state = .loaded(entries: entries, updated: Date())
+                    self.state = .loaded(snapshot: snapshot, updated: Date())
                 }
             case .failure(let error):
                 if error is CancellationError { return }
                 // Детально логируем (os.Logger → Console.app), в UI
                 // только generic сообщение (P8 — moat-safe).
-                self.logger.error("timeInApp failed: \(String(describing: error), privacy: .public)")
+                self.logger.error("insights snapshot failed: \(String(describing: error), privacy: .public)")
                 self.database = nil
                 self.state = .error(
                     message: "Couldn't read today's activity. Try Refresh."
@@ -141,6 +157,14 @@ final class InsightsReader {
         )
         #else
         return nil
+        #endif
+    }
+
+    nonisolated private static func defaultDeepSessionMinSec() -> TimeInterval {
+        #if LEAF_PROD
+        return ProdConfigs.agent.deepSessionMinSec
+        #else
+        return AgentThresholds.weakDefaults.deepSessionMinSec
         #endif
     }
 }

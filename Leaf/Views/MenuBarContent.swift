@@ -75,13 +75,13 @@ struct MenuBarContent: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 4)
-        case .loaded(let entries, _):
-            loadedContent(entries: entries)
+        case .loaded(let snapshot, _):
+            loadedContent(snapshot: snapshot)
         }
     }
 
-    private func loadedContent(entries: [AppTimeEntry]) -> some View {
-        let top = Array(entries.prefix(5))
+    private func loadedContent(snapshot: InsightsSnapshot) -> some View {
+        let top = Array(snapshot.topApps.prefix(5))
         return VStack(alignment: .leading, spacing: 6) {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(top, id: \.bundleID) { entry in
@@ -96,6 +96,7 @@ struct MenuBarContent: View {
                     }
                 }
             }
+            sessionsBlock(snapshot: snapshot)
             Chart(top, id: \.bundleID) { entry in
                 BarMark(
                     x: .value("App", AppNameResolver.shared.displayName(for: entry.bundleID)),
@@ -104,6 +105,31 @@ struct MenuBarContent: View {
             }
             .frame(height: 120)
             .chartYAxis { AxisMarks(position: .leading) }
+        }
+    }
+
+    @ViewBuilder
+    private func sessionsBlock(snapshot: InsightsSnapshot) -> some View {
+        if snapshot.sessions.isEmpty {
+            HStack {
+                Text("No focus sessions yet — keep working")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.top, 2)
+        } else {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Sessions: \(snapshot.sessions.count) · avg \(formatDuration(snapshot.avgSessionDuration)) · deep \(snapshot.deepSessionsCount)")
+                        .font(.caption)
+                    Text(String(format: "Switches: %.1f/h", snapshot.switchRate))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .padding(.top, 2)
         }
     }
 

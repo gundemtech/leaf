@@ -36,6 +36,12 @@ public protocol DerivedInsights: Sendable {
     // Trends
     func weekOverWeekDelta() throws -> Double
     func activeDaysInRow() throws -> Int
+
+    // Activity lookup (Phase 2.1).
+    /// Last attention event, опционально отфильтрованный по `bundleID`.
+    /// Возвращает `nil` если matching events нет (пустая БД, неизвестный bundle).
+    /// `nil` — semantically valid "нет данных", не error → не throws при empty result.
+    func lastActivity(bundleID: String?) throws -> ActivitySnapshot?
 }
 
 /// Phase 1.1 / CI fallback. Все методы бросают .notImplemented.
@@ -55,4 +61,5 @@ public struct StubInsights: DerivedInsights {
     public func teamTimeline(team: [String], period: DateInterval) throws -> [AppTimeEntry] { throw LeafError.notImplemented }
     public func weekOverWeekDelta() throws -> Double { throw LeafError.notImplemented }
     public func activeDaysInRow() throws -> Int { throw LeafError.notImplemented }
+    public func lastActivity(bundleID: String?) throws -> ActivitySnapshot? { nil }
 }
