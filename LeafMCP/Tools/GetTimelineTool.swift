@@ -30,6 +30,7 @@ nonisolated enum TimelinePeriod: String, Codable {
 struct GetTimelineTool: ToolExecutor {
     let dbURL: URL
     let dbConfig: DatabaseConfig
+    let dbEncryption: EncryptionOptions?
 
     static let definition: ToolDefinition = {
         let schema: [String: Any] = [
@@ -73,7 +74,7 @@ struct GetTimelineTool: ToolExecutor {
             )
         }
 
-        let database = try Database.openForRead(at: dbURL, config: dbConfig)
+        let database = try Database.openForRead(at: dbURL, config: dbConfig, encryption: dbEncryption)
         let insights = DerivedInsightsFactory.make(database: database)
         let interval = period.interval()
         let entries = try insights.timeInApp(period: interval)

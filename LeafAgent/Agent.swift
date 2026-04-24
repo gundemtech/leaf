@@ -18,10 +18,21 @@ enum AgentMain {
         let databaseConfig = ProdConfigs.database
         let agentThresholds = ProdConfigs.agent
         let usingProdConfig = true
+        let databaseEncryption: EncryptionOptions? = {
+            let accessGroup = KeychainAccessGroup.current()
+            return EncryptionOptions(
+                keyProvider: .callback { @Sendable in
+                    try KeychainKeyStore.fetchOrCreate(accessGroup: accessGroup)
+                },
+                preKeyPragmas: ProdConfigs.sqlcipherPragmasPreKey,
+                postKeyPragmas: ProdConfigs.sqlcipherPragmasPostKey
+            )
+        }()
         #else
         let databaseConfig = DatabaseConfig.weakDefaults
         let agentThresholds = AgentThresholds.weakDefaults
         let usingProdConfig = false
+        let databaseEncryption: EncryptionOptions? = nil
         #endif
 
         agentLogger.info("Leaf agent starting (prodConfig=\(usingProdConfig, privacy: .public))")
@@ -30,7 +41,7 @@ enum AgentMain {
         let dbURL = DatabasePath.defaultURL()
         let database: Database
         do {
-            database = try Database.openForWrite(at: dbURL, config: databaseConfig)
+            database = try Database.openForWrite(at: dbURL, config: databaseConfig, encryption: databaseEncryption)
             agentLogger.info("Database opened at \(dbURL.path, privacy: .public)")
         } catch {
             agentLogger.critical("Failed to open database: \(error.localizedDescription, privacy: .public)")

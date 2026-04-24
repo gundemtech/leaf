@@ -13,15 +13,26 @@ enum MCPMain {
         let dbConfig = ProdConfigs.database
         DerivedInsightsFactory.register { LeafCorePrivate.ProdInsights(database: $0) }
         let prodMode = true
+        let dbEncryption: EncryptionOptions? = {
+            let accessGroup = KeychainAccessGroup.current()
+            return EncryptionOptions(
+                keyProvider: .callback { @Sendable in
+                    try KeychainKeyStore.fetchOrCreate(accessGroup: accessGroup)
+                },
+                preKeyPragmas: ProdConfigs.sqlcipherPragmasPreKey,
+                postKeyPragmas: ProdConfigs.sqlcipherPragmasPostKey
+            )
+        }()
         #else
         let dbConfig = DatabaseConfig.weakDefaults
         let prodMode = false
+        let dbEncryption: EncryptionOptions? = nil
         #endif
 
         MCPLog.info("leaf-mcp v\(MCPConstants.serverVersion) starting (prod=\(prodMode))")
 
         let dbURL = DatabasePath.defaultURL()
-        let timelineTool = GetTimelineTool(dbURL: dbURL, dbConfig: dbConfig)
+        let timelineTool = GetTimelineTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
 
         // Notifications (`notifications/*`) обрабатываются Dispatcher'ом через
         // id == nil short-circuit — отдельный handler регистрировать не нужно.

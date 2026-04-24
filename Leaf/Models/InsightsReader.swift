@@ -38,14 +38,17 @@ final class InsightsReader {
 
     private let databaseURL: URL
     private let databaseConfig: DatabaseConfig
+    private let databaseEncryption: EncryptionOptions?
     private let logger = Logger(subsystem: "tech.gundem.leaf.app", category: "insights")
 
     init(
         databaseURL: URL = DatabasePath.defaultURL(),
-        databaseConfig: DatabaseConfig = InsightsReader.defaultConfig()
+        databaseConfig: DatabaseConfig = InsightsReader.defaultConfig(),
+        databaseEncryption: EncryptionOptions? = InsightsReader.defaultEncryption()
     ) {
         self.databaseURL = databaseURL
         self.databaseConfig = databaseConfig
+        self.databaseEncryption = databaseEncryption
     }
 
     func refresh() {
@@ -65,6 +68,7 @@ final class InsightsReader {
         state = .loading
         let url = databaseURL
         let cfg = databaseConfig
+        let enc = databaseEncryption
         let cachedDB = database
 
         currentTask = Task { [self] in
@@ -74,7 +78,7 @@ final class InsightsReader {
             let result: Result<(LeafCore.Database, [AppTimeEntry]), Error> =
                 await Task.detached(priority: .userInitiated) {
                     do {
-                        let db = try cachedDB ?? LeafCore.Database.openForRead(at: url, config: cfg)
+                        let db = try cachedDB ?? LeafCore.Database.openForRead(at: url, config: cfg, encryption: enc)
                         let insights = DerivedInsightsFactory.make(database: db)
                         let today = InsightsReader.todayInterval()
                         let entries = try insights.timeInApp(period: today)
@@ -122,6 +126,21 @@ final class InsightsReader {
         return ProdConfigs.database
         #else
         return .weakDefaults
+        #endif
+    }
+
+    nonisolated private static func defaultEncryption() -> EncryptionOptions? {
+        #if LEAF_PROD
+        let accessGroup = KeychainAccessGroup.current()
+        return EncryptionOptions(
+            keyProvider: .callback { @Sendable in
+                try KeychainKeyStore.fetchOrCreate(accessGroup: accessGroup)
+            },
+            preKeyPragmas: ProdConfigs.sqlcipherPragmasPreKey,
+            postKeyPragmas: ProdConfigs.sqlcipherPragmasPostKey
+        )
+        #else
+        return nil
         #endif
     }
 }

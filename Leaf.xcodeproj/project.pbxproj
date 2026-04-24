@@ -9,14 +9,14 @@
 /* Begin PBXBuildFile section */
 		065215E1C75AB8E8F58D15F7 /* LeafMCP in Embed CLI Helpers */ = {isa = PBXBuildFile; fileRef = C8DAA11FC3F5FFF6580F491A /* LeafMCP */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		0B762EFD0076DDEFF0180D89 /* LeafCorePrivate in Frameworks */ = {isa = PBXBuildFile; productRef = 7453218574ED9E25C1E2249B /* LeafCorePrivate */; };
-		1B977B45F3768B3750A221F9 /* LeafMCPProtocol in Frameworks */ = {isa = PBXBuildFile; productRef = 65BA2F4632F07A6655AE7545 /* LeafMCPProtocol */; };
-		32811FB1AE98CCAF84012E39 /* LeafCorePrivate in Frameworks */ = {isa = PBXBuildFile; productRef = 8F8E34D2D7EE02F8A517B0A3 /* LeafCorePrivate */; };
-		4BC90D9CB73EB9BBDD60F841 /* LeafCorePrivate in Frameworks */ = {isa = PBXBuildFile; productRef = DADE63FF43B0419C4A7B4ABB /* LeafCorePrivate */; };
-		6BA6FF9CECCDF93CF297CCB0 /* LeafCore in Frameworks */ = {isa = PBXBuildFile; productRef = B046993ED3685984462393D9 /* LeafCore */; };
+		1B977B45F3768B3750A221F9 /* LeafMCPProtocol in Frameworks */ = {isa = PBXBuildFile; productRef = 65BA2F4632F07A6655AE7545 /* LeafMCPProtocol */; settings = {ATTRIBUTES = (); }; };
+		32811FB1AE98CCAF84012E39 /* LeafCorePrivate in Frameworks */ = {isa = PBXBuildFile; productRef = 8F8E34D2D7EE02F8A517B0A3 /* LeafCorePrivate */; settings = {ATTRIBUTES = (); }; };
+		4BC90D9CB73EB9BBDD60F841 /* LeafCorePrivate in Frameworks */ = {isa = PBXBuildFile; productRef = DADE63FF43B0419C4A7B4ABB /* LeafCorePrivate */; settings = {ATTRIBUTES = (); }; };
+		6BA6FF9CECCDF93CF297CCB0 /* LeafCore in Frameworks */ = {isa = PBXBuildFile; productRef = B046993ED3685984462393D9 /* LeafCore */; settings = {ATTRIBUTES = (); }; };
 		AB01C171AADFFAA2C54DC33D /* LeafAgent in Embed CLI Helpers */ = {isa = PBXBuildFile; fileRef = B0EC45208EBCB3682E080571 /* LeafAgent */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		E0192A42BE48990A6ABC3993 /* LeafCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5C6E93B7D5BA63F53057E5BD /* LeafCore */; };
-		F3E5D5DB835340572123E0D5 /* LeafCore in Frameworks */ = {isa = PBXBuildFile; productRef = DF87B75D3DB9208E396D0AB8 /* LeafCore */; };
-		FBDE789863EA1EAA8C2B84B1 /* Resources/LaunchAgents/tech.gundem.leaf.agent.plist in Embed LaunchAgent Plist */ = {isa = PBXBuildFile; fileRef = AAFF44718B4072844D5C6FF3 /* Resources/LaunchAgents/tech.gundem.leaf.agent.plist */; };
+		F3E5D5DB835340572123E0D5 /* LeafCore in Frameworks */ = {isa = PBXBuildFile; productRef = DF87B75D3DB9208E396D0AB8 /* LeafCore */; settings = {ATTRIBUTES = (); }; };
+		FBDE789863EA1EAA8C2B84B1 /* tech.gundem.leaf.agent.plist in Embed LaunchAgent Plist */ = {isa = PBXBuildFile; fileRef = AAFF44718B4072844D5C6FF3 /* tech.gundem.leaf.agent.plist */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -43,7 +43,7 @@
 			dstPath = Contents/Library/LaunchAgents;
 			dstSubfolderSpec = 1;
 			files = (
-				FBDE789863EA1EAA8C2B84B1 /* Resources/LaunchAgents/tech.gundem.leaf.agent.plist in Embed LaunchAgent Plist */,
+				FBDE789863EA1EAA8C2B84B1 /* tech.gundem.leaf.agent.plist in Embed LaunchAgent Plist */,
 			);
 			name = "Embed LaunchAgent Plist";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -63,11 +63,11 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		AAFF44718B4072844D5C6FF3 /* Resources/LaunchAgents/tech.gundem.leaf.agent.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Resources/LaunchAgents/tech.gundem.leaf.agent.plist; sourceTree = "<group>"; };
+		AAFF44718B4072844D5C6FF3 /* tech.gundem.leaf.agent.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Resources/LaunchAgents/tech.gundem.leaf.agent.plist; sourceTree = "<group>"; };
 		B0EC45208EBCB3682E080571 /* LeafAgent */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = LeafAgent; sourceTree = BUILT_PRODUCTS_DIR; };
 		C8DAA11FC3F5FFF6580F491A /* LeafMCP */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = LeafMCP; sourceTree = BUILT_PRODUCTS_DIR; };
 		D81CFDB62F97B50500D2D372 /* Leaf.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Leaf.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		F5623F079AF6FD8D42A82215 /* Config/Base.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Config/Base.xcconfig; sourceTree = "<group>"; };
+		F5623F079AF6FD8D42A82215 /* Base.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Config/Base.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -83,16 +83,22 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		14B6E7581FBDB34479727CBD /* Config */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = Config;
 			sourceTree = "<group>";
 		};
 		603A3C6446C95A90C052E05C /* LeafMCP */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = LeafMCP;
 			sourceTree = "<group>";
 		};
 		7E3BE3513A4F5CA769F72F4A /* LeafAgent */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = LeafAgent;
 			sourceTree = "<group>";
 		};
@@ -146,8 +152,8 @@
 				7E3BE3513A4F5CA769F72F4A /* LeafAgent */,
 				603A3C6446C95A90C052E05C /* LeafMCP */,
 				14B6E7581FBDB34479727CBD /* Config */,
-				F5623F079AF6FD8D42A82215 /* Config/Base.xcconfig */,
-				AAFF44718B4072844D5C6FF3 /* Resources/LaunchAgents/tech.gundem.leaf.agent.plist */,
+				F5623F079AF6FD8D42A82215 /* Base.xcconfig */,
+				AAFF44718B4072844D5C6FF3 /* tech.gundem.leaf.agent.plist */,
 			);
 			sourceTree = "<group>";
 		};
@@ -264,7 +270,7 @@
 			mainGroup = D81CFDAD2F97B50500D2D372;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "Packages/LeafCore" */,
+				7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "LeafCore" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D81CFDB72F97B50500D2D372 /* Products */;
@@ -330,7 +336,7 @@
 /* Begin XCBuildConfiguration section */
 		7469B0ABD5182A68AFBC1158 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Config/Base.xcconfig */;
+			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Base.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = LeafAgent/LeafAgent.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -338,6 +344,10 @@
 				DEVELOPMENT_TEAM = 4LZ84Z78M7;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = tech.gundem.leaf.agent;
@@ -349,12 +359,13 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
+				TARGET_BUILD_DIR = "$(CONFIGURATION_BUILD_DIR)/LeafAgent";
 			};
 			name = Release;
 		};
 		79A584B58BF097FFC6663BF1 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Config/Base.xcconfig */;
+			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Base.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = LeafAgent/LeafAgent.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -362,6 +373,10 @@
 				DEVELOPMENT_TEAM = 4LZ84Z78M7;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = tech.gundem.leaf.agent;
@@ -373,12 +388,13 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
+				TARGET_BUILD_DIR = "$(CONFIGURATION_BUILD_DIR)/LeafAgent";
 			};
 			name = Debug;
 		};
 		947D409C0578F1815DB64B00 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Config/Base.xcconfig */;
+			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Base.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = LeafMCP/LeafMCP.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -386,6 +402,10 @@
 				DEVELOPMENT_TEAM = 4LZ84Z78M7;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = tech.gundem.leaf.mcp;
@@ -397,12 +417,13 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
+				TARGET_BUILD_DIR = "$(CONFIGURATION_BUILD_DIR)/LeafMCP";
 			};
 			name = Debug;
 		};
 		C7BFE675906ED75A763CFBFC /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Config/Base.xcconfig */;
+			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Base.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = LeafMCP/LeafMCP.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -410,6 +431,10 @@
 				DEVELOPMENT_TEAM = 4LZ84Z78M7;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = tech.gundem.leaf.mcp;
@@ -421,12 +446,13 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
+				TARGET_BUILD_DIR = "$(CONFIGURATION_BUILD_DIR)/LeafMCP";
 			};
 			name = Release;
 		};
 		D81CFDBF2F97B50700D2D372 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Config/Base.xcconfig */;
+			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Base.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -491,7 +517,7 @@
 		};
 		D81CFDC02F97B50700D2D372 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Config/Base.xcconfig */;
+			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Base.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -549,7 +575,7 @@
 		};
 		D81CFDC22F97B50700D2D372 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Config/Base.xcconfig */;
+			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Base.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -585,7 +611,7 @@
 		};
 		D81CFDC32F97B50700D2D372 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Config/Base.xcconfig */;
+			baseConfigurationReference = F5623F079AF6FD8D42A82215 /* Base.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -661,7 +687,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "Packages/LeafCore" */ = {
+		7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "LeafCore" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/LeafCore;
 		};
@@ -670,37 +696,37 @@
 /* Begin XCSwiftPackageProductDependency section */
 		5C6E93B7D5BA63F53057E5BD /* LeafCore */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "Packages/LeafCore" */;
+			package = 7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "LeafCore" */;
 			productName = LeafCore;
 		};
 		65BA2F4632F07A6655AE7545 /* LeafMCPProtocol */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "Packages/LeafCore" */;
+			package = 7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "LeafCore" */;
 			productName = LeafMCPProtocol;
 		};
 		7453218574ED9E25C1E2249B /* LeafCorePrivate */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "Packages/LeafCore" */;
+			package = 7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "LeafCore" */;
 			productName = LeafCorePrivate;
 		};
 		8F8E34D2D7EE02F8A517B0A3 /* LeafCorePrivate */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "Packages/LeafCore" */;
+			package = 7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "LeafCore" */;
 			productName = LeafCorePrivate;
 		};
 		B046993ED3685984462393D9 /* LeafCore */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "Packages/LeafCore" */;
+			package = 7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "LeafCore" */;
 			productName = LeafCore;
 		};
 		DADE63FF43B0419C4A7B4ABB /* LeafCorePrivate */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "Packages/LeafCore" */;
+			package = 7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "LeafCore" */;
 			productName = LeafCorePrivate;
 		};
 		DF87B75D3DB9208E396D0AB8 /* LeafCore */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "Packages/LeafCore" */;
+			package = 7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "LeafCore" */;
 			productName = LeafCore;
 		};
 /* End XCSwiftPackageProductDependency section */

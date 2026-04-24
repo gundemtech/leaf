@@ -1,8 +1,10 @@
 import Foundation
 import GRDB
+import os
 
-/// Phase 1 plaintext GRDB 7.x wrapper. SQLCipher — отдельный sub-phase 1.5.
+/// GRDB 7.x wrapper с опциональной SQLCipher-шифровкой.
 /// Writer (Agent) и Reader (App / MCP) — разные `Database` instance'ы поверх одного файла через WAL.
+/// `encryption: nil` на open* → plaintext (CI / unit-тесты). `.some(...)` → SQLCipher-encrypted.
 public final class Database: @unchecked Sendable {
     public enum Mode: Sendable { case writer, reader }
 
@@ -18,12 +20,18 @@ public final class Database: @unchecked Sendable {
 
     // MARK: - Opening
 
-    public static func openForWrite(at url: URL, config: DatabaseConfig) throws -> Database {
+    public static func openForWrite(
+        at url: URL,
+        config: DatabaseConfig,
+        encryption: EncryptionOptions? = nil
+    ) throws -> Database {
         try ensureDirectory(for: url)
+        try migrateFromPlaintextIfNeeded(at: url, encryption: encryption)
 
         var grdbConfig = Configuration()
         grdbConfig.readonly = false
         grdbConfig.busyMode = .timeout(TimeInterval(config.busyTimeoutMs) / 1000.0)
+        applyEncryption(encryption, to: &grdbConfig)
 
         let pool = try DatabasePool(path: url.path, configuration: grdbConfig)
 
@@ -34,10 +42,15 @@ public final class Database: @unchecked Sendable {
         return Database(pool: pool, config: config, mode: .writer)
     }
 
-    public static func openForRead(at url: URL, config: DatabaseConfig) throws -> Database {
+    public static func openForRead(
+        at url: URL,
+        config: DatabaseConfig,
+        encryption: EncryptionOptions? = nil
+    ) throws -> Database {
         var grdbConfig = Configuration()
         grdbConfig.readonly = true
         grdbConfig.busyMode = .timeout(TimeInterval(config.busyTimeoutMs) / 1000.0)
+        applyEncryption(encryption, to: &grdbConfig)
 
         let pool = try DatabasePool(path: url.path, configuration: grdbConfig)
         return Database(pool: pool, config: config, mode: .reader)
@@ -126,6 +139,52 @@ public final class Database: @unchecked Sendable {
     private static func ensureDirectory(for url: URL) throws {
         let directory = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
+
+    /// Устанавливает `prepareDatabase` hook на GRDB Configuration, применяющий
+    /// SQLCipher pragmas per-connection. Ordering: pre-key → `PRAGMA key = x'HEX'` → post-key.
+    /// Если `opts == nil` — ничего не делаем, DB открывается как plaintext SQLite.
+    private static func applyEncryption(_ opts: EncryptionOptions?, to config: inout Configuration) {
+        guard let opts else { return }
+        config.prepareDatabase { db in
+            for pragma in opts.preKeyPragmas {
+                try db.execute(sql: "PRAGMA \(pragma.name) = \(pragma.value)")
+            }
+            let key = try opts.keyProvider.resolve()
+            let hex = key.map { String(format: "%02x", $0) }.joined()
+            try db.execute(sql: "PRAGMA key = \"x'\(hex)'\"")
+            for pragma in opts.postKeyPragmas {
+                try db.execute(sql: "PRAGMA \(pragma.name) = \(pragma.value)")
+            }
+        }
+    }
+
+    /// Detection + rename plaintext SQLite при первом encrypted-boot.
+    /// Запускается только в writer mode (юзер уже писал → что-то есть для миграции),
+    /// и только если передан encryption (nil = остаёмся на plaintext).
+    /// Strategy (D-1.5-2): если первые 16 байт == "SQLite format 3\0" → переименовать
+    /// в `events.sqlite.pre-sqlcipher.bak`, удалить WAL/SHM sidecar'ы, запустить
+    /// нормальный open-flow (создаст свежую encrypted).
+    private static func migrateFromPlaintextIfNeeded(at url: URL, encryption: EncryptionOptions?) throws {
+        guard encryption != nil else { return }
+        let path = url.path
+        guard FileManager.default.fileExists(atPath: path) else { return }
+
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        let header = try handle.read(upToCount: 16) ?? Data()
+        guard header == Data("SQLite format 3\0".utf8) else { return }
+
+        let backup = url.appendingPathExtension("pre-sqlcipher.bak")
+        try FileManager.default.moveItem(at: url, to: backup)
+        for ext in ["-wal", "-shm"] {
+            let side = URL(fileURLWithPath: path + ext)
+            if FileManager.default.fileExists(atPath: side.path) {
+                try? FileManager.default.removeItem(at: side)
+            }
+        }
+        Logger(subsystem: "tech.gundem.leaf.core", category: "db")
+            .warning("Plaintext SQLite detected at \(path, privacy: .public), renamed to \(backup.path, privacy: .public). Starting fresh encrypted DB.")
     }
 }
 

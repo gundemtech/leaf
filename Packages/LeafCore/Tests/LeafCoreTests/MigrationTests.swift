@@ -17,7 +17,7 @@ final class MigrationTests: XCTestCase {
 
     func testMigration001CreatesEventsTable() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
-        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults)
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
         try db.readSQL { rawDB in
             let tables = try String.fetchAll(
@@ -31,7 +31,7 @@ final class MigrationTests: XCTestCase {
 
     func testMigration001CreatesBothIndexes() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
-        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults)
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
         try db.readSQL { rawDB in
             let indexes = try String.fetchAll(
@@ -47,13 +47,13 @@ final class MigrationTests: XCTestCase {
     func testMigration001IsIdempotent() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         // Open + close + reopen should not error on already-applied migration.
-        _ = try Database.openForWrite(at: dbURL, config: .weakDefaults)
-        _ = try Database.openForWrite(at: dbURL, config: .weakDefaults)
+        _ = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        _ = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
     }
 
     func testMigrationCreatesAllExpectedColumns() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
-        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults)
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
         try db.readSQL { rawDB in
             let columns = try Row.fetchAll(
@@ -67,5 +67,37 @@ final class MigrationTests: XCTestCase {
             XCTAssertTrue(columns.contains(Schema.Events.bundleID))
             XCTAssertTrue(columns.contains(Schema.Events.payloadJSON))
         }
+    }
+
+    func testPlaintextDetectionRenamesFileAndStartsFresh() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        let key = EncryptionOptions(keyProvider: .data(Data(repeating: 0xDD, count: 32)))
+
+        // Arrange: создаём plaintext DB с одним событием.
+        do {
+            let plain = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: nil)
+            try plain.write(RawEvent(signalType: .attention, bundleID: "com.legacy"))
+            try plain.checkpointWAL()
+        }
+
+        // Sanity — файл plaintext.
+        let headerBefore = try (FileHandle(forReadingFrom: dbURL).read(upToCount: 16)) ?? Data()
+        XCTAssertEqual(headerBefore, Data("SQLite format 3\0".utf8))
+
+        // Act: reopen с encryption — должен рядом появиться .bak и свежая encrypted DB.
+        let encrypted = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: key)
+
+        // Assert: .bak существует и plaintext.
+        let backup = dbURL.appendingPathExtension("pre-sqlcipher.bak")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: backup.path))
+        let headerBak = try (FileHandle(forReadingFrom: backup).read(upToCount: 16)) ?? Data()
+        XCTAssertEqual(headerBak, Data("SQLite format 3\0".utf8))
+
+        // Новая DB encrypted: header не SQLite и пустая.
+        try encrypted.checkpointWAL()
+        let headerNew = try (FileHandle(forReadingFrom: dbURL).read(upToCount: 16)) ?? Data()
+        XCTAssertNotEqual(headerNew, Data("SQLite format 3\0".utf8))
+        let range = DateInterval(start: .distantPast, duration: 86_400_000)
+        XCTAssertEqual(try encrypted.eventCount(in: range), 0)
     }
 }

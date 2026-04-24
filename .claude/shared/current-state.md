@@ -3,7 +3,7 @@
 _Срез "где мы сейчас" за 30 секунд. Обновляется вручную._
 
 ## Последнее обновление
-2026-04-24 (Phase 1.4 stdio MCP server + `get_timeline` tool)
+2026-04-24 (Phase 1.5 SQLCipher migration — encryption enabled)
 
 ## Где мы
 - Инфраструктура команды готова: `leaf-docs` (whitepaper v1.2) + shared memory в Leaf-репо.
@@ -13,6 +13,7 @@ _Срез "где мы сейчас" за 30 секунд. Обновляетс�
 - **Phase 1.2 done 2026-04-24.** Agent daemon: `@main enum AgentMain` с `RunLoop.main.run()`, `ActiveAppCollector` на `NSWorkspace.didActivateApplicationNotification`, `IdleCollector` на `CGEventSource.secondsSinceLastEventType`, `EventWriter` actor с batching + periodic flush, graceful shutdown на SIGTERM/SIGINT через `DispatchSource`, hardcoded Phase-1 blocklist. LaunchAgent plist embedded в `Leaf.app/Contents/Library/LaunchAgents/` через Copy Files phase. App: `@Observable LaunchAgentService` обёртка над `SMAppService.agent(plistName:)`, Settings с real toggle + status indicator.
 - **Phase 1.3 done 2026-04-24.** Первая визуальная метрика: `timeInApp` реализован в moat (`ProdInsights` с LEAD-window SQL + Swift tail-bonus), остальные 11 Insights методов throw `.notImplemented`. Factory перешёл с `#if LEAF_PROD` на runtime DI (регистрация провайдера в `LeafApp.init()`) т.к. Xcode не прокидывает compilation conditions в SPM dependencies. MenuBarExtra style сменён на `.window`, popover показывает Today header + top-5 apps + SwiftUI Charts bar chart + warning banner когда Agent off. `InsightsReader @MainActor @Observable` с state machine (notConfigured/loading/loaded/empty/error), cancellation previous task при новом refresh, file-exists precheck. `AppNameResolver` (3-tier lookup + cache), `formatDuration`, `Database.readSQL` как public moat bridge. Новый test target `LeafCorePrivateTests` с Placeholder + gitignore pattern для dev-only тестов. 32/32 тестов в dev (вкл. 5 ProdInsightsTests), 27/27 public simulation.
 - **Phase 1.4 done 2026-04-24.** stdio MCP server: JSON-RPC 2.0 поверх newline-delimited stdio (protocolVersion `2025-11-25`). Pure protocol layer в новом SPM target `LeafMCPProtocol` (15 unit-тестов: JSONRPC round-trip, MCP types, Dispatcher, Initialize/ToolsList/ToolsCall handlers). Binary в Xcode target `LeafMCP/`: `enum MCPLog` с `nonisolated static` методами (stderr writes, не unified log — Claude Code MCP debug pipe ожидает stderr), `actor StdioTransport` на `FileHandle.standardInput.bytes.lines`, `@main enum MCPMain` с `async main()`. Shutdown через stdin EOF (нет signal handlers — в async main без `RunLoop.main.run()` DispatchSource на `.main` ненадёжен). Tool `get_timeline(period: today|yesterday|last_7_days)` → `DerivedInsightsFactory.make(database:).timeInApp(period:)` через тот же runtime DI что у MenuBar. `claude mcp add --transport stdio leaf -- ...` → `✓ Connected`; Claude Code на "что я делал сегодня?" получает JSON с реальным top-apps. 47/47 тестов зелёные (32 existing + 15 MCP).
+- **Phase 1.5 done 2026-04-24.** SQLCipher AES-256 включён. Собственный fork `gundemtech/GRDB.swift-sqlcipher` (tracks groue v7.10.0) с раскомментированным "GRDB+SQLCipher" блоком + `sqlcipher/SQLCipher.swift` 4.14.0 (Zetetic SPM). Ключ 32-byte raw keyspec в Keychain (`events.db.key`, `$(TeamID).tech.gundem.leaf` access group, `AfterFirstUnlockThisDeviceOnly`), `PRAGMA key = x'HEX'` bypass PBKDF2. Public API additive: `EncryptionOptions(keyProvider:preKeyPragmas:postKeyPragmas:)` + `Database.openFor*(..., encryption:)`. Plaintext → encrypted миграция автоматическая (detection по header `SQLite format 3\0`, rename в `.pre-sqlcipher.bak`, cleanup WAL/SHM, fresh encrypted DB). Xcode 16 framework auto-embed fix: `TARGET_BUILD_DIR = $(CONFIGURATION_BUILD_DIR)/$(TARGET_NAME)` для LeafAgent/LeafMCP + `LD_RUNPATH_SEARCH_PATHS += @executable_path/../Frameworks`. Build OK, 52/52 тестов зелёные (47 existing → encrypted path + 1 migration + 4 SQLCipher integration).
 - **Linear переведён в режим "только таски"**. Второй мозг = whitepaper.
 
 ## Ключевые архитектурные решения (актуальный срез)
@@ -30,11 +31,11 @@ _Срез "где мы сейчас" за 30 секунд. Обновляетс�
 - **Distribution:** Sparkle 2 + EdDSA + Cloudflare R2 + notarytool.
 
 ## В работе прямо сейчас
-- Demo-видео ≤ 2 мин — acceptance criterion Phase 1. Menu-bar popover + Claude Code "что я делал сегодня?".
+- Demo-видео ≤ 2 мин — acceptance criterion Phase 1. Menu-bar popover + Claude Code "что я делал сегодня?" — теперь на encrypted DB.
 
-## Следующим (Phase 1.5 → distribution)
-- Phase 1.5 — SQLCipher migration (блокер до любой distribution).
-- Phase 2 — остальные Insights функции + дополнительные MCP tools.
+## Следующим (→ distribution)
+- Phase 2 — остальные Insights функции (11 шт, throw `.notImplemented`) + дополнительные MCP tools.
+- Phase 3 — Sparkle + notarization + Cloudflare R2 distribution.
 
 ## Open tensions
 Живут в `leaf-docs/docs/05-reference/open-tensions.md`. Топ-2:

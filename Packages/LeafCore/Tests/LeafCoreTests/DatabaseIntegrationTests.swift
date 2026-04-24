@@ -17,7 +17,7 @@ final class DatabaseIntegrationTests: XCTestCase {
     }
 
     func testWriteThenReadSingleEvent() throws {
-        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults)
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
         let event = RawEvent(
             timestamp: Date(timeIntervalSince1970: 1_700_000_000),
@@ -39,7 +39,7 @@ final class DatabaseIntegrationTests: XCTestCase {
     }
 
     func testBulkWriteAndRangeFilter() throws {
-        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults)
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
         let base = Date(timeIntervalSince1970: 1_700_000_000)
         let events = (0..<50).map { i in
@@ -65,7 +65,7 @@ final class DatabaseIntegrationTests: XCTestCase {
     }
 
     func testOrderingAscending() throws {
-        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults)
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
         let base = Date(timeIntervalSince1970: 1_700_000_000)
         // Write in reversed order
@@ -80,9 +80,9 @@ final class DatabaseIntegrationTests: XCTestCase {
 
     func testReaderCannotWrite() throws {
         // Writer initialises the DB
-        _ = try Database.openForWrite(at: dbURL, config: .weakDefaults)
+        _ = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
-        let reader = try Database.openForRead(at: dbURL, config: .weakDefaults)
+        let reader = try Database.openForRead(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         XCTAssertThrowsError(try reader.write(RawEvent(signalType: .attention, bundleID: "X"))) { error in
             guard let lcError = error as? LeafError else {
                 return XCTFail("Expected LeafError, got \(error)")
@@ -92,8 +92,8 @@ final class DatabaseIntegrationTests: XCTestCase {
     }
 
     func testReaderSeesWriterWrites() throws {
-        let writer = try Database.openForWrite(at: dbURL, config: .weakDefaults)
-        let reader = try Database.openForRead(at: dbURL, config: .weakDefaults)
+        let writer = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let reader = try Database.openForRead(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
         let ts = Date(timeIntervalSince1970: 1_700_000_000)
         try writer.write(RawEvent(timestamp: ts, signalType: .context, bundleID: nil, payload: ["state": "idle"]))
@@ -106,7 +106,7 @@ final class DatabaseIntegrationTests: XCTestCase {
     }
 
     func testCheckpointWALDoesNotCrash() throws {
-        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults)
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try db.write(RawEvent(signalType: .attention, bundleID: "Z"))
         try db.checkpointWAL()
     }

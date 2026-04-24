@@ -17,13 +17,15 @@ let package = Package(
         .library(name: "LeafMCPProtocol", targets: ["LeafMCPProtocol"])
     ],
     dependencies: [
-        .package(url: "https://github.com/groue/GRDB.swift", exact: "7.10.0")
+        // GRDB fork with SQLCipher enabled. Tracks groue/GRDB.swift v7.10.0
+        // with "GRDB+SQLCipher" inline instructions applied + SQLCipher.swift 4.14.0.
+        .package(url: "https://github.com/gundemtech/GRDB.swift-sqlcipher", exact: "7.10.0-sqlcipher2")
     ],
     targets: [
         .target(
             name: "LeafCore",
             dependencies: [
-                .product(name: "GRDB", package: "GRDB.swift")
+                .product(name: "GRDB", package: "GRDB.swift-sqlcipher")
             ],
             path: "Sources/LeafCore"
         ),
@@ -31,7 +33,7 @@ let package = Package(
             name: "LeafCorePrivate",
             dependencies: [
                 "LeafCore",
-                .product(name: "GRDB", package: "GRDB.swift")
+                .product(name: "GRDB", package: "GRDB.swift-sqlcipher")
             ],
             path: "Sources/LeafCorePrivate"
         ),
