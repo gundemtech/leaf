@@ -104,6 +104,11 @@ final class InsightsReader {
                         try Task.checkCancellation()
                         let activeDays = try insights.activeDaysInRow()
                         try Task.checkCancellation()
+                        // Phase 2.3 — AI breakdown за тот же `today` period.
+                        // 8-я sequential query; если совокупный p95 вырастет —
+                        // оптимизация в 2.5 wrap (shared CTE для bucket'ов).
+                        let aiBreakdown = try insights.aiActivityBreakdown(period: today)
+                        try Task.checkCancellation()
                         let snapshot = InsightsSnapshot(
                             topApps: topApps,
                             sessions: sessions,
@@ -112,7 +117,9 @@ final class InsightsReader {
                             deepWorkStreak: streak,
                             peakProductivityHour: peakHour,
                             weekOverWeekDelta: wow,
-                            activeDaysInRow: activeDays
+                            activeDaysInRow: activeDays,
+                            aiRatio: aiBreakdown.ratio,
+                            aiActiveSeconds: aiBreakdown.aiActiveSeconds
                         )
                         return .success((db, snapshot))
                     } catch {

@@ -2,10 +2,17 @@ import Foundation
 import LeafCore
 import LeafMCPProtocol
 
-// `TimelinePeriod` extracted в `Tools/Period.swift` (Phase 2.3) — shared с
-// `get_ai_activity` и future tools. Реализация enum'а живёт там.
-
-struct GetTimelineTool: ToolExecutor {
+/// MCP-tool: вернуть AI collaboration breakdown за период (today / yesterday /
+/// last_7_days). Reads same encrypted DB что MenuBar app — single source of truth.
+///
+/// Output payload (versioned `version: 1` через `ToolResponseBuilder`):
+///   - `period`, `from`, `to` — окно
+///   - `aiRatio` — 0..1, доля AI-active минут от union с attention
+///   - `aiActiveSeconds`, `totalActiveSeconds` — for human-readable formatting
+///   - `sessionCount` — distinct Claude Code sessions в окне
+///   - `topTools[]` — `{name, count}`, top-5 by tool_use count
+///   - `topProjects[]` — `{cwd, aiActiveSeconds}`, top-5 by AI-active time
+struct GetAiActivityTool: ToolExecutor {
     let dbURL: URL
     let dbConfig: DatabaseConfig
     let dbEncryption: EncryptionOptions?
@@ -23,8 +30,8 @@ struct GetTimelineTool: ToolExecutor {
             "additionalProperties": false
         ]
         return ToolDefinition(
-            name: "get_timeline",
-            description: "Return top applications by active time for the given period. Data comes from the local Leaf agent — raw metadata never leaves the device.",
+            name: "get_ai_activity",
+            description: "Return AI collaboration breakdown (Claude Code) for the given period — ratio, active seconds, session count, top tools, top projects. Metadata only — prompt/response content never leaves the device.",
             inputSchema: AnyCodable(schema)
         )
     }()
@@ -55,20 +62,22 @@ struct GetTimelineTool: ToolExecutor {
         let database = try Database.openForRead(at: dbURL, config: dbConfig, encryption: dbEncryption)
         let insights = DerivedInsightsFactory.make(database: database)
         let interval = period.interval()
-        let entries = try insights.timeInApp(period: interval)
+        let breakdown = try insights.aiActivityBreakdown(period: interval)
 
         let iso = ISO8601DateFormatter()
         let payload: [String: Any] = [
             "period": period.rawValue,
             "from": iso.string(from: interval.start),
             "to": iso.string(from: interval.end),
-            "entries": entries.map { entry -> [String: Any] in
-                [
-                    "bundleID": entry.bundleID,
-                    "durationSec": Int(entry.duration),
-                    "firstSeen": iso.string(from: entry.firstSeen),
-                    "lastSeen": iso.string(from: entry.lastSeen)
-                ]
+            "aiRatio": breakdown.ratio,
+            "aiActiveSeconds": Int(breakdown.aiActiveSeconds),
+            "totalActiveSeconds": Int(breakdown.totalActiveSeconds),
+            "sessionCount": breakdown.sessionCount,
+            "topTools": breakdown.topTools.map { entry -> [String: Any] in
+                ["name": entry.name, "count": entry.count]
+            },
+            "topProjects": breakdown.topProjects.map { entry -> [String: Any] in
+                ["cwd": entry.cwd, "aiActiveSeconds": Int(entry.aiActiveSeconds)]
             }
         ]
         return try ToolResponseBuilder.versionedJSONResult(payload)

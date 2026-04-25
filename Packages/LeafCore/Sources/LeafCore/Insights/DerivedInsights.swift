@@ -27,6 +27,9 @@ public protocol DerivedInsights: Sendable {
 
     // AI collaboration
     func aiRatio(period: DateInterval) throws -> Double
+    /// Phase 2.3 — детальный AI-collaboration breakdown для MCP / popover.
+    /// `aiRatio` делегирует в `aiActivityBreakdown(period:).ratio`.
+    func aiActivityBreakdown(period: DateInterval) throws -> AIActivityBreakdown
 
     // Team (Phase 2+)
     func teamPresenceOverlap(team: [String], period: DateInterval) throws -> TimeInterval
@@ -55,7 +58,8 @@ public struct StubInsights: DerivedInsights {
     public func deepWorkStreak() throws -> DeepWorkStreak { throw LeafError.notImplemented }
     public func peakProductivityHour() throws -> Int? { nil }
     public func filesTouched(period: DateInterval) throws -> [String] { throw LeafError.notImplemented }
-    public func aiRatio(period: DateInterval) throws -> Double { throw LeafError.notImplemented }
+    public func aiRatio(period: DateInterval) throws -> Double { 0 }
+    public func aiActivityBreakdown(period: DateInterval) throws -> AIActivityBreakdown { .empty }
     public func teamPresenceOverlap(team: [String], period: DateInterval) throws -> TimeInterval { throw LeafError.notImplemented }
     public func teamFocusAlignment(team: [String], period: DateInterval) throws -> Double { throw LeafError.notImplemented }
     public func teamTimeline(team: [String], period: DateInterval) throws -> [AppTimeEntry] { throw LeafError.notImplemented }

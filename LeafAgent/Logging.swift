@@ -10,3 +10,4 @@ nonisolated let agentLogger = Logger(subsystem: "tech.gundem.leaf.agent", catego
 nonisolated let collectorLogger = Logger(subsystem: "tech.gundem.leaf.agent", category: "collectors")
 nonisolated let writerLogger = Logger(subsystem: "tech.gundem.leaf.agent", category: "writer")
 nonisolated let maintenanceLogger = Logger(subsystem: "tech.gundem.leaf.agent", category: "maintenance")
+nonisolated let claudeCodeLogger = Logger(subsystem: "tech.gundem.leaf.agent", category: "claude-code")

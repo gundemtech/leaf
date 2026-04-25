@@ -31,6 +31,11 @@ public struct InsightsSnapshot: Sendable, Hashable {
     /// Phase 2.2 — consecutive active days ending at today/yesterday.
     /// `0` = сегодня не active и yesterday не active.
     public let activeDaysInRow: Int
+    /// Phase 2.3 — per-minute bucket union ratio aiCollab/(ai∪attention).
+    /// `0` = либо нет AI events, либо нет ни одной активной минуты в окне.
+    public let aiRatio: Double
+    /// Phase 2.3 — distinct minutes с AI activity × 60. UI показывает рядом с %.
+    public let aiActiveSeconds: TimeInterval
 
     public init(
         topApps: [AppTimeEntry],
@@ -40,7 +45,9 @@ public struct InsightsSnapshot: Sendable, Hashable {
         deepWorkStreak: DeepWorkStreak,
         peakProductivityHour: Int?,
         weekOverWeekDelta: Double?,
-        activeDaysInRow: Int
+        activeDaysInRow: Int,
+        aiRatio: Double,
+        aiActiveSeconds: TimeInterval
     ) {
         self.topApps = topApps
         self.sessions = sessions
@@ -50,11 +57,13 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.peakProductivityHour = peakProductivityHour
         self.weekOverWeekDelta = weekOverWeekDelta
         self.activeDaysInRow = activeDaysInRow
+        self.aiRatio = aiRatio
+        self.aiActiveSeconds = aiActiveSeconds
     }
 
     /// Convenience init — рассчитывает `deepSessionsCount` по threshold'у.
-    /// Phase 2.2 — trend-поля с default'ами; тестовые callsite'ы (и существующие
-    /// 2.1 consumers) не ломаются когда trends ещё не вычислены.
+    /// Phase 2.2 — trend-поля с default'ами; Phase 2.3 — AI-поля с default'ами.
+    /// Existing test/UI callsite'ы не ломаются когда trends/AI ещё не вычислены.
     public init(
         topApps: [AppTimeEntry],
         sessions: [FocusSession],
@@ -63,7 +72,9 @@ public struct InsightsSnapshot: Sendable, Hashable {
         deepWorkStreak: DeepWorkStreak = .empty,
         peakProductivityHour: Int? = nil,
         weekOverWeekDelta: Double? = nil,
-        activeDaysInRow: Int = 0
+        activeDaysInRow: Int = 0,
+        aiRatio: Double = 0,
+        aiActiveSeconds: TimeInterval = 0
     ) {
         self.init(
             topApps: topApps,
@@ -73,7 +84,9 @@ public struct InsightsSnapshot: Sendable, Hashable {
             deepWorkStreak: deepWorkStreak,
             peakProductivityHour: peakProductivityHour,
             weekOverWeekDelta: weekOverWeekDelta,
-            activeDaysInRow: activeDaysInRow
+            activeDaysInRow: activeDaysInRow,
+            aiRatio: aiRatio,
+            aiActiveSeconds: aiActiveSeconds
         )
     }
 
@@ -85,6 +98,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
             && peakProductivityHour == nil
             && weekOverWeekDelta == nil
             && activeDaysInRow == 0
+            && aiRatio == 0
+            && aiActiveSeconds == 0
     }
 
     /// Average session duration. `0` если sessions пуст.

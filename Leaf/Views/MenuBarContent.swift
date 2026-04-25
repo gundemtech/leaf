@@ -109,14 +109,16 @@ struct MenuBarContent: View {
     }
 
     /// Phase 2.1: sessions + switches. Phase 2.2: добавили 2 строки trends
-    /// (deep streak + peak/WoW/active days). Все 4 строки graceful к empty-state —
-    /// "—" показываем где insight не посчитался ещё (insufficient data).
+    /// (deep streak + peak/WoW/active days). Phase 2.3: AI ratio row.
+    /// Все строки graceful к empty-state — "—" / "no activity yet" placeholder
+    /// показываем где insight не посчитался ещё (insufficient data).
     @ViewBuilder
     private func analyticsBlock(snapshot: InsightsSnapshot) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 sessionsLines(snapshot: snapshot)
                 trendsLines(snapshot: snapshot)
+                aiLine(snapshot: snapshot)
             }
             Spacer()
         }
@@ -177,6 +179,49 @@ struct MenuBarContent: View {
         } else {
             return "\(pct)%"
         }
+    }
+
+    /// Phase 2.3 — AI collaboration row. Empty placeholder если ratio == 0
+    /// (нет AI events за day). Tooltip с деталями: aiActiveSeconds /
+    /// totalActiveSeconds derives через formatDuration; ratio % rounded.
+    @ViewBuilder
+    private func aiLine(snapshot: InsightsSnapshot) -> some View {
+        if snapshot.aiRatio == 0 && snapshot.aiActiveSeconds == 0 {
+            Text("AI: no activity yet")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        } else {
+            Text("AI ratio today: \(formatPercentage(snapshot.aiRatio)) · Claude Code \(formatDurationShort(snapshot.aiActiveSeconds))")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .help(aiTooltip(snapshot: snapshot))
+        }
+    }
+
+    private func formatPercentage(_ ratio: Double) -> String {
+        "\(Int((ratio * 100).rounded()))%"
+    }
+
+    /// "5m" / "1h 23m" — компактный, не тянет string formatter overhead.
+    private func formatDurationShort(_ seconds: TimeInterval) -> String {
+        let total = Int(seconds)
+        let h = total / 3600
+        let m = (total % 3600) / 60
+        if h > 0 {
+            return "\(h)h \(m)m"
+        } else {
+            return "\(m)m"
+        }
+    }
+
+    private func aiTooltip(snapshot: InsightsSnapshot) -> String {
+        let total = max(snapshot.aiActiveSeconds, 0)  // semantic: aiActive not > totalActive
+        // Reconstruct totalActive — попадает в snapshot, но мы его не tracking;
+        // показываем компонентами от ratio: total = ai / ratio.
+        let totalActive: TimeInterval = snapshot.aiRatio > 0
+            ? snapshot.aiActiveSeconds / snapshot.aiRatio
+            : 0
+        return "AI \(formatDurationShort(total)) of \(formatDurationShort(totalActive)) (\(formatPercentage(snapshot.aiRatio)))"
     }
 
     private var controls: some View {

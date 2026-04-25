@@ -33,6 +33,16 @@ public struct AgentThresholds: Sendable, Hashable {
     /// Phase 2.2: минимум active-дней в previous-week окне чтобы
     /// `weekOverWeekDelta` не возвращал nil.
     public let wowBaselineMinActiveDays: Int
+    /// Phase 2.3: как часто `ClaudeCodeCollector` сканирует `~/.claude/projects/`
+    /// и tail-read'ит .jsonl. Real prod 90s в moat; weakDefault — 120s.
+    public let aiCollectIntervalSec: TimeInterval
+    /// Phase 2.3: окно "недавних" jsonl-файлов для backfill при первом запуске.
+    /// `mtime >= now - backfillWindowDays * 86400s` → читаем с byte_offset=0
+    /// (в БД попадёт исторический срез). Иначе skip-backward (offset = file size).
+    public let backfillWindowDays: Int
+    /// Phase 2.3: путь к Claude Code projects root. Поддерживает leading `~`
+    /// (раскрывается callsite-side через `NSString.expandingTildeInPath`).
+    public let claudeCodeProjectsPath: String
 
     public init(
         idlePollIntervalSec: TimeInterval,
@@ -46,7 +56,10 @@ public struct AgentThresholds: Sendable, Hashable {
         activeDayMinAttentionSec: TimeInterval,
         peakHourWindowDays: Int,
         peakHourMinActiveDays: Int,
-        wowBaselineMinActiveDays: Int
+        wowBaselineMinActiveDays: Int,
+        aiCollectIntervalSec: TimeInterval,
+        backfillWindowDays: Int,
+        claudeCodeProjectsPath: String
     ) {
         self.idlePollIntervalSec = idlePollIntervalSec
         self.idleThresholdSec = idleThresholdSec
@@ -60,6 +73,9 @@ public struct AgentThresholds: Sendable, Hashable {
         self.peakHourWindowDays = peakHourWindowDays
         self.peakHourMinActiveDays = peakHourMinActiveDays
         self.wowBaselineMinActiveDays = wowBaselineMinActiveDays
+        self.aiCollectIntervalSec = aiCollectIntervalSec
+        self.backfillWindowDays = backfillWindowDays
+        self.claudeCodeProjectsPath = claudeCodeProjectsPath
     }
 
     public static let weakDefaults = AgentThresholds(
@@ -74,6 +90,9 @@ public struct AgentThresholds: Sendable, Hashable {
         activeDayMinAttentionSec: 1800,
         peakHourWindowDays: 14,
         peakHourMinActiveDays: 7,
-        wowBaselineMinActiveDays: 2
+        wowBaselineMinActiveDays: 2,
+        aiCollectIntervalSec: 120,
+        backfillWindowDays: 7,
+        claudeCodeProjectsPath: "~/.claude/projects"
     )
 }

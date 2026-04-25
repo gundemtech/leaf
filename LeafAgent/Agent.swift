@@ -61,10 +61,32 @@ enum AgentMain {
             logger: maintenanceLogger
         )
 
+        // Phase 2.3 — Claude Code AI collaboration collector.
+        // Parser injection: prod schema-mapping в moat, public Stub для dev/CI.
+        let claudeCodeParser: any ClaudeCodeJSONLParsing = {
+            #if LEAF_PROD
+            return ClaudeCodeJSONLParser()
+            #else
+            return StubClaudeCodeJSONLParser()
+            #endif
+        }()
+        let projectsRoot = URL(
+            fileURLWithPath: (agentThresholds.claudeCodeProjectsPath as NSString).expandingTildeInPath
+        )
+        let claudeCodeCollector = ClaudeCodeCollector(
+            database: database,
+            parser: claudeCodeParser,
+            projectsRoot: projectsRoot,
+            intervalSec: agentThresholds.aiCollectIntervalSec,
+            backfillWindowDays: agentThresholds.backfillWindowDays,
+            logger: claudeCodeLogger
+        )
+
         AgentLifetime.writer = writer
         AgentLifetime.activeAppCollector = activeAppCollector
         AgentLifetime.idleCollector = idleCollector
         AgentLifetime.maintenance = maintenance
+        AgentLifetime.claudeCodeCollector = claudeCodeCollector
 
         // Kick off writer + collectors + scheduler.
         // `start()` на writer/idle — fire-and-forget Task внутри; на activeApp — запускаем
@@ -73,12 +95,16 @@ enum AgentMain {
         DispatchQueue.main.async { activeAppCollector.start() }
         idleCollector.start()
         Task { await maintenance.start() }
+        Task { await claudeCodeCollector.start() }
 
-        // Shutdown порядок: maintenance → writer (flush + stop) → exit.
-        // maintenance первым — новый sweep/checkpoint не стартанёт.
-        // writer вторым — финальный drain буфера в DB.
+        // Shutdown порядок: maintenance → claudeCode → writer (flush + stop) → exit.
+        // maintenance + claudeCode сначала — новые tick'и не стартанут, in-flight закроются.
+        // claudeCode flush'ит свой текущий tick атомарно (events + offset в одной transaction)
+        // → не остаётся "записанные events без offset" / "offset без events".
+        // writer последним — drain буфера attention/idle в DB перед exit.
         installSignalHandlers {
             if let m = AgentLifetime.maintenance { await m.stop() }
+            if let c = AgentLifetime.claudeCodeCollector { await c.stop() }
             if let w = AgentLifetime.writer {
                 await w.flush()
                 await w.stop()
@@ -101,4 +127,5 @@ enum AgentLifetime {
     nonisolated(unsafe) static var activeAppCollector: ActiveAppCollector?
     nonisolated(unsafe) static var idleCollector: IdleCollector?
     nonisolated(unsafe) static var maintenance: MaintenanceScheduler?
+    nonisolated(unsafe) static var claudeCodeCollector: ClaudeCodeCollector?
 }

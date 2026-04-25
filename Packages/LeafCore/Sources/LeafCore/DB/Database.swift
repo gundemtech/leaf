@@ -37,6 +37,7 @@ public final class Database: @unchecked Sendable {
 
         var migrator = DatabaseMigrator()
         migrator.registerMigration001Events()
+        migrator.registerMigration002CollectorOffsets()
         try migrator.migrate(pool)
 
         return Database(pool: pool, config: config, mode: .writer)
@@ -162,6 +163,130 @@ public final class Database: @unchecked Sendable {
     /// Схема таблиц в whitepaper, конкретные query — в moat.
     public func readSQL<T>(_ block: (GRDB.Database) throws -> T) throws -> T {
         try pool.read(block)
+    }
+
+    // MARK: - Collector offsets (Phase 2.3)
+
+    /// Reads single offset by composite PK. Returns `nil` если записи нет —
+    /// callsite (collector bootstrap branch) трактует как "ещё не видели этот файл".
+    public func readOffset(collectorID: String, sourceID: String) throws -> CollectorOffset? {
+        try pool.read { db in
+            try Self.fetchOffset(db, collectorID: collectorID, sourceID: sourceID)
+        }
+    }
+
+    /// Returns все offsets для данного `collectorID`. Order — по `sourceID` ASC
+    /// для детерминизма (тесты ассертят последовательность).
+    public func listOffsets(collectorID: String) throws -> [CollectorOffset] {
+        try pool.read { db in
+            try Row.fetchAll(db, sql: """
+                SELECT \(Schema.CollectorOffsets.collectorID), \(Schema.CollectorOffsets.sourceID),
+                       \(Schema.CollectorOffsets.byteOffset), \(Schema.CollectorOffsets.inode),
+                       \(Schema.CollectorOffsets.size), \(Schema.CollectorOffsets.lastModifiedMs),
+                       \(Schema.CollectorOffsets.updatedMs)
+                FROM \(Schema.CollectorOffsets.tableName)
+                WHERE \(Schema.CollectorOffsets.collectorID) = ?
+                ORDER BY \(Schema.CollectorOffsets.sourceID) ASC
+                """,
+                arguments: [collectorID]
+            ).map(Self.mapOffsetRow)
+        }
+    }
+
+    /// UPSERT single offset — INSERT or UPDATE in-place. Writer-only.
+    /// Для bootstrap rows и edge cases (skip-backward branch без events).
+    /// Для совмещённого `events + offset` write используй `writeEventsAndOffset`.
+    public func writeOffset(_ offset: CollectorOffset) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try Self.upsertOffset(offset, in: db)
+        }
+    }
+
+    /// Atomic batch insert of `events` + offset UPSERT в одной транзакции.
+    /// Phase 2.3 ClaudeCodeCollector — primary API: либо обе записи попадают
+    /// в WAL, либо ни одной (Agent crash посреди flush → no duplicates +
+    /// no lost-but-marked-as-read events). `offset == nil` допустим для
+    /// чистых event-write'ов, но для regular collector flow всегда передаётся.
+    public func writeEventsAndOffset(_ events: [RawEvent], offset: CollectorOffset?) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        guard !events.isEmpty || offset != nil else { return }
+
+        let records = try events.map(EventRecord.make(from:))
+
+        try pool.write { db in
+            for var record in records {
+                try record.insert(db)
+            }
+            if let offset {
+                try Self.upsertOffset(offset, in: db)
+            }
+        }
+    }
+
+    // MARK: - Offset helpers (private)
+
+    private static func fetchOffset(
+        _ db: GRDB.Database,
+        collectorID: String,
+        sourceID: String
+    ) throws -> CollectorOffset? {
+        let row = try Row.fetchOne(db, sql: """
+            SELECT \(Schema.CollectorOffsets.collectorID), \(Schema.CollectorOffsets.sourceID),
+                   \(Schema.CollectorOffsets.byteOffset), \(Schema.CollectorOffsets.inode),
+                   \(Schema.CollectorOffsets.size), \(Schema.CollectorOffsets.lastModifiedMs),
+                   \(Schema.CollectorOffsets.updatedMs)
+            FROM \(Schema.CollectorOffsets.tableName)
+            WHERE \(Schema.CollectorOffsets.collectorID) = ?
+              AND \(Schema.CollectorOffsets.sourceID) = ?
+            """,
+            arguments: [collectorID, sourceID]
+        )
+        return row.map(Self.mapOffsetRow)
+    }
+
+    private static func mapOffsetRow(_ row: Row) -> CollectorOffset {
+        CollectorOffset(
+            collectorID: row[Schema.CollectorOffsets.collectorID] as String,
+            sourceID: row[Schema.CollectorOffsets.sourceID] as String,
+            byteOffset: row[Schema.CollectorOffsets.byteOffset] as Int64,
+            inode: row[Schema.CollectorOffsets.inode] as Int64?,
+            size: row[Schema.CollectorOffsets.size] as Int64,
+            lastModifiedMs: row[Schema.CollectorOffsets.lastModifiedMs] as Int64,
+            updatedMs: row[Schema.CollectorOffsets.updatedMs] as Int64
+        )
+    }
+
+    /// SQLite 3.24+ UPSERT (Zetetic SQLCipher 4.14 поверх 3.46+ — supported).
+    /// Атомарно INSERT-or-UPDATE по composite PK (collector_id, source_id).
+    private static func upsertOffset(_ offset: CollectorOffset, in db: GRDB.Database) throws {
+        try db.execute(sql: """
+            INSERT INTO \(Schema.CollectorOffsets.tableName) (
+                \(Schema.CollectorOffsets.collectorID),
+                \(Schema.CollectorOffsets.sourceID),
+                \(Schema.CollectorOffsets.byteOffset),
+                \(Schema.CollectorOffsets.inode),
+                \(Schema.CollectorOffsets.size),
+                \(Schema.CollectorOffsets.lastModifiedMs),
+                \(Schema.CollectorOffsets.updatedMs)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(\(Schema.CollectorOffsets.collectorID), \(Schema.CollectorOffsets.sourceID)) DO UPDATE SET
+                \(Schema.CollectorOffsets.byteOffset)      = excluded.\(Schema.CollectorOffsets.byteOffset),
+                \(Schema.CollectorOffsets.inode)           = excluded.\(Schema.CollectorOffsets.inode),
+                \(Schema.CollectorOffsets.size)            = excluded.\(Schema.CollectorOffsets.size),
+                \(Schema.CollectorOffsets.lastModifiedMs)  = excluded.\(Schema.CollectorOffsets.lastModifiedMs),
+                \(Schema.CollectorOffsets.updatedMs)       = excluded.\(Schema.CollectorOffsets.updatedMs)
+            """,
+            arguments: [
+                offset.collectorID,
+                offset.sourceID,
+                offset.byteOffset,
+                offset.inode,
+                offset.size,
+                offset.lastModifiedMs,
+                offset.updatedMs
+            ]
+        )
     }
 
     // MARK: - Helpers
