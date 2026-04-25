@@ -82,11 +82,34 @@ enum AgentMain {
             logger: claudeCodeLogger
         )
 
+        // Phase 2.4 — FSEvents content collector для watched folders.
+        // Router injection: prod (ignore-list + L4/L5 + coalesce) в moat,
+        // public Stub возвращает .filtered always → CI builds работают.
+        let fsEventsRouter: any FSEventsRouting = {
+            #if LEAF_PROD
+            return FSEventsRouterProd(
+                ignoreRules: ProdConfigs.fsEventsIgnoreRules,
+                coalesceWindowSec: agentThresholds.fsEventsCoalesceWindowSec
+            )
+            #else
+            return StubFSEventsRouter()
+            #endif
+        }()
+        let fsEventsCollector = FSEventsCollector(
+            database: database,
+            router: fsEventsRouter,
+            reconfigPollSec: agentThresholds.fsEventsReconfigPollSec,
+            latencySec: agentThresholds.fsEventsLatencySec,
+            darwinNotificationName: agentThresholds.fsEventsRestartTriggerName,
+            logger: fsEventsLogger
+        )
+
         AgentLifetime.writer = writer
         AgentLifetime.activeAppCollector = activeAppCollector
         AgentLifetime.idleCollector = idleCollector
         AgentLifetime.maintenance = maintenance
         AgentLifetime.claudeCodeCollector = claudeCodeCollector
+        AgentLifetime.fsEventsCollector = fsEventsCollector
 
         // Kick off writer + collectors + scheduler.
         // `start()` на writer/idle — fire-and-forget Task внутри; на activeApp — запускаем
@@ -96,14 +119,18 @@ enum AgentMain {
         idleCollector.start()
         Task { await maintenance.start() }
         Task { await claudeCodeCollector.start() }
+        Task { await fsEventsCollector.start() }
 
-        // Shutdown порядок: maintenance → claudeCode → writer (flush + stop) → exit.
-        // maintenance + claudeCode сначала — новые tick'и не стартанут, in-flight закроются.
-        // claudeCode flush'ит свой текущий tick атомарно (events + offset в одной transaction)
-        // → не остаётся "записанные events без offset" / "offset без events".
+        // Shutdown порядок: maintenance → fsEvents → claudeCode → writer (flush + stop).
+        // fsEvents первым из collectors — закрываем приём callback'ов до того как
+        // claudeCode flush'ит и writer drains буфер. Иначе FSEvents callback может
+        // прийти после writer.stop() и остаться written-event без сохранения.
+        // claudeCode flush'ит свой текущий tick атомарно (events + offset в одной
+        // transaction) — не остаётся "events без offset" / "offset без events".
         // writer последним — drain буфера attention/idle в DB перед exit.
         installSignalHandlers {
             if let m = AgentLifetime.maintenance { await m.stop() }
+            if let f = AgentLifetime.fsEventsCollector { await f.stop() }
             if let c = AgentLifetime.claudeCodeCollector { await c.stop() }
             if let w = AgentLifetime.writer {
                 await w.flush()
@@ -128,4 +155,5 @@ enum AgentLifetime {
     nonisolated(unsafe) static var idleCollector: IdleCollector?
     nonisolated(unsafe) static var maintenance: MaintenanceScheduler?
     nonisolated(unsafe) static var claudeCodeCollector: ClaudeCodeCollector?
+    nonisolated(unsafe) static var fsEventsCollector: FSEventsCollector?
 }

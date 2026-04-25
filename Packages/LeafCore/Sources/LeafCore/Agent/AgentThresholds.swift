@@ -43,6 +43,19 @@ public struct AgentThresholds: Sendable, Hashable {
     /// Phase 2.3: путь к Claude Code projects root. Поддерживает leading `~`
     /// (раскрывается callsite-side через `NSString.expandingTildeInPath`).
     public let claudeCodeProjectsPath: String
+    /// Phase 2.4: FSEvents stream `latency` (CFTimeInterval) — окно coalescing
+    /// ОС'ом до доставки batch'а callback'у. Real prod ~0.5s в moat.
+    public let fsEventsLatencySec: TimeInterval
+    /// Phase 2.4: poll fallback interval для `FSEventsCollector.reload()` —
+    /// belt+suspenders на случай потери Darwin notification.
+    public let fsEventsReconfigPollSec: TimeInterval
+    /// Phase 2.4: имя `DistributedNotificationCenter` notification, которой
+    /// UI сигнализирует Agent'у что watched_folders изменились → reload.
+    public let fsEventsRestartTriggerName: String
+    /// Phase 2.4: окно coalesce dedup — same `(path, kind)` в этом окне → drop.
+    /// Применяется только в Prod router (moat). Stub coalesce игнорирует.
+    /// `weakDefault = 0` → effectively no coalesce; точное prod-значение в moat.
+    public let fsEventsCoalesceWindowSec: TimeInterval
 
     public init(
         idlePollIntervalSec: TimeInterval,
@@ -59,7 +72,11 @@ public struct AgentThresholds: Sendable, Hashable {
         wowBaselineMinActiveDays: Int,
         aiCollectIntervalSec: TimeInterval,
         backfillWindowDays: Int,
-        claudeCodeProjectsPath: String
+        claudeCodeProjectsPath: String,
+        fsEventsLatencySec: TimeInterval = 0.5,
+        fsEventsReconfigPollSec: TimeInterval = 60,
+        fsEventsRestartTriggerName: String = "tech.gundem.leaf.watched-folders-changed",
+        fsEventsCoalesceWindowSec: TimeInterval = 0
     ) {
         self.idlePollIntervalSec = idlePollIntervalSec
         self.idleThresholdSec = idleThresholdSec
@@ -76,6 +93,10 @@ public struct AgentThresholds: Sendable, Hashable {
         self.aiCollectIntervalSec = aiCollectIntervalSec
         self.backfillWindowDays = backfillWindowDays
         self.claudeCodeProjectsPath = claudeCodeProjectsPath
+        self.fsEventsLatencySec = fsEventsLatencySec
+        self.fsEventsReconfigPollSec = fsEventsReconfigPollSec
+        self.fsEventsRestartTriggerName = fsEventsRestartTriggerName
+        self.fsEventsCoalesceWindowSec = fsEventsCoalesceWindowSec
     }
 
     public static let weakDefaults = AgentThresholds(
@@ -93,6 +114,10 @@ public struct AgentThresholds: Sendable, Hashable {
         wowBaselineMinActiveDays: 2,
         aiCollectIntervalSec: 120,
         backfillWindowDays: 7,
-        claudeCodeProjectsPath: "~/.claude/projects"
+        claudeCodeProjectsPath: "~/.claude/projects",
+        fsEventsLatencySec: 0.5,
+        fsEventsReconfigPollSec: 60,
+        fsEventsRestartTriggerName: "tech.gundem.leaf.watched-folders-changed",
+        fsEventsCoalesceWindowSec: 0
     )
 }

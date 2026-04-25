@@ -27,6 +27,20 @@ public enum Schema {
         public static let lastModifiedMs = "last_modified_ms"
         public static let updatedMs = "updated_ms"
     }
+
+    /// Phase 2.4 — user-managed list folder paths под FSEvents-наблюдением.
+    /// PK — `id` (UUID); `path` UNIQUE (canonical absolute, после resolvingSymlinksInPath).
+    public enum WatchedFolders {
+        public static let tableName = "watched_folders"
+        public static let id = "id"
+        public static let path = "path"
+        public static let maxGranularity = "max_granularity"
+        public static let enabled = "enabled"
+        public static let addedTs = "added_ts"
+        public static let updatedMs = "updated_ms"
+
+        public static let indexEnabled = "watched_folders_enabled"
+    }
 }
 
 /// Канонические `collector_id` значения. Литералы — public, чтобы тесты
@@ -34,4 +48,7 @@ public enum Schema {
 public enum CollectorID {
     /// Phase 2.3 — Claude Code session jsonl tail-reader.
     public static let claudeCodeJSONL = "claude_code_jsonl"
+    /// Phase 2.4 — FSEvents content collector. Не используется для offsets
+    /// (FSEvents stream-based, не tail-read), но фигурирует в diagnostic logs.
+    public static let fsEvents = "fs_events"
 }

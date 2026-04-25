@@ -38,6 +38,7 @@ public final class Database: @unchecked Sendable {
         var migrator = DatabaseMigrator()
         migrator.registerMigration001Events()
         migrator.registerMigration002CollectorOffsets()
+        migrator.registerMigration003WatchedFolders()
         try migrator.migrate(pool)
 
         return Database(pool: pool, config: config, mode: .writer)
@@ -286,6 +287,128 @@ public final class Database: @unchecked Sendable {
                 offset.lastModifiedMs,
                 offset.updatedMs
             ]
+        )
+    }
+
+    // MARK: - Watched folders (Phase 2.4)
+
+    /// Returns watched folders ordered by `added_ts` ASC (детерминированный
+    /// порядок для UI + tests). `includingDisabled=false` (default) — только
+    /// `enabled=1`; UI Settings показывает все, FSEventsCollector — только enabled.
+    public func listWatchedFolders(includingDisabled: Bool = false) throws -> [WatchedFolder] {
+        try pool.read { db in
+            let sql: String
+            if includingDisabled {
+                sql = """
+                    SELECT \(Schema.WatchedFolders.id), \(Schema.WatchedFolders.path),
+                           \(Schema.WatchedFolders.maxGranularity), \(Schema.WatchedFolders.enabled),
+                           \(Schema.WatchedFolders.addedTs), \(Schema.WatchedFolders.updatedMs)
+                    FROM \(Schema.WatchedFolders.tableName)
+                    ORDER BY \(Schema.WatchedFolders.addedTs) ASC
+                """
+            } else {
+                sql = """
+                    SELECT \(Schema.WatchedFolders.id), \(Schema.WatchedFolders.path),
+                           \(Schema.WatchedFolders.maxGranularity), \(Schema.WatchedFolders.enabled),
+                           \(Schema.WatchedFolders.addedTs), \(Schema.WatchedFolders.updatedMs)
+                    FROM \(Schema.WatchedFolders.tableName)
+                    WHERE \(Schema.WatchedFolders.enabled) = 1
+                    ORDER BY \(Schema.WatchedFolders.addedTs) ASC
+                """
+            }
+            return try Row.fetchAll(db, sql: sql).compactMap(Self.mapWatchedFolderRow)
+        }
+    }
+
+    /// INSERT — fails on UNIQUE(`path`) conflict (юзер пытается добавить
+    /// already-watched folder). Caller обрабатывает GRDB DatabaseError SQLITE_CONSTRAINT.
+    public func addWatchedFolder(_ folder: WatchedFolder) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try db.execute(sql: """
+                INSERT INTO \(Schema.WatchedFolders.tableName) (
+                    \(Schema.WatchedFolders.id),
+                    \(Schema.WatchedFolders.path),
+                    \(Schema.WatchedFolders.maxGranularity),
+                    \(Schema.WatchedFolders.enabled),
+                    \(Schema.WatchedFolders.addedTs),
+                    \(Schema.WatchedFolders.updatedMs)
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                arguments: [
+                    folder.id,
+                    folder.path,
+                    folder.maxGranularity.rawValue,
+                    folder.enabled ? 1 : 0,
+                    Int64(folder.addedAt.timeIntervalSince1970 * 1000),
+                    Int64(folder.updatedAt.timeIntervalSince1970 * 1000)
+                ]
+            )
+        }
+    }
+
+    /// DELETE by `id`. No-op если row не существует (idempotent — UI можно
+    /// безопасно вызывать multiple раз).
+    public func removeWatchedFolder(id: String) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try db.execute(sql: """
+                DELETE FROM \(Schema.WatchedFolders.tableName) WHERE \(Schema.WatchedFolders.id) = ?
+                """,
+                arguments: [id]
+            )
+        }
+    }
+
+    /// Partial UPDATE. `nil` параметр — поле не меняется. `updated_ms` — bumped always
+    /// при любом change (audit trail). No-op если оба `enabled` и `maxGranularity` nil.
+    public func updateWatchedFolder(
+        id: String,
+        enabled: Bool? = nil,
+        maxGranularity: WatchedFolderGranularity? = nil
+    ) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        guard enabled != nil || maxGranularity != nil else { return }
+
+        try pool.write { db in
+            var sets: [String] = []
+            var args: [DatabaseValueConvertible] = []
+            if let enabled {
+                sets.append("\(Schema.WatchedFolders.enabled) = ?")
+                args.append(enabled ? 1 : 0)
+            }
+            if let maxGranularity {
+                sets.append("\(Schema.WatchedFolders.maxGranularity) = ?")
+                args.append(maxGranularity.rawValue)
+            }
+            sets.append("\(Schema.WatchedFolders.updatedMs) = ?")
+            args.append(Int64(Date().timeIntervalSince1970 * 1000))
+            args.append(id)
+
+            try db.execute(
+                sql: "UPDATE \(Schema.WatchedFolders.tableName) SET \(sets.joined(separator: ", ")) WHERE \(Schema.WatchedFolders.id) = ?",
+                arguments: StatementArguments(args)
+            )
+        }
+    }
+
+    private static func mapWatchedFolderRow(_ row: Row) -> WatchedFolder? {
+        guard
+            let id = row[Schema.WatchedFolders.id] as String?,
+            let path = row[Schema.WatchedFolders.path] as String?,
+            let granularityRaw = row[Schema.WatchedFolders.maxGranularity] as String?,
+            let granularity = WatchedFolderGranularity(rawValue: granularityRaw),
+            let enabledInt = row[Schema.WatchedFolders.enabled] as Int?,
+            let addedTsMs = row[Schema.WatchedFolders.addedTs] as Int64?,
+            let updatedMs = row[Schema.WatchedFolders.updatedMs] as Int64?
+        else { return nil }
+        return WatchedFolder(
+            id: id,
+            path: path,
+            maxGranularity: granularity,
+            enabled: enabledInt == 1,
+            addedAt: Date(timeIntervalSince1970: TimeInterval(addedTsMs) / 1000.0),
+            updatedAt: Date(timeIntervalSince1970: TimeInterval(updatedMs) / 1000.0)
         )
     }
 
