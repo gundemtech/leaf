@@ -8,16 +8,20 @@ import ServiceManagement
 
 struct SettingsView: View {
     @Environment(LaunchAgentService.self) private var launchAgent
+    @Environment(WatchedFoldersService.self) private var watchedFolders
 
     var body: some View {
         TabView {
             GeneralSettings(launchAgent: launchAgent)
                 .tabItem { Label("General", systemImage: "gearshape") }
 
+            FoldersSettings(service: watchedFolders)
+                .tabItem { Label("Folders", systemImage: "folder.badge.gear") }
+
             PrivacySettings()
                 .tabItem { Label("Privacy", systemImage: "lock.shield") }
         }
-        .frame(width: 520, height: 360)
+        .frame(width: 540, height: 420)
     }
 }
 

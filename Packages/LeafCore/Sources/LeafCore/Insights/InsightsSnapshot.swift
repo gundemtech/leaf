@@ -36,6 +36,10 @@ public struct InsightsSnapshot: Sendable, Hashable {
     public let aiRatio: Double
     /// Phase 2.3 — distinct minutes с AI activity × 60. UI показывает рядом с %.
     public let aiActiveSeconds: TimeInterval
+    /// Phase 2.4 — top-N file paths за `period` (recency-ordered, MAX 10).
+    /// Содержит уже granularity-mapped paths (router'ом on write — L4 даёт
+    /// folder-level, L5 — full path). UI показывает basename + tooltip.
+    public let filesTouched: [String]
 
     public init(
         topApps: [AppTimeEntry],
@@ -47,7 +51,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         weekOverWeekDelta: Double?,
         activeDaysInRow: Int,
         aiRatio: Double,
-        aiActiveSeconds: TimeInterval
+        aiActiveSeconds: TimeInterval,
+        filesTouched: [String]
     ) {
         self.topApps = topApps
         self.sessions = sessions
@@ -59,11 +64,13 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.activeDaysInRow = activeDaysInRow
         self.aiRatio = aiRatio
         self.aiActiveSeconds = aiActiveSeconds
+        self.filesTouched = filesTouched
     }
 
     /// Convenience init — рассчитывает `deepSessionsCount` по threshold'у.
-    /// Phase 2.2 — trend-поля с default'ами; Phase 2.3 — AI-поля с default'ами.
-    /// Existing test/UI callsite'ы не ломаются когда trends/AI ещё не вычислены.
+    /// Phase 2.2 — trend-поля с default'ами; Phase 2.3 — AI-поля с default'ами;
+    /// Phase 2.4 — `filesTouched` с default `[]`.
+    /// Existing test/UI callsite'ы не ломаются когда поля не вычислены.
     public init(
         topApps: [AppTimeEntry],
         sessions: [FocusSession],
@@ -74,7 +81,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         weekOverWeekDelta: Double? = nil,
         activeDaysInRow: Int = 0,
         aiRatio: Double = 0,
-        aiActiveSeconds: TimeInterval = 0
+        aiActiveSeconds: TimeInterval = 0,
+        filesTouched: [String] = []
     ) {
         self.init(
             topApps: topApps,
@@ -86,7 +94,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
             weekOverWeekDelta: weekOverWeekDelta,
             activeDaysInRow: activeDaysInRow,
             aiRatio: aiRatio,
-            aiActiveSeconds: aiActiveSeconds
+            aiActiveSeconds: aiActiveSeconds,
+            filesTouched: filesTouched
         )
     }
 
@@ -100,6 +109,7 @@ public struct InsightsSnapshot: Sendable, Hashable {
             && activeDaysInRow == 0
             && aiRatio == 0
             && aiActiveSeconds == 0
+            && filesTouched.isEmpty
     }
 
     /// Average session duration. `0` если sessions пуст.

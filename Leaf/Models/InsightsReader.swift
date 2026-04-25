@@ -109,6 +109,11 @@ final class InsightsReader {
                         // оптимизация в 2.5 wrap (shared CTE для bucket'ов).
                         let aiBreakdown = try insights.aiActivityBreakdown(period: today)
                         try Task.checkCancellation()
+                        // Phase 2.4 — top files touched в watched folders.
+                        // 9-я sequential query; lazy на пустой content events
+                        // (router StubFSEventsRouter в CI всегда .filtered → []).
+                        let filesTouched = try insights.filesTouched(period: today)
+                        try Task.checkCancellation()
                         let snapshot = InsightsSnapshot(
                             topApps: topApps,
                             sessions: sessions,
@@ -119,7 +124,8 @@ final class InsightsReader {
                             weekOverWeekDelta: wow,
                             activeDaysInRow: activeDays,
                             aiRatio: aiBreakdown.ratio,
-                            aiActiveSeconds: aiBreakdown.aiActiveSeconds
+                            aiActiveSeconds: aiBreakdown.aiActiveSeconds,
+                            filesTouched: filesTouched
                         )
                         return .success((db, snapshot))
                     } catch {

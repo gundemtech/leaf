@@ -119,6 +119,7 @@ struct MenuBarContent: View {
                 sessionsLines(snapshot: snapshot)
                 trendsLines(snapshot: snapshot)
                 aiLine(snapshot: snapshot)
+                filesLines(snapshot: snapshot)
             }
             Spacer()
         }
@@ -211,6 +212,30 @@ struct MenuBarContent: View {
             return "\(h)h \(m)m"
         } else {
             return "\(m)m"
+        }
+    }
+
+    /// Phase 2.4 — top-5 files touched today из watched folders. Empty placeholder
+    /// если нет content events (FSEventsCollector idle / no folders / events
+    /// все coalesced). Tooltip показывает full path для L4 (UI basename).
+    @ViewBuilder
+    private func filesLines(snapshot: InsightsSnapshot) -> some View {
+        if snapshot.filesTouched.isEmpty {
+            Text("Files: no activity yet")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        } else {
+            Text("Files touched (top 5):")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            ForEach(snapshot.filesTouched.prefix(5), id: \.self) { path in
+                Text(FilenameResolver.shared.displayName(for: path))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(path)
+            }
         }
     }
 
