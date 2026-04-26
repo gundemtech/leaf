@@ -41,3 +41,9 @@ Packages/LeafCore/Tests/LeafCorePrivateTests/**/*.swift
 # Local xcconfig — dev-only флаги для LeafCorePrivate prod-сборки.
 # Пример в Config/Local.xcconfig.example (tracked).
 Config/Local.xcconfig
+
+# Phase 3 distribution — secrets and release artifacts
+*.p8
+build/releases/
+*eddsa-private*
+*.eddsa

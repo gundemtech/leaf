@@ -24,37 +24,37 @@ jobs:
       - name: Swift version
         run: swift --version
 
-      - name: Build LeafControl (app)
+      - name: Build Leaf (app)
         run: |
           xcodebuild \
-            -project LeafControl.xcodeproj \
-            -scheme LeafControl \
+            -project Leaf.xcodeproj \
+            -scheme Leaf \
             -destination 'platform=macOS' \
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO \
             build
 
-      - name: Build LeafControlAgent
+      - name: Build LeafAgent
         run: |
           xcodebuild \
-            -project LeafControl.xcodeproj \
-            -scheme LeafControlAgent \
+            -project Leaf.xcodeproj \
+            -scheme LeafAgent \
             -destination 'platform=macOS' \
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO \
             build
 
-      - name: Build LeafControlMCP
+      - name: Build LeafMCP
         run: |
           xcodebuild \
-            -project LeafControl.xcodeproj \
-            -scheme LeafControlMCP \
+            -project Leaf.xcodeproj \
+            -scheme LeafMCP \
             -destination 'platform=macOS' \
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO \
             build
 
-      - name: Test LeafControlCore package (fresh-clone simulation, only tracked files)
+      - name: Test LeafCore package (fresh-clone simulation, only tracked files)
         run: |
-          cd Packages/LeafControlCore
+          cd Packages/LeafCore
           swift test
