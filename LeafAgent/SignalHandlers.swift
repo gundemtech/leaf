@@ -3,8 +3,10 @@ import os
 
 /// Graceful shutdown: SIGTERM/SIGINT → run shutdown closure → exit(0).
 /// Держим DispatchSource refs в глобалах чтобы не уехали в ARC.
-private var sigtermSource: DispatchSourceSignal?
-private var sigintSource: DispatchSourceSignal?
+/// `nonisolated(unsafe)` — write только из `installSignalHandlers` один раз
+/// при bootstrap, после чего сорсы только resume'ятся внутри dispatch queue.
+nonisolated(unsafe) private var sigtermSource: DispatchSourceSignal?
+nonisolated(unsafe) private var sigintSource: DispatchSourceSignal?
 
 /// Устанавливает handler'ы на SIGTERM + SIGINT. `shutdown` closure вызывается
 /// сериализованно на main queue, внутри `Task { ... }` — т.е. имеет право
