@@ -50,6 +50,15 @@ struct MenuBarContent: View {
         }
     }
 
+    // TODO Phase 3 onboarding: surface AX/FDA permission denials.
+    // Когда AX denied → AppNameResolver работает, но AXWebArea browser-URL
+    // collection (v1.1) не будет; когда FDA denied → FSEvents под
+    // ~/Documents и ~/Desktop недоступны (callback тихо не приходит).
+    // UX: orange banner ниже agentOffBanner с "Grant Accessibility →"
+    // / "Grant Full Disk Access →" кнопками открывающими System Settings
+    // deep links (x-apple.systempreferences:com.apple.preference.security).
+    private var permissionsBanner: some View { EmptyView() }
+
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
             Text("Today")
@@ -143,11 +152,30 @@ struct MenuBarContent: View {
 
     @ViewBuilder
     private func trendsLines(snapshot: InsightsSnapshot) -> some View {
-        Text(streakLine(snapshot: snapshot))
-            .font(.caption)
-        Text(trendsSummaryLine(snapshot: snapshot))
-            .font(.caption)
-            .foregroundStyle(.secondary)
+        if hasNoTrends(snapshot) {
+            // Phase 2.5 — collapse 2 строк с множественными "—" в одну
+            // строку placeholder'а пока копится первая неделя данных.
+            Text("Trends appear after ~14 days of data")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        } else {
+            Text(streakLine(snapshot: snapshot))
+                .font(.caption)
+            Text(trendsSummaryLine(snapshot: snapshot))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// `activeDaysInRow <= 1` — порог "имеет смысл показать": 0 — нет
+    /// активности, 1 — сегодня впервые открыли. ≥2 дней или любой другой
+    /// trend ненулевой → показываем full strip (даже если часть в "—" —
+    /// это уже информативно "появилось одно, копится остальное").
+    private func hasNoTrends(_ snapshot: InsightsSnapshot) -> Bool {
+        snapshot.deepWorkStreak.days == 0
+            && snapshot.peakProductivityHour == nil
+            && snapshot.weekOverWeekDelta == nil
+            && snapshot.activeDaysInRow <= 1
     }
 
     private func streakLine(snapshot: InsightsSnapshot) -> String {
@@ -182,15 +210,20 @@ struct MenuBarContent: View {
         }
     }
 
-    /// Phase 2.3 — AI collaboration row. Empty placeholder если ratio == 0
-    /// (нет AI events за day). Tooltip с деталями: aiActiveSeconds /
-    /// totalActiveSeconds derives через formatDuration; ratio % rounded.
+    /// Phase 2.3 — AI collaboration row. Phase 2.5 — 3-state display:
+    /// (1) zero — нет AI events; (2) short — < 3 мин активности, ratio %
+    /// после rounding всё равно даёт "0%" (confusing) → показываем raw
+    /// time без процента; (3) measured — full ratio + tooltip.
     @ViewBuilder
     private func aiLine(snapshot: InsightsSnapshot) -> some View {
-        if snapshot.aiRatio == 0 && snapshot.aiActiveSeconds == 0 {
+        if snapshot.aiActiveSeconds == 0 {
             Text("AI: no activity yet")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
+        } else if snapshot.aiActiveSeconds < 180 {
+            Text("AI today: Claude Code \(formatDurationShort(snapshot.aiActiveSeconds))")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         } else {
             Text("AI ratio today: \(formatPercentage(snapshot.aiRatio)) · Claude Code \(formatDurationShort(snapshot.aiActiveSeconds))")
                 .font(.caption)

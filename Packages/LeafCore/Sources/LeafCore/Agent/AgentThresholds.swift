@@ -22,6 +22,12 @@ public struct AgentThresholds: Sendable, Hashable {
     /// Phase 2.1: минимальная длительность session чтобы считаться "deep".
     /// Default 1500s = 25min (Pomodoro lower bound).
     public let deepSessionMinSec: TimeInterval
+    /// Phase 2.5: минимум секунд в новом app чтобы засчитать context switch.
+    /// Quick alt-tab peek (Telegram check за <N сек) не должен инфлировать
+    /// switches/h. Применяется в `contextSwitchRate` SQL via LEAD(ts) check.
+    /// `weakDefault = 0` → no filter (back-compat для тестов); prod значение
+    /// в moat. Не влияет на `focusSessions` segmentation — только на switch counter.
+    public let contextSwitchMinHoldSec: TimeInterval
     /// Phase 2.2: минимум attention-секунд в день чтобы день считался "active"
     /// в `activeDaysInRow`. Default 1800s = 30min.
     public let activeDayMinAttentionSec: TimeInterval
@@ -66,6 +72,7 @@ public struct AgentThresholds: Sendable, Hashable {
         retentionDays: Int,
         focusSessionGapSec: TimeInterval,
         deepSessionMinSec: TimeInterval,
+        contextSwitchMinHoldSec: TimeInterval = 0,
         activeDayMinAttentionSec: TimeInterval,
         peakHourWindowDays: Int,
         peakHourMinActiveDays: Int,
@@ -86,6 +93,7 @@ public struct AgentThresholds: Sendable, Hashable {
         self.retentionDays = retentionDays
         self.focusSessionGapSec = focusSessionGapSec
         self.deepSessionMinSec = deepSessionMinSec
+        self.contextSwitchMinHoldSec = contextSwitchMinHoldSec
         self.activeDayMinAttentionSec = activeDayMinAttentionSec
         self.peakHourWindowDays = peakHourWindowDays
         self.peakHourMinActiveDays = peakHourMinActiveDays
@@ -108,6 +116,7 @@ public struct AgentThresholds: Sendable, Hashable {
         retentionDays: 365,
         focusSessionGapSec: 600,
         deepSessionMinSec: 1500,
+        contextSwitchMinHoldSec: 0,
         activeDayMinAttentionSec: 1800,
         peakHourWindowDays: 14,
         peakHourMinActiveDays: 7,
