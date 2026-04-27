@@ -50,3 +50,5 @@ Config/Local.xcconfig
 build/releases/
 *eddsa-private*
 *.eddsa
+.envrc
+.env
