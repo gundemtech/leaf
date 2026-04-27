@@ -3,7 +3,7 @@
 _Срез "где мы сейчас" за 30 секунд. Обновляется вручную._
 
 ## Последнее обновление
-2026-04-26 (Phase 2.5 wrap + Section B E2E walkthrough confirmed; Phase 2 закрыт целиком)
+2026-04-27 (Phase 3.4 Onboarding track done — first-launch UX готов к alpha)
 
 ## Где мы
 - Инфраструктура команды готова: `leaf-docs` (whitepaper v1.2) + shared memory в Leaf-репо.
@@ -37,10 +37,15 @@ _Срез "где мы сейчас" за 30 секунд. Обновляетс�
 - **Distribution:** Sparkle 2 + EdDSA + Cloudflare R2 + notarytool.
 
 ## В работе прямо сейчас
-- **Phase 2 закрыт.** Master plan deliverables зелёные: ✅ 8/8 insights ✅ 4/4 MCP tools ✅ 2/2 collectors ✅ 5/5 popover-блоков ✅ Watched Folders Settings ✅ MCP versioning ✅ 135 tests (≥84 acceptance). Master plan: `.claude/plans/phase-2.md`; per-phase: `.claude/plans/phase-2-4.md`, `.claude/plans/phase-2-5.md`. Готов выбирать следующий трек.
+- **Phase 3.0 Track A (Sparkle/CF/R2):** ⏳ partially done в parallel session, blocked на CF/R2 invite от партнёра. 5/11 GH secrets set; brew tools + EdDSA keypair готовы; 6 secrets + R2 bucket + Custom Domain — ждут unblock.
+- **Phase 3.4 Track B (Onboarding) — done 2026-04-27.** PermissionsService (AX + FDA polling, hybrid lifecycle 1s onboarding / 4s normal popover) + BannerView (reusable) + OnboardingView (4-step inline state machine с auto-advance + Skip for now) + permissionsBanner (replace EmptyView TODO в MenuBarContent.swift:53-60) + LeafApp env injection. 5 файлов (3 new, 2 mod), ~+310/-15 LOC, 3 commits (832e899/a7bfc89/d75f43f). Manual smoke на real macOS confirmed: все 4 onboarding steps + auto-advance ≤2с при toggle AX/FDA + permissionsBanner reactivity ≤4с при revoke. Tests deferred (D9 в plan): XCTest не линкуется в app target → `// MARK: - Test plan` comment block документирует 4 planned кейсов для Phase 3.5+ когда LeafTests target создаётся.
+- **Phase 3.4.5 — keychain prompt fix (deferred).** Smoke выявил pre-existing Phase 1.5 issue: LeafAgent/LeafMCP без `keychain-access-groups` entitlement → fresh-install user видит macOS keychain prompt при первом Toggle Background ON. Naive fix (добавить entitlement) крашит Agent на exec (AMFI reject даже с `application-identifier` + `team-identifier`). Решения: (a) per-helper provisioning profiles в Apple Developer Portal, (b) XPC proxy через main app, (c) file-based key. Defer в отдельную сессию — outside Phase 3.4 onboarding scope.
 
 ## Следующим (→ distribution)
-- **Phase 3** — Sparkle + EdDSA + notarization + Cloudflare R2 distribution + onboarding-экран с AX/FDA permissions UX (TODO-anchor `permissionsBanner` уже зарезервирован в MenuBarContent).
+- **Phase 3.0 unblock** когда партнёр пришлёт CF invite → R2 bucket + Custom Domain `updates.gundem.tech` + 6 GH secrets.
+- **Phase 3.1-3.3** (Sparkle integration + notarytool wrapper + release.sh) после 3.0 complete.
+- **Phase 3.4.5** (keychain prompt fix) — отдельная infra сессия, не блокирует distribution track.
+- **Phase 3.5** (first release smoke на clean VM) — после 3.1-3.3.
 - **Linear OAuth track** — отдельный (не блокирован Phase 3), Layer B источник.
 
 ## Open tensions
