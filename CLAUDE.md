@@ -18,13 +18,13 @@
 
 ## Whitepaper — source of truth
 
-Публичный whitepaper живёт в `gundemtech/leaf-docs` (клон в `~/Desktop/leaf-docs`). Сайт: `leaf-docs.gundem.tech`, стек — MkDocs Material, push в `main` = автодеплой.
+Публичный whitepaper живёт в `gundemtech/leaf-docs` (клон в `~/Desktop/Leaf/leaf-docs`, рядом с `~/Desktop/Leaf/leaf`). Сайт: `leaf-docs.gundem.tech`, стек — MkDocs Material, push в `main` = автодеплой.
 
 **Правила для Claude Code (обязательные, без напоминания):**
 
-1. **Читай whitepaper как источник правды.** В любой сессии где обсуждаются архитектура / продукт / философия / ICP / pricing / MVP / конкуренты / глоссарий — свериться с `~/Desktop/leaf-docs/docs/` перед ответом. Противоречие с whitepaper → whitepaper приоритетнее, явно проговори.
+1. **Читай whitepaper как источник правды.** В любой сессии где обсуждаются архитектура / продукт / философия / ICP / pricing / MVP / конкуренты / глоссарий — свериться с `~/Desktop/Leaf/leaf-docs/docs/` перед ответом. Противоречие с whitepaper → whitepaper приоритетнее, явно проговори.
 2. **Синхронизируй изменения автоматически.** Принято содержательное решение уровня whitepaper — **не дожидаясь просьбы**:
-   - найти нужный раздел в `~/Desktop/leaf-docs/docs/` (структура в `leaf-docs/CLAUDE.md`),
+   - найти нужный раздел в `~/Desktop/Leaf/leaf-docs/docs/` (структура в `leaf-docs/CLAUDE.md`),
    - обновить markdown + admonition `!!! note "Изменение vX.Y — YYYY-MM-DD"` (раньше / теперь / причина),
    - дописать в `docs/05-reference/changelog.md`,
    - `git add` + коммит `docs: ...` + `git push origin main`,
@@ -32,7 +32,7 @@
 3. **Что синкать в whitepaper (public-safe концепты):** философия, видение, ICP, сигналы (типы/слои), архитектурный каркас, opt-in transparency, share-controls как модель, конкуренты, дифференциаторы, pricing tiers, глоссарий, won't-list, high-level changelog.
 4. **Что НЕ синкать в whitepaper (implementation moat):** SQL-запросы, точные пороги (idle, polling, heartbeat, WAL checkpoint), SQLCipher pragma values, bytes layouts crypto envelope, HKDF info strings, exact nonce generation, git log format strings, Claude Code hooks JSON parser, Share Controls preset bundle IDs, Cloudflare Worker внутренности, ship timeline, имена сотрудников, клиентские детали.
 5. **Явный триггер:** `/sync-docs <тема>` форсирует синк прямо сейчас.
-6. **Pull перед новой задачей (обязательно).** Перед началом любой задачи, касающейся архитектуры / продукта / whitepaper, а также в начале сессии — выполнить `git -C ~/Desktop/leaf-docs pull --ff-only --quiet`. Партнёр мог обновить whitepaper пока ты не смотрел. Если pull пишет про merge/conflict — остановись и покажи юзеру. Если pull успешен и что-то реально изменилось — коротко сообщи: "В leaf-docs подтянул N коммитов, последний: `<hash> — <msg>`".
+6. **Pull перед новой задачей (обязательно).** Перед началом любой задачи, касающейся архитектуры / продукта / whitepaper, а также в начале сессии — выполнить `git -C ~/Desktop/Leaf/leaf-docs pull --ff-only --quiet`. Партнёр мог обновить whitepaper пока ты не смотрел. Если pull пишет про merge/conflict — остановись и покажи юзеру. Если pull успешен и что-то реально изменилось — коротко сообщи: "В leaf-docs подтянул N коммитов, последний: `<hash> — <msg>`".
 
 Branch protection на `leaf-docs` пока нет — push прямой в `main`. Когда появится — PR-flow.
 

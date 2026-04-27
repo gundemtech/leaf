@@ -12,7 +12,7 @@ description: Синхронизировать изменение из текущ
 ## Алгоритм
 
 1. **Определи тему** изменения из `$ARGUMENTS` или последнего обмена в сессии.
-2. **Найди целевой файл** в `~/Desktop/leaf-docs/docs/`:
+2. **Найди целевой файл** в `~/Desktop/Leaf/leaf-docs/docs/`:
    - архитектура / storage / MCP / share controls / presence → `03-architecture/`
    - ICP / сигналы / MVP / pricing → `02-product/`
    - философия / won't-list / видение → `01-vision/`
@@ -30,7 +30,7 @@ description: Синхронизировать изменение из текущ
 5. **Допиши `docs/05-reference/changelog.md`** — одна строка вида `- vX.Y (YYYY-MM-DD) — <тема>: <что поменялось>`.
 6. **Commit + push**:
    ```bash
-   cd ~/Desktop/leaf-docs
+   cd ~/Desktop/Leaf/leaf-docs
    git add -A
    git commit -m "docs: <понятное сообщение>"
    git push origin main
@@ -42,4 +42,4 @@ description: Синхронизировать изменение из текущ
 - Не синкать ephemeral-обсуждения без принятого решения.
 - Не трогать `mkdocs.yml` / `nav` без явного запроса (чтобы не ломать структуру навигации).
 - Если несколько разделов затронуто — один коммит на всё изменение, не дроби.
-- Если репо `~/Desktop/leaf-docs` не найден — сообщи юзеру и попроси склонировать.
+- Если репо `~/Desktop/Leaf/leaf-docs` не найден — сообщи юзеру и попроси склонировать.

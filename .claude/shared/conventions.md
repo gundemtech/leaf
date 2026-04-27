@@ -13,7 +13,7 @@
 - **Перед каждым `git push`: `/pre-push-leaf`** (проверка diff на утечки moat-деталей, см. корневой `CLAUDE.md`)
 
 ## Git — whitepaper (`gundemtech/leaf-docs`, ПУБЛИЧНЫЙ)
-- Клон: `~/Desktop/leaf-docs`
+- Клон: `~/Desktop/Leaf/leaf-docs` (рядом с `~/Desktop/Leaf/leaf`)
 - Прямой push в `main` (branch protection пока нет)
 - Коммиты: `docs: <что>`, `fix: <опечатка>`, `chore: <служебное>`
 - Триггер синка из сессии: автоматом при принятии решения уровня whitepaper, либо `/sync-docs`

@@ -161,4 +161,4 @@ SQLCipher таблицы:
 
 ---
 
-> Текущий срез "как оно сейчас устроено". Подробности и обоснования (в public-safe формулировке) — в whitepaper `~/Desktop/leaf-docs/docs/03-architecture/`. Ярлыки ADR-XXX в тексте — исторические, живой источник правды = whitepaper. Implementation moat (SQL, точные пороги, crypto layouts) — в приватных модулях кода, не здесь.
+> Текущий срез "как оно сейчас устроено". Подробности и обоснования (в public-safe формулировке) — в whitepaper `~/Desktop/Leaf/leaf-docs/docs/03-architecture/`. Ярлыки ADR-XXX в тексте — исторические, живой источник правды = whitepaper. Implementation moat (SQL, точные пороги, crypto layouts) — в приватных модулях кода, не здесь.
