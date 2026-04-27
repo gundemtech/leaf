@@ -10,7 +10,7 @@
 | **leaf-relay** (репо) | Приватный репо Cloudflare Worker (TypeScript, presence-relay). Будет создан. |
 | **Второй мозг** | Whitepaper в `leaf-docs`. Единственный источник правды для продуктовых и архитектурных решений. |
 | **Shared memory** | `.claude/shared/*.md` в репо `leaf` — контекст, автоматически читаемый Claude Code у всей команды |
-| **Whitepaper** | Публичная документация продукта, MkDocs Material, текущая версия v1.2 |
+| **Whitepaper** | Публичная документация продукта, MkDocs Material, текущая версия v1.4 |
 | **Implementation moat** | Детали, которые НЕ публикуем: SQL queries, точные пороги/числа, crypto internals, preset bundle IDs, Cloudflare код. Остаются в приватных модулях. |
 
 ---
