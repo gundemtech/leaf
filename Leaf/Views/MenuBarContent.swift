@@ -14,6 +14,7 @@ import LeafCore
 struct MenuBarContent: View {
     @Environment(\.openSettings) private var openSettings
     @Environment(LaunchAgentService.self) private var launchAgent
+    @Environment(PermissionsService.self) private var permissions
     @State private var reader = InsightsReader()
 
     var body: some View {
@@ -21,6 +22,7 @@ struct MenuBarContent: View {
             if !launchAgent.isEnabled {
                 agentOffBanner
             }
+            permissionsBanner
             header
             Divider()
             content
@@ -31,33 +33,49 @@ struct MenuBarContent: View {
         .frame(width: 320)
         .onAppear {
             launchAgent.refreshStatus()
+            permissions.refresh()
+            permissions.startPolling(every: 4.0)
             reader.refresh()
+        }
+        .onDisappear {
+            permissions.stopPolling()
         }
     }
 
     // MARK: - Sections
 
     private var agentOffBanner: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-            Text("Background collection is off")
-                .font(.caption)
-            Spacer()
-            Button("Enable") { openSettingsWindow() }
-                .buttonStyle(.link)
-                .font(.caption)
-        }
+        BannerView(
+            color: .orange,
+            title: "Background collection is off",
+            action: "Enable",
+            onTap: openSettingsWindow
+        )
     }
 
-    // TODO Phase 3 onboarding: surface AX/FDA permission denials.
-    // Когда AX denied → AppNameResolver работает, но AXWebArea browser-URL
-    // collection (v1.1) не будет; когда FDA denied → FSEvents под
-    // ~/Documents и ~/Desktop недоступны (callback тихо не приходит).
-    // UX: orange banner ниже agentOffBanner с "Grant Accessibility →"
-    // / "Grant Full Disk Access →" кнопками открывающими System Settings
-    // deep links (x-apple.systempreferences:com.apple.preference.security).
-    private var permissionsBanner: some View { EmptyView() }
+    /// Phase 3.4 — surface AX/FDA denials. AX-deny приоритет: без AX
+    /// AppNameResolver работает, но window-title / browser-URL (v1.1) — нет.
+    /// FDA-deny — secondary: FSEvents под ~/Documents / ~/Desktop недоступны
+    /// (callback тихо не приходит, watched_folders просто не дают данных).
+    @ViewBuilder
+    private var permissionsBanner: some View {
+        if !permissions.axGranted {
+            BannerView(
+                color: .orange,
+                title: "Accessibility disabled",
+                action: "Grant",
+                onTap: permissions.openAXSettings
+            )
+        } else if !permissions.fdaGranted {
+            BannerView(
+                color: .orange,
+                title: "Full Disk Access disabled",
+                subtitle: "Watched Folders won't track ~/Documents",
+                action: "Grant",
+                onTap: permissions.openFDASettings
+            )
+        }
+    }
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {

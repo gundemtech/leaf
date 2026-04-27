@@ -13,6 +13,7 @@ import LeafCorePrivate
 struct LeafApp: App {
     @State private var launchAgent = LaunchAgentService()
     @State private var watchedFolders = WatchedFoldersService()
+    @State private var permissions = PermissionsService()
 
     init() {
         // Register Derived Insights provider once per app launch. Прямой
@@ -29,6 +30,7 @@ struct LeafApp: App {
             MenuBarContent()
                 .environment(launchAgent)
                 .environment(watchedFolders)
+                .environment(permissions)
         }
         .menuBarExtraStyle(.window)
 
@@ -36,6 +38,7 @@ struct LeafApp: App {
             SettingsView()
                 .environment(launchAgent)
                 .environment(watchedFolders)
+                .environment(permissions)
         }
     }
 }
