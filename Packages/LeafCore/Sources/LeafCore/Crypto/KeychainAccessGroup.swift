@@ -1,25 +1,24 @@
 import Foundation
 
-/// Резолвит текущий keychain access group для подписанного бинаря.
+/// Резолвит keychain access group для текущего бинаря.
 ///
-/// Читает `AppIdentifierPrefix` из `Bundle.main.infoDictionary` — это значение
-/// Xcode/codesign подставляют автоматически из entitlements. Формат:
-/// `"<TeamID>."` — поэтому склеиваем с суффиксом `"tech.gundem.leaf"`.
+/// Сейчас всегда возвращает пустую строку — используем default access group
+/// (per-bundle-ID). `keychain-access-groups` entitlement требует Developer ID
+/// Provisioning Profile (которого у нас нет на distribution-этапе alpha.1+);
+/// без profile AMFI убивает app на launch с "Unsatisfied entitlements".
 ///
-/// Для unsigned/CI сборок (`AppIdentifierPrefix` отсутствует) возвращает
-/// пустую строку. `KeychainKeyStore.fetchOrCreate(accessGroup:)` в этом
-/// случае работает против default keychain (unit-tests pattern, не shared).
+/// Trade-off: app/agent/mcp не разделяют один key — каждый бинарь хранит свой
+/// в отдельном default group. Phase 3.4.5 / Phase 4 восстановит sharing через
+/// (a) Developer ID Provisioning Profile, либо (b) file-based key вместо
+/// Keychain, либо (c) XPC proxy через main app.
+///
+/// `KeychainKeyStore.fetchOrCreate(accessGroup:)` обрабатывает empty string
+/// как "не передавать `kSecAttrAccessGroup`" → default group.
 public enum KeychainAccessGroup {
     public static let leafSuffix = "tech.gundem.leaf"
 
-    /// Текущее значение для текущего бинаря. Пустая строка = unsigned (fallback).
+    /// Текущее значение для текущего бинаря. Всегда "" до Phase 3.4.5.
     public static func current() -> String {
-        guard let prefix = Bundle.main.infoDictionary?["AppIdentifierPrefix"] as? String,
-              !prefix.isEmpty else {
-            return ""
-        }
-        // `AppIdentifierPrefix` включает trailing dot → prefix + suffix без
-        // дополнительной точки.
-        return prefix + leafSuffix
+        return ""
     }
 }
