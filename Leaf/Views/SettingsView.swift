@@ -9,10 +9,11 @@ import ServiceManagement
 struct SettingsView: View {
     @Environment(LaunchAgentService.self) private var launchAgent
     @Environment(WatchedFoldersService.self) private var watchedFolders
+    @Environment(UpdaterController.self) private var updater
 
     var body: some View {
         TabView {
-            GeneralSettings(launchAgent: launchAgent)
+            GeneralSettings(launchAgent: launchAgent, updater: updater)
                 .tabItem { Label("General", systemImage: "gearshape") }
 
             FoldersSettings(service: watchedFolders)
@@ -27,6 +28,7 @@ struct SettingsView: View {
 
 private struct GeneralSettings: View {
     @Bindable var launchAgent: LaunchAgentService
+    let updater: UpdaterController
 
     var body: some View {
         Form {
@@ -73,6 +75,27 @@ private struct GeneralSettings: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            // Phase 3.1c — Sparkle update controls. Manual-only до Phase 3.5
+            // R2 unblock (SUEnableAutomaticChecks=NO). После flip — также
+            // periodic background checks (см. Info.plist SUScheduledCheckInterval).
+            Section {
+                LabeledContent("Version") {
+                    Text(versionDisplay)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+
+                Button("Check for Updates…") {
+                    updater.checkForUpdates()
+                }
+            } header: {
+                Text("Updates")
+            } footer: {
+                Text("Updates served from updates.gundem.tech. Sparkle 2 + EdDSA-signed appcast.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
         .padding()
@@ -85,6 +108,15 @@ private struct GeneralSettings: View {
         case .notRegistered, .notFound: .gray
         @unknown default: .gray
         }
+    }
+
+    /// "1.0.0-alpha.1 (build 2)" — matches Phase 3.1a Info.plist version bump
+    /// (CFBundleShortVersionString = MARKETING_VERSION, CFBundleVersion = CURRENT_PROJECT_VERSION).
+    private var versionDisplay: String {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let short = (info["CFBundleShortVersionString"] as? String) ?? "?"
+        let build = (info["CFBundleVersion"] as? String) ?? "?"
+        return "\(short) (build \(build))"
     }
 }
 
