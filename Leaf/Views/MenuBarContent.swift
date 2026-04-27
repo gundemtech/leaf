@@ -15,9 +15,23 @@ struct MenuBarContent: View {
     @Environment(\.openSettings) private var openSettings
     @Environment(LaunchAgentService.self) private var launchAgent
     @Environment(PermissionsService.self) private var permissions
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @State private var reader = InsightsReader()
 
     var body: some View {
+        if hasCompletedOnboarding {
+            normalBody
+        } else {
+            OnboardingView(onDone: {
+                hasCompletedOnboarding = true
+                // Cleanup: если юзер reset'нет hasCompletedOnboarding в debug,
+                // onboarding starts с .welcome заново вместо middle-of-flow.
+                UserDefaults.standard.removeObject(forKey: "onboardingStep")
+            })
+        }
+    }
+
+    private var normalBody: some View {
         VStack(alignment: .leading, spacing: 10) {
             if !launchAgent.isEnabled {
                 agentOffBanner
