@@ -51,12 +51,20 @@ In a new Claude Code session ask natural-language questions — e.g.
 The MCP server reads the same local database as the MenuBar app; raw metadata
 never leaves the device.
 
-**Supported tools (Phase 1):**
+**Supported tools (4 of 8 shipped, through Phase 2.3):**
 
 - `get_timeline(period: today | yesterday | last_7_days)` — top applications
   by active time for the given period.
+- `find_last_activity(bundle_id?)` — when the user last opened a given app
+  (or any app if `bundle_id` is omitted).
+- `get_current_session()` — live focus session if one is active, plus the
+  last completed session for context.
+- `get_ai_activity(period: today | yesterday | last_7_days)` — AI
+  collaboration breakdown: ratio, active seconds, session count, top tools,
+  top projects.
 
-More tools (`find_last_activity`, `get_team_timeline`, …) ship in later phases.
+Team tools (`get_presence`, `get_team_timeline`, `get_team_focus`,
+`get_team_overlap`) ship together with the presence relay.
 
 ## License
 
