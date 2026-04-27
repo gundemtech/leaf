@@ -25,8 +25,11 @@ xcuserdata/
 .swiftpm/
 Packages/*/Package.resolved
 *.xcresult
-# Workspace-level SPM state (user-specific for local packages)
-*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
+# Workspace-level SPM state — user-specific (artifacts/, configuration/, etc.).
+# Exception: Package.resolved для remote SPM deps (Sparkle и т.д.) — committed для reproducible builds.
+# NB: git negation `!` НЕ работает если parent dir ignored, поэтому ignore'им только подпапки swiftpm/.
+*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/configuration/
+*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/artifacts/
 
 # LeafCorePrivate — implementation moat живёт локально.
 # Tracked только Placeholder.swift; все остальные swift-файлы — dev-only.

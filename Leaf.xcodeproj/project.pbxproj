@@ -14,6 +14,7 @@
 		4BC90D9CB73EB9BBDD60F841 /* LeafCorePrivate in Frameworks */ = {isa = PBXBuildFile; productRef = DADE63FF43B0419C4A7B4ABB /* LeafCorePrivate */; settings = {ATTRIBUTES = (); }; };
 		6BA6FF9CECCDF93CF297CCB0 /* LeafCore in Frameworks */ = {isa = PBXBuildFile; productRef = B046993ED3685984462393D9 /* LeafCore */; settings = {ATTRIBUTES = (); }; };
 		AB01C171AADFFAA2C54DC33D /* LeafAgent in Embed CLI Helpers */ = {isa = PBXBuildFile; fileRef = B0EC45208EBCB3682E080571 /* LeafAgent */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D8FD57232F9F807000E5FDB3 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = D8FD57222F9F807000E5FDB3 /* Sparkle */; };
 		E0192A42BE48990A6ABC3993 /* LeafCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5C6E93B7D5BA63F53057E5BD /* LeafCore */; };
 		F3E5D5DB835340572123E0D5 /* LeafCore in Frameworks */ = {isa = PBXBuildFile; productRef = DF87B75D3DB9208E396D0AB8 /* LeafCore */; settings = {ATTRIBUTES = (); }; };
 		FBDE789863EA1EAA8C2B84B1 /* Resources/LaunchAgents/tech.gundem.leaf.agent.plist in Embed LaunchAgent Plist */ = {isa = PBXBuildFile; fileRef = AAFF44718B4072844D5C6FF3 /* Resources/LaunchAgents/tech.gundem.leaf.agent.plist */; };
@@ -130,6 +131,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D8FD57232F9F807000E5FDB3 /* Sparkle in Frameworks */,
 				E0192A42BE48990A6ABC3993 /* LeafCore in Frameworks */,
 				0B762EFD0076DDEFF0180D89 /* LeafCorePrivate in Frameworks */,
 			);
@@ -234,6 +236,7 @@
 			packageProductDependencies = (
 				5C6E93B7D5BA63F53057E5BD /* LeafCore */,
 				7453218574ED9E25C1E2249B /* LeafCorePrivate */,
+				D8FD57222F9F807000E5FDB3 /* Sparkle */,
 			);
 			productName = Leaf;
 			productReference = D81CFDB62F97B50500D2D372 /* Leaf.app */;
@@ -265,6 +268,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "Packages/LeafCore" */,
+				D8FD57212F9F807000E5FDB3 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D81CFDB72F97B50500D2D372 /* Products */;
@@ -334,7 +338,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = LeafAgent/LeafAgent.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 4LZ84Z78M7;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -343,7 +347,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = "1.0.0-alpha.1";
 				PRODUCT_BUNDLE_IDENTIFIER = tech.gundem.leaf.agent;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -363,7 +367,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = LeafAgent/LeafAgent.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 4LZ84Z78M7;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -372,7 +376,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = "1.0.0-alpha.1";
 				PRODUCT_BUNDLE_IDENTIFIER = tech.gundem.leaf.agent;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -392,7 +396,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = LeafMCP/LeafMCP.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 4LZ84Z78M7;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -401,7 +405,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = "1.0.0-alpha.1";
 				PRODUCT_BUNDLE_IDENTIFIER = tech.gundem.leaf.mcp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -421,7 +425,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = LeafMCP/LeafMCP.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 4LZ84Z78M7;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -430,7 +434,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = "1.0.0-alpha.1";
 				PRODUCT_BUNDLE_IDENTIFIER = tech.gundem.leaf.mcp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -576,7 +580,7 @@
 				CODE_SIGN_ENTITLEMENTS = Leaf/Leaf.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 4LZ84Z78M7;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -589,7 +593,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = "1.0.0-alpha.1";
 				PRODUCT_BUNDLE_IDENTIFIER = tech.gundem.leaf;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -612,7 +616,7 @@
 				CODE_SIGN_ENTITLEMENTS = Leaf/Leaf.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 4LZ84Z78M7;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -625,7 +629,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = "1.0.0-alpha.1";
 				PRODUCT_BUNDLE_IDENTIFIER = tech.gundem.leaf;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -687,6 +691,17 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		D8FD57212F9F807000E5FDB3 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.9.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		5C6E93B7D5BA63F53057E5BD /* LeafCore */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -712,6 +727,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 7D7C108236B8F39358D41FF6 /* XCLocalSwiftPackageReference "Packages/LeafCore" */;
 			productName = LeafCore;
+		};
+		D8FD57222F9F807000E5FDB3 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D8FD57212F9F807000E5FDB3 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
 		};
 		DADE63FF43B0419C4A7B4ABB /* LeafCorePrivate */ = {
 			isa = XCSwiftPackageProductDependency;

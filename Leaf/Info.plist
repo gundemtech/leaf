@@ -26,5 +26,19 @@
 	<string></string>
 	<key>NSSupportsAutomaticGraphicsSwitching</key>
 	<true/>
+	<key>SUFeedURL</key>
+	<string>https://updates.gundem.tech/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>MzPOBHOfA6rzShhSpfIC+GpvpeSrv0eQKX8b3B7aN3s=</string>
+	<key>SURequireSignedFeed</key>
+	<true/>
+	<key>SUEnableInstallerLauncherService</key>
+	<false/>
+	<key>SUAutomaticallyUpdate</key>
+	<false/>
+	<key>SUEnableAutomaticChecks</key>
+	<false/>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
 </dict>
 </plist>
