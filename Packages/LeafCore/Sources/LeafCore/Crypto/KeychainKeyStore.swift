@@ -1,15 +1,20 @@
 import Foundation
 import Security
 
-/// Генерит 32-byte random key для SQLCipher и хранит его в macOS Keychain.
+/// **DEPRECATED — kept for one-shot migration to FileKeyStore (Phase 3.4.5).**
+/// Удалить вместе с `LeafError.keychainUnavailable` в Phase 3.5+ после
+/// confirmed stable runtime у alpha-юзеров.
+///
+/// Раньше генерил 32-byte random key для SQLCipher и хранил его в macOS Keychain.
 ///
 /// - Accessibility: `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` — доступ
 ///   после первого unlock'а сессии, не синкается на iCloud.
 /// - Access group: shared между app / agent / mcp (`$(TeamID).tech.gundem.leaf`).
-///   Все три процесса читают один и тот же ключ → единая DB.
+///   Все три процесса читали один и тот же ключ → единая DB.
 ///
-/// Phase 1.1 — ключ не используется реально (plaintext SQLite), но infra готова
-/// для Phase 1.5 SQLCipher migration.
+/// Phase 3.4.5 заменил это на `FileKeyStore` — keychain access group sharing
+/// требует Developer ID Provisioning Profile, которого нет на distribution.
+/// `fetchOnly` остаётся для bridge migration в FileKeyStore (legacy alpha.2 пользователи).
 public enum KeychainKeyStore {
     public static let keyLengthBytes = 32
 
@@ -26,6 +31,18 @@ public enum KeychainKeyStore {
         let newKey = try generateRandomKey()
         try insert(key: newKey, accessGroup: accessGroup, service: service, account: account)
         return newKey
+    }
+
+    /// Fetch-only без auto-create. Возвращает `nil` если `errSecItemNotFound`.
+    /// Используется `FileKeyStore.fetchOrCreate` для bridge migration —
+    /// alpha.2 main app записал ключ в default Keychain group, Phase 3.4.5
+    /// переносит его в `~/Library/Application Support/Leaf/db.key`.
+    public static func fetchOnly(
+        accessGroup: String = "",
+        service: String = "tech.gundem.leaf",
+        account: String = "events.db.key"
+    ) throws -> Data? {
+        return try fetch(accessGroup: accessGroup, service: service, account: account)
     }
 
     /// Удаляет ключ. Для dev reset / тестового tearDown.

@@ -4,10 +4,13 @@
 //
 
 import SwiftUI
+import os
 import LeafCore
 #if LEAF_PROD
 import LeafCorePrivate
 #endif
+
+private let leafAppLogger = Logger(subsystem: "tech.gundem.leaf", category: "app")
 
 @main
 struct LeafApp: App {
@@ -17,6 +20,21 @@ struct LeafApp: App {
     @State private var updater: UpdaterController
 
     init() {
+        // Phase 3.4.5 — материализуем db.key из main app's Keychain group ДО `agent.register()`.
+        // Helpers (LeafAgent/LeafMCP) живут в other default Keychain access groups (без shared
+        // entitlement они не видят main app's group), поэтому если LeafAgent стартанёт первым,
+        // он сгенерит свой random key и разломает alpha.2 БД, зашифрованную main app's K1.
+        // Eager call здесь решает race детерминированно.
+        #if LEAF_PROD
+        do {
+            _ = try FileKeyStore.fetchOrCreate()
+            FileKeyStore.cleanupLegacyKeychainBestEffort()
+        } catch {
+            // Не падаем — popover/Settings покажет error через InsightsReader state machine.
+            leafAppLogger.error("FileKeyStore.fetchOrCreate failed at init: \(String(describing: error), privacy: .public)")
+        }
+        #endif
+
         // Register Derived Insights provider once per app launch. Прямой
         // import + register здесь возможен т.к. app target гарантированно
         // получает флаг LEAF_PROD из xcconfig (в отличие от SPM

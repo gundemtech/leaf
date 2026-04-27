@@ -141,10 +141,9 @@ final class WatchedFoldersService {
 
     nonisolated private static func defaultEncryption() -> EncryptionOptions? {
         #if LEAF_PROD
-        let accessGroup = KeychainAccessGroup.current()
         return EncryptionOptions(
             keyProvider: .callback { @Sendable in
-                try KeychainKeyStore.fetchOrCreate(accessGroup: accessGroup)
+                try FileKeyStore.fetchOrCreate()
             },
             preKeyPragmas: ProdConfigs.sqlcipherPragmasPreKey,
             postKeyPragmas: ProdConfigs.sqlcipherPragmasPostKey

@@ -18,16 +18,13 @@ enum AgentMain {
         let databaseConfig = ProdConfigs.database
         let agentThresholds = ProdConfigs.agent
         let usingProdConfig = true
-        let databaseEncryption: EncryptionOptions? = {
-            let accessGroup = KeychainAccessGroup.current()
-            return EncryptionOptions(
-                keyProvider: .callback { @Sendable in
-                    try KeychainKeyStore.fetchOrCreate(accessGroup: accessGroup)
-                },
-                preKeyPragmas: ProdConfigs.sqlcipherPragmasPreKey,
-                postKeyPragmas: ProdConfigs.sqlcipherPragmasPostKey
-            )
-        }()
+        let databaseEncryption: EncryptionOptions? = EncryptionOptions(
+            keyProvider: .callback { @Sendable in
+                try FileKeyStore.fetchOrCreate()
+            },
+            preKeyPragmas: ProdConfigs.sqlcipherPragmasPreKey,
+            postKeyPragmas: ProdConfigs.sqlcipherPragmasPostKey
+        )
         #else
         let databaseConfig = DatabaseConfig.weakDefaults
         let agentThresholds = AgentThresholds.weakDefaults

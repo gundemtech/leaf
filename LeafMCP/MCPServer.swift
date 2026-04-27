@@ -13,16 +13,13 @@ enum MCPMain {
         let dbConfig = ProdConfigs.database
         DerivedInsightsFactory.register { LeafCorePrivate.ProdInsights(database: $0) }
         let prodMode = true
-        let dbEncryption: EncryptionOptions? = {
-            let accessGroup = KeychainAccessGroup.current()
-            return EncryptionOptions(
-                keyProvider: .callback { @Sendable in
-                    try KeychainKeyStore.fetchOrCreate(accessGroup: accessGroup)
-                },
-                preKeyPragmas: ProdConfigs.sqlcipherPragmasPreKey,
-                postKeyPragmas: ProdConfigs.sqlcipherPragmasPostKey
-            )
-        }()
+        let dbEncryption: EncryptionOptions? = EncryptionOptions(
+            keyProvider: .callback { @Sendable in
+                try FileKeyStore.fetchOrCreate()
+            },
+            preKeyPragmas: ProdConfigs.sqlcipherPragmasPreKey,
+            postKeyPragmas: ProdConfigs.sqlcipherPragmasPostKey
+        )
         let focusSessionGapSec: TimeInterval = ProdConfigs.agent.focusSessionGapSec
         #else
         let dbConfig = DatabaseConfig.weakDefaults
