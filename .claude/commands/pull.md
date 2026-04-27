@@ -4,13 +4,13 @@ description: Подтянуть последние изменения в whitepa
 
 # /pull
 
-Быстрый `git pull` в локальном клоне `~/Desktop/leaf-docs`, чтобы подтянуть свежие изменения whitepaper от партнёра перед началом новой задачи.
+Быстрый `git pull` в локальном клоне `~/Desktop/Leaf/leaf-docs`, чтобы подтянуть свежие изменения whitepaper от партнёра перед началом новой задачи.
 
 ## Алгоритм
 
 1. Выполни:
    ```bash
-   cd ~/Desktop/leaf-docs && git pull --ff-only
+   cd ~/Desktop/Leaf/leaf-docs && git pull --ff-only
    ```
 2. Разбери вывод и отчитайся коротко:
    - **"Already up to date"** → "leaf-docs уже актуален".

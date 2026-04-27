@@ -6,8 +6,8 @@ _Срез "где мы сейчас" за 30 секунд. Обновляетс�
 2026-04-27 (Phase 3.0 закрыт целиком — distribution ground laid, R2/CF unblock'нут партнёром, 11/11 GH secrets, custom domain live)
 
 ## Где мы
-- Инфраструктура команды готова: `leaf-docs` (whitepaper v1.2) + shared memory в Leaf-репо.
-- **Whitepaper v1.2 published** в `leaf-docs.gundem.tech`. Структура: 01-vision / 02-product / 03-architecture / 04-market / 05-reference.
+- Инфраструктура команды готова: `leaf-docs` (whitepaper v1.4) + shared memory в Leaf-репо.
+- **Whitepaper v1.4 published** в `leaf-docs.gundem.tech` (актуально с 2026-04-25 — Phase 2.3 Claude Code AI collaboration). Структура: 01-vision / 02-product / 03-architecture / 04-market / 05-reference.
 - **Phase 0 done 2026-04-23.** 3-target Xcode project (app + Agent CLI + MCP CLI), local SPM `LeafCore` с public API-каркасом (enums, protocols, unimplemented stubs) + moat-target `LeafCorePrivate` с tracked Placeholder. Все 3 таргета собираются, helper-бинари embed'нуты в `Leaf.app/Contents/MacOS/`, CI workflow написан.
 - **Phase 1.1 done 2026-04-24.** Storage foundation: GRDB 7.10 (plain SQLite, SQLCipher → Phase 1.5), `Database` класс с writer/reader режимами через `DatabasePool`, migration M001 (events table + 2 индекса), `KeychainKeyStore` для 32-byte key (готов к использованию в 1.5), moat-injection pattern (optional `Config/Local.xcconfig` → `#if LEAF_PROD`). 20/20 тестов зелёные.
 - **Phase 1.2 done 2026-04-24.** Agent daemon: `@main enum AgentMain` с `RunLoop.main.run()`, `ActiveAppCollector` на `NSWorkspace.didActivateApplicationNotification`, `IdleCollector` на `CGEventSource.secondsSinceLastEventType`, `EventWriter` actor с batching + periodic flush, graceful shutdown на SIGTERM/SIGINT через `DispatchSource`, hardcoded Phase-1 blocklist. LaunchAgent plist embedded в `Leaf.app/Contents/Library/LaunchAgents/` через Copy Files phase. App: `@Observable LaunchAgentService` обёртка над `SMAppService.agent(plistName:)`, Settings с real toggle + status indicator.
