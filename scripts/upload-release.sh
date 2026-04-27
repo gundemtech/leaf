@@ -50,13 +50,19 @@ RELEASES_DIR="${1:-./build/releases}"
 [[ -d "$RELEASES_DIR" ]] || { echo "✗ $RELEASES_DIR not found" >&2; exit 1; }
 [[ -f "$RELEASES_DIR/appcast.xml" ]] || { echo "✗ appcast.xml missing in $RELEASES_DIR" >&2; exit 1; }
 
-echo "→ Uploading release artifacts (excluding appcast.xml) to s3://$R2_BUCKET/releases/"
+echo "→ Uploading distribution artifacts (.dmg / .zip / .delta) to s3://$R2_BUCKET/releases/"
+# Whitelist по extension: только release artifacts. recursive + --exclude "*" --include
+# "<ext>" защищает от случайного заливания .stamps/, .xcarchive/, exported/Leaf.app/
+# и прочего мусора, который release.sh пишет рядом в build/releases/.
 AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" \
 AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" \
 aws s3 cp "$RELEASES_DIR/" "s3://$R2_BUCKET/releases/" \
     --recursive \
     --endpoint-url "$R2_ENDPOINT" \
-    --exclude "appcast.xml" \
+    --exclude "*" \
+    --include "*.dmg" \
+    --include "*.zip" \
+    --include "*.delta" \
     --content-type "application/octet-stream"
 
 echo "→ Uploading appcast.xml to s3://$R2_BUCKET/appcast.xml"
