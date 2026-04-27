@@ -3,7 +3,7 @@
 _Срез "где мы сейчас" за 30 секунд. Обновляется вручную._
 
 ## Последнее обновление
-2026-04-27 (Phase 3.4 Onboarding track done — first-launch UX готов к alpha)
+2026-04-27 (Phase 3.1 Sparkle integration done — manual update path ready, auto-checks flip ждёт Phase 3.5 R2 unblock)
 
 ## Где мы
 - Инфраструктура команды готова: `leaf-docs` (whitepaper v1.2) + shared memory в Leaf-репо.
@@ -38,14 +38,15 @@ _Срез "где мы сейчас" за 30 секунд. Обновляетс�
 
 ## В работе прямо сейчас
 - **Phase 3.0 Track A (Sparkle/CF/R2):** ⏳ partially done в parallel session, blocked на CF/R2 invite от партнёра. 5/11 GH secrets set; brew tools + EdDSA keypair готовы; 6 secrets + R2 bucket + Custom Domain — ждут unblock.
-- **Phase 3.4 Track B (Onboarding) — done 2026-04-27.** PermissionsService (AX + FDA polling, hybrid lifecycle 1s onboarding / 4s normal popover) + BannerView (reusable) + OnboardingView (4-step inline state machine с auto-advance + Skip for now) + permissionsBanner (replace EmptyView TODO в MenuBarContent.swift:53-60) + LeafApp env injection. 5 файлов (3 new, 2 mod), ~+310/-15 LOC, 3 commits (832e899/a7bfc89/d75f43f). Manual smoke на real macOS confirmed: все 4 onboarding steps + auto-advance ≤2с при toggle AX/FDA + permissionsBanner reactivity ≤4с при revoke. Tests deferred (D9 в plan): XCTest не линкуется в app target → `// MARK: - Test plan` comment block документирует 4 planned кейсов для Phase 3.5+ когда LeafTests target создаётся.
+- **Phase 3.1 Sparkle integration — done 2026-04-27.** Sparkle 2.x SPM dependency (auto-embedded в `Leaf.app/Contents/Frameworks/` для Xcode 14+ SPM dynamic frameworks — Embed & Sign explicit не требуется). Linked только в Leaf target (D5). 7 SU* keys в Info.plist (FeedURL=updates.gundem.tech/appcast.xml, EdDSA pubkey embedded, RequireSignedFeed=YES, EnableInstallerLauncherService=NO для non-sandbox in-process install, AutomaticallyUpdate=NO, **EnableAutomaticChecks=NO** до Phase 3.5 R2 unblock per D10 — убирает 404 spam, **ScheduledCheckInterval=86400** daily per D9 vs hourly из master plan). UpdaterController (Leaf/Models/) — thin @Observable wrapper над SPUStandardUpdaterController, manual checkForUpdates(). LaunchAgentService — D1 register() filter "already registered" для idempotent init. LeafApp — D13 explicit `_state = State(initialValue:)` + idempotent register guard `if !launchAgent.isEnabled { agent.register() }` для post-update relaunch restoration. SettingsView General tab → новый Updates section с "Check for Updates…" button + version display "1.0.0-alpha.1 (build 2)". Bump MARKETING_VERSION + CFBundleVersion × 3 targets. .gitignore переписан: ignore `swiftpm/configuration/` + `swiftpm/artifacts/` (`!` exception на ignored parent dir не работает в git) — Package.resolved committed для reproducible builds. **D14 (mid-execution scope cut от master plan A2 D2/D8): no SPUUpdaterDelegate choreography в 3.1.** Sparkle's `willInstallUpdateOnQuit` срабатывает только для silent-install-on-quit path (auto-download); manual install path использует internal hooks без публичного API. Без choreography flow: Sparkle bundle replace + relaunch → idempotent register → launchd SIGTERM old agent → existing SignalHandlers (`Agent.swift:131`) flush WAL gracefully → new agent acquires writer lock через busy_timeout=5000ms (Phase 1.1). Multi-process SQLCipher handles overlap. Cascading scope cuts: `waitUntilStopped`, agent.pid file, Agent.swift modifications — все skipped. 4 файлов (1 new — UpdaterController, 3 mod — LaunchAgentService/LeafApp/SettingsView + 4 — .gitignore/Info.plist/pbxproj/Package.resolved для 3.1a), ~+200/-15 LOC, 3 commits (b4938b6/ecaac30/181ee61). Build green Debug + Release × 3 targets. Sparkle.framework verified embedded в Leaf.app, otool clean в LeafAgent/LeafMCP.
 - **Phase 3.4.5 — keychain prompt fix (deferred).** Smoke выявил pre-existing Phase 1.5 issue: LeafAgent/LeafMCP без `keychain-access-groups` entitlement → fresh-install user видит macOS keychain prompt при первом Toggle Background ON. Naive fix (добавить entitlement) крашит Agent на exec (AMFI reject даже с `application-identifier` + `team-identifier`). Решения: (a) per-helper provisioning profiles в Apple Developer Portal, (b) XPC proxy через main app, (c) file-based key. Defer в отдельную сессию — outside Phase 3.4 onboarding scope.
 
 ## Следующим (→ distribution)
 - **Phase 3.0 unblock** когда партнёр пришлёт CF invite → R2 bucket + Custom Domain `updates.gundem.tech` + 6 GH secrets.
-- **Phase 3.1-3.3** (Sparkle integration + notarytool wrapper + release.sh) после 3.0 complete.
+- **Phase 3.2** (R2 upload script + appcast layout) — sequential после 3.0 unblock.
+- **Phase 3.3** (Notarization local-first + scripts/release.sh) — после 3.2.
 - **Phase 3.4.5** (keychain prompt fix) — отдельная infra сессия, не блокирует distribution track.
-- **Phase 3.5** (first release smoke на clean VM) — после 3.1-3.3.
+- **Phase 3.5** (first release smoke на clean VM + flip `SUEnableAutomaticChecks=YES` в Info.plist) — после 3.1-3.3.
 - **Linear OAuth track** — отдельный (не блокирован Phase 3), Layer B источник.
 
 ## Open tensions
