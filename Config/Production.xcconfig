@@ -1,0 +1,15 @@
+// Production.xcconfig — committed, public-safe team-wide config values.
+//
+// Здесь живут значения, которые должны быть в shipped Leaf.app у всех
+// end-user'ов одинаковые. По природе OAuth `client_id` публичен (виден в
+// authorize URL у любого юзера), поэтому committed in plain text — норма.
+// Секреты (client_secret, EdDSA private key, R2 tokens) сюда НЕ кладутся —
+// public репо.
+//
+// Local.xcconfig (gitignored) override'ит эти значения для dev / staging.
+
+// Phase 4.1 — Linear OAuth public client.
+// Зарегистрировано на https://linear.app/settings/api на team Leaf workspace,
+// redirect URI = http://127.0.0.1:47823/callback (exact match с
+// LinearOAuthEndpoints.redirectURI в коде).
+LINEAR_OAUTH_CLIENT_ID = 6759268c539e332e0d876f5cb3dac9e0

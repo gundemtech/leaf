@@ -1,7 +1,14 @@
-// Local.xcconfig.example — скопируй в Local.xcconfig (gitignored) и раскомментируй строку,
-// чтобы включить компиляцию с production moat-реализациями (SQL тела, точные пороги и т.д.).
-//
-// Без Local.xcconfig — проект собирается со StubInsights и DatabaseConfig.weakDefaults
-// (работает, но не production-grade).
+// Local.xcconfig.example — скопируй в Local.xcconfig (gitignored) если нужно
+// что-то override'ить локально. Пустой dev-конфиг не нужен — Production.xcconfig
+// уже содержит team-wide значения.
 
+// Раскомментируй чтобы собрать с production moat-реализациями (SQL тела,
+// точные пороги). Без этого флага — StubInsights + DatabaseConfig.weakDefaults.
 // LEAF_FLAGS = LEAF_PROD
+
+// Phase 4.1 — Linear OAuth client_id override для dev / staging. Production
+// значение уже committed в Config/Production.xcconfig — обычным разработчикам
+// override не нужен. Полезно если хочешь тестить со своим personal Linear
+// OAuth app (например staging workspace, separate rate-limit bucket, etc.).
+//
+// LINEAR_OAUTH_CLIENT_ID = lin_oauth_xxxxxxxxxxxxxxxxxxxxxxxxxxxx

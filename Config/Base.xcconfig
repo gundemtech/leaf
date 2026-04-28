@@ -9,7 +9,13 @@
 // CI билд (без Local.xcconfig) остаётся на этой ветке.
 LEAF_FLAGS =
 
-// Local.xcconfig (если существует) перезатирает default выше.
+// Production.xcconfig (committed, team-wide public-safe values, e.g.
+// LINEAR_OAUTH_CLIENT_ID). Загружаем до Local.xcconfig чтобы Local override'ил
+// для dev / staging.
+#include "Production.xcconfig"
+
+// Local.xcconfig (gitignored, dev override). #include? — optional, не падаем
+// если файл отсутствует (CI build).
 #include? "Local.xcconfig"
 
 // Каждый target в project.pbxproj делает:

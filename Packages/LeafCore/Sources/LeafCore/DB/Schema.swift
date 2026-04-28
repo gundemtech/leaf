@@ -41,6 +41,22 @@ public enum Schema {
 
         public static let indexEnabled = "watched_folders_enabled"
     }
+
+    /// Phase 4.1 — OAuth credentials для third-party providers (Layer B).
+    /// PK — `provider` (single-row-per-provider в MVP); multi-workspace
+    /// потребует M005 lift PK → composite (provider, workspace_id).
+    public enum Integrations {
+        public static let tableName = "integrations"
+        public static let provider = "provider"
+        public static let workspaceID = "workspace_id"
+        public static let workspaceName = "workspace_name"
+        public static let accessToken = "access_token"
+        public static let refreshToken = "refresh_token"
+        public static let expiresAtMs = "expires_at_ms"
+        public static let scope = "scope"
+        public static let connectedAtMs = "connected_at_ms"
+        public static let updatedMs = "updated_ms"
+    }
 }
 
 /// Канонические `collector_id` значения. Литералы — public, чтобы тесты
@@ -51,4 +67,10 @@ public enum CollectorID {
     /// Phase 2.4 — FSEvents content collector. Не используется для offsets
     /// (FSEvents stream-based, не tail-read), но фигурирует в diagnostic logs.
     public static let fsEvents = "fs_events"
+}
+
+/// Канонические `provider` значения для `integrations` таблицы. Литералы —
+/// public, single source of truth между OAuth-сервисом, DB и (Phase 4.2) collector.
+public enum IntegrationProvider: String, Sendable, Hashable, CaseIterable {
+    case linear
 }

@@ -9,6 +9,7 @@ import ServiceManagement
 struct SettingsView: View {
     @Environment(LaunchAgentService.self) private var launchAgent
     @Environment(WatchedFoldersService.self) private var watchedFolders
+    @Environment(LinearOAuthService.self) private var linearOAuth
     @Environment(UpdaterController.self) private var updater
 
     var body: some View {
@@ -18,6 +19,9 @@ struct SettingsView: View {
 
             FoldersSettings(service: watchedFolders)
                 .tabItem { Label("Folders", systemImage: "folder.badge.gear") }
+
+            ConnectionsSettings(service: linearOAuth)
+                .tabItem { Label("Connections", systemImage: "link") }
 
             PrivacySettings()
                 .tabItem { Label("Privacy", systemImage: "lock.shield") }

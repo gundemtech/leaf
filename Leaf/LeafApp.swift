@@ -16,6 +16,7 @@ private let leafAppLogger = Logger(subsystem: "tech.gundem.leaf", category: "app
 struct LeafApp: App {
     @State private var launchAgent: LaunchAgentService
     @State private var watchedFolders = WatchedFoldersService()
+    @State private var linearOAuth = LinearOAuthService()
     @State private var permissions = PermissionsService()
     @State private var updater: UpdaterController
 
@@ -78,6 +79,7 @@ struct LeafApp: App {
             SettingsView()
                 .environment(launchAgent)
                 .environment(watchedFolders)
+                .environment(linearOAuth)
                 .environment(permissions)
                 .environment(updater)
         }

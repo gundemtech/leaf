@@ -51,6 +51,23 @@ final class MigrationTests: XCTestCase {
         _ = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
     }
 
+    /// M004 idempotency: повторный open после уже применённой миграции
+    /// не пересоздаёт таблицу integrations и не теряет данные.
+    func testMigration004IsIdempotent() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        let db1 = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        try db1.upsertIntegration(IntegrationRecord(
+            provider: .linear, workspaceID: "ws", workspaceName: "Name",
+            accessToken: "tok", refreshToken: nil, expiresAt: nil,
+            scope: "read", connectedAt: now, updatedAt: now
+        ))
+
+        let db2 = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let loaded = try db2.readIntegration(provider: .linear)
+        XCTAssertEqual(loaded?.workspaceID, "ws")
+    }
+
     func testMigrationCreatesAllExpectedColumns() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)

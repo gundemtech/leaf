@@ -39,6 +39,7 @@ public final class Database: @unchecked Sendable {
         migrator.registerMigration001Events()
         migrator.registerMigration002CollectorOffsets()
         migrator.registerMigration003WatchedFolders()
+        migrator.registerMigration004Integrations()
         try migrator.migrate(pool)
 
         return Database(pool: pool, config: config, mode: .writer)
@@ -390,6 +391,109 @@ public final class Database: @unchecked Sendable {
                 arguments: StatementArguments(args)
             )
         }
+    }
+
+    // MARK: - Integrations (Phase 4.1)
+
+    /// UPSERT one integration row keyed by `provider`. Writer-only.
+    /// Single-row-per-provider — переcoединение тех же workspace либо
+    /// switch на другой workspace одного provider'а просто перезаписывает row.
+    public func upsertIntegration(_ record: IntegrationRecord) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try db.execute(sql: """
+                INSERT INTO \(Schema.Integrations.tableName) (
+                    \(Schema.Integrations.provider),
+                    \(Schema.Integrations.workspaceID),
+                    \(Schema.Integrations.workspaceName),
+                    \(Schema.Integrations.accessToken),
+                    \(Schema.Integrations.refreshToken),
+                    \(Schema.Integrations.expiresAtMs),
+                    \(Schema.Integrations.scope),
+                    \(Schema.Integrations.connectedAtMs),
+                    \(Schema.Integrations.updatedMs)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(\(Schema.Integrations.provider)) DO UPDATE SET
+                    \(Schema.Integrations.workspaceID)   = excluded.\(Schema.Integrations.workspaceID),
+                    \(Schema.Integrations.workspaceName) = excluded.\(Schema.Integrations.workspaceName),
+                    \(Schema.Integrations.accessToken)   = excluded.\(Schema.Integrations.accessToken),
+                    \(Schema.Integrations.refreshToken)  = excluded.\(Schema.Integrations.refreshToken),
+                    \(Schema.Integrations.expiresAtMs)   = excluded.\(Schema.Integrations.expiresAtMs),
+                    \(Schema.Integrations.scope)         = excluded.\(Schema.Integrations.scope),
+                    \(Schema.Integrations.connectedAtMs) = excluded.\(Schema.Integrations.connectedAtMs),
+                    \(Schema.Integrations.updatedMs)     = excluded.\(Schema.Integrations.updatedMs)
+                """,
+                arguments: [
+                    record.provider.rawValue,
+                    record.workspaceID,
+                    record.workspaceName,
+                    record.accessToken,
+                    record.refreshToken,
+                    record.expiresAt.map { Int64($0.timeIntervalSince1970 * 1000) },
+                    record.scope,
+                    Int64(record.connectedAt.timeIntervalSince1970 * 1000),
+                    Int64(record.updatedAt.timeIntervalSince1970 * 1000)
+                ]
+            )
+        }
+    }
+
+    /// Returns row keyed by `provider`, либо nil если ещё не подключено.
+    /// Reader API — App потребляет в Settings UI rehydration, MCP/collector
+    /// (Phase 4.2) — для polling auth.
+    public func readIntegration(provider: IntegrationProvider) throws -> IntegrationRecord? {
+        try pool.read { db in
+            let row = try Row.fetchOne(db, sql: """
+                SELECT \(Schema.Integrations.provider), \(Schema.Integrations.workspaceID),
+                       \(Schema.Integrations.workspaceName), \(Schema.Integrations.accessToken),
+                       \(Schema.Integrations.refreshToken), \(Schema.Integrations.expiresAtMs),
+                       \(Schema.Integrations.scope), \(Schema.Integrations.connectedAtMs),
+                       \(Schema.Integrations.updatedMs)
+                FROM \(Schema.Integrations.tableName)
+                WHERE \(Schema.Integrations.provider) = ?
+                """,
+                arguments: [provider.rawValue]
+            )
+            return row.flatMap(Self.mapIntegrationRow)
+        }
+    }
+
+    /// DELETE by `provider`. Idempotent — no-op для отсутствующего row.
+    /// "Disconnect" в UI; refresh-flow тоже вызывает при `invalid_grant`.
+    public func deleteIntegration(provider: IntegrationProvider) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try db.execute(
+                sql: "DELETE FROM \(Schema.Integrations.tableName) WHERE \(Schema.Integrations.provider) = ?",
+                arguments: [provider.rawValue]
+            )
+        }
+    }
+
+    private static func mapIntegrationRow(_ row: Row) -> IntegrationRecord? {
+        guard
+            let providerRaw = row[Schema.Integrations.provider] as String?,
+            let provider = IntegrationProvider(rawValue: providerRaw),
+            let workspaceID = row[Schema.Integrations.workspaceID] as String?,
+            let workspaceName = row[Schema.Integrations.workspaceName] as String?,
+            let accessToken = row[Schema.Integrations.accessToken] as String?,
+            let scope = row[Schema.Integrations.scope] as String?,
+            let connectedAtMs = row[Schema.Integrations.connectedAtMs] as Int64?,
+            let updatedMs = row[Schema.Integrations.updatedMs] as Int64?
+        else { return nil }
+        let refreshToken = row[Schema.Integrations.refreshToken] as String?
+        let expiresAtMs = row[Schema.Integrations.expiresAtMs] as Int64?
+        return IntegrationRecord(
+            provider: provider,
+            workspaceID: workspaceID,
+            workspaceName: workspaceName,
+            accessToken: accessToken,
+            refreshToken: refreshToken,
+            expiresAt: expiresAtMs.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000.0) },
+            scope: scope,
+            connectedAt: Date(timeIntervalSince1970: TimeInterval(connectedAtMs) / 1000.0),
+            updatedAt: Date(timeIntervalSince1970: TimeInterval(updatedMs) / 1000.0)
+        )
     }
 
     private static func mapWatchedFolderRow(_ row: Row) -> WatchedFolder? {
