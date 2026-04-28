@@ -131,6 +131,36 @@ enum AgentMain {
             )
         }()
 
+        // Phase 4.3 — GitHub REST events polling collector.
+        // Mirror Linear: prod parser в moat (ProdGitHubAPIProvider — REST event
+        // mapping + ADR-010 enforcement), public Stub no-op для CI/dev. Empty
+        // clientID → graceful skip (collector не стартует — нет OAuth App).
+        let githubProvider: any GitHubAPIProvider = {
+            #if LEAF_PROD
+            return ProdGitHubAPIProvider()
+            #else
+            return StubGitHubAPIProvider()
+            #endif
+        }()
+        let githubCollector: GitHubCollector? = {
+            guard !agentThresholds.githubOAuthClientID.isEmpty else {
+                githubLogger.info("GitHub OAuth client_id not configured — collector disabled")
+                return nil
+            }
+            let refresher = GitHubTokenRefresher(
+                database: database,
+                clientID: agentThresholds.githubOAuthClientID
+            )
+            return GitHubCollector(
+                database: database,
+                provider: githubProvider,
+                refresher: refresher,
+                intervalSec: agentThresholds.githubPollIntervalSec,
+                backfillWindowDays: agentThresholds.backfillWindowDays,
+                logger: githubLogger
+            )
+        }()
+
         AgentLifetime.writer = writer
         AgentLifetime.activeAppCollector = activeAppCollector
         AgentLifetime.idleCollector = idleCollector
@@ -138,6 +168,7 @@ enum AgentMain {
         AgentLifetime.claudeCodeCollector = claudeCodeCollector
         AgentLifetime.fsEventsCollector = fsEventsCollector
         AgentLifetime.linearCollector = linearCollector
+        AgentLifetime.githubCollector = githubCollector
 
         // Kick off writer + collectors + scheduler.
         // `start()` на writer/idle — fire-and-forget Task внутри; на activeApp — запускаем
@@ -149,20 +180,22 @@ enum AgentMain {
         Task { await claudeCodeCollector.start() }
         Task { await fsEventsCollector.start() }
         if let lc = linearCollector { Task { await lc.start() } }
+        if let gc = githubCollector { Task { await gc.start() } }
 
-        // Shutdown порядок: maintenance → fsEvents → claudeCode → linear → writer.
+        // Shutdown порядок: maintenance → fsEvents → claudeCode → linear → github → writer.
         // fsEvents первым из collectors — закрываем приём callback'ов до того как
-        // остальные collectors flush'ят. claudeCode + linear flush'ят свои текущие
-        // tick'и атомарно (events + offset в одной транзакции) — не остаётся
-        // "events без offset" / "offset без events". Linear после claudeCode т.к.
-        // Linear collector имеет network call в tick (медленнее на shutdown);
-        // тащить его в конец chain'а minimizes overall stop latency.
-        // writer последним — drain буфера attention/idle в DB перед exit.
+        // остальные collectors flush'ят. claudeCode / linear / github flush'ят свои
+        // текущие tick'и атомарно (events + offset в одной транзакции) — не остаётся
+        // "events без offset" / "offset без events". Linear / github после claudeCode
+        // т.к. имеют network call в tick (медленнее на shutdown); тащить их в конец
+        // chain'а minimizes overall stop latency. writer последним — drain буфера
+        // attention/idle в DB перед exit.
         installSignalHandlers {
             if let m = AgentLifetime.maintenance { await m.stop() }
             if let f = AgentLifetime.fsEventsCollector { await f.stop() }
             if let c = AgentLifetime.claudeCodeCollector { await c.stop() }
             if let l = AgentLifetime.linearCollector { await l.stop() }
+            if let g = AgentLifetime.githubCollector { await g.stop() }
             if let w = AgentLifetime.writer {
                 await w.flush()
                 await w.stop()
@@ -188,4 +221,5 @@ enum AgentLifetime {
     nonisolated(unsafe) static var claudeCodeCollector: ClaudeCodeCollector?
     nonisolated(unsafe) static var fsEventsCollector: FSEventsCollector?
     nonisolated(unsafe) static var linearCollector: LinearCollector?
+    nonisolated(unsafe) static var githubCollector: GitHubCollector?
 }
