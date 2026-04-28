@@ -119,6 +119,10 @@ final class InsightsReader {
                         // .empty (Stub) — popover'у решать рендерить или скрыть.
                         let linear = try insights.linearActivity(period: today)
                         try Task.checkCancellation()
+                        // Phase 4.3 — GitHub events activity. 11-я sequential query;
+                        // на не-подключённом GitHub возвращает .empty (Stub).
+                        let github = try insights.githubActivity(period: today)
+                        try Task.checkCancellation()
                         let snapshot = InsightsSnapshot(
                             topApps: topApps,
                             sessions: sessions,
@@ -133,7 +137,10 @@ final class InsightsReader {
                             filesTouched: filesTouched,
                             linearIssuesTouched: linear.issuesTouched,
                             linearByProject: linear.byProject,
-                            linearByStatus: linear.byStatus
+                            linearByStatus: linear.byStatus,
+                            githubEventsCount: github.eventsCount,
+                            githubByRepo: github.byRepo,
+                            githubByEventKind: github.byEventKind
                         )
                         return .success((db, snapshot))
                     } catch {

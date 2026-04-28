@@ -161,6 +161,7 @@ struct MenuBarContent: View {
                 trendsLines(snapshot: snapshot)
                 aiLine(snapshot: snapshot)
                 linearLine(snapshot: snapshot)
+                githubLine(snapshot: snapshot)
                 filesLines(snapshot: snapshot)
             }
             Spacer()
@@ -318,6 +319,46 @@ struct MenuBarContent: View {
                 .map { "\($0.status): \($0.count)" }
                 .joined(separator: ", ")
             lines.append("By status: \(statuses)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    /// Phase 4.3 — GitHub events line. На пустом GitHub (Stub в no-prod build,
+    /// либо коллектора нет / юзер не подключал) — EmptyView, не показываем
+    /// "GitHub: no activity" placeholder. Tooltip — full breakdown by repo + kind.
+    @ViewBuilder
+    private func githubLine(snapshot: InsightsSnapshot) -> some View {
+        if snapshot.githubEventsCount == 0 {
+            EmptyView()
+        } else {
+            let topRepo = snapshot.githubByRepo.first?.repo ?? ""
+            let label: String = {
+                if topRepo.isEmpty || topRepo == "(unknown)" {
+                    return "GitHub today: \(snapshot.githubEventsCount) events"
+                } else {
+                    return "GitHub today: \(snapshot.githubEventsCount) events · \(topRepo)"
+                }
+            }()
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .help(githubTooltip(snapshot: snapshot))
+        }
+    }
+
+    private func githubTooltip(snapshot: InsightsSnapshot) -> String {
+        var lines: [String] = ["Events today: \(snapshot.githubEventsCount)"]
+        if !snapshot.githubByRepo.isEmpty {
+            let repos = snapshot.githubByRepo
+                .map { "\($0.repo): \($0.count)" }
+                .joined(separator: ", ")
+            lines.append("By repo: \(repos)")
+        }
+        if !snapshot.githubByEventKind.isEmpty {
+            let kinds = snapshot.githubByEventKind
+                .map { "\($0.eventKind): \($0.count)" }
+                .joined(separator: ", ")
+            lines.append("By kind: \(kinds)")
         }
         return lines.joined(separator: "\n")
     }
