@@ -37,14 +37,22 @@ final class UpdaterController {
     private let controller: SPUStandardUpdaterController
 
     init() {
-        // startingUpdater: true — Sparkle scheduling запускается сразу. Нет
-        // delegates: SPUStandardUserDriver (default) handles install dialog,
-        // "no updates" alert, error alerts автоматически.
+        // Phase 3.5 (alpha.4) fix — `startingUpdater: false` + deferred explicit start.
+        // При `startingUpdater: true` Sparkle пытается start updater inline в App.init,
+        // но main runloop ещё не активен (NSApplicationMain spinup happens после
+        // App.init возврата) → start silently no-op, checkForUpdates падает с
+        // "updater hasn't been started yet" в логе и UI dialog не появляется.
+        // DispatchQueue.main.async откладывает start до первого runloop tick — runs
+        // после возврата из App.init когда NSApplication уже activated.
         self.controller = SPUStandardUpdaterController(
-            startingUpdater: true,
+            startingUpdater: false,
             updaterDelegate: nil,
             userDriverDelegate: nil
         )
+        let controller = self.controller
+        DispatchQueue.main.async {
+            controller.startUpdater()
+        }
     }
 
     /// Manual "Check for Updates…" — wired в SettingsView (Phase 3.1c).

@@ -32,12 +32,14 @@
 	<string>MzPOBHOfA6rzShhSpfIC+GpvpeSrv0eQKX8b3B7aN3s=</string>
 	<key>SURequireSignedFeed</key>
 	<true/>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
 	<key>SUEnableInstallerLauncherService</key>
 	<false/>
 	<key>SUAutomaticallyUpdate</key>
 	<false/>
 	<key>SUEnableAutomaticChecks</key>
-	<false/>
+	<true/>
 	<key>SUScheduledCheckInterval</key>
 	<integer>86400</integer>
 </dict>

@@ -70,18 +70,22 @@ final class FileKeyStoreTests: XCTestCase {
         }
     }
 
-    func testConcurrentFetchOrCreateConverges() async throws {
-        // Race spec: два параллельных Task.detached вызова на свежий path должны
-        // вернуть одинаковые bytes (last-writer-wins consensus через atomic+verify).
-        // Не bullet-proof для arbitrary timing, но purpose'ом этого теста — поймать
-        // обвал read-back logic (regression guard).
+    func testConcurrentReadersConverge() async throws {
+        // Production model (Phase 3.4.5): main app eager-init'ит файл В `LeafApp.init()`
+        // ДО `agent.register()`. Helpers (LeafAgent/LeafMCP) гарантированно стартуют после
+        // и читают тот же on-disk файл. Concurrent writes на свежий path в prod не бывает.
+        //
+        // Тест: pre-write файл, потом 2 параллельных fetchOrCreate'а должны прочитать те же bytes.
         for _ in 0..<10 {
-            let url = tempDir.appendingPathComponent("race-\(UUID().uuidString).key")
+            let url = tempDir.appendingPathComponent("read-\(UUID().uuidString).key")
+            let seed = try FileKeyStore.fetchOrCreate(at: url)  // eager-init equivalent
+
             async let a = Task.detached(priority: .userInitiated) { try FileKeyStore.fetchOrCreate(at: url) }.value
             async let b = Task.detached(priority: .userInitiated) { try FileKeyStore.fetchOrCreate(at: url) }.value
 
             let (keyA, keyB) = try await (a, b)
-            XCTAssertEqual(keyA, keyB, "Параллельные fetchOrCreate должны сойтись на одном ключе")
+            XCTAssertEqual(keyA, seed, "Concurrent reader A должен вернуть seed bytes")
+            XCTAssertEqual(keyB, seed, "Concurrent reader B должен вернуть seed bytes")
             XCTAssertEqual(keyA.count, 32)
         }
     }
