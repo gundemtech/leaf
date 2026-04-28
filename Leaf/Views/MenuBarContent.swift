@@ -160,6 +160,7 @@ struct MenuBarContent: View {
                 sessionsLines(snapshot: snapshot)
                 trendsLines(snapshot: snapshot)
                 aiLine(snapshot: snapshot)
+                linearLine(snapshot: snapshot)
                 filesLines(snapshot: snapshot)
             }
             Spacer()
@@ -278,6 +279,47 @@ struct MenuBarContent: View {
         } else {
             return "\(m)m"
         }
+    }
+
+    /// Phase 4.2 — Linear issue activity. Linear opt-in feature: при отсутствии
+    /// данных строка скрыта (EmptyView), а не "Linear: no activity" placeholder
+    /// — иначе wreck'аем popover у юзеров без подключённого Linear (большинство).
+    /// Tooltip показывает full breakdown by project + status.
+    @ViewBuilder
+    private func linearLine(snapshot: InsightsSnapshot) -> some View {
+        if snapshot.linearIssuesTouched == 0 {
+            EmptyView()
+        } else {
+            let topProject = snapshot.linearByProject.first?.project ?? ""
+            let label: String = {
+                if topProject.isEmpty || topProject == "(no project)" {
+                    return "Linear today: \(snapshot.linearIssuesTouched) issues"
+                } else {
+                    return "Linear today: \(snapshot.linearIssuesTouched) issues · \(topProject)"
+                }
+            }()
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .help(linearTooltip(snapshot: snapshot))
+        }
+    }
+
+    private func linearTooltip(snapshot: InsightsSnapshot) -> String {
+        var lines: [String] = ["Distinct issues touched today: \(snapshot.linearIssuesTouched)"]
+        if !snapshot.linearByProject.isEmpty {
+            let projects = snapshot.linearByProject
+                .map { "\($0.project): \($0.count)" }
+                .joined(separator: ", ")
+            lines.append("By project: \(projects)")
+        }
+        if !snapshot.linearByStatus.isEmpty {
+            let statuses = snapshot.linearByStatus
+                .map { "\($0.status): \($0.count)" }
+                .joined(separator: ", ")
+            lines.append("By status: \(statuses)")
+        }
+        return lines.joined(separator: "\n")
     }
 
     /// Phase 2.4 — top-5 files touched today из watched folders. Empty placeholder
