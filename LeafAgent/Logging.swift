@@ -12,3 +12,4 @@ nonisolated let writerLogger = Logger(subsystem: "tech.gundem.leaf.agent", categ
 nonisolated let maintenanceLogger = Logger(subsystem: "tech.gundem.leaf.agent", category: "maintenance")
 nonisolated let claudeCodeLogger = Logger(subsystem: "tech.gundem.leaf.agent", category: "claude-code")
 nonisolated let fsEventsLogger = Logger(subsystem: "tech.gundem.leaf.agent", category: "fsevents")
+nonisolated let linearLogger = Logger(subsystem: "tech.gundem.leaf.agent", category: "linear-collector")

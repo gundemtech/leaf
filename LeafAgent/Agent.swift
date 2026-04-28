@@ -101,12 +101,43 @@ enum AgentMain {
             logger: fsEventsLogger
         )
 
+        // Phase 4.2 — Linear GraphQL polling collector.
+        // Provider injection: prod (paginated query + retry + complexity budget)
+        // в moat, public Stub no-op для CI/dev. clientID empty → graceful skip
+        // (collector не стартует). Refresher переехал в LeafCore (Phase 4.2 D1).
+        let linearProvider: any LinearGraphQLProvider = {
+            #if LEAF_PROD
+            return ProdLinearGraphQLProvider()
+            #else
+            return StubLinearGraphQLProvider()
+            #endif
+        }()
+        let linearCollector: LinearCollector? = {
+            guard !agentThresholds.linearOAuthClientID.isEmpty else {
+                linearLogger.info("Linear OAuth client_id not configured — collector disabled")
+                return nil
+            }
+            let refresher = LinearTokenRefresher(
+                database: database,
+                clientID: agentThresholds.linearOAuthClientID
+            )
+            return LinearCollector(
+                database: database,
+                provider: linearProvider,
+                refresher: refresher,
+                intervalSec: agentThresholds.linearPollIntervalSec,
+                backfillWindowDays: agentThresholds.backfillWindowDays,
+                logger: linearLogger
+            )
+        }()
+
         AgentLifetime.writer = writer
         AgentLifetime.activeAppCollector = activeAppCollector
         AgentLifetime.idleCollector = idleCollector
         AgentLifetime.maintenance = maintenance
         AgentLifetime.claudeCodeCollector = claudeCodeCollector
         AgentLifetime.fsEventsCollector = fsEventsCollector
+        AgentLifetime.linearCollector = linearCollector
 
         // Kick off writer + collectors + scheduler.
         // `start()` на writer/idle — fire-and-forget Task внутри; на activeApp — запускаем
@@ -117,18 +148,21 @@ enum AgentMain {
         Task { await maintenance.start() }
         Task { await claudeCodeCollector.start() }
         Task { await fsEventsCollector.start() }
+        if let lc = linearCollector { Task { await lc.start() } }
 
-        // Shutdown порядок: maintenance → fsEvents → claudeCode → writer (flush + stop).
+        // Shutdown порядок: maintenance → fsEvents → claudeCode → linear → writer.
         // fsEvents первым из collectors — закрываем приём callback'ов до того как
-        // claudeCode flush'ит и writer drains буфер. Иначе FSEvents callback может
-        // прийти после writer.stop() и остаться written-event без сохранения.
-        // claudeCode flush'ит свой текущий tick атомарно (events + offset в одной
-        // transaction) — не остаётся "events без offset" / "offset без events".
+        // остальные collectors flush'ят. claudeCode + linear flush'ят свои текущие
+        // tick'и атомарно (events + offset в одной транзакции) — не остаётся
+        // "events без offset" / "offset без events". Linear после claudeCode т.к.
+        // Linear collector имеет network call в tick (медленнее на shutdown);
+        // тащить его в конец chain'а minimizes overall stop latency.
         // writer последним — drain буфера attention/idle в DB перед exit.
         installSignalHandlers {
             if let m = AgentLifetime.maintenance { await m.stop() }
             if let f = AgentLifetime.fsEventsCollector { await f.stop() }
             if let c = AgentLifetime.claudeCodeCollector { await c.stop() }
+            if let l = AgentLifetime.linearCollector { await l.stop() }
             if let w = AgentLifetime.writer {
                 await w.flush()
                 await w.stop()
@@ -153,4 +187,5 @@ enum AgentLifetime {
     nonisolated(unsafe) static var maintenance: MaintenanceScheduler?
     nonisolated(unsafe) static var claudeCodeCollector: ClaudeCodeCollector?
     nonisolated(unsafe) static var fsEventsCollector: FSEventsCollector?
+    nonisolated(unsafe) static var linearCollector: LinearCollector?
 }
