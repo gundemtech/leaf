@@ -17,6 +17,7 @@ struct LeafApp: App {
     @State private var launchAgent: LaunchAgentService
     @State private var watchedFolders = WatchedFoldersService()
     @State private var linearOAuth = LinearOAuthService()
+    @State private var githubOAuth = GitHubOAuthService()
     @State private var permissions = PermissionsService()
     @State private var updater: UpdaterController
 
@@ -80,6 +81,7 @@ struct LeafApp: App {
                 .environment(launchAgent)
                 .environment(watchedFolders)
                 .environment(linearOAuth)
+                .environment(githubOAuth)
                 .environment(permissions)
                 .environment(updater)
         }

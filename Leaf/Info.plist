@@ -44,5 +44,7 @@
 	<integer>86400</integer>
 	<key>LeafLinearOAuthClientID</key>
 	<string>$(LINEAR_OAUTH_CLIENT_ID)</string>
+	<key>LeafGitHubOAuthClientID</key>
+	<string>$(GITHUB_OAUTH_CLIENT_ID)</string>
 </dict>
 </plist>

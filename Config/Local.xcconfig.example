@@ -12,3 +12,12 @@
 // OAuth app (например staging workspace, separate rate-limit bucket, etc.).
 //
 // LINEAR_OAUTH_CLIENT_ID = lin_oauth_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+// Phase 4.3 — GitHub OAuth client_id (Device Flow). Production placeholder в
+// Production.xcconfig резолвится в литерал "$(...)", который GitHubOAuthService
+// readClientID() трактует как "не сконфигурирован" и UI показывает actionable
+// error. Создай свой OAuth App на https://github.com/settings/developers
+// (Enable Device Flow = ON, Auth callback URL = http://localhost/unused) и
+// раскомментируй:
+//
+// GITHUB_OAUTH_CLIENT_ID = Iv1.xxxxxxxxxxxxxxxx

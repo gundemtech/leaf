@@ -13,3 +13,9 @@
 // redirect URI = http://127.0.0.1:47823/callback (exact match с
 // LinearOAuthEndpoints.redirectURI в коде).
 LINEAR_OAUTH_CLIENT_ID = 6759268c539e332e0d876f5cb3dac9e0
+
+// Phase 4.3 — GitHub OAuth public client (Device Flow, RFC 8628).
+// Зарегистрировано на https://github.com/settings/developers (OAuth Apps,
+// Enable Device Flow = ON). Token expiration = ON (8h access + ~6mo refresh)
+// или OFF (long-lived) — оба режима поддержаны refresher'ом.
+GITHUB_OAUTH_CLIENT_ID = Ov23liIkwUV0UbBNivve
