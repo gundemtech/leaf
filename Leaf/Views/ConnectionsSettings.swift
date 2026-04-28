@@ -69,7 +69,7 @@ struct ConnectionsSettings: View {
                     Text(workspaceName)
                         .font(.headline)
                 }
-                Text("Connected \(Self.relativeFormatter.localizedString(for: connectedAt, relativeTo: Date()))")
+                Text(connectedLabel(connectedAt: connectedAt))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Button(role: .destructive) {
@@ -91,6 +91,17 @@ struct ConnectionsSettings: View {
             }
             .padding(.vertical, 4)
         }
+    }
+
+    /// `RelativeDateTimeFormatter` для свежей даты возвращает "in 0 seconds" из-за
+    /// nanosecond drift между timestamp создания row и rendered Date(). Под 5s
+    /// ставим стабильный лейбл; выше — относительный formatter.
+    private func connectedLabel(connectedAt: Date) -> String {
+        let elapsed = abs(Date().timeIntervalSince(connectedAt))
+        if elapsed < 5 {
+            return "Just connected"
+        }
+        return "Connected \(Self.relativeFormatter.localizedString(for: connectedAt, relativeTo: Date()))"
     }
 
     private var progressLabel: String {
