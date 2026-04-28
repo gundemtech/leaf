@@ -114,6 +114,11 @@ final class InsightsReader {
                         // (router StubFSEventsRouter в CI всегда .filtered → []).
                         let filesTouched = try insights.filesTouched(period: today)
                         try Task.checkCancellation()
+                        // Phase 4.2 — Linear issue activity.
+                        // 10-я sequential query; на не-подключённом Linear возвращает
+                        // .empty (Stub) — popover'у решать рендерить или скрыть.
+                        let linear = try insights.linearActivity(period: today)
+                        try Task.checkCancellation()
                         let snapshot = InsightsSnapshot(
                             topApps: topApps,
                             sessions: sessions,
@@ -125,7 +130,10 @@ final class InsightsReader {
                             activeDaysInRow: activeDays,
                             aiRatio: aiBreakdown.ratio,
                             aiActiveSeconds: aiBreakdown.aiActiveSeconds,
-                            filesTouched: filesTouched
+                            filesTouched: filesTouched,
+                            linearIssuesTouched: linear.issuesTouched,
+                            linearByProject: linear.byProject,
+                            linearByStatus: linear.byStatus
                         )
                         return .success((db, snapshot))
                     } catch {
