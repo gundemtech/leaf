@@ -31,6 +31,13 @@ public protocol DerivedInsights: Sendable {
     /// `aiRatio` делегирует в `aiActivityBreakdown(period:).ratio`.
     func aiActivityBreakdown(period: DateInterval) throws -> AIActivityBreakdown
 
+    // External integrations (Phase 4.2 Layer B)
+    /// Phase 4.2 — Linear issue activity для periodа.
+    /// Source filter: events с `signal_type='action'` AND `payload_json.source='linear'`.
+    /// Returns issuesTouched (distinct issue_key count) + breakdown by project/status.
+    /// Linear не подключён → .empty (не throws — opt-in feature, no-data ≠ error).
+    func linearActivity(period: DateInterval) throws -> LinearActivityBreakdown
+
     // Team (Phase 2+)
     func teamPresenceOverlap(team: [String], period: DateInterval) throws -> TimeInterval
     func teamFocusAlignment(team: [String], period: DateInterval) throws -> Double
@@ -60,6 +67,7 @@ public struct StubInsights: DerivedInsights {
     public func filesTouched(period: DateInterval) throws -> [String] { throw LeafError.notImplemented }
     public func aiRatio(period: DateInterval) throws -> Double { 0 }
     public func aiActivityBreakdown(period: DateInterval) throws -> AIActivityBreakdown { .empty }
+    public func linearActivity(period: DateInterval) throws -> LinearActivityBreakdown { .empty }
     public func teamPresenceOverlap(team: [String], period: DateInterval) throws -> TimeInterval { throw LeafError.notImplemented }
     public func teamFocusAlignment(team: [String], period: DateInterval) throws -> Double { throw LeafError.notImplemented }
     public func teamTimeline(team: [String], period: DateInterval) throws -> [AppTimeEntry] { throw LeafError.notImplemented }
