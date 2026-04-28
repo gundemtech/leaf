@@ -40,6 +40,7 @@ enum MCPMain {
             focusSessionGapSec: focusSessionGapSec
         )
         let aiActivityTool = GetAiActivityTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
+        let linearActivityTool = GetLinearActivityTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
 
         // Notifications (`notifications/*`) обрабатываются Dispatcher'ом через
         // id == nil short-circuit — отдельный handler регистрировать не нужно.
@@ -49,13 +50,15 @@ enum MCPMain {
                 GetTimelineTool.definition,
                 FindLastActivityTool.definition,
                 GetCurrentSessionTool.definition,
-                GetAiActivityTool.definition
+                GetAiActivityTool.definition,
+                GetLinearActivityTool.definition
             ]),
             "tools/call": ToolsCallHandler(registry: [
                 "get_timeline": timelineTool,
                 "find_last_activity": findLastActivityTool,
                 "get_current_session": currentSessionTool,
-                "get_ai_activity": aiActivityTool
+                "get_ai_activity": aiActivityTool,
+                "get_linear_activity": linearActivityTool
             ])
         ])
 
