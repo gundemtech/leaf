@@ -71,6 +71,13 @@ public struct AgentThresholds: Sendable, Hashable {
     /// (а не Info.plist, т.к. tool target без INFOPLIST_FILE). Empty string → collector
     /// graceful no-op (не стартует).
     public let linearOAuthClientID: String
+    /// Phase 4.3: как часто `GitHubCollector` poll'ит REST events feed.
+    /// Whitepaper: 5 min = 300s — well below 5000/hr REST primary rate-limit.
+    public let githubPollIntervalSec: TimeInterval
+    /// Phase 4.3: GitHub OAuth public client_id (Device Flow). Same model
+    /// что Linear — committed в `Production.xcconfig`, hardcoded в moat copy
+    /// для Agent target (no INFOPLIST_FILE). Empty string → collector skip.
+    public let githubOAuthClientID: String
 
     public init(
         idlePollIntervalSec: TimeInterval,
@@ -94,7 +101,9 @@ public struct AgentThresholds: Sendable, Hashable {
         fsEventsRestartTriggerName: String = "tech.gundem.leaf.watched-folders-changed",
         fsEventsCoalesceWindowSec: TimeInterval = 0,
         linearPollIntervalSec: TimeInterval = 300,
-        linearOAuthClientID: String = ""
+        linearOAuthClientID: String = "",
+        githubPollIntervalSec: TimeInterval = 300,
+        githubOAuthClientID: String = ""
     ) {
         self.idlePollIntervalSec = idlePollIntervalSec
         self.idleThresholdSec = idleThresholdSec
@@ -118,6 +127,8 @@ public struct AgentThresholds: Sendable, Hashable {
         self.fsEventsCoalesceWindowSec = fsEventsCoalesceWindowSec
         self.linearPollIntervalSec = linearPollIntervalSec
         self.linearOAuthClientID = linearOAuthClientID
+        self.githubPollIntervalSec = githubPollIntervalSec
+        self.githubOAuthClientID = githubOAuthClientID
     }
 
     public static let weakDefaults = AgentThresholds(
@@ -142,6 +153,8 @@ public struct AgentThresholds: Sendable, Hashable {
         fsEventsRestartTriggerName: "tech.gundem.leaf.watched-folders-changed",
         fsEventsCoalesceWindowSec: 0,
         linearPollIntervalSec: 300,
-        linearOAuthClientID: ""
+        linearOAuthClientID: "",
+        githubPollIntervalSec: 300,
+        githubOAuthClientID: ""
     )
 }

@@ -46,6 +46,12 @@ public struct InsightsSnapshot: Sendable, Hashable {
     public let linearByProject: [ProjectCountEntry]
     /// Phase 4.2 — top-5 statuses by issue count, descending.
     public let linearByStatus: [StatusCountEntry]
+    /// Phase 4.3 — total GitHub events за `period` (commits / PRs / issues / reviews).
+    public let githubEventsCount: Int
+    /// Phase 4.3 — top-5 repos by event count, descending.
+    public let githubByRepo: [RepoCountEntry]
+    /// Phase 4.3 — top-5 event_kinds by count, descending.
+    public let githubByEventKind: [EventKindCountEntry]
 
     public init(
         topApps: [AppTimeEntry],
@@ -61,7 +67,10 @@ public struct InsightsSnapshot: Sendable, Hashable {
         filesTouched: [String],
         linearIssuesTouched: Int,
         linearByProject: [ProjectCountEntry],
-        linearByStatus: [StatusCountEntry]
+        linearByStatus: [StatusCountEntry],
+        githubEventsCount: Int,
+        githubByRepo: [RepoCountEntry],
+        githubByEventKind: [EventKindCountEntry]
     ) {
         self.topApps = topApps
         self.sessions = sessions
@@ -77,12 +86,15 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.linearIssuesTouched = linearIssuesTouched
         self.linearByProject = linearByProject
         self.linearByStatus = linearByStatus
+        self.githubEventsCount = githubEventsCount
+        self.githubByRepo = githubByRepo
+        self.githubByEventKind = githubByEventKind
     }
 
     /// Convenience init — рассчитывает `deepSessionsCount` по threshold'у.
     /// Phase 2.2 — trend-поля с default'ами; Phase 2.3 — AI-поля с default'ами;
     /// Phase 2.4 — `filesTouched` с default `[]`. Phase 4.2 — Linear-поля с defaults.
-    /// Existing test/UI callsite'ы не ломаются когда поля не вычислены.
+    /// Phase 4.3 — GitHub-поля с defaults. Existing test/UI callsite'ы не ломаются.
     public init(
         topApps: [AppTimeEntry],
         sessions: [FocusSession],
@@ -97,7 +109,10 @@ public struct InsightsSnapshot: Sendable, Hashable {
         filesTouched: [String] = [],
         linearIssuesTouched: Int = 0,
         linearByProject: [ProjectCountEntry] = [],
-        linearByStatus: [StatusCountEntry] = []
+        linearByStatus: [StatusCountEntry] = [],
+        githubEventsCount: Int = 0,
+        githubByRepo: [RepoCountEntry] = [],
+        githubByEventKind: [EventKindCountEntry] = []
     ) {
         self.init(
             topApps: topApps,
@@ -113,7 +128,10 @@ public struct InsightsSnapshot: Sendable, Hashable {
             filesTouched: filesTouched,
             linearIssuesTouched: linearIssuesTouched,
             linearByProject: linearByProject,
-            linearByStatus: linearByStatus
+            linearByStatus: linearByStatus,
+            githubEventsCount: githubEventsCount,
+            githubByRepo: githubByRepo,
+            githubByEventKind: githubByEventKind
         )
     }
 
@@ -129,6 +147,7 @@ public struct InsightsSnapshot: Sendable, Hashable {
             && aiActiveSeconds == 0
             && filesTouched.isEmpty
             && linearIssuesTouched == 0
+            && githubEventsCount == 0
     }
 
     /// Average session duration. `0` если sessions пуст.

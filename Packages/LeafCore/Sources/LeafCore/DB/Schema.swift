@@ -70,10 +70,14 @@ public enum CollectorID {
     /// Phase 4.2 — Linear GraphQL polling collector. `sourceID = "linear:<workspaceID>"`.
     /// `lastModifiedMs` хранит cursor (epoch ms newest processed `updatedAt`).
     public static let linearPolling = "linear_polling"
+    /// Phase 4.3 — GitHub REST events polling collector. `sourceID = "github:<login>"`.
+    /// `lastModifiedMs` хранит cursor (epoch ms newest processed event `created_at`).
+    public static let githubPolling = "github_polling"
 }
 
 /// Канонические `provider` значения для `integrations` таблицы. Литералы —
-/// public, single source of truth между OAuth-сервисом, DB и (Phase 4.2) collector.
+/// public, single source of truth между OAuth-сервисом, DB и (Phase 4.2+) collector'ами.
 public enum IntegrationProvider: String, Sendable, Hashable, CaseIterable {
     case linear
+    case github
 }
