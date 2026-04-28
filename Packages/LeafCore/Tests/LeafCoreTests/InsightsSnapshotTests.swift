@@ -123,4 +123,35 @@ final class InsightsSnapshotTests: XCTestCase {
         )
         XCTAssertFalse(snapshot.isEmpty)
     }
+
+    // MARK: - Phase 4.2 Linear
+
+    func testEmptyWhenLinearZero() {
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500,
+            linearIssuesTouched: 0,
+            linearByProject: [],
+            linearByStatus: []
+        )
+        XCTAssertTrue(snapshot.isEmpty)
+        XCTAssertEqual(snapshot.linearIssuesTouched, 0)
+    }
+
+    func testNotEmptyWhenLinearIssuesPresent() {
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500,
+            linearIssuesTouched: 3,
+            linearByProject: [ProjectCountEntry(project: "Leaf", count: 3)],
+            linearByStatus: [StatusCountEntry(status: "In Progress", count: 3)]
+        )
+        XCTAssertFalse(snapshot.isEmpty)
+        XCTAssertEqual(snapshot.linearIssuesTouched, 3)
+        XCTAssertEqual(snapshot.linearByProject.first?.project, "Leaf")
+    }
 }

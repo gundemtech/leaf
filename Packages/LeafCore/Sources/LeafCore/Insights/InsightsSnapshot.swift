@@ -40,6 +40,12 @@ public struct InsightsSnapshot: Sendable, Hashable {
     /// Содержит уже granularity-mapped paths (router'ом on write — L4 даёт
     /// folder-level, L5 — full path). UI показывает basename + tooltip.
     public let filesTouched: [String]
+    /// Phase 4.2 — distinct Linear issue keys touched за `period`.
+    public let linearIssuesTouched: Int
+    /// Phase 4.2 — top-5 projects by issue count, descending.
+    public let linearByProject: [ProjectCountEntry]
+    /// Phase 4.2 — top-5 statuses by issue count, descending.
+    public let linearByStatus: [StatusCountEntry]
 
     public init(
         topApps: [AppTimeEntry],
@@ -52,7 +58,10 @@ public struct InsightsSnapshot: Sendable, Hashable {
         activeDaysInRow: Int,
         aiRatio: Double,
         aiActiveSeconds: TimeInterval,
-        filesTouched: [String]
+        filesTouched: [String],
+        linearIssuesTouched: Int,
+        linearByProject: [ProjectCountEntry],
+        linearByStatus: [StatusCountEntry]
     ) {
         self.topApps = topApps
         self.sessions = sessions
@@ -65,11 +74,14 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.aiRatio = aiRatio
         self.aiActiveSeconds = aiActiveSeconds
         self.filesTouched = filesTouched
+        self.linearIssuesTouched = linearIssuesTouched
+        self.linearByProject = linearByProject
+        self.linearByStatus = linearByStatus
     }
 
     /// Convenience init — рассчитывает `deepSessionsCount` по threshold'у.
     /// Phase 2.2 — trend-поля с default'ами; Phase 2.3 — AI-поля с default'ами;
-    /// Phase 2.4 — `filesTouched` с default `[]`.
+    /// Phase 2.4 — `filesTouched` с default `[]`. Phase 4.2 — Linear-поля с defaults.
     /// Existing test/UI callsite'ы не ломаются когда поля не вычислены.
     public init(
         topApps: [AppTimeEntry],
@@ -82,7 +94,10 @@ public struct InsightsSnapshot: Sendable, Hashable {
         activeDaysInRow: Int = 0,
         aiRatio: Double = 0,
         aiActiveSeconds: TimeInterval = 0,
-        filesTouched: [String] = []
+        filesTouched: [String] = [],
+        linearIssuesTouched: Int = 0,
+        linearByProject: [ProjectCountEntry] = [],
+        linearByStatus: [StatusCountEntry] = []
     ) {
         self.init(
             topApps: topApps,
@@ -95,7 +110,10 @@ public struct InsightsSnapshot: Sendable, Hashable {
             activeDaysInRow: activeDaysInRow,
             aiRatio: aiRatio,
             aiActiveSeconds: aiActiveSeconds,
-            filesTouched: filesTouched
+            filesTouched: filesTouched,
+            linearIssuesTouched: linearIssuesTouched,
+            linearByProject: linearByProject,
+            linearByStatus: linearByStatus
         )
     }
 
@@ -110,6 +128,7 @@ public struct InsightsSnapshot: Sendable, Hashable {
             && aiRatio == 0
             && aiActiveSeconds == 0
             && filesTouched.isEmpty
+            && linearIssuesTouched == 0
     }
 
     /// Average session duration. `0` если sessions пуст.
