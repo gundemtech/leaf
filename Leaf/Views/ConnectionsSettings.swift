@@ -20,7 +20,7 @@ struct ConnectionsSettings: View {
                 Text("Linear")
             } footer: {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Read-only access — Leaf reads issue updates that you authored. Polling activates in Phase 4.2; this build only stores credentials and verifies the connection.")
+                    Text("Read-only access — Leaf polls issue updates every 5 minutes (metadata only: issue key, title, status, project). Bodies and comments stay in Linear.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Text("Data stays on your device, encrypted with the same key as your local activity DB.")
@@ -77,6 +77,21 @@ struct ConnectionsSettings: View {
                 } label: {
                     Text("Disconnect")
                 }
+            }
+            .padding(.vertical, 4)
+
+        case .reconnectNeeded:
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Reconnect needed", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                    .font(.headline)
+                Text("Your Linear session expired and Leaf can't refresh it automatically. Sign in again to resume polling.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button("Reconnect Linear") {
+                    Task { await service.connect() }
+                }
+                .keyboardShortcut(.defaultAction)
             }
             .padding(.vertical, 4)
 

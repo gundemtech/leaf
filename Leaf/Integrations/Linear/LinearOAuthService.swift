@@ -34,6 +34,11 @@ final class LinearOAuthService {
         case exchangingToken
         case fetchingWorkspace
         case connected(workspaceName: String, connectedAt: Date)
+        /// Phase 4.2 — refresh_token revoked / expired (LinearTokenRefresher
+        /// сделал deleteIntegration + UserDefaults flag + DistributedNotification).
+        /// UI показывает orange "Reconnect needed" warning. Cleared на successful
+        /// `connect()` или manual `disconnect()`.
+        case reconnectNeeded
         case error(message: String)
     }
 
@@ -50,24 +55,34 @@ final class LinearOAuthService {
         databaseURL: URL = DatabasePath.defaultURL(),
         databaseConfig: DatabaseConfig = LinearOAuthService.defaultConfig(),
         databaseEncryption: EncryptionOptions? = LinearOAuthService.defaultEncryption(),
-        restartTriggerName: String = "tech.gundem.leaf.linear-integration-changed"
+        restartTriggerName: String = LinearOAuthEndpoints.integrationChangedNotificationName
     ) {
         self.databaseURL = databaseURL
         self.databaseConfig = databaseConfig
         self.databaseEncryption = databaseEncryption
         self.restartTriggerName = restartTriggerName
+        subscribeToIntegrationChangedNotification()
     }
 
     // MARK: - Public API
 
-    /// Перечитывает row из DB → выставляет `.connected` или `.notConnected`.
-    /// Settings view вызывает `.onAppear` чтобы реабилитировать state после
-    /// cold launch и после disconnect / reconnect cycles.
+    /// Перечитывает row из DB → выставляет `.connected`, `.notConnected`,
+    /// или (Phase 4.2) `.reconnectNeeded` если refresher удалил row из-за
+    /// invalid_grant. Settings view вызывает `.onAppear` чтобы реабилитировать
+    /// state после cold launch и после disconnect / reconnect cycles.
     func reload() {
         do {
             let db = try ensureDatabase()
+            let denied = isRefreshDenialFlagSet()
             if let record = try db.readIntegration(provider: .linear) {
+                // Successful row exists — clear stale flag (e.g. юзер вернулся
+                // после reconnect, или manual reconnect через connect()).
+                clearRefreshDenialFlag()
                 state = .connected(workspaceName: record.workspaceName, connectedAt: record.connectedAt)
+            } else if denied {
+                // Row deleted by refresher's invalid_grant path — UI показывает
+                // orange warning "Reconnect needed".
+                state = .reconnectNeeded
             } else {
                 state = .notConnected
             }
@@ -149,6 +164,8 @@ final class LinearOAuthService {
                 updatedAt: now
             )
             try persistWithRetry(record)
+            // Phase 4.2 — successful reconnect clears stale "reconnect needed" flag.
+            clearRefreshDenialFlag()
             postRestartNotification()
 
             state = .connected(workspaceName: record.workspaceName, connectedAt: record.connectedAt)
@@ -290,6 +307,33 @@ final class LinearOAuthService {
             name: NSNotification.Name(restartTriggerName),
             object: nil
         )
+    }
+
+    // MARK: - Phase 4.2 refreshDenied surface
+
+    /// Cross-process flag set by LinearTokenRefresher на invalid_grant. Mirror
+    /// constant defined в LeafCore (LinearOAuthEndpoints.userDefaultsSuite/Key).
+    private func isRefreshDenialFlagSet() -> Bool {
+        UserDefaults(suiteName: LinearOAuthEndpoints.userDefaultsSuite)?
+            .bool(forKey: LinearOAuthEndpoints.refreshDeniedFlagKey) ?? false
+    }
+
+    private func clearRefreshDenialFlag() {
+        UserDefaults(suiteName: LinearOAuthEndpoints.userDefaultsSuite)?
+            .set(false, forKey: LinearOAuthEndpoints.refreshDeniedFlagKey)
+    }
+
+    /// Subscribe на DistributedNotification от Refresher (cross-process) и
+    /// own connect/disconnect (intra-process). Когда flag flip'ится → reload()
+    /// видит новое state. Без observer'а юзер увидел бы stale state до next
+    /// `.onAppear` Settings view.
+    private func subscribeToIntegrationChangedNotification() {
+        let name = NSNotification.Name(restartTriggerName)
+        DistributedNotificationCenter.default().addObserver(
+            forName: name, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.reload() }
+        }
     }
 
     private func makeError(_ message: String) -> NSError {
