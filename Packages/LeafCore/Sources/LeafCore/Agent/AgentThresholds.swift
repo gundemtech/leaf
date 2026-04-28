@@ -62,6 +62,15 @@ public struct AgentThresholds: Sendable, Hashable {
     /// Применяется только в Prod router (moat). Stub coalesce игнорирует.
     /// `weakDefault = 0` → effectively no coalesce; точное prod-значение в moat.
     public let fsEventsCoalesceWindowSec: TimeInterval
+    /// Phase 4.2: как часто `LinearCollector` poll'ит Linear GraphQL.
+    /// Whitepaper: 5 min = 300s (≈ 75 complexity pts/call, 900/hr под лимит 2M/hr).
+    /// `weakDefault = 300` (CI / dev — но collector skips startup если clientID empty).
+    public let linearPollIntervalSec: TimeInterval
+    /// Phase 4.2: Linear OAuth public client_id. Уже committed в `Production.xcconfig`,
+    /// public по природе OAuth. Прокидывается в Agent process через AgentThresholds
+    /// (а не Info.plist, т.к. tool target без INFOPLIST_FILE). Empty string → collector
+    /// graceful no-op (не стартует).
+    public let linearOAuthClientID: String
 
     public init(
         idlePollIntervalSec: TimeInterval,
@@ -83,7 +92,9 @@ public struct AgentThresholds: Sendable, Hashable {
         fsEventsLatencySec: TimeInterval = 0.5,
         fsEventsReconfigPollSec: TimeInterval = 60,
         fsEventsRestartTriggerName: String = "tech.gundem.leaf.watched-folders-changed",
-        fsEventsCoalesceWindowSec: TimeInterval = 0
+        fsEventsCoalesceWindowSec: TimeInterval = 0,
+        linearPollIntervalSec: TimeInterval = 300,
+        linearOAuthClientID: String = ""
     ) {
         self.idlePollIntervalSec = idlePollIntervalSec
         self.idleThresholdSec = idleThresholdSec
@@ -105,6 +116,8 @@ public struct AgentThresholds: Sendable, Hashable {
         self.fsEventsReconfigPollSec = fsEventsReconfigPollSec
         self.fsEventsRestartTriggerName = fsEventsRestartTriggerName
         self.fsEventsCoalesceWindowSec = fsEventsCoalesceWindowSec
+        self.linearPollIntervalSec = linearPollIntervalSec
+        self.linearOAuthClientID = linearOAuthClientID
     }
 
     public static let weakDefaults = AgentThresholds(
@@ -127,6 +140,8 @@ public struct AgentThresholds: Sendable, Hashable {
         fsEventsLatencySec: 0.5,
         fsEventsReconfigPollSec: 60,
         fsEventsRestartTriggerName: "tech.gundem.leaf.watched-folders-changed",
-        fsEventsCoalesceWindowSec: 0
+        fsEventsCoalesceWindowSec: 0,
+        linearPollIntervalSec: 300,
+        linearOAuthClientID: ""
     )
 }
