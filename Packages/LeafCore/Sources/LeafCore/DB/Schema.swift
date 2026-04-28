@@ -67,6 +67,9 @@ public enum CollectorID {
     /// Phase 2.4 — FSEvents content collector. Не используется для offsets
     /// (FSEvents stream-based, не tail-read), но фигурирует в diagnostic logs.
     public static let fsEvents = "fs_events"
+    /// Phase 4.2 — Linear GraphQL polling collector. `sourceID = "linear:<workspaceID>"`.
+    /// `lastModifiedMs` хранит cursor (epoch ms newest processed `updatedAt`).
+    public static let linearPolling = "linear_polling"
 }
 
 /// Канонические `provider` значения для `integrations` таблицы. Литералы —
