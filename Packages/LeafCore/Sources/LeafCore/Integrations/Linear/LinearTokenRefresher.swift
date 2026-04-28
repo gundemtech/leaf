@@ -1,19 +1,20 @@
 //
 //  LinearTokenRefresher.swift
-//  Leaf
+//  LeafCore
 //
 //  Phase 4.1 — refresh helper. В 4.1 dormant: пишем код, runtime
-//  не вызывает (collector ещё не существует). Phase 4.2 LinearCollector
-//  будет вызывать `refreshIfNeeded` перед каждой polling iteration.
+//  не вызывает (collector ещё не существует).
+//  Phase 4.2 — LinearCollector в Agent process вызывает `refreshIfNeeded`
+//  на каждом polling tick'е. Перенесён из Leaf/ в LeafCore чтобы Agent
+//  и main app share'или одну реализацию.
 //
 
 import Foundation
-import LeafCore
 import os
 
-private let refresherLogger = Logger(subsystem: "tech.gundem.leaf.app", category: "linear-token-refresher")
+private let refresherLogger = Logger(subsystem: "tech.gundem.leaf.core", category: "linear-token-refresher")
 
-enum LinearTokenRefresherError: Error, Equatable {
+public enum LinearTokenRefresherError: Error, Equatable, Sendable {
     case notConnected
     case missingRefreshToken
     case refreshDenied(String)
@@ -21,17 +22,17 @@ enum LinearTokenRefresherError: Error, Equatable {
     case decode(String)
 }
 
-nonisolated struct LinearTokenRefresher: Sendable {
+public nonisolated struct LinearTokenRefresher: Sendable {
     /// Под Phase 4.2 collector передаст shared writer; под Phase 4.1 — main app
     /// share'ит свой `WatchedFoldersService.database`-эквивалент. См. service wiring.
-    let database: Database
-    /// Public OAuth client_id из Info.plist (уже валидирован при создании).
-    let clientID: String
+    public let database: Database
+    /// Public OAuth client_id из Info.plist (main app) или AgentThresholds (Agent).
+    public let clientID: String
     /// Buffer перед `expires_at` в секундах. Refresher срабатывает заранее, чтобы
     /// avoid race с одновременным polling call'ом, который может уйти с уже-просроченным token'ом.
-    let earlyRefreshSeconds: TimeInterval
+    public let earlyRefreshSeconds: TimeInterval
 
-    init(
+    public init(
         database: Database,
         clientID: String,
         earlyRefreshSeconds: TimeInterval = 300 // 5 min, ничтожный относительно 24h TTL Linear
@@ -44,7 +45,7 @@ nonisolated struct LinearTokenRefresher: Sendable {
     /// Refresh access_token если оставшаяся жизнь меньше `earlyRefreshSeconds`.
     /// Возвращает текущий или обновлённый record. Caller использует
     /// `record.accessToken` для следующей API call.
-    func refreshIfNeeded(now: Date = Date()) async throws -> IntegrationRecord {
+    public func refreshIfNeeded(now: Date = Date()) async throws -> IntegrationRecord {
         guard let current = try database.readIntegration(provider: .linear) else {
             throw LinearTokenRefresherError.notConnected
         }
@@ -64,7 +65,7 @@ nonisolated struct LinearTokenRefresher: Sendable {
 
     /// Безусловный refresh — вызывается на 401 от API (stale token, может быть
     /// revoked серверной стороной до natural expiry).
-    func forceRefresh(now: Date = Date()) async throws -> IntegrationRecord {
+    public func forceRefresh(now: Date = Date()) async throws -> IntegrationRecord {
         guard let current = try database.readIntegration(provider: .linear) else {
             throw LinearTokenRefresherError.notConnected
         }
@@ -122,11 +123,15 @@ nonisolated struct LinearTokenRefresher: Sendable {
         }
 
         // RFC 6749 §5.2 — `invalid_grant` означает refresh_token revoked / expired.
-        // Удаляем row, заставляем юзера re-connect (в 4.2 surface'ится в UI).
+        // Phase 4.2 surface flow: deleteIntegration + UserDefaults flag + DistributedNotification.
+        // ConnectionsSettings подписан на notification и читает flag в reload() →
+        // показывает orange "Reconnect needed" warning.
         let message: String
         if let errorPayload = try? JSONDecoder().decode(LinearTokenError.self, from: data) {
             message = errorPayload.errorDescription ?? errorPayload.error
             if errorPayload.error == "invalid_grant" {
+                refresherLogger.warning("Linear refresh denied (invalid_grant): \(message, privacy: .public)")
+                surfaceRefreshDenied()
                 try? database.deleteIntegration(provider: .linear)
                 throw LinearTokenRefresherError.refreshDenied(message)
             }
@@ -134,6 +139,19 @@ nonisolated struct LinearTokenRefresher: Sendable {
             message = "HTTP \(http.statusCode)"
         }
         throw LinearTokenRefresherError.refreshDenied(message)
+    }
+
+    /// Phase 4.2 — write UserDefaults flag + post DistributedNotification.
+    /// ConnectionsSettings.reload() читает flag и переключает state в .reconnectNeeded.
+    /// Cross-process: обоим бинарям (Agent — где crashes refresh — и main app
+    /// которое рендерит UI) виден один UserDefaults suite через kCFPreferencesCurrentApplication.
+    private func surfaceRefreshDenied() {
+        UserDefaults(suiteName: LinearOAuthEndpoints.userDefaultsSuite)?
+            .set(true, forKey: LinearOAuthEndpoints.refreshDeniedFlagKey)
+        DistributedNotificationCenter.default().post(
+            name: NSNotification.Name(LinearOAuthEndpoints.integrationChangedNotificationName),
+            object: nil
+        )
     }
 
     private func formEncoded(_ params: [String: String]) -> Data {
