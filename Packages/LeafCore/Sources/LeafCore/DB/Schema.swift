@@ -73,6 +73,9 @@ public enum CollectorID {
     /// Phase 4.3 — GitHub REST events polling collector. `sourceID = "github:<login>"`.
     /// `lastModifiedMs` хранит cursor (epoch ms newest processed event `created_at`).
     public static let githubPolling = "github_polling"
+    /// Phase 4.4 — Slack REST polling collector. `sourceID = "slack:<team_id>:<user_id>"`.
+    /// `lastModifiedMs` хранит cursor (epoch ms newest processed message `ts`).
+    public static let slackPolling = "slack_polling"
 }
 
 /// Канонические `provider` значения для `integrations` таблицы. Литералы —
@@ -80,4 +83,5 @@ public enum CollectorID {
 public enum IntegrationProvider: String, Sendable, Hashable, CaseIterable {
     case linear
     case github
+    case slack
 }

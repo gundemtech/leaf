@@ -170,4 +170,41 @@ final class DatabaseIntegrationsTests: XCTestCase {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         XCTAssertNil(try db.readIntegration(provider: .linear))
     }
+
+    // MARK: - Phase 4.4 Slack provider
+
+    /// Slack round-trip: composite workspaceID `<team_id>:<user_id>` (no `slack:`
+    /// prefix) + xoxp- user token + xoxe- refresh token + 12h expiry. Подтверждает
+    /// что schema generic для provider'ов и не требует новой миграции (M005).
+    func testUpsertSlackProviderRoundTrip() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        let connected = Date(timeIntervalSince1970: 1_700_000_000)
+        let expires = connected.addingTimeInterval(43200) // 12h
+        let record = IntegrationRecord(
+            provider: .slack,
+            workspaceID: "T01ABC:U01DEF",
+            workspaceName: "Acme",
+            accessToken: "xoxp-test-access",
+            refreshToken: "xoxe-1-test-refresh",
+            expiresAt: expires,
+            scope: "users:read,users.profile:read,search:read",
+            connectedAt: connected,
+            updatedAt: connected
+        )
+        try db.upsertIntegration(record)
+
+        let loaded = try db.readIntegration(provider: .slack)
+        XCTAssertNotNil(loaded)
+        XCTAssertEqual(loaded?.provider, .slack)
+        XCTAssertEqual(loaded?.workspaceID, "T01ABC:U01DEF")
+        XCTAssertEqual(loaded?.workspaceName, "Acme")
+        XCTAssertEqual(loaded?.accessToken, "xoxp-test-access")
+        XCTAssertEqual(loaded?.refreshToken, "xoxe-1-test-refresh")
+        XCTAssertEqual(loaded?.scope, "users:read,users.profile:read,search:read")
+        XCTAssertEqual(loaded?.expiresAt?.timeIntervalSince1970 ?? 0, expires.timeIntervalSince1970, accuracy: 0.001)
+
+        // Linear row отдельно — slack не пересекается по PK.
+        XCTAssertNil(try db.readIntegration(provider: .linear))
+    }
 }
