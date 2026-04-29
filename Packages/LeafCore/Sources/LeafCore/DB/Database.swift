@@ -470,6 +470,53 @@ public final class Database: @unchecked Sendable {
         }
     }
 
+    // MARK: - Slack collector helpers (Phase 4.4)
+
+    /// Phase 4.4 B6 — узкий summary для последнего Slack `huddle_state_change`
+    /// context-event. Полная `RawEvent` reconstruction collector'у не нужна —
+    /// он сравнивает только `state` для transition detection.
+    public struct SlackHuddleEventSummary: Sendable, Equatable {
+        /// Raw API string ("in_a_huddle" / "default_unset" / etc) — collector
+        /// сам конвертит в `SlackHuddleState` через `init(slackAPIString:)`,
+        /// чтобы forward-compat с unknown values остался у одного callsite.
+        public let state: String
+        public let tsMs: Int64
+
+        public init(state: String, tsMs: Int64) {
+            self.state = state
+            self.tsMs = tsMs
+        }
+    }
+
+    /// Возвращает (state, ts_ms) последнего slack huddle_state_change context-event,
+    /// или nil если ни одного нет в DB. Используется SlackCollector для transition
+    /// detection. Фильтр по `signal_type='context'` + JSON1 `payload.source='slack'`
+    /// + `payload.event_kind='huddle_state_change'` исключает action events
+    /// (message aggregates) и события других providers.
+    public func readLatestSlackHuddleEvent() throws -> SlackHuddleEventSummary? {
+        try pool.read { db in
+            let row = try Row.fetchOne(db, sql: """
+                SELECT json_extract(\(Schema.Events.payloadJSON), '$.state') AS state,
+                       \(Schema.Events.ts) AS ts_ms
+                FROM \(Schema.Events.tableName)
+                WHERE \(Schema.Events.signalType) = ?
+                  AND json_extract(\(Schema.Events.payloadJSON), '$.source') = 'slack'
+                  AND json_extract(\(Schema.Events.payloadJSON), '$.event_kind') = 'huddle_state_change'
+                  AND json_extract(\(Schema.Events.payloadJSON), '$.state') IS NOT NULL
+                ORDER BY \(Schema.Events.ts) DESC
+                LIMIT 1
+                """,
+                arguments: [SignalType.context.rawValue]
+            )
+            guard
+                let row,
+                let state = row["state"] as String?,
+                let tsMs = row["ts_ms"] as Int64?
+            else { return nil }
+            return SlackHuddleEventSummary(state: state, tsMs: tsMs)
+        }
+    }
+
     private static func mapIntegrationRow(_ row: Row) -> IntegrationRecord? {
         guard
             let providerRaw = row[Schema.Integrations.provider] as String?,
