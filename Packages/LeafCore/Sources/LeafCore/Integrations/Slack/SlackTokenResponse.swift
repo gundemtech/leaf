@@ -6,8 +6,13 @@
 //  + grant_type=refresh_token). Slack возвращает совместимую shape для обоих
 //  grants, поэтому один DTO покрывает оба case'а.
 //
-//  User-token берётся из `authed_user.access_token` (xoxp-). Top-level
-//  `access_token` приходит ТОЛЬКО при bot scopes (мы их не запрашиваем).
+//  Initial code exchange: user-token живёт в `authed_user.access_token` (xoxp-);
+//  top-level `access_token` приходит ТОЛЬКО при bot scopes (мы их не запрашиваем).
+//
+//  `grant_type=refresh_token` (token rotation): новый user-token приходит на
+//  TOP LEVEL — `access_token` (xoxe.xoxp-), `refresh_token`, `expires_in`.
+//  `authed_user` в refresh-ответе содержит только `id`. Verified против
+//  https://api.slack.com/authentication/token-rotation.
 //
 //  `nonisolated` — DTO декодируются JSONDecoder в URLSession callback context.
 //
@@ -21,11 +26,16 @@ import Foundation
 public nonisolated struct SlackOAuthV2Response: Decodable, Sendable {
     public let ok: Bool
 
-    /// Top-level access_token приходит ТОЛЬКО при bot scopes (мы их не запрашиваем).
-    /// User-token берётся из `authedUser.accessToken`.
+    /// Initial code exchange: bot-token (мы не запрашиваем) → nil для user-only flow.
+    /// Refresh-flow: новый user-token (xoxe.xoxp-).
     public let accessToken: String?
     public let tokenType: String?
     public let scope: String?
+    /// Refresh-flow only: новый refresh_token (rotated). Initial exchange кладёт
+    /// refresh_token в `authedUser.refreshToken`.
+    public let refreshToken: String?
+    /// Refresh-flow only: TTL нового access_token в секундах.
+    public let expiresIn: Int?
     public let team: SlackTeam?
     public let authedUser: SlackAuthedUser?
     public let error: String?
@@ -35,6 +45,8 @@ public nonisolated struct SlackOAuthV2Response: Decodable, Sendable {
         case accessToken = "access_token"
         case tokenType = "token_type"
         case scope
+        case refreshToken = "refresh_token"
+        case expiresIn = "expires_in"
         case team
         case authedUser = "authed_user"
         case error
