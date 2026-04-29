@@ -161,6 +161,36 @@ enum AgentMain {
             )
         }()
 
+        // Phase 4.4 — Slack Web API polling collector.
+        // Mirror Linear/GitHub: prod parser в moat (ProdSlackAPIProvider — search.messages
+        // + users.profile.get mapping + ADR-010 enforcement: bodies/permalinks discard'ятся
+        // pre-RawEvent), public Stub no-op для CI/dev. Empty clientID → graceful skip.
+        let slackProvider: any SlackAPIProvider = {
+            #if LEAF_PROD
+            return ProdSlackAPIProvider()
+            #else
+            return StubSlackAPIProvider()
+            #endif
+        }()
+        let slackCollector: SlackCollector? = {
+            guard !agentThresholds.slackOAuthClientID.isEmpty else {
+                slackLogger.info("Slack OAuth client_id not configured — collector disabled")
+                return nil
+            }
+            let refresher = SlackTokenRefresher(
+                database: database,
+                clientID: agentThresholds.slackOAuthClientID
+            )
+            return SlackCollector(
+                database: database,
+                provider: slackProvider,
+                refresher: refresher,
+                intervalSec: agentThresholds.slackPollIntervalSec,
+                backfillWindowDays: agentThresholds.backfillWindowDays,
+                logger: slackLogger
+            )
+        }()
+
         AgentLifetime.writer = writer
         AgentLifetime.activeAppCollector = activeAppCollector
         AgentLifetime.idleCollector = idleCollector
@@ -169,6 +199,7 @@ enum AgentMain {
         AgentLifetime.fsEventsCollector = fsEventsCollector
         AgentLifetime.linearCollector = linearCollector
         AgentLifetime.githubCollector = githubCollector
+        AgentLifetime.slackCollector = slackCollector
 
         // Kick off writer + collectors + scheduler.
         // `start()` на writer/idle — fire-and-forget Task внутри; на activeApp — запускаем
@@ -181,12 +212,13 @@ enum AgentMain {
         Task { await fsEventsCollector.start() }
         if let lc = linearCollector { Task { await lc.start() } }
         if let gc = githubCollector { Task { await gc.start() } }
+        if let sc = slackCollector { Task { await sc.start() } }
 
-        // Shutdown порядок: maintenance → fsEvents → claudeCode → linear → github → writer.
+        // Shutdown порядок: maintenance → fsEvents → claudeCode → linear → github → slack → writer.
         // fsEvents первым из collectors — закрываем приём callback'ов до того как
-        // остальные collectors flush'ят. claudeCode / linear / github flush'ят свои
+        // остальные collectors flush'ят. claudeCode / linear / github / slack flush'ят свои
         // текущие tick'и атомарно (events + offset в одной транзакции) — не остаётся
-        // "events без offset" / "offset без events". Linear / github после claudeCode
+        // "events без offset" / "offset без events". Linear / github / slack после claudeCode
         // т.к. имеют network call в tick (медленнее на shutdown); тащить их в конец
         // chain'а minimizes overall stop latency. writer последним — drain буфера
         // attention/idle в DB перед exit.
@@ -196,6 +228,7 @@ enum AgentMain {
             if let c = AgentLifetime.claudeCodeCollector { await c.stop() }
             if let l = AgentLifetime.linearCollector { await l.stop() }
             if let g = AgentLifetime.githubCollector { await g.stop() }
+            if let s = AgentLifetime.slackCollector { await s.stop() }
             if let w = AgentLifetime.writer {
                 await w.flush()
                 await w.stop()
@@ -222,4 +255,5 @@ enum AgentLifetime {
     nonisolated(unsafe) static var fsEventsCollector: FSEventsCollector?
     nonisolated(unsafe) static var linearCollector: LinearCollector?
     nonisolated(unsafe) static var githubCollector: GitHubCollector?
+    nonisolated(unsafe) static var slackCollector: SlackCollector?
 }

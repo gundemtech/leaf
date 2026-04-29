@@ -42,6 +42,7 @@ enum MCPMain {
         let aiActivityTool = GetAiActivityTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
         let linearActivityTool = GetLinearActivityTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
         let githubActivityTool = GetGitHubActivityTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
+        let slackActivityTool = GetSlackActivityTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
 
         // Notifications (`notifications/*`) обрабатываются Dispatcher'ом через
         // id == nil short-circuit — отдельный handler регистрировать не нужно.
@@ -53,7 +54,8 @@ enum MCPMain {
                 GetCurrentSessionTool.definition,
                 GetAiActivityTool.definition,
                 GetLinearActivityTool.definition,
-                GetGitHubActivityTool.definition
+                GetGitHubActivityTool.definition,
+                GetSlackActivityTool.definition
             ]),
             "tools/call": ToolsCallHandler(registry: [
                 "get_timeline": timelineTool,
@@ -61,7 +63,8 @@ enum MCPMain {
                 "get_current_session": currentSessionTool,
                 "get_ai_activity": aiActivityTool,
                 "get_linear_activity": linearActivityTool,
-                "get_github_activity": githubActivityTool
+                "get_github_activity": githubActivityTool,
+                "get_slack_activity": slackActivityTool
             ])
         ])
 

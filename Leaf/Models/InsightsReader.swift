@@ -123,6 +123,10 @@ final class InsightsReader {
                         // на не-подключённом GitHub возвращает .empty (Stub).
                         let github = try insights.githubActivity(period: today)
                         try Task.checkCancellation()
+                        // Phase 4.4 — Slack activity. 12-я sequential query;
+                        // на не-подключённом Slack возвращает .empty (Stub).
+                        let slack = try insights.slackActivity(period: today)
+                        try Task.checkCancellation()
                         let snapshot = InsightsSnapshot(
                             topApps: topApps,
                             sessions: sessions,
@@ -140,7 +144,10 @@ final class InsightsReader {
                             linearByStatus: linear.byStatus,
                             githubEventsCount: github.eventsCount,
                             githubByRepo: github.byRepo,
-                            githubByEventKind: github.byEventKind
+                            githubByEventKind: github.byEventKind,
+                            slackMessagesCount: slack.messagesCount,
+                            slackHuddleMinutes: slack.huddleMinutes,
+                            slackByChannel: slack.byChannel
                         )
                         return .success((db, snapshot))
                     } catch {

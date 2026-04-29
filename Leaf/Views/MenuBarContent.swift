@@ -162,6 +162,7 @@ struct MenuBarContent: View {
                 aiLine(snapshot: snapshot)
                 linearLine(snapshot: snapshot)
                 githubLine(snapshot: snapshot)
+                slackLine(snapshot: snapshot)
                 filesLines(snapshot: snapshot)
             }
             Spacer()
@@ -361,6 +362,47 @@ struct MenuBarContent: View {
             lines.append("By kind: \(kinds)")
         }
         return lines.joined(separator: "\n")
+    }
+
+    /// Phase 4.4 — Slack activity line. Если ни сообщений, ни huddle минут нет
+    /// (Stub в no-prod build, провайдер ещё не подключён, юзер не подключал) —
+    /// EmptyView. Tooltip — full breakdown по channel + huddle minutes.
+    @ViewBuilder
+    private func slackLine(snapshot: InsightsSnapshot) -> some View {
+        if snapshot.slackMessagesCount == 0 && snapshot.slackHuddleMinutes == 0 {
+            EmptyView()
+        } else {
+            let parts: [String?] = [
+                "\(snapshot.slackMessagesCount) msgs",
+                snapshot.slackByChannel.isEmpty ? nil : "\(snapshot.slackByChannel.count) channels",
+                snapshot.slackHuddleMinutes > 0 ? "huddle \(formatHuddleMinutes(snapshot.slackHuddleMinutes))" : nil
+            ]
+            let label = "Slack today: " + parts.compactMap { $0 }.joined(separator: " · ")
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .help(slackTooltip(snapshot: snapshot))
+        }
+    }
+
+    private func slackTooltip(snapshot: InsightsSnapshot) -> String {
+        var lines: [String] = ["Messages today: \(snapshot.slackMessagesCount)"]
+        if snapshot.slackHuddleMinutes > 0 {
+            lines.append("Huddle: \(formatHuddleMinutes(snapshot.slackHuddleMinutes))")
+        }
+        if !snapshot.slackByChannel.isEmpty {
+            let channels = snapshot.slackByChannel
+                .map { "\($0.channelName): \($0.count)" }
+                .joined(separator: ", ")
+            lines.append("By channel: \(channels)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private func formatHuddleMinutes(_ minutes: Int) -> String {
+        let h = minutes / 60
+        let m = minutes % 60
+        return h > 0 ? "\(h)h \(m)m" : "\(m)m"
     }
 
     /// Phase 2.4 — top-5 files touched today из watched folders. Empty placeholder
