@@ -46,5 +46,7 @@
 	<string>$(LINEAR_OAUTH_CLIENT_ID)</string>
 	<key>LeafGitHubOAuthClientID</key>
 	<string>$(GITHUB_OAUTH_CLIENT_ID)</string>
+	<key>LeafSlackOAuthClientID</key>
+	<string>$(SLACK_OAUTH_CLIENT_ID)</string>
 </dict>
 </plist>

@@ -18,6 +18,7 @@ struct LeafApp: App {
     @State private var watchedFolders = WatchedFoldersService()
     @State private var linearOAuth = LinearOAuthService()
     @State private var githubOAuth = GitHubOAuthService()
+    @State private var slackOAuth = SlackOAuthService()
     @State private var permissions = PermissionsService()
     @State private var updater: UpdaterController
 
@@ -82,6 +83,7 @@ struct LeafApp: App {
                 .environment(watchedFolders)
                 .environment(linearOAuth)
                 .environment(githubOAuth)
+                .environment(slackOAuth)
                 .environment(permissions)
                 .environment(updater)
         }

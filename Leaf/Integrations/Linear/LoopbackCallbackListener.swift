@@ -28,7 +28,8 @@ nonisolated enum LoopbackCallbackListener {
     /// `code`/`state`/`error` параметры из вернувшегося `URLComponents`.
     static func awaitCallback(
         port: UInt16,
-        timeout: Duration = .seconds(60)
+        timeout: Duration = .seconds(60),
+        providerLabel: String = "Linear"
     ) async throws -> URLComponents {
         let nwPort = NWEndpoint.Port(rawValue: port) ?? NWEndpoint.Port.any
         let parameters = NWParameters.tcp
@@ -92,7 +93,7 @@ nonisolated enum LoopbackCallbackListener {
                         // (юзер должен видеть осмысленное сообщение в браузере),
                         // дальше caller (LinearOAuthService) интерпретирует error/state/code.
                         let isError = components.queryItems?.contains(where: { $0.name == "error" }) ?? false
-                        let body = isError ? htmlCancelled() : htmlSuccess()
+                        let body = isError ? htmlCancelled(providerLabel: providerLabel) : htmlSuccess(providerLabel: providerLabel)
                         sendResponse(on: connection, status: "200 OK", body: body)
                         finish(.success(components))
                     }
@@ -145,26 +146,38 @@ nonisolated enum LoopbackCallbackListener {
         })
     }
 
-    private static func htmlSuccess() -> String {
+    private static func htmlSuccess(providerLabel: String) -> String {
         // Минимальная страница без external assets — браузеры не делают retry,
         // если получают full Content-Length response.
-        """
-        <!DOCTYPE html><html><head><meta charset="utf-8"><title>Leaf — Linear connected</title></head>
+        let label = htmlEscape(providerLabel)
+        return """
+        <!DOCTYPE html><html><head><meta charset="utf-8"><title>Leaf — \(label) connected</title></head>
         <body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 4rem; text-align: center;">
-        <h2>Leaf is connected to Linear.</h2>
+        <h2>Leaf is connected to \(label).</h2>
         <p style="color: #666;">You can close this window and return to the app.</p>
         </body></html>
         """
     }
 
-    private static func htmlCancelled() -> String {
-        """
-        <!DOCTYPE html><html><head><meta charset="utf-8"><title>Leaf — connection cancelled</title></head>
+    private static func htmlCancelled(providerLabel: String) -> String {
+        let label = htmlEscape(providerLabel)
+        return """
+        <!DOCTYPE html><html><head><meta charset="utf-8"><title>Leaf — \(label) cancelled</title></head>
         <body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 4rem; text-align: center;">
-        <h2>Connection cancelled.</h2>
+        <h2>\(label) connection cancelled.</h2>
         <p style="color: #666;">You can close this window and try again from Leaf.</p>
         </body></html>
         """
+    }
+
+    /// Минимальный HTML-escape для providerLabel (defense in depth — labels у нас
+    /// hardcoded "Linear"/"Slack", но всё равно sanitize чтобы interpolation не
+    /// инжектил ломанную страницу при future expansion).
+    private static func htmlEscape(_ s: String) -> String {
+        s.replacingOccurrences(of: "&", with: "&amp;")
+         .replacingOccurrences(of: "<", with: "&lt;")
+         .replacingOccurrences(of: ">", with: "&gt;")
+         .replacingOccurrences(of: "\"", with: "&quot;")
     }
 
     private static func htmlError(_ message: String) -> String {

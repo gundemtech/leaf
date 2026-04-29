@@ -78,6 +78,14 @@ public struct AgentThresholds: Sendable, Hashable {
     /// что Linear — committed в `Production.xcconfig`, hardcoded в moat copy
     /// для Agent target (no INFOPLIST_FILE). Empty string → collector skip.
     public let githubOAuthClientID: String
+    /// Phase 4.4: как часто `SlackCollector` poll'ит REST endpoints
+    /// (`users.profile.get` + `search.messages`). 5min = 300s — 24 calls/hr,
+    /// headroom 1000× против Tier 2+ rate-limits.
+    public let slackPollIntervalSec: TimeInterval
+    /// Phase 4.4: Slack OAuth public client_id (PKCE loopback). Same model
+    /// что Linear/GitHub — committed в `Production.xcconfig`, hardcoded в moat copy
+    /// для Agent target (no INFOPLIST_FILE). Empty string → collector skip.
+    public let slackOAuthClientID: String
 
     public init(
         idlePollIntervalSec: TimeInterval,
@@ -103,7 +111,9 @@ public struct AgentThresholds: Sendable, Hashable {
         linearPollIntervalSec: TimeInterval = 300,
         linearOAuthClientID: String = "",
         githubPollIntervalSec: TimeInterval = 300,
-        githubOAuthClientID: String = ""
+        githubOAuthClientID: String = "",
+        slackPollIntervalSec: TimeInterval = 300,
+        slackOAuthClientID: String = ""
     ) {
         self.idlePollIntervalSec = idlePollIntervalSec
         self.idleThresholdSec = idleThresholdSec
@@ -129,6 +139,8 @@ public struct AgentThresholds: Sendable, Hashable {
         self.linearOAuthClientID = linearOAuthClientID
         self.githubPollIntervalSec = githubPollIntervalSec
         self.githubOAuthClientID = githubOAuthClientID
+        self.slackPollIntervalSec = slackPollIntervalSec
+        self.slackOAuthClientID = slackOAuthClientID
     }
 
     public static let weakDefaults = AgentThresholds(
@@ -155,6 +167,8 @@ public struct AgentThresholds: Sendable, Hashable {
         linearPollIntervalSec: 300,
         linearOAuthClientID: "",
         githubPollIntervalSec: 300,
-        githubOAuthClientID: ""
+        githubOAuthClientID: "",
+        slackPollIntervalSec: 300,
+        slackOAuthClientID: ""
     )
 }

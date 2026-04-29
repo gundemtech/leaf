@@ -12,6 +12,7 @@ import Combine
 struct ConnectionsSettings: View {
     @Bindable var service: LinearOAuthService
     @Bindable var githubService: GitHubOAuthService
+    @Bindable var slackService: SlackOAuthService
 
     @State private var nowTick: Date = Date()
     private let countdownTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -47,12 +48,28 @@ struct ConnectionsSettings: View {
                         .foregroundStyle(.tertiary)
                 }
             }
+
+            Section {
+                slackSection
+            } header: {
+                Text("Slack")
+            } footer: {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Read-only access — Leaf polls every 5 minutes for self-authored message counts per channel and huddle state transitions. Message bodies, reactions and attachments stay in Slack.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("Data stays on your device, encrypted with the same key as your local activity DB.")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
         }
         .formStyle(.grouped)
         .padding()
         .onAppear {
             service.reload()
             githubService.reload()
+            slackService.reload()
         }
         .onReceive(countdownTimer) { now in
             nowTick = now
@@ -248,6 +265,82 @@ struct ConnectionsSettings: View {
         }
     }
 
+    // MARK: - Slack section
+
+    @ViewBuilder
+    private var slackSection: some View {
+        switch slackService.state {
+        case .notConnected:
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Not connected")
+                    .font(.headline)
+                Text("Sign in with Slack to capture self-authored message counts per channel and huddle minutes into your local timeline.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button("Connect Slack") {
+                    Task { await slackService.connect() }
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding(.vertical, 4)
+
+        case .authorizing, .waitingForCallback, .exchangingToken, .fetchingWorkspace:
+            HStack(spacing: 10) {
+                ProgressView()
+                    .controlSize(.small)
+                Text(slackProgressLabel)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 4)
+
+        case .connected(let workspaceName, let connectedAt):
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(.green)
+                        .frame(width: 8, height: 8)
+                    Text(workspaceName)
+                        .font(.headline)
+                }
+                Text(connectedLabel(connectedAt: connectedAt))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button(role: .destructive) {
+                    slackService.disconnect()
+                } label: {
+                    Text("Disconnect")
+                }
+            }
+            .padding(.vertical, 4)
+
+        case .reconnectNeeded:
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Reconnect needed", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                    .font(.headline)
+                Text("Your Slack session expired and Leaf can't refresh it automatically. Sign in again to resume polling.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button("Reconnect Slack") {
+                    Task { await slackService.connect() }
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding(.vertical, 4)
+
+        case .error(let message):
+            VStack(alignment: .leading, spacing: 8) {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                Button("Try again") {
+                    Task { await slackService.connect() }
+                }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
     // MARK: - Labels
 
     /// `RelativeDateTimeFormatter` для свежей даты возвращает "in 0 seconds" из-за
@@ -286,6 +379,16 @@ struct ConnectionsSettings: View {
         switch githubService.state {
         case .exchangingToken: "Exchanging token…"
         case .fetchingViewer: "Loading GitHub identity…"
+        default: ""
+        }
+    }
+
+    private var slackProgressLabel: String {
+        switch slackService.state {
+        case .authorizing: "Preparing authorization…"
+        case .waitingForCallback: "Waiting for Slack approval in browser…"
+        case .exchangingToken: "Exchanging token…"
+        case .fetchingWorkspace: "Loading workspace…"
         default: ""
         }
     }

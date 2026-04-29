@@ -19,3 +19,11 @@ LINEAR_OAUTH_CLIENT_ID = 6759268c539e332e0d876f5cb3dac9e0
 // Enable Device Flow = ON). Token expiration = ON (8h access + ~6mo refresh)
 // или OFF (long-lived) — оба режима поддержаны refresher'ом.
 GITHUB_OAUTH_CLIENT_ID = Ov23liIkwUV0UbBNivve
+
+// Phase 4.4 — Slack OAuth public client (PKCE loopback).
+// TODO(B2.7): зарегистрировать distributed/public app на api.slack.com/apps,
+// redirect URI = http://127.0.0.1:47824/callback (exact match с
+// SlackOAuthEndpoints.redirectURI), включить Token Rotation. Empty value →
+// SlackOAuthService показывает "not configured" error в Settings (collector
+// в Agent process пропускает startup).
+SLACK_OAUTH_CLIENT_ID =

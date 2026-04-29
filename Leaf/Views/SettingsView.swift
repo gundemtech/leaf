@@ -11,6 +11,7 @@ struct SettingsView: View {
     @Environment(WatchedFoldersService.self) private var watchedFolders
     @Environment(LinearOAuthService.self) private var linearOAuth
     @Environment(GitHubOAuthService.self) private var githubOAuth
+    @Environment(SlackOAuthService.self) private var slackOAuth
     @Environment(UpdaterController.self) private var updater
 
     var body: some View {
@@ -21,7 +22,7 @@ struct SettingsView: View {
             FoldersSettings(service: watchedFolders)
                 .tabItem { Label("Folders", systemImage: "folder.badge.gear") }
 
-            ConnectionsSettings(service: linearOAuth, githubService: githubOAuth)
+            ConnectionsSettings(service: linearOAuth, githubService: githubOAuth, slackService: slackOAuth)
                 .tabItem { Label("Connections", systemImage: "link") }
 
             PrivacySettings()
