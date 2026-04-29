@@ -26,15 +26,21 @@ public enum SlackOAuthEndpoints {
     /// SlackCollector tick для message activity counts.
     public static let searchMessages = URL(string: "https://slack.com/api/search.messages")!
 
-    /// Loopback redirect URI. Slack требует exact-match (port обязателен в
-    /// app config). Port 47824 — на единицу больше Linear'овского 47823, чтобы
-    /// избежать coincidental collision listener'а (flow'ы не пересекаются по
-    /// времени — но cleaner).
-    /// При изменении порта обнови redirect URI в Slack OAuth app config.
-    public static let redirectHost = "127.0.0.1"
-    public static let redirectPort: UInt16 = 47824
-    public static let redirectPath = "/callback"
-    public static var redirectURI: String { "http://\(redirectHost):\(redirectPort)\(redirectPath)" }
+    /// Public redirect URI для Slack OAuth `/oauth/v2/authorize` и token exchange.
+    /// Slack distributed-app distribution требует HTTPS на redirect URI; loopback
+    /// `http://127.0.0.1:…` физически не может иметь TLS-серт. Поэтому здесь
+    /// публичный HTTPS endpoint Cloudflare Worker'а, который 302-редиректит обратно
+    /// на loopback listener (см. ниже). Worker stateless, не видит токенов.
+    /// Repo: gundemtech/leaf-relay (приватный).
+    /// При изменении этого URI обнови redirect URI в Slack OAuth app config.
+    public static let redirectURI = "https://oauth.gundem.tech/slack/callback"
+
+    /// Loopback listener — куда Cloudflare Worker 302-редиректит после Slack
+    /// approval. SlackOAuthService биндит NWListener на этот port + ловит auth
+    /// code. Port 47824 — на единицу больше Linear'овского 47823, cleaner separation.
+    public static let loopbackHost = "127.0.0.1"
+    public static let loopbackPort: UInt16 = 47824
+    public static let loopbackPath = "/callback"
 
     /// User scopes only — bot scopes desktop redirect не разрешает.
     /// ВАЖНО: для authorize URL это значение идёт в `user_scope` query param,

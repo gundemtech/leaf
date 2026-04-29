@@ -100,7 +100,7 @@ final class SlackOAuthService {
 
         state = .authorizing
         let challenge = PKCE.makeChallenge()
-        let port = SlackOAuthEndpoints.redirectPort
+        let port = SlackOAuthEndpoints.loopbackPort
         let authorizeURL: URL
         do {
             authorizeURL = try buildAuthorizeURL(clientID: clientID, challenge: challenge)
@@ -190,7 +190,7 @@ final class SlackOAuthService {
             case .timeout:
                 state = .error(message: "Authorization timed out. Try again.")
             case .bindFailed(let reason):
-                state = .error(message: "Couldn't bind to port \(SlackOAuthEndpoints.redirectPort): \(reason). Close any conflicting app.")
+                state = .error(message: "Couldn't bind to port \(SlackOAuthEndpoints.loopbackPort): \(reason). Close any conflicting app.")
             case .listenerFailed(let reason):
                 state = .error(message: "Local listener failed: \(reason).")
             case .parseFailed:

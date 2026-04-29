@@ -20,10 +20,14 @@ LINEAR_OAUTH_CLIENT_ID = 6759268c539e332e0d876f5cb3dac9e0
 // или OFF (long-lived) — оба режима поддержаны refresher'ом.
 GITHUB_OAUTH_CLIENT_ID = Ov23liIkwUV0UbBNivve
 
-// Phase 4.4 — Slack OAuth public client (PKCE loopback).
-// TODO(B2.7): зарегистрировать distributed/public app на api.slack.com/apps,
-// redirect URI = http://127.0.0.1:47824/callback (exact match с
-// SlackOAuthEndpoints.redirectURI), включить Token Rotation. Empty value →
+// Phase 4.4 — Slack OAuth public client (PKCE distributed app, HTTPS relay).
+// Distributed/public app зарегистрирован на api.slack.com/apps, Token Rotation
+// ON. Redirect URI = https://oauth.gundem.tech/slack/callback (HTTPS relay,
+// Cloudflare Worker в приватном репо gundemtech/leaf-relay). Worker stateless —
+// 302 на http://127.0.0.1:47824/callback где SlackOAuthService loopback listener
+// ловит auth code. Loopback HTTPS физически невозможен (no TLS cert) → relay
+// нужен для прохождения Slack `Activate Public Distribution` HTTPS check.
+// Exact match с SlackOAuthEndpoints.redirectURI обязателен. Empty value →
 // SlackOAuthService показывает "not configured" error в Settings (collector
 // в Agent process пропускает startup).
-SLACK_OAUTH_CLIENT_ID =
+SLACK_OAUTH_CLIENT_ID = 10976749635137.11005549911623
