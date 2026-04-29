@@ -3,7 +3,7 @@
 _Срез "где мы сейчас" за 30 секунд. История — в whitepaper changelog + `.claude/plans/phase-*.md` + git log._
 
 ## Последнее обновление
-2026-04-29 — Phase 4.3 done end-to-end (GitHub Device Flow + collector + insights + MCP tool). Real-workspace smoke verified (popover показал `GitHub today: 4 events · gundemtech/leaf` после Connect → 5min poll). Bug-fix patched в moat: authenticated REST events feed возвращает stripped PushEvent payload (без `commits[]` массива) → parser теперь поддерживает оба shape'а.
+2026-04-29 — **Shipped 1.0.0-alpha.6** (Phase 3 distribution полностью закрыт E2E). Sparkle delta upgrade alpha.5 → alpha.6 (1.7 MB, EdDSA signed, notarized, stapled) verified на real machine: bridge migration idempotent (db.key байт-в-байт identical pre/post — `FileKeyStore.fetchOrCreate()` hit `readExisting` path), events history intact (events.sqlite size unchanged), main app + popover поднялись на 1.0.0-alpha.6 (build 7), Sparkle release notes отрендерились корректно. Notary submission `03f4af73-f2e5-4c61-b10f-2814e0cdfa42`. Side observations (housekeeping): Xcode Debug LeafAgent залип в launchd registration → fix `pkill DerivedData LeafAgent` + relaunch; macOS TCC AX permission requires toggle off+on после Sparkle bundle replace (CDHash меняется).
 
 ## Где мы
 - **Whitepaper v1.4** published в `leaf-docs.gundem.tech`. Структура `01-vision / 02-product / 03-architecture / 04-market / 05-reference`.
@@ -11,6 +11,7 @@ _Срез "где мы сейчас" за 30 секунд. История — в
 - **Section B done (Phase 3.0-3.5, 2026-04-27 → 2026-04-28).** Distribution: Apple Developer ID + notarytool + Sparkle 2 + R2/CF + EdDSA-signed appcast. Shipped **1.0.0-alpha.5**. Tactical: `.claude/plans/phase-3*.md`.
 - **Phase 4.1+4.2 done (Linear OAuth + collector + insights, 2026-04-28).** PKCE loopback, `LinearCollector` 5min polling, `DerivedInsights.linearActivity`, MCP tool `get_linear_activity`, `.reconnectNeeded` UI. `ProdLinearGraphQLProvider` — moat stub. 161 SPM tests. Tactical: `.claude/plans/phase-4-{1,2}.md`. **Pending**: real prod GraphQL query, sync-docs.
 - **Phase 4.3 done (GitHub Device Flow + collector + insights, 2026-04-29).** OAuth Device Flow (RFC 8628, no PKCE — OAuth Apps не поддерживают), `GitHubCollector` 5min polling REST `/users/<login>/events`, `ProdGitHubAPIProvider` (moat) с PushEvent/PR/Issue/Review mapping + ADR-010 enforcement. 6-й MCP tool `get_github_activity`. 169 SPM tests, build green Debug+Release × 3 targets. **Real-workspace smoke verified**: после Connect → 5min poll → popover показал `GitHub today: 4 events · gundemtech/leaf`. Schema gotcha обнаружен и пропатчен в moat: authenticated REST events feed для `/users/<X>/events` возвращает **stripped** PushEvent payload (без `commits[]` массива — только `before/head/push_id/ref/repository_id`), public feed и webhook payload — full с `commits[]`. Парсер теперь поддерживает оба shape'а — full → N snapshots по N коммитам с subject (ADR-010 first line), stripped → 1 snapshot c `sha=head`, `title=""` (commit message в feed недоступен — ADR-010 trivially enforced). Tactical: `.claude/plans/phase-4-3.md`.
+- **Shipped 1.0.0-alpha.6 (2026-04-29).** Phase 3 (distribution) полностью закрыт E2E. Sparkle delta upgrade alpha.5 → alpha.6 (`Leaf7-6.delta`, 1.7 MB, EdDSA signed) verified на real machine — bridge migration idempotent (db.key identical pre/post, никакой regen), events history intact, version `1.0.0-alpha.6 (build 7)` displayed. Phase 4.1+4.2+4.3 features доставлены alpha-юзерам.
 - **Linear** = только таски. Второй мозг = whitepaper.
 
 ## Архитектура
@@ -18,11 +19,12 @@ _Срез "где мы сейчас" за 30 секунд. История — в
 
 ## Следующим
 - **Phase 4.3 follow-ups (low priority):** (a) regression test в `GitHubAPIProviderTests` под stripped PushEvent shape (фиксирующий что 1 snapshot per push без commits[] handled); (b) расширить `mapPullRequestEvent`/`mapIssuesEvent`/`mapReviewEvent` под потенциальный stripped shape (мы не verified — все 4 PR events в feed были старше cursor); (c) опционально fetch `/repos/<owner>/<repo>/commits/<head>` per stripped PushEvent для recovery commit subject — extra API call, на v1.1.
-- **Phase 4.2/4.3 prod providers**: заполнить `ProdLinearGraphQLProvider` (currently no-op, нужна paginated query + retry + complexity budget). `ProdGitHubAPIProvider` уже реальный — single-page MVP, без pagination follow / ETag (v1.1).
-- **Phase 4.2/4.3 prod providers**: заполнить `ProdLinearGraphQLProvider` (currently no-op, нужна paginated query + retry + complexity budget). `ProdGitHubAPIProvider` уже реальный — single-page MVP, без pagination follow / ETag (v1.1).
+- **Phase 4.2 prod provider**: заполнить `ProdLinearGraphQLProvider` (currently no-op, нужна paginated query + retry + complexity budget). `ProdGitHubAPIProvider` уже реальный — single-page MVP, без pagination follow / ETag (v1.1).
 - **Phase 4.4**: Slack OAuth + collector pattern уже отлажен на Linear+GitHub.
-- **Real Sparkle E2E (alpha.5 → alpha.6)** — следующий ship cycle закроет verify "alpha-юзер кликает Check for Updates → Install → relaunch → bridge migration".
-- **Phase 3.5+ cleanup**: delete `KeychainKeyStore.swift` + tests + `LeafError.keychainUnavailable` после ~2 недель stable runtime у alpha-юзеров.
+- **Phase 3.5+ cleanup**: delete `KeychainKeyStore.swift` + tests + `LeafError.keychainUnavailable` после ~2 недель stable runtime alpha.6 у alpha-юзеров (target ~2026-05-13).
+- **Release tooling fix**: `scripts/upload-release.sh` грузит только `*.{dmg,zip,delta}` в `/releases/`, а `generate_appcast` ставит release notes URL без `/releases/` префикса. Сейчас фиксится вручную через `aws s3 cp` HTML в R2 root. Патч для будущих ship-циклов — добавить `*.html` в whitelist + upload в R2 root.
+- **Sparkle ship gotchas** (зафиксировано в alpha.5 → alpha.6 ship cycle): (a) Xcode Debug LeafAgent может залипнуть в launchd registration слот → SMAppService.register() в shipped Leaf.app filter "already registered", фоновый Agent не подменяется. Pre-ship discipline — `pkill -f "DerivedData.*LeafAgent"` если был active Xcode Run; (b) macOS TCC AX permission иногда требует toggle off+on после Sparkle bundle replace (CDHash меняется).
+- **Stamps gotcha в release.sh** для следующего ship'а: `release.sh 1.0.0-alpha.X` без флагов пропустит archive/export/... если стампы alpha.5/6 ещё в `build/releases/.stamps/`. Использовать `--redo-from archive`, не `--clean` (чтобы сохранить prior-version `.zip` для delta-генерации).
 
 ## Open tensions
 Живут в `leaf-docs/docs/05-reference/open-tensions.md`. Топ-2:
