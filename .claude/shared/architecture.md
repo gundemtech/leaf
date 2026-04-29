@@ -68,7 +68,7 @@ Leaf — ambient memory layer для macOS (далее iOS) + Native UI + MCP-с
 
 ## Layer B — MVP (ADR-009, ADR-011)
 - **Linear + GitHub + Slack.**
-- **Linear:** OAuth 2.0 PKCE (loopback redirect на эфемерный порт), scope=`read`, actor=user. Polling 5 мин: `issues(first:50, filter:{updatedAt:{gt:$since}})` ≈ 75 complexity pts/call, 900/hr под лимит 2M/hr. Safety margin `now - 30s` от clock skew.
+- **Linear:** OAuth 2.0 PKCE (loopback redirect на эфемерный порт), scope=`read`, actor=user. Polling 5 мин per-action attribution: `issues(filter:{or:[{activity:{some:{user:{isMe:{eq:true}},createdAt:{gt:$since}}}},{creator:{isMe:{eq:true}},createdAt:{gt:$since}}]})` — server-side filter по моей activity (комментарии / status changes / labels / assigns) + `creator.isMe` backstop. Workspace-wide `updatedAt` filter (Phase 4.2 baseline) был заменён в Phase 4.5 — старая shape засчитывала teammate updates в user activity. Complexity ≈ 75 pts/page, 900/hr под лимит 2M/hr.
 - **GitHub:** OAuth Device Flow (RFC 8628 — OAuth Apps не поддерживают PKCE). Polling 5 мин REST `/users/<login>/events` под 5000/hr primary rate-limit. Парсер поддерживает full + stripped PushEvent shapes (authenticated feed возвращает stripped без `commits[]`).
 - **Slack:** OAuth 2.0 PKCE distributed-app flow через HTTPS relay (`oauth.gundem.tech/<provider>/callback` Cloudflare Worker → 302 на loopback `127.0.0.1:47824/callback`, обходит Slack distributed-app HTTPS requirement без shipping `client_secret`). Worker — приватный репо `gundemtech/leaf-relay`. Polling 5 мин: `users.profile.get` (huddle state) + `search.messages from:@me`. DM channels anonymized → "DM" bucket до записи.
 

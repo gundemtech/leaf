@@ -470,6 +470,38 @@ public final class Database: @unchecked Sendable {
         }
     }
 
+    // MARK: - Linear attribution v2 migration (Phase 4.5)
+
+    /// Phase 4.5 — одноразовая wipe Linear events + cursor для миграции на
+    /// per-action attribution. Старая query `{updatedAt:{gt:$since}}` была
+    /// workspace-wide и засчитывала teammate updates как user actions; existing
+    /// rows контаминированы. Caller (`LinearCollector.runOneTimeMigration`)
+    /// гарантирует idempotency через UserDefaults flag.
+    /// Возвращает `(eventsDeleted, offsetsDeleted)` для diagnostic logging.
+    public func purgeLinearAttributionV2() throws -> (eventsDeleted: Int, offsetsDeleted: Int) {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        return try pool.write { db in
+            try db.execute(
+                sql: """
+                DELETE FROM \(Schema.Events.tableName)
+                WHERE \(Schema.Events.signalType) = ?
+                  AND json_extract(\(Schema.Events.payloadJSON), '$.source') = 'linear'
+                """,
+                arguments: [SignalType.action.rawValue]
+            )
+            let eventsDeleted = db.changesCount
+            try db.execute(
+                sql: """
+                DELETE FROM \(Schema.CollectorOffsets.tableName)
+                WHERE \(Schema.CollectorOffsets.collectorID) = ?
+                """,
+                arguments: [CollectorID.linearPolling]
+            )
+            let offsetsDeleted = db.changesCount
+            return (eventsDeleted, offsetsDeleted)
+        }
+    }
+
     // MARK: - Slack collector helpers (Phase 4.4)
 
     /// Phase 4.4 B6 — узкий summary для последнего Slack `huddle_state_change`

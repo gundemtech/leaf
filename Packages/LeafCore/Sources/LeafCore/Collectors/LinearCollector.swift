@@ -19,6 +19,12 @@ import Foundation
 import os
 
 public actor LinearCollector {
+    /// Phase 4.5 — UserDefaults flag для одноразового wipe старых
+    /// (контаминированных teammate-noise) Linear events при первом start
+    /// после upgrade. Idempotent: после успешной миграции flag остаётся true,
+    /// last-state-wins при повторном start.
+    public static let attributionV2MigrationFlagKey = "linear.attribution_v2_migrated"
+
     private let database: Database
     private let provider: any LinearGraphQLProvider
     private let refresher: LinearTokenRefresher
@@ -26,6 +32,11 @@ public actor LinearCollector {
     private let backfillWindowDays: Int
     private let logger: Logger
     private let restartTriggerName: String
+    /// Phase 4.5 — UserDefaults suite name под Migration flag. Sendable-friendly
+    /// (String) — UserDefaults instance строится lazy внутри actor'а. Тесты
+    /// передают unique suite ("leaf-test-<UUID>") чтобы изолировать flag от
+    /// shared `tech.gundem.leaf` (где живёт production state).
+    private let userDefaultsSuiteName: String?
 
     private var loopTask: Task<Void, Never>?
     private var notifyToken: NSObjectProtocol?
@@ -37,7 +48,8 @@ public actor LinearCollector {
         intervalSec: TimeInterval,
         backfillWindowDays: Int,
         restartTriggerName: String = LinearOAuthEndpoints.integrationChangedNotificationName,
-        logger: Logger
+        logger: Logger,
+        userDefaultsSuiteName: String? = "tech.gundem.leaf"
     ) {
         self.database = database
         self.provider = provider
@@ -46,10 +58,19 @@ public actor LinearCollector {
         self.backfillWindowDays = backfillWindowDays
         self.restartTriggerName = restartTriggerName
         self.logger = logger
+        self.userDefaultsSuiteName = userDefaultsSuiteName
+    }
+
+    private var userDefaults: UserDefaults {
+        if let name = userDefaultsSuiteName, let suite = UserDefaults(suiteName: name) {
+            return suite
+        }
+        return .standard
     }
 
     public func start() {
         guard loopTask == nil else { return }
+        runOneTimeMigration()
         let name = NSNotification.Name(restartTriggerName)
         notifyToken = DistributedNotificationCenter.default().addObserver(
             forName: name, object: nil, queue: nil
@@ -58,6 +79,22 @@ public actor LinearCollector {
         }
         loopTask = Task { [weak self] in await self?.runLoop() }
         logger.info("LinearCollector started (interval=\(self.intervalSec, privacy: .public)s, backfill=\(self.backfillWindowDays, privacy: .public)d)")
+    }
+
+    /// Phase 4.5 — одноразовый wipe Linear events + cursor для перехода на
+    /// per-action attribution. Атомарно (transaction в `purgeLinearAttributionV2`),
+    /// идемпотентно (UserDefaults flag), не bubble'ит ошибки выше — collector
+    /// должен start'ануть даже если миграция fail'нула (например DB locked
+    /// другим процессом), retry на следующий start.
+    private func runOneTimeMigration() {
+        guard !userDefaults.bool(forKey: Self.attributionV2MigrationFlagKey) else { return }
+        do {
+            let result = try database.purgeLinearAttributionV2()
+            userDefaults.set(true, forKey: Self.attributionV2MigrationFlagKey)
+            logger.info("Linear attribution_v2 migration: events=\(result.eventsDeleted, privacy: .public) wiped, offsets=\(result.offsetsDeleted, privacy: .public) reset")
+        } catch {
+            logger.error("Linear attribution_v2 migration failed: \(String(describing: error), privacy: .public) — will retry next start")
+        }
     }
 
     public func stop() async {
