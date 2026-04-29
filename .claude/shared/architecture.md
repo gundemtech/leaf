@@ -67,10 +67,10 @@ Leaf — ambient memory layer для macOS (далее iOS) + Native UI + MCP-с
 **Запрещено (ADR-010):** Screen Recording, keylogging, OCR canvas, захват UI-events целевых приложений, post-commit hooks в юзерском репо.
 
 ## Layer B — MVP (ADR-009, ADR-011)
-- **Только Linear.** OAuth 2.0 PKCE (localhost redirect на эфемерный порт), scope=`read`, actor=user.
-- Polling раз в 5 мин: `issues(first:50, filter:{updatedAt:{gt:$since}})` ≈ 75 complexity pts/call, 900/hr при лимите 2M pts/hr.
-- Safety margin `now - 30s` на каждый poll от clock skew.
-- Slack / GitHub — v1.1+.
+- **Linear + GitHub + Slack.**
+- **Linear:** OAuth 2.0 PKCE (loopback redirect на эфемерный порт), scope=`read`, actor=user. Polling 5 мин: `issues(first:50, filter:{updatedAt:{gt:$since}})` ≈ 75 complexity pts/call, 900/hr под лимит 2M/hr. Safety margin `now - 30s` от clock skew.
+- **GitHub:** OAuth Device Flow (RFC 8628 — OAuth Apps не поддерживают PKCE). Polling 5 мин REST `/users/<login>/events` под 5000/hr primary rate-limit. Парсер поддерживает full + stripped PushEvent shapes (authenticated feed возвращает stripped без `commits[]`).
+- **Slack:** OAuth 2.0 PKCE distributed-app flow через HTTPS relay (`oauth.gundem.tech/<provider>/callback` Cloudflare Worker → 302 на loopback `127.0.0.1:47824/callback`, обходит Slack distributed-app HTTPS requirement без shipping `client_secret`). Worker — приватный репо `gundemtech/leaf-relay`. Polling 5 мин: `users.profile.get` (huddle state) + `search.messages from:@me`. DM channels anonymized → "DM" bucket до записи.
 
 ## Layer C (V1.5+) и Layer D (V2)
 - Layer C: MCP-aggregator (Figma / Notion / Jira / Gmail / Calendar).
