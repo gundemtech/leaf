@@ -52,6 +52,14 @@ public struct InsightsSnapshot: Sendable, Hashable {
     public let githubByRepo: [RepoCountEntry]
     /// Phase 4.3 — top-5 event_kinds by count, descending.
     public let githubByEventKind: [EventKindCountEntry]
+    /// Phase 4.4 — total Slack messages authored за `period` (sum of per-channel counts).
+    public let slackMessagesCount: Int
+    /// Phase 4.4 — total minutes юзер провёл в huddle'е за `period`, walk'ом
+    /// huddle_state_change context events с clipping к границам periodа.
+    public let slackHuddleMinutes: Int
+    /// Phase 4.4 — top-5 channels by message count, descending. DM channels уже
+    /// merged'ы в один "DM" bucket (ADR-010 anonymization).
+    public let slackByChannel: [SlackActivityBreakdown.ChannelCountEntry]
 
     public init(
         topApps: [AppTimeEntry],
@@ -70,7 +78,10 @@ public struct InsightsSnapshot: Sendable, Hashable {
         linearByStatus: [StatusCountEntry],
         githubEventsCount: Int,
         githubByRepo: [RepoCountEntry],
-        githubByEventKind: [EventKindCountEntry]
+        githubByEventKind: [EventKindCountEntry],
+        slackMessagesCount: Int,
+        slackHuddleMinutes: Int,
+        slackByChannel: [SlackActivityBreakdown.ChannelCountEntry]
     ) {
         self.topApps = topApps
         self.sessions = sessions
@@ -89,12 +100,16 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.githubEventsCount = githubEventsCount
         self.githubByRepo = githubByRepo
         self.githubByEventKind = githubByEventKind
+        self.slackMessagesCount = slackMessagesCount
+        self.slackHuddleMinutes = slackHuddleMinutes
+        self.slackByChannel = slackByChannel
     }
 
     /// Convenience init — рассчитывает `deepSessionsCount` по threshold'у.
     /// Phase 2.2 — trend-поля с default'ами; Phase 2.3 — AI-поля с default'ами;
     /// Phase 2.4 — `filesTouched` с default `[]`. Phase 4.2 — Linear-поля с defaults.
-    /// Phase 4.3 — GitHub-поля с defaults. Existing test/UI callsite'ы не ломаются.
+    /// Phase 4.3 — GitHub-поля с defaults. Phase 4.4 — Slack-поля с defaults.
+    /// Existing test/UI callsite'ы не ломаются.
     public init(
         topApps: [AppTimeEntry],
         sessions: [FocusSession],
@@ -112,7 +127,10 @@ public struct InsightsSnapshot: Sendable, Hashable {
         linearByStatus: [StatusCountEntry] = [],
         githubEventsCount: Int = 0,
         githubByRepo: [RepoCountEntry] = [],
-        githubByEventKind: [EventKindCountEntry] = []
+        githubByEventKind: [EventKindCountEntry] = [],
+        slackMessagesCount: Int = 0,
+        slackHuddleMinutes: Int = 0,
+        slackByChannel: [SlackActivityBreakdown.ChannelCountEntry] = []
     ) {
         self.init(
             topApps: topApps,
@@ -131,7 +149,10 @@ public struct InsightsSnapshot: Sendable, Hashable {
             linearByStatus: linearByStatus,
             githubEventsCount: githubEventsCount,
             githubByRepo: githubByRepo,
-            githubByEventKind: githubByEventKind
+            githubByEventKind: githubByEventKind,
+            slackMessagesCount: slackMessagesCount,
+            slackHuddleMinutes: slackHuddleMinutes,
+            slackByChannel: slackByChannel
         )
     }
 
@@ -148,6 +169,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
             && filesTouched.isEmpty
             && linearIssuesTouched == 0
             && githubEventsCount == 0
+            && slackMessagesCount == 0
+            && slackHuddleMinutes == 0
     }
 
     /// Average session duration. `0` если sessions пуст.

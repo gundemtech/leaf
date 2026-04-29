@@ -154,4 +154,47 @@ final class InsightsSnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.linearIssuesTouched, 3)
         XCTAssertEqual(snapshot.linearByProject.first?.project, "Leaf")
     }
+
+    // MARK: - Phase 4.4 Slack
+
+    func testEmptyWhenSlackZero() {
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500,
+            slackMessagesCount: 0,
+            slackHuddleMinutes: 0,
+            slackByChannel: []
+        )
+        XCTAssertTrue(snapshot.isEmpty)
+        XCTAssertEqual(snapshot.slackMessagesCount, 0)
+        XCTAssertEqual(snapshot.slackHuddleMinutes, 0)
+    }
+
+    func testNotEmptyWhenSlackMessagesPresent() {
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500,
+            slackMessagesCount: 7,
+            slackByChannel: [SlackActivityBreakdown.ChannelCountEntry(channelName: "engineering", count: 7)]
+        )
+        XCTAssertFalse(snapshot.isEmpty)
+        XCTAssertEqual(snapshot.slackMessagesCount, 7)
+        XCTAssertEqual(snapshot.slackByChannel.first?.channelName, "engineering")
+    }
+
+    func testNotEmptyWhenSlackHuddleMinutesPresent() {
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500,
+            slackHuddleMinutes: 30
+        )
+        XCTAssertFalse(snapshot.isEmpty)
+        XCTAssertEqual(snapshot.slackHuddleMinutes, 30)
+    }
 }

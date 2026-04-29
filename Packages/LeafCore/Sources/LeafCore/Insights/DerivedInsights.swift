@@ -43,6 +43,13 @@ public protocol DerivedInsights: Sendable {
     /// Returns eventsCount + breakdown by repo/event_kind. GitHub не подключён → .empty.
     func githubActivity(period: DateInterval) throws -> GitHubActivityBreakdown
 
+    /// Phase 4.4 — Slack activity для periodа.
+    /// Action events с `payload_json.source='slack' AND event_kind='message_authored_aggregate'`
+    /// дают `messagesCount` (sum of `count` field) + `byChannel` (top-5).
+    /// Context events с `event_kind='huddle_state_change'` walk'ом дают `huddleMinutes`.
+    /// Slack не подключён → .empty (default ext) — opt-in feature, no-data ≠ error.
+    func slackActivity(period: DateInterval) throws -> SlackActivityBreakdown
+
     // Team (Phase 2+)
     func teamPresenceOverlap(team: [String], period: DateInterval) throws -> TimeInterval
     func teamFocusAlignment(team: [String], period: DateInterval) throws -> Double
@@ -57,6 +64,12 @@ public protocol DerivedInsights: Sendable {
     /// Возвращает `nil` если matching events нет (пустая БД, неизвестный bundle).
     /// `nil` — semantically valid "нет данных", не error → не throws при empty result.
     func lastActivity(bundleID: String?) throws -> ActivitySnapshot?
+}
+
+/// Default implementations — конформер'ы могут override'ить, но без явного
+/// override получают `.empty` (opt-in feature, no-data ≠ error).
+public extension DerivedInsights {
+    func slackActivity(period: DateInterval) throws -> SlackActivityBreakdown { .empty }
 }
 
 /// Phase 1.1 / CI fallback. Все методы бросают .notImplemented.
@@ -74,6 +87,7 @@ public struct StubInsights: DerivedInsights {
     public func aiActivityBreakdown(period: DateInterval) throws -> AIActivityBreakdown { .empty }
     public func linearActivity(period: DateInterval) throws -> LinearActivityBreakdown { .empty }
     public func githubActivity(period: DateInterval) throws -> GitHubActivityBreakdown { .empty }
+    public func slackActivity(period: DateInterval) throws -> SlackActivityBreakdown { .empty }
     public func teamPresenceOverlap(team: [String], period: DateInterval) throws -> TimeInterval { throw LeafError.notImplemented }
     public func teamFocusAlignment(team: [String], period: DateInterval) throws -> Double { throw LeafError.notImplemented }
     public func teamTimeline(team: [String], period: DateInterval) throws -> [AppTimeEntry] { throw LeafError.notImplemented }
