@@ -222,18 +222,26 @@ public actor SlackCollector {
     ) -> RawEvent {
         // Aggregate event — timestamp = period boundary, не индивидуальное
         // message ts (count > 1 не имеет single moment).
-        RawEvent(
+        var payload: [String: String] = [
+            "source": "slack",
+            "event_kind": "message_authored_aggregate",
+            "channel_name": channel.channelName,
+            "count": String(channel.count),
+            "period_start_ms": String(periodStartMs),
+            "period_end_ms": String(periodEndMs)
+        ]
+        // Phase 4.6.A.3 — reactions_count present ↔ "знаем что были реакции".
+        // Отсутствие ключа = "0 реакций или старая alpha.6 без 4.6.A.3"
+        // (consistent с decision не различать 0 от nil на UI; SQL aggregator
+        // фильтрует `IS NOT NULL` чтобы 0-samples не путать с pre-4.6 events).
+        if channel.reactionsCount > 0 {
+            payload["reactions_count"] = String(channel.reactionsCount)
+        }
+        return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(periodEndMs) / 1000.0),
             signalType: .action,
             bundleID: nil,
-            payload: [
-                "source": "slack",
-                "event_kind": "message_authored_aggregate",
-                "channel_name": channel.channelName,
-                "count": String(channel.count),
-                "period_start_ms": String(periodStartMs),
-                "period_end_ms": String(periodEndMs)
-            ]
+            payload: payload
         )
     }
 

@@ -311,6 +311,50 @@ final class SlackCollectorTests: XCTestCase {
         XCTAssertEqual(offset?.lastModifiedMs, 10_000, "cursor не двигается на empty batch")
     }
 
+    /// Phase 4.6.A.3 — reactionsCount > 0 → payload содержит "reactions_count";
+    /// reactionsCount == 0 → ключ ОТСУТСТВУЕТ (не пустая строка). Это позволяет
+    /// SQL aggregator'у различать pre-4.6 events от 0-samples через `IS NOT NULL`.
+    func testTickEncodesReactionsCountInPayloadWhenPositive() async throws {
+        let db = try makeDB()
+        try insertFreshIntegration(db: db)
+
+        let provider = MockSlackAPIProvider()
+        let cursorMs: Int64 = 1_700_000_300_000
+        let periodStart: Int64 = 1_700_000_000_000
+        let periodEnd: Int64 = 1_700_000_300_000
+        await provider.setResult(SlackTickResult(
+            huddle: .unknown,
+            channelMessageCounts: [
+                SlackChannelMessageCount(channelName: "engineering", count: 3, reactionsCount: 7),
+                SlackChannelMessageCount(channelName: "random", count: 1, reactionsCount: 0)
+            ],
+            cursorMs: cursorMs,
+            periodStartMs: periodStart,
+            periodEndMs: periodEnd
+        ))
+
+        let collector = makeCollector(db: db, provider: provider)
+        let result = await collector.performTick()
+        XCTAssertEqual(result.messageEventsEmitted, 2)
+
+        let writtenEvents = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: TimeInterval(periodEnd) / 1000.0 - 1),
+                end: Date(timeIntervalSince1970: TimeInterval(periodEnd) / 1000.0 + 1)
+            )
+        )
+        XCTAssertEqual(writtenEvents.count, 2)
+        let eng = writtenEvents.first(where: { $0.payload["channel_name"] == "engineering" })
+        let rand = writtenEvents.first(where: { $0.payload["channel_name"] == "random" })
+        XCTAssertEqual(eng?.payload["reactions_count"], "7")
+        XCTAssertNil(rand?.payload["reactions_count"], "ключ должен ОТСУТСТВОВАТЬ при reactionsCount=0, не быть пустой строкой")
+
+        // Sanity: existing fields неизменны.
+        XCTAssertEqual(eng?.payload["count"], "3")
+        XCTAssertEqual(rand?.payload["count"], "1")
+        XCTAssertEqual(eng?.payload["event_kind"], "message_authored_aggregate")
+    }
+
     /// start запускает loopTask, stop его cancels + awaits.
     /// Без integration row provider не должен вызываться (skip path).
     func testStartStopLifecycle() async throws {

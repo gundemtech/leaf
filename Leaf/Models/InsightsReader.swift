@@ -150,7 +150,9 @@ final class InsightsReader {
                             githubReviewDelayStats: github.reviewDelayStats,
                             slackMessagesCount: slack.messagesCount,
                             slackHuddleMinutes: slack.huddleMinutes,
-                            slackByChannel: slack.byChannel
+                            slackByChannel: slack.byChannel,
+                            slackReactionsReceived: slack.reactionsReceived ?? 0,
+                            slackHuddleSessionStats: slack.huddleSessionStats
                         )
                         return .success((db, snapshot))
                     } catch {

@@ -80,13 +80,18 @@ public enum SlackHuddleState: String, Sendable, Hashable {
 /// Bucket: количество self-authored сообщений в одном канале за период tick'а.
 /// `channelName` — public name канала ("engineering"), либо литерал `"DM"` для
 /// IM/MPIM (одна корзина на все DMs — anonymization, ADR-010).
+/// `reactionsCount` (Phase 4.6.A.3) — sum по `match.reactions[].count` всех
+/// сообщений канала в окне tick'а (aggregate numeric only; emoji name / users —
+/// никогда не читаются, ADR-010).
 public struct SlackChannelMessageCount: Sendable, Hashable {
     public let channelName: String
     public let count: Int
+    public let reactionsCount: Int
 
-    public init(channelName: String, count: Int) {
+    public init(channelName: String, count: Int, reactionsCount: Int = 0) {
         self.channelName = channelName
         self.count = count
+        self.reactionsCount = reactionsCount
     }
 }
 

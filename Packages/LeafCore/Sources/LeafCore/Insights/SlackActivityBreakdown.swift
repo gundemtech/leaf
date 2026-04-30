@@ -17,14 +17,36 @@ public struct SlackActivityBreakdown: Sendable, Hashable {
     /// Top-5 channel bucket'ов по count, descending. DM channels уже
     /// слиты в один "DM" bucket до записи (ADR-010 anonymization).
     public let byChannel: [ChannelCountEntry]
+    /// Phase 4.6.A.3 — sum реакций на authored messages за `period` (aggregate
+    /// numeric only). `nil` ↔ нет message events с populated reactions_count
+    /// (старые pre-4.6 events / 0 реакций — индистигвишабл, UI conditional на > 0).
+    public let reactionsReceived: Int?
+    /// Phase 4.6.A.3 — distribution длительностей huddle sessions (clipped к
+    /// границам periodа). `nil` ↔ samples=0 (не было пар transitions в окне).
+    /// Отличает "одна 45m huddle" от "пять 9m huddles" (тот же huddleMinutes total).
+    public let huddleSessionStats: LatencyStats?
 
-    public init(messagesCount: Int, huddleMinutes: Int, byChannel: [ChannelCountEntry]) {
+    public init(
+        messagesCount: Int,
+        huddleMinutes: Int,
+        byChannel: [ChannelCountEntry],
+        reactionsReceived: Int? = nil,
+        huddleSessionStats: LatencyStats? = nil
+    ) {
         self.messagesCount = messagesCount
         self.huddleMinutes = huddleMinutes
         self.byChannel = byChannel
+        self.reactionsReceived = reactionsReceived
+        self.huddleSessionStats = huddleSessionStats
     }
 
-    public static let empty = SlackActivityBreakdown(messagesCount: 0, huddleMinutes: 0, byChannel: [])
+    public static let empty = SlackActivityBreakdown(
+        messagesCount: 0,
+        huddleMinutes: 0,
+        byChannel: [],
+        reactionsReceived: nil,
+        huddleSessionStats: nil
+    )
 
     public struct ChannelCountEntry: Sendable, Hashable, Codable {
         public let channelName: String

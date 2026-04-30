@@ -426,6 +426,14 @@ struct MenuBarContent: View {
                 .joined(separator: ", ")
             lines.append("By channel: \(channels)")
         }
+        // Phase 4.6.A.3 — reactions + huddle session distribution. Hidden
+        // если не было активности (preserve compactness для idle workspaces).
+        if snapshot.slackReactionsReceived > 0 {
+            lines.append("Reactions: \(snapshot.slackReactionsReceived)")
+        }
+        if let stats = snapshot.slackHuddleSessionStats {
+            lines.append("Huddle sessions: \(stats.sampleCount) · avg: \(formatLatency(stats.avgSeconds))")
+        }
         return lines.joined(separator: "\n")
     }
 

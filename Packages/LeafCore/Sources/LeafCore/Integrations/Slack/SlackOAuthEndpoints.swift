@@ -25,6 +25,12 @@ public enum SlackOAuthEndpoints {
     /// `search.messages` — query: `from:me after:<DATE>`. Используется в
     /// SlackCollector tick для message activity counts.
     public static let searchMessages = URL(string: "https://slack.com/api/search.messages")!
+    /// `conversations.history` — per-channel message fetch с populated reactions[].
+    /// Phase 4.6.A.3 — single source of truth для reactions aggregate (search.messages
+    /// response не включает reactions field by design — different schema от
+    /// conversations.history). Вызывается per unique channel_id обнаруженный в
+    /// search.messages response, filtered `user == self_user_id` client-side.
+    public static let conversationsHistory = URL(string: "https://slack.com/api/conversations.history")!
 
     /// Public redirect URI для Slack OAuth `/oauth/v2/authorize` и token exchange.
     /// Slack distributed-app distribution требует HTTPS на redirect URI; loopback
@@ -46,7 +52,11 @@ public enum SlackOAuthEndpoints {
     /// ВАЖНО: для authorize URL это значение идёт в `user_scope` query param,
     /// НЕ в `scope` — `scope` в Slack v2 это bot-token scopes; user-token scopes
     /// идут отдельным параметром.
-    public static let userScopes = "users:read,users.profile:read,search:read"
+    /// Phase 4.6.A.3 — added `*:history` scopes for `conversations.history`
+    /// endpoint (reactions aggregate). Adding scopes требует full OAuth re-consent
+    /// (юзер проходит Disconnect → Connect один раз), backward-compat broken
+    /// для existing alpha.6 tokens.
+    public static let userScopes = "users:read,users.profile:read,search:read,channels:history,groups:history,im:history,mpim:history"
 
     /// DistributedNotification name, постится при connect/disconnect/refreshDenied.
     /// Слушают: ConnectionsSettings (UI re-render), SlackCollector (Phase 4.4 reload).

@@ -36,7 +36,7 @@ struct GetSlackActivityTool: ToolExecutor {
         ]
         return ToolDefinition(
             name: "get_slack_activity",
-            description: "Return Slack activity (messages count, huddle minutes, breakdown by channel) for the given period. Metadata only — message bodies are never stored.",
+            description: "Return Slack activity (messages count, huddle minutes, breakdown by channel, reactions aggregate, huddle session distribution) for the given period. Metadata only — message bodies, reaction emoji names, and reactor identities are never stored.",
             inputSchema: AnyCodable(schema)
         )
     }()
@@ -70,7 +70,7 @@ struct GetSlackActivityTool: ToolExecutor {
         let breakdown = try insights.slackActivity(period: interval)
 
         let iso = ISO8601DateFormatter()
-        let payload: [String: Any] = [
+        var payload: [String: Any] = [
             "period": period.rawValue,
             "from": iso.string(from: interval.start),
             "to": iso.string(from: interval.end),
@@ -80,6 +80,19 @@ struct GetSlackActivityTool: ToolExecutor {
                 ["channel": entry.channelName, "count": entry.count]
             }
         ]
+        // Phase 4.6.A.3 — additive optional fields (version=1 preserved;
+        // older MCP clients ignore unknown keys).
+        if let r = breakdown.reactionsReceived {
+            payload["reactionsReceived"] = r
+        }
+        if let h = breakdown.huddleSessionStats {
+            payload["huddleSessionStats"] = [
+                "medianSeconds": h.medianSeconds,
+                "avgSeconds": h.avgSeconds,
+                "maxSeconds": h.maxSeconds,
+                "sampleCount": h.sampleCount
+            ]
+        }
         return try ToolResponseBuilder.versionedJSONResult(payload)
     }
 }

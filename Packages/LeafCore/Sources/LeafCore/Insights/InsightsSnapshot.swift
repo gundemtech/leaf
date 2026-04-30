@@ -67,6 +67,14 @@ public struct InsightsSnapshot: Sendable, Hashable {
     /// Phase 4.4 — top-5 channels by message count, descending. DM channels уже
     /// merged'ы в один "DM" bucket (ADR-010 anonymization).
     public let slackByChannel: [SlackActivityBreakdown.ChannelCountEntry]
+    /// Phase 4.6.A.3 — sum реакций на authored messages за `period` (aggregate
+    /// numeric). `0` ↔ нет реакций / Slack не подключён / pre-4.6 events. UI
+    /// conditional на `> 0` для рендера.
+    public let slackReactionsReceived: Int
+    /// Phase 4.6.A.3 — distribution длительностей huddle sessions. `nil` ↔
+    /// samples=0 (не было пар transitions в окне). Отличает "одна 45m" от
+    /// "пять 9m" сессий — current `slackHuddleMinutes` total это растворяет.
+    public let slackHuddleSessionStats: LatencyStats?
 
     public init(
         topApps: [AppTimeEntry],
@@ -91,7 +99,9 @@ public struct InsightsSnapshot: Sendable, Hashable {
         githubReviewDelayStats: LatencyStats?,
         slackMessagesCount: Int,
         slackHuddleMinutes: Int,
-        slackByChannel: [SlackActivityBreakdown.ChannelCountEntry]
+        slackByChannel: [SlackActivityBreakdown.ChannelCountEntry],
+        slackReactionsReceived: Int = 0,
+        slackHuddleSessionStats: LatencyStats? = nil
     ) {
         self.topApps = topApps
         self.sessions = sessions
@@ -116,6 +126,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.slackMessagesCount = slackMessagesCount
         self.slackHuddleMinutes = slackHuddleMinutes
         self.slackByChannel = slackByChannel
+        self.slackReactionsReceived = slackReactionsReceived
+        self.slackHuddleSessionStats = slackHuddleSessionStats
     }
 
     /// Convenience init — рассчитывает `deepSessionsCount` по threshold'у.
@@ -146,7 +158,9 @@ public struct InsightsSnapshot: Sendable, Hashable {
         githubReviewDelayStats: LatencyStats? = nil,
         slackMessagesCount: Int = 0,
         slackHuddleMinutes: Int = 0,
-        slackByChannel: [SlackActivityBreakdown.ChannelCountEntry] = []
+        slackByChannel: [SlackActivityBreakdown.ChannelCountEntry] = [],
+        slackReactionsReceived: Int = 0,
+        slackHuddleSessionStats: LatencyStats? = nil
     ) {
         self.init(
             topApps: topApps,
@@ -171,7 +185,9 @@ public struct InsightsSnapshot: Sendable, Hashable {
             githubReviewDelayStats: githubReviewDelayStats,
             slackMessagesCount: slackMessagesCount,
             slackHuddleMinutes: slackHuddleMinutes,
-            slackByChannel: slackByChannel
+            slackByChannel: slackByChannel,
+            slackReactionsReceived: slackReactionsReceived,
+            slackHuddleSessionStats: slackHuddleSessionStats
         )
     }
 

@@ -276,4 +276,40 @@ final class InsightsSnapshotTests: XCTestCase {
         XCTAssertNil(snapshot.linearCompletionDurationStats)
         XCTAssertTrue(snapshot.isEmpty, "no issues + nil completion stats → empty")
     }
+
+    // MARK: - Phase 4.6.A.3 Slack reactions + huddle session stats
+
+    func testSlackReactionsAndHuddleSessionStatsRoundTripWhenPresent() {
+        let huddleStats = LatencyStats(medianSeconds: 1500, avgSeconds: 1500, maxSeconds: 2400, sampleCount: 3)
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500,
+            slackMessagesCount: 5,
+            slackHuddleMinutes: 75,
+            slackByChannel: [SlackActivityBreakdown.ChannelCountEntry(channelName: "engineering", count: 5)],
+            slackReactionsReceived: 8,
+            slackHuddleSessionStats: huddleStats
+        )
+        XCTAssertFalse(snapshot.isEmpty)
+        XCTAssertEqual(snapshot.slackReactionsReceived, 8)
+        XCTAssertEqual(snapshot.slackHuddleSessionStats?.sampleCount, 3)
+        XCTAssertEqual(snapshot.slackHuddleSessionStats?.medianSeconds, 1500)
+        XCTAssertEqual(snapshot.slackHuddleSessionStats?.maxSeconds, 2400)
+    }
+
+    func testSlackReactionsAndHuddleSessionStatsDefaultsBackwardCompat() {
+        // Existing test/UI callsites без новых параметров не ломаются.
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500,
+            slackMessagesCount: 3
+        )
+        XCTAssertEqual(snapshot.slackReactionsReceived, 0, "default 0 для backward compat")
+        XCTAssertNil(snapshot.slackHuddleSessionStats, "default nil")
+        XCTAssertFalse(snapshot.isEmpty, "messages > 0 → не empty")
+    }
 }
