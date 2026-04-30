@@ -471,4 +471,99 @@ final class InsightsSnapshotTests: XCTestCase {
         XCTAssertEqual(bd.huddleParticipationStreak, 1,
             "single-day streak=1 — legitimate value (не nil), edge между \"never\" и \"started today\"")
     }
+
+    // MARK: - Phase 4.6.B — Linear status transitions
+
+    func testLinearBreakdownTransitionsDefaultNil() {
+        let bd = LinearActivityBreakdown(
+            issuesTouched: 3,
+            byProject: [],
+            byStatus: []
+        )
+        XCTAssertNil(bd.transitions, "default nil — backwards compat для existing init callsite'ов")
+        XCTAssertNil(bd.completionRate, "default nil — same convention")
+    }
+
+    func testLinearBreakdownTransitionsExplicit() {
+        let transitions = LinearTransitionBreakdown(started: 2, completed: 3, canceled: 1, reopened: 1)
+        let bd = LinearActivityBreakdown(
+            issuesTouched: 5,
+            byProject: [],
+            byStatus: [],
+            transitions: transitions,
+            completionRate: 0.5
+        )
+        XCTAssertEqual(bd.transitions?.started, 2)
+        XCTAssertEqual(bd.transitions?.completed, 3)
+        XCTAssertEqual(bd.transitions?.canceled, 1)
+        XCTAssertEqual(bd.transitions?.reopened, 1)
+        XCTAssertEqual(bd.transitions?.total, 7, "sum может exceed unique transition count для completed→canceled overlap")
+        XCTAssertEqual(bd.completionRate, 0.5)
+    }
+
+    func testLinearTransitionBreakdownCodableRoundTrip() throws {
+        let original = LinearTransitionBreakdown(started: 5, completed: 3, canceled: 1, reopened: 2)
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+        let data = try encoder.encode(original)
+        let decoded = try decoder.decode(LinearTransitionBreakdown.self, from: data)
+        XCTAssertEqual(decoded, original)
+        XCTAssertEqual(decoded.total, 11)
+    }
+
+    func testLinearTransitionBreakdownEmpty() {
+        let empty = LinearTransitionBreakdown.empty
+        XCTAssertEqual(empty.started, 0)
+        XCTAssertEqual(empty.completed, 0)
+        XCTAssertEqual(empty.canceled, 0)
+        XCTAssertEqual(empty.reopened, 0)
+        XCTAssertEqual(empty.total, 0)
+    }
+
+    func testSnapshotLinearTransitionsRoundTrip() {
+        let transitions = LinearTransitionBreakdown(started: 1, completed: 2, canceled: 0, reopened: 0)
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500,
+            linearIssuesTouched: 3,
+            linearTransitions: transitions,
+            linearCompletionRate: 2.0 / 3.0
+        )
+        XCTAssertEqual(snapshot.linearTransitions?.started, 1)
+        XCTAssertEqual(snapshot.linearTransitions?.completed, 2)
+        XCTAssertEqual(snapshot.linearTransitions?.total, 3)
+        XCTAssertEqual(snapshot.linearCompletionRate, 2.0 / 3.0)
+    }
+
+    func testSnapshotLinearTransitionsDefaultsBackwardCompat() {
+        // Existing callsite'ы без новых параметров продолжают работать.
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500,
+            linearIssuesTouched: 3
+        )
+        XCTAssertNil(snapshot.linearTransitions, "default nil")
+        XCTAssertNil(snapshot.linearCompletionRate, "default nil")
+    }
+
+    func testStubInsightsLinearTransitionsAndCompletionRateDefaults() throws {
+        // StubInsights наследует default extension impl → .empty / nil
+        // (для CI / iOS-future / тест-сценариев без LeafCorePrivate).
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("snapshot-stub-tx-\(UUID().uuidString).sqlite")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let _ = try Database.openForWrite(at: tmp, config: .weakDefaults)
+        let reader = try Database.openForRead(at: tmp, config: .weakDefaults)
+        let stub = StubInsights(database: reader)
+        let now = Date()
+        let period = DateInterval(start: now.addingTimeInterval(-3600), end: now)
+        let transitions = try stub.linearTransitions(period: period)
+        XCTAssertEqual(transitions, .empty, "default extension → .empty")
+        let rate = try stub.linearCompletionRate(period: period)
+        XCTAssertNil(rate, "default extension → nil")
+    }
 }

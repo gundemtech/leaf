@@ -19,16 +19,25 @@ public protocol LinearGraphQLProvider: Sendable {
 
 /// Результат одного GraphQL fetch'а. `cursorMs` — `max(updatedAt)` across `issues`,
 /// или `nil` если batch пуст (cursor не двигается, retry на следующем tick).
+/// Phase 4.6.B — additive `transitions` поле: my status transitions из nested
+/// IssueHistory fragment, после client-side filter (Linear API не поддерживает
+/// `actor.isMe` filter на history connection).
 public struct LinearIssueBatch: Sendable, Hashable {
     public let issues: [LinearIssueSnapshot]
     public let cursorMs: Int64?
+    public let transitions: [LinearStateTransitionSnapshot]
 
-    public init(issues: [LinearIssueSnapshot], cursorMs: Int64?) {
+    public init(
+        issues: [LinearIssueSnapshot],
+        cursorMs: Int64?,
+        transitions: [LinearStateTransitionSnapshot] = []
+    ) {
         self.issues = issues
         self.cursorMs = cursorMs
+        self.transitions = transitions
     }
 
-    public static let empty = LinearIssueBatch(issues: [], cursorMs: nil)
+    public static let empty = LinearIssueBatch(issues: [], cursorMs: nil, transitions: [])
 }
 
 /// Один issue в batch'е — public-safe metadata (whitepaper Section 6 Action signal).
@@ -69,6 +78,45 @@ public struct LinearIssueSnapshot: Sendable, Hashable {
         self.teamKey = teamKey
         self.updatedAtMs = updatedAtMs
         self.completionSeconds = completionSeconds
+    }
+}
+
+/// Phase 4.6.B — мой status transition в Linear (my-actor filter применён
+/// client-side в провайдере, потому что `Issue.history` connection в Linear API
+/// не поддерживает `filter` arg). Public-safe: state names + types + history id.
+/// ADR-010: actor display name / state UUIDs / comment bodies НЕ покидают парсер.
+public struct LinearStateTransitionSnapshot: Sendable, Hashable {
+    /// e.g. "LEA-123" — same convention что и LinearIssueSnapshot.
+    public let issueKey: String
+    /// Linear's IssueHistory.id — для client-side dedup на retry tick'ах.
+    /// Internal API id, не PII.
+    public let historyId: String
+    /// Epoch ms — момент transition (history.createdAt).
+    public let transitionAtMs: Int64
+    /// nil если from-state отсутствует (e.g. issue creation).
+    public let fromStateName: String?
+    /// nil если from-state отсутствует. Linear's WorkflowState.type enum:
+    /// triage / backlog / unstarted / started / completed / canceled.
+    public let fromStateType: String?
+    public let toStateName: String
+    public let toStateType: String
+
+    public init(
+        issueKey: String,
+        historyId: String,
+        transitionAtMs: Int64,
+        fromStateName: String?,
+        fromStateType: String?,
+        toStateName: String,
+        toStateType: String
+    ) {
+        self.issueKey = issueKey
+        self.historyId = historyId
+        self.transitionAtMs = transitionAtMs
+        self.fromStateName = fromStateName
+        self.fromStateType = fromStateType
+        self.toStateName = toStateName
+        self.toStateType = toStateType
     }
 }
 

@@ -68,6 +68,18 @@ public protocol DerivedInsights: Sendable {
     /// ИЛИ если impl не поддерживает (default extension nil — graceful для stubs).
     func longestUninterruptedWindow(period: DateInterval) throws -> UninterruptedWindow?
 
+    /// Phase 4.6.B — counts моих status transitions в Linear за `period`.
+    /// Source filter: events с `signal_type='action' AND source='linear' AND
+    /// event_kind='status_transition'`. Default extension возвращает `.empty`
+    /// (для StubInsights / iOS-future graceful).
+    func linearTransitions(period: DateInterval) throws -> LinearTransitionBreakdown
+
+    /// Phase 4.6.B — soft follow-through ratio = `completed / (completed +
+    /// started + reopened)` через тот же aggregator. `nil` ↔ `completed == 0`
+    /// (избегает misleading "0% follow-through" в типичный in-progress день).
+    /// Default extension возвращает `nil`.
+    func linearCompletionRate(period: DateInterval) throws -> Double?
+
     // Activity lookup (Phase 2.1).
     /// Last attention event, опционально отфильтрованный по `bundleID`.
     /// Возвращает `nil` если matching events нет (пустая БД, неизвестный bundle).
@@ -82,6 +94,12 @@ public extension DerivedInsights {
 
     /// Phase 4.6.C.2 — default nil чтобы StubInsights / iOS-future free от обновления.
     func longestUninterruptedWindow(period: DateInterval) throws -> UninterruptedWindow? { nil }
+
+    /// Phase 4.6.B — default `.empty` для StubInsights / iOS-future.
+    func linearTransitions(period: DateInterval) throws -> LinearTransitionBreakdown { .empty }
+
+    /// Phase 4.6.B — default `nil` для StubInsights / iOS-future.
+    func linearCompletionRate(period: DateInterval) throws -> Double? { nil }
 }
 
 /// Phase 1.1 / CI fallback. Все методы бросают .notImplemented.

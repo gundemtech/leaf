@@ -89,6 +89,12 @@ public struct InsightsSnapshot: Sendable, Hashable {
     /// Phase 4.6.C.3 — consecutive days с ≥1 Slack huddle joined
     /// (state='in_a_huddle' transition, 60-day lookback, period-independent).
     public let slackHuddleParticipationStreak: Int
+    /// Phase 4.6.B — counts моих status transitions за `period`. `nil` ↔ нет
+    /// transitions в окне / Linear не подключён.
+    public let linearTransitions: LinearTransitionBreakdown?
+    /// Phase 4.6.B — soft follow-through ratio (completed / (completed + started
+    /// + reopened)). `nil` ↔ `completed == 0` (см. LinearActivityBreakdown doc).
+    public let linearCompletionRate: Double?
 
     public init(
         topApps: [AppTimeEntry],
@@ -119,7 +125,9 @@ public struct InsightsSnapshot: Sendable, Hashable {
         longestUninterruptedWindow: UninterruptedWindow? = nil,
         linearIssueCloseStreak: Int = 0,
         githubCommitStreak: Int = 0,
-        slackHuddleParticipationStreak: Int = 0
+        slackHuddleParticipationStreak: Int = 0,
+        linearTransitions: LinearTransitionBreakdown? = nil,
+        linearCompletionRate: Double? = nil
     ) {
         self.topApps = topApps
         self.sessions = sessions
@@ -150,6 +158,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.linearIssueCloseStreak = linearIssueCloseStreak
         self.githubCommitStreak = githubCommitStreak
         self.slackHuddleParticipationStreak = slackHuddleParticipationStreak
+        self.linearTransitions = linearTransitions
+        self.linearCompletionRate = linearCompletionRate
     }
 
     /// Convenience init — рассчитывает `deepSessionsCount` по threshold'у.
@@ -186,7 +196,9 @@ public struct InsightsSnapshot: Sendable, Hashable {
         longestUninterruptedWindow: UninterruptedWindow? = nil,
         linearIssueCloseStreak: Int = 0,
         githubCommitStreak: Int = 0,
-        slackHuddleParticipationStreak: Int = 0
+        slackHuddleParticipationStreak: Int = 0,
+        linearTransitions: LinearTransitionBreakdown? = nil,
+        linearCompletionRate: Double? = nil
     ) {
         self.init(
             topApps: topApps,
@@ -217,7 +229,9 @@ public struct InsightsSnapshot: Sendable, Hashable {
             longestUninterruptedWindow: longestUninterruptedWindow,
             linearIssueCloseStreak: linearIssueCloseStreak,
             githubCommitStreak: githubCommitStreak,
-            slackHuddleParticipationStreak: slackHuddleParticipationStreak
+            slackHuddleParticipationStreak: slackHuddleParticipationStreak,
+            linearTransitions: linearTransitions,
+            linearCompletionRate: linearCompletionRate
         )
     }
 

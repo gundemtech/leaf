@@ -22,6 +22,14 @@ public struct LinearActivityBreakdown: Sendable, Hashable {
     /// 60-day lookback window — semantically GLOBAL метрика, period parameter
     /// в `linearActivity()` НЕ ограничивает streak. `nil` ↔ streak=0.
     public let issueCloseStreak: Int?
+    /// Phase 4.6.B — counts моих status transitions за `period`. `nil` ↔
+    /// total=0 (не было transitions / Linear не подключён). UI рендерит
+    /// строку только при `total > 0`.
+    public let transitions: LinearTransitionBreakdown?
+    /// Phase 4.6.B — soft "follow-through" ratio = `completed / (completed +
+    /// started + reopened)`. `nil` ↔ `completed == 0` (избегает misleading
+    /// "0% follow-through" UX для типичного in-progress дня без закрытий).
+    public let completionRate: Double?
 
     public init(
         issuesTouched: Int,
@@ -29,7 +37,9 @@ public struct LinearActivityBreakdown: Sendable, Hashable {
         byStatus: [StatusCountEntry],
         completionDurationStats: LatencyStats? = nil,
         wowDeltaPct: Double? = nil,
-        issueCloseStreak: Int? = nil
+        issueCloseStreak: Int? = nil,
+        transitions: LinearTransitionBreakdown? = nil,
+        completionRate: Double? = nil
     ) {
         self.issuesTouched = issuesTouched
         self.byProject = byProject
@@ -37,6 +47,8 @@ public struct LinearActivityBreakdown: Sendable, Hashable {
         self.completionDurationStats = completionDurationStats
         self.wowDeltaPct = wowDeltaPct
         self.issueCloseStreak = issueCloseStreak
+        self.transitions = transitions
+        self.completionRate = completionRate
     }
 
     public static let empty = LinearActivityBreakdown(
@@ -45,7 +57,9 @@ public struct LinearActivityBreakdown: Sendable, Hashable {
         byStatus: [],
         completionDurationStats: nil,
         wowDeltaPct: nil,
-        issueCloseStreak: nil
+        issueCloseStreak: nil,
+        transitions: nil,
+        completionRate: nil
     )
 }
 

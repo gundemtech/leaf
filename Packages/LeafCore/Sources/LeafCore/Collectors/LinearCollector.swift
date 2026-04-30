@@ -167,8 +167,12 @@ public actor LinearCollector {
             return TickResult(skipped: false, issuesProcessed: 0, cursorAdvancedMs: nil)
         }
 
-        // 5. Map + atomic write.
-        let events = batch.issues.map { Self.makeEvent(issue: $0) }
+        // 5. Map + atomic write. Phase 4.6.B — два event flavors из одного batch:
+        // (a) issue_updated per touched issue (Phase 4.2 baseline shape),
+        // (b) status_transition per my-actor history entry (filter применён в
+        //     провайдере client-side, см. ProdLinearGraphQLProvider.mapStateTransition).
+        var events = batch.issues.map { Self.makeEvent(issue: $0) }
+        events.append(contentsOf: batch.transitions.map { Self.makeTransitionEvent($0) })
         let nowMs = Int64(now.timeIntervalSince1970 * 1000)
         // Если batch пуст — cursor НЕ двигается (retry next tick на тех же since).
         // Если batch не пуст — cursor = batch.cursorMs (max updatedAt).
@@ -189,7 +193,7 @@ public actor LinearCollector {
             return TickResult(skipped: false, issuesProcessed: 0, cursorAdvancedMs: nil)
         }
         if !events.isEmpty {
-            logger.info("tick wrote \(events.count, privacy: .public) issues, cursor=\(offset.lastModifiedMs, privacy: .public)")
+            logger.info("tick wrote \(events.count, privacy: .public) events (\(batch.issues.count, privacy: .public) issues + \(batch.transitions.count, privacy: .public) transitions), cursor=\(offset.lastModifiedMs, privacy: .public)")
         }
         return TickResult(
             skipped: false,
@@ -217,6 +221,30 @@ public actor LinearCollector {
         }
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(issue.updatedAtMs) / 1000.0),
+            signalType: .action,
+            bundleID: nil,
+            payload: payload
+        )
+    }
+
+    /// Phase 4.6.B — RawEvent для my status transition. signalType=.action,
+    /// payload.event_kind="status_transition" — discriminator отделяет от
+    /// existing issue_updated events. ADR-010: payload содержит только
+    /// public-safe metadata (state names + types + history id).
+    static func makeTransitionEvent(_ t: LinearStateTransitionSnapshot) -> RawEvent {
+        var payload: [String: String] = [
+            "source": "linear",
+            "event_kind": "status_transition",
+            "issue_key": t.issueKey,
+            "history_id": t.historyId,
+            "to_state_name": t.toStateName,
+            "to_state_type": t.toStateType,
+            "transition_at": String(t.transitionAtMs)
+        ]
+        if let n = t.fromStateName { payload["from_state_name"] = n }
+        if let ty = t.fromStateType { payload["from_state_type"] = ty }
+        return RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(t.transitionAtMs) / 1000.0),
             signalType: .action,
             bundleID: nil,
             payload: payload
