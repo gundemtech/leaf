@@ -159,6 +159,7 @@ struct MenuBarContent: View {
             VStack(alignment: .leading, spacing: 2) {
                 sessionsLines(snapshot: snapshot)
                 trendsLines(snapshot: snapshot)
+                activityLine(snapshot: snapshot)
                 aiLine(snapshot: snapshot)
                 linearLine(snapshot: snapshot)
                 githubLine(snapshot: snapshot)
@@ -225,9 +226,8 @@ struct MenuBarContent: View {
 
     private func trendsSummaryLine(snapshot: InsightsSnapshot) -> String {
         let peak = formatPeakHour(snapshot.peakProductivityHour)
-        let wow = formatWoW(snapshot.weekOverWeekDelta)
         let dayWord = snapshot.activeDaysInRow == 1 ? "day" : "days"
-        return "Peak \(peak) · WoW \(wow) · Active \(snapshot.activeDaysInRow) \(dayWord)"
+        return "Peak \(peak) · Active \(snapshot.activeDaysInRow) \(dayWord)"
     }
 
     private func formatPeakHour(_ hour: Int?) -> String {
@@ -235,13 +235,29 @@ struct MenuBarContent: View {
         return String(format: "%02d:00", h)
     }
 
-    private func formatWoW(_ delta: Double?) -> String {
-        guard let d = delta else { return "—" }
-        let pct = Int((d * 100).rounded())
-        if pct >= 0 {
-            return "+\(pct)%"
+    /// Phase 4.6.C.1 — отдельная "Activity" строка с arrow + полным контекстом
+    /// "vs last week". Скрыта если global `weekOverWeekDelta` = nil (baseline
+    /// < 7 дней или prev week нулевой).
+    @ViewBuilder
+    private func activityLine(snapshot: InsightsSnapshot) -> some View {
+        if let wow = snapshot.weekOverWeekDelta {
+            Text("Activity \(formatActivityDelta(wow))")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .help("Total attention time this week vs prior 7 days")
         } else {
-            return "\(pct)%"
+            EmptyView()
+        }
+    }
+
+    private func formatActivityDelta(_ delta: Double) -> String {
+        let pct = Int((delta * 100).rounded())
+        if pct > 0 {
+            return "↑\(pct)% vs last week"
+        } else if pct < 0 {
+            return "↓\(-pct)% vs last week"
+        } else {
+            return "no change vs last week"
         }
     }
 

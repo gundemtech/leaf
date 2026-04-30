@@ -90,6 +90,12 @@ struct GetLinearActivityTool: ToolExecutor {
                 "sampleCount": dur.sampleCount
             ]
         }
+        // Phase 4.6.C.1 — global week-over-week activity delta (additive optional;
+        // absent если baseline < 7 days OR prev week zero). Same scalar across
+        // 3 integration tools — это global attention-time trend.
+        if let wow = try? insights.weekOverWeekDelta() {
+            payload["wowDelta"] = wow
+        }
         return try ToolResponseBuilder.versionedJSONResult(payload)
     }
 }
