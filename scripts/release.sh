@@ -280,18 +280,23 @@ step_zip() {
 }
 
 step_appcast() {
-    # generate_appcast не любит .dmg + .zip same version (duplicate updates).
-    # Sparkle update path = .zip; .dmg = first install only. Прячем .dmg на время
-    # генерации, возвращаем после.
+    # generate_appcast не любит .dmg + .zip с одинаковым CFBundleVersion (duplicate updates).
+    # Sparkle update path = .zip; .dmg = first install only. Прячем ВСЕ .dmg
+    # (current + prior ship-cycle artifacts) на время генерации, возвращаем после.
     is_done appcast && { info "skip appcast (stamp exists)"; return 0; }
     info "generate_appcast → $RELEASES/appcast.xml"
-    local hidden="$DMG.appcast-hidden"
-    [[ -f "$DMG" ]] && mv "$DMG" "$hidden"
+    local hidden_list=()
+    while IFS= read -r dmg; do
+        mv "$dmg" "$dmg.appcast-hidden"
+        hidden_list+=("$dmg")
+    done < <(find "$RELEASES" -maxdepth 1 -name "*.dmg" -type f)
     local rc=0
     ~/bin/sparkle/generate_appcast \
         --download-url-prefix https://updates.gundem.tech/releases/ \
         "$RELEASES/" >/dev/null || rc=$?
-    [[ -f "$hidden" ]] && mv "$hidden" "$DMG"
+    for dmg in "${hidden_list[@]}"; do
+        [[ -f "$dmg.appcast-hidden" ]] && mv "$dmg.appcast-hidden" "$dmg"
+    done
     [[ $rc -eq 0 ]] || { err "generate_appcast failed (rc=$rc)"; exit $rc; }
     xmllint --noout "$RELEASES/appcast.xml"
     local item_count
