@@ -16,19 +16,27 @@ public struct LinearActivityBreakdown: Sendable, Hashable {
     /// Phase 4.6.C.1 — reserved под per-provider WoW в 4.7+. Сейчас всегда nil
     /// (global `weekOverWeekDelta` surface'ится отдельно).
     public let wowDeltaPct: Double?
+    /// Phase 4.6.C.3 — consecutive days с ≥1 closed Linear issue
+    /// (event_kind='issue_updated' AND completion_seconds IS NOT NULL),
+    /// ending today (или yesterday если сегодня ещё нет close-event'а).
+    /// 60-day lookback window — semantically GLOBAL метрика, period parameter
+    /// в `linearActivity()` НЕ ограничивает streak. `nil` ↔ streak=0.
+    public let issueCloseStreak: Int?
 
     public init(
         issuesTouched: Int,
         byProject: [ProjectCountEntry],
         byStatus: [StatusCountEntry],
         completionDurationStats: LatencyStats? = nil,
-        wowDeltaPct: Double? = nil
+        wowDeltaPct: Double? = nil,
+        issueCloseStreak: Int? = nil
     ) {
         self.issuesTouched = issuesTouched
         self.byProject = byProject
         self.byStatus = byStatus
         self.completionDurationStats = completionDurationStats
         self.wowDeltaPct = wowDeltaPct
+        self.issueCloseStreak = issueCloseStreak
     }
 
     public static let empty = LinearActivityBreakdown(
@@ -36,7 +44,8 @@ public struct LinearActivityBreakdown: Sendable, Hashable {
         byProject: [],
         byStatus: [],
         completionDurationStats: nil,
-        wowDeltaPct: nil
+        wowDeltaPct: nil,
+        issueCloseStreak: nil
     )
 }
 

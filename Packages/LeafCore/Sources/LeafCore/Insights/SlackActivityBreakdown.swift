@@ -27,6 +27,11 @@ public struct SlackActivityBreakdown: Sendable, Hashable {
     public let huddleSessionStats: LatencyStats?
     /// Phase 4.6.C.1 — reserved под per-provider WoW в 4.7+. Сейчас всегда nil.
     public let wowDeltaPct: Double?
+    /// Phase 4.6.C.3 — consecutive days с ≥1 huddle begin-transition
+    /// (event_kind='huddle_state_change' AND state='in_a_huddle'),
+    /// ending today/yesterday. 60-day lookback, independent of `period`.
+    /// `nil` ↔ streak=0.
+    public let huddleParticipationStreak: Int?
 
     public init(
         messagesCount: Int,
@@ -34,7 +39,8 @@ public struct SlackActivityBreakdown: Sendable, Hashable {
         byChannel: [ChannelCountEntry],
         reactionsReceived: Int? = nil,
         huddleSessionStats: LatencyStats? = nil,
-        wowDeltaPct: Double? = nil
+        wowDeltaPct: Double? = nil,
+        huddleParticipationStreak: Int? = nil
     ) {
         self.messagesCount = messagesCount
         self.huddleMinutes = huddleMinutes
@@ -42,6 +48,7 @@ public struct SlackActivityBreakdown: Sendable, Hashable {
         self.reactionsReceived = reactionsReceived
         self.huddleSessionStats = huddleSessionStats
         self.wowDeltaPct = wowDeltaPct
+        self.huddleParticipationStreak = huddleParticipationStreak
     }
 
     public static let empty = SlackActivityBreakdown(
@@ -50,7 +57,8 @@ public struct SlackActivityBreakdown: Sendable, Hashable {
         byChannel: [],
         reactionsReceived: nil,
         huddleSessionStats: nil,
-        wowDeltaPct: nil
+        wowDeltaPct: nil,
+        huddleParticipationStreak: nil
     )
 
     public struct ChannelCountEntry: Sendable, Hashable, Codable {

@@ -20,6 +20,10 @@ public struct GitHubActivityBreakdown: Sendable, Hashable {
     public let reviewDelayStats: LatencyStats?
     /// Phase 4.6.C.1 — reserved под per-provider WoW в 4.7+. Сейчас всегда nil.
     public let wowDeltaPct: Double?
+    /// Phase 4.6.C.3 — consecutive days с ≥1 GitHub PushEvent
+    /// (event_kind='commit_pushed'), ending today/yesterday. 60-day lookback,
+    /// independent of `period` parameter. `nil` ↔ streak=0.
+    public let commitStreak: Int?
 
     public init(
         eventsCount: Int,
@@ -27,7 +31,8 @@ public struct GitHubActivityBreakdown: Sendable, Hashable {
         byEventKind: [EventKindCountEntry],
         prCycleStats: LatencyStats? = nil,
         reviewDelayStats: LatencyStats? = nil,
-        wowDeltaPct: Double? = nil
+        wowDeltaPct: Double? = nil,
+        commitStreak: Int? = nil
     ) {
         self.eventsCount = eventsCount
         self.byRepo = byRepo
@@ -35,6 +40,7 @@ public struct GitHubActivityBreakdown: Sendable, Hashable {
         self.prCycleStats = prCycleStats
         self.reviewDelayStats = reviewDelayStats
         self.wowDeltaPct = wowDeltaPct
+        self.commitStreak = commitStreak
     }
 
     public static let empty = GitHubActivityBreakdown(
@@ -43,7 +49,8 @@ public struct GitHubActivityBreakdown: Sendable, Hashable {
         byEventKind: [],
         prCycleStats: nil,
         reviewDelayStats: nil,
-        wowDeltaPct: nil
+        wowDeltaPct: nil,
+        commitStreak: nil
     )
 }
 
