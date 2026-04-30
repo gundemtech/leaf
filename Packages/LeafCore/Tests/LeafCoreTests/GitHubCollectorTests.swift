@@ -160,6 +160,66 @@ final class GitHubCollectorTests: XCTestCase {
         XCTAssertEqual(logins, ["octocat"])
     }
 
+    /// Phase 4.6.A.1 — latency-fields из snapshot'а должны доезжать до events.payload.
+    /// Snapshot с `cycleSeconds=10800` → payload содержит ключ `cycle_seconds = "10800"`;
+    /// snapshot без latency → ключ отсутствует (не пустая строка).
+    func testTickEncodesCycleAndReviewDelayInPayload() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockGitHubAPIProvider()
+        let baseMs: Int64 = 1_700_000_000_000
+        await provider.setBatch(GitHubEventBatch(
+            events: [
+                GitHubEventSnapshot(
+                    eventID: "merged-1", eventKind: "pr_merged", repoFullName: "octocat/leaf",
+                    title: "feat: x", number: 42, sha: nil, branch: nil,
+                    createdAtMs: baseMs,
+                    cycleSeconds: 10_800, reviewDelaySeconds: nil
+                ),
+                GitHubEventSnapshot(
+                    eventID: "review-1", eventKind: "review_submitted", repoFullName: "octocat/leaf",
+                    title: "feat: y", number: 50, sha: nil, branch: nil,
+                    createdAtMs: baseMs + 1000,
+                    cycleSeconds: nil, reviewDelaySeconds: 600
+                ),
+                GitHubEventSnapshot(
+                    eventID: "push-1", eventKind: "commit_pushed", repoFullName: "octocat/leaf",
+                    title: "wip", number: nil, sha: "abc", branch: "main",
+                    createdAtMs: baseMs + 2000
+                    // cycleSeconds / reviewDelaySeconds — defaults nil
+                )
+            ],
+            cursorMs: baseMs + 2000
+        ))
+
+        let refresher = GitHubTokenRefresher(database: db, clientID: "test-client")
+        let collector = GitHubCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7,
+            logger: logger
+        )
+        let result = await collector.performTick()
+        XCTAssertEqual(result.eventsProcessed, 3)
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1000) / 1000),
+            end: Date(timeIntervalSince1970: TimeInterval(baseMs + 5000) / 1000)
+        ))
+
+        let merged = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "pr_merged" })
+        XCTAssertEqual(merged.payload["cycle_seconds"], "10800")
+        XCTAssertNil(merged.payload["review_delay_seconds"], "non-review event не должен иметь review_delay_seconds key")
+
+        let review = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "review_submitted" })
+        XCTAssertEqual(review.payload["review_delay_seconds"], "600")
+        XCTAssertNil(review.payload["cycle_seconds"], "review event не несёт cycle key")
+
+        let push = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "commit_pushed" })
+        XCTAssertNil(push.payload["cycle_seconds"], "snapshot.cycleSeconds=nil → key отсутствует, не \"\"")
+        XCTAssertNil(push.payload["review_delay_seconds"])
+    }
+
     /// Второй tick передаёт сохранённый cursor как `since`.
     func testSecondTickPassesStoredCursor() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)

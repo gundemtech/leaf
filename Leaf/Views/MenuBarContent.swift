@@ -361,7 +361,33 @@ struct MenuBarContent: View {
                 .joined(separator: ", ")
             lines.append("By kind: \(kinds)")
         }
+        // Phase 4.6.A.1 — latency rows. Hidden если samples=0 (LatencyStats == nil).
+        if let cycle = snapshot.githubPRCycleStats {
+            lines.append("PRs merged: \(cycle.sampleCount) · avg cycle: \(formatLatency(cycle.avgSeconds))")
+        }
+        if let delay = snapshot.githubReviewDelayStats {
+            lines.append("Reviews: \(delay.sampleCount) · avg wait: \(formatLatency(delay.avgSeconds))")
+        }
         return lines.joined(separator: "\n")
+    }
+
+    /// Phase 4.6.A.1 — compact latency rendering. <60s → "Xs", <60min → "Xm",
+    /// <24h → "Xh Ym", иначе "Xd Yh". Округление вниз для часов/дней — UI ставит
+    /// читаемость выше точности (median ≈ 7200s → "2h" vs "2h 0m").
+    private func formatLatency(_ seconds: Int) -> String {
+        if seconds < 60 { return "\(seconds)s" }
+        if seconds < 3600 {
+            let m = seconds / 60
+            return "\(m)m"
+        }
+        if seconds < 86_400 {
+            let h = seconds / 3600
+            let m = (seconds % 3600) / 60
+            return m > 0 ? "\(h)h \(m)m" : "\(h)h"
+        }
+        let d = seconds / 86_400
+        let h = (seconds % 86_400) / 3600
+        return h > 0 ? "\(d)d \(h)h" : "\(d)d"
     }
 
     /// Phase 4.4 — Slack activity line. Если ни сообщений, ни huddle минут нет

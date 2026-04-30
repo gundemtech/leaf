@@ -145,6 +145,8 @@ final class InsightsReader {
                             githubEventsCount: github.eventsCount,
                             githubByRepo: github.byRepo,
                             githubByEventKind: github.byEventKind,
+                            githubPRCycleStats: github.prCycleStats,
+                            githubReviewDelayStats: github.reviewDelayStats,
                             slackMessagesCount: slack.messagesCount,
                             slackHuddleMinutes: slack.huddleMinutes,
                             slackByChannel: slack.byChannel

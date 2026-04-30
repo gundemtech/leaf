@@ -165,19 +165,28 @@ public actor GitHubCollector {
     }
 
     private static func makeEvent(snapshot: GitHubEventSnapshot) -> RawEvent {
-        RawEvent(
+        var payload: [String: String] = [
+            "source": "github",
+            "event_kind": snapshot.eventKind,
+            "repo": snapshot.repoFullName,
+            "title": snapshot.title,
+            "number": snapshot.number.map(String.init) ?? "",
+            "sha": snapshot.sha ?? "",
+            "branch": snapshot.branch ?? ""
+        ]
+        // Phase 4.6.A.1 — latency fields. Только non-nil → ключ присутствует;
+        // отсутствие ключа в payload отличает "не знаем" от "0 секунд".
+        if let cycle = snapshot.cycleSeconds {
+            payload["cycle_seconds"] = String(cycle)
+        }
+        if let delay = snapshot.reviewDelaySeconds {
+            payload["review_delay_seconds"] = String(delay)
+        }
+        return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(snapshot.createdAtMs) / 1000.0),
             signalType: .action,
             bundleID: nil,
-            payload: [
-                "source": "github",
-                "event_kind": snapshot.eventKind,
-                "repo": snapshot.repoFullName,
-                "title": snapshot.title,
-                "number": snapshot.number.map(String.init) ?? "",
-                "sha": snapshot.sha ?? "",
-                "branch": snapshot.branch ?? ""
-            ]
+            payload: payload
         )
     }
 

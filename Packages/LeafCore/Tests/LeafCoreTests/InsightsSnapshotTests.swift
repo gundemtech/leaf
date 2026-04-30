@@ -197,4 +197,51 @@ final class InsightsSnapshotTests: XCTestCase {
         XCTAssertFalse(snapshot.isEmpty)
         XCTAssertEqual(snapshot.slackHuddleMinutes, 30)
     }
+
+    // MARK: - Phase 4.6.A.1 GitHub latency
+
+    func testGithubLatencyStatsRoundTripWhenPresent() {
+        let cycle = LatencyStats(medianSeconds: 1800, avgSeconds: 2000, maxSeconds: 3600, sampleCount: 3)
+        let delay = LatencyStats(medianSeconds: 900, avgSeconds: 900, maxSeconds: 1200, sampleCount: 2)
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500,
+            githubEventsCount: 5,
+            githubByRepo: [RepoCountEntry(repo: "octocat/leaf", count: 5)],
+            githubByEventKind: [EventKindCountEntry(eventKind: "pr_merged", count: 3)],
+            githubPRCycleStats: cycle,
+            githubReviewDelayStats: delay
+        )
+        XCTAssertFalse(snapshot.isEmpty)
+        XCTAssertEqual(snapshot.githubPRCycleStats?.medianSeconds, 1800)
+        XCTAssertEqual(snapshot.githubReviewDelayStats?.sampleCount, 2)
+    }
+
+    func testGithubLatencyStatsNilByDefault() {
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500,
+            githubEventsCount: 0
+        )
+        XCTAssertNil(snapshot.githubPRCycleStats)
+        XCTAssertNil(snapshot.githubReviewDelayStats)
+        XCTAssertTrue(snapshot.isEmpty, "no events + nil latency → empty")
+    }
+
+    func testLatencyStatsFromSamplesEvenCount() {
+        // sorted: 100, 200, 300, 400 → median = (200+300)/2 = 250, avg=250, max=400.
+        let stats = try? XCTUnwrap(LatencyStats.from(samples: [400, 100, 300, 200]))
+        XCTAssertEqual(stats?.sampleCount, 4)
+        XCTAssertEqual(stats?.medianSeconds, 250)
+        XCTAssertEqual(stats?.avgSeconds, 250)
+        XCTAssertEqual(stats?.maxSeconds, 400)
+    }
+
+    func testLatencyStatsFromEmptySamplesReturnsNil() {
+        XCTAssertNil(LatencyStats.from(samples: []))
+    }
 }

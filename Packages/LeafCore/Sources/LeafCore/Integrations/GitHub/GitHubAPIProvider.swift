@@ -62,6 +62,12 @@ public struct GitHubEventSnapshot: Sendable, Hashable {
     /// Epoch ms — становится cursor для следующего polling tick'а (max `createdAtMs`
     /// идёт в `GitHubEventBatch.cursorMs` → `collector_offsets.last_modified_ms`).
     public let createdAtMs: Int64
+    /// Phase 4.6.A.1 — для `pr_merged`: `closed_at - created_at` в секундах. `nil` для
+    /// других eventKind'ов или если timestamps отсутствуют в payload (clock skew clamped к 0).
+    public let cycleSeconds: Int?
+    /// Phase 4.6.A.1 — для `review_submitted`: `review.submitted_at - pull_request.created_at`
+    /// в секундах. `nil` для других eventKind'ов или missing timestamps.
+    public let reviewDelaySeconds: Int?
 
     public init(
         eventID: String,
@@ -71,7 +77,9 @@ public struct GitHubEventSnapshot: Sendable, Hashable {
         number: Int?,
         sha: String?,
         branch: String?,
-        createdAtMs: Int64
+        createdAtMs: Int64,
+        cycleSeconds: Int? = nil,
+        reviewDelaySeconds: Int? = nil
     ) {
         self.eventID = eventID
         self.eventKind = eventKind
@@ -81,6 +89,8 @@ public struct GitHubEventSnapshot: Sendable, Hashable {
         self.sha = sha
         self.branch = branch
         self.createdAtMs = createdAtMs
+        self.cycleSeconds = cycleSeconds
+        self.reviewDelaySeconds = reviewDelaySeconds
     }
 }
 

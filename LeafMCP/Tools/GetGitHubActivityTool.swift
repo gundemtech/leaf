@@ -11,6 +11,9 @@ import LeafMCPProtocol
 ///   - `eventsCount` — total events с `signal_type='action'` AND `payload.source='github'`
 ///   - `byRepo[]` — `{repo, count}`, top-5 by count DESC
 ///   - `byEventKind[]` — `{eventKind, count}`, top-5 by count DESC
+///   - `prCycleStats` (Phase 4.6.A.1, additive optional) — `{medianSeconds, avgSeconds,
+///     maxSeconds, sampleCount}` для `pr_merged` events; отсутствует если sampleCount=0
+///   - `reviewDelayStats` (Phase 4.6.A.1, additive optional) — то же для `review_submitted`
 ///
 /// Metadata only — PR/issue bodies, comments, file diffs никогда не покидают
 /// устройство (ADR-010 won't-list, enforced на parser-level в ProdGitHubAPIProvider).
@@ -67,7 +70,7 @@ struct GetGitHubActivityTool: ToolExecutor {
         let breakdown = try insights.githubActivity(period: interval)
 
         let iso = ISO8601DateFormatter()
-        let payload: [String: Any] = [
+        var payload: [String: Any] = [
             "period": period.rawValue,
             "from": iso.string(from: interval.start),
             "to": iso.string(from: interval.end),
@@ -79,6 +82,22 @@ struct GetGitHubActivityTool: ToolExecutor {
                 ["eventKind": entry.eventKind, "count": entry.count]
             }
         ]
+        if let cycle = breakdown.prCycleStats {
+            payload["prCycleStats"] = [
+                "medianSeconds": cycle.medianSeconds,
+                "avgSeconds": cycle.avgSeconds,
+                "maxSeconds": cycle.maxSeconds,
+                "sampleCount": cycle.sampleCount
+            ]
+        }
+        if let delay = breakdown.reviewDelayStats {
+            payload["reviewDelayStats"] = [
+                "medianSeconds": delay.medianSeconds,
+                "avgSeconds": delay.avgSeconds,
+                "maxSeconds": delay.maxSeconds,
+                "sampleCount": delay.sampleCount
+            ]
+        }
         return try ToolResponseBuilder.versionedJSONResult(payload)
     }
 }

@@ -52,6 +52,10 @@ public struct InsightsSnapshot: Sendable, Hashable {
     public let githubByRepo: [RepoCountEntry]
     /// Phase 4.3 — top-5 event_kinds by count, descending.
     public let githubByEventKind: [EventKindCountEntry]
+    /// Phase 4.6.A.1 — `pr_merged` cycle time distribution. `nil` если samples=0.
+    public let githubPRCycleStats: LatencyStats?
+    /// Phase 4.6.A.1 — `review_submitted` review delay distribution. `nil` если samples=0.
+    public let githubReviewDelayStats: LatencyStats?
     /// Phase 4.4 — total Slack messages authored за `period` (sum of per-channel counts).
     public let slackMessagesCount: Int
     /// Phase 4.4 — total minutes юзер провёл в huddle'е за `period`, walk'ом
@@ -79,6 +83,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         githubEventsCount: Int,
         githubByRepo: [RepoCountEntry],
         githubByEventKind: [EventKindCountEntry],
+        githubPRCycleStats: LatencyStats?,
+        githubReviewDelayStats: LatencyStats?,
         slackMessagesCount: Int,
         slackHuddleMinutes: Int,
         slackByChannel: [SlackActivityBreakdown.ChannelCountEntry]
@@ -100,6 +106,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.githubEventsCount = githubEventsCount
         self.githubByRepo = githubByRepo
         self.githubByEventKind = githubByEventKind
+        self.githubPRCycleStats = githubPRCycleStats
+        self.githubReviewDelayStats = githubReviewDelayStats
         self.slackMessagesCount = slackMessagesCount
         self.slackHuddleMinutes = slackHuddleMinutes
         self.slackByChannel = slackByChannel
@@ -128,6 +136,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         githubEventsCount: Int = 0,
         githubByRepo: [RepoCountEntry] = [],
         githubByEventKind: [EventKindCountEntry] = [],
+        githubPRCycleStats: LatencyStats? = nil,
+        githubReviewDelayStats: LatencyStats? = nil,
         slackMessagesCount: Int = 0,
         slackHuddleMinutes: Int = 0,
         slackByChannel: [SlackActivityBreakdown.ChannelCountEntry] = []
@@ -150,6 +160,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
             githubEventsCount: githubEventsCount,
             githubByRepo: githubByRepo,
             githubByEventKind: githubByEventKind,
+            githubPRCycleStats: githubPRCycleStats,
+            githubReviewDelayStats: githubReviewDelayStats,
             slackMessagesCount: slackMessagesCount,
             slackHuddleMinutes: slackHuddleMinutes,
             slackByChannel: slackByChannel
