@@ -13,24 +13,30 @@ public struct LinearActivityBreakdown: Sendable, Hashable {
     /// issues completed в окне. `nil` → нет samples (никто не завершён,
     /// либо timestamps отсутствовали).
     public let completionDurationStats: LatencyStats?
+    /// Phase 4.6.C.1 — reserved под per-provider WoW в 4.7+. Сейчас всегда nil
+    /// (global `weekOverWeekDelta` surface'ится отдельно).
+    public let wowDeltaPct: Double?
 
     public init(
         issuesTouched: Int,
         byProject: [ProjectCountEntry],
         byStatus: [StatusCountEntry],
-        completionDurationStats: LatencyStats? = nil
+        completionDurationStats: LatencyStats? = nil,
+        wowDeltaPct: Double? = nil
     ) {
         self.issuesTouched = issuesTouched
         self.byProject = byProject
         self.byStatus = byStatus
         self.completionDurationStats = completionDurationStats
+        self.wowDeltaPct = wowDeltaPct
     }
 
     public static let empty = LinearActivityBreakdown(
         issuesTouched: 0,
         byProject: [],
         byStatus: [],
-        completionDurationStats: nil
+        completionDurationStats: nil,
+        wowDeltaPct: nil
     )
 }
 

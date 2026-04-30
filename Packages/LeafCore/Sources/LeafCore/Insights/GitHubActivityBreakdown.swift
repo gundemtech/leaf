@@ -18,19 +18,23 @@ public struct GitHubActivityBreakdown: Sendable, Hashable {
     /// (seconds) over `review_submitted` events. Семантика: "сколько чужой PR
     /// ждал моего review". `nil` → нет samples.
     public let reviewDelayStats: LatencyStats?
+    /// Phase 4.6.C.1 — reserved под per-provider WoW в 4.7+. Сейчас всегда nil.
+    public let wowDeltaPct: Double?
 
     public init(
         eventsCount: Int,
         byRepo: [RepoCountEntry],
         byEventKind: [EventKindCountEntry],
         prCycleStats: LatencyStats? = nil,
-        reviewDelayStats: LatencyStats? = nil
+        reviewDelayStats: LatencyStats? = nil,
+        wowDeltaPct: Double? = nil
     ) {
         self.eventsCount = eventsCount
         self.byRepo = byRepo
         self.byEventKind = byEventKind
         self.prCycleStats = prCycleStats
         self.reviewDelayStats = reviewDelayStats
+        self.wowDeltaPct = wowDeltaPct
     }
 
     public static let empty = GitHubActivityBreakdown(
@@ -38,7 +42,8 @@ public struct GitHubActivityBreakdown: Sendable, Hashable {
         byRepo: [],
         byEventKind: [],
         prCycleStats: nil,
-        reviewDelayStats: nil
+        reviewDelayStats: nil,
+        wowDeltaPct: nil
     )
 }
 

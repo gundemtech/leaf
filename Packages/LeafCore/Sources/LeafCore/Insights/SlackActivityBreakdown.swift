@@ -25,19 +25,23 @@ public struct SlackActivityBreakdown: Sendable, Hashable {
     /// границам periodа). `nil` ↔ samples=0 (не было пар transitions в окне).
     /// Отличает "одна 45m huddle" от "пять 9m huddles" (тот же huddleMinutes total).
     public let huddleSessionStats: LatencyStats?
+    /// Phase 4.6.C.1 — reserved под per-provider WoW в 4.7+. Сейчас всегда nil.
+    public let wowDeltaPct: Double?
 
     public init(
         messagesCount: Int,
         huddleMinutes: Int,
         byChannel: [ChannelCountEntry],
         reactionsReceived: Int? = nil,
-        huddleSessionStats: LatencyStats? = nil
+        huddleSessionStats: LatencyStats? = nil,
+        wowDeltaPct: Double? = nil
     ) {
         self.messagesCount = messagesCount
         self.huddleMinutes = huddleMinutes
         self.byChannel = byChannel
         self.reactionsReceived = reactionsReceived
         self.huddleSessionStats = huddleSessionStats
+        self.wowDeltaPct = wowDeltaPct
     }
 
     public static let empty = SlackActivityBreakdown(
@@ -45,7 +49,8 @@ public struct SlackActivityBreakdown: Sendable, Hashable {
         huddleMinutes: 0,
         byChannel: [],
         reactionsReceived: nil,
-        huddleSessionStats: nil
+        huddleSessionStats: nil,
+        wowDeltaPct: nil
     )
 
     public struct ChannelCountEntry: Sendable, Hashable, Codable {

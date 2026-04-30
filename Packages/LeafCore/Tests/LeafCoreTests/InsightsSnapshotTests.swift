@@ -312,4 +312,63 @@ final class InsightsSnapshotTests: XCTestCase {
         XCTAssertNil(snapshot.slackHuddleSessionStats, "default nil")
         XCTAssertFalse(snapshot.isEmpty, "messages > 0 → не empty")
     }
+
+    // MARK: - Phase 4.6.C.1 — wowDeltaPct в breakdown structs
+
+    func testLinearBreakdownWowDeltaPctDefaultNil() {
+        let bd = LinearActivityBreakdown(
+            issuesTouched: 3,
+            byProject: [],
+            byStatus: []
+        )
+        XCTAssertNil(bd.wowDeltaPct, "default nil — backwards compat")
+    }
+
+    func testLinearBreakdownWowDeltaPctExplicit() {
+        let bd = LinearActivityBreakdown(
+            issuesTouched: 3,
+            byProject: [],
+            byStatus: [],
+            wowDeltaPct: 0.12
+        )
+        XCTAssertEqual(bd.wowDeltaPct, 0.12)
+    }
+
+    func testGithubBreakdownWowDeltaPctDefaultNil() {
+        let bd = GitHubActivityBreakdown(
+            eventsCount: 5,
+            byRepo: [],
+            byEventKind: []
+        )
+        XCTAssertNil(bd.wowDeltaPct)
+    }
+
+    func testGithubBreakdownWowDeltaPctExplicit() {
+        let bd = GitHubActivityBreakdown(
+            eventsCount: 5,
+            byRepo: [],
+            byEventKind: [],
+            wowDeltaPct: -0.05
+        )
+        XCTAssertEqual(bd.wowDeltaPct, -0.05, "negative WoW сохраняется")
+    }
+
+    func testSlackBreakdownWowDeltaPctDefaultNil() {
+        let bd = SlackActivityBreakdown(
+            messagesCount: 10,
+            huddleMinutes: 0,
+            byChannel: []
+        )
+        XCTAssertNil(bd.wowDeltaPct)
+    }
+
+    func testSlackBreakdownWowDeltaPctExplicit() {
+        let bd = SlackActivityBreakdown(
+            messagesCount: 10,
+            huddleMinutes: 0,
+            byChannel: [],
+            wowDeltaPct: 0.0
+        )
+        XCTAssertEqual(bd.wowDeltaPct, 0.0, "zero WoW (без change) — legitimate value, не nil")
+    }
 }
