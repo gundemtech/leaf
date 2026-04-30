@@ -75,6 +75,10 @@ public struct InsightsSnapshot: Sendable, Hashable {
     /// samples=0 (не было пар transitions в окне). Отличает "одна 45m" от
     /// "пять 9m" сессий — current `slackHuddleMinutes` total это растворяет.
     public let slackHuddleSessionStats: LatencyStats?
+    /// Phase 4.6.C.2 — самое длинное окно в `period` без events из Linear/
+    /// GitHub/Slack. Proxy для "deep async work session" — integration silence,
+    /// не macOS-level idle. `nil` ↔ period degenerate ИЛИ impl не поддерживает.
+    public let longestUninterruptedWindow: UninterruptedWindow?
 
     public init(
         topApps: [AppTimeEntry],
@@ -101,7 +105,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         slackHuddleMinutes: Int,
         slackByChannel: [SlackActivityBreakdown.ChannelCountEntry],
         slackReactionsReceived: Int = 0,
-        slackHuddleSessionStats: LatencyStats? = nil
+        slackHuddleSessionStats: LatencyStats? = nil,
+        longestUninterruptedWindow: UninterruptedWindow? = nil
     ) {
         self.topApps = topApps
         self.sessions = sessions
@@ -128,6 +133,7 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.slackByChannel = slackByChannel
         self.slackReactionsReceived = slackReactionsReceived
         self.slackHuddleSessionStats = slackHuddleSessionStats
+        self.longestUninterruptedWindow = longestUninterruptedWindow
     }
 
     /// Convenience init — рассчитывает `deepSessionsCount` по threshold'у.
@@ -160,7 +166,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         slackHuddleMinutes: Int = 0,
         slackByChannel: [SlackActivityBreakdown.ChannelCountEntry] = [],
         slackReactionsReceived: Int = 0,
-        slackHuddleSessionStats: LatencyStats? = nil
+        slackHuddleSessionStats: LatencyStats? = nil,
+        longestUninterruptedWindow: UninterruptedWindow? = nil
     ) {
         self.init(
             topApps: topApps,
@@ -187,7 +194,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
             slackHuddleMinutes: slackHuddleMinutes,
             slackByChannel: slackByChannel,
             slackReactionsReceived: slackReactionsReceived,
-            slackHuddleSessionStats: slackHuddleSessionStats
+            slackHuddleSessionStats: slackHuddleSessionStats,
+            longestUninterruptedWindow: longestUninterruptedWindow
         )
     }
 

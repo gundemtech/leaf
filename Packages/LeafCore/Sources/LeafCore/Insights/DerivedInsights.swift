@@ -59,6 +59,15 @@ public protocol DerivedInsights: Sendable {
     func weekOverWeekDelta() throws -> Double?
     func activeDaysInRow() throws -> Int
 
+    /// Phase 4.6.C.2 — самое длинное окно в `period` без events из Layer B
+    /// integrations (Linear/GitHub/Slack). Proxy для "deep async work session" —
+    /// время непрерывной работы без notification-interruption из tracked
+    /// интеграций. Period bounds — anchors: gap может начинаться в `period.start`
+    /// (первый event сильно позже) и заканчиваться в `period.end` (последний event
+    /// сильно раньше). Returns nil если period degenerate (zero/negative length)
+    /// ИЛИ если impl не поддерживает (default extension nil — graceful для stubs).
+    func longestUninterruptedWindow(period: DateInterval) throws -> UninterruptedWindow?
+
     // Activity lookup (Phase 2.1).
     /// Last attention event, опционально отфильтрованный по `bundleID`.
     /// Возвращает `nil` если matching events нет (пустая БД, неизвестный bundle).
@@ -70,6 +79,9 @@ public protocol DerivedInsights: Sendable {
 /// override получают `.empty` (opt-in feature, no-data ≠ error).
 public extension DerivedInsights {
     func slackActivity(period: DateInterval) throws -> SlackActivityBreakdown { .empty }
+
+    /// Phase 4.6.C.2 — default nil чтобы StubInsights / iOS-future free от обновления.
+    func longestUninterruptedWindow(period: DateInterval) throws -> UninterruptedWindow? { nil }
 }
 
 /// Phase 1.1 / CI fallback. Все методы бросают .notImplemented.

@@ -371,4 +371,44 @@ final class InsightsSnapshotTests: XCTestCase {
         )
         XCTAssertEqual(bd.wowDeltaPct, 0.0, "zero WoW (без change) — legitimate value, не nil")
     }
+
+    // MARK: - Phase 4.6.C.2 — longestUninterruptedWindow
+
+    func testSnapshotLongestUninterruptedWindowDefaultNil() {
+        XCTAssertNil(emptySnapshot().longestUninterruptedWindow,
+            "convenience init без аргумента → default nil (backwards compat)")
+    }
+
+    func testSnapshotLongestUninterruptedWindowExplicit() {
+        let win = UninterruptedWindow(
+            start: now,
+            end: now.addingTimeInterval(9000),
+            durationSeconds: 9000,
+            sourcesActiveInPeriod: ["github", "slack"]
+        )
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500,
+            longestUninterruptedWindow: win
+        )
+        XCTAssertEqual(snapshot.longestUninterruptedWindow?.durationSeconds, 9000)
+        XCTAssertEqual(snapshot.longestUninterruptedWindow?.sourcesActiveInPeriod,
+                       ["github", "slack"])
+    }
+
+    /// Default extension impl возвращает nil — StubInsights не override'ит,
+    /// поэтому iOS-future / CI и тесты с stub'ом работают без ошибок.
+    func testStubInsightsLongestUninterruptedWindowDefaultsToNil() throws {
+        let dbURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("stub-insights-window-\(UUID().uuidString).sqlite")
+        defer { try? FileManager.default.removeItem(at: dbURL) }
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: nil)
+        let stub = StubInsights(database: db)
+        let win = try stub.longestUninterruptedWindow(
+            period: DateInterval(start: now, end: now.addingTimeInterval(3600))
+        )
+        XCTAssertNil(win, "default extension impl — nil")
+    }
 }
