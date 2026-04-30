@@ -213,7 +213,15 @@ step_dmg() {
     rm -rf "$RELEASES/dmg-source"
     mkdir -p "$RELEASES/dmg-source"
     cp -R "$APP" "$RELEASES/dmg-source/"
-    create-dmg --volname "Leaf $VERSION" "$DMG" "$RELEASES/dmg-source" >/dev/null 2>&1 || true
+    # Standard drag-to-Applications layout: app-icon left, Applications symlink right.
+    # 540×380 window, 128 px icons, vertically centered around y=190.
+    create-dmg \
+        --volname "Leaf $VERSION" \
+        --window-size 540 380 \
+        --icon-size 128 \
+        --icon "Leaf.app" 140 190 \
+        --app-drop-link 400 190 \
+        "$DMG" "$RELEASES/dmg-source" >/dev/null 2>&1 || true
     rm -rf "$RELEASES/dmg-source"
     [[ -f "$DMG" ]] || { err "create-dmg не создал $DMG"; exit 1; }
     mark_done dmg
