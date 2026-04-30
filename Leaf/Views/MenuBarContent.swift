@@ -160,6 +160,7 @@ struct MenuBarContent: View {
                 sessionsLines(snapshot: snapshot)
                 trendsLines(snapshot: snapshot)
                 activityLine(snapshot: snapshot)
+                deepWindowLine(snapshot: snapshot)
                 aiLine(snapshot: snapshot)
                 linearLine(snapshot: snapshot)
                 githubLine(snapshot: snapshot)
@@ -259,6 +260,35 @@ struct MenuBarContent: View {
         } else {
             return "no change vs last week"
         }
+    }
+
+    /// Phase 4.6.C.2 — самый длинный gap без Linear/GitHub/Slack events за today.
+    /// Threshold ≥ 30min — короче считается noise, не signal. Tooltip показывает
+    /// time range и какие интеграции реально звонили (sourcesActive могут быть
+    /// пустыми если за день вообще ничего не пришло — окно = весь period).
+    @ViewBuilder
+    private func deepWindowLine(snapshot: InsightsSnapshot) -> some View {
+        if let win = snapshot.longestUninterruptedWindow,
+           win.durationSeconds >= 30 * 60 {
+            Text("Deep window: \(formatLatency(win.durationSeconds))")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .help(deepWindowTooltip(window: win))
+        } else {
+            EmptyView()
+        }
+    }
+
+    private func deepWindowTooltip(window: UninterruptedWindow) -> String {
+        let timeFmt = DateFormatter()
+        timeFmt.dateFormat = "HH:mm"
+        let from = timeFmt.string(from: window.start)
+        let to = timeFmt.string(from: window.end)
+        let activeSources = window.sourcesActiveInPeriod.sorted().joined(separator: " · ")
+        let sourcesLine = window.sourcesActiveInPeriod.isEmpty
+            ? "No Layer B activity today."
+            : "Active sources today: \(activeSources)."
+        return "Longest gap with no Linear/GitHub/Slack activity today (\(from)–\(to)). \(sourcesLine)"
     }
 
     /// Phase 2.3 — AI collaboration row. Phase 2.5 — 3-state display:

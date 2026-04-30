@@ -127,6 +127,11 @@ final class InsightsReader {
                         // на не-подключённом Slack возвращает .empty (Stub).
                         let slack = try insights.slackActivity(period: today)
                         try Task.checkCancellation()
+                        // Phase 4.6.C.2 — longest gap без Layer B events.
+                        // 13-я sequential query; default impl = nil (StubInsights),
+                        // поэтому popover просто не рендерит row.
+                        let uninterruptedWindow = try insights.longestUninterruptedWindow(period: today)
+                        try Task.checkCancellation()
                         let snapshot = InsightsSnapshot(
                             topApps: topApps,
                             sessions: sessions,
@@ -152,7 +157,8 @@ final class InsightsReader {
                             slackHuddleMinutes: slack.huddleMinutes,
                             slackByChannel: slack.byChannel,
                             slackReactionsReceived: slack.reactionsReceived ?? 0,
-                            slackHuddleSessionStats: slack.huddleSessionStats
+                            slackHuddleSessionStats: slack.huddleSessionStats,
+                            longestUninterruptedWindow: uninterruptedWindow
                         )
                         return .success((db, snapshot))
                     } catch {
