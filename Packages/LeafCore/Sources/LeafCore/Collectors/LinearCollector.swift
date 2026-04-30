@@ -199,19 +199,27 @@ public actor LinearCollector {
     }
 
     private static func makeEvent(issue: LinearIssueSnapshot) -> RawEvent {
-        RawEvent(
+        var payload: [String: String] = [
+            "source": "linear",
+            "event_kind": "issue_updated",
+            "issue_key": issue.issueKey,
+            "title": issue.title,
+            "status": issue.status,
+            "project": issue.project,
+            "team_key": issue.teamKey
+        ]
+        // Phase 4.6.A.2 — completion duration. Только non-nil → ключ присутствует;
+        // отсутствие ключа в payload отличает "не знаем" от "0 секунд" (instant
+        // close). SQL aggregator фильтрует `IS NOT NULL`, а не `> 0`, чтобы
+        // legitimate zero samples учитывались.
+        if let secs = issue.completionSeconds {
+            payload["completion_seconds"] = String(secs)
+        }
+        return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(issue.updatedAtMs) / 1000.0),
             signalType: .action,
             bundleID: nil,
-            payload: [
-                "source": "linear",
-                "event_kind": "issue_updated",
-                "issue_key": issue.issueKey,
-                "title": issue.title,
-                "status": issue.status,
-                "project": issue.project,
-                "team_key": issue.teamKey
-            ]
+            payload: payload
         )
     }
 

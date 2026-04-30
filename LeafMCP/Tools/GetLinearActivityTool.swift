@@ -11,6 +11,9 @@ import LeafMCPProtocol
 ///   - `issuesTouched` — distinct issue_key count
 ///   - `byProject[]` — `{project, count}`, top-5 by distinct issues
 ///   - `byStatus[]` — `{status, count}`, top-5 by distinct issues
+///   - `completionDurationStats` (Phase 4.6.A.2, additive optional) —
+///     `{medianSeconds, avgSeconds, maxSeconds, sampleCount}` для issues, completed
+///     в окне; отсутствует если sampleCount=0
 ///
 /// Metadata only — issue bodies / comment text никогда не покидают устройство
 /// (ADR-010 won't-list, enforced на parser-level в LinearGraphQLProvider).
@@ -33,7 +36,7 @@ struct GetLinearActivityTool: ToolExecutor {
         ]
         return ToolDefinition(
             name: "get_linear_activity",
-            description: "Return Linear issue activity (distinct issues touched, breakdown by project and status) for the given period. Metadata only — issue bodies and comments never leave the device.",
+            description: "Return Linear issue activity (distinct issues touched, breakdown by project and status, plus completion duration stats for issues closed in the period) for the given period. Metadata only — issue bodies and comments never leave the device.",
             inputSchema: AnyCodable(schema)
         )
     }()
@@ -67,7 +70,7 @@ struct GetLinearActivityTool: ToolExecutor {
         let breakdown = try insights.linearActivity(period: interval)
 
         let iso = ISO8601DateFormatter()
-        let payload: [String: Any] = [
+        var payload: [String: Any] = [
             "period": period.rawValue,
             "from": iso.string(from: interval.start),
             "to": iso.string(from: interval.end),
@@ -79,6 +82,14 @@ struct GetLinearActivityTool: ToolExecutor {
                 ["status": entry.status, "count": entry.count]
             }
         ]
+        if let dur = breakdown.completionDurationStats {
+            payload["completionDurationStats"] = [
+                "medianSeconds": dur.medianSeconds,
+                "avgSeconds": dur.avgSeconds,
+                "maxSeconds": dur.maxSeconds,
+                "sampleCount": dur.sampleCount
+            ]
+        }
         return try ToolResponseBuilder.versionedJSONResult(payload)
     }
 }

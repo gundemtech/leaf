@@ -46,6 +46,12 @@ public struct LinearIssueSnapshot: Sendable, Hashable {
     public let teamKey: String
     /// Epoch ms — становится cursor для следующего polling tick'а.
     public let updatedAtMs: Int64
+    /// Phase 4.6.A.2 — `completedAt - startedAt` в секундах для issues, completed
+    /// в polling window (provider dedup'ит чтобы не пересчитывать sample при
+    /// post-completion активности). `nil` если: (а) issue не completed,
+    /// (б) startedAt отсутствует, (в) completedAt раньше polling cursor'а.
+    /// Clock skew clamped к 0.
+    public let completionSeconds: Int?
 
     public init(
         issueKey: String,
@@ -53,7 +59,8 @@ public struct LinearIssueSnapshot: Sendable, Hashable {
         status: String,
         project: String,
         teamKey: String,
-        updatedAtMs: Int64
+        updatedAtMs: Int64,
+        completionSeconds: Int? = nil
     ) {
         self.issueKey = issueKey
         self.title = title
@@ -61,6 +68,7 @@ public struct LinearIssueSnapshot: Sendable, Hashable {
         self.project = project
         self.teamKey = teamKey
         self.updatedAtMs = updatedAtMs
+        self.completionSeconds = completionSeconds
     }
 }
 

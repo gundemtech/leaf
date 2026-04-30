@@ -46,6 +46,9 @@ public struct InsightsSnapshot: Sendable, Hashable {
     public let linearByProject: [ProjectCountEntry]
     /// Phase 4.2 — top-5 statuses by issue count, descending.
     public let linearByStatus: [StatusCountEntry]
+    /// Phase 4.6.A.2 — completion duration distribution для issues, completed
+    /// в `period`. `nil` если samples=0 (никто не закрыт за окно).
+    public let linearCompletionDurationStats: LatencyStats?
     /// Phase 4.3 — total GitHub events за `period` (commits / PRs / issues / reviews).
     public let githubEventsCount: Int
     /// Phase 4.3 — top-5 repos by event count, descending.
@@ -80,6 +83,7 @@ public struct InsightsSnapshot: Sendable, Hashable {
         linearIssuesTouched: Int,
         linearByProject: [ProjectCountEntry],
         linearByStatus: [StatusCountEntry],
+        linearCompletionDurationStats: LatencyStats?,
         githubEventsCount: Int,
         githubByRepo: [RepoCountEntry],
         githubByEventKind: [EventKindCountEntry],
@@ -103,6 +107,7 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.linearIssuesTouched = linearIssuesTouched
         self.linearByProject = linearByProject
         self.linearByStatus = linearByStatus
+        self.linearCompletionDurationStats = linearCompletionDurationStats
         self.githubEventsCount = githubEventsCount
         self.githubByRepo = githubByRepo
         self.githubByEventKind = githubByEventKind
@@ -133,6 +138,7 @@ public struct InsightsSnapshot: Sendable, Hashable {
         linearIssuesTouched: Int = 0,
         linearByProject: [ProjectCountEntry] = [],
         linearByStatus: [StatusCountEntry] = [],
+        linearCompletionDurationStats: LatencyStats? = nil,
         githubEventsCount: Int = 0,
         githubByRepo: [RepoCountEntry] = [],
         githubByEventKind: [EventKindCountEntry] = [],
@@ -157,6 +163,7 @@ public struct InsightsSnapshot: Sendable, Hashable {
             linearIssuesTouched: linearIssuesTouched,
             linearByProject: linearByProject,
             linearByStatus: linearByStatus,
+            linearCompletionDurationStats: linearCompletionDurationStats,
             githubEventsCount: githubEventsCount,
             githubByRepo: githubByRepo,
             githubByEventKind: githubByEventKind,

@@ -244,4 +244,36 @@ final class InsightsSnapshotTests: XCTestCase {
     func testLatencyStatsFromEmptySamplesReturnsNil() {
         XCTAssertNil(LatencyStats.from(samples: []))
     }
+
+    // MARK: - Phase 4.6.A.2 Linear completion duration
+
+    func testLinearCompletionStatsRoundTripWhenPresent() {
+        let dur = LatencyStats(medianSeconds: 7200, avgSeconds: 9000, maxSeconds: 14400, sampleCount: 3)
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500,
+            linearIssuesTouched: 3,
+            linearByProject: [ProjectCountEntry(project: "Leaf", count: 3)],
+            linearByStatus: [StatusCountEntry(status: "Done", count: 3)],
+            linearCompletionDurationStats: dur
+        )
+        XCTAssertFalse(snapshot.isEmpty)
+        XCTAssertEqual(snapshot.linearCompletionDurationStats?.medianSeconds, 7200)
+        XCTAssertEqual(snapshot.linearCompletionDurationStats?.sampleCount, 3)
+        XCTAssertEqual(snapshot.linearCompletionDurationStats?.maxSeconds, 14400)
+    }
+
+    func testLinearCompletionStatsNilByDefault() {
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500,
+            linearIssuesTouched: 0
+        )
+        XCTAssertNil(snapshot.linearCompletionDurationStats)
+        XCTAssertTrue(snapshot.isEmpty, "no issues + nil completion stats → empty")
+    }
 }

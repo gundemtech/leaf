@@ -321,6 +321,10 @@ struct MenuBarContent: View {
                 .joined(separator: ", ")
             lines.append("By status: \(statuses)")
         }
+        // Phase 4.6.A.2 — completion duration row. Hidden если samples=0.
+        if let dur = snapshot.linearCompletionDurationStats {
+            lines.append("Closed: \(dur.sampleCount) · avg duration: \(formatLatency(dur.avgSeconds))")
+        }
         return lines.joined(separator: "\n")
     }
 

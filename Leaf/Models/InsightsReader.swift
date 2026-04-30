@@ -142,6 +142,7 @@ final class InsightsReader {
                             linearIssuesTouched: linear.issuesTouched,
                             linearByProject: linear.byProject,
                             linearByStatus: linear.byStatus,
+                            linearCompletionDurationStats: linear.completionDurationStats,
                             githubEventsCount: github.eventsCount,
                             githubByRepo: github.byRepo,
                             githubByEventKind: github.byEventKind,

@@ -143,6 +143,65 @@ final class LinearCollectorTests: XCTestCase {
         }
     }
 
+    /// Phase 4.6.A.2 — `completionSeconds` из snapshot'а должно доезжать до events.payload.
+    /// Snapshot с positive value → ключ `completion_seconds` присутствует;
+    /// snapshot с nil → ключ ОТСУТСТВУЕТ (не "" — иначе SQL `IS NOT NULL` не отфильтрует);
+    /// snapshot с 0 (instant complete) → ключ `"0"` (legitimate sample, не nil).
+    func testTickEncodesCompletionSecondsInPayload() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockLinearGraphQLProvider()
+        let baseMs: Int64 = 1_700_000_000_000
+        await provider.setBatch(LinearIssueBatch(
+            issues: [
+                LinearIssueSnapshot(
+                    issueKey: "LEA-100", title: "completed", status: "Done",
+                    project: "Leaf", teamKey: "LEA",
+                    updatedAtMs: baseMs,
+                    completionSeconds: 7200
+                ),
+                LinearIssueSnapshot(
+                    issueKey: "LEA-101", title: "in flight", status: "In Progress",
+                    project: "Leaf", teamKey: "LEA",
+                    updatedAtMs: baseMs + 1000,
+                    completionSeconds: nil
+                ),
+                LinearIssueSnapshot(
+                    issueKey: "LEA-102", title: "instant", status: "Done",
+                    project: "Leaf", teamKey: "LEA",
+                    updatedAtMs: baseMs + 2000,
+                    completionSeconds: 0
+                )
+            ],
+            cursorMs: baseMs + 2000
+        ))
+
+        let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
+        let collector = LinearCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7,
+            logger: logger,
+            userDefaultsSuiteName: makeIsolatedSuiteName()
+        )
+        let result = await collector.performTick()
+        XCTAssertEqual(result.issuesProcessed, 3)
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1000) / 1000),
+            end: Date(timeIntervalSince1970: TimeInterval(baseMs + 5000) / 1000)
+        ))
+
+        let completed = try XCTUnwrap(stored.first { $0.payload["issue_key"] == "LEA-100" })
+        XCTAssertEqual(completed.payload["completion_seconds"], "7200")
+
+        let inFlight = try XCTUnwrap(stored.first { $0.payload["issue_key"] == "LEA-101" })
+        XCTAssertNil(inFlight.payload["completion_seconds"], "snapshot.completionSeconds=nil → key отсутствует, не \"\"")
+
+        let instant = try XCTUnwrap(stored.first { $0.payload["issue_key"] == "LEA-102" })
+        XCTAssertEqual(instant.payload["completion_seconds"], "0", "instant completion (0s) — legitimate sample, key present с value \"0\"")
+    }
+
     /// Второй tick передаёт сохранённый cursor как `since`.
     func testSecondTickPassesStoredCursor() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
