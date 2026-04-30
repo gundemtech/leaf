@@ -371,6 +371,11 @@ struct MenuBarContent: View {
         if let dur = snapshot.linearCompletionDurationStats {
             lines.append("Closed: \(dur.sampleCount) · avg duration: \(formatLatency(dur.avgSeconds))")
         }
+        // Phase 4.6.C.3 — issue close streak. Threshold ≥3 (UI noise filter;
+        // MCP отдаёт actual ≥1).
+        if snapshot.linearIssueCloseStreak >= 3 {
+            lines.append("Streak: 🔥 \(snapshot.linearIssueCloseStreak) days")
+        }
         return lines.joined(separator: "\n")
     }
 
@@ -417,6 +422,10 @@ struct MenuBarContent: View {
         }
         if let delay = snapshot.githubReviewDelayStats {
             lines.append("Reviews: \(delay.sampleCount) · avg wait: \(formatLatency(delay.avgSeconds))")
+        }
+        // Phase 4.6.C.3 — commit streak. Threshold ≥3.
+        if snapshot.githubCommitStreak >= 3 {
+            lines.append("Streak: 🔥 \(snapshot.githubCommitStreak) days")
         }
         return lines.joined(separator: "\n")
     }
@@ -479,6 +488,10 @@ struct MenuBarContent: View {
         }
         if let stats = snapshot.slackHuddleSessionStats {
             lines.append("Huddle sessions: \(stats.sampleCount) · avg: \(formatLatency(stats.avgSeconds))")
+        }
+        // Phase 4.6.C.3 — huddle participation streak. Threshold ≥3.
+        if snapshot.slackHuddleParticipationStreak >= 3 {
+            lines.append("Streak: 🔥 \(snapshot.slackHuddleParticipationStreak) days")
         }
         return lines.joined(separator: "\n")
     }

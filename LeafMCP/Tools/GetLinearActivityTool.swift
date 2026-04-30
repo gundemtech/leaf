@@ -96,6 +96,11 @@ struct GetLinearActivityTool: ToolExecutor {
         if let wow = try? insights.weekOverWeekDelta() {
             payload["wowDelta"] = wow
         }
+        // Phase 4.6.C.3 — issue close streak (consecutive days с ≥1 closed issue;
+        // independent of period — global current streak ending today/yesterday).
+        if let streak = breakdown.issueCloseStreak, streak > 0 {
+            payload["issueCloseStreak"] = streak
+        }
         return try ToolResponseBuilder.versionedJSONResult(payload)
     }
 }

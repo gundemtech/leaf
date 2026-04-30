@@ -102,6 +102,11 @@ struct GetGitHubActivityTool: ToolExecutor {
         if let wow = try? insights.weekOverWeekDelta() {
             payload["wowDelta"] = wow
         }
+        // Phase 4.6.C.3 — commit streak (consecutive days с ≥1 commit pushed;
+        // independent of period — global current streak ending today/yesterday).
+        if let streak = breakdown.commitStreak, streak > 0 {
+            payload["commitStreak"] = streak
+        }
         return try ToolResponseBuilder.versionedJSONResult(payload)
     }
 }

@@ -158,7 +158,10 @@ final class InsightsReader {
                             slackByChannel: slack.byChannel,
                             slackReactionsReceived: slack.reactionsReceived ?? 0,
                             slackHuddleSessionStats: slack.huddleSessionStats,
-                            longestUninterruptedWindow: uninterruptedWindow
+                            longestUninterruptedWindow: uninterruptedWindow,
+                            linearIssueCloseStreak: linear.issueCloseStreak ?? 0,
+                            githubCommitStreak: github.commitStreak ?? 0,
+                            slackHuddleParticipationStreak: slack.huddleParticipationStreak ?? 0
                         )
                         return .success((db, snapshot))
                     } catch {

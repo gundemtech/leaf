@@ -79,6 +79,16 @@ public struct InsightsSnapshot: Sendable, Hashable {
     /// GitHub/Slack. Proxy для "deep async work session" — integration silence,
     /// не macOS-level idle. `nil` ↔ period degenerate ИЛИ impl не поддерживает.
     public let longestUninterruptedWindow: UninterruptedWindow?
+    /// Phase 4.6.C.3 — consecutive days с ≥1 closed Linear issue (60-day
+    /// lookback, period-independent). `0` ↔ нет closes ни сегодня, ни вчера.
+    /// UI рендерит "Streak: 🔥 N days" в tooltip при `>= 3`.
+    public let linearIssueCloseStreak: Int
+    /// Phase 4.6.C.3 — consecutive days с ≥1 GitHub commit pushed
+    /// (60-day lookback, period-independent). `0` ↔ ни сегодня, ни вчера.
+    public let githubCommitStreak: Int
+    /// Phase 4.6.C.3 — consecutive days с ≥1 Slack huddle joined
+    /// (state='in_a_huddle' transition, 60-day lookback, period-independent).
+    public let slackHuddleParticipationStreak: Int
 
     public init(
         topApps: [AppTimeEntry],
@@ -106,7 +116,10 @@ public struct InsightsSnapshot: Sendable, Hashable {
         slackByChannel: [SlackActivityBreakdown.ChannelCountEntry],
         slackReactionsReceived: Int = 0,
         slackHuddleSessionStats: LatencyStats? = nil,
-        longestUninterruptedWindow: UninterruptedWindow? = nil
+        longestUninterruptedWindow: UninterruptedWindow? = nil,
+        linearIssueCloseStreak: Int = 0,
+        githubCommitStreak: Int = 0,
+        slackHuddleParticipationStreak: Int = 0
     ) {
         self.topApps = topApps
         self.sessions = sessions
@@ -134,6 +147,9 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.slackReactionsReceived = slackReactionsReceived
         self.slackHuddleSessionStats = slackHuddleSessionStats
         self.longestUninterruptedWindow = longestUninterruptedWindow
+        self.linearIssueCloseStreak = linearIssueCloseStreak
+        self.githubCommitStreak = githubCommitStreak
+        self.slackHuddleParticipationStreak = slackHuddleParticipationStreak
     }
 
     /// Convenience init — рассчитывает `deepSessionsCount` по threshold'у.
@@ -167,7 +183,10 @@ public struct InsightsSnapshot: Sendable, Hashable {
         slackByChannel: [SlackActivityBreakdown.ChannelCountEntry] = [],
         slackReactionsReceived: Int = 0,
         slackHuddleSessionStats: LatencyStats? = nil,
-        longestUninterruptedWindow: UninterruptedWindow? = nil
+        longestUninterruptedWindow: UninterruptedWindow? = nil,
+        linearIssueCloseStreak: Int = 0,
+        githubCommitStreak: Int = 0,
+        slackHuddleParticipationStreak: Int = 0
     ) {
         self.init(
             topApps: topApps,
@@ -195,7 +214,10 @@ public struct InsightsSnapshot: Sendable, Hashable {
             slackByChannel: slackByChannel,
             slackReactionsReceived: slackReactionsReceived,
             slackHuddleSessionStats: slackHuddleSessionStats,
-            longestUninterruptedWindow: longestUninterruptedWindow
+            longestUninterruptedWindow: longestUninterruptedWindow,
+            linearIssueCloseStreak: linearIssueCloseStreak,
+            githubCommitStreak: githubCommitStreak,
+            slackHuddleParticipationStreak: slackHuddleParticipationStreak
         )
     }
 

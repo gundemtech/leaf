@@ -97,6 +97,11 @@ struct GetSlackActivityTool: ToolExecutor {
         if let wow = try? insights.weekOverWeekDelta() {
             payload["wowDelta"] = wow
         }
+        // Phase 4.6.C.3 — huddle participation streak (consecutive days с ≥1
+        // huddle joined; independent of period — global current streak).
+        if let streak = breakdown.huddleParticipationStreak, streak > 0 {
+            payload["huddleParticipationStreak"] = streak
+        }
         return try ToolResponseBuilder.versionedJSONResult(payload)
     }
 }
