@@ -376,6 +376,23 @@ struct MenuBarContent: View {
         if snapshot.linearIssueCloseStreak >= 3 {
             lines.append("Streak: 🔥 \(snapshot.linearIssueCloseStreak) days")
         }
+        // Phase 4.6.B — status transitions (non-zero buckets only) +
+        // follow-through ratio. Compact format mimics existing byProject filter.
+        if let tx = snapshot.linearTransitions, tx.total > 0 {
+            let parts: [String] = [
+                ("started", tx.started),
+                ("completed", tx.completed),
+                ("canceled", tx.canceled),
+                ("reopened", tx.reopened)
+            ]
+            .filter { $0.1 > 0 }
+            .map { "\($0.0) \($0.1)" }
+            lines.append("Transitions: \(parts.joined(separator: " · "))")
+        }
+        if let rate = snapshot.linearCompletionRate {
+            let pct = Int((rate * 100).rounded())
+            lines.append("Follow-through: \(pct)%")
+        }
         return lines.joined(separator: "\n")
     }
 

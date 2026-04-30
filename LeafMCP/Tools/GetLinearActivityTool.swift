@@ -14,6 +14,16 @@ import LeafMCPProtocol
 ///   - `completionDurationStats` (Phase 4.6.A.2, additive optional) —
 ///     `{medianSeconds, avgSeconds, maxSeconds, sampleCount}` для issues, completed
 ///     в окне; отсутствует если sampleCount=0
+///   - `wowDelta` (Phase 4.6.C.1, additive optional) — global week-over-week
+///     activity delta scalar
+///   - `issueCloseStreak` (Phase 4.6.C.3, additive optional) — consecutive days
+///     с ≥1 closed issue (independent of period)
+///   - `transitions` (Phase 4.6.B, additive optional) — `{started, completed,
+///     canceled, reopened, total}` my status transitions counts; отсутствует
+///     если total=0
+///   - `completionRate` (Phase 4.6.B, additive optional) — soft follow-through
+///     ratio `completed / (completed + started + reopened)`, surface'ится только
+///     при completed > 0
 ///
 /// Metadata only — issue bodies / comment text никогда не покидают устройство
 /// (ADR-010 won't-list, enforced на parser-level в LinearGraphQLProvider).
@@ -100,6 +110,24 @@ struct GetLinearActivityTool: ToolExecutor {
         // independent of period — global current streak ending today/yesterday).
         if let streak = breakdown.issueCloseStreak, streak > 0 {
             payload["issueCloseStreak"] = streak
+        }
+        // Phase 4.6.B — my status transitions (started/completed/canceled/reopened).
+        // Full breakdown shape (включая нули) для machine consumers; UI слой
+        // фильтрует non-zero buckets отдельно. Absent если breakdown.transitions
+        // == nil (total=0).
+        if let tx = breakdown.transitions {
+            payload["transitions"] = [
+                "started": tx.started,
+                "completed": tx.completed,
+                "canceled": tx.canceled,
+                "reopened": tx.reopened,
+                "total": tx.total
+            ]
+        }
+        // Phase 4.6.B — soft follow-through ratio. Absent если completed=0
+        // (avoids misleading "0% follow-through" для типичного in-progress дня).
+        if let rate = breakdown.completionRate {
+            payload["completionRate"] = rate
         }
         return try ToolResponseBuilder.versionedJSONResult(payload)
     }

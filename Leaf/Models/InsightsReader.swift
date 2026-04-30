@@ -161,7 +161,11 @@ final class InsightsReader {
                             longestUninterruptedWindow: uninterruptedWindow,
                             linearIssueCloseStreak: linear.issueCloseStreak ?? 0,
                             githubCommitStreak: github.commitStreak ?? 0,
-                            slackHuddleParticipationStreak: slack.huddleParticipationStreak ?? 0
+                            slackHuddleParticipationStreak: slack.huddleParticipationStreak ?? 0,
+                            // Phase 4.6.B — passthrough из linearActivity (third
+                            // read внутри). Snapshot mirror'ит для UI/MCP consumers.
+                            linearTransitions: linear.transitions,
+                            linearCompletionRate: linear.completionRate
                         )
                         return .success((db, snapshot))
                     } catch {
