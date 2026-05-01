@@ -35,11 +35,15 @@ final class GitHubCollectorTests: XCTestCase {
         private(set) var actionsRunsCallCount: Int = 0
         private(set) var actionsRunsReposReceived: [[String]] = []
         private(set) var actionsRunsSinceReceived: [Int64] = []
+        private(set) var checkRunsCallCount: Int = 0
+        private(set) var checkRunsArgsReceived: [(repo: String, sha: String)] = []
         private var batchToReturn: GitHubEventBatch = .empty
         private var notificationsSummaryToReturn: GitHubNotificationsSummary?
         private var reviewQueueSummaryToReturn: GitHubReviewQueueSummary?
         private var myOpenPRsSummaryToReturn: GitHubMyOpenPRsSummary?
         private var actionsRunsToReturn: [GitHubActionsRunSnapshot] = []
+        // Per-(repo, sha) check-runs response keyed by "repo|sha"; default — `.empty`.
+        private var checkRunsByKey: [String: GitHubCheckRunsSummary] = [:]
 
         func fetchEvents(accessToken: String, login: String, since: Int64?) async throws -> GitHubEventBatch {
             sinceCalls.append(since)
@@ -86,6 +90,16 @@ final class GitHubCollectorTests: XCTestCase {
             return actionsRunsToReturn
         }
 
+        // Phase 4.7.B-4 — defaults к `.empty` для backwards compat. setCheckRuns(_:_:_:)
+        // переопределяет per-(repo, sha) — другие pairs всё равно return `.empty`.
+        func fetchCheckRunsForCommit(
+            accessToken: String, repo: String, sha: String
+        ) async throws -> GitHubCheckRunsSummary {
+            checkRunsCallCount += 1
+            checkRunsArgsReceived.append((repo: repo, sha: sha))
+            return checkRunsByKey["\(repo)|\(sha)"] ?? .empty
+        }
+
         func setBatch(_ batch: GitHubEventBatch) {
             self.batchToReturn = batch
         }
@@ -106,6 +120,10 @@ final class GitHubCollectorTests: XCTestCase {
             self.actionsRunsToReturn = runs
         }
 
+        func setCheckRuns(repo: String, sha: String, summary: GitHubCheckRunsSummary) {
+            self.checkRunsByKey["\(repo)|\(sha)"] = summary
+        }
+
         func calls() -> [Int64?] { sinceCalls }
         func logins() -> [String] { loginCalls }
         func notificationsCalls() -> Int { notificationsCallCount }
@@ -113,6 +131,8 @@ final class GitHubCollectorTests: XCTestCase {
         func myOpenPRsCalls() -> Int { myOpenPRsCallCount }
         func actionsRunsCalls() -> Int { actionsRunsCallCount }
         func actionsRunsRepos() -> [[String]] { actionsRunsReposReceived }
+        func checkRunsCalls() -> Int { checkRunsCallCount }
+        func checkRunsArgs() -> [(repo: String, sha: String)] { checkRunsArgsReceived }
     }
 
     // MARK: - Helpers
@@ -610,6 +630,138 @@ final class GitHubCollectorTests: XCTestCase {
         XCTAssertEqual(ciRun.payload["status"], "in_progress")
         XCTAssertNil(ciRun.payload["conclusion"], "conclusion=nil → key omitted entirely")
         XCTAssertEqual(ciRun.payload["head_branch"], "feature/x")
+    }
+
+    // MARK: - Phase 4.7.B-4 — check_runs_status per pushed commit
+
+    /// 2 push events с разными shas → 2 fetchCheckRunsForCommit calls, 2
+    /// `check_runs_status` events emitted (signal_type=.context). Bucket counts
+    /// from summary прокачиваются в payload as-is.
+    func testTick_EmitsCheckRunsStatusForEachPush() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockGitHubAPIProvider()
+        let baseMs: Int64 = 1_700_000_000_000
+        await provider.setBatch(GitHubEventBatch(
+            events: [
+                GitHubEventSnapshot(
+                    eventID: "push-1", eventKind: "commit_pushed",
+                    repoFullName: "octocat/leaf",
+                    title: "feat: x", number: nil, sha: "aaa111",
+                    branch: "main", createdAtMs: baseMs
+                ),
+                GitHubEventSnapshot(
+                    eventID: "push-2", eventKind: "commit_pushed",
+                    repoFullName: "octocat/other",
+                    title: "fix: y", number: nil, sha: "bbb222",
+                    branch: "main", createdAtMs: baseMs + 1000
+                )
+            ],
+            cursorMs: baseMs + 1000
+        ))
+        // Per-(repo, sha) check-runs summaries.
+        await provider.setCheckRuns(
+            repo: "octocat/leaf", sha: "aaa111",
+            summary: GitHubCheckRunsSummary(total: 4, success: 2, failure: 1, inProgress: 1, neutral: 0)
+        )
+        await provider.setCheckRuns(
+            repo: "octocat/other", sha: "bbb222",
+            summary: GitHubCheckRunsSummary(total: 3, success: 0, failure: 0, inProgress: 0, neutral: 3)
+        )
+
+        let refresher = GitHubTokenRefresher(database: db, clientID: "test-client")
+        let collector = GitHubCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7, logger: logger
+        )
+
+        _ = await collector.performTick()
+
+        let checkCalls = await provider.checkRunsCalls()
+        XCTAssertEqual(checkCalls, 2, "2 unique pushed (repo, sha) → 2 fetchCheckRunsForCommit calls")
+        let args = await provider.checkRunsArgs()
+        let pairs = Set(args.map { "\($0.repo)|\($0.sha)" })
+        XCTAssertEqual(pairs, Set(["octocat/leaf|aaa111", "octocat/other|bbb222"]))
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSince1970: 0),
+            end: Date(timeIntervalSince1970: TimeInterval(Date().timeIntervalSince1970 + 60))
+        ))
+        let checkEvents = stored.filter { $0.payload["event_kind"] == "check_runs_status" }
+        XCTAssertEqual(checkEvents.count, 2, "2 push pairs → 2 check_runs_status events")
+        for ev in checkEvents {
+            XCTAssertEqual(ev.signalType, .context, "check_runs_status — state pulse, signal_type=.context")
+            XCTAssertEqual(ev.payload["source"], "github")
+            XCTAssertNotNil(ev.payload["repo"])
+            XCTAssertNotNil(ev.payload["sha"])
+            XCTAssertNotNil(ev.payload["total"])
+            XCTAssertNotNil(ev.payload["success"])
+            XCTAssertNotNil(ev.payload["failure"])
+            XCTAssertNotNil(ev.payload["in_progress"])
+            XCTAssertNotNil(ev.payload["neutral"])
+            XCTAssertNotNil(ev.payload["observed_at_ms"])
+        }
+
+        let leafEvent = try XCTUnwrap(checkEvents.first { $0.payload["sha"] == "aaa111" })
+        XCTAssertEqual(leafEvent.payload["repo"], "octocat/leaf")
+        XCTAssertEqual(leafEvent.payload["total"], "4")
+        XCTAssertEqual(leafEvent.payload["success"], "2")
+        XCTAssertEqual(leafEvent.payload["failure"], "1")
+        XCTAssertEqual(leafEvent.payload["in_progress"], "1")
+        XCTAssertEqual(leafEvent.payload["neutral"], "0")
+
+        let otherEvent = try XCTUnwrap(checkEvents.first { $0.payload["sha"] == "bbb222" })
+        XCTAssertEqual(otherEvent.payload["repo"], "octocat/other")
+        XCTAssertEqual(otherEvent.payload["total"], "3")
+        XCTAssertEqual(otherEvent.payload["neutral"], "3")
+    }
+
+    /// Без commit_pushed events в batch → 0 fetchCheckRunsForCommit calls + 0
+    /// check_runs_status events. Tick остальное (notifications / review queue /
+    /// my open PRs / actions runs pulses) всё равно работает.
+    func testTick_NoPushEvents_NoCheckRunsCalls() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockGitHubAPIProvider()
+        let baseMs: Int64 = 1_700_000_000_000
+        // Batch только non-push events.
+        await provider.setBatch(GitHubEventBatch(
+            events: [
+                GitHubEventSnapshot(
+                    eventID: "pr-1", eventKind: "pr_opened",
+                    repoFullName: "octocat/leaf",
+                    title: "feat", number: 42, sha: nil, branch: nil,
+                    createdAtMs: baseMs
+                ),
+                GitHubEventSnapshot(
+                    eventID: "issue-1", eventKind: "issue_closed",
+                    repoFullName: "octocat/leaf",
+                    title: "bug", number: 7, sha: nil, branch: nil,
+                    createdAtMs: baseMs + 1000
+                )
+            ],
+            cursorMs: baseMs + 1000
+        ))
+
+        let refresher = GitHubTokenRefresher(database: db, clientID: "test-client")
+        let collector = GitHubCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7, logger: logger
+        )
+
+        _ = await collector.performTick()
+
+        let checkCalls = await provider.checkRunsCalls()
+        XCTAssertEqual(checkCalls, 0, "non-push batch → 0 fetchCheckRunsForCommit calls")
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSince1970: 0),
+            end: Date(timeIntervalSince1970: TimeInterval(Date().timeIntervalSince1970 + 60))
+        ))
+        let checkEvents = stored.filter { $0.payload["event_kind"] == "check_runs_status" }
+        XCTAssertEqual(checkEvents.count, 0, "0 push pairs → 0 check_runs_status events")
     }
 
     /// Lifecycle smoke: start запускает loopTask, stop его cancels + awaits.

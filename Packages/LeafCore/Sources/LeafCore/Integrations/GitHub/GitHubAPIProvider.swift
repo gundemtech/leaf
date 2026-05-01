@@ -55,6 +55,20 @@ public protocol GitHubAPIProvider: Sendable {
         repos: [String],
         since: Int64
     ) async throws -> [GitHubActionsRunSnapshot]
+
+    /// Phase 4.7.B-4 — `GET /repos/{owner}/{repo}/commits/{sha}/check-runs`.
+    /// Push-triggered (вызывается только при наличии `commit_pushed` events в текущем
+    /// tick'е) — bounded cost: N HTTP calls = N unique (repo, sha) pairs за tick.
+    /// Returns aggregate counts по 5 buckets для HEAD commit'а.
+    /// ADR-010: `name` of check-run, `output.title` / `output.summary` / `output.text`
+    /// — НЕ читаем. Только `status` + `conclusion` enums per run для bucket'ировки.
+    /// Returns `.empty(...)` при non-200 / parse failure / 404 (commit deleted) —
+    /// graceful, не fail entire tick.
+    func fetchCheckRunsForCommit(
+        accessToken: String,
+        repo: String,
+        sha: String
+    ) async throws -> GitHubCheckRunsSummary
 }
 
 /// Результат одного REST fetch'а. `cursorMs` — `max(createdAt)` across `events`
@@ -258,6 +272,39 @@ public struct GitHubActionsRunSnapshot: Sendable, Hashable {
     }
 }
 
+/// Phase 4.7.B-4 — aggregate check-runs summary для одного HEAD commit'а
+/// (`/repos/{owner}/{repo}/commits/{sha}/check-runs`). State pulse — current
+/// CI status of HEAD после push'а. ADR-010: provider читает только
+/// `status` + `conclusion` enum'ы per run, не `name` / `output.*` / `details_url`.
+/// `total` = sum по всем 5 bucket'ам = response `total_count`.
+public struct GitHubCheckRunsSummary: Sendable, Hashable {
+    /// Сумма check-runs across всех buckets. Equivalent response `total_count`.
+    public let total: Int
+    /// `status="completed"` + `conclusion="success"` bucket.
+    public let success: Int
+    /// `status="completed"` + `conclusion ∈ {"failure","timed_out","action_required","startup_failure"}`.
+    public let failure: Int
+    /// `status ∈ {"queued","in_progress"}` — runs still executing.
+    public let inProgress: Int
+    /// `status="completed"` + `conclusion ∈ {"skipped","cancelled","stale","neutral"}` —
+    /// non-failing terminal states (skipped CI matrix legs, cancelled by user, stale checks).
+    public let neutral: Int
+
+    public init(total: Int, success: Int, failure: Int, inProgress: Int, neutral: Int) {
+        self.total = total
+        self.success = success
+        self.failure = failure
+        self.inProgress = inProgress
+        self.neutral = neutral
+    }
+
+    /// Used при non-200 / parse failure / 404 / network error — graceful degradation.
+    /// `total=0` всё ещё семантически валиден ("у HEAD commit'а нет check-runs").
+    public static let empty = GitHubCheckRunsSummary(
+        total: 0, success: 0, failure: 0, inProgress: 0, neutral: 0
+    )
+}
+
 /// Stub для CI / dev-без-moat сборок. Никогда не делает HTTP call, возвращает
 /// `.empty` — GitHubCollector tick проходит no-op.
 public struct StubGitHubAPIProvider: GitHubAPIProvider {
@@ -281,5 +328,12 @@ public struct StubGitHubAPIProvider: GitHubAPIProvider {
         since: Int64
     ) async throws -> [GitHubActionsRunSnapshot] {
         []
+    }
+    public func fetchCheckRunsForCommit(
+        accessToken: String,
+        repo: String,
+        sha: String
+    ) async throws -> GitHubCheckRunsSummary {
+        .empty
     }
 }

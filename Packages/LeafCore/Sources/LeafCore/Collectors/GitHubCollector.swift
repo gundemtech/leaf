@@ -22,6 +22,10 @@ public actor GitHubCollector {
     /// Phase 4.7.B-3 — top-N most-recently-pushed repos cap для bounded fan-out
     /// `actions/runs` polling. N=10 → ≤10 HTTP calls per tick поверх baseline events
     /// fetch; conservative под 5000/hr primary rate-limit (12 ticks/hr × 10 calls = 120/hr).
+    /// TODO(B-5+): activeReposCap may need to drop to 5-7 once check_runs and
+    /// contributions land — verify GitHub REST budget headroom (B-4 add ≤K
+    /// check-runs calls per tick where K = unique pushed shas; B-5 daily
+    /// contributions GraphQL — separate budget, не per-tick).
     private static let activeReposCap = 10
     /// Phase 4.7.B-3 — sliding window для derive активных repos из `events` table.
     /// 7 дней — достаточно чтобы поймать недельный rhythm проекта без false-positive
@@ -217,6 +221,43 @@ public actor GitHubCollector {
             events.append(Self.makeActionsRunInitiatedEvent(snapshot: run))
         }
 
+        // 5d. Phase 4.7.B-4 — check_runs aggregate per HEAD commit, push-triggered.
+        // Bounded cost: K HTTP calls = K unique (repo, sha) pairs across все
+        // commit_pushed snapshots в этом tick'е. Empty pushes → 0 calls (skipped
+        // entirely). Iterate `batch.events` (snapshots) — preserves repo + sha
+        // напрямую, не rely на string lookup в payload. Dedup via Set<String>
+        // (`repo|sha`) — handles dual shape: stripped feed → 1 sha per push,
+        // full webhook → N shas per push. Per-(repo,sha) failures (404 / parse)
+        // → provider returns `.empty`, мы всё равно emit pulse (observability:
+        // "у HEAD commit'а check-runs нет/недоступны").
+        var seenPairs = Set<String>()
+        var pushedPairs: [(repo: String, sha: String)] = []
+        for snapshot in batch.events {
+            guard snapshot.eventKind == "commit_pushed" else { continue }
+            let repo = snapshot.repoFullName
+            guard let sha = snapshot.sha, !sha.isEmpty, !repo.isEmpty else { continue }
+            let key = "\(repo)|\(sha)"
+            if seenPairs.insert(key).inserted {
+                pushedPairs.append((repo: repo, sha: sha))
+            }
+        }
+        for pair in pushedPairs {
+            let summary: GitHubCheckRunsSummary
+            do {
+                summary = try await provider.fetchCheckRunsForCommit(
+                    accessToken: refreshed.accessToken,
+                    repo: pair.repo,
+                    sha: pair.sha
+                )
+            } catch {
+                logger.error("fetchCheckRunsForCommit failed \(pair.repo, privacy: .public)/\(pair.sha, privacy: .public): \(String(describing: error), privacy: .public)")
+                summary = .empty
+            }
+            events.append(Self.makeCheckRunsStatusEvent(
+                repo: pair.repo, sha: pair.sha, summary: summary, nowMs: nowMs
+            ))
+        }
+
         // 6. Atomic write.
         // Если batch пуст — cursor НЕ двигается (retry next tick на том же since).
         // Если batch не пуст — cursor = batch.cursorMs (max createdAt).
@@ -324,6 +365,36 @@ public actor GitHubCollector {
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(snapshot.createdAtMs) / 1000.0),
             signalType: .action,
+            bundleID: nil,
+            payload: payload
+        )
+    }
+
+    /// Phase 4.7.B-4 — `check_runs_status` state event per (repo, sha) pair.
+    /// `signal_type=.context` (state pulse — current CI status of HEAD commit,
+    /// не discrete user action). Timestamp = `nowMs` (when collector observed),
+    /// не `created_at` of run (this is aggregate snapshot across N runs).
+    /// ADR-010: ни `name` of check-run, ни `output.title`/`output.summary`/
+    /// `output.text` — provider их не parses, collector их не emit'ит. Только
+    /// 5 aggregate counts (total + 4 buckets) + repo + sha identifiers.
+    static func makeCheckRunsStatusEvent(
+        repo: String, sha: String, summary: GitHubCheckRunsSummary, nowMs: Int64
+    ) -> RawEvent {
+        let payload: [String: String] = [
+            "source": "github",
+            "event_kind": "check_runs_status",
+            "repo": repo,
+            "sha": sha,
+            "total": String(summary.total),
+            "success": String(summary.success),
+            "failure": String(summary.failure),
+            "in_progress": String(summary.inProgress),
+            "neutral": String(summary.neutral),
+            "observed_at_ms": String(nowMs)
+        ]
+        return RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0),
+            signalType: .context,
             bundleID: nil,
             payload: payload
         )
