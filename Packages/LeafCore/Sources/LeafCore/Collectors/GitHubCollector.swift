@@ -43,6 +43,17 @@ public actor GitHubCollector {
     private var loopTask: Task<Void, Never>?
     private var notifyToken: NSObjectProtocol?
 
+    /// Phase 4.7.B-5 — in-memory cooldown gate для daily contributions GraphQL.
+    /// `"yyyy-MM-dd"` UTC; refetch fires только когда day rolls over. Reset на
+    /// app restart — допустимо: at-most one redundant fetch per launch (REST
+    /// `/graphql` cost ≈ negligible под 5000pts/hr secondary limit).
+    private var lastContributionsFetchDay: String?
+    /// Phase 4.7.B-5 — cached value across ticks. Updated только когда fresh
+    /// calendar fetched в этом tick'е (cooldown gate didn't fire). Sticky:
+    /// если today's day rolls over но fetch упал, prev value остаётся в
+    /// `presence_state` — non-zero false-positive менее плох, чем silent drop.
+    private var lastContributionsToday: Int = 0
+
     public init(
         database: Database,
         provider: any GitHubAPIProvider,
@@ -241,6 +252,12 @@ public actor GitHubCollector {
                 pushedPairs.append((repo: repo, sha: sha))
             }
         }
+        // Latest push check-run status — собираем для presence_state.github.
+        // pushedPairs приходит в том порядке, в котором мы итерировали batch.events
+        // (REST events DESC by created_at → first pair = most recent push).
+        // Берём first non-nil bucket reduction; nil если push events не было.
+        var latestPushCheckStatus: String? = nil
+
         for pair in pushedPairs {
             let summary: GitHubCheckRunsSummary
             do {
@@ -256,9 +273,63 @@ public actor GitHubCollector {
             events.append(Self.makeCheckRunsStatusEvent(
                 repo: pair.repo, sha: pair.sha, summary: summary, nowMs: nowMs
             ))
+            if latestPushCheckStatus == nil {
+                // Reduce summary → status string. Severity-ordered: failure > in_progress > success.
+                if summary.failure > 0 {
+                    latestPushCheckStatus = "failure"
+                } else if summary.inProgress > 0 {
+                    latestPushCheckStatus = "in_progress"
+                } else if summary.success > 0 {
+                    latestPushCheckStatus = "success"
+                }
+                // total=0 / только neutral → leave nil (no actionable CI signal).
+            }
         }
 
-        // 6. Atomic write.
+        // 5e. Phase 4.7.B-5 — daily contributions calendar. NOT emitted as event;
+        // только cooldown-gated update of `lastContributionsToday` для
+        // presence_state.github. Cooldown — in-memory `"yyyy-MM-dd"` UTC,
+        // resets на app restart (acceptable: at-most 1 redundant fetch per launch).
+        let utcDayFormatter = DateFormatter()
+        utcDayFormatter.calendar = Calendar(identifier: .gregorian)
+        utcDayFormatter.timeZone = TimeZone(identifier: "UTC")
+        utcDayFormatter.dateFormat = "yyyy-MM-dd"
+        utcDayFormatter.locale = Locale(identifier: "en_US_POSIX")
+        let todayString = utcDayFormatter.string(from: now)
+        if lastContributionsFetchDay != todayString {
+            do {
+                let calendar = try await provider.fetchContributionsCalendar(
+                    accessToken: refreshed.accessToken
+                )
+                lastContributionsToday = calendar.todayCount
+                lastContributionsFetchDay = todayString
+            } catch {
+                logger.error("fetchContributionsCalendar failed: \(String(describing: error), privacy: .public)")
+                // Cooldown НЕ advance — retry next tick same day. lastContributionsToday
+                // оставляем previous value (sticky).
+            }
+        }
+
+        // 6. Build presence_state.github composite snapshot.
+        // ADR-010 boundary: только counts / repo identifiers / status enums.
+        // No titles / bodies / message subjects попадают в state JSON.
+        // JSONSerialization не принимает Swift Optional — nil поля сериализуем
+        // как NSNull (поле присутствует с явно null значением), не омитим.
+        // Это позволяет downstream readers различать "ключ отсутствует, поле
+        // не отслеживается" от "поле известно, значение null" — важный сигнал
+        // для presence broadcast / merged snapshot rendering в Phase 5.
+        let githubPresence: [String: Any] = [
+            "notifications_unread": notifSummary.totalUnread,
+            "notifications_by_reason": notifSummary.byReason,
+            "prs_awaiting_my_review": reviewQueueSummary.count,
+            "prs_awaiting_top_repo": reviewQueueSummary.topRepo.map { $0 as Any } ?? NSNull(),
+            "my_open_prs": myOpenPRsSummary.count,
+            "latest_push_check_status": latestPushCheckStatus.map { $0 as Any } ?? NSNull(),
+            "contributions_today": lastContributionsToday,
+            "active_repos_count": activeRepos.count
+        ]
+
+        // 7. Atomic write — events + offset + presence_state в одной транзакции.
         // Если batch пуст — cursor НЕ двигается (retry next tick на том же since).
         // Если batch не пуст — cursor = batch.cursorMs (max createdAt).
         let advancedCursor = batch.cursorMs ?? since
@@ -272,7 +343,12 @@ public actor GitHubCollector {
             updatedMs: nowMs
         )
         do {
-            try database.writeEventsAndOffset(events, offset: offset)
+            try database.writeEventsOffsetAndPresence(
+                events,
+                offset: offset,
+                presence: (.github, githubPresence, nil),
+                nowMs: nowMs
+            )
         } catch {
             logger.error("persist failed: \(String(describing: error), privacy: .public)")
             return TickResult(skipped: false, eventsProcessed: 0, cursorAdvancedMs: nil)

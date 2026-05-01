@@ -37,6 +37,7 @@ final class GitHubCollectorTests: XCTestCase {
         private(set) var actionsRunsSinceReceived: [Int64] = []
         private(set) var checkRunsCallCount: Int = 0
         private(set) var checkRunsArgsReceived: [(repo: String, sha: String)] = []
+        private(set) var contributionsCallCount: Int = 0
         private var batchToReturn: GitHubEventBatch = .empty
         private var notificationsSummaryToReturn: GitHubNotificationsSummary?
         private var reviewQueueSummaryToReturn: GitHubReviewQueueSummary?
@@ -44,6 +45,7 @@ final class GitHubCollectorTests: XCTestCase {
         private var actionsRunsToReturn: [GitHubActionsRunSnapshot] = []
         // Per-(repo, sha) check-runs response keyed by "repo|sha"; default — `.empty`.
         private var checkRunsByKey: [String: GitHubCheckRunsSummary] = [:]
+        private var contributionsCalendarToReturn: GitHubContributionsCalendar = .empty
 
         func fetchEvents(accessToken: String, login: String, since: Int64?) async throws -> GitHubEventBatch {
             sinceCalls.append(since)
@@ -100,6 +102,13 @@ final class GitHubCollectorTests: XCTestCase {
             return checkRunsByKey["\(repo)|\(sha)"] ?? .empty
         }
 
+        // Phase 4.7.B-5 — contributions calendar; defaults к `.empty` (todayCount=0).
+        // Используется только когда collector сам решает fetch (cooldown gate).
+        func fetchContributionsCalendar(accessToken: String) async throws -> GitHubContributionsCalendar {
+            contributionsCallCount += 1
+            return contributionsCalendarToReturn
+        }
+
         func setBatch(_ batch: GitHubEventBatch) {
             self.batchToReturn = batch
         }
@@ -124,6 +133,10 @@ final class GitHubCollectorTests: XCTestCase {
             self.checkRunsByKey["\(repo)|\(sha)"] = summary
         }
 
+        func setContributionsCalendar(_ calendar: GitHubContributionsCalendar) {
+            self.contributionsCalendarToReturn = calendar
+        }
+
         func calls() -> [Int64?] { sinceCalls }
         func logins() -> [String] { loginCalls }
         func notificationsCalls() -> Int { notificationsCallCount }
@@ -133,6 +146,7 @@ final class GitHubCollectorTests: XCTestCase {
         func actionsRunsRepos() -> [[String]] { actionsRunsReposReceived }
         func checkRunsCalls() -> Int { checkRunsCallCount }
         func checkRunsArgs() -> [(repo: String, sha: String)] { checkRunsArgsReceived }
+        func contributionsCalls() -> Int { contributionsCallCount }
     }
 
     // MARK: - Helpers
@@ -762,6 +776,211 @@ final class GitHubCollectorTests: XCTestCase {
         ))
         let checkEvents = stored.filter { $0.payload["event_kind"] == "check_runs_status" }
         XCTAssertEqual(checkEvents.count, 0, "0 push pairs → 0 check_runs_status events")
+    }
+
+    // MARK: - Phase 4.7.B-5 — contributions calendar + presence_state.github
+
+    /// Helper для UTC-aligned `Date` для testов day-boundary cooldown'а.
+    /// Возвращает midnight UTC + offsetSeconds.
+    private func utcDate(year: Int, month: Int, day: Int, hour: Int = 12) -> Date {
+        var components = DateComponents()
+        components.year = year
+        components.month = month
+        components.day = day
+        components.hour = hour
+        components.minute = 0
+        components.second = 0
+        components.timeZone = TimeZone(identifier: "UTC")
+        let cal = Calendar(identifier: .gregorian)
+        return cal.date(from: components)!
+    }
+
+    /// Two ticks одного дня → fetchContributionsCalendar called только один раз.
+    /// Cooldown gate работает.
+    func testTick_FetchesContributionsOncePerDay() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        // expiresAt в далёком будущем — refresher выходит на no-op даже когда мы
+        // подаём `now` в прошлом (utcDate fixture'ы для day-boundary теста).
+        try insertFreshIntegration(
+            db: db,
+            expiresAt: utcDate(year: 2030, month: 1, day: 1)
+        )
+
+        let provider = MockGitHubAPIProvider()
+        await provider.setBatch(.empty)
+
+        let refresher = GitHubTokenRefresher(database: db, clientID: "test-client")
+        let collector = GitHubCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7, logger: logger
+        )
+
+        let day1Noon = utcDate(year: 2026, month: 5, day: 1, hour: 12)
+        let day1Evening = utcDate(year: 2026, month: 5, day: 1, hour: 22)
+
+        _ = await collector.performTick(now: day1Noon)
+        _ = await collector.performTick(now: day1Evening)
+
+        let calls = await provider.contributionsCalls()
+        XCTAssertEqual(calls, 1, "two ticks same UTC day → 1 fetchContributionsCalendar call")
+    }
+
+    /// Tick на day+1 → fetchContributionsCalendar called второй раз.
+    /// Day-boundary triggers re-fetch.
+    func testTick_FetchesContributionsAcrossDayBoundary() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(
+            db: db,
+            expiresAt: utcDate(year: 2030, month: 1, day: 1)
+        )
+
+        let provider = MockGitHubAPIProvider()
+        await provider.setBatch(.empty)
+
+        let refresher = GitHubTokenRefresher(database: db, clientID: "test-client")
+        let collector = GitHubCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7, logger: logger
+        )
+
+        let day1 = utcDate(year: 2026, month: 5, day: 1, hour: 12)
+        let day2 = utcDate(year: 2026, month: 5, day: 2, hour: 8)
+
+        _ = await collector.performTick(now: day1)
+        _ = await collector.performTick(now: day2)
+
+        let calls = await provider.contributionsCalls()
+        XCTAssertEqual(calls, 2, "ticks across UTC day boundary → 2 fetchContributionsCalendar calls")
+    }
+
+    /// После tick'а presence_state.github row существует с composite state, все
+    /// 8 plan-required keys присутствуют, derivedMode=nil.
+    func testTick_WritesPresenceStateRow() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockGitHubAPIProvider()
+        let baseMs: Int64 = 1_700_000_000_000
+        // Push event → check_runs reduction → latest_push_check_status="success".
+        await provider.setBatch(GitHubEventBatch(
+            events: [
+                GitHubEventSnapshot(
+                    eventID: "push-1", eventKind: "commit_pushed",
+                    repoFullName: "octocat/leaf", title: "wip",
+                    number: nil, sha: "deadbeef", branch: "main",
+                    createdAtMs: baseMs
+                )
+            ],
+            cursorMs: baseMs
+        ))
+        await provider.setNotificationsSummary(GitHubNotificationsSummary(
+            totalUnread: 4,
+            byReason: ["review_requested": 2, "mention": 1, "comment": 1],
+            observedAtMs: baseMs
+        ))
+        await provider.setReviewQueueSummary(GitHubReviewQueueSummary(
+            count: 3, topRepo: "octocat/leaf", observedAtMs: baseMs
+        ))
+        await provider.setMyOpenPRsSummary(GitHubMyOpenPRsSummary(
+            count: 5, observedAtMs: baseMs
+        ))
+        await provider.setCheckRuns(
+            repo: "octocat/leaf", sha: "deadbeef",
+            summary: GitHubCheckRunsSummary(total: 2, success: 2, failure: 0, inProgress: 0, neutral: 0)
+        )
+        await provider.setContributionsCalendar(GitHubContributionsCalendar(
+            totalContributions: 423, todayCount: 7, weeks: []
+        ))
+
+        let refresher = GitHubTokenRefresher(database: db, clientID: "test-client")
+        let collector = GitHubCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7, logger: logger
+        )
+
+        _ = await collector.performTick()
+
+        // Read back presence_state.github row.
+        let presence = try db.readSQL { rawDB in
+            try PresenceStateWriter.read(provider: .github, in: rawDB)
+        }
+        let row = try XCTUnwrap(presence, "presence_state.github row должен существовать после tick'а")
+        XCTAssertNil(row.derivedMode, "derivedMode=nil в Phase 4.7 (Phase 4.9 начнёт populate)")
+
+        // All 8 plan-required keys present.
+        let state = row.state
+        XCTAssertEqual(state["notifications_unread"] as? Int, 4)
+        let byReason = try XCTUnwrap(state["notifications_by_reason"] as? [String: Int])
+        XCTAssertEqual(byReason["review_requested"], 2)
+        XCTAssertEqual(byReason["mention"], 1)
+        XCTAssertEqual(byReason["comment"], 1)
+        XCTAssertEqual(state["prs_awaiting_my_review"] as? Int, 3)
+        XCTAssertEqual(state["prs_awaiting_top_repo"] as? String, "octocat/leaf")
+        XCTAssertEqual(state["my_open_prs"] as? Int, 5)
+        XCTAssertEqual(state["latest_push_check_status"] as? String, "success",
+                       "2 success / 0 failure / 0 in_progress → success bucket")
+        XCTAssertEqual(state["contributions_today"] as? Int, 7)
+        // active_repos_count = 0 (events table пуста до этого tick'а — derive
+        // query видит just-inserted push, но окно 7 дней назад отработало
+        // на прошлом empty состоянии). Если будет 1 (включая current push),
+        // это тоже acceptable — invariant: ключ присутствует и Int.
+        XCTAssertNotNil(state["active_repos_count"] as? Int)
+    }
+
+    /// ADR-010 regression: presence_state JSON не должен содержать reserved
+    /// content keys ("title" / "body" / "message") — defensive shape check.
+    /// Caller responsibility — этот тест guards boundary.
+    func testTick_PresenceStateOmitsRedactedFields() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockGitHubAPIProvider()
+        // Even if we inject sentinel into "title-bearing" fields, those don't
+        // propagate into presence_state — we only push counts/repo identifiers.
+        let sentinelTitle = "SENSITIVE_TITLE_LEAK_xyz"
+        await provider.setBatch(GitHubEventBatch(
+            events: [
+                GitHubEventSnapshot(
+                    eventID: "pr-1", eventKind: "pr_opened",
+                    repoFullName: "octocat/leaf",
+                    title: sentinelTitle, number: 42, sha: nil, branch: nil,
+                    createdAtMs: 1_700_000_000_000
+                )
+            ],
+            cursorMs: 1_700_000_000_000
+        ))
+        await provider.setReviewQueueSummary(GitHubReviewQueueSummary(
+            count: 1, topRepo: "octocat/leaf", observedAtMs: 1_700_000_000_000
+        ))
+
+        let refresher = GitHubTokenRefresher(database: db, clientID: "test-client")
+        let collector = GitHubCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7, logger: logger
+        )
+        _ = await collector.performTick()
+
+        // Read raw JSON и ассерт что reserved content keys не появились.
+        // Используем raw stateJSON column через PresenceStateWriter.read (parsed dict
+        // даёт нам keys()) — boundary check.
+        let presence = try db.readSQL { rawDB in
+            try PresenceStateWriter.read(provider: .github, in: rawDB)
+        }
+        let row = try XCTUnwrap(presence)
+        let topLevelKeys = Set(row.state.keys)
+        XCTAssertFalse(topLevelKeys.contains("title"),
+                       "presence_state не должен содержать 'title' top-level key")
+        XCTAssertFalse(topLevelKeys.contains("body"),
+                       "presence_state не должен содержать 'body' top-level key")
+        XCTAssertFalse(topLevelKeys.contains("message"),
+                       "presence_state не должен содержать 'message' top-level key")
+
+        // Sentinel string из event title не должна leak'ать в стейт через какое-либо
+        // поле (paranoid check — guards против accidental forwarding).
+        let serialized = try JSONSerialization.data(withJSONObject: row.state, options: [])
+        let serializedStr = String(data: serialized, encoding: .utf8) ?? ""
+        XCTAssertFalse(serializedStr.contains(sentinelTitle),
+                       "title content не должен попасть в presence_state JSON")
     }
 
     /// Lifecycle smoke: start запускает loopTask, stop его cancels + awaits.

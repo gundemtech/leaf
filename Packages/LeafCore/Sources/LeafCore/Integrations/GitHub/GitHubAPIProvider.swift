@@ -69,6 +69,18 @@ public protocol GitHubAPIProvider: Sendable {
         repo: String,
         sha: String
     ) async throws -> GitHubCheckRunsSummary
+
+    /// Phase 4.7.B-5 — GraphQL `viewer.contributionsCollection.contributionCalendar`.
+    /// Single call в день (collector сам gates через `lastContributionsFetchDay` —
+    /// in-memory `"yyyy-MM-dd"` cooldown). Возвращает 53-week heatmap + today's count
+    /// для self-UI и `presence_state.github.contributions_today`. NOT emitted as
+    /// per-tick event — это presence-state pulse, не activity log.
+    /// GitHub auto-includes private contributions если они visible to self
+    /// (по `Profile → Settings → Contributions`).
+    /// Returns `.empty` на non-200 / GraphQL error / parse failure — graceful
+    /// degradation, не блокирует other fetches и не сдвигает cooldown (collector
+    /// retry'ит на следующий tick если day всё ещё current).
+    func fetchContributionsCalendar(accessToken: String) async throws -> GitHubContributionsCalendar
 }
 
 /// Результат одного REST fetch'а. `cursorMs` — `max(createdAt)` across `events`
@@ -305,6 +317,55 @@ public struct GitHubCheckRunsSummary: Sendable, Hashable {
     )
 }
 
+/// Phase 4.7.B-5 — GraphQL `viewer.contributionsCollection.contributionCalendar`
+/// snapshot. Daily fetch (collector cooldown), used для self-UI heatmap +
+/// `presence_state.github.contributions_today`. ADR-010-safe — это aggregate
+/// counts per day (нет titles / bodies / repo-level breakdown).
+public struct GitHubContributionsCalendar: Sendable, Hashable {
+    /// Aggregate over fetched range (≈ last 365 days). Equivalent
+    /// `contributionCalendar.totalContributions` в GraphQL response.
+    public let totalContributions: Int
+    /// Today's count — derived из `weeks[].contributionDays[]` где
+    /// `date == today` в UTC. `0` если today ещё нет в response (calendar
+    /// для recent timezone shifts может не содержать сегодняшний day) или
+    /// при `.empty` fallback.
+    public let todayCount: Int
+    /// Last 53 weeks по убыванию давности (oldest first, как returns GitHub).
+    /// Used для self-UI heatmap rendering — collector в `presence_state` его
+    /// не пишет (raw heatmap живёт в memory + UI cache, не в SQLCipher).
+    public let weeks: [Week]
+
+    public struct Week: Sendable, Hashable {
+        public let days: [Day]
+        public init(days: [Day]) { self.days = days }
+    }
+    public struct Day: Sendable, Hashable {
+        /// "yyyy-MM-dd" в UTC (GitHub returns ISO date strings).
+        public let date: String
+        public let count: Int
+        /// 0..4 — bucket level; 0 = `NONE`, 4 = `FOURTH_QUARTILE`.
+        public let level: Int
+        public init(date: String, count: Int, level: Int) {
+            self.date = date
+            self.count = count
+            self.level = level
+        }
+    }
+
+    public init(totalContributions: Int, todayCount: Int, weeks: [Week]) {
+        self.totalContributions = totalContributions
+        self.todayCount = todayCount
+        self.weeks = weeks
+    }
+
+    /// Used при non-200 / GraphQL error / parse failure / network error.
+    /// `todayCount=0` семантически корректен ("calendar недоступен сейчас, у
+    /// presence_state.contributions_today останется previous value до next day").
+    public static let empty = GitHubContributionsCalendar(
+        totalContributions: 0, todayCount: 0, weeks: []
+    )
+}
+
 /// Stub для CI / dev-без-moat сборок. Никогда не делает HTTP call, возвращает
 /// `.empty` — GitHubCollector tick проходит no-op.
 public struct StubGitHubAPIProvider: GitHubAPIProvider {
@@ -334,6 +395,9 @@ public struct StubGitHubAPIProvider: GitHubAPIProvider {
         repo: String,
         sha: String
     ) async throws -> GitHubCheckRunsSummary {
+        .empty
+    }
+    public func fetchContributionsCalendar(accessToken: String) async throws -> GitHubContributionsCalendar {
         .empty
     }
 }

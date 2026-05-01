@@ -44,6 +44,13 @@ public enum GitHubOAuthEndpoints {
     /// `repository_url` (parsed → "owner/repo") и total count.
     public static let searchIssues = URL(string: "https://api.github.com/search/issues")!
 
+    /// `POST /graphql` — Phase 4.7.B-5. GraphQL endpoint для
+    /// `viewer.contributionsCollection.contributionCalendar` (heatmap + today's count).
+    /// REST API нет equivalent — public-events / private-events split не доступен,
+    /// только GraphQL отдаёт unified contribution count со включёнными private repos
+    /// (если юзер их `Profile → Settings → Contributions` enabled).
+    public static let graphql = URL(string: "https://api.github.com/graphql")!
+
     /// Минимальный scope для work workflow integration.
     /// `repo` — обязателен для private events (без него feed возвращает только public, тихо).
     /// `read:user` — для GET /user identity fetch.
