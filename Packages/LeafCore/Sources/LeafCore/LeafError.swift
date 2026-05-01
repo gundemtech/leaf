@@ -8,4 +8,5 @@ public enum LeafError: Error, Sendable {
     case keyFileCorrupted
     case corruptedEnvelope
     case invalidPayload
+    case jsonEncodingFailed
 }

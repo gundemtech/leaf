@@ -168,6 +168,16 @@ public final class Database: @unchecked Sendable {
         try pool.read(block)
     }
 
+    /// Internal-intent bridge на write transaction для unit-тестов
+    /// (`PresenceStateWriterTests`). Production callsites используют
+    /// высокоуровневые методы (`writeEventsOffsetAndPresence`,
+    /// `writeEventsAndOffset`, `upsertIntegration` и т.д.) — этот handle
+    /// не предназначен для них и поэтому `internal`, не `public`.
+    internal func writeSQL<T>(_ block: (GRDB.Database) throws -> T) throws -> T {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        return try pool.write(block)
+    }
+
     // MARK: - Collector offsets (Phase 2.3)
 
     /// Reads single offset by composite PK. Returns `nil` если записи нет —
@@ -223,6 +233,41 @@ public final class Database: @unchecked Sendable {
             }
             if let offset {
                 try Self.upsertOffset(offset, in: db)
+            }
+        }
+    }
+
+    /// Phase 4.7.B — atomic `events` + `offset` + `presence_state` UPSERT.
+    /// All-or-nothing per tick: если presence write падает, cursor не двигается
+    /// и ни одного event не вставляется → следующий tick пере-fetch'ит и
+    /// перепишет presence на свежем snapshot'е. `presence == nil` допустим
+    /// (тики, в которых нечего обновлять — например, polling response
+    /// идентичен previous).
+    public func writeEventsOffsetAndPresence(
+        _ events: [RawEvent],
+        offset: CollectorOffset,
+        presence: (provider: PresenceStateWriter.Provider,
+                   state: [String: Any],
+                   derivedMode: String?)?,
+        nowMs: Int64
+    ) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+
+        let records = try events.map(EventRecord.make(from:))
+
+        try pool.write { db in
+            for var record in records {
+                try record.insert(db)
+            }
+            try Self.upsertOffset(offset, in: db)
+            if let presence {
+                try PresenceStateWriter.upsert(
+                    provider: presence.provider,
+                    state: presence.state,
+                    derivedMode: presence.derivedMode,
+                    nowMs: nowMs,
+                    in: db
+                )
             }
         }
     }
