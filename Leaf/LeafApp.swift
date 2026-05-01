@@ -14,6 +14,7 @@ private let leafAppLogger = Logger(subsystem: "tech.gundem.leaf", category: "app
 
 @main
 struct LeafApp: App {
+    @NSApplicationDelegateAdaptor(LeafAppDelegate.self) private var appDelegate
     @State private var launchAgent: LaunchAgentService
     @State private var watchedFolders = WatchedFoldersService()
     @State private var linearOAuth = LinearOAuthService()
@@ -21,6 +22,8 @@ struct LeafApp: App {
     @State private var slackOAuth = SlackOAuthService()
     @State private var permissions = PermissionsService()
     @State private var updater: UpdaterController
+    @State private var reader = InsightsReader()
+    @State private var windowState = WindowState()
 
     init() {
         // Phase 3.4.5 — материализуем db.key из main app's Keychain group ДО `agent.register()`.
@@ -68,17 +71,8 @@ struct LeafApp: App {
     }
 
     var body: some Scene {
-        MenuBarExtra("Leaf", systemImage: "leaf") {
-            MenuBarContent()
-                .environment(launchAgent)
-                .environment(watchedFolders)
-                .environment(permissions)
-                .environment(updater)
-        }
-        .menuBarExtraStyle(.window)
-
-        Settings {
-            SettingsView()
+        Window("Leaf", id: "main") {
+            RootView()
                 .environment(launchAgent)
                 .environment(watchedFolders)
                 .environment(linearOAuth)
@@ -86,6 +80,58 @@ struct LeafApp: App {
                 .environment(slackOAuth)
                 .environment(permissions)
                 .environment(updater)
+                .environment(reader)
+                .environment(windowState)
         }
+        .defaultSize(width: 1100, height: 720)
+        .windowResizability(.contentMinSize)
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                OpenSettingsCommand(windowState: windowState)
+            }
+        }
+
+        MenuBarExtra("Leaf", systemImage: "leaf") {
+            MenuBarContent()
+                .environment(launchAgent)
+                .environment(watchedFolders)
+                .environment(permissions)
+                .environment(updater)
+                .environment(reader)
+                .environment(windowState)
+        }
+        .menuBarExtraStyle(.window)
+    }
+}
+
+/// `applicationShouldHandleReopen` нужен чтобы клик по Dock-иконке (после
+/// того как юзер закрыл окно) снова открывал главное окно. Без этого SwiftUI
+/// `Window` не реагирует на reopen — менюбар-присутствие "съедает" событие.
+final class LeafAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag {
+            // Найти существующее SwiftUI Window (id="main") по identifier и поднять.
+            for window in sender.windows where window.identifier?.rawValue.contains("main") == true {
+                window.makeKeyAndOrderFront(nil)
+                sender.activate(ignoringOtherApps: true)
+                return false
+            }
+        }
+        return true
+    }
+}
+
+/// View-обёртка чтобы `@Environment(\.openWindow)` резолвился внутри `CommandGroup`.
+private struct OpenSettingsCommand: View {
+    let windowState: WindowState
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button("Settings…") {
+            windowState.section = .settings
+            NSApp.activate(ignoringOtherApps: true)
+            openWindow(id: "main")
+        }
+        .keyboardShortcut(",", modifiers: .command)
     }
 }

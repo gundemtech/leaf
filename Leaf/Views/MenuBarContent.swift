@@ -2,21 +2,22 @@
 //  MenuBarContent.swift
 //  Leaf
 //
-//  Popover в menu bar: Today header, top-5 apps с durations, bar chart.
-//  Требует .menuBarExtraStyle(.window) — Charts не рендерится в .menu стиле.
+//  Минимальный popover: FOCUS TODAY hero + top-3 apps + Open/Quit.
+//  Все детали (per-provider, files, charts) — в главном окне.
 //
 
 import SwiftUI
 import AppKit
-import Charts
 import LeafCore
 
 struct MenuBarContent: View {
-    @Environment(\.openSettings) private var openSettings
     @Environment(LaunchAgentService.self) private var launchAgent
     @Environment(PermissionsService.self) private var permissions
+    @Environment(InsightsReader.self) private var reader
+    @Environment(WindowState.self) private var windowState
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismiss) private var dismiss
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
-    @State private var reader = InsightsReader()
 
     var body: some View {
         if hasCompletedOnboarding {
@@ -24,27 +25,26 @@ struct MenuBarContent: View {
         } else {
             OnboardingView(onDone: {
                 hasCompletedOnboarding = true
-                // Cleanup: если юзер reset'нет hasCompletedOnboarding в debug,
-                // onboarding starts с .welcome заново вместо middle-of-flow.
                 UserDefaults.standard.removeObject(forKey: "onboardingStep")
             })
         }
     }
 
     private var normalBody: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 14) {
             if !launchAgent.isEnabled {
                 agentOffBanner
             }
             permissionsBanner
-            header
-            Divider()
+            hero
+            Divider().opacity(0.4)
             content
-            Divider()
+            Divider().opacity(0.4)
             controls
         }
-        .padding(14)
-        .frame(width: 320)
+        .padding(16)
+        .frame(width: 280)
+        .background(Color.leafBackground)
         .onAppear {
             launchAgent.refreshStatus()
             permissions.refresh()
@@ -56,21 +56,17 @@ struct MenuBarContent: View {
         }
     }
 
-    // MARK: - Sections
+    // MARK: - Banners
 
     private var agentOffBanner: some View {
         BannerView(
             color: .orange,
             title: "Background collection is off",
             action: "Enable",
-            onTap: openSettingsWindow
+            onTap: openMainWindowToSettings
         )
     }
 
-    /// Phase 3.4 — surface AX/FDA denials. AX-deny приоритет: без AX
-    /// AppNameResolver работает, но window-title / browser-URL (v1.1) — нет.
-    /// FDA-deny — secondary: FSEvents под ~/Documents / ~/Desktop недоступны
-    /// (callback тихо не приходит, watched_folders просто не дают данных).
     @ViewBuilder
     private var permissionsBanner: some View {
         if !permissions.axGranted {
@@ -91,489 +87,102 @@ struct MenuBarContent: View {
         }
     }
 
-    private var header: some View {
+    // MARK: - Hero
+
+    private var hero: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text("Today")
-                .font(.headline)
-            Spacer()
-            if case .loaded(_, let ts) = reader.state {
-                Text(ts, style: .relative)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("FOCUS TODAY")
+                    .leafLabelStyle()
+                Text(focusTotalDisplay)
+                    .font(.system(size: 28, weight: .regular, design: .serif))
+                    .foregroundStyle(.leafInk)
+                    .monospacedDigit()
             }
+            Spacer()
         }
     }
+
+    // MARK: - Content
 
     @ViewBuilder
     private var content: some View {
         switch reader.state {
         case .loading:
             ProgressView()
-                .frame(maxWidth: .infinity, minHeight: 60)
+                .controlSize(.small)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 6)
         case .notConfigured(let msg), .empty(let msg), .error(let msg):
             Text(msg)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.leafCaption)
+                .foregroundStyle(.leafMuted)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 4)
         case .loaded(let snapshot, _):
-            loadedContent(snapshot: snapshot)
+            topAppsList(snapshot.topApps)
         }
     }
 
-    private func loadedContent(snapshot: InsightsSnapshot) -> some View {
-        let top = Array(snapshot.topApps.prefix(5))
-        return VStack(alignment: .leading, spacing: 6) {
-            VStack(alignment: .leading, spacing: 4) {
+    private func topAppsList(_ apps: [AppTimeEntry]) -> some View {
+        let top = Array(apps.prefix(3))
+        return VStack(alignment: .leading, spacing: 8) {
+            if top.isEmpty {
+                Text("No activity yet today.")
+                    .font(.leafCaption)
+                    .foregroundStyle(.leafMuted)
+            } else {
                 ForEach(top, id: \.bundleID) { entry in
                     HStack {
                         Text(AppNameResolver.shared.displayName(for: entry.bundleID))
+                            .font(.leafBody)
+                            .foregroundStyle(.leafInk)
                             .lineLimit(1)
                             .truncationMode(.middle)
                         Spacer()
                         Text(formatDuration(entry.duration))
-                            .foregroundStyle(.secondary)
-                            .font(.caption)
+                            .font(.leafBody.monospacedDigit())
+                            .foregroundStyle(.leafMuted)
                     }
                 }
             }
-            analyticsBlock(snapshot: snapshot)
-            Chart(top, id: \.bundleID) { entry in
-                BarMark(
-                    x: .value("App", AppNameResolver.shared.displayName(for: entry.bundleID)),
-                    y: .value("Minutes", entry.duration / 60.0)
-                )
-            }
-            .frame(height: 120)
-            .chartYAxis { AxisMarks(position: .leading) }
         }
     }
 
-    /// Phase 2.1: sessions + switches. Phase 2.2: добавили 2 строки trends
-    /// (deep streak + peak/WoW/active days). Phase 2.3: AI ratio row.
-    /// Все строки graceful к empty-state — "—" / "no activity yet" placeholder
-    /// показываем где insight не посчитался ещё (insufficient data).
-    @ViewBuilder
-    private func analyticsBlock(snapshot: InsightsSnapshot) -> some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                sessionsLines(snapshot: snapshot)
-                trendsLines(snapshot: snapshot)
-                activityLine(snapshot: snapshot)
-                deepWindowLine(snapshot: snapshot)
-                aiLine(snapshot: snapshot)
-                linearLine(snapshot: snapshot)
-                githubLine(snapshot: snapshot)
-                slackLine(snapshot: snapshot)
-                filesLines(snapshot: snapshot)
-            }
-            Spacer()
-        }
-        .padding(.top, 2)
-    }
-
-    @ViewBuilder
-    private func sessionsLines(snapshot: InsightsSnapshot) -> some View {
-        if snapshot.sessions.isEmpty {
-            Text("No focus sessions yet — keep working")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        } else {
-            Text("Sessions: \(snapshot.sessions.count) · avg \(formatDuration(snapshot.avgSessionDuration)) · deep \(snapshot.deepSessionsCount)")
-                .font(.caption)
-            Text(String(format: "Switches: %.1f/h", snapshot.switchRate))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    @ViewBuilder
-    private func trendsLines(snapshot: InsightsSnapshot) -> some View {
-        if hasNoTrends(snapshot) {
-            // Phase 2.5 — collapse 2 строк с множественными "—" в одну
-            // строку placeholder'а пока копится первая неделя данных.
-            Text("Trends appear after ~14 days of data")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-        } else {
-            Text(streakLine(snapshot: snapshot))
-                .font(.caption)
-            Text(trendsSummaryLine(snapshot: snapshot))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    /// `activeDaysInRow <= 1` — порог "имеет смысл показать": 0 — нет
-    /// активности, 1 — сегодня впервые открыли. ≥2 дней или любой другой
-    /// trend ненулевой → показываем full strip (даже если часть в "—" —
-    /// это уже информативно "появилось одно, копится остальное").
-    private func hasNoTrends(_ snapshot: InsightsSnapshot) -> Bool {
-        snapshot.deepWorkStreak.days == 0
-            && snapshot.peakProductivityHour == nil
-            && snapshot.weekOverWeekDelta == nil
-            && snapshot.activeDaysInRow <= 1
-    }
-
-    private func streakLine(snapshot: InsightsSnapshot) -> String {
-        let streak = snapshot.deepWorkStreak
-        if streak.days == 0 {
-            return "🔥 — · start a deep session to begin a streak"
-        } else {
-            let dayWord = streak.days == 1 ? "day" : "days"
-            return "🔥 \(streak.days) \(dayWord) deep · \(formatDuration(streak.totalSeconds)) total"
-        }
-    }
-
-    private func trendsSummaryLine(snapshot: InsightsSnapshot) -> String {
-        let peak = formatPeakHour(snapshot.peakProductivityHour)
-        let dayWord = snapshot.activeDaysInRow == 1 ? "day" : "days"
-        return "Peak \(peak) · Active \(snapshot.activeDaysInRow) \(dayWord)"
-    }
-
-    private func formatPeakHour(_ hour: Int?) -> String {
-        guard let h = hour else { return "—" }
-        return String(format: "%02d:00", h)
-    }
-
-    /// Phase 4.6.C.1 — отдельная "Activity" строка с arrow + полным контекстом
-    /// "vs last week". Скрыта если global `weekOverWeekDelta` = nil (baseline
-    /// < 7 дней или prev week нулевой).
-    @ViewBuilder
-    private func activityLine(snapshot: InsightsSnapshot) -> some View {
-        if let wow = snapshot.weekOverWeekDelta {
-            Text("Activity \(formatActivityDelta(wow))")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .help("Total attention time this week vs prior 7 days")
-        } else {
-            EmptyView()
-        }
-    }
-
-    private func formatActivityDelta(_ delta: Double) -> String {
-        let pct = Int((delta * 100).rounded())
-        if pct > 0 {
-            return "↑\(pct)% vs last week"
-        } else if pct < 0 {
-            return "↓\(-pct)% vs last week"
-        } else {
-            return "no change vs last week"
-        }
-    }
-
-    /// Phase 4.6.C.2 — самый длинный gap без Linear/GitHub/Slack events за today.
-    /// Threshold ≥ 30min — короче считается noise, не signal. Tooltip показывает
-    /// time range и какие интеграции реально звонили (sourcesActive могут быть
-    /// пустыми если за день вообще ничего не пришло — окно = весь period).
-    @ViewBuilder
-    private func deepWindowLine(snapshot: InsightsSnapshot) -> some View {
-        if let win = snapshot.longestUninterruptedWindow,
-           win.durationSeconds >= 30 * 60 {
-            Text("Deep window: \(formatLatency(win.durationSeconds))")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .help(deepWindowTooltip(window: win))
-        } else {
-            EmptyView()
-        }
-    }
-
-    private func deepWindowTooltip(window: UninterruptedWindow) -> String {
-        let timeFmt = DateFormatter()
-        timeFmt.dateFormat = "HH:mm"
-        let from = timeFmt.string(from: window.start)
-        let to = timeFmt.string(from: window.end)
-        let activeSources = window.sourcesActiveInPeriod.sorted().joined(separator: " · ")
-        let sourcesLine = window.sourcesActiveInPeriod.isEmpty
-            ? "No Layer B activity today."
-            : "Active sources today: \(activeSources)."
-        return "Longest gap with no Linear/GitHub/Slack activity today (\(from)–\(to)). \(sourcesLine)"
-    }
-
-    /// Phase 2.3 — AI collaboration row. Phase 2.5 — 3-state display:
-    /// (1) zero — нет AI events; (2) short — < 3 мин активности, ratio %
-    /// после rounding всё равно даёт "0%" (confusing) → показываем raw
-    /// time без процента; (3) measured — full ratio + tooltip.
-    @ViewBuilder
-    private func aiLine(snapshot: InsightsSnapshot) -> some View {
-        if snapshot.aiActiveSeconds == 0 {
-            Text("AI: no activity yet")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-        } else if snapshot.aiActiveSeconds < 180 {
-            Text("AI today: Claude Code \(formatDurationShort(snapshot.aiActiveSeconds))")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        } else {
-            Text("AI ratio today: \(formatPercentage(snapshot.aiRatio)) · Claude Code \(formatDurationShort(snapshot.aiActiveSeconds))")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .help(aiTooltip(snapshot: snapshot))
-        }
-    }
-
-    private func formatPercentage(_ ratio: Double) -> String {
-        "\(Int((ratio * 100).rounded()))%"
-    }
-
-    /// "5m" / "1h 23m" — компактный, не тянет string formatter overhead.
-    private func formatDurationShort(_ seconds: TimeInterval) -> String {
-        let total = Int(seconds)
-        let h = total / 3600
-        let m = (total % 3600) / 60
-        if h > 0 {
-            return "\(h)h \(m)m"
-        } else {
-            return "\(m)m"
-        }
-    }
-
-    /// Phase 4.2 — Linear issue activity. Linear opt-in feature: при отсутствии
-    /// данных строка скрыта (EmptyView), а не "Linear: no activity" placeholder
-    /// — иначе wreck'аем popover у юзеров без подключённого Linear (большинство).
-    /// Tooltip показывает full breakdown by project + status.
-    @ViewBuilder
-    private func linearLine(snapshot: InsightsSnapshot) -> some View {
-        if snapshot.linearIssuesTouched == 0 {
-            EmptyView()
-        } else {
-            let topProject = snapshot.linearByProject.first?.project ?? ""
-            let label: String = {
-                if topProject.isEmpty || topProject == "(no project)" {
-                    return "Linear today: \(snapshot.linearIssuesTouched) issues"
-                } else {
-                    return "Linear today: \(snapshot.linearIssuesTouched) issues · \(topProject)"
-                }
-            }()
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .help(linearTooltip(snapshot: snapshot))
-        }
-    }
-
-    private func linearTooltip(snapshot: InsightsSnapshot) -> String {
-        var lines: [String] = ["Distinct issues touched today: \(snapshot.linearIssuesTouched)"]
-        if !snapshot.linearByProject.isEmpty {
-            let projects = snapshot.linearByProject
-                .map { "\($0.project): \($0.count)" }
-                .joined(separator: ", ")
-            lines.append("By project: \(projects)")
-        }
-        if !snapshot.linearByStatus.isEmpty {
-            let statuses = snapshot.linearByStatus
-                .map { "\($0.status): \($0.count)" }
-                .joined(separator: ", ")
-            lines.append("By status: \(statuses)")
-        }
-        // Phase 4.6.A.2 — completion duration row. Hidden если samples=0.
-        if let dur = snapshot.linearCompletionDurationStats {
-            lines.append("Closed: \(dur.sampleCount) · avg duration: \(formatLatency(dur.avgSeconds))")
-        }
-        // Phase 4.6.C.3 — issue close streak. Threshold ≥3 (UI noise filter;
-        // MCP отдаёт actual ≥1).
-        if snapshot.linearIssueCloseStreak >= 3 {
-            lines.append("Streak: 🔥 \(snapshot.linearIssueCloseStreak) days")
-        }
-        // Phase 4.6.B — status transitions (non-zero buckets only) +
-        // follow-through ratio. Compact format mimics existing byProject filter.
-        if let tx = snapshot.linearTransitions, tx.total > 0 {
-            let parts: [String] = [
-                ("started", tx.started),
-                ("completed", tx.completed),
-                ("canceled", tx.canceled),
-                ("reopened", tx.reopened)
-            ]
-            .filter { $0.1 > 0 }
-            .map { "\($0.0) \($0.1)" }
-            lines.append("Transitions: \(parts.joined(separator: " · "))")
-        }
-        if let rate = snapshot.linearCompletionRate {
-            let pct = Int((rate * 100).rounded())
-            lines.append("Follow-through: \(pct)%")
-        }
-        return lines.joined(separator: "\n")
-    }
-
-    /// Phase 4.3 — GitHub events line. На пустом GitHub (Stub в no-prod build,
-    /// либо коллектора нет / юзер не подключал) — EmptyView, не показываем
-    /// "GitHub: no activity" placeholder. Tooltip — full breakdown by repo + kind.
-    @ViewBuilder
-    private func githubLine(snapshot: InsightsSnapshot) -> some View {
-        if snapshot.githubEventsCount == 0 {
-            EmptyView()
-        } else {
-            let topRepo = snapshot.githubByRepo.first?.repo ?? ""
-            let label: String = {
-                if topRepo.isEmpty || topRepo == "(unknown)" {
-                    return "GitHub today: \(snapshot.githubEventsCount) events"
-                } else {
-                    return "GitHub today: \(snapshot.githubEventsCount) events · \(topRepo)"
-                }
-            }()
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .help(githubTooltip(snapshot: snapshot))
-        }
-    }
-
-    private func githubTooltip(snapshot: InsightsSnapshot) -> String {
-        var lines: [String] = ["Events today: \(snapshot.githubEventsCount)"]
-        if !snapshot.githubByRepo.isEmpty {
-            let repos = snapshot.githubByRepo
-                .map { "\($0.repo): \($0.count)" }
-                .joined(separator: ", ")
-            lines.append("By repo: \(repos)")
-        }
-        if !snapshot.githubByEventKind.isEmpty {
-            let kinds = snapshot.githubByEventKind
-                .map { "\($0.eventKind): \($0.count)" }
-                .joined(separator: ", ")
-            lines.append("By kind: \(kinds)")
-        }
-        // Phase 4.6.A.1 — latency rows. Hidden если samples=0 (LatencyStats == nil).
-        if let cycle = snapshot.githubPRCycleStats {
-            lines.append("PRs merged: \(cycle.sampleCount) · avg cycle: \(formatLatency(cycle.avgSeconds))")
-        }
-        if let delay = snapshot.githubReviewDelayStats {
-            lines.append("Reviews: \(delay.sampleCount) · avg wait: \(formatLatency(delay.avgSeconds))")
-        }
-        // Phase 4.6.C.3 — commit streak. Threshold ≥3.
-        if snapshot.githubCommitStreak >= 3 {
-            lines.append("Streak: 🔥 \(snapshot.githubCommitStreak) days")
-        }
-        return lines.joined(separator: "\n")
-    }
-
-    /// Phase 4.6.A.1 — compact latency rendering. <60s → "Xs", <60min → "Xm",
-    /// <24h → "Xh Ym", иначе "Xd Yh". Округление вниз для часов/дней — UI ставит
-    /// читаемость выше точности (median ≈ 7200s → "2h" vs "2h 0m").
-    private func formatLatency(_ seconds: Int) -> String {
-        if seconds < 60 { return "\(seconds)s" }
-        if seconds < 3600 {
-            let m = seconds / 60
-            return "\(m)m"
-        }
-        if seconds < 86_400 {
-            let h = seconds / 3600
-            let m = (seconds % 3600) / 60
-            return m > 0 ? "\(h)h \(m)m" : "\(h)h"
-        }
-        let d = seconds / 86_400
-        let h = (seconds % 86_400) / 3600
-        return h > 0 ? "\(d)d \(h)h" : "\(d)d"
-    }
-
-    /// Phase 4.4 — Slack activity line. Если ни сообщений, ни huddle минут нет
-    /// (Stub в no-prod build, провайдер ещё не подключён, юзер не подключал) —
-    /// EmptyView. Tooltip — full breakdown по channel + huddle minutes.
-    @ViewBuilder
-    private func slackLine(snapshot: InsightsSnapshot) -> some View {
-        if snapshot.slackMessagesCount == 0 && snapshot.slackHuddleMinutes == 0 {
-            EmptyView()
-        } else {
-            let parts: [String?] = [
-                "\(snapshot.slackMessagesCount) msgs",
-                snapshot.slackByChannel.isEmpty ? nil : "\(snapshot.slackByChannel.count) channels",
-                snapshot.slackHuddleMinutes > 0 ? "huddle \(formatHuddleMinutes(snapshot.slackHuddleMinutes))" : nil
-            ]
-            let label = "Slack today: " + parts.compactMap { $0 }.joined(separator: " · ")
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .help(slackTooltip(snapshot: snapshot))
-        }
-    }
-
-    private func slackTooltip(snapshot: InsightsSnapshot) -> String {
-        var lines: [String] = ["Messages today: \(snapshot.slackMessagesCount)"]
-        if snapshot.slackHuddleMinutes > 0 {
-            lines.append("Huddle: \(formatHuddleMinutes(snapshot.slackHuddleMinutes))")
-        }
-        if !snapshot.slackByChannel.isEmpty {
-            let channels = snapshot.slackByChannel
-                .map { "\($0.channelName): \($0.count)" }
-                .joined(separator: ", ")
-            lines.append("By channel: \(channels)")
-        }
-        // Phase 4.6.A.3 — reactions + huddle session distribution. Hidden
-        // если не было активности (preserve compactness для idle workspaces).
-        if snapshot.slackReactionsReceived > 0 {
-            lines.append("Reactions: \(snapshot.slackReactionsReceived)")
-        }
-        if let stats = snapshot.slackHuddleSessionStats {
-            lines.append("Huddle sessions: \(stats.sampleCount) · avg: \(formatLatency(stats.avgSeconds))")
-        }
-        // Phase 4.6.C.3 — huddle participation streak. Threshold ≥3.
-        if snapshot.slackHuddleParticipationStreak >= 3 {
-            lines.append("Streak: 🔥 \(snapshot.slackHuddleParticipationStreak) days")
-        }
-        return lines.joined(separator: "\n")
-    }
-
-    private func formatHuddleMinutes(_ minutes: Int) -> String {
-        let h = minutes / 60
-        let m = minutes % 60
-        return h > 0 ? "\(h)h \(m)m" : "\(m)m"
-    }
-
-    /// Phase 2.4 — top-5 files touched today из watched folders. Empty placeholder
-    /// если нет content events (FSEventsCollector idle / no folders / events
-    /// все coalesced). Tooltip показывает full path для L4 (UI basename).
-    @ViewBuilder
-    private func filesLines(snapshot: InsightsSnapshot) -> some View {
-        if snapshot.filesTouched.isEmpty {
-            Text("Files: no activity yet")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-        } else {
-            Text("Files touched (top 5):")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            ForEach(snapshot.filesTouched.prefix(5), id: \.self) { path in
-                Text(FilenameResolver.shared.displayName(for: path))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .help(path)
-            }
-        }
-    }
-
-    private func aiTooltip(snapshot: InsightsSnapshot) -> String {
-        let total = max(snapshot.aiActiveSeconds, 0)  // semantic: aiActive not > totalActive
-        // Reconstruct totalActive — попадает в snapshot, но мы его не tracking;
-        // показываем компонентами от ratio: total = ai / ratio.
-        let totalActive: TimeInterval = snapshot.aiRatio > 0
-            ? snapshot.aiActiveSeconds / snapshot.aiRatio
-            : 0
-        return "AI \(formatDurationShort(total)) of \(formatDurationShort(totalActive)) (\(formatPercentage(snapshot.aiRatio)))"
-    }
+    // MARK: - Controls
 
     private var controls: some View {
-        HStack {
-            Button("Settings…") { openSettingsWindow() }
-                .keyboardShortcut(",")
-            Button("Refresh") { reader.refresh() }
+        HStack(spacing: 8) {
+            LeafProminentButton(action: openMainWindow) {
+                Label("Open", systemImage: "arrow.up.right")
+                    .labelStyle(.titleAndIcon)
+            }
             Spacer()
             Button("Quit") { NSApplication.shared.terminate(nil) }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.leafMuted)
                 .keyboardShortcut("q")
         }
     }
 
     // MARK: - Helpers
 
-    /// LSUIElement apps не активируются автоматом при openSettings() —
-    /// окно появляется "за" другими. Сначала активируем app, затем открываем.
-    private func openSettingsWindow() {
-        NSApp.activate(ignoringOtherApps: true)
-        openSettings()
-        for window in NSApp.windows where window.title.lowercased().contains("settings")
-            || window.title.lowercased().contains("leaf") {
-            window.makeKeyAndOrderFront(nil)
+    private var focusTotalDisplay: String {
+        if case .loaded(let snapshot, _) = reader.state {
+            let total = snapshot.topApps.map(\.duration).reduce(0, +)
+            return total == 0 ? "—" : formatDuration(total)
         }
+        return "—"
+    }
+
+    private func openMainWindow() {
+        NSApp.activate(ignoringOtherApps: true)
+        openWindow(id: "main")
+        dismiss()
+    }
+
+    private func openMainWindowToSettings() {
+        windowState.section = .settings
+        openMainWindow()
     }
 }
