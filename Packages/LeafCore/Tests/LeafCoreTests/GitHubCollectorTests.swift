@@ -254,6 +254,71 @@ final class GitHubCollectorTests: XCTestCase {
         XCTAssertEqual(calls[1], cursorMs, "second tick — stored cursor")
     }
 
+    /// Phase 4.7.A — `metadata` dict из snapshot'а прокачивается в payload,
+    /// reserved keys (`source`/`event_kind`/etc) защищены от override.
+    func testTickEncodesMetadataFieldsInPayload() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockGitHubAPIProvider()
+        let baseMs: Int64 = 1_700_000_000_000
+        await provider.setBatch(GitHubEventBatch(
+            events: [
+                GitHubEventSnapshot(
+                    eventID: "rel-1", eventKind: "release_published",
+                    repoFullName: "octocat/leaf",
+                    title: "", number: nil, sha: nil, branch: nil,
+                    createdAtMs: baseMs,
+                    metadata: [
+                        "tag_name": "v1.0.0",
+                        "action": "published",
+                        // Попытка override reserved key — должна быть проигнорирована.
+                        "event_kind": "OVERRIDE_ATTEMPT"
+                    ]
+                ),
+                GitHubEventSnapshot(
+                    eventID: "tag-1", eventKind: "tag_created",
+                    repoFullName: "octocat/leaf",
+                    title: "", number: nil, sha: nil, branch: nil,
+                    createdAtMs: baseMs + 1000,
+                    metadata: ["tag_name": "v1.1.0"]
+                ),
+                GitHubEventSnapshot(
+                    eventID: "push-1", eventKind: "commit_pushed",
+                    repoFullName: "octocat/leaf",
+                    title: "wip", number: nil, sha: "abc", branch: "main",
+                    createdAtMs: baseMs + 2000
+                    // metadata defaults nil → no extra payload keys
+                )
+            ],
+            cursorMs: baseMs + 2000
+        ))
+
+        let refresher = GitHubTokenRefresher(database: db, clientID: "test-client")
+        let collector = GitHubCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7, logger: logger
+        )
+        _ = await collector.performTick()
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1000) / 1000),
+            end: Date(timeIntervalSince1970: TimeInterval(baseMs + 5000) / 1000)
+        ))
+
+        let release = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "release_published" })
+        XCTAssertEqual(release.payload["tag_name"], "v1.0.0")
+        XCTAssertEqual(release.payload["action"], "published")
+        XCTAssertEqual(release.payload["event_kind"], "release_published",
+                       "reserved key event_kind не overridable через metadata")
+
+        let tag = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "tag_created" })
+        XCTAssertEqual(tag.payload["tag_name"], "v1.1.0")
+
+        let push = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "commit_pushed" })
+        XCTAssertNil(push.payload["tag_name"], "snapshot.metadata=nil → нет лишних ключей в payload")
+    }
+
     /// Lifecycle smoke: start запускает loopTask, stop его cancels + awaits.
     /// Без assertion — если actor zombie'ит, тест зависнет (timeout safeguard).
     func testStartStopLifecycle() async throws {

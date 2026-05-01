@@ -182,6 +182,19 @@ public actor GitHubCollector {
         if let delay = snapshot.reviewDelaySeconds {
             payload["review_delay_seconds"] = String(delay)
         }
+        // Phase 4.7.A — per-event-kind extension fields. Reserved baseline keys
+        // ("source"/"event_kind"/"repo"/"title"/"number"/"sha"/"branch"/
+        // "cycle_seconds"/"review_delay_seconds") cannot be overridden via metadata
+        // — guards против accidental shadowing. Other keys merge in.
+        if let metadata = snapshot.metadata {
+            let reserved: Set<String> = [
+                "source", "event_kind", "repo", "title", "number", "sha", "branch",
+                "cycle_seconds", "review_delay_seconds"
+            ]
+            for (key, value) in metadata where !reserved.contains(key) {
+                payload[key] = value
+            }
+        }
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(snapshot.createdAtMs) / 1000.0),
             signalType: .action,

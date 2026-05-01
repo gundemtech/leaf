@@ -46,18 +46,21 @@ public struct GitHubEventSnapshot: Sendable, Hashable {
     /// (cursor-by-timestamp imperfect для events с identical `created_at`).
     public let eventID: String
     /// Канонический kind после маппинга raw GitHub `type` + `payload.action`.
-    /// MVP supported: "commit_pushed" | "pr_opened" | "pr_merged" | "pr_closed"
+    /// Phase 4.6 baseline: "commit_pushed" | "pr_opened" | "pr_merged" | "pr_closed"
     /// | "issue_opened" | "issue_closed" | "review_submitted".
+    /// Phase 4.7.A additions: "pr_review_comment_authored" | "issue_comment_authored"
+    /// | "release_published" | "branch_created" | "branch_deleted" | "tag_created"
+    /// | "discussion_authored" | "discussion_comment_authored".
     public let eventKind: String
     /// "owner/name" — self-authored repo identifier, public-safe.
     public let repoFullName: String
     /// Commit subject (только первая строка) для commit_pushed; PR title; issue title.
     public let title: String
-    /// PR/issue number; `nil` для commit_pushed / review_submitted без issue context.
+    /// PR/issue/discussion number; `nil` для commit_pushed / review_submitted без issue context.
     public let number: Int?
     /// Commit SHA (short or full) для PushEvent; `nil` для не-push.
     public let sha: String?
-    /// Branch ref (e.g. "main") для PushEvent — извлекается из `refs/heads/<x>`.
+    /// Branch ref (e.g. "main") для PushEvent / branch_created / branch_deleted.
     public let branch: String?
     /// Epoch ms — становится cursor для следующего polling tick'а (max `createdAtMs`
     /// идёт в `GitHubEventBatch.cursorMs` → `collector_offsets.last_modified_ms`).
@@ -68,6 +71,11 @@ public struct GitHubEventSnapshot: Sendable, Hashable {
     /// Phase 4.6.A.1 — для `review_submitted`: `review.submitted_at - pull_request.created_at`
     /// в секундах. `nil` для других eventKind'ов или missing timestamps.
     public let reviewDelaySeconds: Int?
+    /// Phase 4.7.A — extension slot для new event_kinds с per-kind payload fields
+    /// (`action`, `tag_name`, `category`, `comment_id`, `is_pull_request`,
+    /// `linked_linear_id`). `nil` или empty dict — не emit'им keys в payload (отличает
+    /// "не знаем" от пустого значения). Existing baseline event_kinds оставляют nil.
+    public let metadata: [String: String]?
 
     public init(
         eventID: String,
@@ -79,7 +87,8 @@ public struct GitHubEventSnapshot: Sendable, Hashable {
         branch: String?,
         createdAtMs: Int64,
         cycleSeconds: Int? = nil,
-        reviewDelaySeconds: Int? = nil
+        reviewDelaySeconds: Int? = nil,
+        metadata: [String: String]? = nil
     ) {
         self.eventID = eventID
         self.eventKind = eventKind
@@ -91,6 +100,7 @@ public struct GitHubEventSnapshot: Sendable, Hashable {
         self.createdAtMs = createdAtMs
         self.cycleSeconds = cycleSeconds
         self.reviewDelaySeconds = reviewDelaySeconds
+        self.metadata = metadata
     }
 }
 
