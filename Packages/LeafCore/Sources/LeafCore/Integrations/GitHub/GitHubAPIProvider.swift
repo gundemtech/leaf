@@ -19,6 +19,14 @@ public protocol GitHubAPIProvider: Sendable {
     /// throws на network/parsing failures. `login` — viewer login из `GET /user`,
     /// used для path `/users/<login>/events`.
     func fetchEvents(accessToken: String, login: String, since: Int64?) async throws -> GitHubEventBatch
+
+    /// Phase 4.7.B-1 — `GET /notifications?all=false&participating=false&per_page=50`.
+    /// State pulse — что в моём inbox прямо сейчас. Returns total unread count + breakdown
+    /// by `reason`. Reasons we track: "review_requested", "mention", "ci_activity", "comment",
+    /// "team_mention", "author", "subscribed", "manual", "state_change". Bucket "other" для unknown.
+    /// Body / subject text НЕ extract'им (ADR-010). Provider возвращает `.empty(nowMs:)` на
+    /// non-200 / parse failure — graceful degradation, не блокирует events tick.
+    func fetchNotifications(accessToken: String) async throws -> GitHubNotificationsSummary
 }
 
 /// Результат одного REST fetch'а. `cursorMs` — `max(createdAt)` across `events`
@@ -104,11 +112,41 @@ public struct GitHubEventSnapshot: Sendable, Hashable {
     }
 }
 
+/// Phase 4.7.B-1 — summary одного `/notifications` fetch'а. State snapshot (не events log):
+/// `totalUnread` = что лежит в inbox прямо сейчас, `byReason` — breakdown.
+/// Включается в events feed как single `github_notifications_pulse` event с
+/// `signal_type=.context` (не `.action` — это state pulse, не user action).
+public struct GitHubNotificationsSummary: Sendable, Hashable {
+    /// Сумма unread notifications across all reasons. `byReason.values.sum()`,
+    /// но stored independently на случай если parsing бакета `other` отстаёт от raw count.
+    public let totalUnread: Int
+    /// Reason → count. Только non-zero buckets (parser не emit'ит ключ если 0).
+    public let byReason: [String: Int]
+    /// `now` от Agent'а в момент fetch'а — used как `observed_at_ms` в payload event'а.
+    public let observedAtMs: Int64
+
+    public init(totalUnread: Int, byReason: [String: Int], observedAtMs: Int64) {
+        self.totalUnread = totalUnread
+        self.byReason = byReason
+        self.observedAtMs = observedAtMs
+    }
+
+    /// Used при non-200 / parse failure / collector graceful degradation.
+    /// `observedAtMs` всё равно populated — потому что pulse event с total_unread=0
+    /// семантически валиден ("inbox empty в момент N").
+    public static func empty(nowMs: Int64) -> GitHubNotificationsSummary {
+        GitHubNotificationsSummary(totalUnread: 0, byReason: [:], observedAtMs: nowMs)
+    }
+}
+
 /// Stub для CI / dev-без-moat сборок. Никогда не делает HTTP call, возвращает
 /// `.empty` — GitHubCollector tick проходит no-op.
 public struct StubGitHubAPIProvider: GitHubAPIProvider {
     public init() {}
     public func fetchEvents(accessToken: String, login: String, since: Int64?) async throws -> GitHubEventBatch {
         .empty
+    }
+    public func fetchNotifications(accessToken: String) async throws -> GitHubNotificationsSummary {
+        .empty(nowMs: Int64(Date().timeIntervalSince1970 * 1000))
     }
 }

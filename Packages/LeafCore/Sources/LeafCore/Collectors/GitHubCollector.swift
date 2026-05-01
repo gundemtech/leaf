@@ -133,9 +133,24 @@ public actor GitHubCollector {
             return TickResult(skipped: false, eventsProcessed: 0, cursorAdvancedMs: nil)
         }
 
-        // 5. Map + atomic write.
-        let events = batch.events.map { Self.makeEvent(snapshot: $0) }
+        // 5. Map events.
+        var events = batch.events.map { Self.makeEvent(snapshot: $0) }
         let nowMs = Int64(now.timeIntervalSince1970 * 1000)
+
+        // 5a. Phase 4.7.B-1 — notifications pulse. Failure must NOT block events
+        // tick: provider already returns `.empty(nowMs:)` on non-200 / parse failure,
+        // но сетевая ошибка throw'ит — wrap'им в do/catch + emit empty pulse, чтобы
+        // observability не пропадала между tick'ами.
+        let notifSummary: GitHubNotificationsSummary
+        do {
+            notifSummary = try await provider.fetchNotifications(accessToken: refreshed.accessToken)
+        } catch {
+            logger.error("fetchNotifications failed: \(String(describing: error), privacy: .public)")
+            notifSummary = .empty(nowMs: nowMs)
+        }
+        events.append(Self.makeNotificationsPulseEvent(summary: notifSummary, nowMs: nowMs))
+
+        // 6. Atomic write.
         // Если batch пуст — cursor НЕ двигается (retry next tick на том же since).
         // Если batch не пуст — cursor = batch.cursorMs (max createdAt).
         let advancedCursor = batch.cursorMs ?? since
@@ -161,6 +176,32 @@ public actor GitHubCollector {
             skipped: false,
             eventsProcessed: events.count,
             cursorAdvancedMs: advancedCursor
+        )
+    }
+
+    /// Phase 4.7.B-1 — `github_notifications_pulse` state event. Эмитится КАЖДЫЙ tick
+    /// (даже при empty inbox) — нулевой count всё равно signal: "пользователь дочистил
+    /// inbox". `signal_type=.context` (state pulse, не user action).
+    /// Reasons распакованы в top-level keys (`reason_review_requested_count`) для
+    /// query-friendly доступа без nested JSON parsing на read-side.
+    static func makeNotificationsPulseEvent(
+        summary: GitHubNotificationsSummary, nowMs: Int64
+    ) -> RawEvent {
+        var payload: [String: String] = [
+            "source": "github",
+            "event_kind": "github_notifications_pulse",
+            "total_unread": String(summary.totalUnread),
+            "observed_at_ms": String(nowMs)
+        ]
+        // Top-level fields для query-friendly access (избегаем nested JSON в payload).
+        for (reason, count) in summary.byReason {
+            payload["reason_\(reason)_count"] = String(count)
+        }
+        return RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0),
+            signalType: .context,
+            bundleID: nil,
+            payload: payload
         )
     }
 

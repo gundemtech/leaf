@@ -29,7 +29,9 @@ final class GitHubCollectorTests: XCTestCase {
     private actor MockGitHubAPIProvider: GitHubAPIProvider {
         private(set) var sinceCalls: [Int64?] = []
         private(set) var loginCalls: [String] = []
+        private(set) var notificationsCallCount: Int = 0
         private var batchToReturn: GitHubEventBatch = .empty
+        private var notificationsSummaryToReturn: GitHubNotificationsSummary?
 
         func fetchEvents(accessToken: String, login: String, since: Int64?) async throws -> GitHubEventBatch {
             sinceCalls.append(since)
@@ -37,12 +39,27 @@ final class GitHubCollectorTests: XCTestCase {
             return batchToReturn
         }
 
+        // Phase 4.7.B-1 — default returns empty pulse если test не setNotificationsSummary;
+        // позволяет существующим тестам компилиться без модификации (они проверяют
+        // events from setBatch(_:), pulse — orthogonal channel).
+        func fetchNotifications(accessToken: String) async throws -> GitHubNotificationsSummary {
+            notificationsCallCount += 1
+            return notificationsSummaryToReturn ?? .empty(
+                nowMs: Int64(Date().timeIntervalSince1970 * 1000)
+            )
+        }
+
         func setBatch(_ batch: GitHubEventBatch) {
             self.batchToReturn = batch
         }
 
+        func setNotificationsSummary(_ summary: GitHubNotificationsSummary) {
+            self.notificationsSummaryToReturn = summary
+        }
+
         func calls() -> [Int64?] { sinceCalls }
         func logins() -> [String] { loginCalls }
+        func notificationsCalls() -> Int { notificationsCallCount }
     }
 
     // MARK: - Helpers
@@ -134,7 +151,8 @@ final class GitHubCollectorTests: XCTestCase {
         let result = await collector.performTick()
 
         XCTAssertFalse(result.skipped)
-        XCTAssertEqual(result.eventsProcessed, 3)
+        // 3 events from batch + 1 pulse event (Phase 4.7.B-1).
+        XCTAssertEqual(result.eventsProcessed, 4)
         XCTAssertEqual(result.cursorAdvancedMs, cursorMs)
 
         // Atomic write: события + offset row должны быть в БД.
@@ -200,7 +218,8 @@ final class GitHubCollectorTests: XCTestCase {
             logger: logger
         )
         let result = await collector.performTick()
-        XCTAssertEqual(result.eventsProcessed, 3)
+        // 3 events from batch + 1 pulse event (Phase 4.7.B-1).
+        XCTAssertEqual(result.eventsProcessed, 4)
 
         let stored = try db.events(in: DateInterval(
             start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1000) / 1000),
@@ -317,6 +336,60 @@ final class GitHubCollectorTests: XCTestCase {
 
         let push = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "commit_pushed" })
         XCTAssertNil(push.payload["tag_name"], "snapshot.metadata=nil → нет лишних ключей в payload")
+    }
+
+    // MARK: - Phase 4.7.B-1 — notifications pulse
+
+    /// Provider stub returns a non-empty summary → tick должен emit'ить
+    /// `github_notifications_pulse` event с total_unread + reason_*_count keys.
+    /// Signal type — `.context` (не `.action` — это state pulse, не user action).
+    func testTick_EmitsNotificationsPulse() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockGitHubAPIProvider()
+        // Empty events batch + non-empty notifications → tick должен emit'ить только pulse.
+        await provider.setBatch(.empty)
+        let pulseObservedAt: Int64 = 1_700_000_000_000
+        await provider.setNotificationsSummary(GitHubNotificationsSummary(
+            totalUnread: 4,
+            byReason: [
+                "review_requested": 2,
+                "mention": 1,
+                "comment": 1
+            ],
+            observedAtMs: pulseObservedAt
+        ))
+
+        let refresher = GitHubTokenRefresher(database: db, clientID: "test-client")
+        let collector = GitHubCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7, logger: logger
+        )
+
+        let result = await collector.performTick()
+        XCTAssertFalse(result.skipped)
+        // Empty batch (0 events) + 1 pulse = 1 event total.
+        XCTAssertEqual(result.eventsProcessed, 1)
+        let notifCalls = await provider.notificationsCalls()
+        XCTAssertEqual(notifCalls, 1, "fetchNotifications вызвался ровно раз")
+
+        // Read all events; ровно один с event_kind=github_notifications_pulse.
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSince1970: 0),
+            end: Date(timeIntervalSince1970: TimeInterval(Date().timeIntervalSince1970 + 60))
+        ))
+        let pulse = try XCTUnwrap(
+            stored.first { $0.payload["event_kind"] == "github_notifications_pulse" },
+            "ожидался github_notifications_pulse event"
+        )
+        XCTAssertEqual(pulse.signalType, .context, "pulse — state event, signal_type=.context")
+        XCTAssertEqual(pulse.payload["source"], "github")
+        XCTAssertEqual(pulse.payload["total_unread"], "4")
+        XCTAssertEqual(pulse.payload["reason_review_requested_count"], "2")
+        XCTAssertEqual(pulse.payload["reason_mention_count"], "1")
+        XCTAssertEqual(pulse.payload["reason_comment_count"], "1")
+        XCTAssertNotNil(pulse.payload["observed_at_ms"], "observed_at_ms всегда populated")
     }
 
     /// Lifecycle smoke: start запускает loopTask, stop его cancels + awaits.

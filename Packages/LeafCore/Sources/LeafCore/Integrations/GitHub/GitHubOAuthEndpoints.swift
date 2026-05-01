@@ -32,6 +32,12 @@ public enum GitHubOAuthEndpoints {
     /// Swift-side через event `id` set.
     public static let eventsBase = URL(string: "https://api.github.com/users/")!
 
+    /// `GET /notifications?all=false&participating=false&per_page=50` — Phase 4.7.B-1.
+    /// Inbox state pulse: только unread (`all=false`) + все subscriptions (`participating=false`
+    /// чтобы включить team_mention / state_change / ci_activity, не только direct comments).
+    /// Body / subject text НЕ extract'им (ADR-010) — только count + reason breakdown.
+    public static let notifications = URL(string: "https://api.github.com/notifications")!
+
     /// Минимальный scope для work workflow integration.
     /// `repo` — обязателен для private events (без него feed возвращает только public, тихо).
     /// `read:user` — для GET /user identity fetch.
