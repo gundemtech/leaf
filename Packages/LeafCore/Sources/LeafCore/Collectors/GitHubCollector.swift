@@ -19,6 +19,15 @@ import Foundation
 import os
 
 public actor GitHubCollector {
+    /// Phase 4.7.B-3 — top-N most-recently-pushed repos cap для bounded fan-out
+    /// `actions/runs` polling. N=10 → ≤10 HTTP calls per tick поверх baseline events
+    /// fetch; conservative под 5000/hr primary rate-limit (12 ticks/hr × 10 calls = 120/hr).
+    private static let activeReposCap = 10
+    /// Phase 4.7.B-3 — sliding window для derive активных repos из `events` table.
+    /// 7 дней — достаточно чтобы поймать недельный rhythm проекта без false-positive
+    /// от старого ad-hoc activity. Конфигурабельно (constant) если потребуется tuning.
+    private static let activeReposLookbackDays = 7
+
     private let database: Database
     private let provider: any GitHubAPIProvider
     private let refresher: GitHubTokenRefresher
@@ -175,6 +184,39 @@ public actor GitHubCollector {
         }
         events.append(Self.makeMyOpenPRCountEvent(summary: myOpenPRsSummary, nowMs: nowMs))
 
+        // 5c. Phase 4.7.B-3 — actions/runs feed для top-N most-recently-pushed repos.
+        // Derive активные repos из existing `events` table — bounded fan-out N HTTP
+        // calls per tick (N = `Self.activeReposCap`). DB query failure → empty list,
+        // не блокируем tick. `since` = nowMs - intervalSec*1000 → fetch только runs
+        // initiated after last tick window (graceful approximation last-tick boundary).
+        let activeReposSinceMs = nowMs - Int64(Self.activeReposLookbackDays) * 24 * 3600 * 1000
+        let activeRepos: [String]
+        do {
+            activeRepos = try database.queryActiveGitHubRepos(
+                sinceMs: activeReposSinceMs,
+                limit: Self.activeReposCap
+            )
+        } catch {
+            logger.error("queryActiveGitHubRepos failed: \(String(describing: error), privacy: .public)")
+            activeRepos = []
+        }
+        let runsSinceMs = nowMs - Int64(intervalSec * 1000)
+        let actionsRuns: [GitHubActionsRunSnapshot]
+        do {
+            actionsRuns = try await provider.fetchActionsRunsForActor(
+                accessToken: refreshed.accessToken,
+                login: login,
+                repos: activeRepos,
+                since: runsSinceMs
+            )
+        } catch {
+            logger.error("fetchActionsRunsForActor failed: \(String(describing: error), privacy: .public)")
+            actionsRuns = []
+        }
+        for run in actionsRuns {
+            events.append(Self.makeActionsRunInitiatedEvent(snapshot: run))
+        }
+
         // 6. Atomic write.
         // Если batch пуст — cursor НЕ двигается (retry next tick на том же since).
         // Если batch не пуст — cursor = batch.cursorMs (max createdAt).
@@ -248,6 +290,40 @@ public actor GitHubCollector {
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0),
             signalType: .context,
+            bundleID: nil,
+            payload: payload
+        )
+    }
+
+    /// Phase 4.7.B-3 — `actions_run_initiated` action event per snapshot.
+    /// `signal_type=.action` (discrete action — юзер запустил CI run), не `.context`.
+    /// Timestamp = run's `created_at` (когда GitHub registered run start), не nowMs —
+    /// синхронизируется с реальным moment of action для downstream timeline accuracy.
+    /// ADR-010: `head_commit.message` / run `name` (часто equals commit subject) /
+    /// `output.title` — НЕ persisted. Только public-safe metadata: workflow file slug,
+    /// trigger event, status/conclusion enum, head branch.
+    static func makeActionsRunInitiatedEvent(snapshot: GitHubActionsRunSnapshot) -> RawEvent {
+        var payload: [String: String] = [
+            "source": "github",
+            "event_kind": "actions_run_initiated",
+            "run_id": String(snapshot.runID),
+            "repo": snapshot.repo,
+            "workflow_name": snapshot.workflowName,
+            "event": snapshot.event,
+            "status": snapshot.status,
+            "created_at_ms": String(snapshot.createdAtMs)
+        ]
+        // Только non-nil поля — отличает "completed→success" от "in_progress" (no
+        // conclusion yet) на read-side без nullable parsing.
+        if let conclusion = snapshot.conclusion {
+            payload["conclusion"] = conclusion
+        }
+        if let branch = snapshot.headBranch {
+            payload["head_branch"] = branch
+        }
+        return RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(snapshot.createdAtMs) / 1000.0),
+            signalType: .action,
             bundleID: nil,
             payload: payload
         )

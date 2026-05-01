@@ -40,6 +40,21 @@ public protocol GitHubAPIProvider: Sendable {
     /// State pulse — сколько моих PRs открыто across orgs. ADR-010: ни title ни body
     /// не читаем; берём только count. Provider возвращает `.empty(nowMs:)` на failure.
     func fetchMyOpenPRs(accessToken: String, login: String) async throws -> GitHubMyOpenPRsSummary
+
+    /// Phase 4.7.B-3 — `GET /repos/{owner}/{repo}/actions/runs?actor=<login>&per_page=10&created=>=<sinceISO>`.
+    /// Возвращает Actions runs запущенные пользователем во all `repos` начиная с `since`.
+    /// `repos` — pre-computed top-N most-recently-pushed репо (collector сам derive'ит
+    /// через `Database.queryActiveGitHubRepos`); empty list → 0 HTTP calls, returns [].
+    /// Per-repo failures (404 / 401 / non-200) — silent skip без fail всего batch'а.
+    /// `since` — epoch ms; provider конвертирует в ISO-8601 для query string.
+    /// ADR-010: `head_commit.message`, `name` of run (часто defaults к commit subject)
+    /// — НЕ store. `workflowName` (file-based: `release.yml` → "Release") — public-safe metadata.
+    func fetchActionsRunsForActor(
+        accessToken: String,
+        login: String,
+        repos: [String],
+        since: Int64
+    ) async throws -> [GitHubActionsRunSnapshot]
 }
 
 /// Результат одного REST fetch'а. `cursorMs` — `max(createdAt)` across `events`
@@ -198,6 +213,51 @@ public struct GitHubMyOpenPRsSummary: Sendable, Hashable {
     }
 }
 
+/// Phase 4.7.B-3 — один `workflow_runs[]` элемент `/repos/{owner}/{repo}/actions/runs`.
+/// Public-safe metadata (whitepaper Section 6 Action signal). ADR-010: ни
+/// `head_commit.message`, ни `name` of run (часто equals commit subject), ни
+/// `output.title`/`output.summary` — НЕ хранятся. `workflowName` derived from
+/// workflow file slug (e.g. `release.yml` → "Release") — public-safe.
+public struct GitHubActionsRunSnapshot: Sendable, Hashable {
+    /// REST `id` поля run'а — used для dedup на одном fetch'е.
+    public let runID: Int64
+    /// "owner/repo" — public-safe identifier.
+    public let repo: String
+    /// File-based workflow name (slug → display name). НЕ run-name (тот часто
+    /// equals commit subject — ADR-010 unsafe).
+    public let workflowName: String
+    /// Trigger event: "push" | "pull_request" | "schedule" | "workflow_dispatch" | ...
+    public let event: String
+    /// "queued" | "in_progress" | "completed".
+    public let status: String
+    /// "success" | "failure" | "cancelled" | "skipped" | nil if not completed.
+    public let conclusion: String?
+    /// Epoch ms of `created_at` (когда run был initiated).
+    public let createdAtMs: Int64
+    /// Branch ref (e.g. "main"). Может отсутствовать для некоторых trigger types.
+    public let headBranch: String?
+
+    public init(
+        runID: Int64,
+        repo: String,
+        workflowName: String,
+        event: String,
+        status: String,
+        conclusion: String?,
+        createdAtMs: Int64,
+        headBranch: String?
+    ) {
+        self.runID = runID
+        self.repo = repo
+        self.workflowName = workflowName
+        self.event = event
+        self.status = status
+        self.conclusion = conclusion
+        self.createdAtMs = createdAtMs
+        self.headBranch = headBranch
+    }
+}
+
 /// Stub для CI / dev-без-moat сборок. Никогда не делает HTTP call, возвращает
 /// `.empty` — GitHubCollector tick проходит no-op.
 public struct StubGitHubAPIProvider: GitHubAPIProvider {
@@ -213,5 +273,13 @@ public struct StubGitHubAPIProvider: GitHubAPIProvider {
     }
     public func fetchMyOpenPRs(accessToken: String, login: String) async throws -> GitHubMyOpenPRsSummary {
         .empty(nowMs: Int64(Date().timeIntervalSince1970 * 1000))
+    }
+    public func fetchActionsRunsForActor(
+        accessToken: String,
+        login: String,
+        repos: [String],
+        since: Int64
+    ) async throws -> [GitHubActionsRunSnapshot] {
+        []
     }
 }

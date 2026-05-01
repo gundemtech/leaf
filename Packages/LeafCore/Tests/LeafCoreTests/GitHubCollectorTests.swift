@@ -32,10 +32,14 @@ final class GitHubCollectorTests: XCTestCase {
         private(set) var notificationsCallCount: Int = 0
         private(set) var reviewQueueCallCount: Int = 0
         private(set) var myOpenPRsCallCount: Int = 0
+        private(set) var actionsRunsCallCount: Int = 0
+        private(set) var actionsRunsReposReceived: [[String]] = []
+        private(set) var actionsRunsSinceReceived: [Int64] = []
         private var batchToReturn: GitHubEventBatch = .empty
         private var notificationsSummaryToReturn: GitHubNotificationsSummary?
         private var reviewQueueSummaryToReturn: GitHubReviewQueueSummary?
         private var myOpenPRsSummaryToReturn: GitHubMyOpenPRsSummary?
+        private var actionsRunsToReturn: [GitHubActionsRunSnapshot] = []
 
         func fetchEvents(accessToken: String, login: String, since: Int64?) async throws -> GitHubEventBatch {
             sinceCalls.append(since)
@@ -69,6 +73,19 @@ final class GitHubCollectorTests: XCTestCase {
             )
         }
 
+        // Phase 4.7.B-3 — defaults к `[]` для backwards compat. setActionsRuns(_:)
+        // переопределяет результат для тестов, exercise'ующих action runs explicitly.
+        // Existing тесты используют signalType=.action filter assuming только batch
+        // events; default empty actions runs preserves этот invariant.
+        func fetchActionsRunsForActor(
+            accessToken: String, login: String, repos: [String], since: Int64
+        ) async throws -> [GitHubActionsRunSnapshot] {
+            actionsRunsCallCount += 1
+            actionsRunsReposReceived.append(repos)
+            actionsRunsSinceReceived.append(since)
+            return actionsRunsToReturn
+        }
+
         func setBatch(_ batch: GitHubEventBatch) {
             self.batchToReturn = batch
         }
@@ -85,11 +102,17 @@ final class GitHubCollectorTests: XCTestCase {
             self.myOpenPRsSummaryToReturn = summary
         }
 
+        func setActionsRuns(_ runs: [GitHubActionsRunSnapshot]) {
+            self.actionsRunsToReturn = runs
+        }
+
         func calls() -> [Int64?] { sinceCalls }
         func logins() -> [String] { loginCalls }
         func notificationsCalls() -> Int { notificationsCallCount }
         func reviewQueueCalls() -> Int { reviewQueueCallCount }
         func myOpenPRsCalls() -> Int { myOpenPRsCallCount }
+        func actionsRunsCalls() -> Int { actionsRunsCallCount }
+        func actionsRunsRepos() -> [[String]] { actionsRunsReposReceived }
     }
 
     // MARK: - Helpers
@@ -516,6 +539,77 @@ final class GitHubCollectorTests: XCTestCase {
         let reviewPulse = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "pr_awaiting_review_count" })
         XCTAssertEqual(reviewPulse.payload["count"], "0")
         XCTAssertNil(reviewPulse.payload["top_repo"], "topRepo=nil → key omitted entirely")
+    }
+
+    // MARK: - Phase 4.7.B-3 — actions runs
+
+    /// Provider stub returns 2 runs → 2 `actions_run_initiated` action events emitted.
+    /// `signal_type=.action` (discrete user action), payload содержит run_id + repo +
+    /// workflow_name + event + status. ADR-010 fields (head_commit.message / run.name)
+    /// — provider их не set'ит в snapshot, collector их не emit'ит.
+    func testTick_EmitsActionsRunInitiatedEvents() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockGitHubAPIProvider()
+        await provider.setBatch(.empty)
+        let baseMs: Int64 = 1_700_000_000_000
+        await provider.setActionsRuns([
+            GitHubActionsRunSnapshot(
+                runID: 100, repo: "octocat/leaf",
+                workflowName: "Release", event: "push",
+                status: "completed", conclusion: "success",
+                createdAtMs: baseMs, headBranch: "main"
+            ),
+            GitHubActionsRunSnapshot(
+                runID: 101, repo: "octocat/leaf",
+                workflowName: "Ci", event: "pull_request",
+                status: "in_progress", conclusion: nil,
+                createdAtMs: baseMs + 1000, headBranch: "feature/x"
+            )
+        ])
+
+        let refresher = GitHubTokenRefresher(database: db, clientID: "test-client")
+        let collector = GitHubCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7, logger: logger
+        )
+
+        let result = await collector.performTick()
+        XCTAssertFalse(result.skipped)
+        let runsCalls = await provider.actionsRunsCalls()
+        XCTAssertEqual(runsCalls, 1, "fetchActionsRunsForActor вызвался ровно раз")
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSince1970: TimeInterval(baseMs - 10_000) / 1000),
+            end: Date(timeIntervalSince1970: TimeInterval(baseMs + 10_000) / 1000)
+        ))
+        let runEvents = stored.filter { $0.payload["event_kind"] == "actions_run_initiated" }
+        XCTAssertEqual(runEvents.count, 2, "2 runs → 2 actions_run_initiated events")
+
+        // Все run-events должны иметь signal_type=.action (discrete user action).
+        for ev in runEvents {
+            XCTAssertEqual(ev.signalType, .action, "actions_run_initiated — signal_type=.action")
+            XCTAssertEqual(ev.payload["source"], "github")
+            XCTAssertNotNil(ev.payload["run_id"])
+            XCTAssertNotNil(ev.payload["repo"])
+            XCTAssertNotNil(ev.payload["workflow_name"])
+        }
+
+        // First run — completed/success, со всеми optional fields.
+        let releaseRun = try XCTUnwrap(runEvents.first { $0.payload["run_id"] == "100" })
+        XCTAssertEqual(releaseRun.payload["repo"], "octocat/leaf")
+        XCTAssertEqual(releaseRun.payload["workflow_name"], "Release")
+        XCTAssertEqual(releaseRun.payload["event"], "push")
+        XCTAssertEqual(releaseRun.payload["status"], "completed")
+        XCTAssertEqual(releaseRun.payload["conclusion"], "success")
+        XCTAssertEqual(releaseRun.payload["head_branch"], "main")
+
+        // Second run — in_progress, conclusion=nil → ключ omitted из payload.
+        let ciRun = try XCTUnwrap(runEvents.first { $0.payload["run_id"] == "101" })
+        XCTAssertEqual(ciRun.payload["status"], "in_progress")
+        XCTAssertNil(ciRun.payload["conclusion"], "conclusion=nil → key omitted entirely")
+        XCTAssertEqual(ciRun.payload["head_branch"], "feature/x")
     }
 
     /// Lifecycle smoke: start запускает loopTask, stop его cancels + awaits.
