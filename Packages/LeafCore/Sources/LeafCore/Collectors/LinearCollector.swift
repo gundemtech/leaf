@@ -187,6 +187,11 @@ public actor LinearCollector {
         //     провайдере client-side, см. ProdLinearGraphQLProvider.mapStateTransition).
         // Phase 4.7.A — третий flavor: linear_comment_authored aggregate per
         // issue с моими comments в окне tick'а (count-only, не per-comment).
+        // Phase 4.7.B — четвёртый flavor: linear_assigned_workload_pulse — single
+        // event per tick из batch.workload, signal_type=.context (state pulse,
+        // не action). Substrate consistency: emit'ится КАЖДЫЙ tick включая empty
+        // workload (startedCount=0) — downstream aggregator опирается на наличие
+        // sample, чтобы отличать "не успели poll'нуть" от "у юзера 0 in-flight".
         let nowMs = Int64(now.timeIntervalSince1970 * 1000)
         var events = batch.issues.map { Self.makeEvent(issue: $0) }
         events.append(contentsOf: batch.transitions.map { Self.makeTransitionEvent($0) })
@@ -194,6 +199,10 @@ public actor LinearCollector {
             .filter { $0.commentCountInWindow > 0 }
             .map { Self.makeCommentEvent(issue: $0, periodEndMs: nowMs) }
         events.append(contentsOf: commentEvents)
+        let workloadEvent = Self.makeAssignedWorkloadPulseEvent(
+            snapshot: batch.workload, nowMs: nowMs
+        )
+        events.append(workloadEvent)
         // Если batch пуст — cursor НЕ двигается (retry next tick на тех же since).
         // Если batch не пуст — cursor = batch.cursorMs (max updatedAt).
         let advancedCursor = batch.cursorMs ?? since
@@ -213,7 +222,7 @@ public actor LinearCollector {
             return TickResult(skipped: false, issuesProcessed: 0, cursorAdvancedMs: nil)
         }
         if !events.isEmpty {
-            logger.info("tick wrote \(events.count, privacy: .public) events (\(batch.issues.count, privacy: .public) issues + \(batch.transitions.count, privacy: .public) transitions + \(commentEvents.count, privacy: .public) comments), cursor=\(offset.lastModifiedMs, privacy: .public)")
+            logger.info("tick wrote \(events.count, privacy: .public) events (\(batch.issues.count, privacy: .public) issues + \(batch.transitions.count, privacy: .public) transitions + \(commentEvents.count, privacy: .public) comments + 1 workload pulse), cursor=\(offset.lastModifiedMs, privacy: .public)")
         }
         return TickResult(
             skipped: false,
@@ -265,6 +274,58 @@ public actor LinearCollector {
                 "period_end_ms": String(periodEndMs)
             ]
         )
+    }
+
+    /// Phase 4.7.B — RawEvent для linear_assigned_workload_pulse.
+    /// signalType=.context (это state pulse, не action — describes the *current*
+    /// snapshot of viewer's in-flight assigned issues). Emit'ится every tick
+    /// including empty workload (startedCount=0) для substrate consistency.
+    ///
+    /// Payload key conventions:
+    /// - `started_count` — всегда present (включая "0").
+    /// - `top_priority` — всегда present, string enum: "urgent"/"high"/"normal"/"low"/"none"
+    ///   (per plan literal — "none" не omit'ится, чтобы downstream parser не путал
+    ///   missing field с "не запросили").
+    /// - `last_touched_identifier` / `last_touched_ts_ms` — omit'ятся когда nil
+    ///   (consistent с completion_seconds pattern в makeEvent: отсутствие ключа
+    ///   = "no sample", не "" / "0" чтобы SQL `IS NOT NULL` корректно фильтровал).
+    ///
+    /// ADR-010: title issue'а НЕ хранится — даже для lastTouched issue'а; identifier
+    /// (e.g. "LEA-123") public-safe (self-authored team key + sequence number).
+    static func makeAssignedWorkloadPulseEvent(
+        snapshot: LinearAssignedWorkloadSnapshot,
+        nowMs: Int64
+    ) -> RawEvent {
+        var payload: [String: String] = [
+            "source": "linear",
+            "event_kind": "linear_assigned_workload_pulse",
+            "started_count": String(snapshot.startedCount),
+            "top_priority": Self.priorityString(snapshot.topPriority)
+        ]
+        if let id = snapshot.lastTouchedIdentifier {
+            payload["last_touched_identifier"] = id
+        }
+        if let ts = snapshot.lastTouchedTs {
+            payload["last_touched_ts_ms"] = String(ts)
+        }
+        return RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0),
+            signalType: .context,
+            bundleID: nil,
+            payload: payload
+        )
+    }
+
+    /// Maps Linear's int priority enum в string token. 0 ("no priority" в Linear UI)
+    /// и nil (workload empty или ни одна issue с priority>0) → "none".
+    private static func priorityString(_ value: Int?) -> String {
+        switch value {
+        case 1: return "urgent"
+        case 2: return "high"
+        case 3: return "normal"
+        case 4: return "low"
+        default: return "none"
+        }
     }
 
     /// Phase 4.6.B — RawEvent для my status transition. signalType=.action,

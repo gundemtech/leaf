@@ -22,22 +22,72 @@ public protocol LinearGraphQLProvider: Sendable {
 /// Phase 4.6.B — additive `transitions` поле: my status transitions из nested
 /// IssueHistory fragment, после client-side filter (Linear API не поддерживает
 /// `actor.isMe` filter на history connection).
+/// Phase 4.7.B — additive `workload` field: viewer's currently-`started` assigned
+/// issues snapshot. Single page (≤50 issues per user типично), single HTTP call —
+/// piggy-back на existing `fetchIssues` query через `viewer.assignedIssues` root field.
 public struct LinearIssueBatch: Sendable, Hashable {
     public let issues: [LinearIssueSnapshot]
     public let cursorMs: Int64?
     public let transitions: [LinearStateTransitionSnapshot]
+    public let workload: LinearAssignedWorkloadSnapshot
 
     public init(
         issues: [LinearIssueSnapshot],
         cursorMs: Int64?,
-        transitions: [LinearStateTransitionSnapshot] = []
+        transitions: [LinearStateTransitionSnapshot] = [],
+        workload: LinearAssignedWorkloadSnapshot = .empty
     ) {
         self.issues = issues
         self.cursorMs = cursorMs
         self.transitions = transitions
+        self.workload = workload
     }
 
-    public static let empty = LinearIssueBatch(issues: [], cursorMs: nil, transitions: [])
+    public static let empty = LinearIssueBatch(
+        issues: [], cursorMs: nil, transitions: [], workload: .empty
+    )
+}
+
+/// Phase 4.7.B — snapshot моих assigned `started` issues (current workload pulse).
+/// Substrate под Phase 5 broadcast (presence_state.linear) и MCP `get_workload_pulse`.
+/// Источник: `viewer.assignedIssues(filter: { state: { type: { in: [started] } } })`,
+/// single page first:50.
+///
+/// ADR-010 — title / description / body НЕ запрашиваются. Public-safe metadata only:
+/// counts, priority enum (Linear's int), identifier (self-authored label), updatedAt.
+public struct LinearAssignedWorkloadSnapshot: Sendable, Hashable {
+    /// Сколько issues с `state.type == "started"` assigned на меня прямо сейчас.
+    /// 0 если у меня ничего in-flight.
+    public let startedCount: Int
+    /// Linear priority enum: 1=urgent, 2=high, 3=normal, 4=low. `nil` если:
+    /// (а) startedCount == 0, (б) все issues с priority == 0 ("no priority" в Linear).
+    /// Минимум по issues — самый срочный приоритет в текущей нагрузке.
+    public let topPriority: Int?
+    /// Identifier (e.g. "LEA-123") issue с самым свежим `updatedAt` в started bucket.
+    /// `nil` если startedCount == 0.
+    public let lastTouchedIdentifier: String?
+    /// Epoch ms того самого most-recent `updatedAt`.
+    /// `nil` если startedCount == 0.
+    public let lastTouchedTs: Int64?
+
+    public init(
+        startedCount: Int,
+        topPriority: Int?,
+        lastTouchedIdentifier: String?,
+        lastTouchedTs: Int64?
+    ) {
+        self.startedCount = startedCount
+        self.topPriority = topPriority
+        self.lastTouchedIdentifier = lastTouchedIdentifier
+        self.lastTouchedTs = lastTouchedTs
+    }
+
+    public static let empty = LinearAssignedWorkloadSnapshot(
+        startedCount: 0,
+        topPriority: nil,
+        lastTouchedIdentifier: nil,
+        lastTouchedTs: nil
+    )
 }
 
 /// Один issue в batch'е — public-safe metadata (whitepaper Section 6 Action signal).

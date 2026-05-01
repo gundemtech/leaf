@@ -121,7 +121,8 @@ final class LinearCollectorTests: XCTestCase {
         let result = await collector.performTick()
 
         XCTAssertFalse(result.skipped)
-        XCTAssertEqual(result.issuesProcessed, 2)
+        // 2 issue_updated + 1 workload pulse (Phase 4.7.B — emit'ится every tick).
+        XCTAssertEqual(result.issuesProcessed, 3)
         XCTAssertEqual(result.cursorAdvancedMs, cursorMs)
 
         // Atomic write: оба events + offset row должны быть в БД.
@@ -185,7 +186,8 @@ final class LinearCollectorTests: XCTestCase {
             userDefaultsSuiteName: makeIsolatedSuiteName()
         )
         let result = await collector.performTick()
-        XCTAssertEqual(result.issuesProcessed, 3)
+        // 3 issue_updated + 1 workload pulse (Phase 4.7.B).
+        XCTAssertEqual(result.issuesProcessed, 4)
 
         let stored = try db.events(in: DateInterval(
             start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1000) / 1000),
@@ -452,6 +454,94 @@ final class LinearCollectorTests: XCTestCase {
             end: Date(timeIntervalSinceNow: 3600)
         ))
         XCTAssertNil(stored.first { $0.payload["event_kind"] == "linear_comment_authored" })
+    }
+
+    // MARK: - Phase 4.7.B — linear_assigned_workload_pulse
+
+    /// Batch с populated workload → events array contains pulse event с
+    /// payload, отражающим snapshot (started_count + top_priority + last_touched).
+    func testTick_EmitsLinearWorkloadPulseEvent() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockLinearGraphQLProvider()
+        let cursorMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000) - 60_000
+        let lastTouchedTs: Int64 = cursorMs - 1_000
+        await provider.setBatch(LinearIssueBatch(
+            issues: [],
+            cursorMs: nil,
+            transitions: [],
+            workload: LinearAssignedWorkloadSnapshot(
+                startedCount: 3,
+                topPriority: 1,  // urgent
+                lastTouchedIdentifier: "LEA-201",
+                lastTouchedTs: lastTouchedTs
+            )
+        ))
+
+        let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
+        let collector = LinearCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7,
+            logger: logger,
+            userDefaultsSuiteName: makeIsolatedSuiteName()
+        )
+        _ = await collector.performTick()
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSinceNow: -3600),
+            end: Date(timeIntervalSinceNow: 3600)
+        ))
+        let pulse = try XCTUnwrap(
+            stored.first { $0.payload["event_kind"] == "linear_assigned_workload_pulse" },
+            "expected one pulse event with populated workload"
+        )
+        XCTAssertEqual(pulse.payload["source"], "linear")
+        XCTAssertEqual(pulse.payload["started_count"], "3")
+        XCTAssertEqual(pulse.payload["top_priority"], "urgent")
+        XCTAssertEqual(pulse.payload["last_touched_identifier"], "LEA-201")
+        XCTAssertEqual(pulse.payload["last_touched_ts_ms"], String(lastTouchedTs))
+        XCTAssertEqual(pulse.signalType, .context, "workload pulse — state pulse, signal_type=.context")
+        // ADR-010 regression: pulse не должен нести title (snapshot его не несёт,
+        // но defensive — payload не должен contain'ить любые non-whitelisted keys).
+        XCTAssertNil(pulse.payload["title"])
+    }
+
+    /// Empty workload (startedCount=0) → pulse всё равно emit'ится с
+    /// started_count="0" + top_priority="none" + omitted last_touched_*.
+    /// Substrate consistency: downstream aggregator опирается на наличие sample.
+    func testTick_LinearWorkloadPulseAlwaysEmitted() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockLinearGraphQLProvider()
+        // Empty batch с empty workload — bootstrap path with nothing in flight.
+        await provider.setBatch(.empty)
+
+        let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
+        let collector = LinearCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7,
+            logger: logger,
+            userDefaultsSuiteName: makeIsolatedSuiteName()
+        )
+        _ = await collector.performTick()
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSinceNow: -3600),
+            end: Date(timeIntervalSinceNow: 3600)
+        ))
+        let pulse = try XCTUnwrap(
+            stored.first { $0.payload["event_kind"] == "linear_assigned_workload_pulse" },
+            "pulse должен emit'иться даже на empty workload"
+        )
+        XCTAssertEqual(pulse.payload["started_count"], "0")
+        XCTAssertEqual(pulse.payload["top_priority"], "none",
+                       "empty workload → top_priority=\"none\" (всегда present, не omitted)")
+        XCTAssertNil(pulse.payload["last_touched_identifier"],
+                     "nil identifier → key omitted")
+        XCTAssertNil(pulse.payload["last_touched_ts_ms"],
+                     "nil ts → key omitted")
     }
 
     /// Lifecycle smoke: start запускает loopTask, stop его cancels + awaits.
