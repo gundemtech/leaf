@@ -27,6 +27,19 @@ public protocol GitHubAPIProvider: Sendable {
     /// Body / subject text НЕ extract'им (ADR-010). Provider возвращает `.empty(nowMs:)` на
     /// non-200 / parse failure — graceful degradation, не блокирует events tick.
     func fetchNotifications(accessToken: String) async throws -> GitHubNotificationsSummary
+
+    /// Phase 4.7.B-2 — `GET /search/issues?q=review-requested:@me+is:open+is:pr&per_page=50`.
+    /// State pulse — сколько PRs ждут моего review прямо сейчас + top repo
+    /// (most pending PRs). Body / title text НЕ extract'им (ADR-010) — только count
+    /// + repo identifier (parsed из `repository_url` каждого item'а). Provider возвращает
+    /// `.empty(nowMs:)` на non-200 / parse failure — graceful degradation.
+    /// `login` сейчас не used (`@me` query token), но reserved для future per-org filter.
+    func fetchPRsAwaitingReview(accessToken: String, login: String) async throws -> GitHubReviewQueueSummary
+
+    /// Phase 4.7.B-2 — `GET /search/issues?q=author:@me+is:open+is:pr&per_page=50`.
+    /// State pulse — сколько моих PRs открыто across orgs. ADR-010: ни title ни body
+    /// не читаем; берём только count. Provider возвращает `.empty(nowMs:)` на failure.
+    func fetchMyOpenPRs(accessToken: String, login: String) async throws -> GitHubMyOpenPRsSummary
 }
 
 /// Результат одного REST fetch'а. `cursorMs` — `max(createdAt)` across `events`
@@ -139,6 +152,52 @@ public struct GitHubNotificationsSummary: Sendable, Hashable {
     }
 }
 
+/// Phase 4.7.B-2 — summary `/search/issues?q=review-requested:@me+is:open+is:pr`.
+/// State snapshot: количество PRs ждущих моего review + top repo (most pending PRs)
+/// для self-UI. ADR-010: ни title, ни body items не читаем — только `repository_url`.
+/// Эмитится как `pr_awaiting_review_count` event с `signal_type=.context`.
+public struct GitHubReviewQueueSummary: Sendable, Hashable {
+    /// Сумма PRs awaiting my review (search.issues `total_count` или len(items[])).
+    public let count: Int
+    /// "owner/repo" с most-pending PRs. `nil` если `count == 0`.
+    /// На равенстве — берём первый встреченный (search.issues порядок by best-match).
+    public let topRepo: String?
+    /// `now` от Agent'а в момент fetch'а. Used как `observed_at_ms` в payload.
+    public let observedAtMs: Int64
+
+    public init(count: Int, topRepo: String?, observedAtMs: Int64) {
+        self.count = count
+        self.topRepo = topRepo
+        self.observedAtMs = observedAtMs
+    }
+
+    /// Used при non-200 / parse failure / graceful degradation. `count=0` +
+    /// `topRepo=nil` — семантически валиден ("review queue empty в момент N").
+    public static func empty(nowMs: Int64) -> GitHubReviewQueueSummary {
+        GitHubReviewQueueSummary(count: 0, topRepo: nil, observedAtMs: nowMs)
+    }
+}
+
+/// Phase 4.7.B-2 — summary `/search/issues?q=author:@me+is:open+is:pr`.
+/// State snapshot: количество моих open PRs across orgs. ADR-010: ни title, ни body
+/// не читаем — только count. Эмитится как `my_open_pr_count` event, `signal_type=.context`.
+public struct GitHubMyOpenPRsSummary: Sendable, Hashable {
+    /// Сумма моих open PRs.
+    public let count: Int
+    /// `now` от Agent'а в момент fetch'а. Used как `observed_at_ms` в payload.
+    public let observedAtMs: Int64
+
+    public init(count: Int, observedAtMs: Int64) {
+        self.count = count
+        self.observedAtMs = observedAtMs
+    }
+
+    /// Used при non-200 / parse failure / graceful degradation.
+    public static func empty(nowMs: Int64) -> GitHubMyOpenPRsSummary {
+        GitHubMyOpenPRsSummary(count: 0, observedAtMs: nowMs)
+    }
+}
+
 /// Stub для CI / dev-без-moat сборок. Никогда не делает HTTP call, возвращает
 /// `.empty` — GitHubCollector tick проходит no-op.
 public struct StubGitHubAPIProvider: GitHubAPIProvider {
@@ -147,6 +206,12 @@ public struct StubGitHubAPIProvider: GitHubAPIProvider {
         .empty
     }
     public func fetchNotifications(accessToken: String) async throws -> GitHubNotificationsSummary {
+        .empty(nowMs: Int64(Date().timeIntervalSince1970 * 1000))
+    }
+    public func fetchPRsAwaitingReview(accessToken: String, login: String) async throws -> GitHubReviewQueueSummary {
+        .empty(nowMs: Int64(Date().timeIntervalSince1970 * 1000))
+    }
+    public func fetchMyOpenPRs(accessToken: String, login: String) async throws -> GitHubMyOpenPRsSummary {
         .empty(nowMs: Int64(Date().timeIntervalSince1970 * 1000))
     }
 }

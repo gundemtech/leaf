@@ -150,6 +150,31 @@ public actor GitHubCollector {
         }
         events.append(Self.makeNotificationsPulseEvent(summary: notifSummary, nowMs: nowMs))
 
+        // 5b. Phase 4.7.B-2 — review queue + my open PRs pulse. Each fetch wrapped
+        // в свой do/catch — независимый graceful degrade. Always emit пульсы
+        // даже при failure (counts=0, top_repo omitted) — observability discipline.
+        let reviewQueueSummary: GitHubReviewQueueSummary
+        do {
+            reviewQueueSummary = try await provider.fetchPRsAwaitingReview(
+                accessToken: refreshed.accessToken, login: login
+            )
+        } catch {
+            logger.error("fetchPRsAwaitingReview failed: \(String(describing: error), privacy: .public)")
+            reviewQueueSummary = .empty(nowMs: nowMs)
+        }
+        events.append(Self.makePRAwaitingReviewCountEvent(summary: reviewQueueSummary, nowMs: nowMs))
+
+        let myOpenPRsSummary: GitHubMyOpenPRsSummary
+        do {
+            myOpenPRsSummary = try await provider.fetchMyOpenPRs(
+                accessToken: refreshed.accessToken, login: login
+            )
+        } catch {
+            logger.error("fetchMyOpenPRs failed: \(String(describing: error), privacy: .public)")
+            myOpenPRsSummary = .empty(nowMs: nowMs)
+        }
+        events.append(Self.makeMyOpenPRCountEvent(summary: myOpenPRsSummary, nowMs: nowMs))
+
         // 6. Atomic write.
         // Если batch пуст — cursor НЕ двигается (retry next tick на том же since).
         // Если batch не пуст — cursor = batch.cursorMs (max createdAt).
@@ -197,6 +222,48 @@ public actor GitHubCollector {
         for (reason, count) in summary.byReason {
             payload["reason_\(reason)_count"] = String(count)
         }
+        return RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0),
+            signalType: .context,
+            bundleID: nil,
+            payload: payload
+        )
+    }
+
+    /// Phase 4.7.B-2 — `pr_awaiting_review_count` state event. Эмитится каждый tick.
+    /// `signal_type=.context` (state pulse). `top_repo` поле omitted при `count==0`
+    /// или `topRepo==nil` — отличает "нет данных" от "owner/repo:0".
+    static func makePRAwaitingReviewCountEvent(
+        summary: GitHubReviewQueueSummary, nowMs: Int64
+    ) -> RawEvent {
+        var payload: [String: String] = [
+            "source": "github",
+            "event_kind": "pr_awaiting_review_count",
+            "count": String(summary.count),
+            "observed_at_ms": String(nowMs)
+        ]
+        if let topRepo = summary.topRepo {
+            payload["top_repo"] = topRepo
+        }
+        return RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0),
+            signalType: .context,
+            bundleID: nil,
+            payload: payload
+        )
+    }
+
+    /// Phase 4.7.B-2 — `my_open_pr_count` state event. Эмитится каждый tick.
+    /// `signal_type=.context` (state pulse).
+    static func makeMyOpenPRCountEvent(
+        summary: GitHubMyOpenPRsSummary, nowMs: Int64
+    ) -> RawEvent {
+        let payload: [String: String] = [
+            "source": "github",
+            "event_kind": "my_open_pr_count",
+            "count": String(summary.count),
+            "observed_at_ms": String(nowMs)
+        ]
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0),
             signalType: .context,

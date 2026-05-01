@@ -38,6 +38,12 @@ public enum GitHubOAuthEndpoints {
     /// Body / subject text НЕ extract'им (ADR-010) — только count + reason breakdown.
     public static let notifications = URL(string: "https://api.github.com/notifications")!
 
+    /// `GET /search/issues?q=...&per_page=50` — Phase 4.7.B-2.
+    /// Used для review queue (`review-requested:@me+is:open+is:pr`) и моих open PRs
+    /// (`author:@me+is:open+is:pr`). ADR-010: title / body items НЕ читаем — только
+    /// `repository_url` (parsed → "owner/repo") и total count.
+    public static let searchIssues = URL(string: "https://api.github.com/search/issues")!
+
     /// Минимальный scope для work workflow integration.
     /// `repo` — обязателен для private events (без него feed возвращает только public, тихо).
     /// `read:user` — для GET /user identity fetch.

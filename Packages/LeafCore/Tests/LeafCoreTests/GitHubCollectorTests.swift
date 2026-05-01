@@ -30,8 +30,12 @@ final class GitHubCollectorTests: XCTestCase {
         private(set) var sinceCalls: [Int64?] = []
         private(set) var loginCalls: [String] = []
         private(set) var notificationsCallCount: Int = 0
+        private(set) var reviewQueueCallCount: Int = 0
+        private(set) var myOpenPRsCallCount: Int = 0
         private var batchToReturn: GitHubEventBatch = .empty
         private var notificationsSummaryToReturn: GitHubNotificationsSummary?
+        private var reviewQueueSummaryToReturn: GitHubReviewQueueSummary?
+        private var myOpenPRsSummaryToReturn: GitHubMyOpenPRsSummary?
 
         func fetchEvents(accessToken: String, login: String, since: Int64?) async throws -> GitHubEventBatch {
             sinceCalls.append(since)
@@ -49,6 +53,22 @@ final class GitHubCollectorTests: XCTestCase {
             )
         }
 
+        // Phase 4.7.B-2 — defaults к `.empty` для backwards compat с existing тестами,
+        // которые сосредоточены на batch events / cursor flow.
+        func fetchPRsAwaitingReview(accessToken: String, login: String) async throws -> GitHubReviewQueueSummary {
+            reviewQueueCallCount += 1
+            return reviewQueueSummaryToReturn ?? .empty(
+                nowMs: Int64(Date().timeIntervalSince1970 * 1000)
+            )
+        }
+
+        func fetchMyOpenPRs(accessToken: String, login: String) async throws -> GitHubMyOpenPRsSummary {
+            myOpenPRsCallCount += 1
+            return myOpenPRsSummaryToReturn ?? .empty(
+                nowMs: Int64(Date().timeIntervalSince1970 * 1000)
+            )
+        }
+
         func setBatch(_ batch: GitHubEventBatch) {
             self.batchToReturn = batch
         }
@@ -57,9 +77,19 @@ final class GitHubCollectorTests: XCTestCase {
             self.notificationsSummaryToReturn = summary
         }
 
+        func setReviewQueueSummary(_ summary: GitHubReviewQueueSummary) {
+            self.reviewQueueSummaryToReturn = summary
+        }
+
+        func setMyOpenPRsSummary(_ summary: GitHubMyOpenPRsSummary) {
+            self.myOpenPRsSummaryToReturn = summary
+        }
+
         func calls() -> [Int64?] { sinceCalls }
         func logins() -> [String] { loginCalls }
         func notificationsCalls() -> Int { notificationsCallCount }
+        func reviewQueueCalls() -> Int { reviewQueueCallCount }
+        func myOpenPRsCalls() -> Int { myOpenPRsCallCount }
     }
 
     // MARK: - Helpers
@@ -151,9 +181,18 @@ final class GitHubCollectorTests: XCTestCase {
         let result = await collector.performTick()
 
         XCTAssertFalse(result.skipped)
-        // 3 events from batch + 1 pulse event (Phase 4.7.B-1).
-        XCTAssertEqual(result.eventsProcessed, 4)
         XCTAssertEqual(result.cursorAdvancedMs, cursorMs)
+
+        // Structural assertion на batch events: filter by signalType=.action.
+        // Pulses (notifications / pr_awaiting_review_count / my_open_pr_count) идут
+        // как .context — не пересекаются. Forward-compat: следующие B-tasks могут
+        // добавлять new pulse'ы без bumping числовых counts здесь.
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSince1970: TimeInterval(cursorMs - 10_000) / 1000),
+            end: Date(timeIntervalSince1970: TimeInterval(cursorMs + 10_000) / 1000)
+        ))
+        let actionEvents = stored.filter { $0.signalType == .action }
+        XCTAssertEqual(actionEvents.count, 3, "3 batch events from fetchEvents")
 
         // Atomic write: события + offset row должны быть в БД.
         let offset = try db.readOffset(
@@ -217,14 +256,16 @@ final class GitHubCollectorTests: XCTestCase {
             intervalSec: 999, backfillWindowDays: 7,
             logger: logger
         )
-        let result = await collector.performTick()
-        // 3 events from batch + 1 pulse event (Phase 4.7.B-1).
-        XCTAssertEqual(result.eventsProcessed, 4)
+        _ = await collector.performTick()
 
         let stored = try db.events(in: DateInterval(
             start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1000) / 1000),
             end: Date(timeIntervalSince1970: TimeInterval(baseMs + 5000) / 1000)
         ))
+        // Structural assertion: 3 .action events from batch + N .context pulses.
+        // Filter by signalType — forward-compat across future B-tasks.
+        let actionEvents = stored.filter { $0.signalType == .action }
+        XCTAssertEqual(actionEvents.count, 3, "3 batch events with signalType=.action")
 
         let merged = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "pr_merged" })
         XCTAssertEqual(merged.payload["cycle_seconds"], "10800")
@@ -369,8 +410,6 @@ final class GitHubCollectorTests: XCTestCase {
 
         let result = await collector.performTick()
         XCTAssertFalse(result.skipped)
-        // Empty batch (0 events) + 1 pulse = 1 event total.
-        XCTAssertEqual(result.eventsProcessed, 1)
         let notifCalls = await provider.notificationsCalls()
         XCTAssertEqual(notifCalls, 1, "fetchNotifications вызвался ровно раз")
 
@@ -379,6 +418,9 @@ final class GitHubCollectorTests: XCTestCase {
             start: Date(timeIntervalSince1970: 0),
             end: Date(timeIntervalSince1970: TimeInterval(Date().timeIntervalSince1970 + 60))
         ))
+        // Empty batch → нет .action events; только .context pulses.
+        XCTAssertEqual(stored.filter { $0.signalType == .action }.count, 0,
+                       "empty batch → нет .action events")
         let pulse = try XCTUnwrap(
             stored.first { $0.payload["event_kind"] == "github_notifications_pulse" },
             "ожидался github_notifications_pulse event"
@@ -390,6 +432,90 @@ final class GitHubCollectorTests: XCTestCase {
         XCTAssertEqual(pulse.payload["reason_mention_count"], "1")
         XCTAssertEqual(pulse.payload["reason_comment_count"], "1")
         XCTAssertNotNil(pulse.payload["observed_at_ms"], "observed_at_ms всегда populated")
+    }
+
+    // MARK: - Phase 4.7.B-2 — review queue + my open PRs pulses
+
+    /// Provider stubs return non-empty summaries → tick должен emit'ить два pulse
+    /// event'а: `pr_awaiting_review_count` (с `top_repo`) и `my_open_pr_count`.
+    /// Both signal_type=.context (state pulses, не user actions).
+    func testTick_EmitsPRAwaitingReviewAndMyOpenPRs() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockGitHubAPIProvider()
+        await provider.setBatch(.empty)
+        let observedAt: Int64 = 1_700_000_000_000
+        await provider.setReviewQueueSummary(GitHubReviewQueueSummary(
+            count: 5, topRepo: "octocat/leaf", observedAtMs: observedAt
+        ))
+        await provider.setMyOpenPRsSummary(GitHubMyOpenPRsSummary(
+            count: 7, observedAtMs: observedAt
+        ))
+
+        let refresher = GitHubTokenRefresher(database: db, clientID: "test-client")
+        let collector = GitHubCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7, logger: logger
+        )
+
+        let result = await collector.performTick()
+        XCTAssertFalse(result.skipped)
+        let reviewCalls = await provider.reviewQueueCalls()
+        let myOpenCalls = await provider.myOpenPRsCalls()
+        XCTAssertEqual(reviewCalls, 1, "fetchPRsAwaitingReview вызвался ровно раз")
+        XCTAssertEqual(myOpenCalls, 1, "fetchMyOpenPRs вызвался ровно раз")
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSince1970: 0),
+            end: Date(timeIntervalSince1970: TimeInterval(Date().timeIntervalSince1970 + 60))
+        ))
+
+        let reviewPulse = try XCTUnwrap(
+            stored.first { $0.payload["event_kind"] == "pr_awaiting_review_count" },
+            "ожидался pr_awaiting_review_count event"
+        )
+        XCTAssertEqual(reviewPulse.signalType, .context)
+        XCTAssertEqual(reviewPulse.payload["source"], "github")
+        XCTAssertEqual(reviewPulse.payload["count"], "5")
+        XCTAssertEqual(reviewPulse.payload["top_repo"], "octocat/leaf")
+        XCTAssertNotNil(reviewPulse.payload["observed_at_ms"])
+
+        let openPulse = try XCTUnwrap(
+            stored.first { $0.payload["event_kind"] == "my_open_pr_count" },
+            "ожидался my_open_pr_count event"
+        )
+        XCTAssertEqual(openPulse.signalType, .context)
+        XCTAssertEqual(openPulse.payload["source"], "github")
+        XCTAssertEqual(openPulse.payload["count"], "7")
+        XCTAssertNil(openPulse.payload["top_repo"], "my_open_pr_count не несёт top_repo")
+        XCTAssertNotNil(openPulse.payload["observed_at_ms"])
+    }
+
+    /// `top_repo` payload key omitted при `count==0` (review queue empty).
+    /// Отличает "ничего не ждёт" от "ничего не fetched" / future error states.
+    func testTick_EmptyReviewQueueOmitsTopRepoKey() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockGitHubAPIProvider()
+        await provider.setBatch(.empty)
+        // Default mock summaries — empty (.empty(nowMs:)) — count=0, topRepo=nil.
+
+        let refresher = GitHubTokenRefresher(database: db, clientID: "test-client")
+        let collector = GitHubCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7, logger: logger
+        )
+        _ = await collector.performTick()
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSince1970: 0),
+            end: Date(timeIntervalSince1970: TimeInterval(Date().timeIntervalSince1970 + 60))
+        ))
+        let reviewPulse = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "pr_awaiting_review_count" })
+        XCTAssertEqual(reviewPulse.payload["count"], "0")
+        XCTAssertNil(reviewPulse.payload["top_repo"], "topRepo=nil → key omitted entirely")
     }
 
     /// Lifecycle smoke: start запускает loopTask, stop его cancels + awaits.
