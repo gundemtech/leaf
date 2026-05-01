@@ -112,6 +112,20 @@ public actor LinearCollector {
         public let skipped: Bool
         public let issuesProcessed: Int
         public let cursorAdvancedMs: Int64?
+        /// Phase 4.7.A — linear_comment_authored events emitted в этом tick'е (один per issue с count > 0).
+        public let commentEventsEmitted: Int
+
+        public init(
+            skipped: Bool,
+            issuesProcessed: Int,
+            cursorAdvancedMs: Int64?,
+            commentEventsEmitted: Int = 0
+        ) {
+            self.skipped = skipped
+            self.issuesProcessed = issuesProcessed
+            self.cursorAdvancedMs = cursorAdvancedMs
+            self.commentEventsEmitted = commentEventsEmitted
+        }
     }
 
     @discardableResult
@@ -171,9 +185,15 @@ public actor LinearCollector {
         // (a) issue_updated per touched issue (Phase 4.2 baseline shape),
         // (b) status_transition per my-actor history entry (filter применён в
         //     провайдере client-side, см. ProdLinearGraphQLProvider.mapStateTransition).
+        // Phase 4.7.A — третий flavor: linear_comment_authored aggregate per
+        // issue с моими comments в окне tick'а (count-only, не per-comment).
+        let nowMs = Int64(now.timeIntervalSince1970 * 1000)
         var events = batch.issues.map { Self.makeEvent(issue: $0) }
         events.append(contentsOf: batch.transitions.map { Self.makeTransitionEvent($0) })
-        let nowMs = Int64(now.timeIntervalSince1970 * 1000)
+        let commentEvents = batch.issues
+            .filter { $0.commentCountInWindow > 0 }
+            .map { Self.makeCommentEvent(issue: $0, periodEndMs: nowMs) }
+        events.append(contentsOf: commentEvents)
         // Если batch пуст — cursor НЕ двигается (retry next tick на тех же since).
         // Если batch не пуст — cursor = batch.cursorMs (max updatedAt).
         let advancedCursor = batch.cursorMs ?? since
@@ -193,12 +213,13 @@ public actor LinearCollector {
             return TickResult(skipped: false, issuesProcessed: 0, cursorAdvancedMs: nil)
         }
         if !events.isEmpty {
-            logger.info("tick wrote \(events.count, privacy: .public) events (\(batch.issues.count, privacy: .public) issues + \(batch.transitions.count, privacy: .public) transitions), cursor=\(offset.lastModifiedMs, privacy: .public)")
+            logger.info("tick wrote \(events.count, privacy: .public) events (\(batch.issues.count, privacy: .public) issues + \(batch.transitions.count, privacy: .public) transitions + \(commentEvents.count, privacy: .public) comments), cursor=\(offset.lastModifiedMs, privacy: .public)")
         }
         return TickResult(
             skipped: false,
             issuesProcessed: events.count,
-            cursorAdvancedMs: advancedCursor
+            cursorAdvancedMs: advancedCursor,
+            commentEventsEmitted: commentEvents.count
         )
     }
 
@@ -224,6 +245,25 @@ public actor LinearCollector {
             signalType: .action,
             bundleID: nil,
             payload: payload
+        )
+    }
+
+    /// Phase 4.7.A — RawEvent для linear_comment_authored aggregate.
+    /// Single event per issue per tick, count = моих comments в окне.
+    /// ADR-010: bodies НЕ хранятся (provider не запрашивает body вообще).
+    static func makeCommentEvent(issue: LinearIssueSnapshot, periodEndMs: Int64) -> RawEvent {
+        RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(periodEndMs) / 1000.0),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "linear",
+                "event_kind": "linear_comment_authored",
+                "issue_key": issue.issueKey,
+                "team_key": issue.teamKey,
+                "count_in_window": String(issue.commentCountInWindow),
+                "period_end_ms": String(periodEndMs)
+            ]
         )
     }
 

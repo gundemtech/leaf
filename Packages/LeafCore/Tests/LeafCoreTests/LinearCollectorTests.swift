@@ -373,6 +373,87 @@ final class LinearCollectorTests: XCTestCase {
         XCTAssertEqual(linearEvents.first?.payload["issue_key"], "LEA-NEW")
     }
 
+    // MARK: - Phase 4.7.A — linear_comment_authored
+
+    /// Issue с count > 0 → emit linear_comment_authored event рядом с issue_updated.
+    func testTickEmitsCommentEventWhenCountPositive() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockLinearGraphQLProvider()
+        // Использую timestamp близкий к now — comment event пишется
+        // с periodEndMs = now (а не cursorMs), а issue_updated с cursorMs.
+        // Range query должен покрыть оба.
+        let cursorMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000) - 60_000
+        await provider.setBatch(LinearIssueBatch(
+            issues: [
+                LinearIssueSnapshot(
+                    issueKey: "LEA-1", title: "Topic", status: "In Progress",
+                    project: "Leaf", teamKey: "LEA", updatedAtMs: cursorMs,
+                    completionSeconds: nil, commentCountInWindow: 4
+                )
+            ],
+            cursorMs: cursorMs
+        ))
+
+        let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
+        let collector = LinearCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7,
+            logger: logger,
+            userDefaultsSuiteName: makeIsolatedSuiteName()
+        )
+        let result = await collector.performTick()
+        XCTAssertEqual(result.commentEventsEmitted, 1)
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSinceNow: -3600),
+            end: Date(timeIntervalSinceNow: 3600)
+        ))
+        let issueEvent = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "issue_updated" })
+        XCTAssertEqual(issueEvent.payload["issue_key"], "LEA-1")
+
+        let comment = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "linear_comment_authored" })
+        XCTAssertEqual(comment.payload["issue_key"], "LEA-1")
+        XCTAssertEqual(comment.payload["count_in_window"], "4")
+        XCTAssertEqual(comment.payload["team_key"], "LEA")
+    }
+
+    /// Issue с count=0 → no comment event.
+    func testTickDoesNotEmitCommentEventWhenCountZero() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockLinearGraphQLProvider()
+        let cursorMs: Int64 = 1_700_000_000_000
+        await provider.setBatch(LinearIssueBatch(
+            issues: [
+                LinearIssueSnapshot(
+                    issueKey: "LEA-1", title: "Topic", status: "In Progress",
+                    project: "", teamKey: "LEA", updatedAtMs: cursorMs,
+                    commentCountInWindow: 0
+                )
+            ],
+            cursorMs: cursorMs
+        ))
+
+        let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
+        let collector = LinearCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7,
+            logger: logger,
+            userDefaultsSuiteName: makeIsolatedSuiteName()
+        )
+        let result = await collector.performTick()
+        XCTAssertEqual(result.commentEventsEmitted, 0)
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSinceNow: -3600),
+            end: Date(timeIntervalSinceNow: 3600)
+        ))
+        XCTAssertNil(stored.first { $0.payload["event_kind"] == "linear_comment_authored" })
+    }
+
     /// Lifecycle smoke: start запускает loopTask, stop его cancels + awaits.
     /// Без assertion — если actor zombie'ит, тест зависнет (timeout safeguard).
     func testStartStopLifecycle() async throws {

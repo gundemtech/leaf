@@ -61,6 +61,11 @@ public struct LinearIssueSnapshot: Sendable, Hashable {
     /// (б) startedAt отсутствует, (в) completedAt раньше polling cursor'а.
     /// Clock skew clamped к 0.
     public let completionSeconds: Int?
+    /// Phase 4.7.A — count моих comment'ов в этом issue, приходящихся на tick window
+    /// (`createdAt > effectiveSince`, filter actor по `user.id == viewer.id`,
+    /// applied client-side в parser'е). 0 если не было моих comments.
+    /// ADR-010: bodies НЕ запрашиваются — только id + createdAt + user.id для filter.
+    public let commentCountInWindow: Int
 
     public init(
         issueKey: String,
@@ -69,7 +74,8 @@ public struct LinearIssueSnapshot: Sendable, Hashable {
         project: String,
         teamKey: String,
         updatedAtMs: Int64,
-        completionSeconds: Int? = nil
+        completionSeconds: Int? = nil,
+        commentCountInWindow: Int = 0
     ) {
         self.issueKey = issueKey
         self.title = title
@@ -78,6 +84,7 @@ public struct LinearIssueSnapshot: Sendable, Hashable {
         self.teamKey = teamKey
         self.updatedAtMs = updatedAtMs
         self.completionSeconds = completionSeconds
+        self.commentCountInWindow = commentCountInWindow
     }
 }
 
