@@ -40,6 +40,7 @@ public final class Database: @unchecked Sendable {
         migrator.registerMigration002CollectorOffsets()
         migrator.registerMigration003WatchedFolders()
         migrator.registerMigration004Integrations()
+        migrator.registerMigration005PresenceState()
         try migrator.migrate(pool)
 
         return Database(pool: pool, config: config, mode: .writer)
