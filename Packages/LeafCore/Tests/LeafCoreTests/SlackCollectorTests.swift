@@ -355,6 +355,150 @@ final class SlackCollectorTests: XCTestCase {
         XCTAssertEqual(eng?.payload["event_kind"], "message_authored_aggregate")
     }
 
+    // MARK: - Phase 4.7.A — slack_status_change
+
+    /// First tick observed=":coffee:", lastEmitted=nil → emit. Second tick тот же
+    /// emoji → no emit. Third tick observed=":pizza:" → emit.
+    func testTickStatusEmojiChangeEmitsEvent() async throws {
+        let db = try makeDB()
+        try insertFreshIntegration(db: db)
+        let provider = MockSlackAPIProvider()
+        let collector = makeCollector(db: db, provider: provider)
+
+        // Tick 1: observed=":coffee:" → emit slack_status_change.
+        await provider.setResult(SlackTickResult(
+            huddle: .defaultUnset,
+            channelMessageCounts: [],
+            cursorMs: nil,
+            periodStartMs: 0, periodEndMs: 0,
+            statusEmoji: ":coffee:",
+            statusExpirationTs: 0
+        ))
+        let r1 = await collector.performTick()
+        XCTAssertTrue(r1.statusChangeEmitted, "first observation always emits")
+
+        // Tick 2: same emoji → no emit.
+        let r2 = await collector.performTick()
+        XCTAssertFalse(r2.statusChangeEmitted, "unchanged emoji не emit")
+
+        // Tick 3: different emoji → emit.
+        await provider.setResult(SlackTickResult(
+            huddle: .defaultUnset,
+            channelMessageCounts: [],
+            cursorMs: nil,
+            periodStartMs: 0, periodEndMs: 0,
+            statusEmoji: ":pizza:",
+            statusExpirationTs: 1_730_000_000_000
+        ))
+        let r3 = await collector.performTick()
+        XCTAssertTrue(r3.statusChangeEmitted, "different emoji → emit")
+
+        // Verify DB rows.
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSinceNow: -3600),
+            end: Date(timeIntervalSinceNow: 3600)
+        ))
+        let statusEvents = stored.filter { $0.payload["event_kind"] == "slack_status_change" }
+        XCTAssertEqual(statusEvents.count, 2, "1 + 1 status_change events")
+        XCTAssertEqual(Set(statusEvents.compactMap { $0.payload["status_emoji"] }),
+                       Set([":coffee:", ":pizza:"]))
+        let pizza = try XCTUnwrap(statusEvents.first { $0.payload["status_emoji"] == ":pizza:" })
+        XCTAssertEqual(pizza.payload["status_expiration_ts"], "1730000000000")
+    }
+
+    /// emoji "" → "" → "" — no emit ни разу (lastEmittedStatusEmoji=nil
+    /// only first tick).
+    func testTickStatusEmojiUnsetFirstObservationEmitsBaseline() async throws {
+        let db = try makeDB()
+        try insertFreshIntegration(db: db)
+        let provider = MockSlackAPIProvider()
+        let collector = makeCollector(db: db, provider: provider)
+
+        await provider.setResult(SlackTickResult(
+            huddle: .defaultUnset,
+            channelMessageCounts: [],
+            cursorMs: nil,
+            periodStartMs: 0, periodEndMs: 0,
+            statusEmoji: "",
+            statusExpirationTs: 0
+        ))
+        // First-ever observation always emits (nil → "").
+        let r1 = await collector.performTick()
+        XCTAssertTrue(r1.statusChangeEmitted)
+        // Second tick — equal "" → no emit.
+        let r2 = await collector.performTick()
+        XCTAssertFalse(r2.statusChangeEmitted)
+    }
+
+    // MARK: - Phase 4.7.A — slack_thread_reply_aggregate
+
+    func testTickThreadReplyAggregateEmittedWhenCountPositive() async throws {
+        let db = try makeDB()
+        try insertFreshIntegration(db: db)
+        let provider = MockSlackAPIProvider()
+        let collector = makeCollector(db: db, provider: provider)
+
+        let baseMs: Int64 = 1_700_000_000_000
+        await provider.setResult(SlackTickResult(
+            huddle: .defaultUnset,
+            channelMessageCounts: [
+                SlackChannelMessageCount(
+                    channelName: "engineering",
+                    count: 7,
+                    reactionsCount: 0,
+                    threadReplyCount: 5
+                )
+            ],
+            cursorMs: baseMs,
+            periodStartMs: baseMs - 300_000,
+            periodEndMs: baseMs,
+            statusEmoji: "",
+            statusExpirationTs: 0
+        ))
+
+        let r = await collector.performTick()
+        XCTAssertEqual(r.messageEventsEmitted, 1)
+        XCTAssertEqual(r.threadReplyEventsEmitted, 1)
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1_000_000) / 1000),
+            end: Date(timeIntervalSince1970: TimeInterval(baseMs + 1_000_000) / 1000)
+        ))
+        let regular = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "message_authored_aggregate" })
+        XCTAssertEqual(regular.payload["count"], "7")
+
+        let thread = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "slack_thread_reply_aggregate" })
+        XCTAssertEqual(thread.payload["count"], "5", "subset of total — replies only")
+        XCTAssertEqual(thread.payload["channel_name"], "engineering")
+    }
+
+    func testTickNoThreadReplyEventWhenCountZero() async throws {
+        let db = try makeDB()
+        try insertFreshIntegration(db: db)
+        let provider = MockSlackAPIProvider()
+        let collector = makeCollector(db: db, provider: provider)
+
+        let baseMs: Int64 = 1_700_000_000_000
+        await provider.setResult(SlackTickResult(
+            huddle: .defaultUnset,
+            channelMessageCounts: [
+                SlackChannelMessageCount(
+                    channelName: "engineering",
+                    count: 5,
+                    reactionsCount: 0,
+                    threadReplyCount: 0
+                )
+            ],
+            cursorMs: baseMs,
+            periodStartMs: baseMs - 300_000,
+            periodEndMs: baseMs
+        ))
+
+        let r = await collector.performTick()
+        XCTAssertEqual(r.messageEventsEmitted, 1)
+        XCTAssertEqual(r.threadReplyEventsEmitted, 0, "threadReplyCount=0 → no event")
+    }
+
     /// start запускает loopTask, stop его cancels + awaits.
     /// Без integration row provider не должен вызываться (skip path).
     func testStartStopLifecycle() async throws {

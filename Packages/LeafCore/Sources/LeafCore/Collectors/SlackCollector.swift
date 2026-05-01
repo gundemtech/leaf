@@ -33,6 +33,12 @@ public actor SlackCollector {
     private var loopTask: Task<Void, Never>?
     private var notifyToken: NSObjectProtocol?
 
+    /// Phase 4.7.A — last emitted custom-status emoji. In-memory, reset на restart.
+    /// `nil` = ещё не наблюдали в этом процессе (first-tick всегда emit). Acceptable
+    /// double-emit на crash-restart — emoji rarely changes (юзер выставил намеренно),
+    /// дубликаты dedupable downstream через одинаковый `transition_at`.
+    private var lastEmittedStatusEmoji: String?
+
     public init(
         database: Database,
         provider: any SlackAPIProvider,
@@ -79,6 +85,26 @@ public actor SlackCollector {
         public let messageEventsEmitted: Int
         public let huddleTransitionEmitted: Bool
         public let cursorAdvancedMs: Int64?
+        /// Phase 4.7.A — кол-во slack_thread_reply_aggregate events emitted в этом tick'е.
+        public let threadReplyEventsEmitted: Int
+        /// Phase 4.7.A — true если в этом tick'е emit'ился slack_status_change.
+        public let statusChangeEmitted: Bool
+
+        public init(
+            skipped: Bool,
+            messageEventsEmitted: Int,
+            huddleTransitionEmitted: Bool,
+            cursorAdvancedMs: Int64?,
+            threadReplyEventsEmitted: Int = 0,
+            statusChangeEmitted: Bool = false
+        ) {
+            self.skipped = skipped
+            self.messageEventsEmitted = messageEventsEmitted
+            self.huddleTransitionEmitted = huddleTransitionEmitted
+            self.cursorAdvancedMs = cursorAdvancedMs
+            self.threadReplyEventsEmitted = threadReplyEventsEmitted
+            self.statusChangeEmitted = statusChangeEmitted
+        }
     }
 
     @discardableResult
@@ -157,6 +183,20 @@ public actor SlackCollector {
                 )
             }
 
+        // 6a'. Phase 4.7.A — thread reply aggregate events. Subset of `count`
+        // (replies are still messages). Emit'ится отдельным event_kind рядом
+        // с `message_authored_aggregate` чтобы downstream insights могли
+        // distinguish "initiation vs reply" без re-parsing payload.
+        let threadReplyEvents: [RawEvent] = tick.channelMessageCounts
+            .filter { $0.threadReplyCount > 0 }
+            .map {
+                Self.makeThreadReplyEvent(
+                    channel: $0,
+                    periodStartMs: tick.periodStartMs,
+                    periodEndMs: tick.periodEndMs
+                )
+            }
+
         // 6b. Huddle transition event — emit только если state различается с
         // последним DB-зафиксированным huddle event'ом. .unknown → skip
         // (provider не смог fetch). Первый ever event (DB пуст) → emit
@@ -176,7 +216,24 @@ public actor SlackCollector {
             }
         }
 
-        let allEvents: [RawEvent] = messageEvents + (huddleEvent.map { [$0] } ?? [])
+        // 6c. Phase 4.7.A — slack_status_change event. Compare текущий emoji
+        // против last-emitted (in-memory). Different → emit. Idle ticks (тот же
+        // emoji) → no emit. First-ever observation per process always emits
+        // (lastEmittedStatusEmoji=nil), это acceptable double-emit на restart.
+        var statusChangeEvent: RawEvent?
+        if tick.statusEmoji != lastEmittedStatusEmoji {
+            statusChangeEvent = Self.makeStatusChangeEvent(
+                emoji: tick.statusEmoji,
+                expirationTs: tick.statusExpirationTs,
+                now: now
+            )
+            lastEmittedStatusEmoji = tick.statusEmoji
+        }
+
+        let allEvents: [RawEvent] = messageEvents
+            + threadReplyEvents
+            + (huddleEvent.map { [$0] } ?? [])
+            + (statusChangeEvent.map { [$0] } ?? [])
 
         // 7. Atomic write events + cursor.
         // Cursor двигается только когда provider дал nonempty cursorMs (т.е.
@@ -205,13 +262,15 @@ public actor SlackCollector {
             )
         }
         if !allEvents.isEmpty {
-            logger.info("tick wrote \(messageEvents.count, privacy: .public) message events + \(huddleEvent != nil ? 1 : 0, privacy: .public) huddle, cursor=\(offset.lastModifiedMs, privacy: .public)")
+            logger.info("tick wrote \(messageEvents.count, privacy: .public) message + \(threadReplyEvents.count, privacy: .public) thread-reply + \(huddleEvent != nil ? 1 : 0, privacy: .public) huddle + \(statusChangeEvent != nil ? 1 : 0, privacy: .public) status events, cursor=\(offset.lastModifiedMs, privacy: .public)")
         }
         return TickResult(
             skipped: false,
             messageEventsEmitted: messageEvents.count,
             huddleTransitionEmitted: huddleEvent != nil,
-            cursorAdvancedMs: advancedCursor
+            cursorAdvancedMs: advancedCursor,
+            threadReplyEventsEmitted: threadReplyEvents.count,
+            statusChangeEmitted: statusChangeEvent != nil
         )
     }
 
@@ -242,6 +301,50 @@ public actor SlackCollector {
             signalType: .action,
             bundleID: nil,
             payload: payload
+        )
+    }
+
+    /// Phase 4.7.A — thread reply aggregate event. Same shape pattern что
+    /// `message_authored_aggregate`, distinct event_kind, count=subset.
+    private static func makeThreadReplyEvent(
+        channel: SlackChannelMessageCount,
+        periodStartMs: Int64,
+        periodEndMs: Int64
+    ) -> RawEvent {
+        RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(periodEndMs) / 1000.0),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "slack",
+                "event_kind": "slack_thread_reply_aggregate",
+                "channel_name": channel.channelName,
+                "count": String(channel.threadReplyCount),
+                "period_start_ms": String(periodStartMs),
+                "period_end_ms": String(periodEndMs)
+            ]
+        )
+    }
+
+    /// Phase 4.7.A — slack_status_change context event. Emoji = pure literal
+    /// (e.g. ":pizza:") или "" если cleared. ADR-010: status_text НЕ читаем
+    /// на parsing (provider drop'ает field до payload-finalize).
+    private static func makeStatusChangeEvent(
+        emoji: String,
+        expirationTs: Int64,
+        now: Date
+    ) -> RawEvent {
+        RawEvent(
+            timestamp: now,
+            signalType: .context,
+            bundleID: nil,
+            payload: [
+                "source": "slack",
+                "event_kind": "slack_status_change",
+                "status_emoji": emoji,
+                "status_expiration_ts": String(expirationTs),
+                "transition_at": String(Int64(now.timeIntervalSince1970 * 1000))
+            ]
         )
     }
 

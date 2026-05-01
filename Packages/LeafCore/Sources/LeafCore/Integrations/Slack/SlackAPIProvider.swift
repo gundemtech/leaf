@@ -30,25 +30,36 @@ public protocol SlackAPIProvider: Sendable {
 /// channel counts — aggregated over [since, now] window.
 /// `cursorMs` = max(ts ms) across processed messages (advance cursor для next tick),
 /// `nil` если в batch'е сообщений не было — cursor не двигается.
+/// Phase 4.7.A: + statusEmoji / statusExpirationTs (Slack custom status). ADR-010:
+/// `status_text` (body) НЕ извлекается на provider-side.
 public struct SlackTickResult: Sendable, Hashable {
     public let huddle: SlackHuddleState
     public let channelMessageCounts: [SlackChannelMessageCount]
     public let cursorMs: Int64?
     public let periodStartMs: Int64
     public let periodEndMs: Int64
+    /// Phase 4.7.A — Slack custom status emoji (e.g. ":pizza:"), пустая строка если
+    /// не выставлен. ADR-010: status_text (body) ИГНОРИРУЕМ на parsing'е.
+    public let statusEmoji: String
+    /// Phase 4.7.A — epoch ms когда status истекает (0 = no expiration).
+    public let statusExpirationTs: Int64
 
     public init(
         huddle: SlackHuddleState,
         channelMessageCounts: [SlackChannelMessageCount],
         cursorMs: Int64?,
         periodStartMs: Int64,
-        periodEndMs: Int64
+        periodEndMs: Int64,
+        statusEmoji: String = "",
+        statusExpirationTs: Int64 = 0
     ) {
         self.huddle = huddle
         self.channelMessageCounts = channelMessageCounts
         self.cursorMs = cursorMs
         self.periodStartMs = periodStartMs
         self.periodEndMs = periodEndMs
+        self.statusEmoji = statusEmoji
+        self.statusExpirationTs = statusExpirationTs
     }
 
     public static let empty = SlackTickResult(
@@ -83,15 +94,25 @@ public enum SlackHuddleState: String, Sendable, Hashable {
 /// `reactionsCount` (Phase 4.6.A.3) — sum по `match.reactions[].count` всех
 /// сообщений канала в окне tick'а (aggregate numeric only; emoji name / users —
 /// никогда не читаются, ADR-010).
+/// `threadReplyCount` (Phase 4.7.A) — subset of `count` где `thread_ts != ts`
+/// (т.е. message — это reply в чужом thread'е, не initiation). Aggregate
+/// numeric. ADR-010: text/permalink не сохраняются как и раньше.
 public struct SlackChannelMessageCount: Sendable, Hashable {
     public let channelName: String
     public let count: Int
     public let reactionsCount: Int
+    public let threadReplyCount: Int
 
-    public init(channelName: String, count: Int, reactionsCount: Int = 0) {
+    public init(
+        channelName: String,
+        count: Int,
+        reactionsCount: Int = 0,
+        threadReplyCount: Int = 0
+    ) {
         self.channelName = channelName
         self.count = count
         self.reactionsCount = reactionsCount
+        self.threadReplyCount = threadReplyCount
     }
 }
 
