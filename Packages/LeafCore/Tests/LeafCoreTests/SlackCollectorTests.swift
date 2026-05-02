@@ -30,10 +30,14 @@ final class SlackCollectorTests: XCTestCase {
 
     /// Captures `since` / `userID` calls для assertion'ов; injectable
     /// `nextResult: SlackTickResult` (default — `.empty`).
+    /// Phase 4.7.B-9 — также injectable presence + counter для tick'ов.
     private actor MockSlackAPIProvider: SlackAPIProvider {
         private(set) var sinceCalls: [Int64?] = []
         private(set) var userIDCalls: [String] = []
+        private(set) var presenceCalls: Int = 0
         private var nextResult: SlackTickResult = .empty
+        private var nextPresence: SlackPresenceState = .unknown
+        private var presenceShouldThrow: Bool = false
 
         func fetchTick(
             accessToken: String,
@@ -46,9 +50,24 @@ final class SlackCollectorTests: XCTestCase {
             return nextResult
         }
 
+        func fetchPresence(
+            accessToken: String,
+            userID: String
+        ) async throws -> SlackPresenceState {
+            presenceCalls += 1
+            if presenceShouldThrow {
+                struct DummyError: Error {}
+                throw DummyError()
+            }
+            return nextPresence
+        }
+
         func setResult(_ result: SlackTickResult) { nextResult = result }
+        func setPresence(_ presence: SlackPresenceState) { nextPresence = presence }
+        func setPresenceShouldThrow(_ shouldThrow: Bool) { presenceShouldThrow = shouldThrow }
         func sinceHistory() -> [Int64?] { sinceCalls }
         func userIDHistory() -> [String] { userIDCalls }
+        func presenceCallCount() -> Int { presenceCalls }
     }
 
     // MARK: - Helpers
@@ -497,6 +516,71 @@ final class SlackCollectorTests: XCTestCase {
         let r = await collector.performTick()
         XCTAssertEqual(r.messageEventsEmitted, 1)
         XCTAssertEqual(r.threadReplyEventsEmitted, 0, "threadReplyCount=0 → no event")
+    }
+
+    // MARK: - Phase 4.7.B-9 — slack_presence_state pulse
+
+    /// Pulse emit'ится КАЖДЫЙ non-skipped tick (active / away / unknown). Mirror
+    /// к github_notifications_pulse: observation continuity > shrunk row count.
+    /// Также проверяем что network throw в provider'е graceful'но degrade'ит в
+    /// state="unknown" event (не блокирует tick).
+    func testTick_EmitsSlackPresenceStateEvent() async throws {
+        let db = try makeDB()
+        try insertFreshIntegration(db: db)
+        let provider = MockSlackAPIProvider()
+        let collector = makeCollector(db: db, provider: provider)
+
+        // Tick 1 — presence=active.
+        await provider.setPresence(.active)
+        await provider.setResult(SlackTickResult(
+            huddle: .unknown,
+            channelMessageCounts: [],
+            cursorMs: nil,
+            periodStartMs: 0,
+            periodEndMs: 0
+        ))
+        let now1 = Date(timeIntervalSince1970: 1_700_000_100)
+        let r1 = await collector.performTick(now: now1)
+        XCTAssertTrue(r1.presenceStateEmitted, "always emit on non-skipped tick")
+        let calls1 = await provider.presenceCallCount()
+        XCTAssertEqual(calls1, 1)
+
+        // Tick 2 — presence=away.
+        await provider.setPresence(.away)
+        let now2 = Date(timeIntervalSince1970: 1_700_000_400)
+        let r2 = await collector.performTick(now: now2)
+        XCTAssertTrue(r2.presenceStateEmitted)
+        let calls2 = await provider.presenceCallCount()
+        XCTAssertEqual(calls2, 2)
+
+        // Tick 3 — provider throws → graceful unknown, pulse still emit.
+        await provider.setPresenceShouldThrow(true)
+        let now3 = Date(timeIntervalSince1970: 1_700_000_700)
+        let r3 = await collector.performTick(now: now3)
+        XCTAssertTrue(r3.presenceStateEmitted, "even на network throw мы emit pulse (unknown)")
+        let calls3 = await provider.presenceCallCount()
+        XCTAssertEqual(calls3, 3)
+
+        // Verify DB: 3 slack_presence_state events с правильным state mapping.
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSince1970: 1_700_000_000),
+            end: Date(timeIntervalSince1970: 1_700_001_000)
+        ))
+        let presenceEvents = stored.filter { $0.payload["event_kind"] == "slack_presence_state" }
+        XCTAssertEqual(presenceEvents.count, 3, "3 ticks → 3 pulses")
+        for e in presenceEvents {
+            XCTAssertEqual(e.signalType, .context, "pulse — state event, не user action")
+            XCTAssertEqual(e.payload["source"], "slack")
+            XCTAssertNotNil(e.payload["observed_at_ms"])
+        }
+        let states = presenceEvents
+            .compactMap { $0.payload["state"] }
+            .sorted()
+        XCTAssertEqual(states, ["active", "away", "unknown"])
+
+        // observed_at_ms = nowMs (per tick).
+        let activeEv = try XCTUnwrap(presenceEvents.first { $0.payload["state"] == "active" })
+        XCTAssertEqual(activeEv.payload["observed_at_ms"], String(Int64(now1.timeIntervalSince1970 * 1000)))
     }
 
     /// start запускает loopTask, stop его cancels + awaits.

@@ -31,6 +31,10 @@ public enum SlackOAuthEndpoints {
     /// conversations.history). Вызывается per unique channel_id обнаруженный в
     /// search.messages response, filtered `user == self_user_id` client-side.
     public static let conversationsHistory = URL(string: "https://slack.com/api/conversations.history")!
+    /// `users.getPresence` — Tier 3 (50+ req/min). Per-user presence ("active"|"away").
+    /// Phase 4.7.B-9 — emits per-tick `slack_presence_state` pulse (mirror к GitHub
+    /// `github_notifications_pulse`). Self-only call (вызываем для авторизованного юзера).
+    public static let usersGetPresence = URL(string: "https://slack.com/api/users.getPresence")!
 
     /// Public redirect URI для Slack OAuth `/oauth/v2/authorize` и token exchange.
     /// Slack distributed-app distribution требует HTTPS на redirect URI; loopback

@@ -24,6 +24,17 @@ public protocol SlackAPIProvider: Sendable {
         since: Int64?,
         now: Date
     ) async throws -> SlackTickResult
+
+    /// Phase 4.7.B-9 — Slack `users.getPresence` (Tier 3). Returns "active" | "away"
+    /// для авторизованного юзера (т.е. self). `userID` обязателен Slack API
+    /// signature даже для self-call. Graceful: 401/429/network/parse fail →
+    /// `.unknown` (collector ВСЁ РАВНО emit'ит pulse, чтобы downstream ввёл
+    /// continuity — отсутствие event'а != отсутствие observation).
+    /// ADR-010: тело response ничего PII не содержит (только presence enum).
+    func fetchPresence(
+        accessToken: String,
+        userID: String
+    ) async throws -> SlackPresenceState
 }
 
 /// Результат одного Slack tick'а. Huddle state — point-in-time snapshot;
@@ -116,6 +127,17 @@ public struct SlackChannelMessageCount: Sendable, Hashable {
     }
 }
 
+/// Phase 4.7.B-9 — Slack presence state, как его отдаёт `users.getPresence`.
+/// rawValue матчит API string ("active" | "away"); `.unknown` — sentinel для
+/// graceful degrade (401 / ratelimited / network / parse fail на provider-side).
+/// Collector ВСЕГДА emit'ит pulse — на `.unknown` payload содержит state="unknown",
+/// чтобы downstream видел observation continuity без gap'ов между tick'ами.
+public enum SlackPresenceState: String, Sendable, Hashable {
+    case active
+    case away
+    case unknown
+}
+
 /// Stub для CI / dev-без-moat сборок. Никогда не делает HTTP call, возвращает
 /// `.empty` — SlackCollector tick проходит no-op.
 public struct StubSlackAPIProvider: SlackAPIProvider {
@@ -127,5 +149,12 @@ public struct StubSlackAPIProvider: SlackAPIProvider {
         now: Date
     ) async throws -> SlackTickResult {
         .empty
+    }
+
+    public func fetchPresence(
+        accessToken: String,
+        userID: String
+    ) async throws -> SlackPresenceState {
+        .unknown
     }
 }

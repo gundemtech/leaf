@@ -89,6 +89,9 @@ public actor SlackCollector {
         public let threadReplyEventsEmitted: Int
         /// Phase 4.7.A — true если в этом tick'е emit'ился slack_status_change.
         public let statusChangeEmitted: Bool
+        /// Phase 4.7.B-9 — true если в этом tick'е emit'ился slack_presence_state pulse.
+        /// Should be true каждый non-skipped tick (always-emit semantics).
+        public let presenceStateEmitted: Bool
 
         public init(
             skipped: Bool,
@@ -96,7 +99,8 @@ public actor SlackCollector {
             huddleTransitionEmitted: Bool,
             cursorAdvancedMs: Int64?,
             threadReplyEventsEmitted: Int = 0,
-            statusChangeEmitted: Bool = false
+            statusChangeEmitted: Bool = false,
+            presenceStateEmitted: Bool = false
         ) {
             self.skipped = skipped
             self.messageEventsEmitted = messageEventsEmitted
@@ -104,6 +108,7 @@ public actor SlackCollector {
             self.cursorAdvancedMs = cursorAdvancedMs
             self.threadReplyEventsEmitted = threadReplyEventsEmitted
             self.statusChangeEmitted = statusChangeEmitted
+            self.presenceStateEmitted = presenceStateEmitted
         }
     }
 
@@ -171,6 +176,22 @@ public actor SlackCollector {
             return TickResult(skipped: false, messageEventsEmitted: 0, huddleTransitionEmitted: false, cursorAdvancedMs: nil)
         }
 
+        // 5a. Phase 4.7.B-9 — presence pulse. Independent of fetchTick — observability
+        // continuity discipline: even на network throw мы emit'им pulse с state="unknown"
+        // чтобы downstream видел "observed but undeterminable" без gap'ов между tick'ами.
+        // Provider impl сам делает graceful degrade на 401/429/parse, но network throw
+        // bubble'ит наверх — wrap'им здесь.
+        let presenceState: SlackPresenceState
+        do {
+            presenceState = try await provider.fetchPresence(
+                accessToken: refreshed.accessToken,
+                userID: userID
+            )
+        } catch {
+            logger.error("fetchPresence failed: \(String(describing: error), privacy: .public)")
+            presenceState = .unknown
+        }
+
         // 6. Compose events.
         // 6a. Message events — один Action RawEvent per (channel, count > 0).
         let messageEvents: [RawEvent] = tick.channelMessageCounts
@@ -230,10 +251,20 @@ public actor SlackCollector {
             lastEmittedStatusEmoji = tick.statusEmoji
         }
 
+        // 6d. Phase 4.7.B-9 — slack_presence_state pulse. ВСЕГДА emit (per-tick
+        // pulse, mirror к github_notifications_pulse). `nowMs` определяется ниже
+        // в шаге 7 для cursor — компьютим раньше чтобы передать в event.
+        let nowMsForPresence = Int64(now.timeIntervalSince1970 * 1000)
+        let presenceEvent = Self.makePresenceStateEvent(
+            state: presenceState,
+            nowMs: nowMsForPresence
+        )
+
         let allEvents: [RawEvent] = messageEvents
             + threadReplyEvents
             + (huddleEvent.map { [$0] } ?? [])
             + (statusChangeEvent.map { [$0] } ?? [])
+            + [presenceEvent]
 
         // 7. Atomic write events + cursor.
         // Cursor двигается только когда provider дал nonempty cursorMs (т.е.
@@ -262,7 +293,7 @@ public actor SlackCollector {
             )
         }
         if !allEvents.isEmpty {
-            logger.info("tick wrote \(messageEvents.count, privacy: .public) message + \(threadReplyEvents.count, privacy: .public) thread-reply + \(huddleEvent != nil ? 1 : 0, privacy: .public) huddle + \(statusChangeEvent != nil ? 1 : 0, privacy: .public) status events, cursor=\(offset.lastModifiedMs, privacy: .public)")
+            logger.info("tick wrote \(messageEvents.count, privacy: .public) message + \(threadReplyEvents.count, privacy: .public) thread-reply + \(huddleEvent != nil ? 1 : 0, privacy: .public) huddle + \(statusChangeEvent != nil ? 1 : 0, privacy: .public) status + 1 presence events, cursor=\(offset.lastModifiedMs, privacy: .public)")
         }
         return TickResult(
             skipped: false,
@@ -270,7 +301,8 @@ public actor SlackCollector {
             huddleTransitionEmitted: huddleEvent != nil,
             cursorAdvancedMs: advancedCursor,
             threadReplyEventsEmitted: threadReplyEvents.count,
-            statusChangeEmitted: statusChangeEvent != nil
+            statusChangeEmitted: statusChangeEvent != nil,
+            presenceStateEmitted: true
         )
     }
 
@@ -344,6 +376,28 @@ public actor SlackCollector {
                 "status_emoji": emoji,
                 "status_expiration_ts": String(expirationTs),
                 "transition_at": String(Int64(now.timeIntervalSince1970 * 1000))
+            ]
+        )
+    }
+
+    /// Phase 4.7.B-9 — `slack_presence_state` per-tick pulse event. Mirror'ит
+    /// `github_notifications_pulse`: эмитится КАЖДЫЙ non-skipped tick (даже на
+    /// `.unknown` — observation continuity > shrunk row count). `signal_type=.context`
+    /// (state pulse, не user action). Payload — minimal enum + observed ts; ничего
+    /// PII (ADR-010), `users.getPresence` response в принципе не содержит body.
+    static func makePresenceStateEvent(
+        state: SlackPresenceState,
+        nowMs: Int64
+    ) -> RawEvent {
+        RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0),
+            signalType: .context,
+            bundleID: nil,
+            payload: [
+                "source": "slack",
+                "event_kind": "slack_presence_state",
+                "state": state.rawValue,
+                "observed_at_ms": String(nowMs)
             ]
         )
     }
