@@ -33,6 +33,7 @@ final class SlackCollectorTests: XCTestCase {
     /// Phase 4.7.B-9 — также injectable presence + counter для tick'ов.
     /// Phase 4.7.B-10 — также injectable DND + counter для tick'ов.
     /// Phase 4.7.B-11 — также injectable mentions + counter для tick'ов.
+    /// Phase 4.7.B-12 — также injectable file upload summary + counter.
     private actor MockSlackAPIProvider: SlackAPIProvider {
         private(set) var sinceCalls: [Int64?] = []
         private(set) var userIDCalls: [String] = []
@@ -40,13 +41,17 @@ final class SlackCollectorTests: XCTestCase {
         private(set) var dndCalls: Int = 0
         private(set) var mentionCalls: Int = 0
         private(set) var mentionSinceCalls: [Int64] = []
+        private(set) var filesCalls: Int = 0
+        private(set) var filesSinceCalls: [Int64] = []
         private var nextResult: SlackTickResult = .empty
         private var nextPresence: SlackPresenceState = .unknown
         private var nextDND: SlackDNDState = .empty
         private var nextMentions: [SlackMentionChannelCount] = []
+        private var nextFiles: SlackFileUploadSummary = .empty(periodStartMs: 0, periodEndMs: 0)
         private var presenceShouldThrow: Bool = false
         private var dndShouldThrow: Bool = false
         private var mentionsShouldThrow: Bool = false
+        private var filesShouldThrow: Bool = false
 
         func fetchTick(
             accessToken: String,
@@ -97,6 +102,20 @@ final class SlackCollectorTests: XCTestCase {
             return nextMentions
         }
 
+        func fetchFilesUploaded(
+            accessToken: String,
+            userID: String,
+            since: Int64
+        ) async throws -> SlackFileUploadSummary {
+            filesCalls += 1
+            filesSinceCalls.append(since)
+            if filesShouldThrow {
+                struct DummyError: Error {}
+                throw DummyError()
+            }
+            return nextFiles
+        }
+
         func setResult(_ result: SlackTickResult) { nextResult = result }
         func setPresence(_ presence: SlackPresenceState) { nextPresence = presence }
         func setPresenceShouldThrow(_ shouldThrow: Bool) { presenceShouldThrow = shouldThrow }
@@ -104,12 +123,16 @@ final class SlackCollectorTests: XCTestCase {
         func setDNDShouldThrow(_ shouldThrow: Bool) { dndShouldThrow = shouldThrow }
         func setMentions(_ mentions: [SlackMentionChannelCount]) { nextMentions = mentions }
         func setMentionsShouldThrow(_ shouldThrow: Bool) { mentionsShouldThrow = shouldThrow }
+        func setFiles(_ files: SlackFileUploadSummary) { nextFiles = files }
+        func setFilesShouldThrow(_ shouldThrow: Bool) { filesShouldThrow = shouldThrow }
         func sinceHistory() -> [Int64?] { sinceCalls }
         func userIDHistory() -> [String] { userIDCalls }
         func presenceCallCount() -> Int { presenceCalls }
         func dndCallCount() -> Int { dndCalls }
         func mentionCallCount() -> Int { mentionCalls }
         func mentionSinceHistory() -> [Int64] { mentionSinceCalls }
+        func filesCallCount() -> Int { filesCalls }
+        func filesSinceHistory() -> [Int64] { filesSinceCalls }
     }
 
     // MARK: - Helpers
@@ -782,6 +805,84 @@ final class SlackCollectorTests: XCTestCase {
         XCTAssertEqual(eng.payload["count"], "3")
         let dm = try XCTUnwrap(mentions.first { $0.payload["channel"] == "DM" })
         XCTAssertEqual(dm.payload["count"], "1")
+    }
+
+    // MARK: - Phase 4.7.B-12 — slack_file_uploaded_aggregate
+
+    /// Single aggregate event per tick (NOT per-file). Verifies payload shape
+    /// (event_kind, count, image_count, code_count, doc_count, other_count,
+    /// period_*_ms), `signal_type=.action`, always-emit semantics (даже на zero
+    /// count), и что fetchFilesUploaded вызывается ровно раз per tick.
+    func testTick_EmitsFileUploadedAggregateEvent() async throws {
+        let db = try makeDB()
+        try insertFreshIntegration(db: db)
+        let provider = MockSlackAPIProvider()
+        let collector = makeCollector(db: db, provider: provider)
+
+        // 5 files: 2 images + 1 code + 1 doc + 1 other.
+        let periodStart: Int64 = 1_700_000_000_000
+        let periodEnd: Int64 = 1_700_000_300_000
+        await provider.setFiles(SlackFileUploadSummary(
+            count: 5,
+            typesSummary: ["image": 2, "code": 1, "doc": 1, "other": 1],
+            periodStartMs: periodStart,
+            periodEndMs: periodEnd
+        ))
+        await provider.setResult(SlackTickResult(
+            huddle: .unknown,
+            channelMessageCounts: [],
+            cursorMs: nil,
+            periodStartMs: 0,
+            periodEndMs: 0
+        ))
+
+        let now = Date(timeIntervalSince1970: 1_700_000_400)
+        let result = await collector.performTick(now: now)
+
+        XCTAssertTrue(result.fileUploadEventEmitted, "always-emit semantics: 1 aggregate per tick")
+        let filesCalls = await provider.filesCallCount()
+        XCTAssertEqual(filesCalls, 1, "fetchFilesUploaded вызывается ровно раз per tick")
+        // First tick — bootstrap (no stored cursor) → since=0.
+        let filesSinceHistory = await provider.filesSinceHistory()
+        XCTAssertEqual(filesSinceHistory, [0], "bootstrap → since=0")
+
+        // Найти сам event — timestamp = nowMs (UTC).
+        let nowMs = Int64(now.timeIntervalSince1970 * 1000)
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0 - 1),
+            end: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0 + 1)
+        ))
+        let fileEvents = stored.filter { $0.payload["event_kind"] == "slack_file_uploaded_aggregate" }
+        XCTAssertEqual(fileEvents.count, 1, "single aggregate per tick")
+        let ev = try XCTUnwrap(fileEvents.first)
+        XCTAssertEqual(ev.signalType, .action, "file upload — triggering action")
+        XCTAssertEqual(ev.payload["source"], "slack")
+        XCTAssertEqual(ev.payload["count"], "5")
+        XCTAssertEqual(ev.payload["image_count"], "2")
+        XCTAssertEqual(ev.payload["code_count"], "1")
+        XCTAssertEqual(ev.payload["doc_count"], "1")
+        XCTAssertEqual(ev.payload["other_count"], "1")
+        XCTAssertEqual(ev.payload["period_start_ms"], String(periodStart))
+        XCTAssertEqual(ev.payload["period_end_ms"], String(periodEnd))
+
+        // Always-emit: tick 2 с zero count тоже emit'ит.
+        await provider.setFiles(.empty(periodStartMs: periodEnd, periodEndMs: periodEnd + 1000))
+        let now2 = Date(timeIntervalSince1970: 1_700_000_500)
+        let result2 = await collector.performTick(now: now2)
+        XCTAssertTrue(result2.fileUploadEventEmitted, "zero count → still emit (substrate continuity)")
+        let nowMs2 = Int64(now2.timeIntervalSince1970 * 1000)
+        let stored2 = try db.events(in: DateInterval(
+            start: Date(timeIntervalSince1970: TimeInterval(nowMs2) / 1000.0 - 1),
+            end: Date(timeIntervalSince1970: TimeInterval(nowMs2) / 1000.0 + 1)
+        ))
+        let fileEvents2 = stored2.filter { $0.payload["event_kind"] == "slack_file_uploaded_aggregate" }
+        XCTAssertEqual(fileEvents2.count, 1)
+        let ev2 = try XCTUnwrap(fileEvents2.first)
+        XCTAssertEqual(ev2.payload["count"], "0")
+        XCTAssertEqual(ev2.payload["image_count"], "0", "zero buckets explicit, не omitted")
+        XCTAssertEqual(ev2.payload["code_count"], "0")
+        XCTAssertEqual(ev2.payload["doc_count"], "0")
+        XCTAssertEqual(ev2.payload["other_count"], "0")
     }
 
     /// start запускает loopTask, stop его cancels + awaits.

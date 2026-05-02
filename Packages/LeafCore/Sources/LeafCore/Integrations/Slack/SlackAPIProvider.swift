@@ -61,6 +61,27 @@ public protocol SlackAPIProvider: Sendable {
         userID: String,
         since: Int64
     ) async throws -> [SlackMentionChannelCount]
+
+    /// Phase 4.7.B-12 — `search.files?query=from:me+after:<sinceISO>&count=100`.
+    /// Tier 2 endpoint. Returns aggregate count + mime-type bucket distribution
+    /// of files юзер uploaded в окне `[since, now]`. Single aggregate per tick
+    /// (not per-file) — мы хотим объёмную картину "сколько и какого типа", не
+    /// individual file timeline.
+    /// `since` — epoch ms; provider конвертирует в UTC `YYYY-MM-DD` (Slack
+    /// `after:` имеет day-resolution).
+    /// ADR-010: filenames (`file.name` / `file.title` / `file.permalink_*`),
+    /// preview text (`file.preview` / `file.preview_highlight`), thumbs
+    /// (`file.thumb_*`) — НИКОГДА не читаем. Извлекаем ТОЛЬКО `file.mimetype`
+    /// для bucket'ирования; всё остальное игнорируется на parsing'е.
+    /// Buckets (provider-side): `image` / `code` / `doc` / `other`.
+    /// Graceful degrade: 401/429/network/parse fail → `.empty(...)` с count=0,
+    /// типs пустой; collector ВСЁ РАВНО emit'ит aggregate event (substrate
+    /// continuity — отсутствие event'а != отсутствие observation).
+    func fetchFilesUploaded(
+        accessToken: String,
+        userID: String,
+        since: Int64
+    ) async throws -> SlackFileUploadSummary
 }
 
 /// Результат одного Slack tick'а. Huddle state — point-in-time snapshot;
@@ -231,6 +252,50 @@ public struct SlackMentionChannelCount: Sendable, Hashable {
     }
 }
 
+/// Phase 4.7.B-12 — aggregate snapshot of files юзер uploaded в окне tick'а.
+/// `count` — total files (sum'а across всех bucket'ов). `typesSummary` — count
+/// per mime-type bucket; canonical buckets `"image"` / `"code"` / `"doc"` /
+/// `"other"`. Bucket с zero-count omittable (consumer flatten'ит — отсутствующий
+/// ключ читаем как 0).
+/// Period boundaries — derived collector'ом / provider'ом из `since` / `nowMs`,
+/// downstream может nominally считать "files per hour" без re-fetching cursor.
+/// `.empty(...)` — graceful sentinel когда provider не смог fetch (401/429/parse);
+/// collector emit'ит aggregate с count=0 чтобы downstream видел observation continuity.
+/// ADR-010: filename / preview / permalink / thumbs — НИКОГДА не читаются на
+/// provider-side; провайдер извлекает только mimetype для bucket'ирования.
+public struct SlackFileUploadSummary: Sendable, Hashable {
+    public let count: Int
+    /// Canonical buckets: "image" / "code" / "doc" / "other". Bucket с 0 files —
+    /// допустимо отсутствовать; consumer flatten'ит (default 0).
+    public let typesSummary: [String: Int]
+    public let periodStartMs: Int64
+    public let periodEndMs: Int64
+
+    public init(
+        count: Int,
+        typesSummary: [String: Int],
+        periodStartMs: Int64,
+        periodEndMs: Int64
+    ) {
+        self.count = count
+        self.typesSummary = typesSummary
+        self.periodStartMs = periodStartMs
+        self.periodEndMs = periodEndMs
+    }
+
+    /// Graceful sentinel: provider не смог определить state (401 / 429 / network /
+    /// parse fail). Collector emit'ит aggregate event с count=0 — downstream
+    /// видит observation continuity без gap'ов между tick'ами.
+    public static func empty(periodStartMs: Int64, periodEndMs: Int64) -> SlackFileUploadSummary {
+        SlackFileUploadSummary(
+            count: 0,
+            typesSummary: [:],
+            periodStartMs: periodStartMs,
+            periodEndMs: periodEndMs
+        )
+    }
+}
+
 /// Stub для CI / dev-без-moat сборок. Никогда не делает HTTP call, возвращает
 /// `.empty` — SlackCollector tick проходит no-op.
 public struct StubSlackAPIProvider: SlackAPIProvider {
@@ -264,5 +329,13 @@ public struct StubSlackAPIProvider: SlackAPIProvider {
         since: Int64
     ) async throws -> [SlackMentionChannelCount] {
         []
+    }
+
+    public func fetchFilesUploaded(
+        accessToken: String,
+        userID: String,
+        since: Int64
+    ) async throws -> SlackFileUploadSummary {
+        .empty(periodStartMs: 0, periodEndMs: 0)
     }
 }

@@ -99,6 +99,10 @@ public actor SlackCollector {
         /// в этом tick'е (один event per channel-bucket, count=mentions per period).
         /// 0 = no mentions / graceful degrade на provider-throw / ratelimit.
         public let mentionEventsEmitted: Int
+        /// Phase 4.7.B-12 — true если в этом tick'е emit'ился
+        /// `slack_file_uploaded_aggregate`. Should be true каждый non-skipped tick
+        /// (always-emit semantics — substrate continuity, mirror к presence/dnd).
+        public let fileUploadEventEmitted: Bool
 
         public init(
             skipped: Bool,
@@ -109,7 +113,8 @@ public actor SlackCollector {
             statusChangeEmitted: Bool = false,
             presenceStateEmitted: Bool = false,
             dndStateEmitted: Bool = false,
-            mentionEventsEmitted: Int = 0
+            mentionEventsEmitted: Int = 0,
+            fileUploadEventEmitted: Bool = false
         ) {
             self.skipped = skipped
             self.messageEventsEmitted = messageEventsEmitted
@@ -120,6 +125,7 @@ public actor SlackCollector {
             self.presenceStateEmitted = presenceStateEmitted
             self.dndStateEmitted = dndStateEmitted
             self.mentionEventsEmitted = mentionEventsEmitted
+            self.fileUploadEventEmitted = fileUploadEventEmitted
         }
     }
 
@@ -238,6 +244,25 @@ public actor SlackCollector {
             mentionCounts = []
         }
 
+        // 5d. Phase 4.7.B-12 — files uploaded aggregate. Single aggregate per
+        // tick (count + mime-type bucket distribution, NOT per-file timeline).
+        // Always emit (mirror к presence/dnd substrate continuity): graceful
+        // network throw → `.empty(...)` с count=0, типs пустой. Provider-side
+        // 401/429/parse тоже degrade'ят в `.empty(...)`. ADR-010: filenames /
+        // previews / permalinks отбрасываются на provider-side parsing'е.
+        let nowEpochMsForFiles = Int64(now.timeIntervalSince1970 * 1000)
+        let filesSummary: SlackFileUploadSummary
+        do {
+            filesSummary = try await provider.fetchFilesUploaded(
+                accessToken: refreshed.accessToken,
+                userID: userID,
+                since: since ?? 0
+            )
+        } catch {
+            logger.error("fetchFilesUploaded failed: \(String(describing: error), privacy: .public)")
+            filesSummary = .empty(periodStartMs: since ?? 0, periodEndMs: nowEpochMsForFiles)
+        }
+
         // 6. Compose events.
         // 6a. Message events — один Action RawEvent per (channel, count > 0).
         let messageEvents: [RawEvent] = tick.channelMessageCounts
@@ -321,6 +346,17 @@ public actor SlackCollector {
             .filter { $0.count > 0 }
             .map { Self.makeMentionReceivedAggregateEvent(channelCount: $0, nowMs: nowMsForPresence) }
 
+        // 6g. Phase 4.7.B-12 — slack_file_uploaded_aggregate. Single event per
+        // tick (NOT per-file). Always emit — mirror к presence/dnd: на zero count
+        // тоже emit (substrate continuity, downstream видит "наблюдали, файлов
+        // не было" vs "не наблюдали"). Flatten typesSummary в top-level keys
+        // (image_count / code_count / doc_count / other_count) для query-friendly
+        // SQL access.
+        let fileUploadEvent = Self.makeFileUploadedAggregateEvent(
+            summary: filesSummary,
+            nowMs: nowMsForPresence
+        )
+
         // Compose tick events. Split в локальные slices чтобы Swift type-checker
         // не задыхался на длинной chained-`+` expression.
         var allEvents: [RawEvent] = []
@@ -331,6 +367,7 @@ public actor SlackCollector {
         allEvents.append(presenceEvent)
         allEvents.append(dndEvent)
         allEvents.append(contentsOf: mentionEvents)
+        allEvents.append(fileUploadEvent)
 
         // 7. Atomic write events + cursor.
         // Cursor двигается только когда provider дал nonempty cursorMs (т.е.
@@ -359,7 +396,7 @@ public actor SlackCollector {
             )
         }
         if !allEvents.isEmpty {
-            logger.info("tick wrote \(messageEvents.count, privacy: .public) message + \(threadReplyEvents.count, privacy: .public) thread-reply + \(huddleEvent != nil ? 1 : 0, privacy: .public) huddle + \(statusChangeEvent != nil ? 1 : 0, privacy: .public) status + 1 presence + 1 dnd + \(mentionEvents.count, privacy: .public) mentions events, cursor=\(offset.lastModifiedMs, privacy: .public)")
+            logger.info("tick wrote \(messageEvents.count, privacy: .public) message + \(threadReplyEvents.count, privacy: .public) thread-reply + \(huddleEvent != nil ? 1 : 0, privacy: .public) huddle + \(statusChangeEvent != nil ? 1 : 0, privacy: .public) status + 1 presence + 1 dnd + \(mentionEvents.count, privacy: .public) mentions + 1 file-upload events, cursor=\(offset.lastModifiedMs, privacy: .public)")
         }
         return TickResult(
             skipped: false,
@@ -370,7 +407,8 @@ public actor SlackCollector {
             statusChangeEmitted: statusChangeEvent != nil,
             presenceStateEmitted: true,
             dndStateEmitted: true,
-            mentionEventsEmitted: mentionEvents.count
+            mentionEventsEmitted: mentionEvents.count,
+            fileUploadEventEmitted: true
         )
     }
 
@@ -526,6 +564,38 @@ public actor SlackCollector {
                 "count": String(channelCount.count),
                 "period_start_ms": String(channelCount.periodStartMs),
                 "period_end_ms": String(channelCount.periodEndMs)
+            ]
+        )
+    }
+
+    /// Phase 4.7.B-12 — `slack_file_uploaded_aggregate` action event. Single
+    /// event per tick (not per-file). Always-emit: на zero count тоже эмитится
+    /// (substrate continuity). `signal_type=.action` (uploading file —
+    /// triggering action, не state). Payload flatten'ит typesSummary в top-level
+    /// keys (`image_count` / `code_count` / `doc_count` / `other_count`) для
+    /// query-friendly access — SQL может фильтровать по type без JSON-функций.
+    /// Bucket с zero — пишем 0 explicit (consumer не угадывает "ключ
+    /// отсутствует == 0 ИЛИ pre-4.7.B без bucket'а").
+    /// ADR-010: filename / preview / permalink — отбрасываются на provider-side
+    /// parsing'е, в payload не попадают.
+    static func makeFileUploadedAggregateEvent(
+        summary: SlackFileUploadSummary,
+        nowMs: Int64
+    ) -> RawEvent {
+        RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "slack",
+                "event_kind": "slack_file_uploaded_aggregate",
+                "count": String(summary.count),
+                "image_count": String(summary.typesSummary["image"] ?? 0),
+                "code_count": String(summary.typesSummary["code"] ?? 0),
+                "doc_count": String(summary.typesSummary["doc"] ?? 0),
+                "other_count": String(summary.typesSummary["other"] ?? 0),
+                "period_start_ms": String(summary.periodStartMs),
+                "period_end_ms": String(summary.periodEndMs)
             ]
         )
     }
