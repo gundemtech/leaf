@@ -544,6 +544,122 @@ final class LinearCollectorTests: XCTestCase {
                      "nil ts → key omitted")
     }
 
+    // MARK: - Phase 4.7.B (B-7) — linear_cycle_progress
+
+    /// Helper: build `LinearTeamCycleSnapshot` с разумными defaults.
+    private func makeTeamCycle(
+        teamID: String = "team-A",
+        teamName: String = "Engineering",
+        cycleID: String = "cycle-1",
+        cycleName: String = "Sprint 42",
+        startsAtMs: Int64 = 1_777_180_800_000,  // 2026-04-26 ~ начало
+        endsAtMs: Int64 = 1_780_000_000_000,    // в будущем
+        completedPct: Double = 60.0,
+        daysRemaining: Int = 5,
+        scopeCount: Int = 15
+    ) -> LinearTeamCycleSnapshot {
+        LinearTeamCycleSnapshot(
+            teamID: teamID,
+            teamName: teamName,
+            cycleID: cycleID,
+            cycleName: cycleName,
+            startsAtMs: startsAtMs,
+            endsAtMs: endsAtMs,
+            completedPct: completedPct,
+            daysRemaining: daysRemaining,
+            scopeCount: scopeCount
+        )
+    }
+
+    /// Plan-required: 2 teams с cycles → 2 events emitted (один per team).
+    func testTick_EmitsCycleProgressPerTeam() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockLinearGraphQLProvider()
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let teamA = makeTeamCycle(
+            teamID: "team-A", teamName: "Engineering",
+            cycleID: "cycle-1", cycleName: "Sprint 42",
+            completedPct: 80.0, daysRemaining: 3, scopeCount: 15
+        )
+        let teamB = makeTeamCycle(
+            teamID: "team-B", teamName: "Design",
+            cycleID: "cycle-2", cycleName: "Iteration 7",
+            completedPct: 50.0, daysRemaining: 7, scopeCount: 8
+        )
+        await provider.setBatch(LinearIssueBatch(
+            issues: [],
+            cursorMs: nil,
+            transitions: [],
+            workload: .empty,
+            cycles: LinearCycleSnapshot(teams: [teamA, teamB], observedAtMs: nowMs)
+        ))
+
+        let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
+        let collector = LinearCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7,
+            logger: logger,
+            userDefaultsSuiteName: makeIsolatedSuiteName()
+        )
+        let result = await collector.performTick()
+        XCTAssertEqual(result.cycleEventsEmitted, 2, "2 teams с cycles → 2 events")
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSinceNow: -3600),
+            end: Date(timeIntervalSinceNow: 3600)
+        ))
+        let cycleEvents = stored.filter { $0.payload["event_kind"] == "linear_cycle_progress" }
+        XCTAssertEqual(cycleEvents.count, 2)
+        let teamIDs = Set(cycleEvents.compactMap { $0.payload["team_id"] })
+        XCTAssertEqual(teamIDs, ["team-A", "team-B"])
+
+        let eventA = try XCTUnwrap(cycleEvents.first { $0.payload["team_id"] == "team-A" })
+        XCTAssertEqual(eventA.payload["source"], "linear")
+        XCTAssertEqual(eventA.payload["team_name"], "Engineering")
+        XCTAssertEqual(eventA.payload["cycle_id"], "cycle-1")
+        XCTAssertEqual(eventA.payload["cycle_name"], "Sprint 42")
+        XCTAssertEqual(eventA.payload["completed_pct"], "80.0")
+        XCTAssertEqual(eventA.payload["days_remaining"], "3")
+        XCTAssertEqual(eventA.payload["scope_count"], "15")
+        XCTAssertEqual(eventA.signalType, .context, "cycle progress — state pulse, signal_type=.context")
+        // ADR-010 regression — defensive (snapshot не несёт description).
+        XCTAssertNil(eventA.payload["description"])
+    }
+
+    /// Plan-required: 0 cycles (empty teams array) → 0 cycle events emitted (silent).
+    func testTick_NoActiveCycles_NoCycleEvents() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockLinearGraphQLProvider()
+        // Empty cycles snapshot — no team in-cycle.
+        await provider.setBatch(LinearIssueBatch(
+            issues: [],
+            cursorMs: nil,
+            transitions: [],
+            workload: .empty,
+            cycles: .empty
+        ))
+
+        let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
+        let collector = LinearCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7,
+            logger: logger,
+            userDefaultsSuiteName: makeIsolatedSuiteName()
+        )
+        let result = await collector.performTick()
+        XCTAssertEqual(result.cycleEventsEmitted, 0)
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSinceNow: -3600),
+            end: Date(timeIntervalSinceNow: 3600)
+        ))
+        XCTAssertNil(stored.first { $0.payload["event_kind"] == "linear_cycle_progress" })
+    }
+
     /// Lifecycle smoke: start запускает loopTask, stop его cancels + awaits.
     /// Без assertion — если actor zombie'ит, тест зависнет (timeout safeguard).
     func testStartStopLifecycle() async throws {

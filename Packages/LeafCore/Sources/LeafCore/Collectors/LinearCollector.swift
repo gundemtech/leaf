@@ -114,17 +114,22 @@ public actor LinearCollector {
         public let cursorAdvancedMs: Int64?
         /// Phase 4.7.A — linear_comment_authored events emitted в этом tick'е (один per issue с count > 0).
         public let commentEventsEmitted: Int
+        /// Phase 4.7.B (B-7) — linear_cycle_progress events emitted в этом tick'е
+        /// (один per team с активным cycle'ом). 0 если ни одна команда не in-cycle.
+        public let cycleEventsEmitted: Int
 
         public init(
             skipped: Bool,
             issuesProcessed: Int,
             cursorAdvancedMs: Int64?,
-            commentEventsEmitted: Int = 0
+            commentEventsEmitted: Int = 0,
+            cycleEventsEmitted: Int = 0
         ) {
             self.skipped = skipped
             self.issuesProcessed = issuesProcessed
             self.cursorAdvancedMs = cursorAdvancedMs
             self.commentEventsEmitted = commentEventsEmitted
+            self.cycleEventsEmitted = cycleEventsEmitted
         }
     }
 
@@ -192,6 +197,11 @@ public actor LinearCollector {
         // не action). Substrate consistency: emit'ится КАЖДЫЙ tick включая empty
         // workload (startedCount=0) — downstream aggregator опирается на наличие
         // sample, чтобы отличать "не успели poll'нуть" от "у юзера 0 in-flight".
+        // Phase 4.7.B (B-7) — пятый flavor: linear_cycle_progress per team с
+        // активным cycle'ом. signal_type=.context. В отличие от workload pulse,
+        // emit'ится conditionally: только для team'ов с populated activeCycle
+        // (`batch.cycles.teams` уже filtered в provider'е). Если ни одна команда
+        // не in-cycle → 0 событий (silent).
         let nowMs = Int64(now.timeIntervalSince1970 * 1000)
         var events = batch.issues.map { Self.makeEvent(issue: $0) }
         events.append(contentsOf: batch.transitions.map { Self.makeTransitionEvent($0) })
@@ -203,6 +213,10 @@ public actor LinearCollector {
             snapshot: batch.workload, nowMs: nowMs
         )
         events.append(workloadEvent)
+        let cycleEvents = batch.cycles.teams.map { team in
+            Self.makeCycleProgressEvent(team: team, nowMs: nowMs)
+        }
+        events.append(contentsOf: cycleEvents)
         // Если batch пуст — cursor НЕ двигается (retry next tick на тех же since).
         // Если batch не пуст — cursor = batch.cursorMs (max updatedAt).
         let advancedCursor = batch.cursorMs ?? since
@@ -222,13 +236,14 @@ public actor LinearCollector {
             return TickResult(skipped: false, issuesProcessed: 0, cursorAdvancedMs: nil)
         }
         if !events.isEmpty {
-            logger.info("tick wrote \(events.count, privacy: .public) events (\(batch.issues.count, privacy: .public) issues + \(batch.transitions.count, privacy: .public) transitions + \(commentEvents.count, privacy: .public) comments + 1 workload pulse), cursor=\(offset.lastModifiedMs, privacy: .public)")
+            logger.info("tick wrote \(events.count, privacy: .public) events (\(batch.issues.count, privacy: .public) issues + \(batch.transitions.count, privacy: .public) transitions + \(commentEvents.count, privacy: .public) comments + 1 workload pulse + \(cycleEvents.count, privacy: .public) cycle progress), cursor=\(offset.lastModifiedMs, privacy: .public)")
         }
         return TickResult(
             skipped: false,
             issuesProcessed: events.count,
             cursorAdvancedMs: advancedCursor,
-            commentEventsEmitted: commentEvents.count
+            commentEventsEmitted: commentEvents.count,
+            cycleEventsEmitted: cycleEvents.count
         )
     }
 
@@ -313,6 +328,43 @@ public actor LinearCollector {
             signalType: .context,
             bundleID: nil,
             payload: payload
+        )
+    }
+
+    /// Phase 4.7.B (B-7) — RawEvent для linear_cycle_progress per team.
+    /// signalType=.context (cycle progress — state pulse, не action).
+    /// Один event per team с активным cycle'ом; teams без cycle'а в provider'е
+    /// уже отфильтрованы (`batch.cycles.teams` содержит только in-cycle).
+    ///
+    /// Payload key conventions (per plan B-7):
+    /// - `team_id` / `team_name` / `cycle_id` / `cycle_name` — public-safe metadata.
+    /// - `completed_pct` — Double serialized via `String(_:)` (e.g. "80.0"); reader
+    ///   parses back с `Double(_:)`.
+    /// - `days_remaining` / `scope_count` — Int.
+    /// - `starts_at_ms` / `ends_at_ms` — для downstream cycle window queries.
+    ///
+    /// ADR-010: cycle.description / goals НЕ хранятся (provider их не запрашивает).
+    static func makeCycleProgressEvent(
+        team: LinearTeamCycleSnapshot,
+        nowMs: Int64
+    ) -> RawEvent {
+        RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0),
+            signalType: .context,
+            bundleID: nil,
+            payload: [
+                "source": "linear",
+                "event_kind": "linear_cycle_progress",
+                "team_id": team.teamID,
+                "team_name": team.teamName,
+                "cycle_id": team.cycleID,
+                "cycle_name": team.cycleName,
+                "completed_pct": String(team.completedPct),
+                "days_remaining": String(team.daysRemaining),
+                "scope_count": String(team.scopeCount),
+                "starts_at_ms": String(team.startsAtMs),
+                "ends_at_ms": String(team.endsAtMs)
+            ]
         )
     }
 

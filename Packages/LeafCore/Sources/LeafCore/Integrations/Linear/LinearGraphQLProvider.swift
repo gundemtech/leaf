@@ -25,26 +25,32 @@ public protocol LinearGraphQLProvider: Sendable {
 /// Phase 4.7.B — additive `workload` field: viewer's currently-`started` assigned
 /// issues snapshot. Single page (≤50 issues per user типично), single HTTP call —
 /// piggy-back на existing `fetchIssues` query через `viewer.assignedIssues` root field.
+/// Phase 4.7.B (B-7) — additive `cycles` field: viewer's teams current active cycle
+/// progress. Up to 5 teams (cap per design budget), single HTTP call — piggy-back
+/// на existing `fetchIssues` query через `viewer.teams.activeCycle` block.
 public struct LinearIssueBatch: Sendable, Hashable {
     public let issues: [LinearIssueSnapshot]
     public let cursorMs: Int64?
     public let transitions: [LinearStateTransitionSnapshot]
     public let workload: LinearAssignedWorkloadSnapshot
+    public let cycles: LinearCycleSnapshot
 
     public init(
         issues: [LinearIssueSnapshot],
         cursorMs: Int64?,
         transitions: [LinearStateTransitionSnapshot] = [],
-        workload: LinearAssignedWorkloadSnapshot = .empty
+        workload: LinearAssignedWorkloadSnapshot = .empty,
+        cycles: LinearCycleSnapshot = .empty
     ) {
         self.issues = issues
         self.cursorMs = cursorMs
         self.transitions = transitions
         self.workload = workload
+        self.cycles = cycles
     }
 
     public static let empty = LinearIssueBatch(
-        issues: [], cursorMs: nil, transitions: [], workload: .empty
+        issues: [], cursorMs: nil, transitions: [], workload: .empty, cycles: .empty
     )
 }
 
@@ -88,6 +94,75 @@ public struct LinearAssignedWorkloadSnapshot: Sendable, Hashable {
         lastTouchedIdentifier: nil,
         lastTouchedTs: nil
     )
+}
+
+/// Phase 4.7.B (B-7) — per-team current active cycle progress snapshot.
+/// Один из ≤5 teams юзера (`viewer.teams(first: 5).nodes[].activeCycle`).
+/// Source: `viewer.teams.activeCycle.{scopeHistory, completedScopeHistory, progress}`.
+///
+/// ADR-010 — cycle.description / cycle goals / любой long-form text НЕ запрашиваются
+/// и НЕ парсятся. Только public-safe metadata: cycle id (internal), self-authored
+/// cycle name (e.g. "Sprint 42"), scope counts, days remaining, completed pct.
+public struct LinearTeamCycleSnapshot: Sendable, Hashable {
+    /// Linear's internal team UUID. Public-safe metadata (not PII).
+    public let teamID: String
+    /// Self-authored team name (e.g. "Engineering", "Leaf"). Per Section 6 — OK.
+    public let teamName: String
+    /// Linear's internal cycle UUID.
+    public let cycleID: String
+    /// Self-authored cycle name (e.g. "Sprint 42", "Cycle 7"). Per Section 6 — OK.
+    public let cycleName: String
+    /// Cycle start (epoch ms).
+    public let startsAtMs: Int64
+    /// Cycle end (epoch ms).
+    public let endsAtMs: Int64
+    /// 0-100. Derived from `completedScopeHistory.last / scopeHistory.last * 100`,
+    /// fallback to `progress * 100` if histories missing/empty.
+    public let completedPct: Double
+    /// `(endsAtMs - nowMs) / 86_400_000` floored, clamped к 0 если cycle уже завершён.
+    public let daysRemaining: Int
+    /// Total scope (`scopeHistory.last` rounded к Int). 0 если scope history пуст.
+    public let scopeCount: Int
+
+    public init(
+        teamID: String,
+        teamName: String,
+        cycleID: String,
+        cycleName: String,
+        startsAtMs: Int64,
+        endsAtMs: Int64,
+        completedPct: Double,
+        daysRemaining: Int,
+        scopeCount: Int
+    ) {
+        self.teamID = teamID
+        self.teamName = teamName
+        self.cycleID = cycleID
+        self.cycleName = cycleName
+        self.startsAtMs = startsAtMs
+        self.endsAtMs = endsAtMs
+        self.completedPct = completedPct
+        self.daysRemaining = daysRemaining
+        self.scopeCount = scopeCount
+    }
+}
+
+/// Phase 4.7.B (B-7) — aggregate snapshot всех teams юзера с активным cycle'ом.
+/// Teams без `activeCycle` (Linear возвращает null) skip'аются — `teams` array
+/// содержит только teams где cycle in-flight. Empty `teams` = nothing in-flight,
+/// downstream LinearCollector ничего не emit'ит (никаких cycle events).
+public struct LinearCycleSnapshot: Sendable, Hashable {
+    /// Per-team снимок active cycle. Up to 5 entries (provider cap).
+    public let teams: [LinearTeamCycleSnapshot]
+    /// Snapshot capture timestamp (epoch ms). 0 если snapshot пуст (`.empty`).
+    public let observedAtMs: Int64
+
+    public init(teams: [LinearTeamCycleSnapshot], observedAtMs: Int64) {
+        self.teams = teams
+        self.observedAtMs = observedAtMs
+    }
+
+    public static let empty = LinearCycleSnapshot(teams: [], observedAtMs: 0)
 }
 
 /// Один issue в batch'е — public-safe metadata (whitepaper Section 6 Action signal).
