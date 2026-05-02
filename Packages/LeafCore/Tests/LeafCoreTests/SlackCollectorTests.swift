@@ -32,16 +32,21 @@ final class SlackCollectorTests: XCTestCase {
     /// `nextResult: SlackTickResult` (default — `.empty`).
     /// Phase 4.7.B-9 — также injectable presence + counter для tick'ов.
     /// Phase 4.7.B-10 — также injectable DND + counter для tick'ов.
+    /// Phase 4.7.B-11 — также injectable mentions + counter для tick'ов.
     private actor MockSlackAPIProvider: SlackAPIProvider {
         private(set) var sinceCalls: [Int64?] = []
         private(set) var userIDCalls: [String] = []
         private(set) var presenceCalls: Int = 0
         private(set) var dndCalls: Int = 0
+        private(set) var mentionCalls: Int = 0
+        private(set) var mentionSinceCalls: [Int64] = []
         private var nextResult: SlackTickResult = .empty
         private var nextPresence: SlackPresenceState = .unknown
         private var nextDND: SlackDNDState = .empty
+        private var nextMentions: [SlackMentionChannelCount] = []
         private var presenceShouldThrow: Bool = false
         private var dndShouldThrow: Bool = false
+        private var mentionsShouldThrow: Bool = false
 
         func fetchTick(
             accessToken: String,
@@ -78,15 +83,33 @@ final class SlackCollectorTests: XCTestCase {
             return nextDND
         }
 
+        func fetchMentionsReceived(
+            accessToken: String,
+            userID: String,
+            since: Int64
+        ) async throws -> [SlackMentionChannelCount] {
+            mentionCalls += 1
+            mentionSinceCalls.append(since)
+            if mentionsShouldThrow {
+                struct DummyError: Error {}
+                throw DummyError()
+            }
+            return nextMentions
+        }
+
         func setResult(_ result: SlackTickResult) { nextResult = result }
         func setPresence(_ presence: SlackPresenceState) { nextPresence = presence }
         func setPresenceShouldThrow(_ shouldThrow: Bool) { presenceShouldThrow = shouldThrow }
         func setDND(_ dnd: SlackDNDState) { nextDND = dnd }
         func setDNDShouldThrow(_ shouldThrow: Bool) { dndShouldThrow = shouldThrow }
+        func setMentions(_ mentions: [SlackMentionChannelCount]) { nextMentions = mentions }
+        func setMentionsShouldThrow(_ shouldThrow: Bool) { mentionsShouldThrow = shouldThrow }
         func sinceHistory() -> [Int64?] { sinceCalls }
         func userIDHistory() -> [String] { userIDCalls }
         func presenceCallCount() -> Int { presenceCalls }
         func dndCallCount() -> Int { dndCalls }
+        func mentionCallCount() -> Int { mentionCalls }
+        func mentionSinceHistory() -> [Int64] { mentionSinceCalls }
     }
 
     // MARK: - Helpers
@@ -695,6 +718,70 @@ final class SlackCollectorTests: XCTestCase {
         XCTAssertNil(emptyEv.payload["snooze_until_ms"])
         XCTAssertNil(emptyEv.payload["next_dnd_start_ms"])
         XCTAssertNil(emptyEv.payload["next_dnd_end_ms"])
+    }
+
+    // MARK: - Phase 4.7.B-11 — slack_mention_received_aggregate
+
+    /// Per-channel mention counts → 1 RawEvent per (channel, count > 0). Verifies
+    /// payload shape (event_kind, channel, count, period_*_ms), `signal_type=.action`,
+    /// и что графа provider'а вызывается с корректным `since`.
+    func testTick_EmitsMentionReceivedAggregatePerChannel() async throws {
+        let db = try makeDB()
+        try insertFreshIntegration(db: db)
+        let provider = MockSlackAPIProvider()
+        let collector = makeCollector(db: db, provider: provider)
+
+        // Two channels: "engineering" — 3 mentions, "DM" — 1 mention.
+        let periodStart: Int64 = 1_700_000_000_000
+        let periodEnd: Int64 = 1_700_000_300_000
+        await provider.setMentions([
+            SlackMentionChannelCount(
+                channelName: "engineering",
+                count: 3,
+                periodStartMs: periodStart,
+                periodEndMs: periodEnd
+            ),
+            SlackMentionChannelCount(
+                channelName: "DM",
+                count: 1,
+                periodStartMs: periodStart,
+                periodEndMs: periodEnd
+            )
+        ])
+        await provider.setResult(SlackTickResult(
+            huddle: .unknown,
+            channelMessageCounts: [],
+            cursorMs: nil,
+            periodStartMs: 0,
+            periodEndMs: 0
+        ))
+
+        let now = Date(timeIntervalSince1970: 1_700_000_400)
+        let result = await collector.performTick(now: now)
+
+        XCTAssertEqual(result.mentionEventsEmitted, 2, "2 channel buckets → 2 events")
+        let mentionCalls = await provider.mentionCallCount()
+        XCTAssertEqual(mentionCalls, 1, "fetchMentionsReceived вызывается ровно раз per tick")
+        // First tick — bootstrap path (no stored cursor) → since=0.
+        let mentionSinceHistory = await provider.mentionSinceHistory()
+        XCTAssertEqual(mentionSinceHistory, [0], "bootstrap → since=0 (no stored cursor)")
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSince1970: TimeInterval(periodEnd) / 1000.0 - 1),
+            end: Date(timeIntervalSince1970: TimeInterval(periodEnd) / 1000.0 + 1)
+        ))
+        let mentions = stored.filter { $0.payload["event_kind"] == "slack_mention_received_aggregate" }
+        XCTAssertEqual(mentions.count, 2)
+        for e in mentions {
+            XCTAssertEqual(e.signalType, .action, "mention — triggering action, не state")
+            XCTAssertEqual(e.payload["source"], "slack")
+            XCTAssertEqual(e.payload["period_start_ms"], String(periodStart))
+            XCTAssertEqual(e.payload["period_end_ms"], String(periodEnd))
+        }
+        let eng = try XCTUnwrap(mentions.first { $0.payload["channel"] == "engineering" })
+        XCTAssertEqual(eng.payload["count"], "3")
+        let dm = try XCTUnwrap(mentions.first { $0.payload["channel"] == "DM" })
+        XCTAssertEqual(dm.payload["count"], "1")
     }
 
     /// start запускает loopTask, stop его cancels + awaits.

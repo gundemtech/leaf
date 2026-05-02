@@ -46,6 +46,21 @@ public protocol SlackAPIProvider: Sendable {
         accessToken: String,
         userID: String
     ) async throws -> SlackDNDState
+
+    /// Phase 4.7.B-11 — `search.messages?query=<@USER_ID>+after:<sinceISO>`.
+    /// Tier 2 endpoint. Возвращает per-channel aggregate count'ы сообщений, в
+    /// которых юзер был mention'нут (`<@USER_ID>` — canonical Slack mention syntax).
+    /// `since` — epoch ms (collector предоставляет cursor / nowMs - bootstrap),
+    /// конвертируется в `YYYY-MM-DD` (Slack `after:` имеет day-resolution).
+    /// DM channels (is_im / is_mpim) → bucket "DM" (anonymization, ADR-010).
+    /// ADR-010: `match.text` (само mention'ящее сообщение) и `match.user` (кто
+    /// mention'ил) — НЕ читаем; это body / from-user attribution, не наша cardinality.
+    /// Graceful degrade: 401/429/network/parse fail → `[]` (no events emitted).
+    func fetchMentionsReceived(
+        accessToken: String,
+        userID: String,
+        since: Int64
+    ) async throws -> [SlackMentionChannelCount]
 }
 
 /// Результат одного Slack tick'а. Huddle state — point-in-time snapshot;
@@ -189,6 +204,33 @@ public struct SlackDNDState: Sendable, Hashable {
     )
 }
 
+/// Phase 4.7.B-11 — per-channel aggregate "сколько раз меня mention'нули" в
+/// окне `[periodStartMs, periodEndMs]`. Mirror'ит shape `SlackChannelMessageCount`
+/// (channel name + count + period boundaries), но семантика другая: not authored,
+/// а received-as-mention. DM channels collapse'ятся в literal bucket "DM"
+/// (ADR-010 anonymization, как existing message aggregate).
+/// Period boundaries — derived collector'ом из `since` / `nowMs` чтобы downstream
+/// мог nominally считать "mentions per hour" без re-fetching cursor history.
+public struct SlackMentionChannelCount: Sendable, Hashable {
+    /// Public channel name ("engineering") или literal "DM" для IM/MPIM.
+    public let channelName: String
+    public let count: Int
+    public let periodStartMs: Int64
+    public let periodEndMs: Int64
+
+    public init(
+        channelName: String,
+        count: Int,
+        periodStartMs: Int64,
+        periodEndMs: Int64
+    ) {
+        self.channelName = channelName
+        self.count = count
+        self.periodStartMs = periodStartMs
+        self.periodEndMs = periodEndMs
+    }
+}
+
 /// Stub для CI / dev-без-moat сборок. Никогда не делает HTTP call, возвращает
 /// `.empty` — SlackCollector tick проходит no-op.
 public struct StubSlackAPIProvider: SlackAPIProvider {
@@ -214,5 +256,13 @@ public struct StubSlackAPIProvider: SlackAPIProvider {
         userID: String
     ) async throws -> SlackDNDState {
         .empty
+    }
+
+    public func fetchMentionsReceived(
+        accessToken: String,
+        userID: String,
+        since: Int64
+    ) async throws -> [SlackMentionChannelCount] {
+        []
     }
 }

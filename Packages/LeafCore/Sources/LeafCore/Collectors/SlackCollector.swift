@@ -95,6 +95,10 @@ public actor SlackCollector {
         /// Phase 4.7.B-10 — true если в этом tick'е emit'ился slack_dnd_state pulse.
         /// Should be true каждый non-skipped tick (always-emit semantics).
         public let dndStateEmitted: Bool
+        /// Phase 4.7.B-11 — кол-во slack_mention_received_aggregate events emitted
+        /// в этом tick'е (один event per channel-bucket, count=mentions per period).
+        /// 0 = no mentions / graceful degrade на provider-throw / ratelimit.
+        public let mentionEventsEmitted: Int
 
         public init(
             skipped: Bool,
@@ -104,7 +108,8 @@ public actor SlackCollector {
             threadReplyEventsEmitted: Int = 0,
             statusChangeEmitted: Bool = false,
             presenceStateEmitted: Bool = false,
-            dndStateEmitted: Bool = false
+            dndStateEmitted: Bool = false,
+            mentionEventsEmitted: Int = 0
         ) {
             self.skipped = skipped
             self.messageEventsEmitted = messageEventsEmitted
@@ -114,6 +119,7 @@ public actor SlackCollector {
             self.statusChangeEmitted = statusChangeEmitted
             self.presenceStateEmitted = presenceStateEmitted
             self.dndStateEmitted = dndStateEmitted
+            self.mentionEventsEmitted = mentionEventsEmitted
         }
     }
 
@@ -212,6 +218,26 @@ public actor SlackCollector {
             dndState = .empty
         }
 
+        // 5c. Phase 4.7.B-11 — mentions received aggregate. Per-channel count'ы
+        // сообщений где меня mention'нули за период `[since, now]` (bootstrap
+        // window — provider-side, по умолчанию 7 дней). Graceful: throw → []
+        // (no events emitted этим mechanism'ом). Period semantics: `since` =
+        // tick cursor (либо 0 на bootstrap path — provider обработает).
+        // Mentions — это NOT message activity (от меня); это received-from-others.
+        // Cursor для mention search не двигаем — окно перекрывается tick-to-tick
+        // и нам важен `периодический snapshot`, а не точный delta dedup.
+        let mentionCounts: [SlackMentionChannelCount]
+        do {
+            mentionCounts = try await provider.fetchMentionsReceived(
+                accessToken: refreshed.accessToken,
+                userID: userID,
+                since: since ?? 0
+            )
+        } catch {
+            logger.error("fetchMentionsReceived failed: \(String(describing: error), privacy: .public)")
+            mentionCounts = []
+        }
+
         // 6. Compose events.
         // 6a. Message events — один Action RawEvent per (channel, count > 0).
         let messageEvents: [RawEvent] = tick.channelMessageCounts
@@ -287,11 +313,24 @@ public actor SlackCollector {
             nowMs: nowMsForPresence
         )
 
-        let allEvents: [RawEvent] = messageEvents
-            + threadReplyEvents
-            + (huddleEvent.map { [$0] } ?? [])
-            + (statusChangeEvent.map { [$0] } ?? [])
-            + [presenceEvent, dndEvent]
+        // 6f. Phase 4.7.B-11 — mention_received_aggregate events. Один event
+        // per channel-bucket с count > 0 (provider гарантирует count > 0 в
+        // groups, но belt-and-suspenders filter здесь). count=0 буффер не
+        // создаём — provider drop'ает channels без matches до return.
+        let mentionEvents: [RawEvent] = mentionCounts
+            .filter { $0.count > 0 }
+            .map { Self.makeMentionReceivedAggregateEvent(channelCount: $0, nowMs: nowMsForPresence) }
+
+        // Compose tick events. Split в локальные slices чтобы Swift type-checker
+        // не задыхался на длинной chained-`+` expression.
+        var allEvents: [RawEvent] = []
+        allEvents.append(contentsOf: messageEvents)
+        allEvents.append(contentsOf: threadReplyEvents)
+        if let huddleEvent { allEvents.append(huddleEvent) }
+        if let statusChangeEvent { allEvents.append(statusChangeEvent) }
+        allEvents.append(presenceEvent)
+        allEvents.append(dndEvent)
+        allEvents.append(contentsOf: mentionEvents)
 
         // 7. Atomic write events + cursor.
         // Cursor двигается только когда provider дал nonempty cursorMs (т.е.
@@ -320,7 +359,7 @@ public actor SlackCollector {
             )
         }
         if !allEvents.isEmpty {
-            logger.info("tick wrote \(messageEvents.count, privacy: .public) message + \(threadReplyEvents.count, privacy: .public) thread-reply + \(huddleEvent != nil ? 1 : 0, privacy: .public) huddle + \(statusChangeEvent != nil ? 1 : 0, privacy: .public) status + 1 presence + 1 dnd events, cursor=\(offset.lastModifiedMs, privacy: .public)")
+            logger.info("tick wrote \(messageEvents.count, privacy: .public) message + \(threadReplyEvents.count, privacy: .public) thread-reply + \(huddleEvent != nil ? 1 : 0, privacy: .public) huddle + \(statusChangeEvent != nil ? 1 : 0, privacy: .public) status + 1 presence + 1 dnd + \(mentionEvents.count, privacy: .public) mentions events, cursor=\(offset.lastModifiedMs, privacy: .public)")
         }
         return TickResult(
             skipped: false,
@@ -330,7 +369,8 @@ public actor SlackCollector {
             threadReplyEventsEmitted: threadReplyEvents.count,
             statusChangeEmitted: statusChangeEvent != nil,
             presenceStateEmitted: true,
-            dndStateEmitted: true
+            dndStateEmitted: true,
+            mentionEventsEmitted: mentionEvents.count
         )
     }
 
@@ -460,6 +500,33 @@ public actor SlackCollector {
             signalType: .context,
             bundleID: nil,
             payload: payload
+        )
+    }
+
+    /// Phase 4.7.B-11 — `slack_mention_received_aggregate` action event. Один
+    /// event per channel-bucket (count > 0). Mirror'ит shape `message_authored_aggregate`
+    /// (channel + count + period boundaries), но `event_kind` distinct чтобы
+    /// downstream insights могли distinguish "что написал я" vs "сколько раз
+    /// меня mention'нули". `signal_type=.action` (per plan): mention — это
+    /// triggering event для меня (нужно отреагировать), не пассивный state.
+    /// ADR-010: текст mention'ящего сообщения и автор mention'а — provider
+    /// drop'ает на parsing'е, в payload не попадают.
+    static func makeMentionReceivedAggregateEvent(
+        channelCount: SlackMentionChannelCount,
+        nowMs: Int64
+    ) -> RawEvent {
+        RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(channelCount.periodEndMs) / 1000.0),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "slack",
+                "event_kind": "slack_mention_received_aggregate",
+                "channel": channelCount.channelName,
+                "count": String(channelCount.count),
+                "period_start_ms": String(channelCount.periodStartMs),
+                "period_end_ms": String(channelCount.periodEndMs)
+            ]
         )
     }
 
