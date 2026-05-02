@@ -43,6 +43,22 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     case slackThreadReplyAggregate = "slack_thread_reply_aggregate"
     case slackStatusChange = "slack_status_change"
     case linearCommentAuthored = "linear_comment_authored"
+
+    // MARK: - Phase 4.7.B — presence-first first-class APIs (this commit)
+    case githubNotificationsPulse = "github_notifications_pulse"
+    case githubPRAwaitingReviewCount = "pr_awaiting_review_count"
+    case githubMyOpenPRCount = "my_open_pr_count"
+    case githubActionsRunInitiated = "actions_run_initiated"
+    case githubCheckRunsStatus = "check_runs_status"
+    case linearAssignedWorkloadPulse = "linear_assigned_workload_pulse"
+    case linearCycleProgress = "linear_cycle_progress"
+    case slackPresenceState = "slack_presence_state"
+    case slackDNDState = "slack_dnd_state"
+    case slackMentionReceivedAggregate = "slack_mention_received_aggregate"
+    case slackFileUploadedAggregate = "slack_file_uploaded_aggregate"
+    // Note: linear `attachments` enrichment — extends existing `issue_updated`,
+    // no new key. github contributions calendar — used for presence_state only,
+    // no event key.
 }
 
 /// Phase 4.7.A — onboarding default enabled-state per event_kind.
@@ -91,6 +107,20 @@ public enum ShareEventTypeDefaults {
         .init(key: .githubDiscussionCommentAuthored, defaultEnabled: false),
         .init(key: .slackThreadReplyAggregate, defaultEnabled: true),
         .init(key: .slackStatusChange, defaultEnabled: true),
-        .init(key: .linearCommentAuthored, defaultEnabled: true)
+        .init(key: .linearCommentAuthored, defaultEnabled: true),
+
+        // Phase 4.7.B — presence-first first-class APIs
+        .init(key: .githubNotificationsPulse, defaultEnabled: true),
+        .init(key: .githubPRAwaitingReviewCount, defaultEnabled: true),
+        .init(key: .githubMyOpenPRCount, defaultEnabled: true),
+        .init(key: .githubActionsRunInitiated, defaultEnabled: true),
+        .init(key: .githubCheckRunsStatus, defaultEnabled: true),
+        .init(key: .linearAssignedWorkloadPulse, defaultEnabled: true),
+        .init(key: .linearCycleProgress, defaultEnabled: true),
+        // Slack presence/DND — Slack уже шарит это нативно, default ON.
+        .init(key: .slackPresenceState, defaultEnabled: true),
+        .init(key: .slackDNDState, defaultEnabled: true),
+        .init(key: .slackMentionReceivedAggregate, defaultEnabled: true),
+        .init(key: .slackFileUploadedAggregate, defaultEnabled: true)
     ]
 }
