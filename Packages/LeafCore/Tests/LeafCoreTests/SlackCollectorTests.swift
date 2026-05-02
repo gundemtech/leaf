@@ -885,6 +885,234 @@ final class SlackCollectorTests: XCTestCase {
         XCTAssertEqual(ev2.payload["other_count"], "0")
     }
 
+    // MARK: - Phase 4.7.B-13 — presence_state.slack writer
+
+    /// Plan-required: после tick'а presence_state.slack row существует с composite
+    /// state (native presence + dnd + status + huddle + last activity + mention/file
+    /// counts), все expected keys присутствуют, derivedMode=nil.
+    func testTick_WritesSlackPresenceState() async throws {
+        let db = try makeDB()
+        try insertFreshIntegration(db: db)
+        let provider = MockSlackAPIProvider()
+        let collector = makeCollector(db: db, provider: provider)
+
+        let periodStart: Int64 = 1_700_000_000_000
+        let periodEnd: Int64 = 1_700_000_300_000
+        await provider.setResult(SlackTickResult(
+            huddle: .inAHuddle,
+            channelMessageCounts: [
+                SlackChannelMessageCount(channelName: "engineering", count: 5),
+                SlackChannelMessageCount(channelName: "DM", count: 2)
+            ],
+            cursorMs: periodEnd,
+            periodStartMs: periodStart,
+            periodEndMs: periodEnd,
+            statusEmoji: ":coffee:",
+            statusExpirationTs: 1_700_010_000_000
+        ))
+        await provider.setPresence(.active)
+        await provider.setDND(SlackDNDState(
+            dndEnabled: true,
+            snoozeUntilMs: 1_700_001_000_000,
+            nextDNDStartMs: 1_700_010_000_000,
+            nextDNDEndMs: 1_700_020_000_000
+        ))
+        await provider.setMentions([
+            SlackMentionChannelCount(
+                channelName: "engineering",
+                count: 3,
+                periodStartMs: periodStart,
+                periodEndMs: periodEnd
+            ),
+            SlackMentionChannelCount(
+                channelName: "DM",
+                count: 2,
+                periodStartMs: periodStart,
+                periodEndMs: periodEnd
+            )
+        ])
+        await provider.setFiles(SlackFileUploadSummary(
+            count: 4,
+            typesSummary: ["image": 2, "code": 1, "doc": 1, "other": 0],
+            periodStartMs: periodStart,
+            periodEndMs: periodEnd
+        ))
+
+        _ = await collector.performTick()
+
+        let presence = try db.readSQL { rawDB in
+            try PresenceStateWriter.read(provider: .slack, in: rawDB)
+        }
+        let row = try XCTUnwrap(presence, "presence_state.slack row должен существовать после tick'а")
+        XCTAssertNil(row.derivedMode, "derivedMode=nil в Phase 4.7 (Phase 4.9 начнёт populate)")
+
+        let state = row.state
+        XCTAssertEqual(state["native_presence"] as? String, "active")
+        XCTAssertEqual(state["status_emoji"] as? String, ":coffee:")
+        XCTAssertEqual(state["status_expiration_ts"] as? Int64, 1_700_010_000_000)
+        XCTAssertEqual(state["in_huddle"] as? Bool, true)
+        XCTAssertEqual(state["huddle_channel"] as? String, "")
+        XCTAssertEqual(state["last_activity_channel"] as? String, "engineering",
+                       "max-count channel — engineering (5) > DM (2)")
+        XCTAssertEqual(state["mention_count_today"] as? Int, 5, "3 + 2 = 5")
+        XCTAssertEqual(state["file_count_today"] as? Int, 4)
+
+        // Nested dnd dict: 4 keys.
+        let dnd = try XCTUnwrap(state["dnd"] as? [String: Any])
+        XCTAssertEqual(dnd["is_active"] as? Bool, true)
+        XCTAssertEqual(dnd["snooze_until_ms"] as? Int64, 1_700_001_000_000)
+        XCTAssertEqual(dnd["next_dnd_start_ms"] as? Int64, 1_700_010_000_000)
+        XCTAssertEqual(dnd["next_dnd_end_ms"] as? Int64, 1_700_020_000_000)
+    }
+
+    /// ADR-010 regression: presence_state JSON не должен содержать reserved
+    /// content keys ("text" / "preview" / "title" / "body") — defensive shape check.
+    /// Caller responsibility — этот тест guards boundary.
+    func testTick_SlackPresenceStateOmitsBodyFields() async throws {
+        let db = try makeDB()
+        try insertFreshIntegration(db: db)
+        let provider = MockSlackAPIProvider()
+        let collector = makeCollector(db: db, provider: provider)
+
+        // Inject sentinel-like channel name (paranoid: это всё равно public-safe
+        // identifier, но сверим что body keys никогда не появляются).
+        await provider.setResult(SlackTickResult(
+            huddle: .defaultUnset,
+            channelMessageCounts: [
+                SlackChannelMessageCount(channelName: "engineering", count: 1)
+            ],
+            cursorMs: 1_700_000_300_000,
+            periodStartMs: 1_700_000_000_000,
+            periodEndMs: 1_700_000_300_000,
+            statusEmoji: ":pizza:",
+            statusExpirationTs: 0
+        ))
+        await provider.setPresence(.active)
+        await provider.setDND(.empty)
+
+        _ = await collector.performTick()
+
+        let presence = try db.readSQL { rawDB in
+            try PresenceStateWriter.read(provider: .slack, in: rawDB)
+        }
+        let row = try XCTUnwrap(presence)
+        let topLevelKeys = Set(row.state.keys)
+        XCTAssertFalse(topLevelKeys.contains("text"),
+                       "presence_state.slack не должен содержать 'text' top-level key")
+        XCTAssertFalse(topLevelKeys.contains("preview"),
+                       "presence_state.slack не должен содержать 'preview' top-level key")
+        XCTAssertFalse(topLevelKeys.contains("title"),
+                       "presence_state.slack не должен содержать 'title' top-level key")
+        XCTAssertFalse(topLevelKeys.contains("body"),
+                       "presence_state.slack не должен содержать 'body' top-level key")
+
+        // Paranoid: serialized JSON не должен иметь body markers.
+        let serialized = try JSONSerialization.data(withJSONObject: row.state, options: [])
+        let serializedStr = String(data: serialized, encoding: .utf8) ?? ""
+        for forbidden in ["\"text\"", "\"preview\"", "\"title\"", "\"body\""] {
+            XCTAssertFalse(serializedStr.contains(forbidden),
+                           "serialized state не должен содержать ключ \(forbidden)")
+        }
+    }
+
+    /// Roundtrip: write → read → assert dict equality для всех expected keys
+    /// (включая nested `dnd`). Verifies, что JSONSerialization сохранение через
+    /// `PresenceStateWriter.upsert` + `read` не теряет nested struct.
+    func testTick_SlackPresenceStateRoundtrips() async throws {
+        let db = try makeDB()
+        try insertFreshIntegration(db: db)
+        let provider = MockSlackAPIProvider()
+        let collector = makeCollector(db: db, provider: provider)
+
+        let periodStart: Int64 = 1_700_000_000_000
+        let periodEnd: Int64 = 1_700_000_300_000
+        await provider.setResult(SlackTickResult(
+            huddle: .defaultUnset,
+            channelMessageCounts: [
+                SlackChannelMessageCount(channelName: "design", count: 7),
+                SlackChannelMessageCount(channelName: "engineering", count: 3)
+            ],
+            cursorMs: periodEnd,
+            periodStartMs: periodStart,
+            periodEndMs: periodEnd,
+            statusEmoji: ":spiral_calendar_pad:",
+            statusExpirationTs: 1_700_005_000_000
+        ))
+        await provider.setPresence(.away)
+        await provider.setDND(SlackDNDState(
+            dndEnabled: false,
+            snoozeUntilMs: nil,
+            nextDNDStartMs: 1_700_030_000_000,
+            nextDNDEndMs: 1_700_050_000_000
+        ))
+        await provider.setMentions([
+            SlackMentionChannelCount(
+                channelName: "design",
+                count: 1,
+                periodStartMs: periodStart,
+                periodEndMs: periodEnd
+            )
+        ])
+        await provider.setFiles(SlackFileUploadSummary(
+            count: 0,
+            typesSummary: [:],
+            periodStartMs: periodStart,
+            periodEndMs: periodEnd
+        ))
+
+        _ = await collector.performTick()
+
+        let presence = try db.readSQL { rawDB in
+            try PresenceStateWriter.read(provider: .slack, in: rawDB)
+        }
+        let row = try XCTUnwrap(presence)
+        let state = row.state
+
+        // Verify every plan-required key is present + correct value.
+        XCTAssertEqual(state["native_presence"] as? String, "away")
+        XCTAssertEqual(state["status_emoji"] as? String, ":spiral_calendar_pad:")
+        XCTAssertEqual(state["status_expiration_ts"] as? Int64, 1_700_005_000_000)
+        XCTAssertEqual(state["in_huddle"] as? Bool, false, ".defaultUnset → in_huddle=false")
+        XCTAssertEqual(state["huddle_channel"] as? String, "")
+        XCTAssertEqual(state["last_activity_channel"] as? String, "design",
+                       "max-count channel — design (7) > engineering (3)")
+        XCTAssertEqual(state["mention_count_today"] as? Int, 1)
+        XCTAssertEqual(state["file_count_today"] as? Int, 0)
+
+        // dnd nested dict roundtripped:
+        let dnd = try XCTUnwrap(state["dnd"] as? [String: Any])
+        XCTAssertEqual(dnd.keys.sorted(),
+                       ["is_active", "next_dnd_end_ms", "next_dnd_start_ms", "snooze_until_ms"],
+                       "ровно 4 keys в nested dnd dict")
+        XCTAssertEqual(dnd["is_active"] as? Bool, false)
+        XCTAssertEqual(dnd["snooze_until_ms"] as? Int64, 0, "nil → 0 per plan literal")
+        XCTAssertEqual(dnd["next_dnd_start_ms"] as? Int64, 1_700_030_000_000)
+        XCTAssertEqual(dnd["next_dnd_end_ms"] as? Int64, 1_700_050_000_000)
+
+        // Top-level keys count check (defensive against accidental drift).
+        XCTAssertEqual(Set(state.keys), [
+            "native_presence", "dnd", "status_emoji", "status_expiration_ts",
+            "in_huddle", "huddle_channel", "last_activity_channel",
+            "mention_count_today", "file_count_today"
+        ])
+    }
+
+    /// Skip path: без integration row → presence_state.slack row НЕ записан
+    /// (early return до writeEventsOffsetAndPresence).
+    func testTickSkipPathDoesNotWritePresenceRow() async throws {
+        let db = try makeDB()
+        let provider = MockSlackAPIProvider()
+        let collector = makeCollector(db: db, provider: provider)
+
+        let result = await collector.performTick()
+        XCTAssertTrue(result.skipped)
+
+        let presence = try db.readSQL { rawDB in
+            try PresenceStateWriter.read(provider: .slack, in: rawDB)
+        }
+        XCTAssertNil(presence, "skip path не должен создавать presence_state.slack row")
+    }
+
     /// start запускает loopTask, stop его cancels + awaits.
     /// Без integration row provider не должен вызываться (skip path).
     func testStartStopLifecycle() async throws {

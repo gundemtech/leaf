@@ -369,7 +369,23 @@ public actor SlackCollector {
         allEvents.append(contentsOf: mentionEvents)
         allEvents.append(fileUploadEvent)
 
-        // 7. Atomic write events + cursor.
+        // 7. Build presence_state.slack composite snapshot.
+        // ADR-010 boundary: только counts / public-safe identifiers / enums /
+        // emoji literal. Никаких message text / file names / mention bodies
+        // не попадает (provider их не парсит, build dict здесь — defensive,
+        // мы строим его из уже-redacted snapshot'ов).
+        // JSONSerialization-friendly: Int / Bool / String / [String: Any].
+        // Optional ts → 0 per plan literal (downstream parser проверяет
+        // наличие через > 0 или строковое сравнение с "" для channel'а).
+        let slackPresence: [String: Any] = Self.buildSlackPresenceState(
+            tick: tick,
+            presenceState: presenceState,
+            dnd: dndState,
+            mentions: mentionCounts,
+            files: filesSummary
+        )
+
+        // 8. Atomic write events + cursor + presence_state.
         // Cursor двигается только когда provider дал nonempty cursorMs (т.е.
         // были messages в batch'е). Empty batch + no transition → cursor
         // остаётся (retry next tick), как Linear/GitHub.
@@ -385,7 +401,12 @@ public actor SlackCollector {
             updatedMs: nowMs
         )
         do {
-            try database.writeEventsAndOffset(allEvents, offset: offset)
+            try database.writeEventsOffsetAndPresence(
+                allEvents,
+                offset: offset,
+                presence: (.slack, slackPresence, nil),
+                nowMs: nowMs
+            )
         } catch {
             logger.error("persist failed: \(String(describing: error), privacy: .public)")
             return TickResult(
@@ -410,6 +431,73 @@ public actor SlackCollector {
             mentionEventsEmitted: mentionEvents.count,
             fileUploadEventEmitted: true
         )
+    }
+
+    /// Phase 4.7.B-13 — composite `presence_state.slack` snapshot. Single point
+    /// of truth для Slack-side state visible to команде через Phase 5 broadcast.
+    /// Built из tick fetch outputs (already redacted на provider parsing'е).
+    ///
+    /// Plan-required keys (top-level):
+    /// - `native_presence: String` — "active" | "away" | "unknown" (raw value
+    ///   `SlackPresenceState`, mirror к API enum).
+    /// - `dnd: [String: Any]` — nested dict с 4 keys:
+    ///     - `is_active: Bool` — `dnd.dndEnabled`.
+    ///     - `snooze_until_ms: Int64` — user-set snooze, 0 если nil (per plan literal).
+    ///     - `next_dnd_start_ms: Int64` — scheduled DND start, 0 если nil.
+    ///     - `next_dnd_end_ms: Int64` — scheduled DND end, 0 если nil.
+    /// - `status_emoji: String` — Slack custom status emoji (Phase 4.7.A), пустая
+    ///   строка если не выставлен.
+    /// - `status_expiration_ts: Int64` — epoch ms когда status истекает (0 = no expiration).
+    /// - `in_huddle: Bool` — `tick.huddle == .inAHuddle` (`.unknown` / `.defaultUnset` → false).
+    /// - `huddle_channel: String` — channel name where huddle is active. **Currently
+    ///   always `""`** — `SlackHuddleState` enum не несёт channel info на уровне
+    ///   API (`profile.huddle_state` отдаёт только enum). Surface зарезервирован
+    ///   под потенциальное расширение API parsing'а; downstream readers НЕ должны
+    ///   считать "" = "no huddle" — для этого есть `in_huddle`.
+    /// - `last_activity_channel: String` — most-recent-message channel за tick window
+    ///   (max-count entry в `tick.channelMessageCounts`); `""` если no messages
+    ///   authored.
+    /// - `mention_count_today: Int` — sum of mention counts по всем channel'ам в
+    ///   tick window. Naming "today" — semantic intent (Slack `after:` имеет
+    ///   day-resolution); фактически intra-tick aggregate (provider возвращает
+    ///   per-channel counts за окно `[since, now]`, мы суммируем). Нulled из DB не
+    ///   читаем — каждый tick свежий snapshot.
+    /// - `file_count_today: Int` — `filesSummary.count`, naming зеркалирует mention.
+    ///
+    /// ADR-010 redaction: caller responsibility. `tick.statusEmoji` — pure literal
+    /// (provider drop'ает `status_text` body). `last_activity_channel` — public
+    /// channel name либо literal "DM" (anonymized в provider'е). Mention/file
+    /// counts — numeric only.
+    static func buildSlackPresenceState(
+        tick: SlackTickResult,
+        presenceState: SlackPresenceState,
+        dnd: SlackDNDState,
+        mentions: [SlackMentionChannelCount],
+        files: SlackFileUploadSummary
+    ) -> [String: Any] {
+        let lastActivityChannel = tick.channelMessageCounts
+            .max(by: { $0.count < $1.count })?
+            .channelName ?? ""
+        let mentionTotal = mentions.map { $0.count }.reduce(0, +)
+        let dndDict: [String: Any] = [
+            "is_active": dnd.dndEnabled,
+            "snooze_until_ms": dnd.snoozeUntilMs ?? 0,
+            "next_dnd_start_ms": dnd.nextDNDStartMs ?? 0,
+            "next_dnd_end_ms": dnd.nextDNDEndMs ?? 0
+        ]
+        return [
+            "native_presence": presenceState.rawValue,
+            "dnd": dndDict,
+            "status_emoji": tick.statusEmoji,
+            "status_expiration_ts": tick.statusExpirationTs,
+            "in_huddle": tick.huddle == .inAHuddle,
+            // huddle_channel: surface зарезервирован, current API parser не
+            // populates — `SlackHuddleState` enum только indicator, без channel.
+            "huddle_channel": "",
+            "last_activity_channel": lastActivityChannel,
+            "mention_count_today": mentionTotal,
+            "file_count_today": files.count
+        ]
     }
 
     private static func makeMessageEvent(
