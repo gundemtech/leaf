@@ -191,6 +191,23 @@ public struct LinearIssueSnapshot: Sendable, Hashable {
     /// applied client-side в parser'е). 0 если не было моих comments.
     /// ADR-010: bodies НЕ запрашиваются — только id + createdAt + user.id для filter.
     public let commentCountInWindow: Int
+    /// Phase 4.7.B (B-8) — counts of GitHub PR attachments на этом issue, derived
+    /// из `Issue.attachments(first: 10)` block'а парсером URL'ов. 0 если ни один
+    /// attachment не matched GitHub PR pattern (или вообще не attached).
+    public let linkedGitHubPRCount: Int
+    /// Phase 4.7.B (B-8) — most-frequent `<owner>/<repo>` среди GitHub PR attachments
+    /// на этом issue. `nil` если linkedGitHubPRCount==0. Tie-break — lex-smallest
+    /// repo при равных counts (deterministic across test fixtures + production).
+    public let linkedGitHubTopRepo: String?
+    /// Phase 4.7.B (B-8) — counts Slack permalink attachments (matched
+    /// `https://<workspace>.slack.com/archives/<channel>/p<ts>` pattern).
+    /// 0 если ни один attachment не matched. ADR-010: только URL structure парсится,
+    /// message text / preview не запрашиваются.
+    public let linkedSlackMessageCount: Int
+    /// Phase 4.7.B (B-8) — total count attachments на issue (всех типов: GitHub /
+    /// Slack / другие external links). 0 если attachments пусты.
+    /// (`linkedGitHubPRCount + linkedSlackMessageCount + other`).
+    public let linkedAttachmentCount: Int
 
     public init(
         issueKey: String,
@@ -200,7 +217,11 @@ public struct LinearIssueSnapshot: Sendable, Hashable {
         teamKey: String,
         updatedAtMs: Int64,
         completionSeconds: Int? = nil,
-        commentCountInWindow: Int = 0
+        commentCountInWindow: Int = 0,
+        linkedGitHubPRCount: Int = 0,
+        linkedGitHubTopRepo: String? = nil,
+        linkedSlackMessageCount: Int = 0,
+        linkedAttachmentCount: Int = 0
     ) {
         self.issueKey = issueKey
         self.title = title
@@ -210,6 +231,10 @@ public struct LinearIssueSnapshot: Sendable, Hashable {
         self.updatedAtMs = updatedAtMs
         self.completionSeconds = completionSeconds
         self.commentCountInWindow = commentCountInWindow
+        self.linkedGitHubPRCount = linkedGitHubPRCount
+        self.linkedGitHubTopRepo = linkedGitHubTopRepo
+        self.linkedSlackMessageCount = linkedSlackMessageCount
+        self.linkedAttachmentCount = linkedAttachmentCount
     }
 }
 

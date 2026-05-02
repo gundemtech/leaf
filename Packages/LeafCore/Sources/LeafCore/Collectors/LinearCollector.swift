@@ -229,8 +229,25 @@ public actor LinearCollector {
             lastModifiedMs: advancedCursor ?? nowMs,
             updatedMs: nowMs
         )
+        // Phase 4.7.B (B-8) — composite presence_state.linear snapshot.
+        // ADR-010 boundary: только counts / public-safe identifiers / enums.
+        // Никаких title / description / body не попадает (provider их не парсит,
+        // build dict здесь — defensive — мы не reading из event payloads).
+        // JSONSerialization-friendly: Int / Double / String / [String: Any]
+        // / [[String: Any]]. Optional scalars defaulted к "" / 0 per plan literal
+        // (downstream parser проверяет startedCount > 0 чтобы отличить empty от
+        // populated, current_cycle dict пустой если no in-cycle teams).
+        let linearPresence: [String: Any] = Self.buildLinearPresenceState(
+            workload: batch.workload,
+            cycles: batch.cycles
+        )
         do {
-            try database.writeEventsAndOffset(events, offset: offset)
+            try database.writeEventsOffsetAndPresence(
+                events,
+                offset: offset,
+                presence: (.linear, linearPresence, nil),
+                nowMs: nowMs
+            )
         } catch {
             logger.error("persist failed: \(String(describing: error), privacy: .public)")
             return TickResult(skipped: false, issuesProcessed: 0, cursorAdvancedMs: nil)
@@ -263,6 +280,23 @@ public actor LinearCollector {
         // legitimate zero samples учитывались.
         if let secs = issue.completionSeconds {
             payload["completion_seconds"] = String(secs)
+        }
+        // Phase 4.7.B (B-8) — cross-provider links derived из Issue.attachments.
+        // Omit при zero/nil — same convention что completion_seconds: отсутствие
+        // ключа = "no signal", presence ключа = legitimate count (включая edge
+        // cases типа issue с attachments к Figma / Notion / external links но без
+        // GitHub/Slack — те попадут только в linked_attachment_count).
+        if issue.linkedGitHubPRCount > 0 {
+            payload["linked_github_pr_count"] = String(issue.linkedGitHubPRCount)
+        }
+        if let topRepo = issue.linkedGitHubTopRepo {
+            payload["linked_github_top_repo"] = topRepo
+        }
+        if issue.linkedSlackMessageCount > 0 {
+            payload["linked_slack_message_count"] = String(issue.linkedSlackMessageCount)
+        }
+        if issue.linkedAttachmentCount > 0 {
+            payload["linked_attachment_count"] = String(issue.linkedAttachmentCount)
         }
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(issue.updatedAtMs) / 1000.0),
@@ -366,6 +400,55 @@ public actor LinearCollector {
                 "ends_at_ms": String(team.endsAtMs)
             ]
         )
+    }
+
+    /// Phase 4.7.B (B-8) — build composite `presence_state.linear` JSON dict per
+    /// plan literal. Combines workload (B-6) + cycles (B-7) snapshots в single
+    /// current-state record для presence broadcast (Phase 5) и MCP tools (B-15+).
+    ///
+    /// Schema:
+    /// - `started_issues_count: Int` — derived from workload.startedCount.
+    /// - `top_priority: String` — "urgent"/"high"/"normal"/"low"/"none" (always present;
+    ///   "none" не omit'ится — downstream parser отличает "не запросили" по отсутствию
+    ///   ключа, а "0 in-flight" / "all priority=0" → "none").
+    /// - `current_cycle: [String: Any] | {}` — first team's cycle если есть, иначе `{}`.
+    ///   Empty dict выбран вместо NSNull чтобы JSON readers могли просто `keys.isEmpty`
+    ///   проверить (mirror pattern из B-5: NSNull только для known-nullable scalar fields).
+    /// - `all_team_cycles: [[String: Any]]` — array per team с cycle (multi-team support
+    ///   для users с >1 team в-cycle simultaneously). Empty array если нет cycles.
+    /// - `last_touched_issue_id: String` — workload.lastTouchedIdentifier ?? "".
+    /// - `last_touched_ts: Int` — workload.lastTouchedTs ?? 0.
+    ///
+    /// ADR-010 redaction: только counts / enum strings / self-authored identifiers
+    /// (cycle name, team name, issue identifier "LEA-123") + cycle window timestamps.
+    /// НЕ хранится: cycle.description, issue.title, comment bodies, attachment titles.
+    static func buildLinearPresenceState(
+        workload: LinearAssignedWorkloadSnapshot,
+        cycles: LinearCycleSnapshot
+    ) -> [String: Any] {
+        let cyclesArray: [[String: Any]] = cycles.teams.map { team in
+            [
+                "team_id": team.teamID,
+                "team_name": team.teamName,
+                "cycle_id": team.cycleID,
+                "cycle_name": team.cycleName,
+                "completed_pct": team.completedPct,
+                "days_remaining": team.daysRemaining,
+                "scope_count": team.scopeCount,
+                "starts_at_ms": team.startsAtMs,
+                "ends_at_ms": team.endsAtMs
+            ]
+        }
+        let firstCycle: [String: Any] = cyclesArray.first ?? [:]
+
+        return [
+            "started_issues_count": workload.startedCount,
+            "top_priority": Self.priorityString(workload.topPriority),
+            "current_cycle": firstCycle,
+            "all_team_cycles": cyclesArray,
+            "last_touched_issue_id": workload.lastTouchedIdentifier ?? "",
+            "last_touched_ts": workload.lastTouchedTs ?? 0
+        ]
     }
 
     /// Maps Linear's int priority enum в string token. 0 ("no priority" в Linear UI)
