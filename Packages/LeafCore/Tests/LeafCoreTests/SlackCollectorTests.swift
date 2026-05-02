@@ -31,13 +31,17 @@ final class SlackCollectorTests: XCTestCase {
     /// Captures `since` / `userID` calls для assertion'ов; injectable
     /// `nextResult: SlackTickResult` (default — `.empty`).
     /// Phase 4.7.B-9 — также injectable presence + counter для tick'ов.
+    /// Phase 4.7.B-10 — также injectable DND + counter для tick'ов.
     private actor MockSlackAPIProvider: SlackAPIProvider {
         private(set) var sinceCalls: [Int64?] = []
         private(set) var userIDCalls: [String] = []
         private(set) var presenceCalls: Int = 0
+        private(set) var dndCalls: Int = 0
         private var nextResult: SlackTickResult = .empty
         private var nextPresence: SlackPresenceState = .unknown
+        private var nextDND: SlackDNDState = .empty
         private var presenceShouldThrow: Bool = false
+        private var dndShouldThrow: Bool = false
 
         func fetchTick(
             accessToken: String,
@@ -62,12 +66,27 @@ final class SlackCollectorTests: XCTestCase {
             return nextPresence
         }
 
+        func fetchDND(
+            accessToken: String,
+            userID: String
+        ) async throws -> SlackDNDState {
+            dndCalls += 1
+            if dndShouldThrow {
+                struct DummyError: Error {}
+                throw DummyError()
+            }
+            return nextDND
+        }
+
         func setResult(_ result: SlackTickResult) { nextResult = result }
         func setPresence(_ presence: SlackPresenceState) { nextPresence = presence }
         func setPresenceShouldThrow(_ shouldThrow: Bool) { presenceShouldThrow = shouldThrow }
+        func setDND(_ dnd: SlackDNDState) { nextDND = dnd }
+        func setDNDShouldThrow(_ shouldThrow: Bool) { dndShouldThrow = shouldThrow }
         func sinceHistory() -> [Int64?] { sinceCalls }
         func userIDHistory() -> [String] { userIDCalls }
         func presenceCallCount() -> Int { presenceCalls }
+        func dndCallCount() -> Int { dndCalls }
     }
 
     // MARK: - Helpers
@@ -581,6 +600,101 @@ final class SlackCollectorTests: XCTestCase {
         // observed_at_ms = nowMs (per tick).
         let activeEv = try XCTUnwrap(presenceEvents.first { $0.payload["state"] == "active" })
         XCTAssertEqual(activeEv.payload["observed_at_ms"], String(Int64(now1.timeIntervalSince1970 * 1000)))
+    }
+
+    // MARK: - Phase 4.7.B-10 — slack_dnd_state pulse
+
+    /// Pulse emit'ится КАЖДЫЙ non-skipped tick (active DND / inactive / scheduled-only /
+    /// graceful empty). Mirror к slack_presence_state. Также проверяем что network
+    /// throw в provider'е graceful'но degrade'ит в empty event без блокировки tick'а,
+    /// и что nil ts-поля омитятся из payload (consistent с existing conventions).
+    func testTick_EmitsSlackDNDStateEvent() async throws {
+        let db = try makeDB()
+        try insertFreshIntegration(db: db)
+        let provider = MockSlackAPIProvider()
+        let collector = makeCollector(db: db, provider: provider)
+
+        // Tick 1 — DND active с user-set snooze.
+        await provider.setDND(SlackDNDState(
+            dndEnabled: true,
+            snoozeUntilMs: 1_700_001_000_000,
+            nextDNDStartMs: nil,
+            nextDNDEndMs: nil
+        ))
+        await provider.setResult(SlackTickResult(
+            huddle: .unknown,
+            channelMessageCounts: [],
+            cursorMs: nil,
+            periodStartMs: 0,
+            periodEndMs: 0
+        ))
+        let now1 = Date(timeIntervalSince1970: 1_700_000_100)
+        let r1 = await collector.performTick(now: now1)
+        XCTAssertTrue(r1.dndStateEmitted, "always emit on non-skipped tick")
+        let calls1 = await provider.dndCallCount()
+        XCTAssertEqual(calls1, 1)
+
+        // Tick 2 — scheduled DND only (recurring schedule), no active snooze.
+        await provider.setDND(SlackDNDState(
+            dndEnabled: false,
+            snoozeUntilMs: nil,
+            nextDNDStartMs: 1_700_010_000_000,
+            nextDNDEndMs: 1_700_020_000_000
+        ))
+        let now2 = Date(timeIntervalSince1970: 1_700_000_400)
+        let r2 = await collector.performTick(now: now2)
+        XCTAssertTrue(r2.dndStateEmitted)
+        let calls2 = await provider.dndCallCount()
+        XCTAssertEqual(calls2, 2)
+
+        // Tick 3 — provider throws → graceful .empty, pulse still emit.
+        await provider.setDNDShouldThrow(true)
+        let now3 = Date(timeIntervalSince1970: 1_700_000_700)
+        let r3 = await collector.performTick(now: now3)
+        XCTAssertTrue(r3.dndStateEmitted, "even на network throw мы emit pulse (empty)")
+        let calls3 = await provider.dndCallCount()
+        XCTAssertEqual(calls3, 3)
+
+        // Verify DB: 3 slack_dnd_state events с правильным payload mapping.
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSince1970: 1_700_000_000),
+            end: Date(timeIntervalSince1970: 1_700_001_000)
+        ))
+        let dndEvents = stored.filter { $0.payload["event_kind"] == "slack_dnd_state" }
+        XCTAssertEqual(dndEvents.count, 3, "3 ticks → 3 pulses")
+        for e in dndEvents {
+            XCTAssertEqual(e.signalType, .context, "pulse — state event, не user action")
+            XCTAssertEqual(e.payload["source"], "slack")
+            XCTAssertNotNil(e.payload["observed_at_ms"])
+            XCTAssertNotNil(e.payload["dnd_enabled"])
+        }
+
+        // Tick 1 — dnd_enabled=true + snooze_until_ms; next_dnd_* ОМИТЯТСЯ (nil → no key).
+        let activeEv = try XCTUnwrap(dndEvents.first {
+            $0.payload["observed_at_ms"] == String(Int64(now1.timeIntervalSince1970 * 1000))
+        })
+        XCTAssertEqual(activeEv.payload["dnd_enabled"], "true")
+        XCTAssertEqual(activeEv.payload["snooze_until_ms"], "1700001000000")
+        XCTAssertNil(activeEv.payload["next_dnd_start_ms"], "nil ts → omitted from payload")
+        XCTAssertNil(activeEv.payload["next_dnd_end_ms"])
+
+        // Tick 2 — dnd_enabled=false + scheduled window; snooze_until ОМИТНУТ.
+        let scheduledEv = try XCTUnwrap(dndEvents.first {
+            $0.payload["observed_at_ms"] == String(Int64(now2.timeIntervalSince1970 * 1000))
+        })
+        XCTAssertEqual(scheduledEv.payload["dnd_enabled"], "false")
+        XCTAssertNil(scheduledEv.payload["snooze_until_ms"])
+        XCTAssertEqual(scheduledEv.payload["next_dnd_start_ms"], "1700010000000")
+        XCTAssertEqual(scheduledEv.payload["next_dnd_end_ms"], "1700020000000")
+
+        // Tick 3 — graceful empty: dnd_enabled=false, все ts nil.
+        let emptyEv = try XCTUnwrap(dndEvents.first {
+            $0.payload["observed_at_ms"] == String(Int64(now3.timeIntervalSince1970 * 1000))
+        })
+        XCTAssertEqual(emptyEv.payload["dnd_enabled"], "false")
+        XCTAssertNil(emptyEv.payload["snooze_until_ms"])
+        XCTAssertNil(emptyEv.payload["next_dnd_start_ms"])
+        XCTAssertNil(emptyEv.payload["next_dnd_end_ms"])
     }
 
     /// start запускает loopTask, stop его cancels + awaits.

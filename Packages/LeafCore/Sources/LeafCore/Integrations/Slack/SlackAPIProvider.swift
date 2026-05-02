@@ -35,6 +35,17 @@ public protocol SlackAPIProvider: Sendable {
         accessToken: String,
         userID: String
     ) async throws -> SlackPresenceState
+
+    /// Phase 4.7.B-10 — Slack `dnd.info` (Tier 3). Returns текущий DND-state
+    /// + scheduled DND window + user-set snooze (до какого ts тишина).
+    /// Self-call (юзер запрашивает свой dnd state); `userID` обязателен Slack API
+    /// signature. Graceful: 401/429/network/parse fail → `.empty`. Collector ВСЁ
+    /// РАВНО emit'ит pulse — `slack_dnd_state` per-tick observation continuity.
+    /// ADR-010: response не содержит body / PII — только booleans + ts.
+    func fetchDND(
+        accessToken: String,
+        userID: String
+    ) async throws -> SlackDNDState
 }
 
 /// Результат одного Slack tick'а. Huddle state — point-in-time snapshot;
@@ -138,6 +149,46 @@ public enum SlackPresenceState: String, Sendable, Hashable {
     case unknown
 }
 
+/// Phase 4.7.B-10 — Slack DND snapshot, как его отдаёт `dnd.info`.
+/// `dndEnabled` — true если юзер сейчас в DND (либо scheduled DND window сейчас
+/// active, либо user-set snooze active). Slack возвращает это напрямую полем
+/// `dnd_enabled`; мы дополнительно OR'им с `snooze_endtime > now` defensively.
+/// `snoozeUntilMs` — user-set snooze (например "Pause notifications for 1h"),
+/// 0 / nil = no active snooze.
+/// `nextDNDStartMs` / `nextDNDEndMs` — scheduled DND window (recurring user
+/// schedule). 0 / nil = no scheduled DND.
+/// Все ts конвертированы в epoch ms (Slack отдаёт seconds → multiply by 1000).
+/// `.empty` = "couldn't determine" (graceful degrade на 401/429/network/parse).
+/// ADR-010: response не содержит body content или PII.
+public struct SlackDNDState: Sendable, Hashable {
+    public let dndEnabled: Bool
+    public let snoozeUntilMs: Int64?
+    public let nextDNDStartMs: Int64?
+    public let nextDNDEndMs: Int64?
+
+    public init(
+        dndEnabled: Bool,
+        snoozeUntilMs: Int64?,
+        nextDNDStartMs: Int64?,
+        nextDNDEndMs: Int64?
+    ) {
+        self.dndEnabled = dndEnabled
+        self.snoozeUntilMs = snoozeUntilMs
+        self.nextDNDStartMs = nextDNDStartMs
+        self.nextDNDEndMs = nextDNDEndMs
+    }
+
+    /// Graceful sentinel: provider не смог определить state (401 / 429 / network /
+    /// parse fail). Collector emit'ит pulse с `dnd_enabled=false` — downstream
+    /// видит observation continuity без gap'ов между tick'ами.
+    public static let empty = SlackDNDState(
+        dndEnabled: false,
+        snoozeUntilMs: nil,
+        nextDNDStartMs: nil,
+        nextDNDEndMs: nil
+    )
+}
+
 /// Stub для CI / dev-без-moat сборок. Никогда не делает HTTP call, возвращает
 /// `.empty` — SlackCollector tick проходит no-op.
 public struct StubSlackAPIProvider: SlackAPIProvider {
@@ -156,5 +207,12 @@ public struct StubSlackAPIProvider: SlackAPIProvider {
         userID: String
     ) async throws -> SlackPresenceState {
         .unknown
+    }
+
+    public func fetchDND(
+        accessToken: String,
+        userID: String
+    ) async throws -> SlackDNDState {
+        .empty
     }
 }

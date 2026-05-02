@@ -35,6 +35,10 @@ public enum SlackOAuthEndpoints {
     /// Phase 4.7.B-9 — emits per-tick `slack_presence_state` pulse (mirror к GitHub
     /// `github_notifications_pulse`). Self-only call (вызываем для авторизованного юзера).
     public static let usersGetPresence = URL(string: "https://slack.com/api/users.getPresence")!
+    /// `dnd.info` — Tier 3. Per-user DND state (current dnd + scheduled DND window
+    /// + user-set snooze). Phase 4.7.B-10 — emits per-tick `slack_dnd_state` pulse.
+    /// Self-only (`?user=<authed user>`); требует scope `dnd:read`.
+    public static let dndInfo = URL(string: "https://slack.com/api/dnd.info")!
 
     /// Public redirect URI для Slack OAuth `/oauth/v2/authorize` и token exchange.
     /// Slack distributed-app distribution требует HTTPS на redirect URI; loopback
@@ -60,7 +64,9 @@ public enum SlackOAuthEndpoints {
     /// endpoint (reactions aggregate). Adding scopes требует full OAuth re-consent
     /// (юзер проходит Disconnect → Connect один раз), backward-compat broken
     /// для existing alpha.6 tokens.
-    public static let userScopes = "users:read,users.profile:read,search:read,channels:history,groups:history,im:history,mpim:history"
+    /// Phase 4.7.B-10 — added `dnd:read` for `dnd.info` (slack_dnd_state pulse).
+    /// Same re-consent caveat: new scope требует Disconnect → Connect.
+    public static let userScopes = "users:read,users.profile:read,search:read,channels:history,groups:history,im:history,mpim:history,dnd:read"
 
     /// DistributedNotification name, постится при connect/disconnect/refreshDenied.
     /// Слушают: ConnectionsSettings (UI re-render), SlackCollector (Phase 4.4 reload).

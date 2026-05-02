@@ -92,6 +92,9 @@ public actor SlackCollector {
         /// Phase 4.7.B-9 — true если в этом tick'е emit'ился slack_presence_state pulse.
         /// Should be true каждый non-skipped tick (always-emit semantics).
         public let presenceStateEmitted: Bool
+        /// Phase 4.7.B-10 — true если в этом tick'е emit'ился slack_dnd_state pulse.
+        /// Should be true каждый non-skipped tick (always-emit semantics).
+        public let dndStateEmitted: Bool
 
         public init(
             skipped: Bool,
@@ -100,7 +103,8 @@ public actor SlackCollector {
             cursorAdvancedMs: Int64?,
             threadReplyEventsEmitted: Int = 0,
             statusChangeEmitted: Bool = false,
-            presenceStateEmitted: Bool = false
+            presenceStateEmitted: Bool = false,
+            dndStateEmitted: Bool = false
         ) {
             self.skipped = skipped
             self.messageEventsEmitted = messageEventsEmitted
@@ -109,6 +113,7 @@ public actor SlackCollector {
             self.threadReplyEventsEmitted = threadReplyEventsEmitted
             self.statusChangeEmitted = statusChangeEmitted
             self.presenceStateEmitted = presenceStateEmitted
+            self.dndStateEmitted = dndStateEmitted
         }
     }
 
@@ -192,6 +197,21 @@ public actor SlackCollector {
             presenceState = .unknown
         }
 
+        // 5b. Phase 4.7.B-10 — DND pulse. Same observability discipline что и
+        // fetchPresence: graceful `.empty` на network throw чтобы не блокировать
+        // tick. Provider impl сам degrade'ит на 401/429/parse, но network throw
+        // bubble'ит — wrap'им здесь.
+        let dndState: SlackDNDState
+        do {
+            dndState = try await provider.fetchDND(
+                accessToken: refreshed.accessToken,
+                userID: userID
+            )
+        } catch {
+            logger.error("fetchDND failed: \(String(describing: error), privacy: .public)")
+            dndState = .empty
+        }
+
         // 6. Compose events.
         // 6a. Message events — один Action RawEvent per (channel, count > 0).
         let messageEvents: [RawEvent] = tick.channelMessageCounts
@@ -260,11 +280,18 @@ public actor SlackCollector {
             nowMs: nowMsForPresence
         )
 
+        // 6e. Phase 4.7.B-10 — slack_dnd_state pulse. ВСЕГДА emit (per-tick),
+        // тот же `nowMs` что и presence (один observation timestamp на tick).
+        let dndEvent = Self.makeDNDStateEvent(
+            state: dndState,
+            nowMs: nowMsForPresence
+        )
+
         let allEvents: [RawEvent] = messageEvents
             + threadReplyEvents
             + (huddleEvent.map { [$0] } ?? [])
             + (statusChangeEvent.map { [$0] } ?? [])
-            + [presenceEvent]
+            + [presenceEvent, dndEvent]
 
         // 7. Atomic write events + cursor.
         // Cursor двигается только когда provider дал nonempty cursorMs (т.е.
@@ -293,7 +320,7 @@ public actor SlackCollector {
             )
         }
         if !allEvents.isEmpty {
-            logger.info("tick wrote \(messageEvents.count, privacy: .public) message + \(threadReplyEvents.count, privacy: .public) thread-reply + \(huddleEvent != nil ? 1 : 0, privacy: .public) huddle + \(statusChangeEvent != nil ? 1 : 0, privacy: .public) status + 1 presence events, cursor=\(offset.lastModifiedMs, privacy: .public)")
+            logger.info("tick wrote \(messageEvents.count, privacy: .public) message + \(threadReplyEvents.count, privacy: .public) thread-reply + \(huddleEvent != nil ? 1 : 0, privacy: .public) huddle + \(statusChangeEvent != nil ? 1 : 0, privacy: .public) status + 1 presence + 1 dnd events, cursor=\(offset.lastModifiedMs, privacy: .public)")
         }
         return TickResult(
             skipped: false,
@@ -302,7 +329,8 @@ public actor SlackCollector {
             cursorAdvancedMs: advancedCursor,
             threadReplyEventsEmitted: threadReplyEvents.count,
             statusChangeEmitted: statusChangeEvent != nil,
-            presenceStateEmitted: true
+            presenceStateEmitted: true,
+            dndStateEmitted: true
         )
     }
 
@@ -399,6 +427,39 @@ public actor SlackCollector {
                 "state": state.rawValue,
                 "observed_at_ms": String(nowMs)
             ]
+        )
+    }
+
+    /// Phase 4.7.B-10 — `slack_dnd_state` per-tick pulse event. Always-emit
+    /// semantics (mirror к `slack_presence_state`): tick → 1 event regardless
+    /// of state. `signal_type=.context` (DND — состояние, не user action).
+    /// Optional ts payload keys — omit когда nil (consistent с completion_seconds
+    /// и прочими existing-conventions; downstream считает отсутствие = "no scheduled" /
+    /// "no active snooze"). ADR-010: response не содержит body / PII.
+    static func makeDNDStateEvent(
+        state: SlackDNDState,
+        nowMs: Int64
+    ) -> RawEvent {
+        var payload: [String: String] = [
+            "source": "slack",
+            "event_kind": "slack_dnd_state",
+            "dnd_enabled": state.dndEnabled ? "true" : "false",
+            "observed_at_ms": String(nowMs)
+        ]
+        if let snooze = state.snoozeUntilMs {
+            payload["snooze_until_ms"] = String(snooze)
+        }
+        if let nextStart = state.nextDNDStartMs {
+            payload["next_dnd_start_ms"] = String(nextStart)
+        }
+        if let nextEnd = state.nextDNDEndMs {
+            payload["next_dnd_end_ms"] = String(nextEnd)
+        }
+        return RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0),
+            signalType: .context,
+            bundleID: nil,
+            payload: payload
         )
     }
 
