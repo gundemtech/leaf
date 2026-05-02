@@ -46,6 +46,7 @@ enum MCPMain {
         let uninterruptedWindowTool = GetUninterruptedWindowTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
         let currentPresenceTool = GetCurrentPresenceTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
         let workloadPulseTool = GetWorkloadPulseTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
+        let reviewActivityTool = GetReviewActivityTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
 
         // Notifications (`notifications/*`) обрабатываются Dispatcher'ом через
         // id == nil short-circuit — отдельный handler регистрировать не нужно.
@@ -61,7 +62,8 @@ enum MCPMain {
                 GetSlackActivityTool.definition,
                 GetUninterruptedWindowTool.definition,
                 GetCurrentPresenceTool.definition,
-                GetWorkloadPulseTool.definition
+                GetWorkloadPulseTool.definition,
+                GetReviewActivityTool.definition
             ]),
             "tools/call": ToolsCallHandler(registry: [
                 "get_timeline": timelineTool,
@@ -73,7 +75,8 @@ enum MCPMain {
                 "get_slack_activity": slackActivityTool,
                 "get_uninterrupted_window": uninterruptedWindowTool,
                 "get_current_presence": currentPresenceTool,
-                "get_workload_pulse": workloadPulseTool
+                "get_workload_pulse": workloadPulseTool,
+                "get_review_activity": reviewActivityTool
             ])
         ])
 
