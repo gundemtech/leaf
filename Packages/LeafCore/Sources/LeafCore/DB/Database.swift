@@ -563,6 +563,56 @@ public final class Database: @unchecked Sendable {
         }
     }
 
+    /// Strict INSERT — re-insert того же UUID — это bug (caller контролирует
+    /// PK). Идемпотентность создания org+self-row на caller'е (5.1.D
+    /// `OrgService.createPersonalOrg` проверяет `readOrg()` first).
+    public func insertTeamMember(_ member: TeamMember) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try db.execute(sql: """
+                INSERT INTO \(Schema.TeamMembers.tableName) (
+                    \(Schema.TeamMembers.id),
+                    \(Schema.TeamMembers.orgID),
+                    \(Schema.TeamMembers.role),
+                    \(Schema.TeamMembers.pubkeyHex),
+                    \(Schema.TeamMembers.displayName),
+                    \(Schema.TeamMembers.addedAtMs),
+                    \(Schema.TeamMembers.removedAtMs)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                arguments: [
+                    member.id,
+                    member.orgID,
+                    member.role.rawValue,
+                    member.pubkeyHex,
+                    member.displayName,
+                    Int64(member.addedAt.timeIntervalSince1970 * 1000),
+                    member.removedAt.map { Int64($0.timeIntervalSince1970 * 1000) }
+                ]
+            )
+        }
+    }
+
+    /// Returns members одной org, ordered by `added_at_ms` ASC.
+    /// `includeRemoved: false` (default) — active members only через partial
+    /// index `team_members_org_active`. UI Team list — default-call.
+    public func readTeamMembers(orgID: String, includeRemoved: Bool = false) throws -> [TeamMember] {
+        try pool.read { db in
+            let sql = """
+                SELECT \(Schema.TeamMembers.id), \(Schema.TeamMembers.orgID),
+                       \(Schema.TeamMembers.role), \(Schema.TeamMembers.pubkeyHex),
+                       \(Schema.TeamMembers.displayName), \(Schema.TeamMembers.addedAtMs),
+                       \(Schema.TeamMembers.removedAtMs)
+                FROM \(Schema.TeamMembers.tableName)
+                WHERE \(Schema.TeamMembers.orgID) = ?\
+                \(includeRemoved ? "" : " AND \(Schema.TeamMembers.removedAtMs) IS NULL")
+                ORDER BY \(Schema.TeamMembers.addedAtMs) ASC
+                """
+            let rows = try Row.fetchAll(db, sql: sql, arguments: [orgID])
+            return rows.compactMap(Self.mapTeamMemberRow)
+        }
+    }
+
     // MARK: - Linear attribution v2 migration (Phase 4.5)
 
     /// Phase 4.5 — одноразовая wipe Linear events + cursor для миграции на
@@ -709,6 +759,28 @@ public final class Database: @unchecked Sendable {
             name: name,
             createdAt: Date(timeIntervalSince1970: TimeInterval(createdAtMs) / 1000.0),
             createdByMemberID: createdByMemberID
+        )
+    }
+
+    private static func mapTeamMemberRow(_ row: Row) -> TeamMember? {
+        guard
+            let id = row[Schema.TeamMembers.id] as String?,
+            let orgID = row[Schema.TeamMembers.orgID] as String?,
+            let roleRaw = row[Schema.TeamMembers.role] as String?,
+            let role = TeamMemberRole(rawValue: roleRaw),
+            let pubkeyHex = row[Schema.TeamMembers.pubkeyHex] as String?,
+            let displayName = row[Schema.TeamMembers.displayName] as String?,
+            let addedAtMs = row[Schema.TeamMembers.addedAtMs] as Int64?
+        else { return nil }
+        let removedAtMs = row[Schema.TeamMembers.removedAtMs] as Int64?
+        return TeamMember(
+            id: id,
+            orgID: orgID,
+            role: role,
+            pubkeyHex: pubkeyHex,
+            displayName: displayName,
+            addedAt: Date(timeIntervalSince1970: TimeInterval(addedAtMs) / 1000.0),
+            removedAt: removedAtMs.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000.0) }
         )
     }
 
