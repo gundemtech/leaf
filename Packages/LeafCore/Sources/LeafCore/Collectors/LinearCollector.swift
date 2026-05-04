@@ -233,6 +233,10 @@ public actor LinearCollector {
         // feature support).
         let docEvents = batch.documents.map { Self.makeDocumentEditedEvent($0) }
         events.append(contentsOf: docEvents)
+        // Phase 4.7.C — Initiative observed events (context signal — membership
+        // snapshot per tick, NOT state change). Empty при отсутствии feature support.
+        let initEvents = batch.initiatives.map { Self.makeInitiativeObservedEvent($0) }
+        events.append(contentsOf: initEvents)
         let commentEvents = batch.issues
             .filter { $0.commentCountInWindow > 0 }
             .map { Self.makeCommentEvent(issue: $0, periodEndMs: nowMs) }
@@ -489,6 +493,26 @@ public actor LinearCollector {
         case 4: return "low"
         default: return "none"
         }
+    }
+
+    /// Phase 4.7.C — RawEvent для linear_initiative_observed. signalType=.context
+    /// (per spec: membership snapshot per tick, не state change). observedAtMs
+    /// — момент tick'а, не initiative.updatedAt.
+    static func makeInitiativeObservedEvent(_ i: LinearInitiativeSnapshot) -> RawEvent {
+        var payload: [String: String] = [
+            "source": "linear",
+            "event_kind": "linear_initiative_observed",
+            "initiative_id": i.initiativeId,
+            "name": i.name,
+            "observed_at": String(i.observedAtMs)
+        ]
+        if let s = i.status { payload["status"] = s }
+        return RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(i.observedAtMs) / 1000.0),
+            signalType: .context,
+            bundleID: nil,
+            payload: payload
+        )
     }
 
     /// Phase 4.7.C — RawEvent для linear_document_edited.

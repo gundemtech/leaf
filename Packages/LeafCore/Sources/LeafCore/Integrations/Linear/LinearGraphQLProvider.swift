@@ -50,6 +50,9 @@ public struct LinearIssueBatch: Sendable, Hashable {
     /// Phase 4.7.C — Linear Document snaps (skeleton). Empty при отсутствии
     /// feature support или нулевой activity юзера.
     public let documents: [LinearDocumentSnapshot]
+    /// Phase 4.7.C — Initiatives membership snapshot (skeleton). Empty при
+    /// отсутствии feature support / на legacy plans.
+    public let initiatives: [LinearInitiativeSnapshot]
 
     public init(
         issues: [LinearIssueSnapshot],
@@ -63,7 +66,8 @@ public struct LinearIssueBatch: Sendable, Hashable {
         cycleTransitions: [LinearCycleTransitionSnapshot] = [],
         estimateTransitions: [LinearEstimateTransitionSnapshot] = [],
         projectUpdates: [LinearProjectUpdateSnapshot] = [],
-        documents: [LinearDocumentSnapshot] = []
+        documents: [LinearDocumentSnapshot] = [],
+        initiatives: [LinearInitiativeSnapshot] = []
     ) {
         self.issues = issues
         self.cursorMs = cursorMs
@@ -77,13 +81,14 @@ public struct LinearIssueBatch: Sendable, Hashable {
         self.estimateTransitions = estimateTransitions
         self.projectUpdates = projectUpdates
         self.documents = documents
+        self.initiatives = initiatives
     }
 
     public static let empty = LinearIssueBatch(
         issues: [], cursorMs: nil, transitions: [], workload: .empty, cycles: .empty,
         priorityTransitions: [], labelTransitions: [], assigneeTransitions: [],
         cycleTransitions: [], estimateTransitions: [], projectUpdates: [],
-        documents: []
+        documents: [], initiatives: []
     )
 }
 
@@ -307,6 +312,31 @@ public struct LinearStateTransitionSnapshot: Sendable, Hashable {
         self.fromStateType = fromStateType
         self.toStateName = toStateName
         self.toStateType = toStateType
+    }
+}
+
+/// Phase 4.7.C — Linear Initiative observation. Membership-style snapshot
+/// (NOT state-change). Emit'ится один-к-одному per initiative per tick;
+/// `observedAtMs` фиксируется как tick timestamp (НЕ initiative.updatedAt) —
+/// каждый tick "наблюдает" текущий список my-related initiatives. Skeleton-
+/// style: viewer.initiatives — newer Linear API; graceful degrade на
+/// missing/null field.
+/// ADR-010: id + name + status (raw enum string)?; description / goals /
+/// content — никогда (provider их и не запрашивает).
+public struct LinearInitiativeSnapshot: Sendable, Hashable {
+    public let initiativeId: String
+    /// Self-authored initiative name. Public-safe.
+    public let name: String
+    /// Linear's status enum raw string; `nil` если status field omitted.
+    public let status: String?
+    /// Tick timestamp (epoch ms) — момент наблюдения, НЕ initiative.updatedAt.
+    public let observedAtMs: Int64
+
+    public init(initiativeId: String, name: String, status: String?, observedAtMs: Int64) {
+        self.initiativeId = initiativeId
+        self.name = name
+        self.status = status
+        self.observedAtMs = observedAtMs
     }
 }
 
