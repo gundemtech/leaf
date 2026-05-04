@@ -326,6 +326,85 @@ final class MigrationTests: XCTestCase {
         }
     }
 
+    // MARK: - Phase 5.1.A — Step 4 (M008 team_keys)
+
+    /// M008 — `team_keys` table создана с правильными столбцами.
+    /// `deprecated_at_ms` nullable, остальные NOT NULL.
+    func testMigration008CreatesTeamKeysTable() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        try db.readSQL { rawDB in
+            let tables = try String.fetchAll(
+                rawDB,
+                sql: "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                arguments: [Schema.TeamKeys.tableName]
+            )
+            XCTAssertEqual(tables, [Schema.TeamKeys.tableName])
+
+            let columns = try Row.fetchAll(
+                rawDB,
+                sql: "PRAGMA table_info(\(Schema.TeamKeys.tableName))"
+            )
+            let byName = Dictionary(uniqueKeysWithValues: columns.compactMap { row -> (String, Row)? in
+                guard let name = row["name"] as String? else { return nil }
+                return (name, row)
+            })
+
+            XCTAssertEqual(
+                Set(byName.keys),
+                Set([
+                    Schema.TeamKeys.id,
+                    Schema.TeamKeys.generatedAtMs,
+                    Schema.TeamKeys.deprecatedAtMs,
+                    Schema.TeamKeys.generatedByMemberID
+                ])
+            )
+
+            let id = try XCTUnwrap(byName[Schema.TeamKeys.id])
+            XCTAssertEqual(id["pk"] as Int?, 1)
+            XCTAssertEqual(id["notnull"] as Int?, 1)
+
+            for col in [Schema.TeamKeys.generatedAtMs, Schema.TeamKeys.generatedByMemberID] {
+                let row = try XCTUnwrap(byName[col])
+                XCTAssertEqual(row["notnull"] as Int?, 1, "column \(col) должен быть NOT NULL")
+            }
+
+            let deprecated = try XCTUnwrap(byName[Schema.TeamKeys.deprecatedAtMs])
+            XCTAssertEqual(deprecated["notnull"] as Int?, 0)
+        }
+    }
+
+    /// M008 — partial index `team_keys_active` присутствует и фильтрует
+    /// по `deprecated_at_ms IS NULL`.
+    func testMigration008CreatesActiveIndex() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        try db.readSQL { rawDB in
+            let indexes = try String.fetchAll(
+                rawDB,
+                sql: "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name=?",
+                arguments: [Schema.TeamKeys.tableName]
+            )
+            XCTAssertTrue(
+                indexes.contains(Schema.TeamKeys.indexActive),
+                "expected index \(Schema.TeamKeys.indexActive); found \(indexes)"
+            )
+
+            let sql = try String.fetchOne(
+                rawDB,
+                sql: "SELECT sql FROM sqlite_master WHERE type='index' AND name=?",
+                arguments: [Schema.TeamKeys.indexActive]
+            )
+            let unwrapped = try XCTUnwrap(sql)
+            XCTAssertTrue(
+                unwrapped.uppercased().contains("WHERE"),
+                "ожидался partial index с WHERE clause; got: \(unwrapped)"
+            )
+        }
+    }
+
     func testPlaintextDetectionRenamesFileAndStartsFresh() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         let key = EncryptionOptions(keyProvider: .data(Data(repeating: 0xDD, count: 32)))

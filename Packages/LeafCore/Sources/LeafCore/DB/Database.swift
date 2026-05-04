@@ -43,6 +43,7 @@ public final class Database: @unchecked Sendable {
         migrator.registerMigration005PresenceState()
         migrator.registerMigration006Org()
         migrator.registerMigration007TeamMembers()
+        migrator.registerMigration008TeamKeys()
         try migrator.migrate(pool)
 
         return Database(pool: pool, config: config, mode: .writer)
