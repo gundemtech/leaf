@@ -48,7 +48,11 @@ enum AgentMain {
         // Writer + collectors + maintenance scheduler. Retain'им в статичных globals
         // чтобы не собралось по ARC до срабатывания SIGTERM handler'а.
         let writer = EventWriter(database: database, thresholds: agentThresholds)
-        let activeAppCollector = ActiveAppCollector(writer: writer, blocklist: Blocklist.phase1Default)
+        let activeAppCollector = ActiveAppCollector(
+            writer: writer,
+            blocklist: Blocklist.phase1Default,
+            pollIntervalSec: agentThresholds.attentionWindowPollIntervalSec
+        )
         let idleCollector = IdleCollector(writer: writer, thresholds: agentThresholds)
         let maintenance = MaintenanceScheduler(
             database: database,
