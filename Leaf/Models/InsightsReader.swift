@@ -137,6 +137,12 @@ final class InsightsReader {
                         // поэтому Activity tab рендерит empty state на CI / no-prod.
                         let recentActivity = try insights.recentActivity(period: today, limit: 200)
                         try Task.checkCancellation()
+                        // Phase 4.10.B — aggregated sessions для Activity tab
+                        // ("Sessions" mode) и Home Recent Sessions block. Default
+                        // impl = [] (StubInsights / pre-prod), поэтому UI просто
+                        // не рендерит блок если sessions пустые.
+                        let recentSessions = try insights.recentSessions(period: today, limit: 200)
+                        try Task.checkCancellation()
                         // Phase 4.10.A — Live Presence widget читает merged
                         // presence_state row-ы (single-row-per-provider materialized
                         // view, no period). Empty pre-4.7 install / non-prod CI.
@@ -177,7 +183,8 @@ final class InsightsReader {
                             linearTransitions: linear.transitions,
                             linearCompletionRate: linear.completionRate,
                             recentActivity: recentActivity,
-                            presenceState: presenceState
+                            presenceState: presenceState,
+                            recentSessions: recentSessions
                         )
                         return .success((db, snapshot))
                     } catch {

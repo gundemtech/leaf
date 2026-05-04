@@ -4,6 +4,7 @@ import LeafCore
 struct ActivityView: View {
     @Environment(InsightsReader.self) private var reader
     @State private var selectedFilter: ActivityFilter = .all
+    @State private var mode: ActivityMode = .sessions
 
     var body: some View {
         ScrollView {
@@ -30,7 +31,9 @@ struct ActivityView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("ACTIVITY · TODAY")
                 .leafLabelStyle()
-            Text("Every event the agent has captured today.")
+            Text(mode == .sessions
+                 ? "Continuous work blocks: app + window/file context."
+                 : "Every event the agent has captured today.")
                 .font(.leafBody)
                 .foregroundStyle(.leafMuted)
         }
@@ -38,27 +41,74 @@ struct ActivityView: View {
 
     // MARK: - Loaded content
 
+    @ViewBuilder
     private func content(for snapshot: InsightsSnapshot) -> some View {
-        let entries = snapshot.recentActivity
-        return VStack(alignment: .leading, spacing: 20) {
-            FilterBar(selected: $selectedFilter, counts: providerCounts(in: entries))
+        VStack(alignment: .leading, spacing: 20) {
+            modePicker
+            switch mode {
+            case .sessions:
+                sessionsContent(for: snapshot)
+            case .rawEvents:
+                rawEventsContent(for: snapshot)
+            }
+        }
+    }
 
-            if entries.isEmpty {
-                placeholder("No events captured today yet — give the agent a few minutes.")
+    private var modePicker: some View {
+        Picker("", selection: $mode) {
+            ForEach(ActivityMode.allCases, id: \.self) { m in
+                Text(m.title).tag(m)
+            }
+        }
+        .pickerStyle(.segmented)
+        .frame(maxWidth: 240)
+    }
+
+    // MARK: - Sessions mode
+
+    @ViewBuilder
+    private func sessionsContent(for snapshot: InsightsSnapshot) -> some View {
+        let sessions = snapshot.recentSessions.sorted { $0.start > $1.start }
+        if sessions.isEmpty {
+            placeholder("No sessions yet — switch between apps or files for a few minutes.")
+        } else {
+            GlassCard(padding: 8) {
+                VStack(spacing: 0) {
+                    ForEach(Array(sessions.enumerated()), id: \.element.id) { index, session in
+                        SessionRow(session: session)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                        if index < sessions.count - 1 {
+                            Divider().opacity(0.3).padding(.leading, 56)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Raw events mode
+
+    @ViewBuilder
+    private func rawEventsContent(for snapshot: InsightsSnapshot) -> some View {
+        let entries = snapshot.recentActivity
+        FilterBar(selected: $selectedFilter, counts: providerCounts(in: entries))
+
+        if entries.isEmpty {
+            placeholder("No events captured today yet — give the agent a few minutes.")
+        } else {
+            let filtered = entries.filter { selectedFilter.matches($0.provider) }
+            if filtered.isEmpty {
+                placeholder("No \(selectedFilter.title.lowercased()) events in this window.")
             } else {
-                let filtered = entries.filter { selectedFilter.matches($0.provider) }
-                if filtered.isEmpty {
-                    placeholder("No \(selectedFilter.title.lowercased()) events in this window.")
-                } else {
-                    GlassCard(padding: 8) {
-                        VStack(spacing: 0) {
-                            ForEach(Array(filtered.enumerated()), id: \.element.id) { index, entry in
-                                ActivityRow(entry: entry)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 10)
-                                if index < filtered.count - 1 {
-                                    Divider().opacity(0.3).padding(.leading, 44)
-                                }
+                GlassCard(padding: 8) {
+                    VStack(spacing: 0) {
+                        ForEach(Array(filtered.enumerated()), id: \.element.id) { index, entry in
+                            ActivityRow(entry: entry)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
+                            if index < filtered.count - 1 {
+                                Divider().opacity(0.3).padding(.leading, 44)
                             }
                         }
                     }
@@ -92,6 +142,20 @@ struct ActivityView: View {
             .font(.leafBody)
             .foregroundStyle(.leafMuted)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+// MARK: - Mode toggle
+
+enum ActivityMode: String, CaseIterable, Hashable {
+    case sessions
+    case rawEvents
+
+    var title: String {
+        switch self {
+        case .sessions:  "Sessions"
+        case .rawEvents: "Raw events"
+        }
     }
 }
 

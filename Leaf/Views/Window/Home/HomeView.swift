@@ -37,6 +37,7 @@ private struct HomeContent: View {
             }
             PeakFocusChart(peakHour: snapshot.peakProductivityHour)
             TopAppsList(entries: Array(snapshot.topApps.prefix(5)))
+            RecentSessionsBlock(sessions: snapshot.recentSessions)
             ProvidersBlock(snapshot: snapshot)
         }
     }
