@@ -93,6 +93,14 @@ public protocol DerivedInsights: Sendable {
     /// the Live Presence widget. Default extension returns `[]` so StubInsights
     /// stays no-op without override.
     func recentActivity(period: DateInterval, limit: Int) throws -> [ActivityFeedEntry]
+
+    /// Phase 4.10.B — aggregated work sessions for the Activity tab "Sessions"
+    /// mode and the Home "Recent sessions" block. Reads `attention` events
+    /// (+ `context` boundary markers) within `period`, aggregates via
+    /// `SessionFeedMapper`, returns up to `limit` sessions sorted newest-first
+    /// (start desc). Default extension returns `[]` so StubInsights / iOS-future
+    /// stay no-op without override.
+    func recentSessions(period: DateInterval, limit: Int) throws -> [ActivitySession]
 }
 
 /// Default implementations — конформер'ы могут override'ить, но без явного
@@ -112,6 +120,9 @@ public extension DerivedInsights {
     /// Phase 4.10.A — default empty feed для StubInsights / iOS-future / любого
     /// конформера, который ещё не имплементил raw-events SELECT.
     func recentActivity(period: DateInterval, limit: Int) throws -> [ActivityFeedEntry] { [] }
+
+    /// Phase 4.10.B — default empty list для StubInsights / iOS-future.
+    func recentSessions(period: DateInterval, limit: Int) throws -> [ActivitySession] { [] }
 }
 
 /// Phase 1.1 / CI fallback. Все методы бросают .notImplemented.
