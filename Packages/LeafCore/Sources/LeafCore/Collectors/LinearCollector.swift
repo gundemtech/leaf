@@ -225,6 +225,10 @@ public actor LinearCollector {
         // Phase 4.7.C — estimate transitions (assigned/changed/removed).
         let estimateEvents = batch.estimateTransitions.map { Self.makeEstimateTransitionEvent($0) }
         events.append(contentsOf: estimateEvents)
+        // Phase 4.7.C — ProjectUpdate authored events (separate Linear top-level
+        // type, piggy-back fragment в той же query).
+        let pUpdateEvents = batch.projectUpdates.map { Self.makeProjectUpdateAuthoredEvent($0) }
+        events.append(contentsOf: pUpdateEvents)
         let commentEvents = batch.issues
             .filter { $0.commentCountInWindow > 0 }
             .map { Self.makeCommentEvent(issue: $0, periodEndMs: nowMs) }
@@ -481,6 +485,28 @@ public actor LinearCollector {
         case 4: return "low"
         default: return "none"
         }
+    }
+
+    /// Phase 4.7.C — RawEvent для my projectUpdate authored.
+    /// payload.event_kind="linear_project_update_authored", signalType=.action.
+    /// ADR-010: только id + project metadata + health enum; body НЕ включается
+    /// (provider не запрашивает, defensive — мы и не формируем).
+    static func makeProjectUpdateAuthoredEvent(_ pu: LinearProjectUpdateSnapshot) -> RawEvent {
+        var payload: [String: String] = [
+            "source": "linear",
+            "event_kind": "linear_project_update_authored",
+            "update_id": pu.updateId,
+            "project_id": pu.projectId,
+            "project_name": pu.projectName,
+            "created_at": String(pu.createdAtMs)
+        ]
+        if let h = pu.health { payload["health"] = h }
+        return RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(pu.createdAtMs) / 1000.0),
+            signalType: .action,
+            bundleID: nil,
+            payload: payload
+        )
     }
 
     /// Phase 4.7.C — RawEvent для my estimate transition. signalType=.action,

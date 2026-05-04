@@ -1298,6 +1298,72 @@ final class LinearCollectorTests: XCTestCase {
         XCTAssertEqual(est.payload["to_estimate"], "8.0")
     }
 
+    /// Phase 4.7.C — ProjectUpdate authored event с правильным payload.
+    func testTickEmitsProjectUpdateAuthoredEvent() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockLinearGraphQLProvider()
+        let cursorMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000) - 60_000
+        let pu = LinearProjectUpdateSnapshot(
+            updateId: "pu-1",
+            createdAtMs: cursorMs,
+            projectId: "proj-A", projectName: "Leaf",
+            health: "onTrack"
+        )
+        await provider.setBatch(LinearIssueBatch(
+            issues: [],
+            cursorMs: cursorMs,
+            projectUpdates: [pu]
+        ))
+
+        let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
+        let collector = LinearCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7,
+            logger: logger,
+            userDefaultsSuiteName: makeIsolatedSuiteName()
+        )
+        _ = await collector.performTick()
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSinceNow: -3600),
+            end: Date(timeIntervalSinceNow: 3600)
+        ))
+        let pu2 = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "linear_project_update_authored" })
+        XCTAssertEqual(pu2.payload["update_id"], "pu-1")
+        XCTAssertEqual(pu2.payload["project_id"], "proj-A")
+        XCTAssertEqual(pu2.payload["project_name"], "Leaf")
+        XCTAssertEqual(pu2.payload["health"], "onTrack")
+    }
+
+    /// Empty projectUpdates → no event.
+    func testTickDoesNotEmitProjectUpdateEventWhenEmpty() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockLinearGraphQLProvider()
+        let cursorMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000) - 60_000
+        await provider.setBatch(LinearIssueBatch(issues: [], cursorMs: cursorMs))
+
+        let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
+        let collector = LinearCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7,
+            logger: logger,
+            userDefaultsSuiteName: makeIsolatedSuiteName()
+        )
+        _ = await collector.performTick()
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSinceNow: -3600),
+            end: Date(timeIntervalSinceNow: 3600)
+        ))
+        XCTAssertNil(
+            stored.first { $0.payload["event_kind"] == "linear_project_update_authored" }
+        )
+    }
+
     /// Empty priorityTransitions → no priority event emitted.
     func testTickDoesNotEmitPriorityEventWhenEmpty() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)

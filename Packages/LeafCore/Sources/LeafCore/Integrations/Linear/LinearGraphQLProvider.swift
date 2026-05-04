@@ -43,6 +43,10 @@ public struct LinearIssueBatch: Sendable, Hashable {
     public let assigneeTransitions: [LinearAssigneeTransitionSnapshot]
     public let cycleTransitions: [LinearCycleTransitionSnapshot]
     public let estimateTransitions: [LinearEstimateTransitionSnapshot]
+    /// Phase 4.7.C — ProjectUpdate authored snaps (separate top-level Linear type,
+    /// piggy-back fragment в той же query). Empty если provider degrade'нулся
+    /// или у юзера нет updates в окне.
+    public let projectUpdates: [LinearProjectUpdateSnapshot]
 
     public init(
         issues: [LinearIssueSnapshot],
@@ -54,7 +58,8 @@ public struct LinearIssueBatch: Sendable, Hashable {
         labelTransitions: [LinearLabelTransitionSnapshot] = [],
         assigneeTransitions: [LinearAssigneeTransitionSnapshot] = [],
         cycleTransitions: [LinearCycleTransitionSnapshot] = [],
-        estimateTransitions: [LinearEstimateTransitionSnapshot] = []
+        estimateTransitions: [LinearEstimateTransitionSnapshot] = [],
+        projectUpdates: [LinearProjectUpdateSnapshot] = []
     ) {
         self.issues = issues
         self.cursorMs = cursorMs
@@ -66,12 +71,13 @@ public struct LinearIssueBatch: Sendable, Hashable {
         self.assigneeTransitions = assigneeTransitions
         self.cycleTransitions = cycleTransitions
         self.estimateTransitions = estimateTransitions
+        self.projectUpdates = projectUpdates
     }
 
     public static let empty = LinearIssueBatch(
         issues: [], cursorMs: nil, transitions: [], workload: .empty, cycles: .empty,
         priorityTransitions: [], labelTransitions: [], assigneeTransitions: [],
-        cycleTransitions: [], estimateTransitions: []
+        cycleTransitions: [], estimateTransitions: [], projectUpdates: []
     )
 }
 
@@ -295,6 +301,30 @@ public struct LinearStateTransitionSnapshot: Sendable, Hashable {
         self.fromStateType = fromStateType
         self.toStateName = toStateName
         self.toStateType = toStateType
+    }
+}
+
+/// Phase 4.7.C — ProjectUpdate snapshot. ProjectUpdate — first-class top-level
+/// type в Linear; piggy-back fragment в основной query через
+/// `projectUpdates(filter: { user: { isMe: { eq: true } } })`.
+/// ADR-010: body НЕ запрашивается; health enum (onTrack/atRisk/offTrack) +
+/// project.id + project.name (self-authored, public-safe).
+public struct LinearProjectUpdateSnapshot: Sendable, Hashable {
+    public let updateId: String
+    public let createdAtMs: Int64
+    public let projectId: String
+    public let projectName: String
+    /// Linear's health enum raw string ("onTrack" / "atRisk" / "offTrack");
+    /// `nil` если field omitted (project без health tracking).
+    public let health: String?
+
+    public init(updateId: String, createdAtMs: Int64,
+                projectId: String, projectName: String, health: String?) {
+        self.updateId = updateId
+        self.createdAtMs = createdAtMs
+        self.projectId = projectId
+        self.projectName = projectName
+        self.health = health
     }
 }
 
