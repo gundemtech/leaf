@@ -174,6 +174,66 @@ final class MigrationTests: XCTestCase {
         XCTAssertEqual(Set(TeamMemberRole.allCases.map(\.rawValue)), ["admin", "member"])
     }
 
+    // MARK: - Phase 5.1.A — Step 2 (M006 org)
+
+    /// M006 — `org` table создана с правильными столбцами.
+    func testMigration006CreatesOrgTable() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        try db.readSQL { rawDB in
+            let tables = try String.fetchAll(
+                rawDB,
+                sql: "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                arguments: [Schema.Org.tableName]
+            )
+            XCTAssertEqual(tables, [Schema.Org.tableName])
+
+            let columns = try Row.fetchAll(
+                rawDB,
+                sql: "PRAGMA table_info(\(Schema.Org.tableName))"
+            ).compactMap { $0["name"] as String? }
+
+            XCTAssertEqual(
+                Set(columns),
+                Set([
+                    Schema.Org.id,
+                    Schema.Org.name,
+                    Schema.Org.createdAtMs,
+                    Schema.Org.createdByMemberID
+                ])
+            )
+        }
+    }
+
+    /// M006 — `org.id` PK NOT NULL.
+    func testMigration006OrgPrimaryKeyIsId() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        try db.readSQL { rawDB in
+            let columns = try Row.fetchAll(
+                rawDB,
+                sql: "PRAGMA table_info(\(Schema.Org.tableName))"
+            )
+            let byName = Dictionary(uniqueKeysWithValues: columns.compactMap { row -> (String, Row)? in
+                guard let name = row["name"] as String? else { return nil }
+                return (name, row)
+            })
+
+            let id = try XCTUnwrap(byName[Schema.Org.id])
+            XCTAssertEqual(id["pk"] as Int?, 1)
+            XCTAssertEqual(id["notnull"] as Int?, 1)
+
+            // Остальные — NOT NULL без PK.
+            for col in [Schema.Org.name, Schema.Org.createdAtMs, Schema.Org.createdByMemberID] {
+                let row = try XCTUnwrap(byName[col])
+                XCTAssertEqual(row["pk"] as Int?, 0, "column \(col) не должен быть PK")
+                XCTAssertEqual(row["notnull"] as Int?, 1, "column \(col) должен быть NOT NULL")
+            }
+        }
+    }
+
     func testPlaintextDetectionRenamesFileAndStartsFresh() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         let key = EncryptionOptions(keyProvider: .data(Data(repeating: 0xDD, count: 32)))
