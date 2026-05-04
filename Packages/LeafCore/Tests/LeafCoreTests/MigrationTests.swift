@@ -319,9 +319,15 @@ final class MigrationTests: XCTestCase {
                 arguments: [Schema.TeamMembers.indexOrgActive]
             )
             let unwrapped = try XCTUnwrap(sql)
+            let upper = unwrapped.uppercased()
+            XCTAssertTrue(upper.contains("WHERE"), "ожидался partial index; got: \(unwrapped)")
             XCTAssertTrue(
-                unwrapped.uppercased().contains("WHERE"),
-                "ожидался partial index с WHERE clause; got: \(unwrapped)"
+                upper.contains(Schema.TeamMembers.removedAtMs.uppercased()),
+                "WHERE clause должен фильтровать по \(Schema.TeamMembers.removedAtMs); got: \(unwrapped)"
+            )
+            XCTAssertTrue(
+                upper.contains("IS NULL"),
+                "ожидался WHERE ... IS NULL predicate; got: \(unwrapped)"
             )
         }
     }
@@ -398,9 +404,15 @@ final class MigrationTests: XCTestCase {
                 arguments: [Schema.TeamKeys.indexActive]
             )
             let unwrapped = try XCTUnwrap(sql)
+            let upper = unwrapped.uppercased()
+            XCTAssertTrue(upper.contains("WHERE"), "ожидался partial index; got: \(unwrapped)")
             XCTAssertTrue(
-                unwrapped.uppercased().contains("WHERE"),
-                "ожидался partial index с WHERE clause; got: \(unwrapped)"
+                upper.contains(Schema.TeamKeys.deprecatedAtMs.uppercased()),
+                "WHERE clause должен фильтровать по \(Schema.TeamKeys.deprecatedAtMs); got: \(unwrapped)"
+            )
+            XCTAssertTrue(
+                upper.contains("IS NULL"),
+                "ожидался WHERE ... IS NULL predicate; got: \(unwrapped)"
             )
         }
     }
