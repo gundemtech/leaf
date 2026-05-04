@@ -120,7 +120,22 @@ struct MenuBarContent: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 4)
         case .loaded(let snapshot, _):
-            topAppsList(snapshot.topApps)
+            VStack(alignment: .leading, spacing: 12) {
+                topAppsList(snapshot.topApps)
+                let lines = providerSummaryLines(snapshot)
+                if !lines.isEmpty {
+                    Divider().opacity(0.3)
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                            Text(line)
+                                .font(.leafCaption)
+                                .foregroundStyle(.leafInk.opacity(0.8))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -147,6 +162,31 @@ struct MenuBarContent: View {
                 }
             }
         }
+    }
+
+    private func providerSummaryLines(_ snapshot: InsightsSnapshot) -> [String] {
+        var lines: [String] = []
+        if snapshot.linearIssuesTouched > 0 {
+            let closed = snapshot.linearTransitions?.completed ?? 0
+            let suffix = closed > 0 ? " · \(closed) closed" : ""
+            lines.append("Linear · \(snapshot.linearIssuesTouched) issue\(snapshot.linearIssuesTouched == 1 ? "" : "s")\(suffix)")
+        }
+        if snapshot.githubEventsCount > 0 {
+            let repos = snapshot.githubByRepo.count
+            let suffix = repos > 0 ? " · \(repos) repo\(repos == 1 ? "" : "s")" : ""
+            lines.append("GitHub · \(snapshot.githubEventsCount) event\(snapshot.githubEventsCount == 1 ? "" : "s")\(suffix)")
+        }
+        if snapshot.slackMessagesCount > 0 || snapshot.slackHuddleMinutes > 0 {
+            var parts: [String] = []
+            if snapshot.slackMessagesCount > 0 {
+                parts.append("\(snapshot.slackMessagesCount) msg\(snapshot.slackMessagesCount == 1 ? "" : "s")")
+            }
+            if snapshot.slackHuddleMinutes > 0 {
+                parts.append("\(snapshot.slackHuddleMinutes)m huddle")
+            }
+            lines.append("Slack · " + parts.joined(separator: " · "))
+        }
+        return lines
     }
 
     // MARK: - Controls

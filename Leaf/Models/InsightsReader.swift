@@ -132,6 +132,16 @@ final class InsightsReader {
                         // поэтому popover просто не рендерит row.
                         let uninterruptedWindow = try insights.longestUninterruptedWindow(period: today)
                         try Task.checkCancellation()
+                        // Phase 4.10.A — chronological per-event feed для Activity tab.
+                        // 14-я sequential query; default impl = [] (StubInsights),
+                        // поэтому Activity tab рендерит empty state на CI / no-prod.
+                        let recentActivity = try insights.recentActivity(period: today, limit: 200)
+                        try Task.checkCancellation()
+                        // Phase 4.10.A — Live Presence widget читает merged
+                        // presence_state row-ы (single-row-per-provider materialized
+                        // view, no period). Empty pre-4.7 install / non-prod CI.
+                        let presenceState: PresenceUISnapshot = (try? PresenceUISnapshot.read(database: db)) ?? .empty
+                        try Task.checkCancellation()
                         let snapshot = InsightsSnapshot(
                             topApps: topApps,
                             sessions: sessions,
@@ -165,7 +175,9 @@ final class InsightsReader {
                             // Phase 4.6.B — passthrough из linearActivity (third
                             // read внутри). Snapshot mirror'ит для UI/MCP consumers.
                             linearTransitions: linear.transitions,
-                            linearCompletionRate: linear.completionRate
+                            linearCompletionRate: linear.completionRate,
+                            recentActivity: recentActivity,
+                            presenceState: presenceState
                         )
                         return .success((db, snapshot))
                     } catch {
