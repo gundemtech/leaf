@@ -41,14 +41,32 @@ public struct EnvelopeHeader: Sendable, Hashable {
 }
 
 public protocol EnvelopeCodec: Sendable {
-    func encode(_ snapshot: PresenceSnapshot, teamKey: Data) throws -> Data
+    /// Сериализует snapshot и шифрует под `teamKey`, embedd'ит `keyID` в header.
+    /// - Parameters:
+    ///   - snapshot: payload to serialise + encrypt.
+    ///   - keyID: ровно 16 bytes (UUID `team_keys.id` raw bytes).
+    ///   - teamKey: ровно 32 bytes raw AES-256 key.
+    /// - Returns: bytes envelope `[ver:1B|keyID:16B|nonce:12B|ct|tag:16B]`.
+    /// - Throws: `LeafError.corruptedEnvelope` на bad input sizes.
+    func encode(_ snapshot: PresenceSnapshot,
+                keyID: Data,
+                teamKey: Data) throws -> Data
+
+    /// Расшифровывает envelope под `teamKey`. Caller обязан ДО вызова
+    /// peek'нуть header (`EnvelopeHeader.peek(from:)`) и найти
+    /// teamKey по `header.keyID` в keystore (history rotation).
+    /// - Throws: `LeafError.corruptedEnvelope` на short bytes / unknown version /
+    ///           AES-GCM tag mismatch / JSON decode failure.
     func decode(_ bytes: Data, teamKey: Data) throws -> PresenceSnapshot
 }
 
-/// Phase-0 / CI заглушка. Реальный codec на CryptoKit.AES.GCM — Phase 2.
+/// Phase-0 / CI заглушка. Реальный codec — `ProdEnvelopeCodec`
+/// в LeafCorePrivate/Prod/Crypto/ (Phase 5.1.C).
 public struct UnimplementedEnvelopeCodec: EnvelopeCodec {
     public init() {}
-    public func encode(_ snapshot: PresenceSnapshot, teamKey: Data) throws -> Data {
+    public func encode(_ snapshot: PresenceSnapshot,
+                       keyID: Data,
+                       teamKey: Data) throws -> Data {
         throw LeafError.notImplemented
     }
     public func decode(_ bytes: Data, teamKey: Data) throws -> PresenceSnapshot {

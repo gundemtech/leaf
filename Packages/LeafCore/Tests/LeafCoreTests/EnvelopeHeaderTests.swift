@@ -46,7 +46,34 @@ final class EnvelopeHeaderTests: XCTestCase {
         }
     }
 
+    // MARK: - Unimplemented codec keeps throwing after signature change
+
+    func testUnimplementedCodec_StillThrowsAfterSignatureChange() {
+        let codec = UnimplementedEnvelopeCodec()
+        let snap = PresenceSnapshot(userID: "u", status: .active)
+        let keyID = Data(repeating: 0xAB, count: 16)
+        let teamKey = Data(repeating: 0xCD, count: 32)
+
+        XCTAssertThrowsError(try codec.encode(snap, keyID: keyID, teamKey: teamKey)) { error in
+            XCTAssertTrue(isNotImplemented(error), "encode wrong error: \(error)")
+        }
+
+        var bytes = Data([EnvelopeHeader.currentVersion])
+        bytes.append(keyID)
+        bytes.append(Data(repeating: 0x00, count: 28))   // nonce + min ciphertext + tag stub
+        XCTAssertThrowsError(try codec.decode(bytes, teamKey: teamKey)) { error in
+            XCTAssertTrue(isNotImplemented(error), "decode wrong error: \(error)")
+        }
+    }
+
     // MARK: - Helpers
+
+    private func isNotImplemented(_ error: Error) -> Bool {
+        guard let leafErr = error as? LeafError else { return false }
+        if case .notImplemented = leafErr { return true }
+        return false
+    }
+
 
     private func isCorruptedEnvelope(_ error: Error) -> Bool {
         guard let leafErr = error as? LeafError else { return false }
