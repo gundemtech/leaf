@@ -34,23 +34,31 @@ public struct LinearIssueBatch: Sendable, Hashable {
     public let transitions: [LinearStateTransitionSnapshot]
     public let workload: LinearAssignedWorkloadSnapshot
     public let cycles: LinearCycleSnapshot
+    /// Phase 4.7.C — additive transition flavors (priority/labels/assignee/cycle/estimate).
+    /// Все piggy-back на той же `Issue.history` connection — никаких extra HTTP calls.
+    /// Каждый array — independent: один history entry может породить 0+ snap'ов разных
+    /// flavors (priority change + label add + assignee bucket в одной mutation).
+    public let priorityTransitions: [LinearPriorityTransitionSnapshot]
 
     public init(
         issues: [LinearIssueSnapshot],
         cursorMs: Int64?,
         transitions: [LinearStateTransitionSnapshot] = [],
         workload: LinearAssignedWorkloadSnapshot = .empty,
-        cycles: LinearCycleSnapshot = .empty
+        cycles: LinearCycleSnapshot = .empty,
+        priorityTransitions: [LinearPriorityTransitionSnapshot] = []
     ) {
         self.issues = issues
         self.cursorMs = cursorMs
         self.transitions = transitions
         self.workload = workload
         self.cycles = cycles
+        self.priorityTransitions = priorityTransitions
     }
 
     public static let empty = LinearIssueBatch(
-        issues: [], cursorMs: nil, transitions: [], workload: .empty, cycles: .empty
+        issues: [], cursorMs: nil, transitions: [], workload: .empty, cycles: .empty,
+        priorityTransitions: []
     )
 }
 
@@ -274,6 +282,27 @@ public struct LinearStateTransitionSnapshot: Sendable, Hashable {
         self.fromStateType = fromStateType
         self.toStateName = toStateName
         self.toStateType = toStateType
+    }
+}
+
+/// Phase 4.7.C — priority transition (Linear int enum: 1=Urgent .. 4=Low; 0=NoPriority).
+/// Mirrors LinearStateTransitionSnapshot: same actor-filter + cursor-guard discipline,
+/// emit'ится один-к-одному per qualifying history entry.
+/// ADR-010: только raw int values + history id + timestamp; никаких display labels.
+public struct LinearPriorityTransitionSnapshot: Sendable, Hashable {
+    public let issueKey: String
+    public let historyId: String
+    public let transitionAtMs: Int64
+    public let fromPriority: Int
+    public let toPriority: Int
+
+    public init(issueKey: String, historyId: String, transitionAtMs: Int64,
+                fromPriority: Int, toPriority: Int) {
+        self.issueKey = issueKey
+        self.historyId = historyId
+        self.transitionAtMs = transitionAtMs
+        self.fromPriority = fromPriority
+        self.toPriority = toPriority
     }
 }
 

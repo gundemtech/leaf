@@ -205,6 +205,11 @@ public actor LinearCollector {
         let nowMs = Int64(now.timeIntervalSince1970 * 1000)
         var events = batch.issues.map { Self.makeEvent(issue: $0) }
         events.append(contentsOf: batch.transitions.map { Self.makeTransitionEvent($0) })
+        // Phase 4.7.C — priority transitions per qualified history entry. Mirror
+        // status-transition emission shape: signal_type=.action, payload event_kind
+        // distinguishes flavor.
+        let priorityEvents = batch.priorityTransitions.map { Self.makePriorityTransitionEvent($0) }
+        events.append(contentsOf: priorityEvents)
         let commentEvents = batch.issues
             .filter { $0.commentCountInWindow > 0 }
             .map { Self.makeCommentEvent(issue: $0, periodEndMs: nowMs) }
@@ -461,6 +466,28 @@ public actor LinearCollector {
         case 4: return "low"
         default: return "none"
         }
+    }
+
+    /// Phase 4.7.C — RawEvent для my priority transition. signalType=.action,
+    /// payload.event_kind="linear_priority_changed" — отдельный flavor от
+    /// linear_status_transition. ADR-010: only raw int values + history id +
+    /// timestamp; никаких display labels (Linear's "Urgent"/"High"/etc — UI mapping,
+    /// derive'ится downstream).
+    static func makePriorityTransitionEvent(_ t: LinearPriorityTransitionSnapshot) -> RawEvent {
+        RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(t.transitionAtMs) / 1000.0),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "linear",
+                "event_kind": "linear_priority_changed",
+                "issue_key": t.issueKey,
+                "history_id": t.historyId,
+                "from_priority": String(t.fromPriority),
+                "to_priority": String(t.toPriority),
+                "transition_at": String(t.transitionAtMs)
+            ]
+        )
     }
 
     /// Phase 4.6.B — RawEvent для my status transition. signalType=.action,

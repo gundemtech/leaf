@@ -968,4 +968,92 @@ final class LinearCollectorTests: XCTestCase {
         let calls = await provider.calls()
         XCTAssertEqual(calls.count, 0)
     }
+
+    // MARK: - Phase 4.7.C — priority transitions
+
+    /// Batch с одним priorityTransitions snap → tick emit'ит linear_priority_changed
+    /// event с правильным payload shape (signal=action, raw int values, history_id).
+    func testTickEmitsPriorityTransitionEvent() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockLinearGraphQLProvider()
+        let cursorMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000) - 60_000
+        let prioritySnap = LinearPriorityTransitionSnapshot(
+            issueKey: "LEA-1",
+            historyId: "hist-prio-1",
+            transitionAtMs: cursorMs,
+            fromPriority: 3,
+            toPriority: 1
+        )
+        await provider.setBatch(LinearIssueBatch(
+            issues: [
+                LinearIssueSnapshot(
+                    issueKey: "LEA-1", title: "Topic", status: "In Progress",
+                    project: "", teamKey: "LEA", updatedAtMs: cursorMs
+                )
+            ],
+            cursorMs: cursorMs,
+            priorityTransitions: [prioritySnap]
+        ))
+
+        let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
+        let collector = LinearCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7,
+            logger: logger,
+            userDefaultsSuiteName: makeIsolatedSuiteName()
+        )
+        _ = await collector.performTick()
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSinceNow: -3600),
+            end: Date(timeIntervalSinceNow: 3600)
+        ))
+        let priorityEvent = try XCTUnwrap(
+            stored.first { $0.payload["event_kind"] == "linear_priority_changed" }
+        )
+        XCTAssertEqual(priorityEvent.payload["issue_key"], "LEA-1")
+        XCTAssertEqual(priorityEvent.payload["history_id"], "hist-prio-1")
+        XCTAssertEqual(priorityEvent.payload["from_priority"], "3")
+        XCTAssertEqual(priorityEvent.payload["to_priority"], "1")
+        XCTAssertEqual(priorityEvent.payload["source"], "linear")
+        XCTAssertEqual(priorityEvent.signalType, .action)
+    }
+
+    /// Empty priorityTransitions → no priority event emitted.
+    func testTickDoesNotEmitPriorityEventWhenEmpty() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockLinearGraphQLProvider()
+        let cursorMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000) - 60_000
+        await provider.setBatch(LinearIssueBatch(
+            issues: [
+                LinearIssueSnapshot(
+                    issueKey: "LEA-1", title: "Topic", status: "In Progress",
+                    project: "", teamKey: "LEA", updatedAtMs: cursorMs
+                )
+            ],
+            cursorMs: cursorMs
+        ))
+
+        let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
+        let collector = LinearCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7,
+            logger: logger,
+            userDefaultsSuiteName: makeIsolatedSuiteName()
+        )
+        _ = await collector.performTick()
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSinceNow: -3600),
+            end: Date(timeIntervalSinceNow: 3600)
+        ))
+        XCTAssertNil(
+            stored.first { $0.payload["event_kind"] == "linear_priority_changed" },
+            "no priority transitions in batch → no event emitted"
+        )
+    }
 }
