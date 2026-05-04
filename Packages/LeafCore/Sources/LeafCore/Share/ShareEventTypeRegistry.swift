@@ -59,6 +59,18 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     // Note: linear `attachments` enrichment — extends existing `issue_updated`,
     // no new key. github contributions calendar — used for presence_state only,
     // no event key.
+
+    // MARK: - Phase 4.7.C — triage / state-change depth + skeleton queries
+    case linearPriorityChanged = "linear_priority_changed"
+    case linearLabelAdded = "linear_label_added"
+    case linearLabelRemoved = "linear_label_removed"
+    case linearAssigneeChanged = "linear_assignee_changed"
+    case linearCycleChanged = "linear_cycle_changed"
+    case linearEstimateChanged = "linear_estimate_changed"
+    case linearProjectUpdateAuthored = "linear_project_update_authored"
+    case linearDocumentEdited = "linear_document_edited"
+    case linearInitiativeObserved = "linear_initiative_observed"
+    case githubPullRequestReviewThreadResolved = "pr_review_thread_resolved"
 }
 
 /// Phase 4.7.A — onboarding default enabled-state per event_kind.
@@ -121,6 +133,21 @@ public enum ShareEventTypeDefaults {
         .init(key: .slackPresenceState, defaultEnabled: true),
         .init(key: .slackDNDState, defaultEnabled: true),
         .init(key: .slackMentionReceivedAggregate, defaultEnabled: true),
-        .init(key: .slackFileUploadedAggregate, defaultEnabled: true)
+        .init(key: .slackFileUploadedAggregate, defaultEnabled: true),
+
+        // Phase 4.7.C — outcome-bearing transitions / project updates ON;
+        // skeleton-style features (documents / initiatives) OFF на legacy
+        // workspaces без feature support.
+        .init(key: .linearPriorityChanged, defaultEnabled: true),
+        .init(key: .linearLabelAdded, defaultEnabled: true),
+        .init(key: .linearLabelRemoved, defaultEnabled: true),
+        .init(key: .linearAssigneeChanged, defaultEnabled: true),
+        .init(key: .linearCycleChanged, defaultEnabled: true),
+        .init(key: .linearEstimateChanged, defaultEnabled: true),
+        .init(key: .linearProjectUpdateAuthored, defaultEnabled: true),
+        // Skeleton — могут вернуть 0 events на workspaces без feature; OFF.
+        .init(key: .linearDocumentEdited, defaultEnabled: false),
+        .init(key: .linearInitiativeObserved, defaultEnabled: false),
+        .init(key: .githubPullRequestReviewThreadResolved, defaultEnabled: true)
     ]
 }

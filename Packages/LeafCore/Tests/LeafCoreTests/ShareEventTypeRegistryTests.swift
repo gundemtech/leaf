@@ -19,12 +19,11 @@ final class ShareEventTypeRegistryTests: XCTestCase {
         XCTAssertEqual(Set(raws).count, raws.count, "All event_kind raws must be unique")
     }
 
-    /// Phase 4.7.B — registry total 33 keys (4.4=10 + 4.6.B=1 + 4.7.A=11 +
-    /// 4.7.B=11). Если этот тест ломается при добавлении 4.7.C/далее —
-    /// обновить counter сознательно.
-    func testPhase47BRegistrySize() {
-        XCTAssertEqual(ShareEventTypeKey.allCases.count, 33,
-                       "Phase 4.7.B total = 22 prior + 11 new = 33 keys total")
+    /// Phase 4.7.C — registry total 43 keys (4.7.B baseline 33 + 4.7.C 10).
+    /// Если ломается при добавлении в 4.8/далее — обновить counter сознательно.
+    func testPhase47CRegistrySize() {
+        XCTAssertEqual(ShareEventTypeKey.allCases.count, 43,
+                       "Phase 4.7.C total = 33 prior + 10 new = 43 keys total")
     }
 
     /// Discussions default OFF (нишевые). Verify that key design intent сохранён.
@@ -59,6 +58,67 @@ final class ShareEventTypeRegistryTests: XCTestCase {
             XCTAssertEqual(entry?.defaultEnabled, true,
                            "Phase 4.7.B key \(key.rawValue) defaults to enabled per design")
         }
+    }
+
+    /// Phase 4.7.C — все 10 новых keys должны быть registered.
+    func testPhase47CNewKeysPresent() {
+        let phase47CKeys: [ShareEventTypeKey] = [
+            .linearPriorityChanged,
+            .linearLabelAdded,
+            .linearLabelRemoved,
+            .linearAssigneeChanged,
+            .linearCycleChanged,
+            .linearEstimateChanged,
+            .linearProjectUpdateAuthored,
+            .linearDocumentEdited,
+            .linearInitiativeObserved,
+            .githubPullRequestReviewThreadResolved
+        ]
+        XCTAssertEqual(phase47CKeys.count, 10, "Phase 4.7.C adds exactly 10 new keys")
+        for key in phase47CKeys {
+            XCTAssertNotNil(
+                ShareEventTypeDefaults.all.first { $0.key == key },
+                "Phase 4.7.C key \(key.rawValue) must have default entry"
+            )
+        }
+    }
+
+    /// Phase 4.7.C — defaults split: 8 ON (transition flavors + projectUpdate +
+    /// pr_review_thread_resolved), 2 OFF (skeleton-style для unstable APIs:
+    /// documents + initiatives — могут вернуть 0 events на legacy workspaces).
+    func testPhase47CDefaults() {
+        let onByDefault: Set<ShareEventTypeKey> = [
+            .linearPriorityChanged, .linearLabelAdded, .linearLabelRemoved,
+            .linearAssigneeChanged, .linearCycleChanged, .linearEstimateChanged,
+            .linearProjectUpdateAuthored,
+            .githubPullRequestReviewThreadResolved
+        ]
+        let offByDefault: Set<ShareEventTypeKey> = [
+            .linearDocumentEdited, .linearInitiativeObserved
+        ]
+        let map = Dictionary(uniqueKeysWithValues:
+            ShareEventTypeDefaults.all.map { ($0.key, $0.defaultEnabled) })
+        for key in onByDefault {
+            XCTAssertEqual(map[key], true, "\(key.rawValue) should be ON by default")
+        }
+        for key in offByDefault {
+            XCTAssertEqual(map[key], false, "\(key.rawValue) should be OFF by default")
+        }
+    }
+
+    /// Phase 4.7.C raw value literals — single source of truth между registry,
+    /// runtime emission, и downstream SQL queries.
+    func testPhase47CRawValueLiterals() {
+        XCTAssertEqual(ShareEventTypeKey.linearPriorityChanged.rawValue, "linear_priority_changed")
+        XCTAssertEqual(ShareEventTypeKey.linearLabelAdded.rawValue, "linear_label_added")
+        XCTAssertEqual(ShareEventTypeKey.linearLabelRemoved.rawValue, "linear_label_removed")
+        XCTAssertEqual(ShareEventTypeKey.linearAssigneeChanged.rawValue, "linear_assignee_changed")
+        XCTAssertEqual(ShareEventTypeKey.linearCycleChanged.rawValue, "linear_cycle_changed")
+        XCTAssertEqual(ShareEventTypeKey.linearEstimateChanged.rawValue, "linear_estimate_changed")
+        XCTAssertEqual(ShareEventTypeKey.linearProjectUpdateAuthored.rawValue, "linear_project_update_authored")
+        XCTAssertEqual(ShareEventTypeKey.linearDocumentEdited.rawValue, "linear_document_edited")
+        XCTAssertEqual(ShareEventTypeKey.linearInitiativeObserved.rawValue, "linear_initiative_observed")
+        XCTAssertEqual(ShareEventTypeKey.githubPullRequestReviewThreadResolved.rawValue, "pr_review_thread_resolved")
     }
 
     /// rawValue strings должны матчить плановые literal'ы — single source of truth
