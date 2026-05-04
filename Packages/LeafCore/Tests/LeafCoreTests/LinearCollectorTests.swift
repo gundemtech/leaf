@@ -1511,6 +1511,158 @@ final class LinearCollectorTests: XCTestCase {
         XCTAssertNil(i.payload["status"])
     }
 
+    // MARK: - Phase 4.7.C — end-to-end collector emission integration
+
+    /// C-12 integration: batch со всеми Phase 4.7.C snapshot flavors → assert все
+    /// expected event_kinds присутствуют в DB, count'ы матчат, signal types
+    /// корректные, sentinel string не просачивается ни в один payload.
+    func testTick_FullPhase47CBatch_EmitsAllEventKinds() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockLinearGraphQLProvider()
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000) - 60_000
+        let sentinel = "SHOULD_NOT_LEAK_ADR010"
+
+        let issue = LinearIssueSnapshot(
+            issueKey: "LEA-INT", title: "Topic", status: "In Progress",
+            project: "Leaf", teamKey: "LEA", updatedAtMs: nowMs
+        )
+        let stateTransition = LinearStateTransitionSnapshot(
+            issueKey: "LEA-INT", historyId: "h-state",
+            transitionAtMs: nowMs,
+            fromStateName: "Unstarted", fromStateType: "unstarted",
+            toStateName: "In Progress", toStateType: "started"
+        )
+        let priority = LinearPriorityTransitionSnapshot(
+            issueKey: "LEA-INT", historyId: "h-prio",
+            transitionAtMs: nowMs, fromPriority: 3, toPriority: 1
+        )
+        let labelAdded = LinearLabelTransitionSnapshot(
+            issueKey: "LEA-INT", historyId: "h-lbl",
+            transitionAtMs: nowMs, kind: .added,
+            labelId: "lbl-A", labelName: "bug"
+        )
+        let labelRemoved = LinearLabelTransitionSnapshot(
+            issueKey: "LEA-INT", historyId: "h-lbl",
+            transitionAtMs: nowMs, kind: .removed,
+            labelId: "lbl-B", labelName: "wontfix"
+        )
+        let assignee = LinearAssigneeTransitionSnapshot(
+            issueKey: "LEA-INT", historyId: "h-asg",
+            transitionAtMs: nowMs, bucket: .reassignedSelfToOther
+        )
+        let cycle = LinearCycleTransitionSnapshot(
+            issueKey: "LEA-INT", historyId: "h-cyc",
+            transitionAtMs: nowMs,
+            fromCycleId: "cyc-1", fromCycleName: "Sprint 41",
+            toCycleId: "cyc-2", toCycleName: "Sprint 42"
+        )
+        let estimate = LinearEstimateTransitionSnapshot(
+            issueKey: "LEA-INT", historyId: "h-est",
+            transitionAtMs: nowMs, fromEstimate: 3.0, toEstimate: 5.0
+        )
+        let projectUpdate = LinearProjectUpdateSnapshot(
+            updateId: "pu-1", createdAtMs: nowMs,
+            projectId: "proj-A", projectName: "Leaf",
+            health: "onTrack"
+        )
+        let document = LinearDocumentSnapshot(
+            documentId: "doc-1", updatedAtMs: nowMs,
+            projectId: "proj-A", projectName: "Leaf",
+            title: "Q4 Roadmap"
+        )
+        let initiative = LinearInitiativeSnapshot(
+            initiativeId: "init-1", name: "Q4 Goals",
+            status: "Active", observedAtMs: nowMs
+        )
+
+        await provider.setBatch(LinearIssueBatch(
+            issues: [issue],
+            cursorMs: nowMs,
+            transitions: [stateTransition],
+            priorityTransitions: [priority],
+            labelTransitions: [labelAdded, labelRemoved],
+            assigneeTransitions: [assignee],
+            cycleTransitions: [cycle],
+            estimateTransitions: [estimate],
+            projectUpdates: [projectUpdate],
+            documents: [document],
+            initiatives: [initiative]
+        ))
+
+        let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
+        let collector = LinearCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7,
+            logger: logger,
+            userDefaultsSuiteName: makeIsolatedSuiteName()
+        )
+        _ = await collector.performTick()
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSinceNow: -3600),
+            end: Date(timeIntervalSinceNow: 3600)
+        ))
+
+        // Expected breakdown (per LinearCollector.performTick emission order):
+        //   1× issue_updated, 1× status_transition, 1× linear_priority_changed,
+        //   2× linear_label_added/removed (1+1), 1× linear_assignee_changed,
+        //   1× linear_cycle_changed, 1× linear_estimate_changed,
+        //   1× linear_project_update_authored, 1× linear_document_edited,
+        //   1× linear_initiative_observed, 1× linear_assigned_workload_pulse.
+        // No comment events (commentCountInWindow=0), no cycle progress
+        // (batch.cycles empty).
+        let kinds = Dictionary(grouping: stored, by: { $0.payload["event_kind"] ?? "?" })
+            .mapValues { $0.count }
+        XCTAssertEqual(kinds["issue_updated"], 1)
+        XCTAssertEqual(kinds["status_transition"], 1)
+        XCTAssertEqual(kinds["linear_priority_changed"], 1)
+        XCTAssertEqual(kinds["linear_label_added"], 1)
+        XCTAssertEqual(kinds["linear_label_removed"], 1)
+        XCTAssertEqual(kinds["linear_assignee_changed"], 1)
+        XCTAssertEqual(kinds["linear_cycle_changed"], 1)
+        XCTAssertEqual(kinds["linear_estimate_changed"], 1)
+        XCTAssertEqual(kinds["linear_project_update_authored"], 1)
+        XCTAssertEqual(kinds["linear_document_edited"], 1)
+        XCTAssertEqual(kinds["linear_initiative_observed"], 1)
+        XCTAssertEqual(kinds["linear_assigned_workload_pulse"], 1)
+        XCTAssertEqual(stored.count, 12,
+                       "Phase 4.7.C full batch → 12 events; got: \(kinds)")
+
+        // Signal type sanity: actions vs context.
+        let actionKinds: Set<String> = [
+            "issue_updated", "status_transition", "linear_priority_changed",
+            "linear_label_added", "linear_label_removed",
+            "linear_assignee_changed", "linear_cycle_changed",
+            "linear_estimate_changed", "linear_project_update_authored",
+            "linear_document_edited"
+        ]
+        let contextKinds: Set<String> = [
+            "linear_initiative_observed", "linear_assigned_workload_pulse"
+        ]
+        for ev in stored {
+            let kind = ev.payload["event_kind"] ?? ""
+            if actionKinds.contains(kind) {
+                XCTAssertEqual(ev.signalType, .action,
+                               "\(kind) must be .action signal")
+            } else if contextKinds.contains(kind) {
+                XCTAssertEqual(ev.signalType, .context,
+                               "\(kind) must be .context signal")
+            }
+        }
+
+        // ADR-010 sentinel walk: ни один payload не содержит sentinel.
+        // (Snapshots не содержат sentinel — это integration test, not response
+        // contamination — но sanity assert для regression catch'ей.)
+        for ev in stored {
+            for (k, v) in ev.payload {
+                XCTAssertFalse(v.contains(sentinel),
+                               "ADR-010: payload[\(k)]=\"\(v)\" не должен содержать sentinel")
+            }
+        }
+    }
+
     /// Empty priorityTransitions → no priority event emitted.
     func testTickDoesNotEmitPriorityEventWhenEmpty() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
