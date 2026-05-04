@@ -137,6 +137,11 @@ final class InsightsReader {
                         // поэтому Activity tab рендерит empty state на CI / no-prod.
                         let recentActivity = try insights.recentActivity(period: today, limit: 200)
                         try Task.checkCancellation()
+                        // Phase 4.10.A — Live Presence widget читает merged
+                        // presence_state row-ы (single-row-per-provider materialized
+                        // view, no period). Empty pre-4.7 install / non-prod CI.
+                        let presenceState: PresenceUISnapshot = (try? PresenceUISnapshot.read(database: db)) ?? .empty
+                        try Task.checkCancellation()
                         let snapshot = InsightsSnapshot(
                             topApps: topApps,
                             sessions: sessions,
@@ -171,7 +176,8 @@ final class InsightsReader {
                             // read внутри). Snapshot mirror'ит для UI/MCP consumers.
                             linearTransitions: linear.transitions,
                             linearCompletionRate: linear.completionRate,
-                            recentActivity: recentActivity
+                            recentActivity: recentActivity,
+                            presenceState: presenceState
                         )
                         return .success((db, snapshot))
                     } catch {

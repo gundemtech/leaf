@@ -99,6 +99,10 @@ public struct InsightsSnapshot: Sendable, Hashable {
     /// recent first, capped on producer side. Empty ↔ no events in `period`
     /// or insights provider returned default empty (Stub / non-prod build).
     public let recentActivity: [ActivityFeedEntry]
+    /// Phase 4.10.A — current cross-provider presence (live state — not period
+    /// scoped). Drives the Live Presence widget on Home. `.empty` ↔ no
+    /// `presence_state` rows yet (provider not connected / pre-4.7 install).
+    public let presenceState: PresenceUISnapshot
 
     public init(
         topApps: [AppTimeEntry],
@@ -132,7 +136,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         slackHuddleParticipationStreak: Int = 0,
         linearTransitions: LinearTransitionBreakdown? = nil,
         linearCompletionRate: Double? = nil,
-        recentActivity: [ActivityFeedEntry] = []
+        recentActivity: [ActivityFeedEntry] = [],
+        presenceState: PresenceUISnapshot = .empty
     ) {
         self.topApps = topApps
         self.sessions = sessions
@@ -166,6 +171,7 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.linearTransitions = linearTransitions
         self.linearCompletionRate = linearCompletionRate
         self.recentActivity = recentActivity
+        self.presenceState = presenceState
     }
 
     /// Convenience init — рассчитывает `deepSessionsCount` по threshold'у.
@@ -206,7 +212,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         slackHuddleParticipationStreak: Int = 0,
         linearTransitions: LinearTransitionBreakdown? = nil,
         linearCompletionRate: Double? = nil,
-        recentActivity: [ActivityFeedEntry] = []
+        recentActivity: [ActivityFeedEntry] = [],
+        presenceState: PresenceUISnapshot = .empty
     ) {
         self.init(
             topApps: topApps,
@@ -240,7 +247,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
             slackHuddleParticipationStreak: slackHuddleParticipationStreak,
             linearTransitions: linearTransitions,
             linearCompletionRate: linearCompletionRate,
-            recentActivity: recentActivity
+            recentActivity: recentActivity,
+            presenceState: presenceState
         )
     }
 
@@ -260,6 +268,7 @@ public struct InsightsSnapshot: Sendable, Hashable {
             && slackMessagesCount == 0
             && slackHuddleMinutes == 0
             && recentActivity.isEmpty
+            && presenceState.isEmpty
     }
 
     /// Average session duration. `0` если sessions пуст.

@@ -31,11 +31,13 @@ private struct HomeContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
             HeroBlock(snapshot: snapshot)
+            LivePresenceWidget(snapshot: snapshot.presenceState)
             LeafGlassGroup(spacing: 16) {
                 metricGrid
             }
             PeakFocusChart(peakHour: snapshot.peakProductivityHour)
             TopAppsList(entries: Array(snapshot.topApps.prefix(5)))
+            ProvidersBlock(snapshot: snapshot)
         }
     }
 
