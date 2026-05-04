@@ -228,10 +228,10 @@ What each sub-project ships, declaratively. If your spec adds something not on t
 |---|---|---|---|
 | **5.1.A** | M006 `org`, M007 `team_members`, M008 `team_keys` migrations + Schema namespace + 1 enum (`TeamMemberRole`) | — | 3 new SQLCipher tables |
 | **5.1.B** | GRDB-style helpers in `Database.swift` + value types (`Org` / `TeamMember` / `TeamKey`) | — | — |
-| **5.1.C** | `EnvelopeCodec` real impl (AES-GCM-256, X25519, HKDF) replacing `UnimplementedEnvelopeCodec`; helpers in LeafCorePrivate for moat-side specifics | — | — |
+| **5.1.C** | `EnvelopeCodec` real impl (AES-GCM-256 only) replacing `UnimplementedEnvelopeCodec`; `EnvelopeHeader.peek` static helper; `ProdEnvelopeCodec` in LeafCorePrivate for moat-side specifics (AAD layout, JSON encoder config) | — | — |
 | **5.1.D** | `OrgService.createPersonalOrg`, keystore writers (teamKey current + history file, X25519 private file) | — | First row in `org`, first row in `team_members`, first row in `team_keys` |
 | **5.1.E** | `OrganizationView` / `TeamView` real content, "Create personal org" CTA, integration test, `docs(shared)` landing commit | — | — |
-| **5.2** | `RelayClient` HTTP, generate-invite UI, accept-invite UI, OTP entry, ECDH handshake, Onboarding screen 6 partial | `POST /v1/invite`, `GET /v1/invite/:token`, `DELETE /v1/invite/:token` + KV with TTL | — (relay state ephemeral only) |
+| **5.2** | `RelayClient` HTTP, generate-invite UI, accept-invite UI, OTP entry, X25519 ECDH + HKDF-SHA256 helpers (moved here from 5.1.C — first real call-site is invite handshake), Onboarding screen 6 partial | `POST /v1/invite`, `GET /v1/invite/:token`, `DELETE /v1/invite/:token` + KV with TTL | — (relay state ephemeral only) |
 | **5.3** | Remove-member UI, key rotation logic, pairwise ECDH wraps for remaining members | (TBD) revocation endpoint or DO key-flush instruction | New rows in `team_keys`, `team_members.removed_at_ms` set |
 | **5.4** | M009 `presence_outgoing`, M010 `presence_history`, broadcast loop in Agent, Swift WS client (reconnect/heartbeat), Team presence grid live UI | `WS /v1/presence/team/:teamID` + per-team Durable Object | 2 new SQLCipher tables |
 | **5.5** | Onboarding screen 6 final integration ("Team — join via invite OR create personal org") | — | — |
