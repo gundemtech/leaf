@@ -130,16 +130,7 @@ struct RealAXTrustChecker: AXTrustChecker {
 /// content (мы не читаем body документа), URL берётся из AXWebArea.
 struct AXWindowContextProvider: WindowContextProvider {
     func windowTitle(forPid pid: pid_t, bundleID: String) -> String? {
-        let appElement = AXUIElementCreateApplication(pid)
-        var windowRef: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(
-            appElement,
-            kAXFocusedWindowAttribute as CFString,
-            &windowRef
-        ) == .success else { return nil }
-        // swift-format-ignore (force-cast — AX гарантирует AXUIElement тип)
-        let window = windowRef as! AXUIElement
-
+        guard let window = focusedOrFallbackWindow(forPid: pid) else { return nil }
         var titleRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
             window,
@@ -150,18 +141,48 @@ struct AXWindowContextProvider: WindowContextProvider {
     }
 
     func browserURL(forPid pid: pid_t, bundleID: String) -> String? {
-        let appElement = AXUIElementCreateApplication(pid)
-        var windowRef: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(
-            appElement,
-            kAXFocusedWindowAttribute as CFString,
-            &windowRef
-        ) == .success else { return nil }
-        let window = windowRef as! AXUIElement
-
+        guard let window = focusedOrFallbackWindow(forPid: pid) else { return nil }
         // BFS-ish search для AXWebArea с глубиной cap'ом — большинство браузеров
         // помещают AXWebArea на 2-4 уровне (window → group → tab → web area).
         return findWebAreaURL(in: window, depthRemaining: 8)
+    }
+
+    /// Phase 4.10.B paper-cut: некоторые apps (Xcode подтверждённо) возвращают
+    /// `AXFocusedWindow` только когда frontmost. Между NSWorkspace activation
+    /// notification и нашим AX read юзер уже мог переключиться → focused = nil
+    /// → title не пишется. Fallback chain: focused → main → first из windows
+    /// array — даёт стабильный titlebar text даже для backgrounded apps.
+    private func focusedOrFallbackWindow(forPid pid: pid_t) -> AXUIElement? {
+        let appElement = AXUIElementCreateApplication(pid)
+
+        if let win = copyAXWindow(appElement, attribute: kAXFocusedWindowAttribute) {
+            return win
+        }
+        if let win = copyAXWindow(appElement, attribute: kAXMainWindowAttribute) {
+            return win
+        }
+        var windowsRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            appElement,
+            kAXWindowsAttribute as CFString,
+            &windowsRef
+        ) == .success,
+              let windows = windowsRef as? [AXUIElement],
+              let first = windows.first else { return nil }
+        return first
+    }
+
+    private func copyAXWindow(_ appElement: AXUIElement, attribute: String) -> AXUIElement? {
+        var ref: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            appElement,
+            attribute as CFString,
+            &ref
+        ) == .success,
+              let value = ref else { return nil }
+        // AXUIElementGetTypeID() guard на случай когда attribute exists но не window-shaped.
+        if CFGetTypeID(value) != AXUIElementGetTypeID() { return nil }
+        return (value as! AXUIElement)
     }
 
     /// Recursively walks AX tree looking for an element whose role is
