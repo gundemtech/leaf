@@ -405,6 +405,56 @@ final class MigrationTests: XCTestCase {
         }
     }
 
+    // MARK: - Phase 5.1.A — Step 5 (idempotency + coexistence)
+
+    /// M006/M007/M008 — повторный open после applied миграций не падает
+    /// и не пересоздаёт таблицы. Mirrors testMigration001IsIdempotent.
+    func testMigration006To008AreIdempotent() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        _ = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        _ = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        _ = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+    }
+
+    /// Sanity — после полного open видим все 8 application tables в `sqlite_master`,
+    /// то есть migration registration order не ломает existing tables.
+    func testMigration006To008CoexistWithEarlier() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        try db.readSQL { rawDB in
+            let tables = try Set(String.fetchAll(
+                rawDB,
+                sql: "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name <> 'grdb_migrations'"
+            ))
+            let expected: Set<String> = [
+                Schema.Events.tableName,
+                Schema.CollectorOffsets.tableName,
+                Schema.WatchedFolders.tableName,
+                Schema.Integrations.tableName,
+                Schema.PresenceState.tableName,
+                Schema.Org.tableName,
+                Schema.TeamMembers.tableName,
+                Schema.TeamKeys.tableName
+            ]
+            XCTAssertEqual(tables, expected)
+        }
+    }
+
+    /// Phase 5.1.A — таблицы создаются пустыми; первые rows будут вставлены
+    /// в Phase 5.1.D `OrgService.createPersonalOrg`. Sanity для substrate.
+    func testPhase51ATablesEmptyAfterMigration() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        try db.readSQL { rawDB in
+            for table in [Schema.Org.tableName, Schema.TeamMembers.tableName, Schema.TeamKeys.tableName] {
+                let count = try Int.fetchOne(rawDB, sql: "SELECT count(*) FROM \(table)")
+                XCTAssertEqual(count, 0, "expected \(table) пустой после fresh migration")
+            }
+        }
+    }
+
     func testPlaintextDetectionRenamesFileAndStartsFresh() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         let key = EncryptionOptions(keyProvider: .data(Data(repeating: 0xDD, count: 32)))
