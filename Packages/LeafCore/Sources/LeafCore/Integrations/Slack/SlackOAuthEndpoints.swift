@@ -31,6 +31,19 @@ public enum SlackOAuthEndpoints {
     /// conversations.history). Вызывается per unique channel_id обнаруженный в
     /// search.messages response, filtered `user == self_user_id` client-side.
     public static let conversationsHistory = URL(string: "https://slack.com/api/conversations.history")!
+    /// `users.getPresence` — Tier 3 (50+ req/min). Per-user presence ("active"|"away").
+    /// Phase 4.7.B-9 — emits per-tick `slack_presence_state` pulse (mirror к GitHub
+    /// `github_notifications_pulse`). Self-only call (вызываем для авторизованного юзера).
+    public static let usersGetPresence = URL(string: "https://slack.com/api/users.getPresence")!
+    /// `dnd.info` — Tier 3. Per-user DND state (current dnd + scheduled DND window
+    /// + user-set snooze). Phase 4.7.B-10 — emits per-tick `slack_dnd_state` pulse.
+    /// Self-only (`?user=<authed user>`); требует scope `dnd:read`.
+    public static let dndInfo = URL(string: "https://slack.com/api/dnd.info")!
+    /// `search.files` — Tier 2. Query `from:me after:<DATE>`. Phase 4.7.B-12 —
+    /// emits per-tick `slack_file_uploaded_aggregate` (count + mime-type buckets).
+    /// ADR-010: provider извлекает ТОЛЬКО `file.mimetype`; filenames / previews /
+    /// permalinks игнорируются на parsing'е. Требует scope `files:read`.
+    public static let searchFiles = URL(string: "https://slack.com/api/search.files")!
 
     /// Public redirect URI для Slack OAuth `/oauth/v2/authorize` и token exchange.
     /// Slack distributed-app distribution требует HTTPS на redirect URI; loopback
@@ -56,7 +69,12 @@ public enum SlackOAuthEndpoints {
     /// endpoint (reactions aggregate). Adding scopes требует full OAuth re-consent
     /// (юзер проходит Disconnect → Connect один раз), backward-compat broken
     /// для existing alpha.6 tokens.
-    public static let userScopes = "users:read,users.profile:read,search:read,channels:history,groups:history,im:history,mpim:history"
+    /// Phase 4.7.B-10 — added `dnd:read` for `dnd.info` (slack_dnd_state pulse).
+    /// Same re-consent caveat: new scope требует Disconnect → Connect.
+    /// Phase 4.7.B-12 — added `files:read` for `search.files` (file upload
+    /// aggregate). Combined re-consent с `dnd:read` (B-10) — юзер проходит
+    /// Disconnect → Connect один раз для обоих новых scope'ов.
+    public static let userScopes = "users:read,users.profile:read,search:read,channels:history,groups:history,im:history,mpim:history,dnd:read,files:read"
 
     /// DistributedNotification name, постится при connect/disconnect/refreshDenied.
     /// Слушают: ConnectionsSettings (UI re-render), SlackCollector (Phase 4.4 reload).

@@ -44,7 +44,7 @@ public enum Schema {
 
     /// Phase 4.1 — OAuth credentials для third-party providers (Layer B).
     /// PK — `provider` (single-row-per-provider в MVP); multi-workspace
-    /// потребует M005 lift PK → composite (provider, workspace_id).
+    /// потребует lift PK → composite (provider, workspace_id).
     public enum Integrations {
         public static let tableName = "integrations"
         public static let provider = "provider"
@@ -56,6 +56,17 @@ public enum Schema {
         public static let scope = "scope"
         public static let connectedAtMs = "connected_at_ms"
         public static let updatedMs = "updated_ms"
+    }
+
+    /// Phase 4.7.A — single-row-per-provider materialized view current presence ceiling.
+    /// Read by MenuBarApp (self-UI) + Phase 5 broadcaster (encrypted snapshot).
+    /// PK — `provider` ('github' | 'linear' | 'slack' | 'derived'). Writes — Track B.
+    public enum PresenceState {
+        public static let tableName = "presence_state"
+        public static let provider = "provider"
+        public static let stateJSON = "state_json"
+        public static let derivedMode = "derived_mode"
+        public static let updatedAtMs = "updated_at_ms"
     }
 }
 

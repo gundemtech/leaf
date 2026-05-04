@@ -40,6 +40,7 @@ public final class Database: @unchecked Sendable {
         migrator.registerMigration002CollectorOffsets()
         migrator.registerMigration003WatchedFolders()
         migrator.registerMigration004Integrations()
+        migrator.registerMigration005PresenceState()
         try migrator.migrate(pool)
 
         return Database(pool: pool, config: config, mode: .writer)
@@ -167,6 +168,16 @@ public final class Database: @unchecked Sendable {
         try pool.read(block)
     }
 
+    /// Internal-intent bridge на write transaction для unit-тестов
+    /// (`PresenceStateWriterTests`). Production callsites используют
+    /// высокоуровневые методы (`writeEventsOffsetAndPresence`,
+    /// `writeEventsAndOffset`, `upsertIntegration` и т.д.) — этот handle
+    /// не предназначен для них и поэтому `internal`, не `public`.
+    internal func writeSQL<T>(_ block: (GRDB.Database) throws -> T) throws -> T {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        return try pool.write(block)
+    }
+
     // MARK: - Collector offsets (Phase 2.3)
 
     /// Reads single offset by composite PK. Returns `nil` если записи нет —
@@ -222,6 +233,41 @@ public final class Database: @unchecked Sendable {
             }
             if let offset {
                 try Self.upsertOffset(offset, in: db)
+            }
+        }
+    }
+
+    /// Phase 4.7.B — atomic `events` + `offset` + `presence_state` UPSERT.
+    /// All-or-nothing per tick: если presence write падает, cursor не двигается
+    /// и ни одного event не вставляется → следующий tick пере-fetch'ит и
+    /// перепишет presence на свежем snapshot'е. `presence == nil` допустим
+    /// (тики, в которых нечего обновлять — например, polling response
+    /// идентичен previous).
+    public func writeEventsOffsetAndPresence(
+        _ events: [RawEvent],
+        offset: CollectorOffset,
+        presence: (provider: PresenceStateWriter.Provider,
+                   state: [String: Any],
+                   derivedMode: String?)?,
+        nowMs: Int64
+    ) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+
+        let records = try events.map(EventRecord.make(from:))
+
+        try pool.write { db in
+            for var record in records {
+                try record.insert(db)
+            }
+            try Self.upsertOffset(offset, in: db)
+            if let presence {
+                try PresenceStateWriter.upsert(
+                    provider: presence.provider,
+                    state: presence.state,
+                    derivedMode: presence.derivedMode,
+                    nowMs: nowMs,
+                    in: db
+                )
             }
         }
     }
@@ -499,6 +545,35 @@ public final class Database: @unchecked Sendable {
             )
             let offsetsDeleted = db.changesCount
             return (eventsDeleted, offsetsDeleted)
+        }
+    }
+
+    // MARK: - GitHub collector helpers (Phase 4.7.B-3)
+
+    /// Phase 4.7.B-3 — derive top-N repos для bounded fan-out actions/runs polling.
+    /// Возвращает "owner/repo" identifier'ы упорядоченные по count `commit_pushed`
+    /// events DESC начиная с `sinceMs` (typically `now - 7 days`).
+    /// Используется `GitHubCollector.performTick()` перед `fetchActionsRunsForActor` —
+    /// ограничивает per-tick HTTP cost N calls (one per repo) и фокусирует на
+    /// реально активных репо. Empty result → no actions/runs HTTP call вообще.
+    /// Reader-mode safe (read-only). Returns repos in DESC order by push count.
+    public func queryActiveGitHubRepos(sinceMs: Int64, limit: Int) throws -> [String] {
+        guard limit > 0 else { return [] }
+        return try pool.read { db in
+            try Row.fetchAll(db, sql: """
+                SELECT json_extract(\(Schema.Events.payloadJSON), '$.repo') AS repo,
+                       COUNT(*) AS c
+                FROM \(Schema.Events.tableName)
+                WHERE json_extract(\(Schema.Events.payloadJSON), '$.source') = 'github'
+                  AND json_extract(\(Schema.Events.payloadJSON), '$.event_kind') = 'commit_pushed'
+                  AND \(Schema.Events.ts) >= ?
+                  AND json_extract(\(Schema.Events.payloadJSON), '$.repo') IS NOT NULL
+                GROUP BY repo
+                ORDER BY c DESC
+                LIMIT ?
+                """,
+                arguments: [sinceMs, limit]
+            ).compactMap { $0["repo"] as String? }
         }
     }
 

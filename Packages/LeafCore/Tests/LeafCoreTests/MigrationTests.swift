@@ -86,6 +86,68 @@ final class MigrationTests: XCTestCase {
         }
     }
 
+    /// Phase 4.7.A M005 — `presence_state` создана с правильной schema.
+    func testMigration005CreatesPresenceStateTable() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        try db.readSQL { rawDB in
+            let tables = try String.fetchAll(
+                rawDB,
+                sql: "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                arguments: [Schema.PresenceState.tableName]
+            )
+            XCTAssertEqual(tables, [Schema.PresenceState.tableName])
+
+            let columns = try Row.fetchAll(
+                rawDB,
+                sql: "PRAGMA table_info(\(Schema.PresenceState.tableName))"
+            )
+            let byName = Dictionary(uniqueKeysWithValues: columns.compactMap { row -> (String, Row)? in
+                guard let name = row["name"] as String? else { return nil }
+                return (name, row)
+            })
+
+            // provider — primary key, NOT NULL.
+            let provider = try XCTUnwrap(byName[Schema.PresenceState.provider])
+            XCTAssertEqual(provider["pk"] as Int?, 1)
+            XCTAssertEqual(provider["notnull"] as Int?, 1)
+
+            // state_json — NOT NULL, default '{}'.
+            let stateJSON = try XCTUnwrap(byName[Schema.PresenceState.stateJSON])
+            XCTAssertEqual(stateJSON["notnull"] as Int?, 1)
+
+            // derived_mode — nullable (всегда NULL в Phase 4.7).
+            let derivedMode = try XCTUnwrap(byName[Schema.PresenceState.derivedMode])
+            XCTAssertEqual(derivedMode["notnull"] as Int?, 0)
+
+            // updated_at_ms — NOT NULL.
+            let updatedAt = try XCTUnwrap(byName[Schema.PresenceState.updatedAtMs])
+            XCTAssertEqual(updatedAt["notnull"] as Int?, 1)
+        }
+    }
+
+    /// M005 idempotency — повторный open после applied миграции не падает.
+    func testMigration005IsIdempotent() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        _ = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        _ = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+    }
+
+    /// M005 — fresh DB → presence_state пустой (writes идут в Track B).
+    func testPresenceStateEmptyAfterMigration() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        try db.readSQL { rawDB in
+            let count = try Int.fetchOne(
+                rawDB,
+                sql: "SELECT count(*) FROM \(Schema.PresenceState.tableName)"
+            )
+            XCTAssertEqual(count, 0)
+        }
+    }
+
     func testPlaintextDetectionRenamesFileAndStartsFresh() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         let key = EncryptionOptions(keyProvider: .data(Data(repeating: 0xDD, count: 32)))
