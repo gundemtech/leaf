@@ -27,13 +27,26 @@ final class AttentionEmissionPlannerTests: XCTestCase {
         func isAXTrusted() -> Bool { trusted }
     }
 
+    private struct StubClassifier: AppCategoryClassifier {
+        let dev: Set<String> = ["com.apple.dt.Xcode"]
+        let browse: Set<String> = ["com.apple.Safari"]
+        func category(for bundleID: String) -> AppCategory {
+            if dev.contains(bundleID) { return .dev }
+            if browse.contains(bundleID) { return .browse }
+            return .other
+        }
+    }
+
     private func makePlanner(
         context: StubContextProvider = StubContextProvider(),
         trust: StubTrustChecker = StubTrustChecker(),
-        policy: AttentionGranularityPolicy = DefaultAttentionGranularityPolicy()
+        classifier: any AppCategoryClassifier = StubClassifier(),
+        policy: AttentionGranularityPolicy? = nil
     ) -> AttentionEmissionPlanner {
-        AttentionEmissionPlanner(
-            policy: policy,
+        let resolvedPolicy = policy ?? DefaultAttentionGranularityPolicy(classifier: classifier)
+        return AttentionEmissionPlanner(
+            policy: resolvedPolicy,
+            classifier: classifier,
             contextProvider: context,
             trustChecker: trust
         )

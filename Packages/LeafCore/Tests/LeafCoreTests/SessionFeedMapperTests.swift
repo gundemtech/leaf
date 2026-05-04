@@ -18,6 +18,7 @@ final class SessionFeedMapperTests: XCTestCase {
     private let xcode = "com.apple.dt.Xcode"
     private let safari = "com.apple.Safari"
     private let unknown = "io.example.unknown"
+    private let classifier = StubClassifier(devBundles: ["com.apple.dt.Xcode"], browseBundles: ["com.apple.Safari"])
 
     private func attention(
         id: Int64,
@@ -66,6 +67,7 @@ final class SessionFeedMapperTests: XCTestCase {
         let refEnd = baseTs.addingTimeInterval(30)
         let sessions = SessionFeedMapper.map(
             rows: rows,
+            classifier: classifier,
             gapThresholdSec: 90,
             minDurationSec: 5,
             referenceEnd: refEnd
@@ -329,15 +331,53 @@ final class SessionFeedMapperTests: XCTestCase {
 
     // MARK: - Category mapping
 
-    func testCategoryFromClassifier() {
+    func testCategoryFromClassifier_unknownBundleIsOther() {
         let rows = [
             attention(id: 1, offset: 0, bundle: unknown, title: "Foo"),
             attention(id: 2, offset: 30, bundle: unknown, title: "Foo")
         ]
         let sessions = SessionFeedMapper.map(
             rows: rows,
+            classifier: classifier,
             referenceEnd: baseTs.addingTimeInterval(60)
         )
         XCTAssertEqual(sessions.first?.category, .other)
+    }
+
+    func testCategoryFromClassifier_knownDevBundle() {
+        let rows = [
+            attention(id: 1, offset: 0, bundle: xcode, title: "Foo"),
+            attention(id: 2, offset: 30, bundle: xcode, title: "Foo")
+        ]
+        let sessions = SessionFeedMapper.map(
+            rows: rows,
+            classifier: classifier,
+            referenceEnd: baseTs.addingTimeInterval(60)
+        )
+        XCTAssertEqual(sessions.first?.category, .dev)
+    }
+
+    func testCategoryFromClassifier_emptyClassifierFallsBackToOther() {
+        // No classifier override → default Empty → everything .other.
+        let rows = [
+            attention(id: 1, offset: 0, bundle: xcode, title: "Foo"),
+            attention(id: 2, offset: 30, bundle: xcode, title: "Foo")
+        ]
+        let sessions = SessionFeedMapper.map(
+            rows: rows,
+            referenceEnd: baseTs.addingTimeInterval(60)
+        )
+        XCTAssertEqual(sessions.first?.category, .other)
+    }
+}
+
+private struct StubClassifier: AppCategoryClassifier {
+    var devBundles: Set<String> = []
+    var browseBundles: Set<String> = []
+
+    func category(for bundleID: String) -> AppCategory {
+        if devBundles.contains(bundleID) { return .dev }
+        if browseBundles.contains(bundleID) { return .browse }
+        return .other
     }
 }

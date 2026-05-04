@@ -48,9 +48,22 @@ enum AgentMain {
         // Writer + collectors + maintenance scheduler. Retain'им в статичных globals
         // чтобы не собралось по ARC до срабатывания SIGTERM handler'а.
         let writer = EventWriter(database: database, thresholds: agentThresholds)
+
+        // Phase 4.10.B — classifier injection: prod (moat preset) для signed
+        // build, public empty stub для dev/CI. Empty fallback корректен:
+        // collector просто не enrich'ит payload window_title (всё → L1).
+        let classifier: any AppCategoryClassifier = {
+            #if LEAF_PROD
+            return ProdAppCategoryClassifier()
+            #else
+            return EmptyAppCategoryClassifier()
+            #endif
+        }()
         let activeAppCollector = ActiveAppCollector(
             writer: writer,
             blocklist: Blocklist.phase1Default,
+            policy: DefaultAttentionGranularityPolicy(classifier: classifier),
+            classifier: classifier,
             pollIntervalSec: agentThresholds.attentionWindowPollIntervalSec
         )
         let idleCollector = IdleCollector(writer: writer, thresholds: agentThresholds)

@@ -3,7 +3,7 @@
 //  LeafCore
 //
 //  Phase 4.10.B — forward-compat shim под будущий `share_apps` DB lookup.
-//  Hardcoded mapping `bundleID → maxGranularity (L1..L5)` определяет, нужно ли
+//  Mapping `bundleID → maxGranularity (L1..L5)` определяет, нужно ли
 //  collector'у писать window_title / browser_url в attention payload.
 //
 //  Когда Share Controls Phase 2 landed (table `share_apps` + UI) — переключаем
@@ -26,13 +26,18 @@ public protocol AttentionGranularityPolicy: Sendable {
     func maxGranularity(for bundleID: String) -> AttentionGranularityLevel
 }
 
-/// Default policy — hardcoded category-based defaults. Conservative L1 для
-/// неизвестных приложений; L3 для known dev / browse / communication / design.
+/// Category-driven policy. Прокидывает classifier через init — composition root
+/// решает, использовать ли moat'овый `ProdAppCategoryClassifier` (full preset)
+/// или public `EmptyAppCategoryClassifier` (всё → L1).
 public struct DefaultAttentionGranularityPolicy: AttentionGranularityPolicy {
-    public init() {}
+    private let classifier: any AppCategoryClassifier
+
+    public init(classifier: any AppCategoryClassifier = EmptyAppCategoryClassifier()) {
+        self.classifier = classifier
+    }
 
     public func maxGranularity(for bundleID: String) -> AttentionGranularityLevel {
-        switch AppCategoryClassifier.category(for: bundleID) {
+        switch classifier.category(for: bundleID) {
         case .dev, .browse, .communication, .design:
             return .l3
         case .other:

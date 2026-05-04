@@ -27,6 +27,7 @@ final class ActiveAppCollector: @unchecked Sendable {
         writer: EventWriter,
         blocklist: Set<String>,
         policy: AttentionGranularityPolicy = DefaultAttentionGranularityPolicy(),
+        classifier: any AppCategoryClassifier = EmptyAppCategoryClassifier(),
         contextProvider: WindowContextProvider = AXWindowContextProvider(),
         trustChecker: AXTrustChecker = RealAXTrustChecker(),
         pollIntervalSec: TimeInterval = 30
@@ -35,6 +36,7 @@ final class ActiveAppCollector: @unchecked Sendable {
         self.blocklist = blocklist
         self.planner = AttentionEmissionPlanner(
             policy: policy,
+            classifier: classifier,
             contextProvider: contextProvider,
             trustChecker: trustChecker
         )

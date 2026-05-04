@@ -57,6 +57,7 @@ public enum SessionFeedMapper {
     /// обычно передаёт `Date()` или верхнюю границу периода.
     public static func map(
         rows: [SessionMapperRow],
+        classifier: any AppCategoryClassifier = EmptyAppCategoryClassifier(),
         gapThresholdSec: TimeInterval = 90,
         minDurationSec: TimeInterval = 5,
         referenceEnd: Date? = nil
@@ -82,7 +83,7 @@ public enum SessionFeedMapper {
             case "attention":
                 guard let bundleID = row.bundleID, !bundleID.isEmpty else { continue }
                 let contextKey = extractContextKey(payload: row.payload)
-                let category = AppCategoryClassifier.category(for: bundleID)
+                let category = classifier.category(for: bundleID)
 
                 if var s = open {
                     let gap = row.timestamp.timeIntervalSince(s.lastEventTs)

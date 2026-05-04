@@ -1,41 +1,17 @@
 import XCTest
 @testable import LeafCore
 
+/// Тесты публичного контракта `AppCategoryClassifier`. Полные preset-bundle
+/// тесты живут в `LeafCorePrivateTests` (gitignored) — здесь только то, что
+/// гарантирует public LeafCore любому консьюмеру: stable enum raw values +
+/// EmptyAppCategoryClassifier safety floor.
 final class AppCategoryClassifierTests: XCTestCase {
-    func testDevBundle_returnsDev() {
-        XCTAssertEqual(AppCategoryClassifier.category(for: "com.apple.dt.Xcode"), .dev)
-        XCTAssertEqual(AppCategoryClassifier.category(for: "com.microsoft.VSCode"), .dev)
-        XCTAssertEqual(AppCategoryClassifier.category(for: "com.googlecode.iterm2"), .dev)
-    }
-
-    func testBrowseBundle_returnsBrowse() {
-        XCTAssertEqual(AppCategoryClassifier.category(for: "com.apple.Safari"), .browse)
-        XCTAssertEqual(AppCategoryClassifier.category(for: "com.google.Chrome"), .browse)
-        XCTAssertEqual(AppCategoryClassifier.category(for: "company.thebrowser.Browser"), .browse)
-    }
-
-    func testCommunicationBundle_returnsCommunication() {
-        XCTAssertEqual(AppCategoryClassifier.category(for: "com.tinyspeck.slackmacgap"), .communication)
-        XCTAssertEqual(AppCategoryClassifier.category(for: "ru.keepcoder.Telegram"), .communication)
-        XCTAssertEqual(AppCategoryClassifier.category(for: "com.apple.Mail"), .communication)
-    }
-
-    func testDesignBundle_returnsDesign() {
-        XCTAssertEqual(AppCategoryClassifier.category(for: "com.figma.Desktop"), .design)
-        XCTAssertEqual(AppCategoryClassifier.category(for: "com.bohemiancoding.sketch3"), .design)
-    }
-
-    func testUnknownBundle_returnsOther() {
-        XCTAssertEqual(AppCategoryClassifier.category(for: "io.example.unknown"), .other)
-    }
-
-    func testEmptyBundle_returnsOther() {
-        XCTAssertEqual(AppCategoryClassifier.category(for: ""), .other)
-    }
-
-    func testMalformedBundle_returnsOther() {
-        XCTAssertEqual(AppCategoryClassifier.category(for: "not.a.real.bundle.id"), .other)
-        XCTAssertEqual(AppCategoryClassifier.category(for: "..."), .other)
+    func testEmptyClassifier_anyBundle_returnsOther() {
+        let classifier = EmptyAppCategoryClassifier()
+        XCTAssertEqual(classifier.category(for: "com.apple.dt.Xcode"), .other)
+        XCTAssertEqual(classifier.category(for: "com.apple.Safari"), .other)
+        XCTAssertEqual(classifier.category(for: ""), .other)
+        XCTAssertEqual(classifier.category(for: "io.example.unknown"), .other)
     }
 
     func testCategoryRawValuesAreStable() {
@@ -45,5 +21,13 @@ final class AppCategoryClassifierTests: XCTestCase {
         XCTAssertEqual(AppCategory.communication.rawValue, "communication")
         XCTAssertEqual(AppCategory.design.rawValue, "design")
         XCTAssertEqual(AppCategory.other.rawValue, "other")
+    }
+
+    func testCategoryAllCases_remainStable() {
+        // Order changes сломает downstream UI rendering / migrations.
+        XCTAssertEqual(
+            AppCategory.allCases,
+            [.dev, .browse, .communication, .design, .other]
+        )
     }
 }

@@ -37,6 +37,7 @@ public enum AttentionEmitReason: Sendable {
 /// suppression. Не Sendable — рассчитан на вызовы с одного потока (main).
 public final class AttentionEmissionPlanner {
     private let policy: AttentionGranularityPolicy
+    private let classifier: any AppCategoryClassifier
     private let contextProvider: WindowContextProvider
     private let trustChecker: AXTrustChecker
 
@@ -54,10 +55,12 @@ public final class AttentionEmissionPlanner {
 
     public init(
         policy: AttentionGranularityPolicy,
+        classifier: any AppCategoryClassifier = EmptyAppCategoryClassifier(),
         contextProvider: WindowContextProvider,
         trustChecker: AXTrustChecker
     ) {
         self.policy = policy
+        self.classifier = classifier
         self.contextProvider = contextProvider
         self.trustChecker = trustChecker
     }
@@ -83,7 +86,7 @@ public final class AttentionEmissionPlanner {
             }
 
             // Browser URL — только для browse-категории (Safari / Chrome / Arc / ...).
-            if AppCategoryClassifier.category(for: bundleID) == .browse,
+            if classifier.category(for: bundleID) == .browse,
                let raw = contextProvider.browserURL(forPid: pid, bundleID: bundleID),
                let sanitized = sanitizeURL(raw) {
                 payload["browser_url"] = sanitized
