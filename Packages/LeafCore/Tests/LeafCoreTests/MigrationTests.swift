@@ -234,6 +234,98 @@ final class MigrationTests: XCTestCase {
         }
     }
 
+    // MARK: - Phase 5.1.A — Step 3 (M007 team_members)
+
+    /// M007 — `team_members` table создана с правильными столбцами.
+    /// `removed_at_ms` nullable, остальные NOT NULL.
+    func testMigration007CreatesTeamMembersTable() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        try db.readSQL { rawDB in
+            let tables = try String.fetchAll(
+                rawDB,
+                sql: "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                arguments: [Schema.TeamMembers.tableName]
+            )
+            XCTAssertEqual(tables, [Schema.TeamMembers.tableName])
+
+            let columns = try Row.fetchAll(
+                rawDB,
+                sql: "PRAGMA table_info(\(Schema.TeamMembers.tableName))"
+            )
+            let byName = Dictionary(uniqueKeysWithValues: columns.compactMap { row -> (String, Row)? in
+                guard let name = row["name"] as String? else { return nil }
+                return (name, row)
+            })
+
+            XCTAssertEqual(
+                Set(byName.keys),
+                Set([
+                    Schema.TeamMembers.id,
+                    Schema.TeamMembers.orgID,
+                    Schema.TeamMembers.role,
+                    Schema.TeamMembers.pubkeyHex,
+                    Schema.TeamMembers.displayName,
+                    Schema.TeamMembers.addedAtMs,
+                    Schema.TeamMembers.removedAtMs
+                ])
+            )
+
+            // PK на id.
+            let id = try XCTUnwrap(byName[Schema.TeamMembers.id])
+            XCTAssertEqual(id["pk"] as Int?, 1)
+            XCTAssertEqual(id["notnull"] as Int?, 1)
+
+            // Всё кроме removed_at_ms — NOT NULL.
+            for col in [
+                Schema.TeamMembers.orgID,
+                Schema.TeamMembers.role,
+                Schema.TeamMembers.pubkeyHex,
+                Schema.TeamMembers.displayName,
+                Schema.TeamMembers.addedAtMs
+            ] {
+                let row = try XCTUnwrap(byName[col])
+                XCTAssertEqual(row["notnull"] as Int?, 1, "column \(col) должен быть NOT NULL")
+            }
+
+            // removed_at_ms — nullable.
+            let removed = try XCTUnwrap(byName[Schema.TeamMembers.removedAtMs])
+            XCTAssertEqual(removed["notnull"] as Int?, 0)
+        }
+    }
+
+    /// M007 — partial index `team_members_org_active` присутствует и фильтрует
+    /// по `removed_at_ms IS NULL`.
+    func testMigration007CreatesActiveIndex() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        try db.readSQL { rawDB in
+            let indexes = try String.fetchAll(
+                rawDB,
+                sql: "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name=?",
+                arguments: [Schema.TeamMembers.tableName]
+            )
+            XCTAssertTrue(
+                indexes.contains(Schema.TeamMembers.indexOrgActive),
+                "expected index \(Schema.TeamMembers.indexOrgActive); found \(indexes)"
+            )
+
+            // Verify partial — sqlite_master.sql содержит WHERE clause.
+            let sql = try String.fetchOne(
+                rawDB,
+                sql: "SELECT sql FROM sqlite_master WHERE type='index' AND name=?",
+                arguments: [Schema.TeamMembers.indexOrgActive]
+            )
+            let unwrapped = try XCTUnwrap(sql)
+            XCTAssertTrue(
+                unwrapped.uppercased().contains("WHERE"),
+                "ожидался partial index с WHERE clause; got: \(unwrapped)"
+            )
+        }
+    }
+
     func testPlaintextDetectionRenamesFileAndStartsFresh() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         let key = EncryptionOptions(keyProvider: .data(Data(repeating: 0xDD, count: 32)))
