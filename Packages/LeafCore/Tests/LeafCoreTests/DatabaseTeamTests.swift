@@ -183,6 +183,121 @@ final class DatabaseTeamTests: XCTestCase {
         XCTAssertEqual(bMembers[0].id, "member-foreign")
     }
 
+    // MARK: - TeamKeys
+
+    /// Insert 1 active key (`deprecatedAt: nil`) → readActiveTeamKey возвращает его,
+    /// все 4 поля match'ат, Date round-trip без потерь.
+    func testInsertTeamKeyAndReadActive() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        let generatedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let key = TeamKey(
+            id: "key-rotation-1",
+            generatedAt: generatedAt,
+            deprecatedAt: nil,
+            generatedByMemberID: "member-self"
+        )
+        try db.insertTeamKey(key)
+
+        let active = try db.readActiveTeamKey()
+        XCTAssertNotNil(active)
+        XCTAssertEqual(active?.id, "key-rotation-1")
+        XCTAssertEqual(active?.generatedAt, generatedAt)
+        XCTAssertNil(active?.deprecatedAt)
+        XCTAssertEqual(active?.generatedByMemberID, "member-self")
+    }
+
+    /// Mark key as deprecated через writeSQL escape (deprecate helper — задача 5.3) →
+    /// readActiveTeamKey() == nil (partial index `team_keys_active` фильтрует).
+    func testReadActiveTeamKeyExcludesDeprecated() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        try db.insertTeamKey(TeamKey(
+            id: "key-rotation-1",
+            generatedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            deprecatedAt: nil,
+            generatedByMemberID: "member-self"
+        ))
+
+        try db.writeSQL { rawDB in
+            try rawDB.execute(
+                sql: "UPDATE \(Schema.TeamKeys.tableName) SET \(Schema.TeamKeys.deprecatedAtMs) = ? WHERE \(Schema.TeamKeys.id) = ?",
+                arguments: [Int64(1_700_001_000_000), "key-rotation-1"]
+            )
+        }
+
+        let active = try db.readActiveTeamKey()
+        XCTAssertNil(active)
+    }
+
+    /// Defensive: при двух active rows (нормально 1, но contract'ом
+    /// на DB-уровне не constrained) — возвращает с latest `generated_at_ms`.
+    func testReadActiveTeamKeyReturnsLatestByGeneratedAt() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        let earlier = TeamKey(
+            id: "key-rotation-1",
+            generatedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            deprecatedAt: nil,
+            generatedByMemberID: "member-self"
+        )
+        let later = TeamKey(
+            id: "key-rotation-2",
+            generatedAt: Date(timeIntervalSince1970: 1_700_001_000),
+            deprecatedAt: nil,
+            generatedByMemberID: "member-self"
+        )
+        try db.insertTeamKey(earlier)
+        try db.insertTeamKey(later)
+
+        let active = try db.readActiveTeamKey()
+        XCTAssertEqual(active?.id, "key-rotation-2", "ORDER BY generated_at_ms DESC LIMIT 1 — должна вернуться latest")
+    }
+
+    // MARK: - Mode guard
+
+    /// Reader-mode `Database` — все 3 write helper'а throw `databaseUnavailable`.
+    /// Покрывает upsertOrg / insertTeamMember / insertTeamKey одной батареей.
+    func testReaderModeWriteHelpersThrowDatabaseUnavailable() throws {
+        // Сначала writer создаёт schema + один row для contention test'а:
+        let writer = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try writer.upsertOrg(Org(
+            id: "org-aaaa",
+            name: "Personal",
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            createdByMemberID: "member-self"
+        ))
+
+        let reader = try Database.openForRead(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        XCTAssertThrowsError(try reader.upsertOrg(Org(
+            id: "org-bbbb", name: "Other",
+            createdAt: Date(timeIntervalSince1970: 1_700_001_000),
+            createdByMemberID: "member-self"
+        ))) { error in
+            XCTAssertEqual(error as? LeafError, .databaseUnavailable)
+        }
+
+        XCTAssertThrowsError(try reader.insertTeamMember(TeamMember(
+            id: "member-x", orgID: "org-aaaa", role: .member,
+            pubkeyHex: String(repeating: "ab", count: 32),
+            displayName: "X",
+            addedAt: Date(timeIntervalSince1970: 1_700_001_000),
+            removedAt: nil
+        ))) { error in
+            XCTAssertEqual(error as? LeafError, .databaseUnavailable)
+        }
+
+        XCTAssertThrowsError(try reader.insertTeamKey(TeamKey(
+            id: "key-x",
+            generatedAt: Date(timeIntervalSince1970: 1_700_001_000),
+            deprecatedAt: nil,
+            generatedByMemberID: "member-self"
+        ))) { error in
+            XCTAssertEqual(error as? LeafError, .databaseUnavailable)
+        }
+    }
+
     // MARK: - Helpers
 
     private func insertSampleMembers(_ db: LeafCore.Database, orgID: String) throws {

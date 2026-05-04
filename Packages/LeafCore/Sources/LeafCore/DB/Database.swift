@@ -613,6 +613,46 @@ public final class Database: @unchecked Sendable {
         }
     }
 
+    /// Strict INSERT — каждая rotation — уникальная запись (history forever-retained,
+    /// contract §12). UUID PK collision = bug.
+    public func insertTeamKey(_ key: TeamKey) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try db.execute(sql: """
+                INSERT INTO \(Schema.TeamKeys.tableName) (
+                    \(Schema.TeamKeys.id),
+                    \(Schema.TeamKeys.generatedAtMs),
+                    \(Schema.TeamKeys.deprecatedAtMs),
+                    \(Schema.TeamKeys.generatedByMemberID)
+                ) VALUES (?, ?, ?, ?)
+                """,
+                arguments: [
+                    key.id,
+                    Int64(key.generatedAt.timeIntervalSince1970 * 1000),
+                    key.deprecatedAt.map { Int64($0.timeIntervalSince1970 * 1000) },
+                    key.generatedByMemberID
+                ]
+            )
+        }
+    }
+
+    /// Returns latest active rotation (`deprecated_at_ms IS NULL` через partial
+    /// index `team_keys_active`). ORDER+LIMIT — defensive под edge case "две
+    /// active rows" (нормально 1 row, contract'ом на DB-уровне не constraint'ится).
+    public func readActiveTeamKey() throws -> TeamKey? {
+        try pool.read { db in
+            let row = try Row.fetchOne(db, sql: """
+                SELECT \(Schema.TeamKeys.id), \(Schema.TeamKeys.generatedAtMs),
+                       \(Schema.TeamKeys.deprecatedAtMs), \(Schema.TeamKeys.generatedByMemberID)
+                FROM \(Schema.TeamKeys.tableName)
+                WHERE \(Schema.TeamKeys.deprecatedAtMs) IS NULL
+                ORDER BY \(Schema.TeamKeys.generatedAtMs) DESC
+                LIMIT 1
+                """)
+            return row.flatMap(Self.mapTeamKeyRow)
+        }
+    }
+
     // MARK: - Linear attribution v2 migration (Phase 4.5)
 
     /// Phase 4.5 — одноразовая wipe Linear events + cursor для миграции на
@@ -781,6 +821,21 @@ public final class Database: @unchecked Sendable {
             displayName: displayName,
             addedAt: Date(timeIntervalSince1970: TimeInterval(addedAtMs) / 1000.0),
             removedAt: removedAtMs.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000.0) }
+        )
+    }
+
+    private static func mapTeamKeyRow(_ row: Row) -> TeamKey? {
+        guard
+            let id = row[Schema.TeamKeys.id] as String?,
+            let generatedAtMs = row[Schema.TeamKeys.generatedAtMs] as Int64?,
+            let generatedByMemberID = row[Schema.TeamKeys.generatedByMemberID] as String?
+        else { return nil }
+        let deprecatedAtMs = row[Schema.TeamKeys.deprecatedAtMs] as Int64?
+        return TeamKey(
+            id: id,
+            generatedAt: Date(timeIntervalSince1970: TimeInterval(generatedAtMs) / 1000.0),
+            deprecatedAt: deprecatedAtMs.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000.0) },
+            generatedByMemberID: generatedByMemberID
         )
     }
 
