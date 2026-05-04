@@ -1021,6 +1021,63 @@ final class LinearCollectorTests: XCTestCase {
         XCTAssertEqual(priorityEvent.signalType, .action)
     }
 
+    /// Mixed batch: 2 added + 1 removed snap'а → 3 events с правильными kind'ами.
+    func testTickEmitsLabelAddedAndRemovedEvents() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockLinearGraphQLProvider()
+        let cursorMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000) - 60_000
+        let snaps = [
+            LinearLabelTransitionSnapshot(
+                issueKey: "LEA-200", historyId: "hist-lbl-1",
+                transitionAtMs: cursorMs, kind: .added,
+                labelId: "lbl-1", labelName: "bug"
+            ),
+            LinearLabelTransitionSnapshot(
+                issueKey: "LEA-200", historyId: "hist-lbl-1",
+                transitionAtMs: cursorMs, kind: .added,
+                labelId: "lbl-2", labelName: "p1"
+            ),
+            LinearLabelTransitionSnapshot(
+                issueKey: "LEA-200", historyId: "hist-lbl-1",
+                transitionAtMs: cursorMs, kind: .removed,
+                labelId: "lbl-3", labelName: "wontfix"
+            )
+        ]
+        await provider.setBatch(LinearIssueBatch(
+            issues: [
+                LinearIssueSnapshot(
+                    issueKey: "LEA-200", title: "Topic", status: "In Progress",
+                    project: "", teamKey: "LEA", updatedAtMs: cursorMs
+                )
+            ],
+            cursorMs: cursorMs,
+            labelTransitions: snaps
+        ))
+
+        let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
+        let collector = LinearCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7,
+            logger: logger,
+            userDefaultsSuiteName: makeIsolatedSuiteName()
+        )
+        _ = await collector.performTick()
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSinceNow: -3600),
+            end: Date(timeIntervalSinceNow: 3600)
+        ))
+        let added = stored.filter { $0.payload["event_kind"] == "linear_label_added" }
+        let removed = stored.filter { $0.payload["event_kind"] == "linear_label_removed" }
+        XCTAssertEqual(added.count, 2)
+        XCTAssertEqual(removed.count, 1)
+        XCTAssertEqual(Set(added.compactMap { $0.payload["label_id"] }), ["lbl-1", "lbl-2"])
+        XCTAssertEqual(removed.first?.payload["label_id"], "lbl-3")
+        XCTAssertEqual(removed.first?.payload["issue_key"], "LEA-200")
+    }
+
     /// Empty priorityTransitions → no priority event emitted.
     func testTickDoesNotEmitPriorityEventWhenEmpty() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)

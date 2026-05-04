@@ -39,6 +39,7 @@ public struct LinearIssueBatch: Sendable, Hashable {
     /// Каждый array — independent: один history entry может породить 0+ snap'ов разных
     /// flavors (priority change + label add + assignee bucket в одной mutation).
     public let priorityTransitions: [LinearPriorityTransitionSnapshot]
+    public let labelTransitions: [LinearLabelTransitionSnapshot]
 
     public init(
         issues: [LinearIssueSnapshot],
@@ -46,7 +47,8 @@ public struct LinearIssueBatch: Sendable, Hashable {
         transitions: [LinearStateTransitionSnapshot] = [],
         workload: LinearAssignedWorkloadSnapshot = .empty,
         cycles: LinearCycleSnapshot = .empty,
-        priorityTransitions: [LinearPriorityTransitionSnapshot] = []
+        priorityTransitions: [LinearPriorityTransitionSnapshot] = [],
+        labelTransitions: [LinearLabelTransitionSnapshot] = []
     ) {
         self.issues = issues
         self.cursorMs = cursorMs
@@ -54,11 +56,12 @@ public struct LinearIssueBatch: Sendable, Hashable {
         self.workload = workload
         self.cycles = cycles
         self.priorityTransitions = priorityTransitions
+        self.labelTransitions = labelTransitions
     }
 
     public static let empty = LinearIssueBatch(
         issues: [], cursorMs: nil, transitions: [], workload: .empty, cycles: .empty,
-        priorityTransitions: []
+        priorityTransitions: [], labelTransitions: []
     )
 }
 
@@ -282,6 +285,35 @@ public struct LinearStateTransitionSnapshot: Sendable, Hashable {
         self.fromStateType = fromStateType
         self.toStateName = toStateName
         self.toStateType = toStateType
+    }
+}
+
+/// Phase 4.7.C — label transition. Один history entry с N added + M removed
+/// labels раскладывается в N+M snap'ов (один per label change). Каждый snap
+/// несёт kind discriminator + label.id + label.name. ADR-010: только id + name —
+/// label description / color НЕ запрашиваются провайдером.
+public struct LinearLabelTransitionSnapshot: Sendable, Hashable {
+    public enum Kind: String, Sendable, Hashable {
+        case added
+        case removed
+    }
+    public let issueKey: String
+    public let historyId: String
+    public let transitionAtMs: Int64
+    public let kind: Kind
+    /// Linear's internal label UUID. Public-safe metadata (not PII).
+    public let labelId: String
+    /// Self-authored label name (e.g. "bug", "p1") — per Section 6 OK.
+    public let labelName: String
+
+    public init(issueKey: String, historyId: String, transitionAtMs: Int64,
+                kind: Kind, labelId: String, labelName: String) {
+        self.issueKey = issueKey
+        self.historyId = historyId
+        self.transitionAtMs = transitionAtMs
+        self.kind = kind
+        self.labelId = labelId
+        self.labelName = labelName
     }
 }
 

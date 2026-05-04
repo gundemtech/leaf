@@ -210,6 +210,11 @@ public actor LinearCollector {
         // distinguishes flavor.
         let priorityEvents = batch.priorityTransitions.map { Self.makePriorityTransitionEvent($0) }
         events.append(contentsOf: priorityEvents)
+        // Phase 4.7.C — label transitions: один history entry → N+M snap'ов
+        // (added/removed). Каждый snap → один RawEvent с event_kind="linear_label_added"
+        // или "linear_label_removed" (kind enum дискриминирует).
+        let labelEvents = batch.labelTransitions.map { Self.makeLabelTransitionEvent($0) }
+        events.append(contentsOf: labelEvents)
         let commentEvents = batch.issues
             .filter { $0.commentCountInWindow > 0 }
             .map { Self.makeCommentEvent(issue: $0, periodEndMs: nowMs) }
@@ -466,6 +471,30 @@ public actor LinearCollector {
         case 4: return "low"
         default: return "none"
         }
+    }
+
+    /// Phase 4.7.C — RawEvent для my label transition. signalType=.action,
+    /// payload.event_kind="linear_label_added" или "linear_label_removed" в
+    /// зависимости от `kind`. Один history entry с N добавленных + M удалённых
+    /// labels раскладывается parser'ом в N+M snap'ов; collector эмитит N+M
+    /// отдельных events.
+    /// ADR-010: только label.id + label.name (self-authored, public-safe);
+    /// label description / color / created_by / любой text body НЕ запрашиваются.
+    static func makeLabelTransitionEvent(_ t: LinearLabelTransitionSnapshot) -> RawEvent {
+        RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(t.transitionAtMs) / 1000.0),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "linear",
+                "event_kind": t.kind == .added ? "linear_label_added" : "linear_label_removed",
+                "issue_key": t.issueKey,
+                "history_id": t.historyId,
+                "label_id": t.labelId,
+                "label_name": t.labelName,
+                "transition_at": String(t.transitionAtMs)
+            ]
+        )
     }
 
     /// Phase 4.7.C — RawEvent для my priority transition. signalType=.action,
