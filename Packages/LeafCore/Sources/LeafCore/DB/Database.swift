@@ -519,6 +519,50 @@ public final class Database: @unchecked Sendable {
         }
     }
 
+    // MARK: - Team (Phase 5.1.B)
+
+    /// UPSERT по `id`. Single-row-per-device convention (contract §4) — на DB
+    /// уровне не enforced, идемпотентность создания + update'а `name` и
+    /// `created_by_member_id` зашиты на UPSERT-семантику.
+    public func upsertOrg(_ org: Org) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try db.execute(sql: """
+                INSERT INTO \(Schema.Org.tableName) (
+                    \(Schema.Org.id),
+                    \(Schema.Org.name),
+                    \(Schema.Org.createdAtMs),
+                    \(Schema.Org.createdByMemberID)
+                ) VALUES (?, ?, ?, ?)
+                ON CONFLICT(\(Schema.Org.id)) DO UPDATE SET
+                    \(Schema.Org.name)              = excluded.\(Schema.Org.name),
+                    \(Schema.Org.createdAtMs)       = excluded.\(Schema.Org.createdAtMs),
+                    \(Schema.Org.createdByMemberID) = excluded.\(Schema.Org.createdByMemberID)
+                """,
+                arguments: [
+                    org.id,
+                    org.name,
+                    Int64(org.createdAt.timeIntervalSince1970 * 1000),
+                    org.createdByMemberID
+                ]
+            )
+        }
+    }
+
+    /// Returns the single org row если present (contract §4). `LIMIT 1` —
+    /// defensive под edge case "две rows" (схема не constrain'ит на 1 row).
+    public func readOrg() throws -> Org? {
+        try pool.read { db in
+            let row = try Row.fetchOne(db, sql: """
+                SELECT \(Schema.Org.id), \(Schema.Org.name),
+                       \(Schema.Org.createdAtMs), \(Schema.Org.createdByMemberID)
+                FROM \(Schema.Org.tableName)
+                LIMIT 1
+                """)
+            return row.flatMap(Self.mapOrgRow)
+        }
+    }
+
     // MARK: - Linear attribution v2 migration (Phase 4.5)
 
     /// Phase 4.5 — одноразовая wipe Linear events + cursor для миграции на
@@ -650,6 +694,21 @@ public final class Database: @unchecked Sendable {
             scope: scope,
             connectedAt: Date(timeIntervalSince1970: TimeInterval(connectedAtMs) / 1000.0),
             updatedAt: Date(timeIntervalSince1970: TimeInterval(updatedMs) / 1000.0)
+        )
+    }
+
+    private static func mapOrgRow(_ row: Row) -> Org? {
+        guard
+            let id = row[Schema.Org.id] as String?,
+            let name = row[Schema.Org.name] as String?,
+            let createdAtMs = row[Schema.Org.createdAtMs] as Int64?,
+            let createdByMemberID = row[Schema.Org.createdByMemberID] as String?
+        else { return nil }
+        return Org(
+            id: id,
+            name: name,
+            createdAt: Date(timeIntervalSince1970: TimeInterval(createdAtMs) / 1000.0),
+            createdByMemberID: createdByMemberID
         )
     }
 
