@@ -2,7 +2,8 @@ import Foundation
 
 /// Заголовок encrypted presence envelope.
 /// Bytes layout: [version:1B | keyID:16B | nonce:12B | ciphertext | tag:16B]
-/// Конкретные значения и serialization живут в LeafCorePrivate (Phase 2+).
+/// Public envelope shape — whitepaper presence-relay.md §6.
+/// Точный AAD/nonce/byte assembly — moat в `LeafCorePrivate/Prod/Crypto/`.
 public struct EnvelopeHeader: Sendable, Hashable {
     public let version: UInt8
     public let keyID: Data
@@ -13,6 +14,30 @@ public struct EnvelopeHeader: Sendable, Hashable {
     }
 
     public static let currentVersion: UInt8 = 1
+
+    /// Размер plaintext header prefix в envelope: 1B version + 16B keyID.
+    public static let prefixSize: Int = 17
+
+    /// Read-only parse первых 17 байт envelope (1B version + 16B keyID).
+    /// No crypto. Caller использует возвращённый `keyID`, чтобы найти
+    /// соответствующий teamKey в keystore (history rotation), потом вызывает
+    /// `EnvelopeCodec.decode(bytes, teamKey)`.
+    /// Throws `LeafError.corruptedEnvelope` если bytes короче 17 или version
+    /// не равна `currentVersion` (per architecture contract §12: implementations
+    /// MUST reject unknown versions).
+    public static func peek(from bytes: Data) throws -> EnvelopeHeader {
+        guard bytes.count >= prefixSize else {
+            throw LeafError.corruptedEnvelope
+        }
+        let version = bytes[bytes.startIndex]
+        guard version == currentVersion else {
+            throw LeafError.corruptedEnvelope
+        }
+        let keyIDStart = bytes.index(bytes.startIndex, offsetBy: 1)
+        let keyIDEnd = bytes.index(keyIDStart, offsetBy: 16)
+        let keyID = Data(bytes[keyIDStart..<keyIDEnd])
+        return EnvelopeHeader(version: version, keyID: keyID)
+    }
 }
 
 public protocol EnvelopeCodec: Sendable {
