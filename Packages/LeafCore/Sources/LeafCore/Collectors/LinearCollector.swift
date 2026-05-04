@@ -215,6 +215,10 @@ public actor LinearCollector {
         // или "linear_label_removed" (kind enum дискриминирует).
         let labelEvents = batch.labelTransitions.map { Self.makeLabelTransitionEvent($0) }
         events.append(contentsOf: labelEvents)
+        // Phase 4.7.C — assignee transitions (bucketed). raw assignee IDs не
+        // покидают provider boundary; collector serialize'ит только bucket enum.
+        let assigneeEvents = batch.assigneeTransitions.map { Self.makeAssigneeTransitionEvent($0) }
+        events.append(contentsOf: assigneeEvents)
         let commentEvents = batch.issues
             .filter { $0.commentCountInWindow > 0 }
             .map { Self.makeCommentEvent(issue: $0, periodEndMs: nowMs) }
@@ -471,6 +475,25 @@ public actor LinearCollector {
         case 4: return "low"
         default: return "none"
         }
+    }
+
+    /// Phase 4.7.C — RawEvent для my assignee transition. signalType=.action,
+    /// payload.event_kind="linear_assignee_changed". Bucket — anonymized
+    /// self/other (raw third-party IDs не покидают provider'а — ADR-010 PII).
+    static func makeAssigneeTransitionEvent(_ t: LinearAssigneeTransitionSnapshot) -> RawEvent {
+        RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(t.transitionAtMs) / 1000.0),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "linear",
+                "event_kind": "linear_assignee_changed",
+                "issue_key": t.issueKey,
+                "history_id": t.historyId,
+                "bucket": t.bucket.rawValue,
+                "transition_at": String(t.transitionAtMs)
+            ]
+        )
     }
 
     /// Phase 4.7.C — RawEvent для my label transition. signalType=.action,

@@ -40,6 +40,7 @@ public struct LinearIssueBatch: Sendable, Hashable {
     /// flavors (priority change + label add + assignee bucket в одной mutation).
     public let priorityTransitions: [LinearPriorityTransitionSnapshot]
     public let labelTransitions: [LinearLabelTransitionSnapshot]
+    public let assigneeTransitions: [LinearAssigneeTransitionSnapshot]
 
     public init(
         issues: [LinearIssueSnapshot],
@@ -48,7 +49,8 @@ public struct LinearIssueBatch: Sendable, Hashable {
         workload: LinearAssignedWorkloadSnapshot = .empty,
         cycles: LinearCycleSnapshot = .empty,
         priorityTransitions: [LinearPriorityTransitionSnapshot] = [],
-        labelTransitions: [LinearLabelTransitionSnapshot] = []
+        labelTransitions: [LinearLabelTransitionSnapshot] = [],
+        assigneeTransitions: [LinearAssigneeTransitionSnapshot] = []
     ) {
         self.issues = issues
         self.cursorMs = cursorMs
@@ -57,11 +59,12 @@ public struct LinearIssueBatch: Sendable, Hashable {
         self.cycles = cycles
         self.priorityTransitions = priorityTransitions
         self.labelTransitions = labelTransitions
+        self.assigneeTransitions = assigneeTransitions
     }
 
     public static let empty = LinearIssueBatch(
         issues: [], cursorMs: nil, transitions: [], workload: .empty, cycles: .empty,
-        priorityTransitions: [], labelTransitions: []
+        priorityTransitions: [], labelTransitions: [], assigneeTransitions: []
     )
 }
 
@@ -285,6 +288,34 @@ public struct LinearStateTransitionSnapshot: Sendable, Hashable {
         self.fromStateType = fromStateType
         self.toStateName = toStateName
         self.toStateType = toStateType
+    }
+}
+
+/// Phase 4.7.C — assignee transition snapshot. Anonymized self/other bucketing
+/// — raw third-party assignee IDs НЕ хранятся (ADR-010 PII concern). Bucket
+/// захватывает actionable shape (`reassigned_self_to_other` информативно для
+/// user'ского workload sense, без раскрытия coworker identity).
+public struct LinearAssigneeTransitionSnapshot: Sendable, Hashable {
+    public enum Bucket: String, Sendable, Hashable {
+        case assignedToSelf = "assigned_to_self"
+        case assignedToOther = "assigned_to_other"
+        case unassignedFromSelf = "unassigned_from_self"
+        case unassignedFromOther = "unassigned_from_other"
+        case reassignedSelfToOther = "reassigned_self_to_other"
+        case reassignedOtherToSelf = "reassigned_other_to_self"
+        case reassignedOtherToOther = "reassigned_other_to_other"
+    }
+    public let issueKey: String
+    public let historyId: String
+    public let transitionAtMs: Int64
+    public let bucket: Bucket
+
+    public init(issueKey: String, historyId: String, transitionAtMs: Int64,
+                bucket: Bucket) {
+        self.issueKey = issueKey
+        self.historyId = historyId
+        self.transitionAtMs = transitionAtMs
+        self.bucket = bucket
     }
 }
 

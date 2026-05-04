@@ -1078,6 +1078,52 @@ final class LinearCollectorTests: XCTestCase {
         XCTAssertEqual(removed.first?.payload["issue_key"], "LEA-200")
     }
 
+    /// Phase 4.7.C — assignee event с bucket enum + no raw IDs leaked.
+    func testTickEmitsAssigneeTransitionEvent() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockLinearGraphQLProvider()
+        let cursorMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000) - 60_000
+        let snap = LinearAssigneeTransitionSnapshot(
+            issueKey: "LEA-300",
+            historyId: "hist-asg-1",
+            transitionAtMs: cursorMs,
+            bucket: .reassignedSelfToOther
+        )
+        await provider.setBatch(LinearIssueBatch(
+            issues: [
+                LinearIssueSnapshot(
+                    issueKey: "LEA-300", title: "Topic", status: "In Progress",
+                    project: "", teamKey: "LEA", updatedAtMs: cursorMs
+                )
+            ],
+            cursorMs: cursorMs,
+            assigneeTransitions: [snap]
+        ))
+
+        let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
+        let collector = LinearCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7,
+            logger: logger,
+            userDefaultsSuiteName: makeIsolatedSuiteName()
+        )
+        _ = await collector.performTick()
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSinceNow: -3600),
+            end: Date(timeIntervalSinceNow: 3600)
+        ))
+        let asgn = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "linear_assignee_changed" })
+        XCTAssertEqual(asgn.payload["issue_key"], "LEA-300")
+        XCTAssertEqual(asgn.payload["history_id"], "hist-asg-1")
+        XCTAssertEqual(asgn.payload["bucket"], "reassigned_self_to_other")
+        // ADR-010 sentinel: payload не должен содержать from/to ID полей вообще.
+        XCTAssertNil(asgn.payload["from_assignee_id"], "raw IDs не покидают provider")
+        XCTAssertNil(asgn.payload["to_assignee_id"])
+    }
+
     /// Empty priorityTransitions → no priority event emitted.
     func testTickDoesNotEmitPriorityEventWhenEmpty() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
