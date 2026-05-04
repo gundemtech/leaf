@@ -47,6 +47,9 @@ public struct LinearIssueBatch: Sendable, Hashable {
     /// piggy-back fragment в той же query). Empty если provider degrade'нулся
     /// или у юзера нет updates в окне.
     public let projectUpdates: [LinearProjectUpdateSnapshot]
+    /// Phase 4.7.C — Linear Document snaps (skeleton). Empty при отсутствии
+    /// feature support или нулевой activity юзера.
+    public let documents: [LinearDocumentSnapshot]
 
     public init(
         issues: [LinearIssueSnapshot],
@@ -59,7 +62,8 @@ public struct LinearIssueBatch: Sendable, Hashable {
         assigneeTransitions: [LinearAssigneeTransitionSnapshot] = [],
         cycleTransitions: [LinearCycleTransitionSnapshot] = [],
         estimateTransitions: [LinearEstimateTransitionSnapshot] = [],
-        projectUpdates: [LinearProjectUpdateSnapshot] = []
+        projectUpdates: [LinearProjectUpdateSnapshot] = [],
+        documents: [LinearDocumentSnapshot] = []
     ) {
         self.issues = issues
         self.cursorMs = cursorMs
@@ -72,12 +76,14 @@ public struct LinearIssueBatch: Sendable, Hashable {
         self.cycleTransitions = cycleTransitions
         self.estimateTransitions = estimateTransitions
         self.projectUpdates = projectUpdates
+        self.documents = documents
     }
 
     public static let empty = LinearIssueBatch(
         issues: [], cursorMs: nil, transitions: [], workload: .empty, cycles: .empty,
         priorityTransitions: [], labelTransitions: [], assigneeTransitions: [],
-        cycleTransitions: [], estimateTransitions: [], projectUpdates: []
+        cycleTransitions: [], estimateTransitions: [], projectUpdates: [],
+        documents: []
     )
 }
 
@@ -301,6 +307,30 @@ public struct LinearStateTransitionSnapshot: Sendable, Hashable {
         self.fromStateType = fromStateType
         self.toStateName = toStateName
         self.toStateType = toStateType
+    }
+}
+
+/// Phase 4.7.C — Linear Document snapshot. Document — first-class top-level
+/// type in Linear, similar to wiki page. Skeleton-style: not all workspaces
+/// expose feature → graceful degrade на missing field.
+/// ADR-010: id + updatedAt + project{id,name}? + title (parity с issue.title);
+/// content / preview / body — никогда.
+public struct LinearDocumentSnapshot: Sendable, Hashable {
+    public let documentId: String
+    public let updatedAtMs: Int64
+    /// `nil` если document standalone (не привязан к project).
+    public let projectId: String?
+    public let projectName: String?
+    /// Self-authored document title (e.g. "Q4 Roadmap"). Public-safe per Section 6.
+    public let title: String
+
+    public init(documentId: String, updatedAtMs: Int64,
+                projectId: String?, projectName: String?, title: String) {
+        self.documentId = documentId
+        self.updatedAtMs = updatedAtMs
+        self.projectId = projectId
+        self.projectName = projectName
+        self.title = title
     }
 }
 

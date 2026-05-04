@@ -229,6 +229,10 @@ public actor LinearCollector {
         // type, piggy-back fragment в той же query).
         let pUpdateEvents = batch.projectUpdates.map { Self.makeProjectUpdateAuthoredEvent($0) }
         events.append(contentsOf: pUpdateEvents)
+        // Phase 4.7.C — Document edited events (skeleton; empty на workspaces без
+        // feature support).
+        let docEvents = batch.documents.map { Self.makeDocumentEditedEvent($0) }
+        events.append(contentsOf: docEvents)
         let commentEvents = batch.issues
             .filter { $0.commentCountInWindow > 0 }
             .map { Self.makeCommentEvent(issue: $0, periodEndMs: nowMs) }
@@ -485,6 +489,27 @@ public actor LinearCollector {
         case 4: return "low"
         default: return "none"
         }
+    }
+
+    /// Phase 4.7.C — RawEvent для linear_document_edited.
+    /// signalType=.action; ADR-010 only document.id + updatedAt + project info? +
+    /// title (parity с issue.title); content / preview / body не запрашиваются.
+    static func makeDocumentEditedEvent(_ d: LinearDocumentSnapshot) -> RawEvent {
+        var payload: [String: String] = [
+            "source": "linear",
+            "event_kind": "linear_document_edited",
+            "document_id": d.documentId,
+            "updated_at": String(d.updatedAtMs),
+            "title": d.title
+        ]
+        if let pid = d.projectId { payload["project_id"] = pid }
+        if let pname = d.projectName { payload["project_name"] = pname }
+        return RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(d.updatedAtMs) / 1000.0),
+            signalType: .action,
+            bundleID: nil,
+            payload: payload
+        )
     }
 
     /// Phase 4.7.C — RawEvent для my projectUpdate authored.

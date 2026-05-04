@@ -1364,6 +1364,82 @@ final class LinearCollectorTests: XCTestCase {
         )
     }
 
+    /// Phase 4.7.C — Document edited event с правильным payload.
+    func testTickEmitsDocumentEditedEvent() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockLinearGraphQLProvider()
+        let nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000) - 60_000
+        let doc = LinearDocumentSnapshot(
+            documentId: "doc-1",
+            updatedAtMs: nowMs,
+            projectId: "proj-A", projectName: "Leaf",
+            title: "Q4 Roadmap"
+        )
+        await provider.setBatch(LinearIssueBatch(
+            issues: [], cursorMs: nowMs,
+            documents: [doc]
+        ))
+
+        let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
+        let collector = LinearCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7,
+            logger: logger,
+            userDefaultsSuiteName: makeIsolatedSuiteName()
+        )
+        _ = await collector.performTick()
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSinceNow: -3600),
+            end: Date(timeIntervalSinceNow: 3600)
+        ))
+        let de = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "linear_document_edited" })
+        XCTAssertEqual(de.payload["document_id"], "doc-1")
+        XCTAssertEqual(de.payload["title"], "Q4 Roadmap")
+        XCTAssertEqual(de.payload["project_id"], "proj-A")
+        XCTAssertEqual(de.payload["project_name"], "Leaf")
+    }
+
+    /// Standalone document — без project info.
+    func testTickEmitsDocumentEditedEventStandalone() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockLinearGraphQLProvider()
+        let nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000) - 60_000
+        let doc = LinearDocumentSnapshot(
+            documentId: "doc-2",
+            updatedAtMs: nowMs,
+            projectId: nil, projectName: nil,
+            title: "Standalone"
+        )
+        await provider.setBatch(LinearIssueBatch(
+            issues: [], cursorMs: nowMs,
+            documents: [doc]
+        ))
+
+        let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
+        let collector = LinearCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7,
+            logger: logger,
+            userDefaultsSuiteName: makeIsolatedSuiteName()
+        )
+        _ = await collector.performTick()
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSinceNow: -3600),
+            end: Date(timeIntervalSinceNow: 3600)
+        ))
+        let de = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "linear_document_edited" })
+        XCTAssertEqual(de.payload["document_id"], "doc-2")
+        XCTAssertEqual(de.payload["title"], "Standalone")
+        XCTAssertNil(de.payload["project_id"])
+        XCTAssertNil(de.payload["project_name"])
+    }
+
     /// Empty priorityTransitions → no priority event emitted.
     func testTickDoesNotEmitPriorityEventWhenEmpty() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
