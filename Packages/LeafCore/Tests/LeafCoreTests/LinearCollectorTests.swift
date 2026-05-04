@@ -1214,6 +1214,90 @@ final class LinearCollectorTests: XCTestCase {
         XCTAssertEqual(cyc.payload["to_cycle_name"], "Sprint X")
     }
 
+    /// Phase 4.7.C — estimate transition event с правильным payload.
+    func testTickEmitsEstimateTransitionEvent() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockLinearGraphQLProvider()
+        let cursorMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000) - 60_000
+        let snap = LinearEstimateTransitionSnapshot(
+            issueKey: "LEA-500", historyId: "hist-est-1",
+            transitionAtMs: cursorMs,
+            fromEstimate: 3.0, toEstimate: 5.0
+        )
+        await provider.setBatch(LinearIssueBatch(
+            issues: [
+                LinearIssueSnapshot(
+                    issueKey: "LEA-500", title: "Topic", status: "In Progress",
+                    project: "", teamKey: "LEA", updatedAtMs: cursorMs
+                )
+            ],
+            cursorMs: cursorMs,
+            estimateTransitions: [snap]
+        ))
+
+        let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
+        let collector = LinearCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7,
+            logger: logger,
+            userDefaultsSuiteName: makeIsolatedSuiteName()
+        )
+        _ = await collector.performTick()
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSinceNow: -3600),
+            end: Date(timeIntervalSinceNow: 3600)
+        ))
+        let est = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "linear_estimate_changed" })
+        XCTAssertEqual(est.payload["issue_key"], "LEA-500")
+        XCTAssertEqual(est.payload["history_id"], "hist-est-1")
+        XCTAssertEqual(est.payload["from_estimate"], "3.0")
+        XCTAssertEqual(est.payload["to_estimate"], "5.0")
+    }
+
+    /// Estimate added (nil → 5) — payload omits from_estimate.
+    func testTickEmitsEstimateAddedEventWithOmittedFrom() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockLinearGraphQLProvider()
+        let cursorMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000) - 60_000
+        let snap = LinearEstimateTransitionSnapshot(
+            issueKey: "LEA-501", historyId: "hist-est-add",
+            transitionAtMs: cursorMs,
+            fromEstimate: nil, toEstimate: 8.0
+        )
+        await provider.setBatch(LinearIssueBatch(
+            issues: [
+                LinearIssueSnapshot(
+                    issueKey: "LEA-501", title: "Topic", status: "In Progress",
+                    project: "", teamKey: "LEA", updatedAtMs: cursorMs
+                )
+            ],
+            cursorMs: cursorMs,
+            estimateTransitions: [snap]
+        ))
+
+        let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
+        let collector = LinearCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7,
+            logger: logger,
+            userDefaultsSuiteName: makeIsolatedSuiteName()
+        )
+        _ = await collector.performTick()
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSinceNow: -3600),
+            end: Date(timeIntervalSinceNow: 3600)
+        ))
+        let est = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "linear_estimate_changed" })
+        XCTAssertNil(est.payload["from_estimate"], "nil from → omit ключа")
+        XCTAssertEqual(est.payload["to_estimate"], "8.0")
+    }
+
     /// Empty priorityTransitions → no priority event emitted.
     func testTickDoesNotEmitPriorityEventWhenEmpty() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)

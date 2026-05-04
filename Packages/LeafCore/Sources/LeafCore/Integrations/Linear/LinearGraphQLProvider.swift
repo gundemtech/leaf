@@ -42,6 +42,7 @@ public struct LinearIssueBatch: Sendable, Hashable {
     public let labelTransitions: [LinearLabelTransitionSnapshot]
     public let assigneeTransitions: [LinearAssigneeTransitionSnapshot]
     public let cycleTransitions: [LinearCycleTransitionSnapshot]
+    public let estimateTransitions: [LinearEstimateTransitionSnapshot]
 
     public init(
         issues: [LinearIssueSnapshot],
@@ -52,7 +53,8 @@ public struct LinearIssueBatch: Sendable, Hashable {
         priorityTransitions: [LinearPriorityTransitionSnapshot] = [],
         labelTransitions: [LinearLabelTransitionSnapshot] = [],
         assigneeTransitions: [LinearAssigneeTransitionSnapshot] = [],
-        cycleTransitions: [LinearCycleTransitionSnapshot] = []
+        cycleTransitions: [LinearCycleTransitionSnapshot] = [],
+        estimateTransitions: [LinearEstimateTransitionSnapshot] = []
     ) {
         self.issues = issues
         self.cursorMs = cursorMs
@@ -63,12 +65,13 @@ public struct LinearIssueBatch: Sendable, Hashable {
         self.labelTransitions = labelTransitions
         self.assigneeTransitions = assigneeTransitions
         self.cycleTransitions = cycleTransitions
+        self.estimateTransitions = estimateTransitions
     }
 
     public static let empty = LinearIssueBatch(
         issues: [], cursorMs: nil, transitions: [], workload: .empty, cycles: .empty,
         priorityTransitions: [], labelTransitions: [], assigneeTransitions: [],
-        cycleTransitions: []
+        cycleTransitions: [], estimateTransitions: []
     )
 }
 
@@ -292,6 +295,26 @@ public struct LinearStateTransitionSnapshot: Sendable, Hashable {
         self.fromStateType = fromStateType
         self.toStateName = toStateName
         self.toStateType = toStateType
+    }
+}
+
+/// Phase 4.7.C — estimate transition (story points). Optional from/to:
+/// `nil` ↔ unestimated. Linear API stores estimate как Float / Double.
+/// Reject equal (`from == to`) и обе nil.
+public struct LinearEstimateTransitionSnapshot: Sendable, Hashable {
+    public let issueKey: String
+    public let historyId: String
+    public let transitionAtMs: Int64
+    public let fromEstimate: Double?
+    public let toEstimate: Double?
+
+    public init(issueKey: String, historyId: String, transitionAtMs: Int64,
+                fromEstimate: Double?, toEstimate: Double?) {
+        self.issueKey = issueKey
+        self.historyId = historyId
+        self.transitionAtMs = transitionAtMs
+        self.fromEstimate = fromEstimate
+        self.toEstimate = toEstimate
     }
 }
 

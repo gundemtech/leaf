@@ -222,6 +222,9 @@ public actor LinearCollector {
         // Phase 4.7.C — cycle transitions (added/moved/removed).
         let cycleTransitionEvents = batch.cycleTransitions.map { Self.makeCycleTransitionEvent($0) }
         events.append(contentsOf: cycleTransitionEvents)
+        // Phase 4.7.C — estimate transitions (assigned/changed/removed).
+        let estimateEvents = batch.estimateTransitions.map { Self.makeEstimateTransitionEvent($0) }
+        events.append(contentsOf: estimateEvents)
         let commentEvents = batch.issues
             .filter { $0.commentCountInWindow > 0 }
             .map { Self.makeCommentEvent(issue: $0, periodEndMs: nowMs) }
@@ -478,6 +481,27 @@ public actor LinearCollector {
         case 4: return "low"
         default: return "none"
         }
+    }
+
+    /// Phase 4.7.C — RawEvent для my estimate transition. signalType=.action,
+    /// payload.event_kind="linear_estimate_changed". from/to optional Double —
+    /// omit'ятся когда nil (parity с cycle event pattern).
+    static func makeEstimateTransitionEvent(_ t: LinearEstimateTransitionSnapshot) -> RawEvent {
+        var payload: [String: String] = [
+            "source": "linear",
+            "event_kind": "linear_estimate_changed",
+            "issue_key": t.issueKey,
+            "history_id": t.historyId,
+            "transition_at": String(t.transitionAtMs)
+        ]
+        if let f = t.fromEstimate { payload["from_estimate"] = String(f) }
+        if let to = t.toEstimate { payload["to_estimate"] = String(to) }
+        return RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(t.transitionAtMs) / 1000.0),
+            signalType: .action,
+            bundleID: nil,
+            payload: payload
+        )
     }
 
     /// Phase 4.7.C — RawEvent для my cycle transition. signalType=.action,
