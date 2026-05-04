@@ -20,6 +20,16 @@ struct ActivityRow: View {
                         .foregroundStyle(.leafInk)
                         .lineLimit(1)
                         .truncationMode(.tail)
+                    if entry.mergedCount > 1 {
+                        Text("×\(entry.mergedCount)")
+                            .font(.leafCaption.monospacedDigit())
+                            .foregroundStyle(.leafMuted)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1)
+                            .background(
+                                Capsule().fill(Color.leafCard.opacity(0.85))
+                            )
+                    }
                 }
                 if let secondary = entry.secondaryText, !secondary.isEmpty {
                     Text(secondary)

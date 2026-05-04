@@ -72,17 +72,50 @@ public enum ActivityFeedMapper {
         payload: [String: String]
     ) -> ActivityFeedEntry? {
         let kind = payload["event_kind"] ?? "ai_activity"
-        let tool = sanitize(payload["tool"]) ?? sanitize(payload["agent"]) ?? "AI"
-        let project = sanitize(payload["project"]) ?? sanitize(payload["cwd_basename"])
+        let primary: String
+        var secondary: String? = nil
+
+        // ClaudeCodeJSONLParser writes:
+        //   tool_use   → tool_name + optional file_path + cwd
+        //   user_prompt → cwd (no body — ADR-010)
+        switch kind {
+        case "tool_use":
+            primary = sanitize(payload["tool_name"]) ?? "Tool use"
+            // Prefer file basename for file-ops tools; fall back to cwd basename.
+            if let path = sanitize(payload["file_path"]) {
+                secondary = basename(of: path)
+            } else if let cwd = sanitize(payload["cwd"]) {
+                secondary = basename(of: cwd)
+            }
+        case "user_prompt":
+            primary = "Prompt"
+            if let cwd = sanitize(payload["cwd"]) {
+                secondary = basename(of: cwd)
+            }
+        default:
+            // Future AI collectors (Cursor / Windsurf / Continue.dev) may
+            // emit other kinds. Show the tool name if present, otherwise
+            // a friendly fallback.
+            primary = sanitize(payload["tool_name"]) ?? sanitize(payload["agent"]) ?? "AI activity"
+            secondary = sanitize(payload["file_path"]).map(basename(of:))
+                ?? sanitize(payload["cwd"]).map(basename(of:))
+        }
+
         return ActivityFeedEntry(
             id: id,
             timestamp: timestamp,
             provider: .ai,
             eventKind: kind,
-            primaryText: tool,
-            secondaryText: project,
+            primaryText: primary,
+            secondaryText: secondary,
             bundleID: bundleID
         )
+    }
+
+    private static func basename(of path: String) -> String {
+        // Last path component without trailing slash.
+        let trimmed = path.hasSuffix("/") ? String(path.dropLast()) : path
+        return (trimmed as NSString).lastPathComponent
     }
 
     // MARK: - Integrations (Linear / GitHub / Slack)

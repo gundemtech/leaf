@@ -211,4 +211,108 @@ final class ActivityFeedMapperTests: XCTestCase {
         XCTAssertNotNil(entry)
         XCTAssertLessThanOrEqual(entry!.primaryText.count, 201)
     }
+
+    // MARK: - AI collaboration (ClaudeCodeJSONLParser shape)
+
+    func testMapsAIToolUseWithFilePath() {
+        let payload = #"{"event_kind":"tool_use","tool_name":"Edit","file_path":"/Users/me/proj/src/Foo.swift","cwd":"/Users/me/proj"}"#
+        let entry = ActivityFeedMapper.map(
+            id: 70, timestampMs: ts, signalType: "aiCollaboration", bundleID: nil, payloadJSON: payload
+        )
+        XCTAssertEqual(entry?.provider, .ai)
+        XCTAssertEqual(entry?.eventKind, "tool_use")
+        XCTAssertEqual(entry?.primaryText, "Edit")
+        XCTAssertEqual(entry?.secondaryText, "Foo.swift")
+    }
+
+    func testMapsAIToolUseWithoutFilePathFallsBackToCwd() {
+        let payload = #"{"event_kind":"tool_use","tool_name":"Bash","cwd":"/Users/me/some-repo"}"#
+        let entry = ActivityFeedMapper.map(
+            id: 71, timestampMs: ts, signalType: "aiCollaboration", bundleID: nil, payloadJSON: payload
+        )
+        XCTAssertEqual(entry?.primaryText, "Bash")
+        XCTAssertEqual(entry?.secondaryText, "some-repo")
+    }
+
+    func testMapsAIUserPromptShowsCwdOnly() {
+        let payload = #"{"event_kind":"user_prompt","cwd":"/Users/me/leaf"}"#
+        let entry = ActivityFeedMapper.map(
+            id: 72, timestampMs: ts, signalType: "aiCollaboration", bundleID: nil, payloadJSON: payload
+        )
+        XCTAssertEqual(entry?.primaryText, "Prompt")
+        XCTAssertEqual(entry?.secondaryText, "leaf")
+    }
+}
+
+// MARK: - coalesceConsecutive
+
+final class ActivityFeedEntryCoalesceTests: XCTestCase {
+
+    private let baseTs = Date(timeIntervalSince1970: 1_700_000_000)
+
+    private func entry(_ id: Int64, kind: String, primary: String, bundleID: String? = nil, addingSeconds: TimeInterval = 0) -> ActivityFeedEntry {
+        ActivityFeedEntry(
+            id: id,
+            timestamp: baseTs.addingTimeInterval(addingSeconds),
+            provider: .ai,
+            eventKind: kind,
+            primaryText: primary,
+            secondaryText: nil,
+            bundleID: bundleID
+        )
+    }
+
+    func testEmptyInputYieldsEmpty() {
+        XCTAssertTrue(ActivityFeedEntry.coalesceConsecutive([]).isEmpty)
+    }
+
+    func testSingleEntryPassesThrough() {
+        let result = ActivityFeedEntry.coalesceConsecutive([entry(1, kind: "tool_use", primary: "Bash")])
+        XCTAssertEqual(result.count, 1)
+        XCTAssertEqual(result.first?.mergedCount, 1)
+    }
+
+    func testTwoConsecutiveDuplicatesMerge() {
+        let a = entry(1, kind: "tool_use", primary: "Bash", addingSeconds: 0)
+        let b = entry(2, kind: "tool_use", primary: "Bash", addingSeconds: 5)
+        let result = ActivityFeedEntry.coalesceConsecutive([a, b])
+        XCTAssertEqual(result.count, 1)
+        XCTAssertEqual(result.first?.mergedCount, 2)
+        // Latest timestamp survives.
+        XCTAssertEqual(result.first?.timestamp, b.timestamp)
+    }
+
+    func testNonConsecutiveDuplicatesDoNotMerge() {
+        // A, B, A — two A entries are NOT adjacent, so no merge.
+        let a1 = entry(1, kind: "tool_use", primary: "Bash", addingSeconds: 0)
+        let b  = entry(2, kind: "tool_use", primary: "Read", addingSeconds: 1)
+        let a2 = entry(3, kind: "tool_use", primary: "Bash", addingSeconds: 2)
+        let result = ActivityFeedEntry.coalesceConsecutive([a1, b, a2])
+        XCTAssertEqual(result.count, 3)
+        XCTAssertEqual(result.map(\.mergedCount), [1, 1, 1])
+    }
+
+    func testDifferentBundleIDsDoNotMergeEvenWithSameText() {
+        let local1 = ActivityFeedEntry(
+            id: 1, timestamp: baseTs, provider: .local,
+            eventKind: "app_active", primaryText: "Safari",
+            secondaryText: nil, bundleID: "com.apple.Safari"
+        )
+        let local2 = ActivityFeedEntry(
+            id: 2, timestamp: baseTs.addingTimeInterval(1), provider: .local,
+            eventKind: "app_active", primaryText: "Safari",
+            secondaryText: nil, bundleID: "com.brave.Safari"  // different bundle
+        )
+        let result = ActivityFeedEntry.coalesceConsecutive([local1, local2])
+        XCTAssertEqual(result.count, 2)
+    }
+
+    func testRunOfThreeMergesIntoOne() {
+        let entries = (0..<3).map { i in
+            entry(Int64(i + 1), kind: "tool_use", primary: "Bash", addingSeconds: TimeInterval(i))
+        }
+        let result = ActivityFeedEntry.coalesceConsecutive(entries)
+        XCTAssertEqual(result.count, 1)
+        XCTAssertEqual(result.first?.mergedCount, 3)
+    }
 }
