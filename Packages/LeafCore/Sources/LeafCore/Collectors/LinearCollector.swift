@@ -219,6 +219,9 @@ public actor LinearCollector {
         // покидают provider boundary; collector serialize'ит только bucket enum.
         let assigneeEvents = batch.assigneeTransitions.map { Self.makeAssigneeTransitionEvent($0) }
         events.append(contentsOf: assigneeEvents)
+        // Phase 4.7.C — cycle transitions (added/moved/removed).
+        let cycleTransitionEvents = batch.cycleTransitions.map { Self.makeCycleTransitionEvent($0) }
+        events.append(contentsOf: cycleTransitionEvents)
         let commentEvents = batch.issues
             .filter { $0.commentCountInWindow > 0 }
             .map { Self.makeCommentEvent(issue: $0, periodEndMs: nowMs) }
@@ -475,6 +478,30 @@ public actor LinearCollector {
         case 4: return "low"
         default: return "none"
         }
+    }
+
+    /// Phase 4.7.C — RawEvent для my cycle transition. signalType=.action,
+    /// payload.event_kind="linear_cycle_changed". from/to optional pairs (id+name) —
+    /// omit'ятся когда nil (parity с completion_seconds pattern: отсутствие ключа =
+    /// "no value", presence ключа = legitimate value).
+    static func makeCycleTransitionEvent(_ t: LinearCycleTransitionSnapshot) -> RawEvent {
+        var payload: [String: String] = [
+            "source": "linear",
+            "event_kind": "linear_cycle_changed",
+            "issue_key": t.issueKey,
+            "history_id": t.historyId,
+            "transition_at": String(t.transitionAtMs)
+        ]
+        if let id = t.fromCycleId { payload["from_cycle_id"] = id }
+        if let name = t.fromCycleName { payload["from_cycle_name"] = name }
+        if let id = t.toCycleId { payload["to_cycle_id"] = id }
+        if let name = t.toCycleName { payload["to_cycle_name"] = name }
+        return RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(t.transitionAtMs) / 1000.0),
+            signalType: .action,
+            bundleID: nil,
+            payload: payload
+        )
     }
 
     /// Phase 4.7.C — RawEvent для my assignee transition. signalType=.action,

@@ -41,6 +41,7 @@ public struct LinearIssueBatch: Sendable, Hashable {
     public let priorityTransitions: [LinearPriorityTransitionSnapshot]
     public let labelTransitions: [LinearLabelTransitionSnapshot]
     public let assigneeTransitions: [LinearAssigneeTransitionSnapshot]
+    public let cycleTransitions: [LinearCycleTransitionSnapshot]
 
     public init(
         issues: [LinearIssueSnapshot],
@@ -50,7 +51,8 @@ public struct LinearIssueBatch: Sendable, Hashable {
         cycles: LinearCycleSnapshot = .empty,
         priorityTransitions: [LinearPriorityTransitionSnapshot] = [],
         labelTransitions: [LinearLabelTransitionSnapshot] = [],
-        assigneeTransitions: [LinearAssigneeTransitionSnapshot] = []
+        assigneeTransitions: [LinearAssigneeTransitionSnapshot] = [],
+        cycleTransitions: [LinearCycleTransitionSnapshot] = []
     ) {
         self.issues = issues
         self.cursorMs = cursorMs
@@ -60,11 +62,13 @@ public struct LinearIssueBatch: Sendable, Hashable {
         self.priorityTransitions = priorityTransitions
         self.labelTransitions = labelTransitions
         self.assigneeTransitions = assigneeTransitions
+        self.cycleTransitions = cycleTransitions
     }
 
     public static let empty = LinearIssueBatch(
         issues: [], cursorMs: nil, transitions: [], workload: .empty, cycles: .empty,
-        priorityTransitions: [], labelTransitions: [], assigneeTransitions: []
+        priorityTransitions: [], labelTransitions: [], assigneeTransitions: [],
+        cycleTransitions: []
     )
 }
 
@@ -288,6 +292,38 @@ public struct LinearStateTransitionSnapshot: Sendable, Hashable {
         self.fromStateType = fromStateType
         self.toStateName = toStateName
         self.toStateType = toStateType
+    }
+}
+
+/// Phase 4.7.C — cycle transition snapshot. Optional from/to: `nil` ↔ unscheduled.
+/// Captures three transition kinds:
+/// - added (from nil → cycle)
+/// - moved between cycles (different ids)
+/// - removed (cycle → nil)
+/// Reject: `from == to` (defensive, degenerate noop) и обе nil.
+/// ADR-010: cycle.id + cycle.name (self-authored team-level metadata, public-safe);
+/// description / goals НЕ запрашиваются.
+public struct LinearCycleTransitionSnapshot: Sendable, Hashable {
+    public let issueKey: String
+    public let historyId: String
+    public let transitionAtMs: Int64
+    public let fromCycleId: String?
+    public let fromCycleName: String?
+    public let toCycleId: String?
+    public let toCycleName: String?
+
+    public init(
+        issueKey: String, historyId: String, transitionAtMs: Int64,
+        fromCycleId: String?, fromCycleName: String?,
+        toCycleId: String?, toCycleName: String?
+    ) {
+        self.issueKey = issueKey
+        self.historyId = historyId
+        self.transitionAtMs = transitionAtMs
+        self.fromCycleId = fromCycleId
+        self.fromCycleName = fromCycleName
+        self.toCycleId = toCycleId
+        self.toCycleName = toCycleName
     }
 }
 

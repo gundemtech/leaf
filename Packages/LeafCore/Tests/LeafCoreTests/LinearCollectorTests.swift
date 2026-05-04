@@ -1124,6 +1124,96 @@ final class LinearCollectorTests: XCTestCase {
         XCTAssertNil(asgn.payload["to_assignee_id"])
     }
 
+    /// Phase 4.7.C — cycle transition event с правильным payload (move scenario).
+    func testTickEmitsCycleTransitionEvent() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockLinearGraphQLProvider()
+        let cursorMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000) - 60_000
+        let snap = LinearCycleTransitionSnapshot(
+            issueKey: "LEA-400", historyId: "hist-cyc-1",
+            transitionAtMs: cursorMs,
+            fromCycleId: "cyc-1", fromCycleName: "Sprint 41",
+            toCycleId: "cyc-2", toCycleName: "Sprint 42"
+        )
+        await provider.setBatch(LinearIssueBatch(
+            issues: [
+                LinearIssueSnapshot(
+                    issueKey: "LEA-400", title: "Topic", status: "In Progress",
+                    project: "", teamKey: "LEA", updatedAtMs: cursorMs
+                )
+            ],
+            cursorMs: cursorMs,
+            cycleTransitions: [snap]
+        ))
+
+        let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
+        let collector = LinearCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7,
+            logger: logger,
+            userDefaultsSuiteName: makeIsolatedSuiteName()
+        )
+        _ = await collector.performTick()
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSinceNow: -3600),
+            end: Date(timeIntervalSinceNow: 3600)
+        ))
+        let cyc = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "linear_cycle_changed" })
+        XCTAssertEqual(cyc.payload["issue_key"], "LEA-400")
+        XCTAssertEqual(cyc.payload["from_cycle_id"], "cyc-1")
+        XCTAssertEqual(cyc.payload["from_cycle_name"], "Sprint 41")
+        XCTAssertEqual(cyc.payload["to_cycle_id"], "cyc-2")
+        XCTAssertEqual(cyc.payload["to_cycle_name"], "Sprint 42")
+    }
+
+    /// Phase 4.7.C — cycle transition payload omits nil sides (added/removed).
+    func testTickEmitsCycleTransitionEventWithOmittedNilSides() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockLinearGraphQLProvider()
+        let cursorMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000) - 60_000
+        // "Added to cycle" — fromCycle nil, toCycle populated.
+        let snap = LinearCycleTransitionSnapshot(
+            issueKey: "LEA-401", historyId: "hist-cyc-add",
+            transitionAtMs: cursorMs,
+            fromCycleId: nil, fromCycleName: nil,
+            toCycleId: "cyc-X", toCycleName: "Sprint X"
+        )
+        await provider.setBatch(LinearIssueBatch(
+            issues: [
+                LinearIssueSnapshot(
+                    issueKey: "LEA-401", title: "Topic", status: "In Progress",
+                    project: "", teamKey: "LEA", updatedAtMs: cursorMs
+                )
+            ],
+            cursorMs: cursorMs,
+            cycleTransitions: [snap]
+        ))
+
+        let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
+        let collector = LinearCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7,
+            logger: logger,
+            userDefaultsSuiteName: makeIsolatedSuiteName()
+        )
+        _ = await collector.performTick()
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSinceNow: -3600),
+            end: Date(timeIntervalSinceNow: 3600)
+        ))
+        let cyc = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "linear_cycle_changed" })
+        XCTAssertNil(cyc.payload["from_cycle_id"], "nil from → ключ omitted")
+        XCTAssertNil(cyc.payload["from_cycle_name"])
+        XCTAssertEqual(cyc.payload["to_cycle_id"], "cyc-X")
+        XCTAssertEqual(cyc.payload["to_cycle_name"], "Sprint X")
+    }
+
     /// Empty priorityTransitions → no priority event emitted.
     func testTickDoesNotEmitPriorityEventWhenEmpty() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
