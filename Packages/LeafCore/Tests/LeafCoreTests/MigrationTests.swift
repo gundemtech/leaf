@@ -148,6 +148,32 @@ final class MigrationTests: XCTestCase {
         }
     }
 
+    // MARK: - Phase 5.1.A — Step 1 sanity (Schema constants + TeamMemberRole)
+
+    /// Phase 5.1.A — Schema namespaces для team-crypto tables присутствуют
+    /// и держат ожидаемые SQL identifier'ы. Sanity для Step 1 (до миграций).
+    func testPhase51ASchemaConstantsAreDeclared() throws {
+        XCTAssertEqual(Schema.Org.tableName, "org")
+        XCTAssertEqual(Schema.Org.id, "id")
+        XCTAssertEqual(Schema.Org.createdByMemberID, "created_by_member_id")
+
+        XCTAssertEqual(Schema.TeamMembers.tableName, "team_members")
+        XCTAssertEqual(Schema.TeamMembers.pubkeyHex, "pubkey_hex")
+        XCTAssertEqual(Schema.TeamMembers.removedAtMs, "removed_at_ms")
+        XCTAssertEqual(Schema.TeamMembers.indexOrgActive, "team_members_org_active")
+
+        XCTAssertEqual(Schema.TeamKeys.tableName, "team_keys")
+        XCTAssertEqual(Schema.TeamKeys.deprecatedAtMs, "deprecated_at_ms")
+        XCTAssertEqual(Schema.TeamKeys.indexActive, "team_keys_active")
+    }
+
+    /// `TeamMemberRole` rawValue — single source of truth для team_members.role.
+    func testTeamMemberRoleRawValuesAreStable() throws {
+        XCTAssertEqual(TeamMemberRole.admin.rawValue, "admin")
+        XCTAssertEqual(TeamMemberRole.member.rawValue, "member")
+        XCTAssertEqual(Set(TeamMemberRole.allCases.map(\.rawValue)), ["admin", "member"])
+    }
+
     func testPlaintextDetectionRenamesFileAndStartsFresh() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         let key = EncryptionOptions(keyProvider: .data(Data(repeating: 0xDD, count: 32)))
