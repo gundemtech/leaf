@@ -9,4 +9,5 @@ public enum LeafError: Error, Sendable {
     case corruptedEnvelope
     case invalidPayload
     case jsonEncodingFailed
+    case orgAlreadyExists
 }
