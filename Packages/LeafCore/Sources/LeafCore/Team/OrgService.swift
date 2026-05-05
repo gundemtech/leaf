@@ -45,9 +45,11 @@ public struct OrgService: Sendable {
         self.now = now
         self.randomBytes = randomBytes
         self.randomUUID = randomUUID
-        // Default factory captures `keystoreRoot` — Swift не позволяет referring
-        // другим init params в default-arg expression, отсюда Optional-resolved-
-        // in-body pattern.
+        // Default factory captures `keystoreRoot` by value at init time — Swift
+        // не позволяет referring другим init params в default-arg expression,
+        // отсюда Optional-resolved-in-body pattern. Если `OrgService` когда-нибудь
+        // станет class, replacing `keystoreRoot` после init НЕ обновит captured
+        // closure (assumption: `OrgService` остаётся value type).
         self.identity = identity ?? { try IdentityService.ensureLocalIdentity(at: keystoreRoot) }
     }
 

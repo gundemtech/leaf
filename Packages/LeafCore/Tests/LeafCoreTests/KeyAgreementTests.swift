@@ -62,6 +62,25 @@ final class KeyAgreementTests: XCTestCase {
         }
     }
 
+    // MARK: - 5. Lenient case — uppercase hex decodes равно lowercase
+
+    /// Pubkeys serialize through `String(format: "%02x", _)` → always lowercase
+    /// в нашем flow. Defensive: lenient decoder survives accidental uppercase
+    /// (e.g., copy-paste из tool которое автоматически uppercase'ит). Test
+    /// pins lenient capability, чтобы не drift'нуть в strict-lowercase
+    /// silently при будущих refactor'ах.
+    func testDecodePublicKey_UppercaseHex_DecodesEqualToLowercase() throws {
+        let priv = Curve25519.KeyAgreement.PrivateKey()
+        let lowerHex = priv.publicKey.rawRepresentation
+            .map { String(format: "%02x", $0) }.joined()
+        let upperHex = lowerHex.uppercased()
+
+        let lower = try KeyAgreement.decodePublicKey(hex: lowerHex)
+        let upper = try KeyAgreement.decodePublicKey(hex: upperHex)
+
+        XCTAssertEqual(lower.rawRepresentation, upper.rawRepresentation)
+    }
+
     // MARK: - Helpers
 
     private func assertInvalidPayload(_ error: Error, file: StaticString = #filePath, line: UInt = #line) {
