@@ -1,0 +1,89 @@
+//
+//  InviteAcceptService.swift
+//  LeafCore
+//
+//  Phase 5.2.E — invitee-side orchestrator. Two-step flow:
+//
+//   1. fetchInvite(token:) → one-shot relay GET (KV consumes), returns blob bytes
+//      caller'у (Reader держит в RAM пока юзер вводит OTP).
+//   2. acceptInvite(blob:, otp:, displayName:) → ECDH(invitee_priv, admin_pub) +
+//      KDF(otp) + AES-GCM decode → materializes 1 row org + 2 rows team_members
+//      (admin from blob + self with new UUID + invitee displayName + invitee
+//      pubkey hex) + 1 row team_keys + writes teamKey file via TeamKeystore.
+//
+//  Atomicity: keystore-first (orphan file < orphan DB rows), затем DB writes
+//  в одной транзакции. Mirror OrgService.createPersonalOrg ordering (5.1.D).
+//
+//  Inject'абельные factories `now` / `identity` / `generateMemberID` —
+//  deterministic test E2E round-trip mirror InviteService (5.2.D).
+//
+
+import CryptoKit
+import Foundation
+
+public struct InviteAcceptService: Sendable {
+    private let database: Database
+    private let relayClient: RelayClient
+    private let inviteKDF: any InviteKDF
+    private let inviteBlobCodec: any InviteBlobCodec
+    private let keystoreRoot: URL
+    private let now: @Sendable () -> Date
+    private let identity: @Sendable () throws -> Curve25519.KeyAgreement.PrivateKey
+    private let generateMemberID: @Sendable () -> String
+
+    public init(
+        database: Database,
+        relayClient: RelayClient,
+        inviteKDF: any InviteKDF,
+        inviteBlobCodec: any InviteBlobCodec,
+        keystoreRoot: URL = TeamKeystore.defaultRoot(),
+        now: @escaping @Sendable () -> Date = { Date() },
+        identity: (@Sendable () throws -> Curve25519.KeyAgreement.PrivateKey)? = nil,
+        generateMemberID: @escaping @Sendable () -> String = { UUID().uuidString.lowercased() }
+    ) {
+        self.database = database
+        self.relayClient = relayClient
+        self.inviteKDF = inviteKDF
+        self.inviteBlobCodec = inviteBlobCodec
+        self.keystoreRoot = keystoreRoot
+        self.now = now
+        self.identity = identity ?? { try IdentityService.ensureLocalIdentity(at: keystoreRoot) }
+        self.generateMemberID = generateMemberID
+    }
+
+    /// One-shot relay fetch — KV consumes invite at this call.
+    /// Caller (Reader) holds returned blob in RAM across OTP retries.
+    public func fetchInvite(token: String) async throws -> InviteBlob {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw LeafError.invalidPayload
+        }
+        let fetched = try await relayClient.getInvite(token: trimmed)
+        return InviteBlob(bytes: fetched.blob)
+    }
+
+    /// Decrypts blob with derived wrapKey (ECDH(invitee_priv, admin_pub_from_header) +
+    /// KDF(otp)) → materializes org/team_members/team_keys + writes teamKey file.
+    /// Throws orgAlreadyExists / inviteOTPInvalid / inviteBlobMalformed / inviteAlreadyAccepted.
+    public func acceptInvite(
+        blob: InviteBlob,
+        otp: String,
+        displayName: String
+    ) async throws -> AcceptedInvite {
+        throw LeafError.notImplemented
+    }
+}
+
+public struct AcceptedInvite: Sendable, Hashable {
+    public let orgID: String
+    public let orgName: String
+    public let teamKeyID: String
+    public let selfMemberID: String
+
+    public init(orgID: String, orgName: String, teamKeyID: String, selfMemberID: String) {
+        self.orgID = orgID
+        self.orgName = orgName
+        self.teamKeyID = teamKeyID
+        self.selfMemberID = selfMemberID
+    }
+}
