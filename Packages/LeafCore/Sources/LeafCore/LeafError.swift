@@ -10,4 +10,6 @@ public enum LeafError: Error, Sendable {
     case invalidPayload
     case jsonEncodingFailed
     case orgAlreadyExists
+    case inviteBlobMalformed
+    case inviteOTPInvalid
 }
