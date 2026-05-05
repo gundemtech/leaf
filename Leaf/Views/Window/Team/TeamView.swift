@@ -4,6 +4,7 @@ import LeafCore
 struct TeamView: View {
     @Environment(OrgReader.self) private var reader
     @Environment(WindowState.self) private var windowState
+    @State private var showingGenerateSheet: Bool = false
 
     var body: some View {
         ScrollView {
@@ -15,6 +16,9 @@ struct TeamView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear { reader.refresh() }
+        .sheet(isPresented: $showingGenerateSheet) {
+            GenerateInviteSheet()
+        }
     }
 
     @ViewBuilder
@@ -80,6 +84,11 @@ struct TeamView: View {
                 }
             }
             .frame(maxWidth: 580, alignment: .leading)
+
+            Button(action: { showingGenerateSheet = true }) {
+                Label("Add member", systemImage: "plus")
+            }
+            .buttonStyle(.borderedProminent)
         }
     }
 
