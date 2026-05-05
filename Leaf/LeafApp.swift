@@ -24,6 +24,7 @@ struct LeafApp: App {
     @State private var updater: UpdaterController
     @State private var reader = InsightsReader()
     @State private var orgReader = OrgReader()
+    @State private var inviteOutboxReader = InviteOutboxReader()
     @State private var windowState = WindowState()
 
     init() {
@@ -83,6 +84,7 @@ struct LeafApp: App {
                 .environment(updater)
                 .environment(reader)
                 .environment(orgReader)
+                .environment(inviteOutboxReader)
                 .environment(windowState)
         }
         .defaultSize(width: 1100, height: 720)
