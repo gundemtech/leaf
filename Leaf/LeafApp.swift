@@ -23,6 +23,7 @@ struct LeafApp: App {
     @State private var permissions = PermissionsService()
     @State private var updater: UpdaterController
     @State private var reader = InsightsReader()
+    @State private var orgReader = OrgReader()
     @State private var windowState = WindowState()
 
     init() {
@@ -81,6 +82,7 @@ struct LeafApp: App {
                 .environment(permissions)
                 .environment(updater)
                 .environment(reader)
+                .environment(orgReader)
                 .environment(windowState)
         }
         .defaultSize(width: 1100, height: 720)
