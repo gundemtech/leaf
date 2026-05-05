@@ -102,7 +102,9 @@ Phase 5.2.A landed 5 commits в `leaf` repo — substrate под invite handshak
 | **500** | KV.delete failure between get-200 and reply | (no body — server-side log only) |
 | **405** | Method != GET | `Allow: GET, DELETE` header |
 
-**One-shot semantics:** `KV.get` (with `cacheTtl: 0` to bypass edge cache during the ~60s eventual-consistency window) → if null → 404. Else `await KV.delete(token)` → return 200. **delete-before-respond** invariant: if delete throws, 500 (don't ship blob if we can't mark consumed).
+**One-shot semantics:** `KV.get(token)` → if null → 404. Else parse stored JSON → `await KV.delete(token)` → return 200. **delete-before-respond** invariant: if delete throws, 500 (don't ship blob if we can't mark consumed).
+
+**Edge-cache caveat:** Cloudflare KV has minimum `cacheTtl = 60s`; we cannot fully bypass edge cache on read. After `KV.delete`, a consumer hitting a different edge DC may briefly observe the stale-cached blob (~≤60s). Mitigation: idempotent delete on every read path + invitee app-layer retry on 404 covers the window. Cross-DC duplicate consumption is bounded by 24h token TTL and acceptable per decomp §8 risk row (worst case admin re-issues invite).
 
 ### 4.3 `DELETE /v1/invite/:token`
 
@@ -345,7 +347,7 @@ Two-Mac E2E gate (admin↔invitee real handshake) — **5.2.E** scope, не 5.2.
 
 | Risk | Mitigation |
 |---|---|
-| KV global eventual consistency (~60s prop) — admin POST → invitee immediate GET could 404 | C5 GET handler uses `cacheTtl: 0` to bypass edge cache. Invitee-side retry on initial 404 — 5.2.E concern. Worst case admin re-shares token; not a security issue (token still bounded by 24h TTL + one-shot). |
+| KV global eventual consistency (~60s prop) — admin POST → invitee immediate GET could 404; cross-DC stale read after delete could let second invitee consume same blob | CF KV minimum cacheTtl = 60s; we cannot bypass edge cache fully. GET path uses default cacheTtl. Mitigation: invitee-side retry on initial 404 (5.2.E concern); idempotent delete; bounded by 24h TTL + one-shot UX. Worst case admin re-shares token. Not a security issue (envelope still requires OTP + correct invitee X25519 priv to unwrap). |
 | `crypto.getRandomValues` on Workers — uses CSPRNG per spec, but documented assumption | Encoding lib test asserts 32-char output + uniqueness across N=100 calls. Production trust = same baseline as nonce generation в `ProdInviteBlobCodec` (already shipped в 5.2.B). |
 | Validation order skip — bug: 8KB ceiling check after JSON parse means raw 12 KB body memory-cost incurred before reject | §5 puts `request.text()` size limit **before** JSON.parse (step 3 of validation). Workers default 100 KB body limit → safe upper bound. |
 | `KV.delete` failure between get-200 and reply → invitee gets blob but key still claimable | §4.2 awaits delete before returning 200; failure surfaces as 500. Token still bounded by TTL + one-shot UX flow tolerates duplicate attempts. |
