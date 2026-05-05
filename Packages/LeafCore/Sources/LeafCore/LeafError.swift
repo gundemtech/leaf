@@ -12,4 +12,8 @@ public enum LeafError: Error, Sendable {
     case orgAlreadyExists
     case inviteBlobMalformed
     case inviteOTPInvalid
+    // Phase 5.2.D additions (consumers: RelayClient HTTP layer + InviteService).
+    case relayUnreachable(reason: String)
+    case inviteNotFound
+    case inviteRequestRejected(reason: String)
 }
