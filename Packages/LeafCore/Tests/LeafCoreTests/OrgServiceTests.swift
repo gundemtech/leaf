@@ -1,5 +1,7 @@
 // Phase 5.1.D — OrgService.createPersonalOrg + currentOrg tests.
-// Inject'абельные factories (now / randomBytes / randomUUID / randomX25519PrivateKey)
+// Phase 5.2.A — `randomX25519PrivateKey` injectable заменён на `identity`
+// factory; default делегирует в IdentityService.ensureLocalIdentity. +1 test 13.
+// Inject'абельные factories (now / randomBytes / randomUUID / identity)
 // дают deterministic round-trip — test 12 проверяет конкретные ID / bytes /
 // timestamp в DB + keystore files.
 
@@ -247,6 +249,7 @@ final class OrgServiceTests: XCTestCase {
         let fixedPub = fixedPriv.publicKey.rawRepresentation
         let fixedPubHex = fixedPub.map { String(format: "%02x", $0) }.joined()
 
+        let injectedKeystoreRoot = keystoreRoot!
         let svc = OrgService(
             database: db,
             keystoreRoot: keystoreRoot,
@@ -256,7 +259,13 @@ final class OrgServiceTests: XCTestCase {
                 return teamKeyBytes
             },
             randomUUID: { uuidCounter.next() },
-            randomX25519PrivateKey: { fixedPriv }
+            // 5.2.A: identity factory mirror'ит default IdentityService path —
+            // generate-then-write — но с deterministic `fixedPriv`. Сохраняет
+            // file-write side effect (assertion ниже verify'ит storedPriv).
+            identity: {
+                try IdentityService.ensureLocalIdentity(at: injectedKeystoreRoot,
+                                                        generate: { fixedPriv })
+            }
         )
 
         let returned = try svc.createPersonalOrg(displayName: "Personal")
@@ -282,6 +291,32 @@ final class OrgServiceTests: XCTestCase {
 
         let storedTeamKey = try TeamKeystore.readTeamKey(id: "fixed-uuid-3", at: keystoreRoot)
         XCTAssertEqual(storedTeamKey, teamKeyBytes)
+    }
+
+    // MARK: - 13. Default identity factory reads existing keystore file (Phase 5.2.A)
+
+    /// Регрессионный test для refactor 5.2.A: default `identity` factory
+    /// делегирует в `IdentityService.ensureLocalIdentity` который reads
+    /// existing X25519 priv с диска вместо overwrite. Pre-write 32B priv,
+    /// затем createPersonalOrg без inject — assert member.pubkeyHex
+    /// derives from pre-written priv.
+    func testCreatePersonalOrg_DefaultIdentityFactory_ReadsExistingKeystoreFile() throws {
+        let knownPriv = Curve25519.KeyAgreement.PrivateKey()
+        try TeamKeystore.writeX25519Private(knownPriv.rawRepresentation, at: keystoreRoot)
+
+        let svc = OrgService(database: db, keystoreRoot: keystoreRoot)
+        _ = try svc.createPersonalOrg(displayName: "Alice")
+
+        let org = try db.readOrg()!
+        let self_ = (try db.readTeamMembers(orgID: org.id))[0]
+
+        let knownPubHex = knownPriv.publicKey.rawRepresentation
+            .map { String(format: "%02x", $0) }.joined()
+        XCTAssertEqual(self_.pubkeyHex, knownPubHex)
+
+        // Existing X25519 file untouched (bytes equal pre-written sentinel).
+        let onDisk = try TeamKeystore.readX25519Private(at: keystoreRoot)
+        XCTAssertEqual(onDisk, knownPriv.rawRepresentation)
     }
 
     // MARK: - Helpers

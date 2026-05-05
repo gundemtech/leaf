@@ -18,15 +18,19 @@ import Security
 /// (idempotency guard видит `readOrg() == nil` → atomic write поверх).
 ///
 /// Inject'абельные factories `now` / `randomBytes` / `randomUUID` /
-/// `randomX25519PrivateKey` — deterministic test round-trip (см. OrgServiceTests
-/// test 12).
+/// `identity` — deterministic test round-trip (см. OrgServiceTests
+/// test 12). Default `identity` делегирует X25519 bootstrap в
+/// `IdentityService.ensureLocalIdentity` (idempotent read-or-generate);
+/// caller path остаётся behaviorally identical с предыдущей inline-генерацией,
+/// но второй `createPersonalOrg` после wipe-DB-but-not-keystore теперь
+/// preserves identity вместо overwrite (см. spec §4 tradeoffs).
 public struct OrgService: Sendable {
     private let database: Database
     private let keystoreRoot: URL
     private let now: @Sendable () -> Date
     private let randomBytes: @Sendable (Int) throws -> Data
     private let randomUUID: @Sendable () -> String
-    private let randomX25519PrivateKey: @Sendable () -> Curve25519.KeyAgreement.PrivateKey
+    private let identity: @Sendable () throws -> Curve25519.KeyAgreement.PrivateKey
 
     public init(
         database: Database,
@@ -34,15 +38,17 @@ public struct OrgService: Sendable {
         now: @escaping @Sendable () -> Date = { Date() },
         randomBytes: @escaping @Sendable (Int) throws -> Data = OrgService.secureRandom,
         randomUUID: @escaping @Sendable () -> String = { UUID().uuidString.lowercased() },
-        randomX25519PrivateKey: @escaping @Sendable () -> Curve25519.KeyAgreement.PrivateKey
-            = { Curve25519.KeyAgreement.PrivateKey() }
+        identity: (@Sendable () throws -> Curve25519.KeyAgreement.PrivateKey)? = nil
     ) {
         self.database = database
         self.keystoreRoot = keystoreRoot
         self.now = now
         self.randomBytes = randomBytes
         self.randomUUID = randomUUID
-        self.randomX25519PrivateKey = randomX25519PrivateKey
+        // Default factory captures `keystoreRoot` — Swift не позволяет referring
+        // другим init params в default-arg expression, отсюда Optional-resolved-
+        // in-body pattern.
+        self.identity = identity ?? { try IdentityService.ensureLocalIdentity(at: keystoreRoot) }
     }
 
     /// Throws:
@@ -65,12 +71,14 @@ public struct OrgService: Sendable {
         let orgID = randomUUID()
         let teamKeyID = randomUUID()
 
-        // Step 4 — keys.
-        let privKey = randomX25519PrivateKey()
+        // Step 4 — keys. `identity()` reads existing X25519 priv ИЛИ
+        // generates+atomically writes (per IdentityService). On read path
+        // файл уже на диске; на gen path IdentityService persisted его сам.
+        // OrgService больше не пишет X25519 (ownership moved to IdentityService).
+        let privKey = try identity()
         let teamKeyBytes = try randomBytes(TeamKeystore.teamKeyLength)
 
-        // Step 5 — keystore writes first.
-        try TeamKeystore.writeX25519Private(privKey.rawRepresentation, at: keystoreRoot)
+        // Step 5 — keystore write для teamKey (X25519 уже на диске после step 4).
         try TeamKeystore.writeTeamKey(teamKeyBytes, id: teamKeyID, at: keystoreRoot)
 
         // Step 6 — value types.
