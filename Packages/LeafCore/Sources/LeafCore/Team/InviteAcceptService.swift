@@ -93,8 +93,21 @@ public struct InviteAcceptService: Sendable {
         // 5. Derive wrap key with OTP salt.
         let wrapKey = try inviteKDF.deriveWrapKey(sharedSecret: shared, otp: otp)
 
-        // 6. Decode blob (AES-GCM tag fail → inviteOTPInvalid in codec).
-        let plaintext = try inviteBlobCodec.decode(blob, wrapKey: wrapKey)
+        // 6. Decode blob. Прод-кодек conflates AES-GCM tag fail / JSON parse /
+        //    short-cipher с одним `.inviteBlobMalformed` (moat — generic error,
+        //    no info-string leak per decomposition §8). Здесь мы wrap'ом
+        //    re-classify пост-peek decode failure как `.inviteOTPInvalid` —
+        //    invitee видит retry-able "OTP doesn't match" UX. Header peek (выше)
+        //    сохраняет .inviteBlobMalformed для structural failures (truncated
+        //    bytes / wrong version) — non-recoverable.
+        let plaintext: InvitePlaintext
+        do {
+            plaintext = try inviteBlobCodec.decode(blob, wrapKey: wrapKey)
+        } catch LeafError.inviteOTPInvalid {
+            throw LeafError.inviteOTPInvalid
+        } catch LeafError.inviteBlobMalformed {
+            throw LeafError.inviteOTPInvalid
+        }
 
         // 7. Decode teamKey base64 (32B AES-256 key bytes).
         guard let teamKeyBytes = Data(base64Encoded: plaintext.teamKeyBase64),
