@@ -128,43 +128,30 @@ public actor RelayClient: Sendable {
 
     private func parseInviteToken(from data: Data) throws -> InviteToken {
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let token = obj["token"] as? String,
-              let expiresAny = obj["expires_at_ms"]
+              let token = obj["token"] as? String
         else {
             throw LeafError.relayUnreachable(reason: "malformed-response")
         }
-        let expiresAtMs: Int64
-        if let v = expiresAny as? Int64 {
-            expiresAtMs = v
-        } else if let v = expiresAny as? Int {
-            expiresAtMs = Int64(v)
-        } else if let v = expiresAny as? NSNumber {
-            expiresAtMs = v.int64Value
-        } else {
-            throw LeafError.relayUnreachable(reason: "malformed-response")
-        }
+        let expiresAtMs = try parseInt64(obj["expires_at_ms"])
         return InviteToken(value: token, expiresAtMs: expiresAtMs)
     }
 
     private func parseInviteFetched(from data: Data) throws -> InviteFetched {
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let blobStr = obj["blob"] as? String,
-              let blobBytes = Data(base64URLNoPad: blobStr),
-              let expiresAny = obj["expires_at_ms"]
+              let blobBytes = Data(base64URLNoPad: blobStr)
         else {
             throw LeafError.relayUnreachable(reason: "malformed-response")
         }
-        let expiresAtMs: Int64
-        if let v = expiresAny as? Int64 {
-            expiresAtMs = v
-        } else if let v = expiresAny as? Int {
-            expiresAtMs = Int64(v)
-        } else if let v = expiresAny as? NSNumber {
-            expiresAtMs = v.int64Value
-        } else {
-            throw LeafError.relayUnreachable(reason: "malformed-response")
-        }
+        let expiresAtMs = try parseInt64(obj["expires_at_ms"])
         return InviteFetched(blob: blobBytes, expiresAtMs: expiresAtMs)
+    }
+
+    private func parseInt64(_ value: Any?) throws -> Int64 {
+        if let v = value as? Int64 { return v }
+        if let v = value as? Int { return Int64(v) }
+        if let v = value as? NSNumber { return v.int64Value }
+        throw LeafError.relayUnreachable(reason: "malformed-response")
     }
 }
 

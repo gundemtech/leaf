@@ -104,9 +104,11 @@ struct GenerateInviteSheet: View {
                 Divider().opacity(0.3)
 
                 HStack {
-                    Text(countdownText(expiresAtMs: outbound.expiresAtMs))
-                        .font(.leafCaption)
-                        .foregroundStyle(.leafInk.opacity(0.6))
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        Text(countdownText(expiresAtMs: outbound.expiresAtMs, now: context.date))
+                            .font(.leafCaption)
+                            .foregroundStyle(.leafInk.opacity(0.6))
+                    }
                     Spacer()
                 }
             }
@@ -166,14 +168,18 @@ struct GenerateInviteSheet: View {
         return "\(otp[..<i]) · \(otp[i...])"
     }
 
-    private func countdownText(expiresAtMs: Int64) -> String {
-        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+    private func countdownText(expiresAtMs: Int64, now: Date = Date()) -> String {
+        let nowMs = Int64(now.timeIntervalSince1970 * 1000)
         let remainingSec = max(0, (expiresAtMs - nowMs) / 1000)
         let h = remainingSec / 3600
         let m = (remainingSec % 3600) / 60
+        let s = remainingSec % 60
         if h > 0 {
             return "Expires in \(h)h \(m)m"
         }
-        return "Expires in \(m)m"
+        if m > 0 {
+            return "Expires in \(m)m \(s)s"
+        }
+        return remainingSec > 0 ? "Expires in \(s)s" : "Expired"
     }
 }
