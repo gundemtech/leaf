@@ -64,13 +64,92 @@ public struct InviteAcceptService: Sendable {
 
     /// Decrypts blob with derived wrapKey (ECDH(invitee_priv, admin_pub_from_header) +
     /// KDF(otp)) → materializes org/team_members/team_keys + writes teamKey file.
-    /// Throws orgAlreadyExists / inviteOTPInvalid / inviteBlobMalformed / inviteAlreadyAccepted.
+    /// Throws inviteAlreadyAccepted / inviteOTPInvalid / inviteBlobMalformed.
     public func acceptInvite(
         blob: InviteBlob,
         otp: String,
         displayName: String
     ) async throws -> AcceptedInvite {
-        throw LeafError.notImplemented
+        // 1. Preflight — non-empty displayName + single-org-per-device invariant.
+        let trimmedDN = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedDN.isEmpty else {
+            throw LeafError.invalidPayload
+        }
+        guard try database.readOrg() == nil else {
+            throw LeafError.inviteAlreadyAccepted
+        }
+
+        // 2. Identity (idempotent X25519 priv).
+        let priv = try identity()
+
+        // 3. Peek admin pubkey from blob header.
+        let header = try InviteBlobHeader.peek(from: blob)
+        let adminPubHex = header.adminPubkey.map { String(format: "%02x", $0) }.joined()
+
+        // 4. ECDH (symmetric — same shared secret as admin computed).
+        let shared = try KeyAgreement.sharedSecret(privateKey: priv,
+                                                   peerPublicKeyHex: adminPubHex)
+
+        // 5. Derive wrap key with OTP salt.
+        let wrapKey = try inviteKDF.deriveWrapKey(sharedSecret: shared, otp: otp)
+
+        // 6. Decode blob (AES-GCM tag fail → inviteOTPInvalid in codec).
+        let plaintext = try inviteBlobCodec.decode(blob, wrapKey: wrapKey)
+
+        // 7. Decode teamKey base64 (32B AES-256 key bytes).
+        guard let teamKeyBytes = Data(base64Encoded: plaintext.teamKeyBase64),
+              teamKeyBytes.count == 32 else {
+            throw LeafError.inviteBlobMalformed
+        }
+
+        // 8. Self pubkey hex (lowercase).
+        let selfPubHex = priv.publicKey.rawRepresentation
+            .map { String(format: "%02x", $0) }.joined()
+
+        // 9. Build domain rows.
+        let acceptedAt = now()
+        let issuedAt = Date(timeIntervalSince1970: TimeInterval(plaintext.issuedAtMs) / 1000)
+        let org = Org(id: plaintext.orgID,
+                      name: plaintext.orgName,
+                      createdAt: issuedAt,
+                      createdByMemberID: plaintext.adminMemberID)
+        let adminMember = TeamMember(id: plaintext.adminMemberID,
+                                     orgID: plaintext.orgID,
+                                     role: .admin,
+                                     pubkeyHex: adminPubHex,
+                                     displayName: plaintext.adminDisplayName,
+                                     addedAt: issuedAt,
+                                     removedAt: nil)
+        let selfMemberID = generateMemberID()
+        let selfMember = TeamMember(id: selfMemberID,
+                                    orgID: plaintext.orgID,
+                                    role: .member,
+                                    pubkeyHex: selfPubHex,
+                                    displayName: trimmedDN,
+                                    addedAt: acceptedAt,
+                                    removedAt: nil)
+        let teamKey = TeamKey(id: plaintext.teamKeyID,
+                              generatedAt: issuedAt,
+                              deprecatedAt: nil,
+                              generatedByMemberID: plaintext.adminMemberID)
+
+        // 10. Keystore-first (orphan file < orphan DB rows). Mirror OrgService
+        //     ordering — corrupted state stays observable, никаких silent
+        //     auto-cleanup'ов.
+        try TeamKeystore.writeTeamKey(teamKeyBytes,
+                                      id: plaintext.teamKeyID,
+                                      at: keystoreRoot)
+
+        // 11. DB writes (sequential — mirror OrgService.createPersonalOrg).
+        try database.upsertOrg(org)
+        try database.insertTeamMember(adminMember)
+        try database.insertTeamMember(selfMember)
+        try database.insertTeamKey(teamKey)
+
+        return AcceptedInvite(orgID: plaintext.orgID,
+                              orgName: plaintext.orgName,
+                              teamKeyID: plaintext.teamKeyID,
+                              selfMemberID: selfMemberID)
     }
 }
 

@@ -44,8 +44,42 @@ private final class StubInviteBlobCodec: InviteBlobCodec, @unchecked Sendable {
         fatalError("unused in accept path")
     }
     func decode(_ blob: InviteBlob, wrapKey: SymmetricKey) throws -> InvitePlaintext {
-        fatalError("acceptInvite tests in C3 inject specific decode behavior")
+        fatalError("acceptInvite tests use RecordingAcceptCodec")
     }
+}
+
+/// Programmable codec для acceptInvite tests — capture wrapKey + return stub
+/// plaintext (or throw).
+private final class RecordingAcceptCodec: InviteBlobCodec, @unchecked Sendable {
+    var stubPlaintext: InvitePlaintext?
+    var decodeError: Error?
+    var capturedWrapKey: SymmetricKey?
+    var decodeCalls: Int = 0
+
+    func encode(_ plaintext: InvitePlaintext, adminPubkey: Data, wrapKey: SymmetricKey) throws -> InviteBlob {
+        fatalError("encode unused in accept path")
+    }
+
+    func decode(_ blob: InviteBlob, wrapKey: SymmetricKey) throws -> InvitePlaintext {
+        decodeCalls += 1
+        capturedWrapKey = wrapKey
+        if let e = decodeError { throw e }
+        guard let pt = stubPlaintext else { throw LeafError.inviteBlobMalformed }
+        return pt
+    }
+}
+
+/// Build a syntactically-valid blob (≥33B, version 0x02) that passes
+/// `InviteBlobHeader.peek`. Bytes after the 33-byte prefix are arbitrary —
+/// our RecordingAcceptCodec doesn't actually decrypt, just returns stub.
+private func makeStubBlob(adminPubkey: Data) -> InviteBlob {
+    var bytes = Data()
+    bytes.append(0x02)                                  // version
+    bytes.append(adminPubkey)                           // 32B
+    bytes.append(Data(repeating: 0xCC, count: 12))      // nonce
+    bytes.append(Data(repeating: 0xDD, count: 80))      // ciphertext
+    bytes.append(Data(repeating: 0xEE, count: 16))      // tag
+    return InviteBlob(bytes: bytes)
 }
 
 final class InviteAcceptServiceTests: XCTestCase {
@@ -88,6 +122,36 @@ final class InviteAcceptServiceTests: XCTestCase {
             now: { Date(timeIntervalSince1970: 1_700_000_000) },
             identity: { Curve25519.KeyAgreement.PrivateKey() },
             generateMemberID: { "fixed-member-id" }
+        )
+    }
+
+    private func makeAcceptService(
+        codec: any InviteBlobCodec,
+        identity: @Sendable @escaping () throws -> Curve25519.KeyAgreement.PrivateKey,
+        nowMs: Int64 = 1_700_000_000_000
+    ) -> InviteAcceptService {
+        InviteAcceptService(
+            database: db,
+            relayClient: makeRelayClient(),
+            inviteKDF: StubInviteKDF(),
+            inviteBlobCodec: codec,
+            keystoreRoot: keystoreRoot,
+            now: { Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000) },
+            identity: identity,
+            generateMemberID: { "11111111-1111-4111-8111-111111111111" }
+        )
+    }
+
+    private func sampleInvitePlaintext(orgID: String, teamKeyID: String, adminID: String,
+                                       teamKeyBase64: String) -> InvitePlaintext {
+        InvitePlaintext(
+            teamKeyBase64: teamKeyBase64,
+            teamKeyID: teamKeyID,
+            orgID: orgID,
+            orgName: "Acme Org",
+            adminMemberID: adminID,
+            adminDisplayName: "Admin",
+            issuedAtMs: 1_699_999_900_000
         )
     }
 
@@ -148,5 +212,167 @@ final class InviteAcceptServiceTests: XCTestCase {
         } catch LeafError.invalidPayload {
             // ok
         }
+    }
+
+    // MARK: - acceptInvite
+
+    func testAcceptInvite_HappyPath_MaterializesRowsAndKeystoreFile() async throws {
+        let inviteePriv = Curve25519.KeyAgreement.PrivateKey()
+        let adminPriv = Curve25519.KeyAgreement.PrivateKey()
+        let adminPub = adminPriv.publicKey.rawRepresentation
+        let blob = makeStubBlob(adminPubkey: adminPub)
+
+        let teamKeyBytes = Data(repeating: 0x42, count: 32)
+        let orgID = "00000000-0000-4000-8000-0000000000aa"
+        let teamKeyID = "00000000-0000-4000-8000-0000000000bb"
+        let adminID = "00000000-0000-4000-8000-0000000000cc"
+        let codec = RecordingAcceptCodec()
+        codec.stubPlaintext = sampleInvitePlaintext(orgID: orgID, teamKeyID: teamKeyID,
+                                                    adminID: adminID,
+                                                    teamKeyBase64: teamKeyBytes.base64EncodedString())
+
+        let svc = makeAcceptService(codec: codec, identity: { inviteePriv })
+        let accepted = try await svc.acceptInvite(blob: blob, otp: "123456", displayName: "  Bob  ")
+
+        XCTAssertEqual(accepted.orgID, orgID)
+        XCTAssertEqual(accepted.orgName, "Acme Org")
+        XCTAssertEqual(accepted.teamKeyID, teamKeyID)
+        XCTAssertEqual(accepted.selfMemberID, "11111111-1111-4111-8111-111111111111")
+
+        // DB rows
+        let org = try XCTUnwrap(db.readOrg())
+        XCTAssertEqual(org.id, orgID)
+        XCTAssertEqual(org.name, "Acme Org")
+        XCTAssertEqual(org.createdByMemberID, adminID)
+
+        let members = try db.readTeamMembers(orgID: orgID)
+        XCTAssertEqual(members.count, 2)
+        let admin = try XCTUnwrap(members.first(where: { $0.id == adminID }))
+        XCTAssertEqual(admin.role, .admin)
+        XCTAssertEqual(admin.displayName, "Admin")
+        XCTAssertEqual(admin.pubkeyHex,
+                       adminPub.map { String(format: "%02x", $0) }.joined())
+        let me = try XCTUnwrap(members.first(where: { $0.id == accepted.selfMemberID }))
+        XCTAssertEqual(me.role, .member)
+        XCTAssertEqual(me.displayName, "Bob")
+        XCTAssertEqual(me.pubkeyHex,
+                       inviteePriv.publicKey.rawRepresentation.map { String(format: "%02x", $0) }.joined())
+
+        let activeKey = try XCTUnwrap(db.readActiveTeamKey())
+        XCTAssertEqual(activeKey.id, teamKeyID)
+
+        // Keystore file
+        let onDisk = try TeamKeystore.readTeamKey(id: teamKeyID, at: keystoreRoot)
+        XCTAssertEqual(onDisk, teamKeyBytes)
+
+        // Codec wired correctly
+        XCTAssertEqual(codec.decodeCalls, 1)
+        XCTAssertNotNil(codec.capturedWrapKey)
+    }
+
+    func testAcceptInvite_WrongOTP_LeavesDBUntouched() async throws {
+        let adminPriv = Curve25519.KeyAgreement.PrivateKey()
+        let blob = makeStubBlob(adminPubkey: adminPriv.publicKey.rawRepresentation)
+
+        let codec = RecordingAcceptCodec()
+        codec.decodeError = LeafError.inviteOTPInvalid
+
+        let svc = makeAcceptService(codec: codec, identity: { Curve25519.KeyAgreement.PrivateKey() })
+        do {
+            _ = try await svc.acceptInvite(blob: blob, otp: "000000", displayName: "Bob")
+            XCTFail("expected inviteOTPInvalid")
+        } catch LeafError.inviteOTPInvalid {
+            // ok
+        }
+
+        XCTAssertNil(try db.readOrg())
+        // No keystore file written.
+        let dir = try? FileManager.default.contentsOfDirectory(atPath: keystoreRoot.path)
+        XCTAssertTrue(dir == nil || dir!.isEmpty,
+                      "keystore root should be empty when decode fails before write")
+    }
+
+    func testAcceptInvite_OrgAlreadyExists_RefusedBeforeCrypto() async throws {
+        // Pre-seed an org row.
+        let existingOrgID = UUID().uuidString.lowercased()
+        let existingMemberID = UUID().uuidString.lowercased()
+        try db.upsertOrg(Org(id: existingOrgID, name: "Existing",
+                              createdAt: Date(timeIntervalSince1970: 1_699_000_000),
+                              createdByMemberID: existingMemberID))
+
+        let adminPriv = Curve25519.KeyAgreement.PrivateKey()
+        let blob = makeStubBlob(adminPubkey: adminPriv.publicKey.rawRepresentation)
+        let codec = RecordingAcceptCodec()
+        codec.stubPlaintext = sampleInvitePlaintext(orgID: "x", teamKeyID: "y", adminID: "z",
+                                                    teamKeyBase64: Data(repeating: 0, count: 32).base64EncodedString())
+
+        let svc = makeAcceptService(codec: codec, identity: { Curve25519.KeyAgreement.PrivateKey() })
+        do {
+            _ = try await svc.acceptInvite(blob: blob, otp: "123456", displayName: "Bob")
+            XCTFail("expected inviteAlreadyAccepted")
+        } catch LeafError.inviteAlreadyAccepted {
+            // ok
+        }
+
+        // Codec must NOT have been called — preflight rejected.
+        XCTAssertEqual(codec.decodeCalls, 0)
+        // Original org row untouched.
+        let org = try XCTUnwrap(db.readOrg())
+        XCTAssertEqual(org.id, existingOrgID)
+    }
+
+    func testAcceptInvite_TruncatedBlob_ThrowsInviteBlobMalformed() async throws {
+        // < 33 bytes — InviteBlobHeader.peek throws.
+        let truncated = InviteBlob(bytes: Data([0x02] + Array(repeating: UInt8(0), count: 10)))
+        let codec = RecordingAcceptCodec()
+        let svc = makeAcceptService(codec: codec, identity: { Curve25519.KeyAgreement.PrivateKey() })
+
+        do {
+            _ = try await svc.acceptInvite(blob: truncated, otp: "123456", displayName: "Bob")
+            XCTFail("expected inviteBlobMalformed")
+        } catch LeafError.inviteBlobMalformed {
+            // ok
+        }
+        XCTAssertEqual(codec.decodeCalls, 0)
+    }
+
+    func testAcceptInvite_BadTeamKeyBase64_ThrowsInviteBlobMalformed() async throws {
+        let adminPriv = Curve25519.KeyAgreement.PrivateKey()
+        let blob = makeStubBlob(adminPubkey: adminPriv.publicKey.rawRepresentation)
+        let codec = RecordingAcceptCodec()
+        // Plaintext where teamKeyBase64 doesn't decode to 32 bytes.
+        codec.stubPlaintext = InvitePlaintext(
+            teamKeyBase64: "not-valid-base64!!!",
+            teamKeyID: "kid",
+            orgID: "oid",
+            orgName: "Acme",
+            adminMemberID: "aid",
+            adminDisplayName: "Admin",
+            issuedAtMs: 1_700_000_000_000
+        )
+
+        let svc = makeAcceptService(codec: codec, identity: { Curve25519.KeyAgreement.PrivateKey() })
+        do {
+            _ = try await svc.acceptInvite(blob: blob, otp: "123456", displayName: "Bob")
+            XCTFail("expected inviteBlobMalformed")
+        } catch LeafError.inviteBlobMalformed {
+            // ok
+        }
+        XCTAssertNil(try db.readOrg())
+    }
+
+    func testAcceptInvite_EmptyDisplayName_RejectedAsInvalidPayload() async throws {
+        let adminPriv = Curve25519.KeyAgreement.PrivateKey()
+        let blob = makeStubBlob(adminPubkey: adminPriv.publicKey.rawRepresentation)
+        let codec = RecordingAcceptCodec()
+        let svc = makeAcceptService(codec: codec, identity: { Curve25519.KeyAgreement.PrivateKey() })
+
+        do {
+            _ = try await svc.acceptInvite(blob: blob, otp: "123456", displayName: "   ")
+            XCTFail("expected invalidPayload")
+        } catch LeafError.invalidPayload {
+            // ok
+        }
+        XCTAssertEqual(codec.decodeCalls, 0)
     }
 }
