@@ -16,4 +16,7 @@ public enum LeafError: Error, Sendable {
     case relayUnreachable(reason: String)
     case inviteNotFound
     case inviteRequestRejected(reason: String)
+    // Phase 5.2.E (consumer: InviteAcceptService) — single-org-per-device invariant
+    // means accept-flow refuses if local DB already has an org row.
+    case inviteAlreadyAccepted
 }
