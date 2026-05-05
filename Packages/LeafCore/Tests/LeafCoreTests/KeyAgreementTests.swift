@@ -64,7 +64,7 @@ final class KeyAgreementTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func assertInvalidPayload(_ error: Error, file: StaticString = #file, line: UInt = #line) {
+    private func assertInvalidPayload(_ error: Error, file: StaticString = #filePath, line: UInt = #line) {
         guard let leafError = error as? LeafError else {
             XCTFail("Expected LeafError, got \(error)", file: file, line: line)
             return
