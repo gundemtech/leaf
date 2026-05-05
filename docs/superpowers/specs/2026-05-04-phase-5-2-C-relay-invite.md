@@ -294,7 +294,7 @@ Exact log strings:
 | 405 | `405 invite-method-not-allowed` |
 | 413 | `413 invite-raw-too-large`, `413 invite-blob-too-large` |
 | 415 | `415 invite-bad-content-type` |
-| 500 | `500 invite-kv-put-failed`, `500 invite-kv-delete-failed` |
+| 500 | `500 invite-kv-put-failed`, `500 invite-kv-delete-failed`, `500 invite-kv-corrupt` |
 
 Code review (Stage 6) explicitly checks that no logger call captures user input.
 
