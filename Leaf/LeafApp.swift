@@ -104,6 +104,8 @@ struct LeafApp: App {
                 .environment(permissions)
                 .environment(updater)
                 .environment(reader)
+                .environment(orgReader)
+                .environment(inviteAcceptReader)
                 .environment(windowState)
         }
         .menuBarExtraStyle(.window)
