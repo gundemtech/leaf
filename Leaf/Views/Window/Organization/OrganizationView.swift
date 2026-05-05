@@ -4,6 +4,7 @@ import LeafCore
 struct OrganizationView: View {
     @Environment(OrgReader.self) private var reader
     @State private var nameInput: String = ""
+    @State private var showingAcceptSheet: Bool = false
 
     var body: some View {
         ScrollView {
@@ -15,6 +16,9 @@ struct OrganizationView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear { reader.refresh() }
+        .sheet(isPresented: $showingAcceptSheet) {
+            AcceptInviteSheet()
+        }
     }
 
     @ViewBuilder
@@ -72,6 +76,21 @@ struct OrganizationView: View {
                 }
             }
             .frame(maxWidth: 580, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 12) {
+                Divider().opacity(0.3)
+                    .frame(maxWidth: 580)
+                Text("OR JOIN A TEAM")
+                    .leafLabelStyle()
+                Text("If a teammate invited you, accept the invite instead.")
+                    .font(.leafBody)
+                    .foregroundStyle(.leafInk.opacity(0.75))
+                Button(action: { showingAcceptSheet = true }) {
+                    Text("Accept invite")
+                }
+                .buttonStyle(.bordered)
+            }
+            .padding(.top, 4)
         }
     }
 

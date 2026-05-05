@@ -25,6 +25,7 @@ struct LeafApp: App {
     @State private var reader = InsightsReader()
     @State private var orgReader = OrgReader()
     @State private var inviteOutboxReader = InviteOutboxReader()
+    @State private var inviteAcceptReader = InviteAcceptReader()
     @State private var windowState = WindowState()
 
     init() {
@@ -85,6 +86,7 @@ struct LeafApp: App {
                 .environment(reader)
                 .environment(orgReader)
                 .environment(inviteOutboxReader)
+                .environment(inviteAcceptReader)
                 .environment(windowState)
         }
         .defaultSize(width: 1100, height: 720)
