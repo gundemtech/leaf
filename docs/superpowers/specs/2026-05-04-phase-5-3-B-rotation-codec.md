@@ -215,7 +215,7 @@ public struct UnimplementedRotationBlobCodec: RotationBlobCodec {
 
 ```swift
 public protocol RotationKDF: Sendable {
-    /// HKDF-SHA256 over (sharedSecret, salt = newKeyID, info = "...rotation.wrapkey.v1").
+    /// HKDF-SHA256 derivation; salt = `newKeyID` raw bytes, info = moat constant.
     /// `newKeyID` MUST be exactly 16B raw UUID; throws `LeafError.invalidPayload` otherwise.
     func deriveWrapKey(sharedSecret: SharedSecret, newKeyID: Data) throws -> SymmetricKey
 }
