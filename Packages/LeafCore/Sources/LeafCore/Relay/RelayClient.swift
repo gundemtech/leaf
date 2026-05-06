@@ -165,6 +165,27 @@ public actor RelayClient: Sendable {
         }
     }
 
+    public func fetchPendingRotations(forPeerPubkeyHex peerPubkeyHex: String) async throws -> [RotationFetched] {
+        var request = URLRequest(url: baseURL.appendingPathComponent("v1/key-rotation/by-peer/\(peerPubkeyHex)"))
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let (data, http) = try await send(request)
+
+        switch http.statusCode {
+        case 200:
+            return try parseRotationsArray(from: data)
+        case 400:
+            throw LeafError.rotationRequestRejected(reason: "bad-input")
+        case 405:
+            throw LeafError.rotationRequestRejected(reason: "method")
+        case 500:
+            throw LeafError.relayUnreachable(reason: "server-error")
+        default:
+            throw LeafError.relayUnreachable(reason: "malformed-response")
+        }
+    }
+
     // MARK: - Internals
 
     private func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
@@ -217,6 +238,29 @@ public actor RelayClient: Sendable {
         }
         let expiresAtMs = try parseInt64(obj["expires_at_ms"])
         return RotationToken(value: token, expiresAtMs: expiresAtMs)
+    }
+
+    private func parseRotationsArray(from data: Data) throws -> [RotationFetched] {
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let arr = obj["rotations"] as? [[String: Any]]
+        else {
+            throw LeafError.relayUnreachable(reason: "malformed-response")
+        }
+        var result: [RotationFetched] = []
+        result.reserveCapacity(arr.count)
+        for item in arr {
+            guard let rotationID = item["rotation_id"] as? String,
+                  let blobStr = item["blob"] as? String,
+                  let blobBytes = Data(base64URLNoPad: blobStr)
+            else {
+                throw LeafError.relayUnreachable(reason: "malformed-response")
+            }
+            let expiresAtMs = try parseInt64(item["expires_at_ms"])
+            result.append(RotationFetched(rotationID: rotationID,
+                                          blob: blobBytes,
+                                          expiresAtMs: expiresAtMs))
+        }
+        return result
     }
 }
 

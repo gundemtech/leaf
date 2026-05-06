@@ -219,4 +219,108 @@ final class RelayClientRotationTests: XCTestCase {
             XCTFail("wrong error: \(error)")
         }
     }
+
+    // MARK: - fetchPendingRotations
+
+    func testFetchPendingRotations_200_EmptyArray_ReturnsEmpty() async throws {
+        RelayMockURLProtocol.handler = { req, _ in
+            let body = #"{"rotations":[]}"#.data(using: .utf8)!
+            return (self.httpResponse(200, url: req.url), body)
+        }
+        let client = makeClient()
+        let result = try await client.fetchPendingRotations(forPeerPubkeyHex: validPubkeyHex)
+        XCTAssertEqual(result, [])
+    }
+
+    func testFetchPendingRotations_200_PopulatedArray_ReturnsItems() async throws {
+        // Two rotations; "3q2-7w" decodes to [0xDE,0xAD,0xBE,0xEF].
+        RelayMockURLProtocol.handler = { req, _ in
+            let body = #"""
+            {"rotations":[
+                {"rotation_id":"rot_one","blob":"3q2-7w","expires_at_ms":1700000000000},
+                {"rotation_id":"rot_two","blob":"AQID","expires_at_ms":1700000999999}
+            ]}
+            """#.data(using: .utf8)!
+            return (self.httpResponse(200, url: req.url), body)
+        }
+        let client = makeClient()
+        let result = try await client.fetchPendingRotations(forPeerPubkeyHex: validPubkeyHex)
+        XCTAssertEqual(result.count, 2)
+        XCTAssertEqual(result[0].rotationID, "rot_one")
+        XCTAssertEqual(Array(result[0].blob), [0xDE, 0xAD, 0xBE, 0xEF])
+        XCTAssertEqual(result[0].expiresAtMs, 1_700_000_000_000)
+        XCTAssertEqual(result[1].rotationID, "rot_two")
+        XCTAssertEqual(Array(result[1].blob), [0x01, 0x02, 0x03])
+        XCTAssertEqual(result[1].expiresAtMs, 1_700_000_999_999)
+    }
+
+    func testFetchPendingRotations_SendsCorrectURLPath() async throws {
+        RelayMockURLProtocol.handler = { req, _ in
+            let body = #"{"rotations":[]}"#.data(using: .utf8)!
+            return (self.httpResponse(200, url: req.url), body)
+        }
+        let client = makeClient()
+        _ = try await client.fetchPendingRotations(forPeerPubkeyHex: validPubkeyHex)
+        let req = try XCTUnwrap(RelayMockURLProtocol.lastRequest)
+        XCTAssertEqual(req.url?.path, "/v1/key-rotation/by-peer/\(validPubkeyHex)")
+        XCTAssertEqual(req.httpMethod, "GET")
+    }
+
+    func testFetchPendingRotations_400_ThrowsRotationRequestRejected_BadInput() async {
+        RelayMockURLProtocol.handler = { req, _ in (self.httpResponse(400, url: req.url), nil) }
+        let client = makeClient()
+        do {
+            _ = try await client.fetchPendingRotations(forPeerPubkeyHex: validPubkeyHex)
+            XCTFail("expected throw")
+        } catch let LeafError.rotationRequestRejected(reason) {
+            XCTAssertEqual(reason, "bad-input")
+        } catch {
+            XCTFail("wrong error: \(error)")
+        }
+    }
+
+    func testFetchPendingRotations_500_ThrowsRelayUnreachable_ServerError() async {
+        RelayMockURLProtocol.handler = { req, _ in (self.httpResponse(500, url: req.url), nil) }
+        let client = makeClient()
+        do {
+            _ = try await client.fetchPendingRotations(forPeerPubkeyHex: validPubkeyHex)
+            XCTFail("expected throw")
+        } catch let LeafError.relayUnreachable(reason) {
+            XCTAssertEqual(reason, "server-error")
+        } catch {
+            XCTFail("wrong error: \(error)")
+        }
+    }
+
+    func testFetchPendingRotations_MalformedResponseBody_ThrowsRelayUnreachable_MalformedResponse() async {
+        RelayMockURLProtocol.handler = { req, _ in
+            let bogus = "not-json".data(using: .utf8)!
+            return (self.httpResponse(200, url: req.url), bogus)
+        }
+        let client = makeClient()
+        do {
+            _ = try await client.fetchPendingRotations(forPeerPubkeyHex: validPubkeyHex)
+            XCTFail("expected throw")
+        } catch let LeafError.relayUnreachable(reason) {
+            XCTAssertEqual(reason, "malformed-response")
+        } catch {
+            XCTFail("wrong error: \(error)")
+        }
+    }
+
+    func testFetchPendingRotations_MissingRotationsKey_ThrowsRelayUnreachable_MalformedResponse() async {
+        RelayMockURLProtocol.handler = { req, _ in
+            let body = #"{"other":"shape"}"#.data(using: .utf8)!
+            return (self.httpResponse(200, url: req.url), body)
+        }
+        let client = makeClient()
+        do {
+            _ = try await client.fetchPendingRotations(forPeerPubkeyHex: validPubkeyHex)
+            XCTFail("expected throw")
+        } catch let LeafError.relayUnreachable(reason) {
+            XCTAssertEqual(reason, "malformed-response")
+        } catch {
+            XCTFail("wrong error: \(error)")
+        }
+    }
 }
