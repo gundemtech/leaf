@@ -258,6 +258,25 @@ enum AgentMain {
             }
         }
 
+        // Phase 5.3.E — periodic peer-side rotation fetch + opportunistic outbox resume.
+        // Drains relay's /v1/key-rotation/by-peer/* mailbox, peek-discriminates rotation
+        // vs tombstone, installs idempotently via insertTeamKeyIfAbsent + deprecateTeamKey
+        // (or markTeamMemberRemoved для self-tombstone). Mirror MaintenanceScheduler
+        // actor pattern. Reuses 5.3.D rotationRelayClient/Codec/KDF instances.
+        let rotationFetchService = RotationFetchService(
+            database: database,
+            relayClient: rotationRelayClient,
+            rotationKDF: rotationKDF,
+            rotationBlobCodec: rotationBlobCodec
+        )
+        let rotationFetchScheduler = RotationFetchScheduler(
+            fetchService: rotationFetchService,
+            keyRotationService: keyRotationService,
+            intervalSec: agentThresholds.rotationFetchIntervalSec,
+            logger: agentLogger
+        )
+        AgentLifetime.rotationFetchScheduler = rotationFetchScheduler
+
         // Kick off writer + collectors + scheduler.
         // `start()` на writer/idle — fire-and-forget Task внутри; на activeApp — запускаем
         // через DispatchQueue.main.async чтобы NSWorkspace observer'у был доступен main runloop.
@@ -270,6 +289,7 @@ enum AgentMain {
         if let lc = linearCollector { Task { await lc.start() } }
         if let gc = githubCollector { Task { await gc.start() } }
         if let sc = slackCollector { Task { await sc.start() } }
+        Task { await rotationFetchScheduler.start() }
 
         // Shutdown порядок: maintenance → fsEvents → claudeCode → linear → github → slack → writer.
         // fsEvents первым из collectors — закрываем приём callback'ов до того как
@@ -280,6 +300,9 @@ enum AgentMain {
         // chain'а minimizes overall stop latency. writer последним — drain буфера
         // attention/idle в DB перед exit.
         installSignalHandlers {
+            // Phase 5.3.E — stop rotationFetchScheduler first (independent from writer
+            // chain; safe to drain while collectors still emit).
+            if let r = AgentLifetime.rotationFetchScheduler { await r.stop() }
             if let m = AgentLifetime.maintenance { await m.stop() }
             if let f = AgentLifetime.fsEventsCollector { await f.stop() }
             if let c = AgentLifetime.claudeCodeCollector { await c.stop() }
@@ -313,4 +336,6 @@ enum AgentLifetime {
     nonisolated(unsafe) static var linearCollector: LinearCollector?
     nonisolated(unsafe) static var githubCollector: GitHubCollector?
     nonisolated(unsafe) static var slackCollector: SlackCollector?
+    // Phase 5.3.E — peer-side rotation fetch loop.
+    nonisolated(unsafe) static var rotationFetchScheduler: RotationFetchScheduler?
 }
