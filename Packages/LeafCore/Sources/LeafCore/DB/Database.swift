@@ -637,6 +637,34 @@ public final class Database: @unchecked Sendable {
         }
     }
 
+    /// Phase 5.3.E — idempotent variant of `insertTeamKey`. Used by `RotationFetchService`
+    /// for crash-resilient peer install: peer fetches blob → unwraps → `insertTeamKeyIfAbsent`
+    /// (succeeds on first install, no-op on retry after crash mid-`deprecateTeamKey`).
+    /// Phase 5.3.C §10 invariant: composite-key dedup at relay means peer may receive
+    /// same blob twice; second `insertTeamKey` would throw on PK collision; this helper
+    /// swallows that path silently via `ON CONFLICT(id) DO NOTHING`.
+    public func insertTeamKeyIfAbsent(_ key: TeamKey) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try db.execute(sql: """
+                INSERT INTO \(Schema.TeamKeys.tableName) (
+                    \(Schema.TeamKeys.id),
+                    \(Schema.TeamKeys.generatedAtMs),
+                    \(Schema.TeamKeys.deprecatedAtMs),
+                    \(Schema.TeamKeys.generatedByMemberID)
+                ) VALUES (?, ?, ?, ?)
+                ON CONFLICT(\(Schema.TeamKeys.id)) DO NOTHING
+                """,
+                arguments: [
+                    key.id,
+                    Int64(key.generatedAt.timeIntervalSince1970 * 1000),
+                    key.deprecatedAt.map { Int64($0.timeIntervalSince1970 * 1000) },
+                    key.generatedByMemberID
+                ]
+            )
+        }
+    }
+
     /// Returns latest active rotation (`deprecated_at_ms IS NULL` через partial
     /// index `team_keys_active`). ORDER+LIMIT — defensive под edge case "две
     /// active rows" (нормально 1 row, contract'ом на DB-уровне не constraint'ится).
