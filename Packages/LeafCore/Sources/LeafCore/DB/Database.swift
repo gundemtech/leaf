@@ -900,6 +900,33 @@ public final class Database: @unchecked Sendable {
         }
     }
 
+    /// Marks a rotation_outbox row posted. Composite key (peerPubkeyHex, newKeyID).
+    /// Conditional UPDATE — silent no-op if already-posted (preserves first call's
+    /// timestamp) or row missing (tolerant for crash-resume race where TTL purge or
+    /// concurrent admin clears the row mid-iteration). Phase 5.3.D.
+    public func markRotationOutboxPosted(
+        peerPubkeyHex: String,
+        newKeyID: String,
+        at postedAt: Date
+    ) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        let postedMs = Int64(postedAt.timeIntervalSince1970 * 1000)
+
+        try pool.write { db in
+            try db.execute(sql: """
+                UPDATE \(Schema.RotationOutbox.tableName)
+                SET \(Schema.RotationOutbox.postedAtMs) = ?
+                WHERE \(Schema.RotationOutbox.peerPubkeyHex) = ?
+                  AND \(Schema.RotationOutbox.newKeyID) = ?
+                  AND \(Schema.RotationOutbox.postedAtMs) IS NULL
+                """,
+                arguments: [postedMs, peerPubkeyHex, newKeyID]
+            )
+            // changesCount 0 (already-posted or missing) tolerated silently.
+            // changesCount 1 → success.
+        }
+    }
+
     /// Lists outbox rows where `posted_at_ms IS NULL`, ordered by `created_at_ms`
     /// ASC then `peer_pubkey_hex` ASC for determinism. Reader-mode safe.
     /// Phase 5.3.D — used by `KeyRotationService.resumePendingPosts()`.

@@ -266,6 +266,65 @@ final class DatabaseRotationOutboxTests: XCTestCase {
         )
     }
 
+    // MARK: - markRotationOutboxPosted
+
+    func testMarkRotationOutboxPosted_HappyPath() throws {
+        try insertOrgFixture()
+        let row = sampleOutboxRow()
+        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        try db.commitRotation(
+            newTeamKey: newKey, priorTeamKeyID: "key0",
+            deprecatedAt: makeDate(1_700_000_001_000),
+            removedMemberID: nil, removedAt: nil,
+            outboxRows: [row]
+        )
+
+        try db.markRotationOutboxPosted(
+            peerPubkeyHex: row.peerPubkeyHex,
+            newKeyID: row.newKeyID,
+            at: makeDate(1_700_000_002_000)
+        )
+
+        XCTAssertTrue(try db.readUnpostedRotationOutboxRows().isEmpty)
+    }
+
+    func testMarkRotationOutboxPosted_IsIdempotentOnAlreadyPosted() throws {
+        try insertOrgFixture()
+        let row = sampleOutboxRow()
+        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        try db.commitRotation(
+            newTeamKey: newKey, priorTeamKeyID: "key0",
+            deprecatedAt: makeDate(1_700_000_001_000),
+            removedMemberID: nil, removedAt: nil,
+            outboxRows: [row]
+        )
+
+        try db.markRotationOutboxPosted(peerPubkeyHex: row.peerPubkeyHex, newKeyID: row.newKeyID, at: makeDate(1_700_000_002_000))
+        // Second mark — silent no-op (already posted, no throw).
+        try db.markRotationOutboxPosted(peerPubkeyHex: row.peerPubkeyHex, newKeyID: row.newKeyID, at: makeDate(1_700_000_003_000))
+
+        XCTAssertTrue(try db.readUnpostedRotationOutboxRows().isEmpty)
+    }
+
+    func testMarkRotationOutboxPosted_OnMissingRowSilent() throws {
+        try insertOrgFixture()
+        // Call markPosted on non-existent (peer, key) — tolerant for crash-resume race.
+        try db.markRotationOutboxPosted(
+            peerPubkeyHex: String(repeating: "ff", count: 32),
+            newKeyID: "ghost-id",
+            at: makeDate(1_700_000_002_000)
+        )
+        // No assertion needed beyond "did not throw".
+    }
+
+    func testMarkRotationOutboxPosted_ReaderModeThrowsDatabaseUnavailable() throws {
+        try insertOrgFixture()
+        let readerDB = try LeafCore.Database.openForRead(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        XCTAssertThrowsError(
+            try readerDB.markRotationOutboxPosted(peerPubkeyHex: "aa", newKeyID: "k1", at: makeDate(1_700_000_002_000))
+        ) { XCTAssertTrue(matches($0, .databaseUnavailable)) }
+    }
+
     func testCommitRotation_ReaderModeThrowsDatabaseUnavailable() throws {
         try insertOrgFixture()
         let readerDB = try Database.openForRead(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
