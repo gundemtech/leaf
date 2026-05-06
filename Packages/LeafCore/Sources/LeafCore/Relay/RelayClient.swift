@@ -110,6 +110,61 @@ public actor RelayClient: Sendable {
         }
     }
 
+    // MARK: - Rotation (Phase 5.3.C)
+    //
+    // Wire format: spec docs/superpowers/specs/2026-05-04-phase-5-3-C-relay-rotation.md §3.
+    //
+    // Status mapping:
+    //   - 201 (POST)    → RotationToken
+    //   - 200 (GET)     → [RotationFetched]  (blob base64url-decoded per element)
+    //   - 204 (DELETE)  → success (no body)
+    //   - 400 → LeafError.rotationRequestRejected("bad-input")
+    //   - 405 → LeafError.rotationRequestRejected("method")
+    //   - 413 → LeafError.rotationRequestRejected("size")
+    //   - 415 → LeafError.rotationRequestRejected("media-type")
+    //   - 500 → LeafError.relayUnreachable("server-error")
+    //   - URLSession throw → LeafError.relayUnreachable("transport")
+    //   - unparseable / unexpected → LeafError.relayUnreachable("malformed-response")
+
+    public func postRotationBlob(peerPubkeyHex: String,
+                                 blob: Data,
+                                 expiresAtMs: Int64) async throws -> RotationToken {
+        var request = URLRequest(url: baseURL.appendingPathComponent("v1/key-rotation"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let payload: [String: Any] = [
+            "peer_pubkey_hex": peerPubkeyHex,
+            "blob": blob.base64URLNoPad,
+            "expires_at_ms": expiresAtMs
+        ]
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
+        } catch {
+            throw LeafError.relayUnreachable(reason: "malformed-response")
+        }
+
+        let (data, http) = try await send(request)
+
+        switch http.statusCode {
+        case 201:
+            return try parseRotationToken(from: data)
+        case 400:
+            throw LeafError.rotationRequestRejected(reason: "bad-input")
+        case 405:
+            throw LeafError.rotationRequestRejected(reason: "method")
+        case 413:
+            throw LeafError.rotationRequestRejected(reason: "size")
+        case 415:
+            throw LeafError.rotationRequestRejected(reason: "media-type")
+        case 500:
+            throw LeafError.relayUnreachable(reason: "server-error")
+        default:
+            throw LeafError.relayUnreachable(reason: "malformed-response")
+        }
+    }
+
     // MARK: - Internals
 
     private func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
@@ -152,6 +207,16 @@ public actor RelayClient: Sendable {
         if let v = value as? Int { return Int64(v) }
         if let v = value as? NSNumber { return v.int64Value }
         throw LeafError.relayUnreachable(reason: "malformed-response")
+    }
+
+    private func parseRotationToken(from data: Data) throws -> RotationToken {
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let token = obj["rotation_id"] as? String
+        else {
+            throw LeafError.relayUnreachable(reason: "malformed-response")
+        }
+        let expiresAtMs = try parseInt64(obj["expires_at_ms"])
+        return RotationToken(value: token, expiresAtMs: expiresAtMs)
     }
 }
 
