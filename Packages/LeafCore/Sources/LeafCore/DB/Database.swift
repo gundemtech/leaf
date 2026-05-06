@@ -750,6 +750,25 @@ public final class Database: @unchecked Sendable {
         }
     }
 
+    /// Returns team_keys row by id, regardless of deprecated status.
+    /// Used by Phase 5.3.E peer-side flow для decrypt'а incoming snapshot
+    /// под previously-rotated keyID (forever-retained per contract §12).
+    /// Reader-mode safe — read-only API без mode guard.
+    public func readTeamKey(byID id: String) throws -> TeamKey? {
+        try pool.read { db in
+            let row = try Row.fetchOne(db, sql: """
+                SELECT \(Schema.TeamKeys.id), \(Schema.TeamKeys.generatedAtMs),
+                       \(Schema.TeamKeys.deprecatedAtMs), \(Schema.TeamKeys.generatedByMemberID)
+                FROM \(Schema.TeamKeys.tableName)
+                WHERE \(Schema.TeamKeys.id) = ?
+                LIMIT 1
+                """,
+                arguments: [id]
+            )
+            return row.flatMap(Self.mapTeamKeyRow)
+        }
+    }
+
     // MARK: - Linear attribution v2 migration (Phase 4.5)
 
     /// Phase 4.5 — одноразовая wipe Linear events + cursor для миграции на

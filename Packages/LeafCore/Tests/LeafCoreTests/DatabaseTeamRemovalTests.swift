@@ -147,16 +147,8 @@ final class DatabaseTeamRemovalTests: XCTestCase {
         let secondDeprecatedAt = Date(timeIntervalSince1970: 1_700_003_000)
         try db.deprecateTeamKey(keyID: "key-rotation-1", at: secondDeprecatedAt)
 
-        let stored: Int64? = try db.writeSQL { rawDB in
-            try Int64.fetchOne(rawDB, sql: """
-                SELECT \(Schema.TeamKeys.deprecatedAtMs)
-                FROM \(Schema.TeamKeys.tableName)
-                WHERE \(Schema.TeamKeys.id) = ?
-                """,
-                arguments: ["key-rotation-1"]
-            )
-        }
-        XCTAssertEqual(stored, Int64(firstDeprecatedAt.timeIntervalSince1970 * 1000),
+        let row = try db.readTeamKey(byID: "key-rotation-1")
+        XCTAssertEqual(row?.deprecatedAt, firstDeprecatedAt,
             "повторный deprecate не должен bump'ить timestamp")
 
         // Sanity — key-rotation-2 всё ещё active.
@@ -212,6 +204,64 @@ final class DatabaseTeamRemovalTests: XCTestCase {
         let active = try db.readActiveTeamKey()
         XCTAssertEqual(active?.id, "key-rotation-1",
             "после deprecate latest active — readActive возвращает older active")
+    }
+
+    // MARK: - readTeamKey(byID:)
+
+    /// Insert active key → readTeamKey(byID:) returns full row with `deprecatedAt == nil`.
+    func testReadTeamKey_ByIDReturnsActiveRow() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let generatedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        try db.insertTeamKey(TeamKey(
+            id: "key-rotation-1",
+            generatedAt: generatedAt,
+            deprecatedAt: nil,
+            generatedByMemberID: "member-self"
+        ))
+
+        let row = try db.readTeamKey(byID: "key-rotation-1")
+        XCTAssertNotNil(row)
+        XCTAssertEqual(row?.id, "key-rotation-1")
+        XCTAssertEqual(row?.generatedAt, generatedAt)
+        XCTAssertNil(row?.deprecatedAt)
+        XCTAssertEqual(row?.generatedByMemberID, "member-self")
+    }
+
+    /// Insert + mark deprecated → readTeamKey(byID:) returns row with non-nil
+    /// `deprecatedAt`. Critical для 5.3.E peer-side decrypt path.
+    func testReadTeamKey_ByIDReturnsDeprecatedRow() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertSampleKeys(db)  // 2 active keys, чтобы deprecate проходил guard
+
+        let deprecatedAt = Date(timeIntervalSince1970: 1_700_002_000)
+        try db.deprecateTeamKey(keyID: "key-rotation-1", at: deprecatedAt)
+
+        let row = try db.readTeamKey(byID: "key-rotation-1")
+        XCTAssertNotNil(row)
+        XCTAssertEqual(row?.id, "key-rotation-1")
+        XCTAssertEqual(row?.deprecatedAt, deprecatedAt)
+    }
+
+    /// Empty DB → readTeamKey(byID:) returns nil.
+    func testReadTeamKey_ByIDReturnsNilForMissing() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        let row = try db.readTeamKey(byID: "key-nonexistent")
+        XCTAssertNil(row)
+    }
+
+    /// Reader-mode DB → readTeamKey(byID:) succeeds (no mode guard).
+    /// Mirror'ит read-only semantic других team-related read helpers
+    /// (`readOrg`, `readActiveTeamKey`, `readTeamMembers`).
+    func testReadTeamKey_ReaderModeWorks() throws {
+        let writer = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertSampleKeys(writer)
+
+        let reader = try Database.openForRead(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        let row = try reader.readTeamKey(byID: "key-rotation-1")
+        XCTAssertNotNil(row)
+        XCTAssertEqual(row?.id, "key-rotation-1")
     }
 
     // MARK: - Helpers
