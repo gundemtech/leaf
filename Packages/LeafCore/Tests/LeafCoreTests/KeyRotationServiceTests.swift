@@ -134,23 +134,37 @@ final class KeyRotationServiceTests: XCTestCase {
         _ = svc  // just constructable
     }
 
-    // MARK: - performRotation (via TEMP removeMember wrapper)
+    // MARK: - performRotation + removeMember (real POST iteration)
 
-    func testPerformRotation_HappyPath_ComposesBlobsForBothPeers() async throws {
+    private static func stubRelaySuccess201(_ request: URLRequest, _ body: Data) throws -> (HTTPURLResponse, Data?) {
+        let resp = HTTPURLResponse(
+            url: request.url!,
+            statusCode: 201,
+            httpVersion: nil,
+            headerFields: ["Content-Type": "application/json"]
+        )!
+        let data = """
+            {"rotation_id":"abcdef0123456789abcdef0123456789","expires_at_ms":1700000086400000}
+            """.data(using: .utf8)!
+        return (resp, data)
+    }
+
+    func testRemoveMember_HappyPath_AllPosted() async throws {
         let pubs = try insertTeamFixture()
+        KeyRotationServiceMockURLProtocol.handler = { req, body in try Self.stubRelaySuccess201(req, body) }
         let kdf = RecordingRotationKDF()
         let codec = RecordingRotationBlobCodec()
         let svc = makeService(adminPriv: pubs.adminPriv, kdf: kdf, codec: codec)
 
         let outcome = try await svc.removeMember(memberID: "peer-b")
 
-        // 2 outbox rows (1 .rotation peer-a + 1 .tombstone peer-b)
         XCTAssertEqual(outcome.totalCount, 2)
+        XCTAssertEqual(outcome.postedCount, 2)
+        XCTAssertEqual(outcome.pendingCount, 0)
+
         XCTAssertEqual(codec.encodedPlaintexts.count, 2)
-        // KDF called only for .rotation (peer-a). Tombstone uses raw prior teamKey.
         XCTAssertEqual(kdf.calls.count, 1)
 
-        // DB state
         XCTAssertEqual(try db.readActiveTeamKey()?.id, "11111111-1111-1111-1111-111111111111")
         let priorKey = try db.readTeamKey(byID: "00000000-0000-0000-0000-000000000000")
         XCTAssertNotNil(priorKey?.deprecatedAt)
@@ -158,9 +172,54 @@ final class KeyRotationServiceTests: XCTestCase {
             .first(where: { $0.id == "peer-b" })
         XCTAssertNotNil(peerB?.removedAt)
 
-        // Outbox
-        let unposted = try db.readUnpostedRotationOutboxRows()
-        XCTAssertEqual(unposted.count, 2)
+        // All outbox rows marked posted
+        XCTAssertEqual(try db.readUnpostedRotationOutboxRows().count, 0)
+    }
+
+    func testRemoveMember_PartialPostFailure_ContinuesAndReturnsPending() async throws {
+        let pubs = try insertTeamFixture()
+        let counter = AtomicCounter()
+        KeyRotationServiceMockURLProtocol.handler = { request, _ in
+            let n = counter.increment()
+            if n == 1 {
+                let resp = HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!
+                return (resp, Data())
+            } else {
+                return try KeyRotationServiceTests.stubRelaySuccess201(request, Data())
+            }
+        }
+        let svc = makeService(adminPriv: pubs.adminPriv)
+
+        let outcome = try await svc.removeMember(memberID: "peer-b")
+
+        XCTAssertEqual(outcome.totalCount, 2)
+        XCTAssertEqual(outcome.postedCount, 1)
+        XCTAssertEqual(outcome.pendingCount, 1)
+
+        XCTAssertEqual(try db.readUnpostedRotationOutboxRows().count, 1)
+    }
+
+    func testRemoveMember_FullPostFailure_DBStillCommitted() async throws {
+        let pubs = try insertTeamFixture()
+        KeyRotationServiceMockURLProtocol.handler = { request, _ in
+            let resp = HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!
+            return (resp, Data())
+        }
+        let svc = makeService(adminPriv: pubs.adminPriv)
+
+        let outcome = try await svc.removeMember(memberID: "peer-b")
+
+        XCTAssertEqual(outcome.totalCount, 2)
+        XCTAssertEqual(outcome.postedCount, 0)
+        XCTAssertEqual(outcome.pendingCount, 2)
+
+        // DB STATE STILL COMMITTED
+        XCTAssertEqual(try db.readActiveTeamKey()?.id, "11111111-1111-1111-1111-111111111111")
+        let peerB = try db.readTeamMembers(orgID: "org1", includeRemoved: true)
+            .first(where: { $0.id == "peer-b" })
+        XCTAssertNotNil(peerB?.removedAt)
+        // 2 unposted rows for resume
+        XCTAssertEqual(try db.readUnpostedRotationOutboxRows().count, 2)
     }
 
     func testPerformRotation_TombstoneShape() async throws {
@@ -270,6 +329,24 @@ final class KeyRotationServiceTests: XCTestCase {
                 XCTFail("Expected .invalidPayload, got \(err)")
             }
         }
+    }
+}
+
+// MARK: - Test helpers
+
+/// Simple call-counter wrapper so URLProtocol handler closures can mutate
+/// state without Swift 6 concurrency complaints.
+final class AtomicCounter: @unchecked Sendable {
+    private var value: Int = 0
+    private let lock = NSLock()
+    func increment() -> Int {
+        lock.lock(); defer { lock.unlock() }
+        value += 1
+        return value
+    }
+    func current() -> Int {
+        lock.lock(); defer { lock.unlock() }
+        return value
     }
 }
 

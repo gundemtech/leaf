@@ -63,17 +63,52 @@ public struct KeyRotationService: Sendable {
     // MARK: - Public API
 
     /// Removes a team member + rotates teamKey. Returns outcome with posted/pending
-    /// counts. Pending POSTs drain on next `resumePendingPosts()`. Phase 5.3.D
-    /// scope: Task 9 returns pending=total (POST iteration in Task 10).
+    /// counts. Pending POSTs (network/relay errors) drain on next
+    /// `resumePendingPosts()`. Continue-on-error per peer — single peer failure
+    /// does not block others.
     public func removeMember(memberID: String) async throws -> RotationOutcome {
         let prepared = try performRotation(removingMember: memberID)
-        // TEMP — Task 10 replaces this with real POST iteration.
-        return RotationOutcome(
+        return await iterateOutboxRows(
+            prepared.outboxRows,
             newKeyID: prepared.newKeyID,
-            priorKeyID: prepared.priorKeyID,
-            postedCount: 0,
-            pendingCount: prepared.outboxRows.count,
-            totalCount: prepared.outboxRows.count
+            priorKeyID: prepared.priorKeyID
+        )
+    }
+
+    /// Iterates outbox rows, POSTs each to relay, marks `posted_at_ms` on success.
+    /// Continue-on-error — accumulates posted/pending counts. Used by both
+    /// `removeMember` (fresh outbox) and `resumePendingPosts` (drain unposted).
+    private func iterateOutboxRows(
+        _ rows: [RotationOutboxRow],
+        newKeyID: String,
+        priorKeyID: String
+    ) async -> RotationOutcome {
+        var posted = 0
+        var pending = 0
+        for row in rows {
+            do {
+                _ = try await relayClient.postRotationBlob(
+                    peerPubkeyHex: row.peerPubkeyHex,
+                    blob: row.blob,
+                    expiresAtMs: row.expiresAtMs
+                )
+                try database.markRotationOutboxPosted(
+                    peerPubkeyHex: row.peerPubkeyHex,
+                    newKeyID: row.newKeyID,
+                    at: now()
+                )
+                posted += 1
+            } catch {
+                // Continue-on-error — pending POSTs drain on next resumePendingPosts().
+                pending += 1
+            }
+        }
+        return RotationOutcome(
+            newKeyID: newKeyID,
+            priorKeyID: priorKeyID,
+            postedCount: posted,
+            pendingCount: pending,
+            totalCount: rows.count
         )
     }
 
