@@ -653,6 +653,41 @@ public final class Database: @unchecked Sendable {
         }
     }
 
+    // MARK: - Team lifecycle (Phase 5.3.A)
+
+    /// Soft-delete на team_members row. Sets `removed_at_ms = at`. Idempotent
+    /// re-call на already-removed row preserves original timestamp (silent no-op).
+    /// Throws `LeafError.invalidPayload` если member не существует.
+    public func markTeamMemberRemoved(memberID: String, at removedAt: Date) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try db.execute(sql: """
+                UPDATE \(Schema.TeamMembers.tableName)
+                SET \(Schema.TeamMembers.removedAtMs) = ?
+                WHERE \(Schema.TeamMembers.id) = ?
+                  AND \(Schema.TeamMembers.removedAtMs) IS NULL
+                """,
+                arguments: [
+                    Int64(removedAt.timeIntervalSince1970 * 1000),
+                    memberID
+                ]
+            )
+            if db.changesCount == 1 { return }
+
+            // changesCount == 0: либо already-removed (idempotent no-op), либо missing row.
+            let row = try Row.fetchOne(db, sql: """
+                SELECT \(Schema.TeamMembers.removedAtMs)
+                FROM \(Schema.TeamMembers.tableName)
+                WHERE \(Schema.TeamMembers.id) = ?
+                LIMIT 1
+                """,
+                arguments: [memberID]
+            )
+            guard row != nil else { throw LeafError.invalidPayload }
+            // row exists с не-NULL removed_at_ms → idempotent no-op, return.
+        }
+    }
+
     // MARK: - Linear attribution v2 migration (Phase 4.5)
 
     /// Phase 4.5 — одноразовая wipe Linear events + cursor для миграции на
