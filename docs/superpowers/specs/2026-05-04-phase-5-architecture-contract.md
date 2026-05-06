@@ -208,9 +208,21 @@ Storage layer: Cloudflare Workers KV with per-token TTL. No long-term storage.
 - On peer connect: relay replays last-known envelope per member.
 - Heartbeat: client-side ping at the cadence specified in whitepaper presence-relay (currently 60s). Server-side disconnect threshold and reconnect policy — configurable, fixed by 5.4 spec; defaults derived from whitepaper-public values.
 
-### Phase 5.3 — key rotation invalidation (TBD by 5.3 spec)
+### Phase 5.3 — key rotation endpoints
 
-May reuse `DELETE /v1/invite/:token` semantics for old wraps, plus an instruction to the per-team DO to drop envelopes whose `keyID` matches the deprecated rotation. Final endpoint shape locked by 5.3 brainstorm.
+- `POST /v1/key-rotation` — admin POSTs wrapped teamKey (or tombstone) blob:
+  - `peer_pubkey_hex` — recipient's X25519 public.
+  - `blob` — admin-side AES-GCM wrap (rotation: under HKDF(ECDH(admin, peer), salt=newKeyID); tombstone: under prior teamKey).
+  - `expires_at_ms` — server enforces ≤ 24h.
+  - Idempotent on `(peer_pubkey_hex, new_key_id_hex)` composite (server peeks blob bytes 17..33 for new_key_id) — repeat POST returns same `rotation_id`, first-writer-wins on blob bytes.
+  - Returns: `{ rotation_id: <random URL-safe 32-byte>, expires_at_ms }`.
+- `GET /v1/key-rotation/by-peer/:peer_pubkey_hex` — peer drains mailbox.
+  - Returns: `{ rotations: [{ rotation_id, blob, expires_at_ms }, ...] }` (200, possibly empty array).
+  - **Server does NOT delete on GET** (list-then-ACK semantic, survives mid-install crash).
+  - Cap N=20 on response array (defensive).
+- `DELETE /v1/key-rotation/:rotation_id` — peer ACKs after successful unwrap+install. Idempotent 204 regardless of token shape / existence (existence-hiding mirror invite DELETE).
+
+Storage layer: Cloudflare Workers KV (separate `KEY_ROTATIONS` namespace) with per-token TTL ≤ 24h. Idempotency via composite-key primary index `rot:<peer>:<newkid>` + reverse `rot-id:<rotation_id>` for DELETE lookup.
 
 ### Versioning policy
 
@@ -232,7 +244,7 @@ What each sub-project ships, declaratively. If your spec adds something not on t
 | **5.1.D** | `OrgService.createPersonalOrg`, keystore writers (teamKey current + history file, X25519 private file) | — | First row in `org`, first row in `team_members`, first row in `team_keys` |
 | **5.1.E** | `OrganizationView` / `TeamView` real content, "Create personal org" CTA, integration test, `docs(shared)` landing commit | — | — |
 | **5.2** | `RelayClient` HTTP, generate-invite UI, accept-invite UI, OTP entry, X25519 ECDH + HKDF-SHA256 helpers (moved here from 5.1.C — first real call-site is invite handshake), Onboarding screen 6 partial | `POST /v1/invite`, `GET /v1/invite/:token`, `DELETE /v1/invite/:token` + KV with TTL | — (relay state ephemeral only) |
-| **5.3** | Remove-member UI, key rotation logic, pairwise ECDH wraps for remaining members | (TBD) revocation endpoint or DO key-flush instruction | New rows in `team_keys`, `team_members.removed_at_ms` set |
+| **5.3** | Remove-member UI, key rotation logic, pairwise ECDH wraps for remaining members | `POST /v1/key-rotation`, `GET /v1/key-rotation/by-peer/:peer`, `DELETE /v1/key-rotation/:id` + KV `KEY_ROTATIONS` namespace | New rows in `team_keys`, `team_members.removed_at_ms` set |
 | **5.4** | M009 `presence_outgoing`, M010 `presence_history`, broadcast loop in Agent, Swift WS client (reconnect/heartbeat), Team presence grid live UI | `WS /v1/presence/team/:teamID` + per-team Durable Object | 2 new SQLCipher tables |
 | **5.5** | Onboarding screen 6 final integration ("Team — join via invite OR create personal org") | — | — |
 
