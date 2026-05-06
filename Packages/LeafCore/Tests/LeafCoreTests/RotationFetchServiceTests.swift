@@ -454,6 +454,81 @@ final class RotationFetchServiceTests: XCTestCase {
         XCTAssertEqual(try db.readActiveTeamKey()?.id, newKeyID)
     }
 
+    /// Promotes `peer-other` (member) to `.admin` so iteration sees 2 admin candidates.
+    fileprivate func promotePeerOtherToAdmin() throws {
+        try db.writeSQL { rawDB in
+            try rawDB.execute(sql: """
+                UPDATE \(Schema.TeamMembers.tableName)
+                SET \(Schema.TeamMembers.role) = 'admin'
+                WHERE \(Schema.TeamMembers.id) = 'peer-other'
+                """)
+        }
+    }
+
+    func testRotationHappyPathMultiAdmin_FirstWorks_DoesNotTrySecond() async throws {
+        let pubs = try insertTeamFixture()
+        try promotePeerOtherToAdmin()
+
+        let newKeyID = "11111111-1111-1111-1111-111111111111"
+        let priorKeyID = "00000000-0000-0000-0000-000000000000"
+        let newTeamKey = Data(repeating: 0xAB, count: 32)
+
+        let (blobBytes, codec) = try makeRotationBlob(
+            priorKeyID: priorKeyID, newKeyID: newKeyID,
+            newTeamKeyBytes: newTeamKey,
+            recipientPubkey: pubs.selfPriv.publicKey.rawRepresentation
+        )
+        let stubKey = SymmetricKey(size: .bits256)
+        codec.wrapKeyExpected = stubKey
+
+        // First admin's KDF derive returns stubKey (codec accepts) → decode succeeds → break.
+        let kdf = RecordingKDF()
+        kdf.stubKey = stubKey
+
+        Self.mountSingleBlobHandler(blobBytes: blobBytes)
+
+        let svc = makeService(kdf: kdf, codec: codec, identityPriv: pubs.selfPriv)
+        let outcome = await svc.tick()
+
+        XCTAssertEqual(outcome.installed, 1)
+        XCTAssertEqual(outcome.skipped, 0)
+        XCTAssertEqual(kdf.calls.count, 1, "Iteration must break after first admin succeeds; got \(kdf.calls.count) calls")
+    }
+
+    func testRotationHappyPathMultiAdmin_FirstFails_SecondWorks() async throws {
+        let pubs = try insertTeamFixture()
+        try promotePeerOtherToAdmin()
+
+        let newKeyID = "11111111-1111-1111-1111-111111111111"
+        let priorKeyID = "00000000-0000-0000-0000-000000000000"
+        let newTeamKey = Data(repeating: 0xAB, count: 32)
+
+        let (blobBytes, codec) = try makeRotationBlob(
+            priorKeyID: priorKeyID, newKeyID: newKeyID,
+            newTeamKeyBytes: newTeamKey,
+            recipientPubkey: pubs.selfPriv.publicKey.rawRepresentation
+        )
+
+        // Codec accepts only the SECOND admin's derived key → first admin's
+        // ECDH+HKDF produces wrong key (rejected by codec); second succeeds.
+        let firstKey = SymmetricKey(size: .bits256)
+        let secondKey = SymmetricKey(size: .bits256)
+        codec.acceptedWrapKeys = [secondKey]
+
+        let kdf = RecordingKDF()
+        kdf.stubKeysSequence = [firstKey, secondKey]
+
+        Self.mountSingleBlobHandler(blobBytes: blobBytes)
+
+        let svc = makeService(kdf: kdf, codec: codec, identityPriv: pubs.selfPriv)
+        let outcome = await svc.tick()
+
+        XCTAssertEqual(outcome.installed, 1)
+        XCTAssertEqual(outcome.skipped, 0)
+        XCTAssertEqual(kdf.calls.count, 2, "Iteration must try both admins (first rejects → second wins); got \(kdf.calls.count) calls")
+        XCTAssertEqual(try db.readActiveTeamKey()?.id, newKeyID)
+    }
+
     func testRotationAllAdminsFail_Skips_NoAck() async throws {
         let pubs = try insertTeamFixture()
         let newKeyID = "11111111-1111-1111-1111-111111111111"
@@ -560,8 +635,8 @@ final class TombstoneRecordingCodec: RotationBlobCodec, @unchecked Sendable {
     nonisolated(unsafe) var forceKindOnDecode: RotationKind?
 
     func encode(_ plaintext: RotationPlaintext, recipientPubkey: Data, wrapKey: SymmetricKey) throws -> RotationBlob {
-        // Real RotationBlobHeader bytes so peek() works:
-        // [ver:1 | priorKeyID:16 | newKeyID:16 | recipientPubkey:32 | nonce:12 | ct:1 | tag:16] = 94B
+        // Build a real RotationBlobHeader prefix so peek() works (exact field
+        // composition is moat — see ProdRotationBlobCodec).
         var bytes = Data([0x03])
         let priorBytes = uuidBytes(plaintext.priorKeyID)
         let newBytes = uuidBytes(plaintext.newKeyID)
@@ -600,10 +675,17 @@ final class TombstoneRecordingCodec: RotationBlobCodec, @unchecked Sendable {
 
 final class RecordingKDF: RotationKDF, @unchecked Sendable {
     nonisolated(unsafe) var stubKey = SymmetricKey(size: .bits256)
+    /// If set, deriveWrapKey returns sequenced keys per call (index 0 → first call,
+    /// index 1 → second call, etc.). Falls back to `stubKey` once exhausted.
+    /// Used by multi-admin iteration tests.
+    nonisolated(unsafe) var stubKeysSequence: [SymmetricKey]?
     nonisolated(unsafe) var calls: [(SharedSecret, Data)] = []
 
     func deriveWrapKey(sharedSecret: SharedSecret, newKeyID: Data) throws -> SymmetricKey {
         calls.append((sharedSecret, newKeyID))
+        if let seq = stubKeysSequence, calls.count <= seq.count {
+            return seq[calls.count - 1]
+        }
         return stubKey
     }
 }
@@ -618,6 +700,10 @@ final class RotationRecordingCodec: RotationBlobCodec, @unchecked Sendable {
     }
     nonisolated(unsafe) var installSpec: RotationSpec?
     nonisolated(unsafe) var wrapKeyExpected: SymmetricKey?
+    /// Alternative to `wrapKeyExpected`: accept any wrapKey from this list.
+    /// Used by multi-admin iteration tests where only one of N admin-derived
+    /// keys should decrypt successfully.
+    nonisolated(unsafe) var acceptedWrapKeys: [SymmetricKey]?
 
     func encode(_ plaintext: RotationPlaintext, recipientPubkey: Data, wrapKey: SymmetricKey) throws -> RotationBlob {
         var bytes = Data([0x03])
@@ -634,6 +720,11 @@ final class RotationRecordingCodec: RotationBlobCodec, @unchecked Sendable {
         if let expected = wrapKeyExpected,
            expected.withUnsafeBytes({ Data($0) }) != wrapKey.withUnsafeBytes({ Data($0) }) {
             throw LeafError.rotationBlobMalformed
+        }
+        if let allowed = acceptedWrapKeys {
+            let wkData = wrapKey.withUnsafeBytes { Data($0) }
+            let match = allowed.contains { $0.withUnsafeBytes({ Data($0) }) == wkData }
+            if !match { throw LeafError.rotationBlobMalformed }
         }
         guard let spec = installSpec else { throw LeafError.rotationBlobMalformed }
         return RotationPlaintext(
