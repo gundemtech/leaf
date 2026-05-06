@@ -218,6 +218,46 @@ enum AgentMain {
         AgentLifetime.githubCollector = githubCollector
         AgentLifetime.slackCollector = slackCollector
 
+        // Phase 5.3.D — Key rotation orchestrator + RotationOutbox resume.
+        // Drains unposted rotation_outbox rows from prior sessions on startup
+        // (fire-and-forget). Composition root for ProdRotationKDF/ProdRotationBlobCodec
+        // under #if LEAF_PROD; Unimplemented* in Debug builds. The Unimplemented
+        // codec/KDF parameters are stored in KeyRotationService init but only
+        // invoked from `removeMember` (UI-triggered, lives in main app); Agent's
+        // `resumePendingPosts` reads encoded blobs from outbox and POSTs them
+        // without touching codec/KDF, so Debug build resume works correctly.
+        let rotationKDF: any RotationKDF = {
+            #if LEAF_PROD
+            return ProdRotationKDF()
+            #else
+            return UnimplementedRotationKDF()
+            #endif
+        }()
+        let rotationBlobCodec: any RotationBlobCodec = {
+            #if LEAF_PROD
+            return ProdRotationBlobCodec()
+            #else
+            return UnimplementedRotationBlobCodec()
+            #endif
+        }()
+        let rotationRelayClient = RelayClient()
+        let keyRotationService = KeyRotationService(
+            database: database,
+            relayClient: rotationRelayClient,
+            rotationKDF: rotationKDF,
+            rotationBlobCodec: rotationBlobCodec
+        )
+        Task.detached {
+            do {
+                let outcome = try await keyRotationService.resumePendingPosts()
+                if outcome.totalCount > 0 {
+                    agentLogger.info("rotation resume drained: posted=\(outcome.postedCount, privacy: .public) pending=\(outcome.pendingCount, privacy: .public)")
+                }
+            } catch {
+                agentLogger.error("rotation resume failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+
         // Kick off writer + collectors + scheduler.
         // `start()` на writer/idle — fire-and-forget Task внутри; на activeApp — запускаем
         // через DispatchQueue.main.async чтобы NSWorkspace observer'у был доступен main runloop.
