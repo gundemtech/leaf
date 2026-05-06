@@ -688,6 +688,68 @@ public final class Database: @unchecked Sendable {
         }
     }
 
+    /// Marks team_keys row deprecated. Sets `deprecated_at_ms = at`.
+    /// **Sole-active invariant:** throws `LeafError.invalidPayload` если
+    /// deprecating этот key оставит 0 active rows. Caller (5.3.D KeyRotationService)
+    /// должен `insertTeamKey(new)` first в той же tx.
+    /// Idempotent re-call на already-deprecated row preserves original timestamp.
+    /// Throws `LeafError.invalidPayload` если key не существует.
+    public func deprecateTeamKey(keyID: String, at deprecatedAt: Date) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            // Step 1 — sole-active invariant guard.
+            let activeCount = try Int.fetchOne(db, sql: """
+                SELECT count(*)
+                FROM \(Schema.TeamKeys.tableName)
+                WHERE \(Schema.TeamKeys.deprecatedAtMs) IS NULL
+                """) ?? 0
+            if activeCount <= 1 {
+                let targetActive = try Int.fetchOne(db, sql: """
+                    SELECT count(*)
+                    FROM \(Schema.TeamKeys.tableName)
+                    WHERE \(Schema.TeamKeys.id) = ?
+                      AND \(Schema.TeamKeys.deprecatedAtMs) IS NULL
+                    """,
+                    arguments: [keyID]
+                ) ?? 0
+                if targetActive == 1 {
+                    // Target is the sole active row — deprecate would leave 0 active.
+                    throw LeafError.invalidPayload
+                }
+                // Иначе — target либо already-deprecated (idempotent path),
+                // либо missing (handled by zero-changesCount branch ниже).
+                // Bypass guard, continue to step 2.
+            }
+
+            // Step 2 — conditional UPDATE.
+            try db.execute(sql: """
+                UPDATE \(Schema.TeamKeys.tableName)
+                SET \(Schema.TeamKeys.deprecatedAtMs) = ?
+                WHERE \(Schema.TeamKeys.id) = ?
+                  AND \(Schema.TeamKeys.deprecatedAtMs) IS NULL
+                """,
+                arguments: [
+                    Int64(deprecatedAt.timeIntervalSince1970 * 1000),
+                    keyID
+                ]
+            )
+            if db.changesCount == 1 { return }
+
+            // changesCount == 0: либо already-deprecated (idempotent no-op),
+            // либо missing row.
+            let row = try Row.fetchOne(db, sql: """
+                SELECT \(Schema.TeamKeys.deprecatedAtMs)
+                FROM \(Schema.TeamKeys.tableName)
+                WHERE \(Schema.TeamKeys.id) = ?
+                LIMIT 1
+                """,
+                arguments: [keyID]
+            )
+            guard row != nil else { throw LeafError.invalidPayload }
+            // row exists с не-NULL deprecated_at_ms → idempotent no-op.
+        }
+    }
+
     // MARK: - Linear attribution v2 migration (Phase 4.5)
 
     /// Phase 4.5 — одноразовая wipe Linear events + cursor для миграции на
