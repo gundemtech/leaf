@@ -325,6 +325,60 @@ final class DatabaseRotationOutboxTests: XCTestCase {
         ) { XCTAssertTrue(matches($0, .databaseUnavailable)) }
     }
 
+    // MARK: - readUnpostedRotationOutboxRows ordering
+
+    func testReadUnpostedRotationOutboxRows_FiltersAndOrders() throws {
+        try insertOrgFixture()
+        let earlier = sampleOutboxRow(
+            peer: String(repeating: "aa", count: 32),
+            createdAtMs: 1_700_000_001_000
+        )
+        let later = sampleOutboxRow(
+            peer: String(repeating: "cc", count: 32),
+            createdAtMs: 1_700_000_005_000
+        )
+
+        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        try db.commitRotation(
+            newTeamKey: newKey, priorTeamKeyID: "key0",
+            deprecatedAt: makeDate(1_700_000_001_000),
+            removedMemberID: nil, removedAt: nil,
+            outboxRows: [earlier, later]
+        )
+
+        // Mark `earlier` posted — should be filtered out from unposted.
+        try db.markRotationOutboxPosted(
+            peerPubkeyHex: earlier.peerPubkeyHex,
+            newKeyID: earlier.newKeyID,
+            at: makeDate(1_700_000_010_000)
+        )
+
+        let result = try db.readUnpostedRotationOutboxRows()
+        XCTAssertEqual(result.count, 1)
+        XCTAssertEqual(result.first?.peerPubkeyHex, later.peerPubkeyHex)
+    }
+
+    func testReadUnpostedRotationOutboxRows_OrdersByCreatedAt() throws {
+        try insertOrgFixture()
+        let row1 = sampleOutboxRow(peer: String(repeating: "aa", count: 32), createdAtMs: 1_700_000_005_000)
+        let row2 = sampleOutboxRow(peer: String(repeating: "bb", count: 32), createdAtMs: 1_700_000_001_000)
+        let row3 = sampleOutboxRow(peer: String(repeating: "cc", count: 32), createdAtMs: 1_700_000_003_000)
+
+        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        try db.commitRotation(
+            newTeamKey: newKey, priorTeamKeyID: "key0",
+            deprecatedAt: makeDate(1_700_000_001_000),
+            removedMemberID: nil, removedAt: nil,
+            outboxRows: [row1, row2, row3]
+        )
+
+        let result = try db.readUnpostedRotationOutboxRows()
+        XCTAssertEqual(result.count, 3)
+        XCTAssertEqual(result[0].peerPubkeyHex, row2.peerPubkeyHex)  // 1_700_000_001 first
+        XCTAssertEqual(result[1].peerPubkeyHex, row3.peerPubkeyHex)  // 1_700_000_003 second
+        XCTAssertEqual(result[2].peerPubkeyHex, row1.peerPubkeyHex)  // 1_700_000_005 last
+    }
+
     func testCommitRotation_ReaderModeThrowsDatabaseUnavailable() throws {
         try insertOrgFixture()
         let readerDB = try Database.openForRead(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
