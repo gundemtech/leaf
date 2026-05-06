@@ -8,7 +8,13 @@
 //  для OrganizationView / TeamView. Mirror InsightsReader composition pattern
 //  (defaultConfig / defaultEncryption через LEAF_PROD).
 //
+//  Phase 5.3.E — adds .removedFromOrg(orgName:) state. Detected via self-pubkey
+//  match against team_members.removed_at_ms (no new schema). When peer's
+//  RotationFetchService receives a tombstone и marks self.removed_at_ms,
+//  next refresh() flips state → RootView swap to RemovedFromTeamBanner.
+//
 
+import CryptoKit
 import Foundation
 import Observation
 import OSLog
@@ -24,6 +30,7 @@ final class OrgReader {
         case loading
         case empty
         case loaded(Org, [TeamMember])
+        case removedFromOrg(orgName: String)        // Phase 5.3.E
         case error(message: String)
     }
 
@@ -50,6 +57,7 @@ final class OrgReader {
     }
 
     /// Reads org + members from DB into state. Idempotent. Sync (~ ms).
+    /// Phase 5.3.E: detects tombstone-applied state via self-member's removed_at_ms.
     func refresh() {
         do {
             let db = try ensureDatabase()
@@ -57,8 +65,22 @@ final class OrgReader {
                 state = .empty
                 return
             }
-            let members = try db.readTeamMembers(orgID: org.id)
-            state = .loaded(org, members)
+            // Phase 5.3.E — read all members (incl. removed) for self-removed detection.
+            let allMembers = try db.readTeamMembers(orgID: org.id, includeRemoved: true)
+
+            // Self-pubkey lookup: identity X25519 priv → pubkey hex → match team_members.
+            // If self.removedAt != nil → banner state (tombstone was applied by
+            // RotationFetchService). Otherwise filter active members and proceed.
+            let priv = try IdentityService.ensureLocalIdentity(at: keystoreRoot)
+            let myPubHex = priv.publicKey.rawRepresentation
+                .map { String(format: "%02x", $0) }.joined()
+            if let selfMember = allMembers.first(where: { $0.pubkeyHex == myPubHex }),
+               selfMember.removedAt != nil {
+                state = .removedFromOrg(orgName: org.name)
+                return
+            }
+            let active = allMembers.filter { $0.removedAt == nil }
+            state = .loaded(org, active)
         } catch {
             logger.error("OrgReader.refresh failed: \(String(describing: error), privacy: .public)")
             state = .error(message: userFacingMessage(for: error))
