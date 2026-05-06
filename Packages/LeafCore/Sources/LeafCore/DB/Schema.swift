@@ -115,6 +115,27 @@ public enum Schema {
         /// Partial index — query "current key" дёшево (1 row).
         public static let indexActive = "team_keys_active"
     }
+
+    /// Phase 5.3.D — admin-side write-ahead journal of pending key-rotation POSTs.
+    /// Composite PK `(peer_pubkey_hex, new_key_id)` matches relay's idempotency
+    /// key (5.3.C). `posted_at_ms IS NULL` means the POST has not yet succeeded;
+    /// `KeyRotationService.resumePendingPosts()` retries on next launch.
+    /// `kind` — `'rotation'` (wrapped new teamKey) или `'tombstone'` (sentinel for removed peer).
+    public enum RotationOutbox {
+        public static let tableName = "rotation_outbox"
+        public static let peerPubkeyHex = "peer_pubkey_hex"
+        public static let newKeyID = "new_key_id"
+        public static let priorKeyID = "prior_key_id"
+        public static let kind = "kind"
+        public static let peerMemberID = "peer_member_id"
+        public static let blob = "blob"
+        public static let expiresAtMs = "expires_at_ms"
+        public static let createdAtMs = "created_at_ms"
+        public static let postedAtMs = "posted_at_ms"
+
+        /// Partial index — query "unposted rows" cheap (drained on launch via Task.detached).
+        public static let indexUnposted = "rotation_outbox_unposted"
+    }
 }
 
 /// Канонические `collector_id` значения. Литералы — public, чтобы тесты
