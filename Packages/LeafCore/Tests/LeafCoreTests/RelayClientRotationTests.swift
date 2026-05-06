@@ -323,4 +323,67 @@ final class RelayClientRotationTests: XCTestCase {
             XCTFail("wrong error: \(error)")
         }
     }
+
+    // MARK: - ackRotation
+
+    func testAckRotation_204_Success() async throws {
+        RelayMockURLProtocol.handler = { req, _ in
+            (self.httpResponse(204, url: req.url), nil)
+        }
+        let client = makeClient()
+        try await client.ackRotation(rotationID: "rot-abc-123")
+    }
+
+    func testAckRotation_SendsCorrectURLPath() async throws {
+        RelayMockURLProtocol.handler = { req, _ in
+            (self.httpResponse(204, url: req.url), nil)
+        }
+        let client = makeClient()
+        try await client.ackRotation(rotationID: "rot-xyz-789")
+        XCTAssertEqual(RelayMockURLProtocol.lastRequest?.httpMethod, "DELETE")
+        XCTAssertEqual(RelayMockURLProtocol.lastRequest?.url?.path, "/v1/key-rotation/rot-xyz-789")
+    }
+
+    func testAckRotation_404_ThrowsRelayUnreachable_MalformedResponse() async {
+        RelayMockURLProtocol.handler = { req, _ in
+            (self.httpResponse(404, url: req.url), nil)
+        }
+        let client = makeClient()
+        do {
+            try await client.ackRotation(rotationID: "rot-missing")
+            XCTFail("expected throw")
+        } catch let LeafError.relayUnreachable(reason) {
+            XCTAssertEqual(reason, "malformed-response")
+        } catch {
+            XCTFail("wrong error: \(error)")
+        }
+    }
+
+    func testAckRotation_NetworkError_ThrowsRelayUnreachable_Transport() async {
+        RelayMockURLProtocol.networkError = URLError(.notConnectedToInternet)
+        let client = makeClient()
+        do {
+            try await client.ackRotation(rotationID: "rot-net")
+            XCTFail("expected throw")
+        } catch let LeafError.relayUnreachable(reason) {
+            XCTAssertEqual(reason, "transport")
+        } catch {
+            XCTFail("wrong error: \(error)")
+        }
+    }
+
+    func testAckRotation_500_ThrowsRelayUnreachable_ServerError() async {
+        RelayMockURLProtocol.handler = { req, _ in
+            (self.httpResponse(500, url: req.url), nil)
+        }
+        let client = makeClient()
+        do {
+            try await client.ackRotation(rotationID: "rot-srv")
+            XCTFail("expected throw")
+        } catch let LeafError.relayUnreachable(reason) {
+            XCTAssertEqual(reason, "server-error")
+        } catch {
+            XCTFail("wrong error: \(error)")
+        }
+    }
 }

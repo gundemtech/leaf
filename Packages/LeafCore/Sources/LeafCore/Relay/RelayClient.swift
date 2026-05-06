@@ -186,6 +186,22 @@ public actor RelayClient: Sendable {
         }
     }
 
+    public func ackRotation(rotationID: String) async throws {
+        var request = URLRequest(url: baseURL.appendingPathComponent("v1/key-rotation/\(rotationID)"))
+        request.httpMethod = "DELETE"
+        let (_, http) = try await send(request)
+        switch http.statusCode {
+        case 204:
+            return
+        case 405:
+            throw LeafError.rotationRequestRejected(reason: "method")
+        case 500:
+            throw LeafError.relayUnreachable(reason: "server-error")
+        default:
+            throw LeafError.relayUnreachable(reason: "malformed-response")
+        }
+    }
+
     // MARK: - Internals
 
     private func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
