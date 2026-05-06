@@ -68,6 +68,74 @@ public enum Schema {
         public static let derivedMode = "derived_mode"
         public static let updatedAtMs = "updated_at_ms"
     }
+
+    /// Phase 5.1.A — organization metadata (1 row per device, single-org-per-device
+    /// per Phase 5 architecture contract §11). PK — `id` UUID v4.
+    /// `created_by_member_id` — logical FK на `team_members.id`; SQL FOREIGN KEY
+    /// не объявляется (см. spec 5.1.A §4 "FK strategy").
+    public enum Org {
+        public static let tableName = "org"
+        public static let id = "id"
+        public static let name = "name"
+        public static let createdAtMs = "created_at_ms"
+        public static let createdByMemberID = "created_by_member_id"
+    }
+
+    /// Phase 5.1.A — long-term member identity + X25519 public key (contract §4, §7).
+    /// PK — `id` UUID v4. `org_id` — logical FK на `org.id`.
+    /// `removed_at_ms` IS NULL = active member; устанавливается в Phase 5.3
+    /// на removal (contract §10). `role` — `TeamMemberRole.rawValue` ('admin' | 'member').
+    /// `pubkey_hex` — X25519 32-byte public, hex-encoded (64 chars).
+    public enum TeamMembers {
+        public static let tableName = "team_members"
+        public static let id = "id"
+        public static let orgID = "org_id"
+        public static let role = "role"
+        public static let pubkeyHex = "pubkey_hex"
+        public static let displayName = "display_name"
+        public static let addedAtMs = "added_at_ms"
+        public static let removedAtMs = "removed_at_ms"
+
+        /// Partial index — фильтрует active members одной org для Team UI list.
+        public static let indexOrgActive = "team_members_org_active"
+    }
+
+    /// Phase 5.1.A — team key rotation history (contract §7).
+    /// PK — `id` UUID v4 (rotation identity; embedded as 16-byte `keyID` в envelope §6).
+    /// `deprecated_at_ms` IS NULL = current rotation; устанавливается в Phase 5.3.
+    /// `generated_by_member_id` — logical FK на `team_members.id` (audit who created rotation).
+    /// **Forever-retained** — old rows нужны для decrypt'а `presence_history` (contract §12).
+    public enum TeamKeys {
+        public static let tableName = "team_keys"
+        public static let id = "id"
+        public static let generatedAtMs = "generated_at_ms"
+        public static let deprecatedAtMs = "deprecated_at_ms"
+        public static let generatedByMemberID = "generated_by_member_id"
+
+        /// Partial index — query "current key" дёшево (1 row).
+        public static let indexActive = "team_keys_active"
+    }
+
+    /// Phase 5.3.D — admin-side write-ahead journal of pending key-rotation POSTs.
+    /// Composite PK `(peer_pubkey_hex, new_key_id)` matches relay's idempotency
+    /// key (5.3.C). `posted_at_ms IS NULL` means the POST has not yet succeeded;
+    /// `KeyRotationService.resumePendingPosts()` retries on next launch.
+    /// `kind` — `'rotation'` (wrapped new teamKey) или `'tombstone'` (sentinel for removed peer).
+    public enum RotationOutbox {
+        public static let tableName = "rotation_outbox"
+        public static let peerPubkeyHex = "peer_pubkey_hex"
+        public static let newKeyID = "new_key_id"
+        public static let priorKeyID = "prior_key_id"
+        public static let kind = "kind"
+        public static let peerMemberID = "peer_member_id"
+        public static let blob = "blob"
+        public static let expiresAtMs = "expires_at_ms"
+        public static let createdAtMs = "created_at_ms"
+        public static let postedAtMs = "posted_at_ms"
+
+        /// Partial index — query "unposted rows" cheap (drained on launch via Task.detached).
+        public static let indexUnposted = "rotation_outbox_unposted"
+    }
 }
 
 /// Канонические `collector_id` значения. Литералы — public, чтобы тесты

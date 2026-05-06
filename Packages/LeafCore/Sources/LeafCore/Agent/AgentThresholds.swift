@@ -92,6 +92,11 @@ public struct AgentThresholds: Sendable, Hashable {
     /// в `AttentionEmissionPlanner` гарантирует, что одинаковые (bundle, title)
     /// poll'ы не пишут лишних events.
     public let attentionWindowPollIntervalSec: TimeInterval
+    /// Phase 5.3.E: how often `RotationFetchScheduler` polls relay's
+    /// `/v1/key-rotation/by-peer/*` mailbox + opportunistically resumes admin-side
+    /// `rotation_outbox`. Default 60s — consistent with presence WS heartbeat in 5.4
+    /// contract; member-removal latency feels live-team.
+    public let rotationFetchIntervalSec: TimeInterval
 
     public init(
         idlePollIntervalSec: TimeInterval,
@@ -120,7 +125,8 @@ public struct AgentThresholds: Sendable, Hashable {
         githubOAuthClientID: String = "",
         slackPollIntervalSec: TimeInterval = 300,
         slackOAuthClientID: String = "",
-        attentionWindowPollIntervalSec: TimeInterval = 30
+        attentionWindowPollIntervalSec: TimeInterval = 30,
+        rotationFetchIntervalSec: TimeInterval = 60
     ) {
         self.idlePollIntervalSec = idlePollIntervalSec
         self.idleThresholdSec = idleThresholdSec
@@ -149,6 +155,7 @@ public struct AgentThresholds: Sendable, Hashable {
         self.slackPollIntervalSec = slackPollIntervalSec
         self.slackOAuthClientID = slackOAuthClientID
         self.attentionWindowPollIntervalSec = attentionWindowPollIntervalSec
+        self.rotationFetchIntervalSec = rotationFetchIntervalSec
     }
 
     public static let weakDefaults = AgentThresholds(
@@ -178,6 +185,7 @@ public struct AgentThresholds: Sendable, Hashable {
         githubOAuthClientID: "",
         slackPollIntervalSec: 300,
         slackOAuthClientID: "",
-        attentionWindowPollIntervalSec: 30
+        attentionWindowPollIntervalSec: 30,
+        rotationFetchIntervalSec: 60
     )
 }

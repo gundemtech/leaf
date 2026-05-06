@@ -14,7 +14,7 @@
 import SwiftUI
 
 enum OnboardingStep: String, CaseIterable {
-    case welcome, ax, fda, done
+    case welcome, ax, fda, team, done
 
     var index: Int { Self.allCases.firstIndex(of: self) ?? 0 }
 }
@@ -22,6 +22,9 @@ enum OnboardingStep: String, CaseIterable {
 struct OnboardingView: View {
     @AppStorage("onboardingStep") private var step: OnboardingStep = .welcome
     @Environment(PermissionsService.self) private var permissions
+    @Environment(InviteAcceptReader.self) private var inviteAcceptReader
+    @Environment(OrgReader.self) private var orgReader
+    @State private var showingAcceptSheet: Bool = false
     let onDone: () -> Void
 
     var body: some View {
@@ -43,7 +46,16 @@ struct OnboardingView: View {
             if step == .ax && granted { step = .fda }
         }
         .onChange(of: permissions.fdaGranted) { _, granted in
-            if step == .fda && granted { step = .done }
+            if step == .fda && granted { step = .team }
+        }
+        .sheet(isPresented: $showingAcceptSheet) {
+            AcceptInviteSheet()
+                .onDisappear {
+                    if case .success = inviteAcceptReader.state {
+                        inviteAcceptReader.discardAndReset()
+                        step = .done
+                    }
+                }
         }
     }
 
@@ -80,6 +92,7 @@ struct OnboardingView: View {
         case .welcome: welcomeStep
         case .ax:      axStep
         case .fda:     fdaStep
+        case .team:    teamStep
         case .done:    doneStep
         }
     }
@@ -134,6 +147,24 @@ struct OnboardingView: View {
                 Spacer()
                 grantStatus(granted: permissions.fdaGranted)
             }
+            Button("Skip for now") { step = .team }
+                .buttonStyle(.link)
+                .font(.caption)
+        }
+    }
+
+    private var teamStep: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Team")
+                .font(.subheadline.weight(.semibold))
+            Text("Has someone invited you to a team? Accept the invite — otherwise skip and create your personal org later.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Accept invite") {
+                showingAcceptSheet = true
+            }
+            .buttonStyle(.borderedProminent)
             Button("Skip for now") { step = .done }
                 .buttonStyle(.link)
                 .font(.caption)

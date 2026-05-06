@@ -41,6 +41,10 @@ public final class Database: @unchecked Sendable {
         migrator.registerMigration003WatchedFolders()
         migrator.registerMigration004Integrations()
         migrator.registerMigration005PresenceState()
+        migrator.registerMigration006Org()
+        migrator.registerMigration007TeamMembers()
+        migrator.registerMigration008TeamKeys()
+        migrator.registerMigration009RotationOutbox()
         try migrator.migrate(pool)
 
         return Database(pool: pool, config: config, mode: .writer)
@@ -516,6 +520,478 @@ public final class Database: @unchecked Sendable {
         }
     }
 
+    // MARK: - Team (Phase 5.1.B)
+
+    /// UPSERT по `id`. Single-row-per-device convention (contract §4) — на DB
+    /// уровне не enforced, идемпотентность создания + update'а `name` и
+    /// `created_by_member_id` зашиты на UPSERT-семантику.
+    public func upsertOrg(_ org: Org) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try db.execute(sql: """
+                INSERT INTO \(Schema.Org.tableName) (
+                    \(Schema.Org.id),
+                    \(Schema.Org.name),
+                    \(Schema.Org.createdAtMs),
+                    \(Schema.Org.createdByMemberID)
+                ) VALUES (?, ?, ?, ?)
+                ON CONFLICT(\(Schema.Org.id)) DO UPDATE SET
+                    \(Schema.Org.name)              = excluded.\(Schema.Org.name),
+                    \(Schema.Org.createdAtMs)       = excluded.\(Schema.Org.createdAtMs),
+                    \(Schema.Org.createdByMemberID) = excluded.\(Schema.Org.createdByMemberID)
+                """,
+                arguments: [
+                    org.id,
+                    org.name,
+                    Int64(org.createdAt.timeIntervalSince1970 * 1000),
+                    org.createdByMemberID
+                ]
+            )
+        }
+    }
+
+    /// Returns the single org row если present (contract §4). `LIMIT 1` —
+    /// defensive под edge case "две rows" (схема не constrain'ит на 1 row).
+    public func readOrg() throws -> Org? {
+        try pool.read { db in
+            let row = try Row.fetchOne(db, sql: """
+                SELECT \(Schema.Org.id), \(Schema.Org.name),
+                       \(Schema.Org.createdAtMs), \(Schema.Org.createdByMemberID)
+                FROM \(Schema.Org.tableName)
+                LIMIT 1
+                """)
+            return row.flatMap(Self.mapOrgRow)
+        }
+    }
+
+    /// Strict INSERT — re-insert того же UUID — это bug (caller контролирует
+    /// PK). Идемпотентность создания org+self-row на caller'е (5.1.D
+    /// `OrgService.createPersonalOrg` проверяет `readOrg()` first).
+    public func insertTeamMember(_ member: TeamMember) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try db.execute(sql: """
+                INSERT INTO \(Schema.TeamMembers.tableName) (
+                    \(Schema.TeamMembers.id),
+                    \(Schema.TeamMembers.orgID),
+                    \(Schema.TeamMembers.role),
+                    \(Schema.TeamMembers.pubkeyHex),
+                    \(Schema.TeamMembers.displayName),
+                    \(Schema.TeamMembers.addedAtMs),
+                    \(Schema.TeamMembers.removedAtMs)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                arguments: [
+                    member.id,
+                    member.orgID,
+                    member.role.rawValue,
+                    member.pubkeyHex,
+                    member.displayName,
+                    Int64(member.addedAt.timeIntervalSince1970 * 1000),
+                    member.removedAt.map { Int64($0.timeIntervalSince1970 * 1000) }
+                ]
+            )
+        }
+    }
+
+    /// Returns members одной org, ordered by `added_at_ms` ASC.
+    /// `includeRemoved: false` (default) — active members only через partial
+    /// index `team_members_org_active`. UI Team list — default-call.
+    public func readTeamMembers(orgID: String, includeRemoved: Bool = false) throws -> [TeamMember] {
+        try pool.read { db in
+            let sql = """
+                SELECT \(Schema.TeamMembers.id), \(Schema.TeamMembers.orgID),
+                       \(Schema.TeamMembers.role), \(Schema.TeamMembers.pubkeyHex),
+                       \(Schema.TeamMembers.displayName), \(Schema.TeamMembers.addedAtMs),
+                       \(Schema.TeamMembers.removedAtMs)
+                FROM \(Schema.TeamMembers.tableName)
+                WHERE \(Schema.TeamMembers.orgID) = ?\
+                \(includeRemoved ? "" : " AND \(Schema.TeamMembers.removedAtMs) IS NULL")
+                ORDER BY \(Schema.TeamMembers.addedAtMs) ASC
+                """
+            let rows = try Row.fetchAll(db, sql: sql, arguments: [orgID])
+            return rows.compactMap(Self.mapTeamMemberRow)
+        }
+    }
+
+    /// Strict INSERT — каждая rotation — уникальная запись (history forever-retained,
+    /// contract §12). UUID PK collision = bug.
+    public func insertTeamKey(_ key: TeamKey) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try db.execute(sql: """
+                INSERT INTO \(Schema.TeamKeys.tableName) (
+                    \(Schema.TeamKeys.id),
+                    \(Schema.TeamKeys.generatedAtMs),
+                    \(Schema.TeamKeys.deprecatedAtMs),
+                    \(Schema.TeamKeys.generatedByMemberID)
+                ) VALUES (?, ?, ?, ?)
+                """,
+                arguments: [
+                    key.id,
+                    Int64(key.generatedAt.timeIntervalSince1970 * 1000),
+                    key.deprecatedAt.map { Int64($0.timeIntervalSince1970 * 1000) },
+                    key.generatedByMemberID
+                ]
+            )
+        }
+    }
+
+    /// Phase 5.3.E — idempotent variant of `insertTeamKey`. Used by `RotationFetchService`
+    /// for crash-resilient peer install: peer fetches blob → unwraps → `insertTeamKeyIfAbsent`
+    /// (succeeds on first install, no-op on retry after crash mid-`deprecateTeamKey`).
+    /// Phase 5.3.C §10 invariant: composite-key dedup at relay means peer may receive
+    /// same blob twice; second `insertTeamKey` would throw on PK collision; this helper
+    /// swallows that path silently via `ON CONFLICT(id) DO NOTHING`.
+    public func insertTeamKeyIfAbsent(_ key: TeamKey) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try db.execute(sql: """
+                INSERT INTO \(Schema.TeamKeys.tableName) (
+                    \(Schema.TeamKeys.id),
+                    \(Schema.TeamKeys.generatedAtMs),
+                    \(Schema.TeamKeys.deprecatedAtMs),
+                    \(Schema.TeamKeys.generatedByMemberID)
+                ) VALUES (?, ?, ?, ?)
+                ON CONFLICT(\(Schema.TeamKeys.id)) DO NOTHING
+                """,
+                arguments: [
+                    key.id,
+                    Int64(key.generatedAt.timeIntervalSince1970 * 1000),
+                    key.deprecatedAt.map { Int64($0.timeIntervalSince1970 * 1000) },
+                    key.generatedByMemberID
+                ]
+            )
+        }
+    }
+
+    /// Returns latest active rotation (`deprecated_at_ms IS NULL` через partial
+    /// index `team_keys_active`). ORDER+LIMIT — defensive под edge case "две
+    /// active rows" (нормально 1 row, contract'ом на DB-уровне не constraint'ится).
+    public func readActiveTeamKey() throws -> TeamKey? {
+        try pool.read { db in
+            let row = try Row.fetchOne(db, sql: """
+                SELECT \(Schema.TeamKeys.id), \(Schema.TeamKeys.generatedAtMs),
+                       \(Schema.TeamKeys.deprecatedAtMs), \(Schema.TeamKeys.generatedByMemberID)
+                FROM \(Schema.TeamKeys.tableName)
+                WHERE \(Schema.TeamKeys.deprecatedAtMs) IS NULL
+                ORDER BY \(Schema.TeamKeys.generatedAtMs) DESC
+                LIMIT 1
+                """)
+            return row.flatMap(Self.mapTeamKeyRow)
+        }
+    }
+
+    // MARK: - Team lifecycle (Phase 5.3.A)
+
+    /// Soft-delete на team_members row. Sets `removed_at_ms = at`. Idempotent
+    /// re-call на already-removed row preserves original timestamp (silent no-op).
+    /// Throws `LeafError.invalidPayload` если member не существует.
+    public func markTeamMemberRemoved(memberID: String, at removedAt: Date) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try db.execute(sql: """
+                UPDATE \(Schema.TeamMembers.tableName)
+                SET \(Schema.TeamMembers.removedAtMs) = ?
+                WHERE \(Schema.TeamMembers.id) = ?
+                  AND \(Schema.TeamMembers.removedAtMs) IS NULL
+                """,
+                arguments: [
+                    Int64(removedAt.timeIntervalSince1970 * 1000),
+                    memberID
+                ]
+            )
+            if db.changesCount == 1 { return }
+
+            // changesCount == 0: либо already-removed (idempotent no-op), либо missing row.
+            let row = try Row.fetchOne(db, sql: """
+                SELECT \(Schema.TeamMembers.removedAtMs)
+                FROM \(Schema.TeamMembers.tableName)
+                WHERE \(Schema.TeamMembers.id) = ?
+                LIMIT 1
+                """,
+                arguments: [memberID]
+            )
+            guard row != nil else { throw LeafError.invalidPayload }
+            // row exists с не-NULL removed_at_ms → idempotent no-op, return.
+        }
+    }
+
+    /// Marks team_keys row deprecated. Sets `deprecated_at_ms = at`.
+    /// **Sole-active invariant:** throws `LeafError.invalidPayload` если
+    /// deprecating этот key оставит 0 active rows. Caller (5.3.D KeyRotationService)
+    /// должен `insertTeamKey(new)` first в той же tx.
+    /// Idempotent re-call на already-deprecated row preserves original timestamp.
+    /// Throws `LeafError.invalidPayload` если key не существует.
+    public func deprecateTeamKey(keyID: String, at deprecatedAt: Date) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            // Step 1 — sole-active invariant guard.
+            let activeCount = try Int.fetchOne(db, sql: """
+                SELECT count(*)
+                FROM \(Schema.TeamKeys.tableName)
+                WHERE \(Schema.TeamKeys.deprecatedAtMs) IS NULL
+                """) ?? 0
+            if activeCount <= 1 {
+                let targetActive = try Int.fetchOne(db, sql: """
+                    SELECT count(*)
+                    FROM \(Schema.TeamKeys.tableName)
+                    WHERE \(Schema.TeamKeys.id) = ?
+                      AND \(Schema.TeamKeys.deprecatedAtMs) IS NULL
+                    """,
+                    arguments: [keyID]
+                ) ?? 0
+                if targetActive == 1 {
+                    // Target is the sole active row — deprecate would leave 0 active.
+                    throw LeafError.invalidPayload
+                }
+                // Иначе — target либо already-deprecated (idempotent path),
+                // либо missing (handled by zero-changesCount branch ниже).
+                // Bypass guard, continue to step 2.
+            }
+
+            // Step 2 — conditional UPDATE.
+            try db.execute(sql: """
+                UPDATE \(Schema.TeamKeys.tableName)
+                SET \(Schema.TeamKeys.deprecatedAtMs) = ?
+                WHERE \(Schema.TeamKeys.id) = ?
+                  AND \(Schema.TeamKeys.deprecatedAtMs) IS NULL
+                """,
+                arguments: [
+                    Int64(deprecatedAt.timeIntervalSince1970 * 1000),
+                    keyID
+                ]
+            )
+            if db.changesCount == 1 { return }
+
+            // changesCount == 0: либо already-deprecated (idempotent no-op),
+            // либо missing row.
+            let row = try Row.fetchOne(db, sql: """
+                SELECT \(Schema.TeamKeys.deprecatedAtMs)
+                FROM \(Schema.TeamKeys.tableName)
+                WHERE \(Schema.TeamKeys.id) = ?
+                LIMIT 1
+                """,
+                arguments: [keyID]
+            )
+            guard row != nil else { throw LeafError.invalidPayload }
+            // row exists с не-NULL deprecated_at_ms → idempotent no-op.
+        }
+    }
+
+    /// Returns team_keys row by id, regardless of deprecated status.
+    /// Used by Phase 5.3.E peer-side flow для decrypt'а incoming snapshot
+    /// под previously-rotated keyID (forever-retained per contract §12).
+    /// Reader-mode safe — read-only API без mode guard.
+    public func readTeamKey(byID id: String) throws -> TeamKey? {
+        try pool.read { db in
+            let row = try Row.fetchOne(db, sql: """
+                SELECT \(Schema.TeamKeys.id), \(Schema.TeamKeys.generatedAtMs),
+                       \(Schema.TeamKeys.deprecatedAtMs), \(Schema.TeamKeys.generatedByMemberID)
+                FROM \(Schema.TeamKeys.tableName)
+                WHERE \(Schema.TeamKeys.id) = ?
+                LIMIT 1
+                """,
+                arguments: [id]
+            )
+            return row.flatMap(Self.mapTeamKeyRow)
+        }
+    }
+
+    // MARK: - Rotation outbox (Phase 5.3.D)
+
+    /// Atomic write of a key-rotation event: INSERT new `team_keys` row + UPDATE
+    /// prior row's `deprecated_at_ms` + optional UPDATE `team_members.removed_at_ms`
+    /// + INSERT N `rotation_outbox` rows. All within single `pool.write` block;
+    /// rolls back on any failure.
+    ///
+    /// Sole-active guard relaxed (vs `deprecateTeamKey` 5.3.A) because new active
+    /// row inserted in step 1 — at the time of step 2 deprecate, count >= 2.
+    ///
+    /// Throws `.databaseUnavailable` on reader-mode, `.invalidPayload` on:
+    /// (removedMemberID, removedAt) nil-vs-non-nil mismatch; missing/already-deprecated
+    /// prior key; missing/already-removed member; duplicate outbox composite key.
+    public func commitRotation(
+        newTeamKey: TeamKey,
+        priorTeamKeyID: String,
+        deprecatedAt: Date,
+        removedMemberID: String?,
+        removedAt: Date?,
+        outboxRows: [RotationOutboxRow]
+    ) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        // Pre-validation: removedMemberID and removedAt must be nil-together or non-nil-together.
+        switch (removedMemberID, removedAt) {
+        case (nil, nil), (.some, .some):
+            break
+        default:
+            throw LeafError.invalidPayload
+        }
+
+        let priorDeprecatedAtMs = Int64(deprecatedAt.timeIntervalSince1970 * 1000)
+        let newGeneratedAtMs = Int64(newTeamKey.generatedAt.timeIntervalSince1970 * 1000)
+        let newDeprecatedAtMs: Int64? = newTeamKey.deprecatedAt.map { Int64($0.timeIntervalSince1970 * 1000) }
+        let removedAtMs: Int64? = removedAt.map { Int64($0.timeIntervalSince1970 * 1000) }
+
+        try pool.write { db in
+            // Step 1: INSERT new team_keys row.
+            try db.execute(sql: """
+                INSERT INTO \(Schema.TeamKeys.tableName) (
+                    \(Schema.TeamKeys.id),
+                    \(Schema.TeamKeys.generatedAtMs),
+                    \(Schema.TeamKeys.deprecatedAtMs),
+                    \(Schema.TeamKeys.generatedByMemberID)
+                ) VALUES (?, ?, ?, ?)
+                """,
+                arguments: [
+                    newTeamKey.id,
+                    newGeneratedAtMs,
+                    newDeprecatedAtMs,
+                    newTeamKey.generatedByMemberID
+                ]
+            )
+
+            // Step 2: UPDATE prior team_keys deprecated_at_ms.
+            try db.execute(sql: """
+                UPDATE \(Schema.TeamKeys.tableName)
+                SET \(Schema.TeamKeys.deprecatedAtMs) = ?
+                WHERE \(Schema.TeamKeys.id) = ?
+                  AND \(Schema.TeamKeys.deprecatedAtMs) IS NULL
+                """,
+                arguments: [priorDeprecatedAtMs, priorTeamKeyID]
+            )
+            if db.changesCount != 1 {
+                // changesCount 0 → either missing row or already-deprecated. Both
+                // surface as .invalidPayload per spec §9 (caller bug — admin shouldn't
+                // initiate rotation от стейта где prior-key already deprecated/missing).
+                throw LeafError.invalidPayload
+            }
+
+            // Step 3: optional UPDATE team_members removed_at_ms.
+            if let memberID = removedMemberID, let memberRemovedMs = removedAtMs {
+                try db.execute(sql: """
+                    UPDATE \(Schema.TeamMembers.tableName)
+                    SET \(Schema.TeamMembers.removedAtMs) = ?
+                    WHERE \(Schema.TeamMembers.id) = ?
+                      AND \(Schema.TeamMembers.removedAtMs) IS NULL
+                    """,
+                    arguments: [memberRemovedMs, memberID]
+                )
+                if db.changesCount != 1 {
+                    // changesCount 0 → either missing row or already-removed; both → .invalidPayload.
+                    throw LeafError.invalidPayload
+                }
+            }
+
+            // Step 4: INSERT N rotation_outbox rows. Duplicate composite PK throws.
+            for row in outboxRows {
+                try db.execute(sql: """
+                    INSERT INTO \(Schema.RotationOutbox.tableName) (
+                        \(Schema.RotationOutbox.peerPubkeyHex),
+                        \(Schema.RotationOutbox.newKeyID),
+                        \(Schema.RotationOutbox.priorKeyID),
+                        \(Schema.RotationOutbox.kind),
+                        \(Schema.RotationOutbox.peerMemberID),
+                        \(Schema.RotationOutbox.blob),
+                        \(Schema.RotationOutbox.expiresAtMs),
+                        \(Schema.RotationOutbox.createdAtMs),
+                        \(Schema.RotationOutbox.postedAtMs)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    arguments: [
+                        row.peerPubkeyHex,
+                        row.newKeyID,
+                        row.priorKeyID,
+                        row.kind.rawValue,
+                        row.peerMemberID,
+                        row.blob,
+                        row.expiresAtMs,
+                        row.createdAtMs,
+                        row.postedAtMs as Int64?
+                    ]
+                )
+            }
+        }
+    }
+
+    /// Marks a rotation_outbox row posted. Composite key (peerPubkeyHex, newKeyID).
+    /// Conditional UPDATE — silent no-op if already-posted (preserves first call's
+    /// timestamp) or row missing (tolerant for crash-resume race where TTL purge or
+    /// concurrent admin clears the row mid-iteration). Phase 5.3.D.
+    public func markRotationOutboxPosted(
+        peerPubkeyHex: String,
+        newKeyID: String,
+        at postedAt: Date
+    ) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        let postedMs = Int64(postedAt.timeIntervalSince1970 * 1000)
+
+        try pool.write { db in
+            try db.execute(sql: """
+                UPDATE \(Schema.RotationOutbox.tableName)
+                SET \(Schema.RotationOutbox.postedAtMs) = ?
+                WHERE \(Schema.RotationOutbox.peerPubkeyHex) = ?
+                  AND \(Schema.RotationOutbox.newKeyID) = ?
+                  AND \(Schema.RotationOutbox.postedAtMs) IS NULL
+                """,
+                arguments: [postedMs, peerPubkeyHex, newKeyID]
+            )
+            // changesCount 0 (already-posted or missing) tolerated silently.
+            // changesCount 1 → success.
+        }
+    }
+
+    /// Lists outbox rows where `posted_at_ms IS NULL`, ordered by `created_at_ms`
+    /// ASC then `peer_pubkey_hex` ASC for determinism. Reader-mode safe.
+    /// Phase 5.3.D — used by `KeyRotationService.resumePendingPosts()`.
+    public func readUnpostedRotationOutboxRows() throws -> [RotationOutboxRow] {
+        try pool.read { db in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT
+                    \(Schema.RotationOutbox.peerPubkeyHex),
+                    \(Schema.RotationOutbox.newKeyID),
+                    \(Schema.RotationOutbox.priorKeyID),
+                    \(Schema.RotationOutbox.kind),
+                    \(Schema.RotationOutbox.peerMemberID),
+                    \(Schema.RotationOutbox.blob),
+                    \(Schema.RotationOutbox.expiresAtMs),
+                    \(Schema.RotationOutbox.createdAtMs),
+                    \(Schema.RotationOutbox.postedAtMs)
+                FROM \(Schema.RotationOutbox.tableName)
+                WHERE \(Schema.RotationOutbox.postedAtMs) IS NULL
+                ORDER BY \(Schema.RotationOutbox.createdAtMs) ASC,
+                         \(Schema.RotationOutbox.peerPubkeyHex) ASC
+                """)
+            return rows.compactMap(Self.mapRotationOutboxRow)
+        }
+    }
+
+    private static func mapRotationOutboxRow(_ row: Row) -> RotationOutboxRow? {
+        guard let peer: String = row[Schema.RotationOutbox.peerPubkeyHex],
+              let newID: String = row[Schema.RotationOutbox.newKeyID],
+              let priorID: String = row[Schema.RotationOutbox.priorKeyID],
+              let kindRaw: String = row[Schema.RotationOutbox.kind],
+              let kind = RotationKind(rawValue: kindRaw),
+              let memberID: String = row[Schema.RotationOutbox.peerMemberID],
+              let blob: Data = row[Schema.RotationOutbox.blob],
+              let expiresMs: Int64 = row[Schema.RotationOutbox.expiresAtMs],
+              let createdMs: Int64 = row[Schema.RotationOutbox.createdAtMs] else {
+            return nil
+        }
+        let postedMs: Int64? = row[Schema.RotationOutbox.postedAtMs]
+        return RotationOutboxRow(
+            peerPubkeyHex: peer,
+            newKeyID: newID,
+            priorKeyID: priorID,
+            kind: kind,
+            peerMemberID: memberID,
+            blob: blob,
+            expiresAtMs: expiresMs,
+            createdAtMs: createdMs,
+            postedAtMs: postedMs
+        )
+    }
+
     // MARK: - Linear attribution v2 migration (Phase 4.5)
 
     /// Phase 4.5 — одноразовая wipe Linear events + cursor для миграции на
@@ -647,6 +1123,58 @@ public final class Database: @unchecked Sendable {
             scope: scope,
             connectedAt: Date(timeIntervalSince1970: TimeInterval(connectedAtMs) / 1000.0),
             updatedAt: Date(timeIntervalSince1970: TimeInterval(updatedMs) / 1000.0)
+        )
+    }
+
+    private static func mapOrgRow(_ row: Row) -> Org? {
+        guard
+            let id = row[Schema.Org.id] as String?,
+            let name = row[Schema.Org.name] as String?,
+            let createdAtMs = row[Schema.Org.createdAtMs] as Int64?,
+            let createdByMemberID = row[Schema.Org.createdByMemberID] as String?
+        else { return nil }
+        return Org(
+            id: id,
+            name: name,
+            createdAt: Date(timeIntervalSince1970: TimeInterval(createdAtMs) / 1000.0),
+            createdByMemberID: createdByMemberID
+        )
+    }
+
+    private static func mapTeamMemberRow(_ row: Row) -> TeamMember? {
+        guard
+            let id = row[Schema.TeamMembers.id] as String?,
+            let orgID = row[Schema.TeamMembers.orgID] as String?,
+            let roleRaw = row[Schema.TeamMembers.role] as String?,
+            let role = TeamMemberRole(rawValue: roleRaw),
+            let pubkeyHex = row[Schema.TeamMembers.pubkeyHex] as String?,
+            let displayName = row[Schema.TeamMembers.displayName] as String?,
+            let addedAtMs = row[Schema.TeamMembers.addedAtMs] as Int64?
+        else { return nil }
+        let removedAtMs = row[Schema.TeamMembers.removedAtMs] as Int64?
+        return TeamMember(
+            id: id,
+            orgID: orgID,
+            role: role,
+            pubkeyHex: pubkeyHex,
+            displayName: displayName,
+            addedAt: Date(timeIntervalSince1970: TimeInterval(addedAtMs) / 1000.0),
+            removedAt: removedAtMs.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000.0) }
+        )
+    }
+
+    private static func mapTeamKeyRow(_ row: Row) -> TeamKey? {
+        guard
+            let id = row[Schema.TeamKeys.id] as String?,
+            let generatedAtMs = row[Schema.TeamKeys.generatedAtMs] as Int64?,
+            let generatedByMemberID = row[Schema.TeamKeys.generatedByMemberID] as String?
+        else { return nil }
+        let deprecatedAtMs = row[Schema.TeamKeys.deprecatedAtMs] as Int64?
+        return TeamKey(
+            id: id,
+            generatedAt: Date(timeIntervalSince1970: TimeInterval(generatedAtMs) / 1000.0),
+            deprecatedAt: deprecatedAtMs.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000.0) },
+            generatedByMemberID: generatedByMemberID
         )
     }
 

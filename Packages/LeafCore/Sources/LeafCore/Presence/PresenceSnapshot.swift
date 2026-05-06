@@ -2,7 +2,7 @@ import Foundation
 
 /// Derived view, композит из Attention + Context + Content@L≤team_ceiling.
 /// Это то, что уходит в presence-relay после Share Controls filter + encryption.
-public struct PresenceSnapshot: Codable, Sendable {
+public struct PresenceSnapshot: Codable, Sendable, Equatable {
     public enum Status: String, Codable, Sendable {
         case active
         case activeGeneric

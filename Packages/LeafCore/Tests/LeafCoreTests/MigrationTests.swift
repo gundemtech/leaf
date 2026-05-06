@@ -148,6 +148,327 @@ final class MigrationTests: XCTestCase {
         }
     }
 
+    // MARK: - Phase 5.1.A — Step 1 sanity (Schema constants + TeamMemberRole)
+
+    /// Phase 5.1.A — Schema namespaces для team-crypto tables присутствуют
+    /// и держат ожидаемые SQL identifier'ы. Sanity для Step 1 (до миграций).
+    func testPhase51ASchemaConstantsAreDeclared() throws {
+        XCTAssertEqual(Schema.Org.tableName, "org")
+        XCTAssertEqual(Schema.Org.id, "id")
+        XCTAssertEqual(Schema.Org.createdByMemberID, "created_by_member_id")
+
+        XCTAssertEqual(Schema.TeamMembers.tableName, "team_members")
+        XCTAssertEqual(Schema.TeamMembers.pubkeyHex, "pubkey_hex")
+        XCTAssertEqual(Schema.TeamMembers.removedAtMs, "removed_at_ms")
+        XCTAssertEqual(Schema.TeamMembers.indexOrgActive, "team_members_org_active")
+
+        XCTAssertEqual(Schema.TeamKeys.tableName, "team_keys")
+        XCTAssertEqual(Schema.TeamKeys.deprecatedAtMs, "deprecated_at_ms")
+        XCTAssertEqual(Schema.TeamKeys.indexActive, "team_keys_active")
+    }
+
+    /// `TeamMemberRole` rawValue — single source of truth для team_members.role.
+    func testTeamMemberRoleRawValuesAreStable() throws {
+        XCTAssertEqual(TeamMemberRole.admin.rawValue, "admin")
+        XCTAssertEqual(TeamMemberRole.member.rawValue, "member")
+        XCTAssertEqual(Set(TeamMemberRole.allCases.map(\.rawValue)), ["admin", "member"])
+    }
+
+    // MARK: - Phase 5.1.A — Step 2 (M006 org)
+
+    /// M006 — `org` table создана с правильными столбцами.
+    func testMigration006CreatesOrgTable() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        try db.readSQL { rawDB in
+            let tables = try String.fetchAll(
+                rawDB,
+                sql: "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                arguments: [Schema.Org.tableName]
+            )
+            XCTAssertEqual(tables, [Schema.Org.tableName])
+
+            let columns = try Row.fetchAll(
+                rawDB,
+                sql: "PRAGMA table_info(\(Schema.Org.tableName))"
+            ).compactMap { $0["name"] as String? }
+
+            XCTAssertEqual(
+                Set(columns),
+                Set([
+                    Schema.Org.id,
+                    Schema.Org.name,
+                    Schema.Org.createdAtMs,
+                    Schema.Org.createdByMemberID
+                ])
+            )
+        }
+    }
+
+    /// M006 — `org.id` PK NOT NULL.
+    func testMigration006OrgPrimaryKeyIsId() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        try db.readSQL { rawDB in
+            let columns = try Row.fetchAll(
+                rawDB,
+                sql: "PRAGMA table_info(\(Schema.Org.tableName))"
+            )
+            let byName = Dictionary(uniqueKeysWithValues: columns.compactMap { row -> (String, Row)? in
+                guard let name = row["name"] as String? else { return nil }
+                return (name, row)
+            })
+
+            let id = try XCTUnwrap(byName[Schema.Org.id])
+            XCTAssertEqual(id["pk"] as Int?, 1)
+            XCTAssertEqual(id["notnull"] as Int?, 1)
+
+            // Остальные — NOT NULL без PK.
+            for col in [Schema.Org.name, Schema.Org.createdAtMs, Schema.Org.createdByMemberID] {
+                let row = try XCTUnwrap(byName[col])
+                XCTAssertEqual(row["pk"] as Int?, 0, "column \(col) не должен быть PK")
+                XCTAssertEqual(row["notnull"] as Int?, 1, "column \(col) должен быть NOT NULL")
+            }
+        }
+    }
+
+    // MARK: - Phase 5.1.A — Step 3 (M007 team_members)
+
+    /// M007 — `team_members` table создана с правильными столбцами.
+    /// `removed_at_ms` nullable, остальные NOT NULL.
+    func testMigration007CreatesTeamMembersTable() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        try db.readSQL { rawDB in
+            let tables = try String.fetchAll(
+                rawDB,
+                sql: "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                arguments: [Schema.TeamMembers.tableName]
+            )
+            XCTAssertEqual(tables, [Schema.TeamMembers.tableName])
+
+            let columns = try Row.fetchAll(
+                rawDB,
+                sql: "PRAGMA table_info(\(Schema.TeamMembers.tableName))"
+            )
+            let byName = Dictionary(uniqueKeysWithValues: columns.compactMap { row -> (String, Row)? in
+                guard let name = row["name"] as String? else { return nil }
+                return (name, row)
+            })
+
+            XCTAssertEqual(
+                Set(byName.keys),
+                Set([
+                    Schema.TeamMembers.id,
+                    Schema.TeamMembers.orgID,
+                    Schema.TeamMembers.role,
+                    Schema.TeamMembers.pubkeyHex,
+                    Schema.TeamMembers.displayName,
+                    Schema.TeamMembers.addedAtMs,
+                    Schema.TeamMembers.removedAtMs
+                ])
+            )
+
+            // PK на id.
+            let id = try XCTUnwrap(byName[Schema.TeamMembers.id])
+            XCTAssertEqual(id["pk"] as Int?, 1)
+            XCTAssertEqual(id["notnull"] as Int?, 1)
+
+            // Всё кроме removed_at_ms — NOT NULL.
+            for col in [
+                Schema.TeamMembers.orgID,
+                Schema.TeamMembers.role,
+                Schema.TeamMembers.pubkeyHex,
+                Schema.TeamMembers.displayName,
+                Schema.TeamMembers.addedAtMs
+            ] {
+                let row = try XCTUnwrap(byName[col])
+                XCTAssertEqual(row["notnull"] as Int?, 1, "column \(col) должен быть NOT NULL")
+            }
+
+            // removed_at_ms — nullable.
+            let removed = try XCTUnwrap(byName[Schema.TeamMembers.removedAtMs])
+            XCTAssertEqual(removed["notnull"] as Int?, 0)
+        }
+    }
+
+    /// M007 — partial index `team_members_org_active` присутствует и фильтрует
+    /// по `removed_at_ms IS NULL`.
+    func testMigration007CreatesActiveIndex() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        try db.readSQL { rawDB in
+            let indexes = try String.fetchAll(
+                rawDB,
+                sql: "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name=?",
+                arguments: [Schema.TeamMembers.tableName]
+            )
+            XCTAssertTrue(
+                indexes.contains(Schema.TeamMembers.indexOrgActive),
+                "expected index \(Schema.TeamMembers.indexOrgActive); found \(indexes)"
+            )
+
+            // Verify partial — sqlite_master.sql содержит WHERE clause.
+            let sql = try String.fetchOne(
+                rawDB,
+                sql: "SELECT sql FROM sqlite_master WHERE type='index' AND name=?",
+                arguments: [Schema.TeamMembers.indexOrgActive]
+            )
+            let unwrapped = try XCTUnwrap(sql)
+            let upper = unwrapped.uppercased()
+            XCTAssertTrue(upper.contains("WHERE"), "ожидался partial index; got: \(unwrapped)")
+            XCTAssertTrue(
+                upper.contains(Schema.TeamMembers.removedAtMs.uppercased()),
+                "WHERE clause должен фильтровать по \(Schema.TeamMembers.removedAtMs); got: \(unwrapped)"
+            )
+            XCTAssertTrue(
+                upper.contains("IS NULL"),
+                "ожидался WHERE ... IS NULL predicate; got: \(unwrapped)"
+            )
+        }
+    }
+
+    // MARK: - Phase 5.1.A — Step 4 (M008 team_keys)
+
+    /// M008 — `team_keys` table создана с правильными столбцами.
+    /// `deprecated_at_ms` nullable, остальные NOT NULL.
+    func testMigration008CreatesTeamKeysTable() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        try db.readSQL { rawDB in
+            let tables = try String.fetchAll(
+                rawDB,
+                sql: "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                arguments: [Schema.TeamKeys.tableName]
+            )
+            XCTAssertEqual(tables, [Schema.TeamKeys.tableName])
+
+            let columns = try Row.fetchAll(
+                rawDB,
+                sql: "PRAGMA table_info(\(Schema.TeamKeys.tableName))"
+            )
+            let byName = Dictionary(uniqueKeysWithValues: columns.compactMap { row -> (String, Row)? in
+                guard let name = row["name"] as String? else { return nil }
+                return (name, row)
+            })
+
+            XCTAssertEqual(
+                Set(byName.keys),
+                Set([
+                    Schema.TeamKeys.id,
+                    Schema.TeamKeys.generatedAtMs,
+                    Schema.TeamKeys.deprecatedAtMs,
+                    Schema.TeamKeys.generatedByMemberID
+                ])
+            )
+
+            let id = try XCTUnwrap(byName[Schema.TeamKeys.id])
+            XCTAssertEqual(id["pk"] as Int?, 1)
+            XCTAssertEqual(id["notnull"] as Int?, 1)
+
+            for col in [Schema.TeamKeys.generatedAtMs, Schema.TeamKeys.generatedByMemberID] {
+                let row = try XCTUnwrap(byName[col])
+                XCTAssertEqual(row["notnull"] as Int?, 1, "column \(col) должен быть NOT NULL")
+            }
+
+            let deprecated = try XCTUnwrap(byName[Schema.TeamKeys.deprecatedAtMs])
+            XCTAssertEqual(deprecated["notnull"] as Int?, 0)
+        }
+    }
+
+    /// M008 — partial index `team_keys_active` присутствует и фильтрует
+    /// по `deprecated_at_ms IS NULL`.
+    func testMigration008CreatesActiveIndex() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        try db.readSQL { rawDB in
+            let indexes = try String.fetchAll(
+                rawDB,
+                sql: "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name=?",
+                arguments: [Schema.TeamKeys.tableName]
+            )
+            XCTAssertTrue(
+                indexes.contains(Schema.TeamKeys.indexActive),
+                "expected index \(Schema.TeamKeys.indexActive); found \(indexes)"
+            )
+
+            let sql = try String.fetchOne(
+                rawDB,
+                sql: "SELECT sql FROM sqlite_master WHERE type='index' AND name=?",
+                arguments: [Schema.TeamKeys.indexActive]
+            )
+            let unwrapped = try XCTUnwrap(sql)
+            let upper = unwrapped.uppercased()
+            XCTAssertTrue(upper.contains("WHERE"), "ожидался partial index; got: \(unwrapped)")
+            XCTAssertTrue(
+                upper.contains(Schema.TeamKeys.deprecatedAtMs.uppercased()),
+                "WHERE clause должен фильтровать по \(Schema.TeamKeys.deprecatedAtMs); got: \(unwrapped)"
+            )
+            XCTAssertTrue(
+                upper.contains("IS NULL"),
+                "ожидался WHERE ... IS NULL predicate; got: \(unwrapped)"
+            )
+        }
+    }
+
+    // MARK: - Phase 5.1.A — Step 5 (idempotency + coexistence)
+
+    /// M006/M007/M008 — повторный open после applied миграций не падает
+    /// и не пересоздаёт таблицы. Mirrors testMigration001IsIdempotent.
+    func testMigration006To008AreIdempotent() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        _ = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        _ = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        _ = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+    }
+
+    /// Sanity — после полного open видим все 9 application tables в `sqlite_master`,
+    /// то есть migration registration order не ломает existing tables.
+    /// Phase 5.3.D добавляет `rotation_outbox` (M009).
+    func testMigration006To009CoexistWithEarlier() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        try db.readSQL { rawDB in
+            let tables = try Set(String.fetchAll(
+                rawDB,
+                sql: "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name <> 'grdb_migrations'"
+            ))
+            let expected: Set<String> = [
+                Schema.Events.tableName,
+                Schema.CollectorOffsets.tableName,
+                Schema.WatchedFolders.tableName,
+                Schema.Integrations.tableName,
+                Schema.PresenceState.tableName,
+                Schema.Org.tableName,
+                Schema.TeamMembers.tableName,
+                Schema.TeamKeys.tableName,
+                Schema.RotationOutbox.tableName
+            ]
+            XCTAssertEqual(tables, expected)
+        }
+    }
+
+    /// Phase 5.1.A — таблицы создаются пустыми; первые rows будут вставлены
+    /// в Phase 5.1.D `OrgService.createPersonalOrg`. Sanity для substrate.
+    func testPhase51ATablesEmptyAfterMigration() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        try db.readSQL { rawDB in
+            for table in [Schema.Org.tableName, Schema.TeamMembers.tableName, Schema.TeamKeys.tableName] {
+                let count = try Int.fetchOne(rawDB, sql: "SELECT count(*) FROM \(table)")
+                XCTAssertEqual(count, 0, "expected \(table) пустой после fresh migration")
+            }
+        }
+    }
+
     func testPlaintextDetectionRenamesFileAndStartsFresh() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         let key = EncryptionOptions(keyProvider: .data(Data(repeating: 0xDD, count: 32)))
