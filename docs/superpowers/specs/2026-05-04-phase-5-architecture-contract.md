@@ -214,7 +214,7 @@ Storage layer: Cloudflare Workers KV with per-token TTL. No long-term storage.
   - `peer_pubkey_hex` — recipient's X25519 public.
   - `blob` — admin-side AES-GCM wrap (rotation: under HKDF(ECDH(admin, peer), salt=newKeyID); tombstone: under prior teamKey).
   - `expires_at_ms` — server enforces ≤ 24h.
-  - Idempotent on `(peer_pubkey_hex, new_key_id_hex)` composite (server peeks blob bytes 17..33 for new_key_id) — repeat POST returns same `rotation_id`, first-writer-wins on blob bytes.
+  - Idempotent on `(peer_pubkey_hex, new_key_id_hex)` composite (server peeks blob to extract `new_key_id` per `RotationBlobHeader` layout — exact byte offsets are moat) — repeat POST returns same `rotation_id`, first-writer-wins on blob bytes.
   - Returns: `{ rotation_id: <random URL-safe 32-byte>, expires_at_ms }`.
 - `GET /v1/key-rotation/by-peer/:peer_pubkey_hex` — peer drains mailbox.
   - Returns: `{ rotations: [{ rotation_id, blob, expires_at_ms }, ...] }` (200, possibly empty array).

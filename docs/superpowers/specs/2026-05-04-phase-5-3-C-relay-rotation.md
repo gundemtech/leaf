@@ -85,7 +85,7 @@ Phase 5.3.C — **wire surface sub-phase**: HTTP endpoints в `gundemtech/leaf-r
 { "rotation_id": "<32 url-safe chars>", "expires_at_ms": <int64> }
 ```
 
-**Idempotency:** primary KV key derived от `(peer_pubkey_hex, new_key_id_hex)`. Server peeks blob — 16 bytes starting at offset 17 (after 1B version + 16B priorKeyID = `RotationBlobHeader.newKeyID`) → hex-encode → composite key. Если composite-key already exists → return existing `rotation_id` со status 201 (same body, response identical to first POST). New POST → `randomToken32()` + double-write (primary + reverse).
+**Idempotency:** primary KV key derived от `(peer_pubkey_hex, new_key_id_hex)`. Server peeks blob to extract `new_key_id` per `RotationBlobHeader` layout (exact byte offsets — moat) → hex-encode → composite key. Если composite-key already exists → return existing `rotation_id` со status 201 (same body, response identical to first POST). New POST → `randomToken32()` + double-write (primary + reverse).
 
 **4xx codes:**
 - 400 `bad-input`: malformed JSON / missing field / wrong type / non-hex pubkey / pubkey != 64 chars / blob not base64url-no-pad / blob bytes < 65 (peek-fail) / blob version != 0x03 / `expires_at_ms` past or > now+24h.
@@ -246,7 +246,7 @@ export async function handleKeyRotation(request: Request, url: URL, env: Env): P
 ```
 
 Helpers:
-- `handleKeyRotationPost` — parse JSON, validate fields, peek blob bytes 17..33 для `new_key_id_hex`, lookup composite-key (idempotency), KV.put primary + reverse on miss, return 201.
+- `handleKeyRotationPost` — parse JSON, validate fields, peek blob to extract `new_key_id_hex` per `RotationBlobHeader` layout (exact byte offsets — moat), lookup composite-key (idempotency), KV.put primary + reverse on miss, return 201.
 - `handleKeyRotationDrain` — validate hex shape; `KV.list({prefix: 'rot:<peer>:', limit: MAX_PENDING_PER_PEER})` returns name list (CF KV `list` does NOT return values); for each name, `KV.get(name)` to fetch JSON value; `Promise.all` parallel; parse + assemble array; return 200.
 - `handleKeyRotationAck` — silent no-op on bad shape (return 204), else reverse lookup, double-delete, return 204.
 
@@ -399,7 +399,7 @@ Replace placeholder со конкретным endpoint shape:
   - `peer_pubkey_hex` — recipient's X25519 public.
   - `blob` — admin-side AES-GCM wrap (rotation: under HKDF(ECDH(admin, peer), salt=newKeyID); tombstone: under prior teamKey).
   - `expires_at_ms` — server enforces ≤ 24h.
-  - Idempotent на `(peer_pubkey_hex, new_key_id_hex)` composite (server peeks blob bytes 17..33 для new_key_id) — repeat POST returns same `rotation_id`.
+  - Idempotent на `(peer_pubkey_hex, new_key_id_hex)` composite (server peeks blob to extract `new_key_id` — exact byte offsets are moat) — repeat POST returns same `rotation_id`.
   - Returns: `{ rotation_id: <random URL-safe 32-byte>, expires_at_ms }`.
 - `GET /v1/key-rotation/by-peer/:peer_pubkey_hex` — peer drains mailbox.
   - Returns: `{ rotations: [{ rotation_id, blob, expires_at_ms }, ...] }` (200, possibly empty array).
