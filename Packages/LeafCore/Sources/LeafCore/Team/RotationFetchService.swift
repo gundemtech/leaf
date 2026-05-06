@@ -169,8 +169,72 @@ public struct RotationFetchService: Sendable {
                                  orgID: String,
                                  selfPriv: Curve25519.KeyAgreement.PrivateKey,
                                  selfPubHex: String) async -> Bool {
-        // Filled in Task 6.
-        return false
+        // 1. Convert newKeyID + priorKeyID Data 16B → UUID lowercase strings.
+        guard let newKeyUUID = uuidFromBytes(header.newKeyID),
+              let priorKeyUUID = uuidFromBytes(header.priorKeyID) else { return false }
+        let newKeyID = newKeyUUID.uuidString.lowercased()
+        let priorKeyID = priorKeyUUID.uuidString.lowercased()
+
+        // 2. Build admin candidates: active members with role == .admin, excluding self.
+        guard let activeMembers = try? database.readTeamMembers(orgID: orgID, includeRemoved: false) else {
+            return false
+        }
+        let adminCandidates = activeMembers.filter { $0.role == .admin && $0.pubkeyHex != selfPubHex }
+        if adminCandidates.isEmpty { return false }
+
+        // 3. Iterate admins; first ECDH+HKDF+decode success wins.
+        var winningPlaintext: RotationPlaintext?
+        var winningAdminID: String?
+        for admin in adminCandidates {
+            do {
+                let sharedSecret = try KeyAgreement.sharedSecret(
+                    privateKey: selfPriv,
+                    peerPublicKeyHex: admin.pubkeyHex
+                )
+                let wrapKey = try rotationKDF.deriveWrapKey(sharedSecret: sharedSecret, newKeyID: header.newKeyID)
+                let plaintext = try rotationBlobCodec.decode(blob, wrapKey: wrapKey)
+                winningPlaintext = plaintext
+                winningAdminID = admin.id
+                break
+            } catch {
+                continue
+            }
+        }
+        guard let plaintext = winningPlaintext, let adminID = winningAdminID else { return false }
+
+        // 4. Cross-field assertions.
+        guard plaintext.kind == .rotation else { return false }
+        guard plaintext.newKeyID == newKeyID, plaintext.priorKeyID == priorKeyID else { return false }
+        guard let newTeamKeyBytes = Data(base64Encoded: plaintext.newTeamKeyBase64),
+              newTeamKeyBytes.count == 32 else { return false }
+
+        // 5. Keystore-first: write newTeamKey bytes to disk (orphan file < orphan rows).
+        do {
+            try TeamKeystore.writeTeamKey(newTeamKeyBytes, id: newKeyID, at: keystoreRoot)
+        } catch {
+            return false
+        }
+
+        // 6. DB: insertTeamKeyIfAbsent (idempotent on duplicate id) + deprecateTeamKey.
+        let nowDate = now()
+        do {
+            try database.insertTeamKeyIfAbsent(TeamKey(
+                id: newKeyID,
+                generatedAt: nowDate,
+                deprecatedAt: nil,
+                generatedByMemberID: adminID
+            ))
+        } catch {
+            return false
+        }
+        do {
+            try database.deprecateTeamKey(keyID: priorKeyID, at: nowDate)
+        } catch {
+            // .invalidPayload here means priorKey missing locally — orchestrator/peer
+            // out of sync. Skip (orphan keystore file harmless).
+            return false
+        }
+        return true
     }
 
     private func hexEncodePubkey(_ data: Data) -> String {

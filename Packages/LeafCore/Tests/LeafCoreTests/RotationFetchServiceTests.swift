@@ -358,6 +358,191 @@ final class RotationFetchServiceTests: XCTestCase {
         XCTAssertEqual(outcome.tombstoneApplied, 0)
         XCTAssertEqual(RotationFetchServiceMockURLProtocol.ackCount(), 0)
     }
+
+    // MARK: - Rotation path
+
+    fileprivate func makeRotationBlob(
+        priorKeyID: String, newKeyID: String,
+        newTeamKeyBytes: Data,
+        recipientPubkey: Data
+    ) throws -> (bytes: Data, codec: RotationRecordingCodec) {
+        let codec = RotationRecordingCodec()
+        codec.installSpec = RotationRecordingCodec.RotationSpec(
+            priorKeyID: priorKeyID,
+            newKeyID: newKeyID,
+            newTeamKeyBase64: newTeamKeyBytes.base64EncodedString()
+        )
+        let plaintext = RotationPlaintext(
+            kind: .rotation,
+            newTeamKeyBase64: newTeamKeyBytes.base64EncodedString(),
+            newKeyID: newKeyID, priorKeyID: priorKeyID,
+            generatedAtMs: 1_700_000_000_500, removedMemberID: nil
+        )
+        let blob = try codec.encode(plaintext, recipientPubkey: recipientPubkey,
+                                    wrapKey: SymmetricKey(size: .bits256))
+        return (blob.bytes, codec)
+    }
+
+    func testRotationHappyPathSingleAdmin_Installs_AcksRelay() async throws {
+        let pubs = try insertTeamFixture()
+        let newKeyID = "11111111-1111-1111-1111-111111111111"
+        let priorKeyID = "00000000-0000-0000-0000-000000000000"
+        let newTeamKey = Data(repeating: 0xAB, count: 32)
+
+        let (blobBytes, codec) = try makeRotationBlob(
+            priorKeyID: priorKeyID, newKeyID: newKeyID,
+            newTeamKeyBytes: newTeamKey,
+            recipientPubkey: pubs.selfPriv.publicKey.rawRepresentation
+        )
+        let stubKey = SymmetricKey(size: .bits256)
+        codec.wrapKeyExpected = stubKey
+
+        let kdf = RecordingKDF()
+        kdf.stubKey = stubKey
+
+        Self.mountSingleBlobHandler(blobBytes: blobBytes)
+
+        let svc = makeService(kdf: kdf, codec: codec, identityPriv: pubs.selfPriv)
+
+        let outcome = await svc.tick()
+
+        XCTAssertEqual(outcome.fetched, 1)
+        XCTAssertEqual(outcome.installed, 1)
+        XCTAssertEqual(outcome.skipped, 0)
+        XCTAssertEqual(RotationFetchServiceMockURLProtocol.ackCount(), 1)
+
+        XCTAssertEqual(try db.readActiveTeamKey()?.id, newKeyID)
+        let prior = try db.readTeamKey(byID: priorKeyID)
+        XCTAssertNotNil(prior?.deprecatedAt)
+
+        let storedNew = try TeamKeystore.readTeamKey(id: newKeyID, at: keystoreRoot)
+        XCTAssertEqual(storedNew, newTeamKey)
+    }
+
+    func testRotationDuplicateInstall_Idempotent() async throws {
+        let pubs = try insertTeamFixture()
+        let newKeyID = "11111111-1111-1111-1111-111111111111"
+        let priorKeyID = "00000000-0000-0000-0000-000000000000"
+        let newTeamKey = Data(repeating: 0xAB, count: 32)
+
+        let (blobBytes, codec) = try makeRotationBlob(
+            priorKeyID: priorKeyID, newKeyID: newKeyID,
+            newTeamKeyBytes: newTeamKey,
+            recipientPubkey: pubs.selfPriv.publicKey.rawRepresentation
+        )
+        let stubKey = SymmetricKey(size: .bits256)
+        codec.wrapKeyExpected = stubKey
+
+        let kdf = RecordingKDF()
+        kdf.stubKey = stubKey
+
+        Self.mountSingleBlobHandler(blobBytes: blobBytes)
+
+        let svc = makeService(kdf: kdf, codec: codec, identityPriv: pubs.selfPriv)
+
+        // First call — installs.
+        _ = await svc.tick()
+        // Second call — same blob (relay still has it); install path runs idempotently
+        // via insertTeamKeyIfAbsent (no-op) + deprecateTeamKey (already deprecated, no-op).
+        let outcome2 = await svc.tick()
+
+        XCTAssertEqual(outcome2.fetched, 1)
+        // Idempotent install reported as success (insertIfAbsent no-op + deprecate idempotent).
+        XCTAssertEqual(outcome2.installed, 1)
+
+        // Active key unchanged (still newKeyID).
+        XCTAssertEqual(try db.readActiveTeamKey()?.id, newKeyID)
+    }
+
+    func testRotationAllAdminsFail_Skips_NoAck() async throws {
+        let pubs = try insertTeamFixture()
+        let newKeyID = "11111111-1111-1111-1111-111111111111"
+        let priorKeyID = "00000000-0000-0000-0000-000000000000"
+        let newTeamKey = Data(repeating: 0xAB, count: 32)
+
+        let (blobBytes, codec) = try makeRotationBlob(
+            priorKeyID: priorKeyID, newKeyID: newKeyID,
+            newTeamKeyBytes: newTeamKey,
+            recipientPubkey: pubs.selfPriv.publicKey.rawRepresentation
+        )
+        let stubKey = SymmetricKey(size: .bits256)
+        codec.wrapKeyExpected = stubKey
+
+        // KDF returns DIFFERENT key from stubKey; codec rejects.
+        let kdf = RecordingKDF()
+        kdf.stubKey = SymmetricKey(size: .bits256)  // != stubKey
+
+        Self.mountSingleBlobHandler(blobBytes: blobBytes)
+
+        let svc = makeService(kdf: kdf, codec: codec, identityPriv: pubs.selfPriv)
+
+        let outcome = await svc.tick()
+        XCTAssertEqual(outcome.skipped, 1)
+        XCTAssertEqual(outcome.installed, 0)
+        XCTAssertEqual(RotationFetchServiceMockURLProtocol.ackCount(), 0)
+
+        XCTAssertEqual(try db.readActiveTeamKey()?.id, priorKeyID)
+        XCTAssertNil(try db.readTeamKey(byID: newKeyID))
+    }
+
+    func testMultipleBlobsMixedOutcomes() async throws {
+        let pubs = try insertTeamFixture()
+        let priorKeyID = "00000000-0000-0000-0000-000000000000"
+        let newKeyID = "11111111-1111-1111-1111-111111111111"
+        let newTeamKey = Data(repeating: 0xAB, count: 32)
+
+        let (rotBytes, rotCodec) = try makeRotationBlob(
+            priorKeyID: priorKeyID, newKeyID: newKeyID, newTeamKeyBytes: newTeamKey,
+            recipientPubkey: pubs.selfPriv.publicKey.rawRepresentation
+        )
+        let stubKey = SymmetricKey(size: .bits256)
+        rotCodec.wrapKeyExpected = stubKey
+
+        let tombKey = SymmetricKey(data: pubs.priorTeamKey)
+        let (tombBytes, tombCodec) = try makeTombstoneBlob(
+            priorKeyID: priorKeyID, removedMemberID: "self-mem",
+            wrapKey: tombKey, recipientPubkey: pubs.selfPriv.publicKey.rawRepresentation
+        )
+        // Wait — running tombstone install will set self.removed_at_ms; that's fine
+        // because we don't assert on self-state, only on counts + acks.
+
+        // Bad/short blob.
+        let badBytes = Data(repeating: 0x00, count: 5)
+
+        let composite = CompositeCodec()
+        composite.rotation = rotCodec
+        composite.tombstone = tombCodec
+
+        let kdf = RecordingKDF()
+        kdf.stubKey = stubKey
+
+        let body = """
+            {"rotations":[\
+            {"rotation_id":"a1","blob":"\(rotBytes.base64URLNoPad)","expires_at_ms":1700000086400000},\
+            {"rotation_id":"a2","blob":"\(tombBytes.base64URLNoPad)","expires_at_ms":1700000086400000},\
+            {"rotation_id":"a3","blob":"\(badBytes.base64URLNoPad)","expires_at_ms":1700000086400000}\
+            ]}
+            """
+        RotationFetchServiceMockURLProtocol.handler = { req, _ in
+            if req.httpMethod == "DELETE" {
+                let resp = HTTPURLResponse(url: req.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!
+                return (resp, nil)
+            }
+            let resp = HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil,
+                                       headerFields: ["Content-Type": "application/json"])!
+            return (resp, body.data(using: .utf8)!)
+        }
+
+        let svc = makeService(kdf: kdf, codec: composite, identityPriv: pubs.selfPriv)
+
+        let outcome = await svc.tick()
+        XCTAssertEqual(outcome.fetched, 3)
+        XCTAssertEqual(outcome.installed, 1)
+        XCTAssertEqual(outcome.tombstoneApplied, 1)
+        XCTAssertEqual(outcome.skipped, 1)
+        XCTAssertEqual(RotationFetchServiceMockURLProtocol.ackCount(), 2,
+                       "Both happy paths acked; bad blob not acked")
+    }
 }
 
 // MARK: - Recording codec for tombstone tests
@@ -408,6 +593,84 @@ final class TombstoneRecordingCodec: RotationBlobCodec, @unchecked Sendable {
     private func uuidBytes(_ uuidString: String) -> Data {
         guard let uuid = UUID(uuidString: uuidString) else { return Data(repeating: 0, count: 16) }
         return withUnsafeBytes(of: uuid.uuid) { Data($0) }
+    }
+}
+
+// MARK: - Recording KDF for rotation tests
+
+final class RecordingKDF: RotationKDF, @unchecked Sendable {
+    nonisolated(unsafe) var stubKey = SymmetricKey(size: .bits256)
+    nonisolated(unsafe) var calls: [(SharedSecret, Data)] = []
+
+    func deriveWrapKey(sharedSecret: SharedSecret, newKeyID: Data) throws -> SymmetricKey {
+        calls.append((sharedSecret, newKeyID))
+        return stubKey
+    }
+}
+
+// MARK: - Recording rotation codec
+
+final class RotationRecordingCodec: RotationBlobCodec, @unchecked Sendable {
+    struct RotationSpec {
+        let priorKeyID: String
+        let newKeyID: String
+        let newTeamKeyBase64: String
+    }
+    nonisolated(unsafe) var installSpec: RotationSpec?
+    nonisolated(unsafe) var wrapKeyExpected: SymmetricKey?
+
+    func encode(_ plaintext: RotationPlaintext, recipientPubkey: Data, wrapKey: SymmetricKey) throws -> RotationBlob {
+        var bytes = Data([0x03])
+        bytes.append(uuidBytes(plaintext.priorKeyID))
+        bytes.append(uuidBytes(plaintext.newKeyID))
+        bytes.append(recipientPubkey)
+        bytes.append(Data(repeating: 0xCC, count: 12))
+        bytes.append(Data([0xEE]))
+        bytes.append(Data(repeating: 0xDD, count: 16))
+        return RotationBlob(bytes: bytes)
+    }
+
+    func decode(_ blob: RotationBlob, wrapKey: SymmetricKey) throws -> RotationPlaintext {
+        if let expected = wrapKeyExpected,
+           expected.withUnsafeBytes({ Data($0) }) != wrapKey.withUnsafeBytes({ Data($0) }) {
+            throw LeafError.rotationBlobMalformed
+        }
+        guard let spec = installSpec else { throw LeafError.rotationBlobMalformed }
+        return RotationPlaintext(
+            kind: .rotation,
+            newTeamKeyBase64: spec.newTeamKeyBase64,
+            newKeyID: spec.newKeyID, priorKeyID: spec.priorKeyID,
+            generatedAtMs: 1_700_000_000_500,
+            removedMemberID: nil
+        )
+    }
+
+    private func uuidBytes(_ uuidString: String) -> Data {
+        guard let uuid = UUID(uuidString: uuidString) else { return Data(repeating: 0, count: 16) }
+        return withUnsafeBytes(of: uuid.uuid) { Data($0) }
+    }
+}
+
+// MARK: - Composite codec (routes by peek header)
+
+final class CompositeCodec: RotationBlobCodec, @unchecked Sendable {
+    nonisolated(unsafe) var rotation: RotationRecordingCodec?
+    nonisolated(unsafe) var tombstone: TombstoneRecordingCodec?
+
+    func encode(_ plaintext: RotationPlaintext, recipientPubkey: Data, wrapKey: SymmetricKey) throws -> RotationBlob {
+        switch plaintext.kind {
+        case .rotation: return try rotation!.encode(plaintext, recipientPubkey: recipientPubkey, wrapKey: wrapKey)
+        case .tombstone: return try tombstone!.encode(plaintext, recipientPubkey: recipientPubkey, wrapKey: wrapKey)
+        }
+    }
+
+    func decode(_ blob: RotationBlob, wrapKey: SymmetricKey) throws -> RotationPlaintext {
+        let header = try RotationBlobHeader.peek(from: blob)
+        if header.priorKeyID == header.newKeyID {
+            return try tombstone!.decode(blob, wrapKey: wrapKey)
+        } else {
+            return try rotation!.decode(blob, wrapKey: wrapKey)
+        }
     }
 }
 
