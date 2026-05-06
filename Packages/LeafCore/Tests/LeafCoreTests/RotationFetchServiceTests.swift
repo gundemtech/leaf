@@ -31,6 +31,7 @@ final class RotationFetchServiceTests: XCTestCase {
         RotationFetchServiceMockURLProtocol.handler = nil
         RotationFetchServiceMockURLProtocol.networkError = nil
         RotationFetchServiceMockURLProtocol.lastRequest = nil
+        RotationFetchServiceMockURLProtocol.requestLog = []
         db = nil
         relayClient = nil
         try? FileManager.default.removeItem(at: tempDir)
@@ -197,8 +198,216 @@ final class RotationFetchServiceTests: XCTestCase {
         XCTAssertEqual(outcome.installed, 0)
         XCTAssertEqual(outcome.tombstoneApplied, 0)
         // No DELETE request expected — we did NOT ack.
-        XCTAssertEqual(RotationFetchServiceMockURLProtocol.lastRequest?.httpMethod, "GET",
-                       "Last request should be GET, not DELETE")
+        XCTAssertEqual(RotationFetchServiceMockURLProtocol.ackCount(), 0)
+    }
+
+    // MARK: - Tombstone path
+
+    /// Builds a stub tombstone blob bytes: header bytes (95B real layout so peek works)
+    /// + Recording codec returns the matching plaintext. Caller passes returned codec
+    /// instance into makeService().
+    fileprivate func makeTombstoneBlob(
+        priorKeyID: String,
+        removedMemberID: String,
+        wrapKey: SymmetricKey,
+        recipientPubkey: Data
+    ) throws -> (bytes: Data, codec: TombstoneRecordingCodec) {
+        let codec = TombstoneRecordingCodec()
+        codec.wrapKeyExpected = wrapKey
+        codec.tombstoneFor = TombstoneRecordingCodec.TombstoneSpec(
+            priorKeyID: priorKeyID, newKeyID: priorKeyID, removedMemberID: removedMemberID
+        )
+        let plaintext = RotationPlaintext(
+            kind: .tombstone, newTeamKeyBase64: "",
+            newKeyID: priorKeyID, priorKeyID: priorKeyID,
+            generatedAtMs: 1_700_000_000_500, removedMemberID: removedMemberID
+        )
+        let blob = try codec.encode(plaintext, recipientPubkey: recipientPubkey, wrapKey: wrapKey)
+        return (blob.bytes, codec)
+    }
+
+    /// Mounts a relay handler that returns a single fetched blob on GET and 204 on DELETE.
+    fileprivate static func mountSingleBlobHandler(blobBytes: Data, rotationID: String = "abcdef0123456789abcdef0123456789") {
+        let blobB64 = blobBytes.base64URLNoPad
+        let body = """
+            {"rotations":[{"rotation_id":"\(rotationID)",\
+            "blob":"\(blobB64)","expires_at_ms":1700000086400000}]}
+            """
+        RotationFetchServiceMockURLProtocol.handler = { req, _ in
+            if req.httpMethod == "DELETE" {
+                let resp = HTTPURLResponse(url: req.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!
+                return (resp, nil)
+            }
+            let resp = HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil,
+                                       headerFields: ["Content-Type": "application/json"])!
+            return (resp, body.data(using: .utf8)!)
+        }
+    }
+
+    func testTombstoneHappyPath_MarksSelfRemoved_AndAcks() async throws {
+        let pubs = try insertTeamFixture()
+        let priorKeyID = "00000000-0000-0000-0000-000000000000"
+        let wrapKey = SymmetricKey(data: pubs.priorTeamKey)
+
+        let (blobBytes, codec) = try makeTombstoneBlob(
+            priorKeyID: priorKeyID,
+            removedMemberID: "self-mem",
+            wrapKey: wrapKey,
+            recipientPubkey: pubs.selfPriv.publicKey.rawRepresentation
+        )
+
+        Self.mountSingleBlobHandler(blobBytes: blobBytes)
+
+        let svc = makeService(codec: codec, identityPriv: pubs.selfPriv)
+
+        let outcome = await svc.tick()
+
+        XCTAssertEqual(outcome.fetched, 1)
+        XCTAssertEqual(outcome.tombstoneApplied, 1)
+        XCTAssertEqual(outcome.installed, 0)
+        XCTAssertEqual(outcome.skipped, 0)
+        XCTAssertEqual(RotationFetchServiceMockURLProtocol.ackCount(), 1)
+
+        // DB: self should be marked removed.
+        let allMembers = try db.readTeamMembers(orgID: "org1", includeRemoved: true)
+        let selfMember = allMembers.first(where: { $0.id == "self-mem" })
+        XCTAssertNotNil(selfMember?.removedAt)
+    }
+
+    func testTombstoneMisroutedToOtherMember_DoesNotMarkSelf_NoAck() async throws {
+        let pubs = try insertTeamFixture()
+        let priorKeyID = "00000000-0000-0000-0000-000000000000"
+        let wrapKey = SymmetricKey(data: pubs.priorTeamKey)
+
+        // removedMemberID points to "peer-other", NOT self.
+        let (blobBytes, codec) = try makeTombstoneBlob(
+            priorKeyID: priorKeyID,
+            removedMemberID: "peer-other",
+            wrapKey: wrapKey,
+            recipientPubkey: pubs.selfPriv.publicKey.rawRepresentation
+        )
+        Self.mountSingleBlobHandler(blobBytes: blobBytes)
+
+        let svc = makeService(codec: codec, identityPriv: pubs.selfPriv)
+        let outcome = await svc.tick()
+
+        XCTAssertEqual(outcome.skipped, 1)
+        XCTAssertEqual(outcome.tombstoneApplied, 0)
+        XCTAssertEqual(RotationFetchServiceMockURLProtocol.ackCount(), 0,
+                       "Mis-routed tombstone must NOT be acked")
+
+        let allMembers = try db.readTeamMembers(orgID: "org1", includeRemoved: true)
+        let selfMember = allMembers.first(where: { $0.id == "self-mem" })
+        XCTAssertNil(selfMember?.removedAt)
+    }
+
+    func testTombstoneMissingPriorTeamKeyInKeystore_Skips_NoAck() async throws {
+        let pubs = try insertTeamFixture()
+        let priorKeyID = "00000000-0000-0000-0000-000000000000"
+        let wrapKey = SymmetricKey(data: pubs.priorTeamKey)
+
+        let (blobBytes, codec) = try makeTombstoneBlob(
+            priorKeyID: priorKeyID,
+            removedMemberID: "self-mem",
+            wrapKey: wrapKey,
+            recipientPubkey: pubs.selfPriv.publicKey.rawRepresentation
+        )
+        // Delete keystore prior teamKey file (simulate missing/corrupted).
+        try FileManager.default.removeItem(
+            at: keystoreRoot.appendingPathComponent(TeamKeystore.teamKeysSubdir, isDirectory: true)
+                .appendingPathComponent("\(priorKeyID).key", isDirectory: false)
+        )
+
+        Self.mountSingleBlobHandler(blobBytes: blobBytes)
+
+        let svc = makeService(codec: codec, identityPriv: pubs.selfPriv)
+        let outcome = await svc.tick()
+
+        XCTAssertEqual(outcome.skipped, 1)
+        XCTAssertEqual(outcome.tombstoneApplied, 0)
+        XCTAssertEqual(RotationFetchServiceMockURLProtocol.ackCount(), 0)
+    }
+
+    func testTombstoneWrongKindPostDecrypt_Skips() async throws {
+        // Codec returns .rotation kind despite peek discriminator (priorKeyID == newKeyID
+        // → tombstone path). Defensive cross-field check should reject.
+        let pubs = try insertTeamFixture()
+        let priorKeyID = "00000000-0000-0000-0000-000000000000"
+        let wrapKey = SymmetricKey(data: pubs.priorTeamKey)
+
+        let codec = TombstoneRecordingCodec()
+        codec.wrapKeyExpected = wrapKey
+        codec.tombstoneFor = TombstoneRecordingCodec.TombstoneSpec(
+            priorKeyID: priorKeyID, newKeyID: priorKeyID, removedMemberID: "self-mem"
+        )
+        codec.forceKindOnDecode = .rotation
+        let plaintext = RotationPlaintext(
+            kind: .tombstone, newTeamKeyBase64: "",
+            newKeyID: priorKeyID, priorKeyID: priorKeyID,
+            generatedAtMs: 1_700_000_000_500, removedMemberID: "self-mem"
+        )
+        let rotationBlob = try codec.encode(plaintext,
+                                            recipientPubkey: pubs.selfPriv.publicKey.rawRepresentation,
+                                            wrapKey: wrapKey)
+        Self.mountSingleBlobHandler(blobBytes: rotationBlob.bytes)
+
+        let svc = makeService(codec: codec, identityPriv: pubs.selfPriv)
+        let outcome = await svc.tick()
+
+        XCTAssertEqual(outcome.skipped, 1)
+        XCTAssertEqual(outcome.tombstoneApplied, 0)
+        XCTAssertEqual(RotationFetchServiceMockURLProtocol.ackCount(), 0)
+    }
+}
+
+// MARK: - Recording codec for tombstone tests
+
+final class TombstoneRecordingCodec: RotationBlobCodec, @unchecked Sendable {
+    struct TombstoneSpec {
+        let priorKeyID: String
+        let newKeyID: String
+        let removedMemberID: String
+    }
+
+    nonisolated(unsafe) var wrapKeyExpected: SymmetricKey?
+    nonisolated(unsafe) var tombstoneFor: TombstoneSpec?
+    /// If set, decode returns plaintext with this kind regardless of encoded blob.
+    nonisolated(unsafe) var forceKindOnDecode: RotationKind?
+
+    func encode(_ plaintext: RotationPlaintext, recipientPubkey: Data, wrapKey: SymmetricKey) throws -> RotationBlob {
+        // Real RotationBlobHeader bytes so peek() works:
+        // [ver:1 | priorKeyID:16 | newKeyID:16 | recipientPubkey:32 | nonce:12 | ct:1 | tag:16] = 94B
+        var bytes = Data([0x03])
+        let priorBytes = uuidBytes(plaintext.priorKeyID)
+        let newBytes = uuidBytes(plaintext.newKeyID)
+        bytes.append(priorBytes)
+        bytes.append(newBytes)
+        bytes.append(recipientPubkey)
+        bytes.append(Data(repeating: 0xCC, count: 12))
+        bytes.append(Data([0xEE]))
+        bytes.append(Data(repeating: 0xDD, count: 16))
+        return RotationBlob(bytes: bytes)
+    }
+
+    func decode(_ blob: RotationBlob, wrapKey: SymmetricKey) throws -> RotationPlaintext {
+        if let expected = wrapKeyExpected,
+           expected.withUnsafeBytes({ Data($0) }) != wrapKey.withUnsafeBytes({ Data($0) }) {
+            throw LeafError.rotationBlobMalformed
+        }
+        guard let spec = tombstoneFor else { throw LeafError.rotationBlobMalformed }
+        return RotationPlaintext(
+            kind: forceKindOnDecode ?? .tombstone,
+            newTeamKeyBase64: "",
+            newKeyID: spec.newKeyID,
+            priorKeyID: spec.priorKeyID,
+            generatedAtMs: 1_700_000_000_500,
+            removedMemberID: spec.removedMemberID
+        )
+    }
+
+    private func uuidBytes(_ uuidString: String) -> Data {
+        guard let uuid = UUID(uuidString: uuidString) else { return Data(repeating: 0, count: 16) }
+        return withUnsafeBytes(of: uuid.uuid) { Data($0) }
     }
 }
 
@@ -208,6 +417,7 @@ final class RotationFetchServiceMockURLProtocol: URLProtocol {
     nonisolated(unsafe) static var handler: ((URLRequest, Data) throws -> (HTTPURLResponse, Data?))?
     nonisolated(unsafe) static var networkError: Error?
     nonisolated(unsafe) static var lastRequest: URLRequest?
+    nonisolated(unsafe) static var requestLog: [URLRequest] = []
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
@@ -222,6 +432,7 @@ final class RotationFetchServiceMockURLProtocol: URLProtocol {
             return
         }
         Self.lastRequest = request
+        Self.requestLog.append(request)
         do {
             let (resp, data) = try handler(request, Data())
             client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
@@ -233,4 +444,8 @@ final class RotationFetchServiceMockURLProtocol: URLProtocol {
     }
 
     override func stopLoading() {}
+
+    static func ackCount() -> Int {
+        requestLog.filter { $0.httpMethod == "DELETE" }.count
+    }
 }
