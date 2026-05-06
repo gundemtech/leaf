@@ -26,4 +26,7 @@ public enum LeafError: Error, Sendable {
     // Phase 5.3.C (consumer: RelayClient rotation methods) — 4xx surfaces from
     // POST /v1/key-rotation, GET /v1/key-rotation/by-peer/, DELETE /v1/key-rotation/.
     case rotationRequestRejected(reason: String)
+    // Phase 5.3.D (consumer: KeyRotationService.removeMember preflight) —
+    // admin cannot kick themselves out of their own org.
+    case cannotRemoveSelfFromTeam
 }
