@@ -54,6 +54,11 @@ struct TeamView: View {
 
         case .error(let message):
             errorCard(message: message)
+
+        case .removedFromOrg:
+            // RootView preempts this state with RemovedFromTeamBanner; this branch
+            // is unreachable but required for switch exhaustiveness.
+            EmptyView()
         }
     }
 
