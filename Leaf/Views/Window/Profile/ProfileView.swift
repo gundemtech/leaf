@@ -4,6 +4,15 @@ import LeafCore
 struct ProfileView: View {
     @Environment(InsightsReader.self) private var reader
 
+    private var fullName: String {
+        let n = NSFullUserName().trimmingCharacters(in: .whitespaces)
+        return n.isEmpty ? "Local user" : n
+    }
+
+    private var initial: String {
+        fullName.first.map { String($0).uppercased() } ?? "?"
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
@@ -24,7 +33,7 @@ struct ProfileView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("PROFILE")
                     .leafLabelStyle()
-                Text("Dmitrii Demidov")
+                Text(fullName)
                     .font(.leafHeadline)
                     .foregroundStyle(.leafInk)
                 Text("Leaf · Local user")
@@ -39,7 +48,7 @@ struct ProfileView: View {
         ZStack {
             Circle()
                 .fill(Color.leafAccent.opacity(0.18))
-            Text("D")
+            Text(initial)
                 .font(.system(size: 28, weight: .semibold, design: .serif))
                 .foregroundStyle(.leafAccentDeep)
         }
