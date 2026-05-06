@@ -19,4 +19,8 @@ public enum LeafError: Error, Sendable {
     // Phase 5.2.E (consumer: InviteAcceptService) — single-org-per-device invariant
     // means accept-flow refuses if local DB already has an org row.
     case inviteAlreadyAccepted
+    // Phase 5.3.B (consumers: RotationBlobHeader.peek + ProdRotationBlobCodec).
+    // Surfaced on short-bytes / version mismatch / AES-GCM tag fail / JSON decode failure /
+    // cross-field invariant violation between kind and other RotationPlaintext fields.
+    case rotationBlobMalformed
 }
