@@ -1,3 +1,4 @@
+import CryptoKit
 import SwiftUI
 import LeafCore
 
@@ -5,6 +6,17 @@ struct TeamView: View {
     @Environment(OrgReader.self) private var reader
     @Environment(WindowState.self) private var windowState
     @State private var showingGenerateSheet: Bool = false
+    // Phase 5.3.E — per-row "..." Menu wiring.
+    @State private var pendingRemoval: PendingRemoval?
+    @State private var myPubHex: String = ""
+
+    /// Identifiable wrapper for `.sheet(item:)` — pendingRemoval transitions
+    /// trigger sheet present.
+    private struct PendingRemoval: Identifiable {
+        let id = UUID()
+        let memberID: String
+        let displayName: String
+    }
 
     var body: some View {
         ScrollView {
@@ -15,9 +27,15 @@ struct TeamView: View {
             .padding(40)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .onAppear { reader.refresh() }
+        .onAppear {
+            reader.refresh()
+            loadMyPubHex()
+        }
         .sheet(isPresented: $showingGenerateSheet) {
             GenerateInviteSheet()
+        }
+        .sheet(item: $pendingRemoval) { removal in
+            RemoveMemberSheet(memberID: removal.memberID, displayName: removal.displayName)
         }
     }
 
@@ -109,6 +127,33 @@ struct TeamView: View {
             }
 
             Spacer()
+
+            // Phase 5.3.E — per-row "..." Menu, hidden for self-row.
+            if !myPubHex.isEmpty && member.pubkeyHex != myPubHex {
+                Menu {
+                    Button("Remove from team…", role: .destructive) {
+                        pendingRemoval = PendingRemoval(
+                            memberID: member.id,
+                            displayName: member.displayName
+                        )
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .foregroundStyle(.leafInk.opacity(0.5))
+                }
+                .menuStyle(.borderlessButton)
+                .frame(width: 28)
+            }
+        }
+    }
+
+    private func loadMyPubHex() {
+        do {
+            let priv = try IdentityService.ensureLocalIdentity(at: TeamKeystore.defaultRoot())
+            myPubHex = priv.publicKey.rawRepresentation
+                .map { String(format: "%02x", $0) }.joined()
+        } catch {
+            myPubHex = ""
         }
     }
 
