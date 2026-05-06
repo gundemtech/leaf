@@ -833,16 +833,9 @@ public final class Database: @unchecked Sendable {
                 arguments: [priorDeprecatedAtMs, priorTeamKeyID]
             )
             if db.changesCount != 1 {
-                // Disambiguate: missing row vs already-deprecated. Both → caller bug,
-                // surface as .invalidPayload (no separate case for now per spec §9).
-                let _ = try Row.fetchOne(db, sql: """
-                    SELECT \(Schema.TeamKeys.id)
-                    FROM \(Schema.TeamKeys.tableName)
-                    WHERE \(Schema.TeamKeys.id) = ?
-                    LIMIT 1
-                    """,
-                    arguments: [priorTeamKeyID]
-                )
+                // changesCount 0 → either missing row or already-deprecated. Both
+                // surface as .invalidPayload per spec §9 (caller bug — admin shouldn't
+                // initiate rotation от стейта где prior-key already deprecated/missing).
                 throw LeafError.invalidPayload
             }
 
@@ -857,14 +850,7 @@ public final class Database: @unchecked Sendable {
                     arguments: [memberRemovedMs, memberID]
                 )
                 if db.changesCount != 1 {
-                    let _ = try Row.fetchOne(db, sql: """
-                        SELECT \(Schema.TeamMembers.id)
-                        FROM \(Schema.TeamMembers.tableName)
-                        WHERE \(Schema.TeamMembers.id) = ?
-                        LIMIT 1
-                        """,
-                        arguments: [memberID]
-                    )
+                    // changesCount 0 → either missing row or already-removed; both → .invalidPayload.
                     throw LeafError.invalidPayload
                 }
             }

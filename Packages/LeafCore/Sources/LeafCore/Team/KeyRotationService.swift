@@ -185,7 +185,10 @@ public struct KeyRotationService: Sendable {
 
             if let removed = removedMember, member.id == removed.id {
                 // .tombstone wrap (raw prior teamKey, no HKDF — 5.3.B AD #6).
-                let removedPubkey = try Self.dataFromHex(member.pubkeyHex)
+                // KeyAgreement.decodePublicKey validates 64-char hex format.
+                let removedPubkey = try KeyAgreement
+                    .decodePublicKey(hex: member.pubkeyHex)
+                    .rawRepresentation
                 let wrapKey = SymmetricKey(data: priorTeamKeyBytes)
                 let plaintext = RotationPlaintext(
                     kind: .tombstone,
@@ -212,10 +215,16 @@ public struct KeyRotationService: Sendable {
                     postedAtMs: nil
                 ))
             } else {
-                // .rotation wrap — ECDH(admin, peer) + HKDF.
-                let peerPubData = try Self.dataFromHex(member.pubkeyHex)
-                let peerPub = try Curve25519.KeyAgreement.PublicKey(rawRepresentation: peerPubData)
-                let sharedSecret = try adminPriv.sharedSecretFromKeyAgreement(with: peerPub)
+                // .rotation wrap — ECDH(admin, peer) + HKDF. KeyAgreement helper
+                // encapsulates hex validation + Curve25519 PublicKey reconstruction
+                // + sharedSecret derivation (Phase 5.2.A).
+                let peerPubData = try KeyAgreement
+                    .decodePublicKey(hex: member.pubkeyHex)
+                    .rawRepresentation
+                let sharedSecret = try KeyAgreement.sharedSecret(
+                    privateKey: adminPriv,
+                    peerPublicKeyHex: member.pubkeyHex
+                )
                 let wrapKey = try rotationKDF.deriveWrapKey(sharedSecret: sharedSecret, newKeyID: newKeyIDData)
                 let plaintext = RotationPlaintext(
                     kind: .rotation,
@@ -270,21 +279,4 @@ public struct KeyRotationService: Sendable {
         )
     }
 
-    // MARK: - Helpers
-
-    private static func dataFromHex(_ hex: String) throws -> Data {
-        guard hex.count % 2 == 0 else { throw LeafError.invalidPayload }
-        var bytes = [UInt8]()
-        bytes.reserveCapacity(hex.count / 2)
-        var index = hex.startIndex
-        while index < hex.endIndex {
-            let next = hex.index(index, offsetBy: 2)
-            guard let byte = UInt8(hex[index..<next], radix: 16) else {
-                throw LeafError.invalidPayload
-            }
-            bytes.append(byte)
-            index = next
-        }
-        return Data(bytes)
-    }
 }
