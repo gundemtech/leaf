@@ -10,8 +10,8 @@ import Foundation
 /// `LeafCorePrivate/Prod/Crypto/`.
 ///
 /// `ver = 0x03` distinguishes от envelope (0x01) и invite (0x02). Domain
-/// separation enforced на двух independent layers — version byte + KDF
-/// info-string (`leaf.rotation.wrapkey.v1` vs `leaf.invite.wrapkey.v1`).
+/// separation enforced на двух independent layers — version byte +
+/// distinct HKDF info string (constant — moat в `LeafCorePrivate`).
 public struct RotationBlob: Sendable, Hashable {
     public let bytes: Data
     public init(bytes: Data) { self.bytes = bytes }

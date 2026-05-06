@@ -40,7 +40,7 @@ Phase 5.3.B — **substrate sub-phase**: wire format для wrapped peer-key dro
 | `RotationKDF` protocol + `UnimplementedRotationKDF` | `Packages/LeafCore/Sources/LeafCore/Crypto/RotationKDF.swift` (новый) | `deriveWrapKey(sharedSecret, newKeyID)` — без OTP |
 | `LeafError` +1 case | `LeafError.swift` (edit) | `rotationBlobMalformed` |
 | `ProdRotationBlobCodec` real impl | `Packages/LeafCore/Sources/LeafCorePrivate/Prod/Crypto/ProdRotationBlobCodec.swift` (новый, **gitignored**) | CryptoKit `AES.GCM`, JSON `.sortedKeys`, AAD = full 77B prefix |
-| `ProdRotationKDF` real impl | `Packages/LeafCore/Sources/LeafCorePrivate/Prod/Crypto/ProdRotationKDF.swift` (новый, **gitignored**) | HKDF-SHA256, info `"leaf.rotation.wrapkey.v1"`, salt = `newKeyID` 16B |
+| `ProdRotationKDF` real impl | `Packages/LeafCore/Sources/LeafCorePrivate/Prod/Crypto/ProdRotationKDF.swift` (новый, **gitignored**) | HKDF-SHA256, distinct info string (moat constant), salt = `newKeyID` 16B |
 | Public tests | `Tests/LeafCoreTests/{RotationPlaintextTests, RotationBlobHeaderTests, RotationBlobCodecTests, RotationKDFTests}.swift` | 11-13 public tests |
 | Moat tests | `Tests/LeafCorePrivateTests/{ProdRotationBlobCodecTests, ProdRotationKDFTests}.swift` (gitignored) | 15-18 moat tests |
 
@@ -77,9 +77,7 @@ Phase 5.3.B — **substrate sub-phase**: wire format для wrapped peer-key dro
 
 ### 3.2 AAD construction
 
-`AAD = ver || prior_keyID || new_keyID || recipient_pubkey || nonce` = full 77B prefix.
-
-Mirror `ProdInviteBlobCodec` belt-and-braces style. AES-GCM internally binds nonce to ciphertext; explicit AAD inclusion **also** binds (version, both keyIDs, recipientPubkey) to the auth tag — tampering anywhere in the prefix invalidates decryption.
+AAD binds full 65B header + 12B nonce = 77B (exact byte composition — moat в `LeafCorePrivate`). Mirror `ProdInviteBlobCodec` belt-and-braces style: AES-GCM internally binds nonce to ciphertext; explicit AAD inclusion **also** binds the header surface to the auth tag — tampering anywhere in the prefix invalidates decryption.
 
 ### 3.3 Plaintext (`RotationPlaintext`) — JSON wire shape
 
@@ -255,7 +253,7 @@ CryptoKit `AES.GCM.seal/open` mirror'ит `ProdInviteBlobCodec` структур
 ### 5.2 `ProdRotationKDF`
 
 Moat constants:
-- `hkdfInfo = Data("leaf.rotation.wrapkey.v1".utf8)` — distinct from invite `"leaf.invite.wrapkey.v1"` for cryptographic domain separation.
+- `hkdfInfo` = distinct rotation-domain literal (moat constant), structurally distinct from invite KDF info string for cryptographic domain separation.
 - `wrapKeyLength = 32` (256-bit AES key).
 - Salt = `newKeyID` raw 16B (no SHA256 wrap — UUID is already random).
 - Validates `newKeyID.count == 16` else throws `LeafError.invalidPayload`.
