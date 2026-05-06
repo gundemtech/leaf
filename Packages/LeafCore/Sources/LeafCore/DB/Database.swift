@@ -770,6 +770,187 @@ public final class Database: @unchecked Sendable {
         }
     }
 
+    // MARK: - Rotation outbox (Phase 5.3.D)
+
+    /// Atomic write of a key-rotation event: INSERT new `team_keys` row + UPDATE
+    /// prior row's `deprecated_at_ms` + optional UPDATE `team_members.removed_at_ms`
+    /// + INSERT N `rotation_outbox` rows. All within single `pool.write` block;
+    /// rolls back on any failure.
+    ///
+    /// Sole-active guard relaxed (vs `deprecateTeamKey` 5.3.A) because new active
+    /// row inserted in step 1 — at the time of step 2 deprecate, count >= 2.
+    ///
+    /// Throws `.databaseUnavailable` on reader-mode, `.invalidPayload` on:
+    /// (removedMemberID, removedAt) nil-vs-non-nil mismatch; missing/already-deprecated
+    /// prior key; missing/already-removed member; duplicate outbox composite key.
+    public func commitRotation(
+        newTeamKey: TeamKey,
+        priorTeamKeyID: String,
+        deprecatedAt: Date,
+        removedMemberID: String?,
+        removedAt: Date?,
+        outboxRows: [RotationOutboxRow]
+    ) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        // Pre-validation: removedMemberID and removedAt must be nil-together or non-nil-together.
+        switch (removedMemberID, removedAt) {
+        case (nil, nil), (.some, .some):
+            break
+        default:
+            throw LeafError.invalidPayload
+        }
+
+        let priorDeprecatedAtMs = Int64(deprecatedAt.timeIntervalSince1970 * 1000)
+        let newGeneratedAtMs = Int64(newTeamKey.generatedAt.timeIntervalSince1970 * 1000)
+        let newDeprecatedAtMs: Int64? = newTeamKey.deprecatedAt.map { Int64($0.timeIntervalSince1970 * 1000) }
+        let removedAtMs: Int64? = removedAt.map { Int64($0.timeIntervalSince1970 * 1000) }
+
+        try pool.write { db in
+            // Step 1: INSERT new team_keys row.
+            try db.execute(sql: """
+                INSERT INTO \(Schema.TeamKeys.tableName) (
+                    \(Schema.TeamKeys.id),
+                    \(Schema.TeamKeys.generatedAtMs),
+                    \(Schema.TeamKeys.deprecatedAtMs),
+                    \(Schema.TeamKeys.generatedByMemberID)
+                ) VALUES (?, ?, ?, ?)
+                """,
+                arguments: [
+                    newTeamKey.id,
+                    newGeneratedAtMs,
+                    newDeprecatedAtMs,
+                    newTeamKey.generatedByMemberID
+                ]
+            )
+
+            // Step 2: UPDATE prior team_keys deprecated_at_ms.
+            try db.execute(sql: """
+                UPDATE \(Schema.TeamKeys.tableName)
+                SET \(Schema.TeamKeys.deprecatedAtMs) = ?
+                WHERE \(Schema.TeamKeys.id) = ?
+                  AND \(Schema.TeamKeys.deprecatedAtMs) IS NULL
+                """,
+                arguments: [priorDeprecatedAtMs, priorTeamKeyID]
+            )
+            if db.changesCount != 1 {
+                // Disambiguate: missing row vs already-deprecated. Both → caller bug,
+                // surface as .invalidPayload (no separate case for now per spec §9).
+                let _ = try Row.fetchOne(db, sql: """
+                    SELECT \(Schema.TeamKeys.id)
+                    FROM \(Schema.TeamKeys.tableName)
+                    WHERE \(Schema.TeamKeys.id) = ?
+                    LIMIT 1
+                    """,
+                    arguments: [priorTeamKeyID]
+                )
+                throw LeafError.invalidPayload
+            }
+
+            // Step 3: optional UPDATE team_members removed_at_ms.
+            if let memberID = removedMemberID, let memberRemovedMs = removedAtMs {
+                try db.execute(sql: """
+                    UPDATE \(Schema.TeamMembers.tableName)
+                    SET \(Schema.TeamMembers.removedAtMs) = ?
+                    WHERE \(Schema.TeamMembers.id) = ?
+                      AND \(Schema.TeamMembers.removedAtMs) IS NULL
+                    """,
+                    arguments: [memberRemovedMs, memberID]
+                )
+                if db.changesCount != 1 {
+                    let _ = try Row.fetchOne(db, sql: """
+                        SELECT \(Schema.TeamMembers.id)
+                        FROM \(Schema.TeamMembers.tableName)
+                        WHERE \(Schema.TeamMembers.id) = ?
+                        LIMIT 1
+                        """,
+                        arguments: [memberID]
+                    )
+                    throw LeafError.invalidPayload
+                }
+            }
+
+            // Step 4: INSERT N rotation_outbox rows. Duplicate composite PK throws.
+            for row in outboxRows {
+                try db.execute(sql: """
+                    INSERT INTO \(Schema.RotationOutbox.tableName) (
+                        \(Schema.RotationOutbox.peerPubkeyHex),
+                        \(Schema.RotationOutbox.newKeyID),
+                        \(Schema.RotationOutbox.priorKeyID),
+                        \(Schema.RotationOutbox.kind),
+                        \(Schema.RotationOutbox.peerMemberID),
+                        \(Schema.RotationOutbox.blob),
+                        \(Schema.RotationOutbox.expiresAtMs),
+                        \(Schema.RotationOutbox.createdAtMs),
+                        \(Schema.RotationOutbox.postedAtMs)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    arguments: [
+                        row.peerPubkeyHex,
+                        row.newKeyID,
+                        row.priorKeyID,
+                        row.kind.rawValue,
+                        row.peerMemberID,
+                        row.blob,
+                        row.expiresAtMs,
+                        row.createdAtMs,
+                        row.postedAtMs as Int64?
+                    ]
+                )
+            }
+        }
+    }
+
+    /// Lists outbox rows where `posted_at_ms IS NULL`, ordered by `created_at_ms`
+    /// ASC then `peer_pubkey_hex` ASC for determinism. Reader-mode safe.
+    /// Phase 5.3.D — used by `KeyRotationService.resumePendingPosts()`.
+    public func readUnpostedRotationOutboxRows() throws -> [RotationOutboxRow] {
+        try pool.read { db in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT
+                    \(Schema.RotationOutbox.peerPubkeyHex),
+                    \(Schema.RotationOutbox.newKeyID),
+                    \(Schema.RotationOutbox.priorKeyID),
+                    \(Schema.RotationOutbox.kind),
+                    \(Schema.RotationOutbox.peerMemberID),
+                    \(Schema.RotationOutbox.blob),
+                    \(Schema.RotationOutbox.expiresAtMs),
+                    \(Schema.RotationOutbox.createdAtMs),
+                    \(Schema.RotationOutbox.postedAtMs)
+                FROM \(Schema.RotationOutbox.tableName)
+                WHERE \(Schema.RotationOutbox.postedAtMs) IS NULL
+                ORDER BY \(Schema.RotationOutbox.createdAtMs) ASC,
+                         \(Schema.RotationOutbox.peerPubkeyHex) ASC
+                """)
+            return rows.compactMap(Self.mapRotationOutboxRow)
+        }
+    }
+
+    private static func mapRotationOutboxRow(_ row: Row) -> RotationOutboxRow? {
+        guard let peer: String = row[Schema.RotationOutbox.peerPubkeyHex],
+              let newID: String = row[Schema.RotationOutbox.newKeyID],
+              let priorID: String = row[Schema.RotationOutbox.priorKeyID],
+              let kindRaw: String = row[Schema.RotationOutbox.kind],
+              let kind = RotationKind(rawValue: kindRaw),
+              let memberID: String = row[Schema.RotationOutbox.peerMemberID],
+              let blob: Data = row[Schema.RotationOutbox.blob],
+              let expiresMs: Int64 = row[Schema.RotationOutbox.expiresAtMs],
+              let createdMs: Int64 = row[Schema.RotationOutbox.createdAtMs] else {
+            return nil
+        }
+        let postedMs: Int64? = row[Schema.RotationOutbox.postedAtMs]
+        return RotationOutboxRow(
+            peerPubkeyHex: peer,
+            newKeyID: newID,
+            priorKeyID: priorID,
+            kind: kind,
+            peerMemberID: memberID,
+            blob: blob,
+            expiresAtMs: expiresMs,
+            createdAtMs: createdMs,
+            postedAtMs: postedMs
+        )
+    }
+
     // MARK: - Linear attribution v2 migration (Phase 4.5)
 
     /// Phase 4.5 — одноразовая wipe Linear events + cursor для миграции на
