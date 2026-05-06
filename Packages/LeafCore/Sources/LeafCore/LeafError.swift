@@ -23,4 +23,7 @@ public enum LeafError: Error, Sendable {
     // Surfaced on short-bytes / version mismatch / AES-GCM tag fail / JSON decode failure /
     // cross-field invariant violation between kind and other RotationPlaintext fields.
     case rotationBlobMalformed
+    // Phase 5.3.C (consumer: RelayClient rotation methods) — 4xx surfaces from
+    // POST /v1/key-rotation, GET /v1/key-rotation/by-peer/, DELETE /v1/key-rotation/.
+    case rotationRequestRejected(reason: String)
 }
