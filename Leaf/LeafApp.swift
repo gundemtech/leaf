@@ -26,6 +26,7 @@ struct LeafApp: App {
     @State private var orgReader = OrgReader()
     @State private var inviteOutboxReader = InviteOutboxReader()
     @State private var inviteAcceptReader = InviteAcceptReader()
+    @State private var memberRemovalReader = MemberRemovalReader()  // Phase 5.3.E
     @State private var windowState = WindowState()
 
     init() {
@@ -87,6 +88,7 @@ struct LeafApp: App {
                 .environment(orgReader)
                 .environment(inviteOutboxReader)
                 .environment(inviteAcceptReader)
+                .environment(memberRemovalReader)  // Phase 5.3.E
                 .environment(windowState)
         }
         .defaultSize(width: 1100, height: 720)
