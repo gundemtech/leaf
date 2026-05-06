@@ -75,6 +75,18 @@ public struct KeyRotationService: Sendable {
         )
     }
 
+    /// Drains all unposted `rotation_outbox` rows. Called from Agent on startup
+    /// (Task.detached) to retry POSTs after crash mid-iteration. Returns aggregate
+    /// outcome across all rows; `newKeyID`/`priorKeyID` are empty strings because
+    /// resume may drain rows from multiple historical rotation events.
+    public func resumePendingPosts() async throws -> RotationOutcome {
+        let unposted = try database.readUnpostedRotationOutboxRows()
+        if unposted.isEmpty {
+            return RotationOutcome(newKeyID: "", priorKeyID: "", postedCount: 0, pendingCount: 0, totalCount: 0)
+        }
+        return await iterateOutboxRows(unposted, newKeyID: "", priorKeyID: "")
+    }
+
     /// Iterates outbox rows, POSTs each to relay, marks `posted_at_ms` on success.
     /// Continue-on-error — accumulates posted/pending counts. Used by both
     /// `removeMember` (fresh outbox) and `resumePendingPosts` (drain unposted).

@@ -199,6 +199,71 @@ final class KeyRotationServiceTests: XCTestCase {
         XCTAssertEqual(try db.readUnpostedRotationOutboxRows().count, 1)
     }
 
+    // MARK: - resumePendingPosts
+
+    func testResumePendingPosts_EmptyOutbox_NoOp() async throws {
+        let pubs = try insertTeamFixture()
+        let svc = makeService(adminPriv: pubs.adminPriv)
+
+        let outcome = try await svc.resumePendingPosts()
+
+        XCTAssertEqual(outcome.totalCount, 0)
+        XCTAssertEqual(outcome.newKeyID, "")
+        XCTAssertEqual(outcome.priorKeyID, "")
+    }
+
+    func testResumePendingPosts_DrainsUnposted() async throws {
+        let pubs = try insertTeamFixture()
+        // First removeMember with all-fail relay → outbox accumulates 2 unposted rows.
+        KeyRotationServiceMockURLProtocol.handler = { request, _ in
+            let resp = HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!
+            return (resp, Data())
+        }
+        let svc = makeService(adminPriv: pubs.adminPriv)
+        _ = try await svc.removeMember(memberID: "peer-b")
+        XCTAssertEqual(try db.readUnpostedRotationOutboxRows().count, 2)
+
+        // Phase 2: resume with success relay
+        KeyRotationServiceMockURLProtocol.handler = { req, body in try Self.stubRelaySuccess201(req, body) }
+
+        let outcome = try await svc.resumePendingPosts()
+
+        XCTAssertEqual(outcome.totalCount, 2)
+        XCTAssertEqual(outcome.postedCount, 2)
+        XCTAssertEqual(outcome.pendingCount, 0)
+        XCTAssertEqual(try db.readUnpostedRotationOutboxRows().count, 0)
+    }
+
+    func testResumePendingPosts_PartialDrainContinues() async throws {
+        let pubs = try insertTeamFixture()
+        // First removeMember with all-fail relay → outbox accumulates 2 unposted rows.
+        KeyRotationServiceMockURLProtocol.handler = { request, _ in
+            let resp = HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!
+            return (resp, Data())
+        }
+        let svc = makeService(adminPriv: pubs.adminPriv)
+        _ = try await svc.removeMember(memberID: "peer-b")
+
+        // Phase 2: resume with one success / one fail
+        let counter = AtomicCounter()
+        KeyRotationServiceMockURLProtocol.handler = { request, _ in
+            let n = counter.increment()
+            if n == 1 {
+                let resp = HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!
+                return (resp, Data())
+            } else {
+                return try KeyRotationServiceTests.stubRelaySuccess201(request, Data())
+            }
+        }
+
+        let outcome = try await svc.resumePendingPosts()
+
+        XCTAssertEqual(outcome.totalCount, 2)
+        XCTAssertEqual(outcome.postedCount, 1)
+        XCTAssertEqual(outcome.pendingCount, 1)
+        XCTAssertEqual(try db.readUnpostedRotationOutboxRows().count, 1)
+    }
+
     func testRemoveMember_FullPostFailure_DBStillCommitted() async throws {
         let pubs = try insertTeamFixture()
         KeyRotationServiceMockURLProtocol.handler = { request, _ in
