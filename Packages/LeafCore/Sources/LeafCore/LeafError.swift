@@ -34,4 +34,8 @@ public enum LeafError: Error, Sendable {
     case joinCodeMalformed
     case joinCodeChecksumMismatch
     case inviteURLMalformed
+    // Phase 5.5.B (consumers: InviteAcceptReader / InviteOutboxReader / InviteURLHandler)
+    case inviteAlreadyConsumed
+    case pasteboardEmpty
+    case clipboardNoMatch
 }
