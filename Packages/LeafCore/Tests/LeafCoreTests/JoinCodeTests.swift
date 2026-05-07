@@ -68,22 +68,28 @@ final class JoinCodeTests: XCTestCase {
 
     func testDecode_TypoResiliencyOIL1() throws {
         let encoded = try JoinCode.encode(pubkey: samplePubkey)
-        // Replace any '0' → 'O', any '1' → 'I' (or 'L' alternation) in DATA portion.
-        // Encoded chars are uppercase from alphabet (no 0→O or 1→I tampering issue
-        // unless the actual chars '0' or '1' appear). We force-substitute on the raw
-        // string to simulate user typo input.
+        // Replace any '0' → 'O', any '1' → 'L' in the DATA portion only.
+        // Indices 0..71 = data chars + hyphens; indices 72..75 = 4-char checksum group.
+        // Substituting inside the checksum group would cause .checksumMismatch (not the
+        // .malformed typo-correction path) — so we leave indices ≥ 72 untouched.
         var typoed = ""
         var didOSwap = false
         var didISwap = false
-        for ch in encoded {
-            switch ch {
-            case "0" where !didOSwap: typoed.append("O"); didOSwap = true
-            case "1" where !didISwap: typoed.append("L"); didISwap = true   // L→1 fix path
-            default: typoed.append(ch)
+        for (idx, ch) in encoded.enumerated() {
+            // Only substitute in the data portion (indices 0..71).
+            // Indices 72..75 are the 4-char checksum group — leave untouched.
+            if idx < 72 {
+                switch ch {
+                case "0" where !didOSwap: typoed.append("O"); didOSwap = true
+                case "1" where !didISwap: typoed.append("L"); didISwap = true
+                default: typoed.append(ch)
+                }
+            } else {
+                typoed.append(ch)
             }
         }
-        // If the encoded form doesn't contain any '0' or '1' chars, this test is
-        // a no-op pass. Skip in that case to avoid false positives.
+        // If the encoded form doesn't contain any '0' or '1' chars in the data portion,
+        // this test is a no-op pass. Skip in that case to avoid false positives.
         guard didOSwap || didISwap else {
             try XCTSkipIf(true, "no 0/1 chars in encoded sample to typo-substitute")
             return
