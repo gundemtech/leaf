@@ -150,6 +150,18 @@ final class JoinCodeTests: XCTestCase {
         XCTAssertEqual(decoded, samplePubkey)
     }
 
+    /// Spec §9 anti-Castagnoli mitigation. A uniform CRC32 polynomial substitution
+    /// (IEEE → Castagnoli) would not be caught by any roundtrip test, since
+    /// encode/decode share the same crc32IEEE helper. This pins a fixed input
+    /// to its expected 4-char base32-Crockford checksum so any poly change fails fast.
+    func testEncode_PinnedKnownVectorChecksum() throws {
+        let encoded = try JoinCode.encode(pubkey: samplePubkey)
+        let checksum = String(encoded.split(separator: "-").last ?? "")
+        XCTAssertEqual(checksum.count, 4)
+        // Pinned: CRC32-IEEE([0x00..0x1F]) low-20 bits, big-endian base32-Crockford.
+        XCTAssertEqual(checksum, "CZMA", "JoinCode CRC32 vector mismatch — possible polynomial change")
+    }
+
     func testDecode_LegacyHexWrongLengthRejected() {
         let hex = samplePubkey.map { String(format: "%02x", $0) }.joined()
         // 63 chars (truncated) — neither strict (68) nor hex (64).
