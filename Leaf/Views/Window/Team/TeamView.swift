@@ -4,6 +4,7 @@ import LeafCore
 
 struct TeamView: View {
     @Environment(OrgReader.self) private var reader
+    @Environment(PendingInvitesReader.self) private var pendingReader  // Phase 5.5.C
     @Environment(WindowState.self) private var windowState
     @State private var showingGenerateSheet: Bool = false
     // Phase 5.3.E — per-row "..." Menu wiring.
@@ -29,6 +30,7 @@ struct TeamView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear {
             reader.refresh()
+            pendingReader.refresh()  // Phase 5.5.C — sync sweep + load pending invites
             loadMyPubHex()
         }
         .sheet(isPresented: $showingGenerateSheet) {
@@ -107,6 +109,9 @@ struct TeamView: View {
                 }
             }
             .frame(maxWidth: 580, alignment: .leading)
+
+            // Phase 5.5.C — pending invites surface. Section hides itself when no rows.
+            PendingInvitesSection()
 
             Button(action: { showingGenerateSheet = true }) {
                 Label("Add member", systemImage: "plus")

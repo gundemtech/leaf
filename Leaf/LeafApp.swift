@@ -27,6 +27,7 @@ struct LeafApp: App {
     @State private var inviteOutboxReader = InviteOutboxReader()
     @State private var inviteAcceptReader = InviteAcceptReader()
     @State private var memberRemovalReader = MemberRemovalReader()  // Phase 5.3.E
+    @State private var pendingInvitesReader = PendingInvitesReader()  // Phase 5.5.C
     @State private var inviteURLHandler = InviteURLHandler()  // Phase 5.5.B
     @State private var windowState = WindowState()
     @Environment(\.scenePhase) private var scenePhase
@@ -91,6 +92,7 @@ struct LeafApp: App {
                 .environment(inviteOutboxReader)
                 .environment(inviteAcceptReader)
                 .environment(memberRemovalReader)  // Phase 5.3.E
+                .environment(pendingInvitesReader)  // Phase 5.5.C
                 .environment(inviteURLHandler)  // Phase 5.5.B
                 .environment(windowState)
                 .onAppear {
