@@ -428,10 +428,10 @@ final class MigrationTests: XCTestCase {
         _ = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
     }
 
-    /// Sanity — после полного open видим все 9 application tables в `sqlite_master`,
+    /// Sanity — после полного open видим все 10 application tables в `sqlite_master`,
     /// то есть migration registration order не ломает existing tables.
-    /// Phase 5.3.D добавляет `rotation_outbox` (M009).
-    func testMigration006To009CoexistWithEarlier() throws {
+    /// Phase 5.5.A добавляет `pending_invites` (M010).
+    func testMigration006To010CoexistWithEarlier() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -449,7 +449,8 @@ final class MigrationTests: XCTestCase {
                 Schema.Org.tableName,
                 Schema.TeamMembers.tableName,
                 Schema.TeamKeys.tableName,
-                Schema.RotationOutbox.tableName
+                Schema.RotationOutbox.tableName,
+                Schema.PendingInvites.tableName
             ]
             XCTAssertEqual(tables, expected)
         }
