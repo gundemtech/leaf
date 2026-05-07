@@ -10,7 +10,6 @@
 //
 
 import SwiftUI
-import AppKit
 import LeafCore
 
 struct GenerateInviteSheet: View {
@@ -37,11 +36,11 @@ struct GenerateInviteSheet: View {
         .padding(28)
         .frame(width: 560, height: 580)
         .onAppear {
-            // Auto-detect Join code в clipboard.
-            if case .joinCode = urlHandler.probeClipboard(),
-               let raw = NSPasteboard.general.string(forType: .string) {
-                // Берём raw text — JoinCode.decode сам канонизирует.
-                joinCodeInput = extractJoinCodeCandidate(from: raw)
+            // Auto-detect Join code в clipboard. Re-encode bytes из match → formatted display
+            // (single pasteboard read, no second .string lookup).
+            if case .joinCode(let bytes) = urlHandler.probeClipboard(),
+               let formatted = try? JoinCode.encode(pubkey: bytes) {
+                joinCodeInput = formatted
             }
         }
     }
@@ -171,17 +170,10 @@ struct GenerateInviteSheet: View {
     }
 
     private func inviteeDisplayNameHint() -> String {
-        // pending_invites сохраняет hint только если onboarding передал; сейчас не передаём → fallback "там"
-        // (template читается естественно). Future polish — surface hint при `display_name_hint != nil`.
-        return "там"
-    }
-
-    private func extractJoinCodeCandidate(from raw: String) -> String {
-        // Берём первый whitespace-разделённый token который JoinCode.decode принимает.
-        for token in raw.split(whereSeparator: { $0.isWhitespace }) {
-            if case .success = JoinCode.decode(String(token)) { return String(token) }
-        }
-        return raw
+        // Admin sheet не знает invitee display name на этапе generation (paste-Join-code path
+        // не несёт имя). Empty → ShareTemplate.adminShare свернёт на neutral greeting "Привет!".
+        // 5.5.C surface name hint когда pending_invites.inviteeDisplayNameHint заполнен.
+        return ""
     }
 
     private func countdownText(expiresAtMs: Int64, now: Date = Date()) -> String {

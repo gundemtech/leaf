@@ -29,6 +29,7 @@ struct LeafApp: App {
     @State private var memberRemovalReader = MemberRemovalReader()  // Phase 5.3.E
     @State private var inviteURLHandler = InviteURLHandler()  // Phase 5.5.B
     @State private var windowState = WindowState()
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         // Phase 3.4.5 — материализуем db.key из main app's Keychain group ДО `agent.register()`.
@@ -98,6 +99,15 @@ struct LeafApp: App {
                 }
                 .onOpenURL { url in
                     inviteURLHandler.handle(url)
+                }
+                .onChange(of: scenePhase) { _, newPhase in
+                    // Phase 5.5.B — invitee comes back to Leaf after admin sent invite link;
+                    // probe clipboard для auto-fetch без manual paste step. Deep-link path
+                    // (`.onOpenURL`) covers click-to-open; this covers Cmd-Tab-from-chat-app.
+                    guard newPhase == .active else { return }
+                    if case .inviteURL(let url) = inviteURLHandler.probeClipboard() {
+                        inviteAcceptReader.fetch(inviteURL: url)
+                    }
                 }
         }
         .defaultSize(width: 1100, height: 720)

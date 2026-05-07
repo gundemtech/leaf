@@ -38,8 +38,12 @@ public enum ShareTemplate {
             Жду от тебя invite link 🌿
             """
         case .adminShare(let displayName, let inviteURL):
+            // Admin-side не всегда знает invitee display name (paste-Join-code flow без preceding
+            // inviteeShare exchange). Empty/whitespace → neutral greeting; иначе — personalized.
+            let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let greeting = trimmed.isEmpty ? "Привет!" : "Привет, \(trimmed)!"
             return """
-            Привет \(displayName)! Вот твой Leaf invite link (действует 24 часа):
+            \(greeting) Вот твой Leaf invite link (действует 24 часа):
 
             \(inviteURL.absoluteString)
 
