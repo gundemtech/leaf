@@ -144,6 +144,26 @@ public struct PendingInvitesStore: Sendable {
         )
     }
 
+    /// Phase 5.5.C — sweep `.pending` rows whose `expires_at_ms < nowMs` to `.expired`.
+    /// Returns affected row count. Idempotent — second run on same nowMs returns 0.
+    /// Caller wraps in `pool.write { ... }` (UPDATE requires writer pool).
+    public static func sweepExpired(nowMs: Int64, in db: GRDB.Database) throws -> Int {
+        try db.execute(
+            sql: """
+                UPDATE \(Schema.PendingInvites.tableName)
+                SET \(Schema.PendingInvites.status) = ?
+                WHERE \(Schema.PendingInvites.status) = ?
+                  AND \(Schema.PendingInvites.expiresAtMs) < ?
+                """,
+            arguments: [
+                PendingInviteStatus.expired.rawValue,
+                PendingInviteStatus.pending.rawValue,
+                nowMs
+            ]
+        )
+        return db.changesCount
+    }
+
     // MARK: - Private
 
     private static func mapRow(_ row: Row) -> PendingInvite? {

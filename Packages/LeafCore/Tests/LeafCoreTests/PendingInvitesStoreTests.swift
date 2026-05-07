@@ -149,4 +149,61 @@ final class PendingInvitesStoreTests: XCTestCase {
             XCTAssertNil(try PendingInvitesStore.read(token: row.token, in: rawDB))
         }
     }
+
+    // MARK: - Phase 5.5.C — sweepExpired
+
+    func testSweepExpiredFlipsPendingPastDeadline() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs: Int64 = 1_700_000_000_000
+        let live = sample(token: "t1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", createdAtMs: nowMs)
+        let expired = sample(
+            token: "t2aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            createdAtMs: nowMs - 48 * 60 * 60 * 1000
+        )
+        let alreadyRevoked = sample(
+            token: "t3aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            createdAtMs: nowMs - 48 * 60 * 60 * 1000,
+            status: .revoked
+        )
+        try writeInPool(db) { rawDB in
+            try PendingInvitesStore.insert(live, in: rawDB)
+            try PendingInvitesStore.insert(expired, in: rawDB)
+            try PendingInvitesStore.insert(alreadyRevoked, in: rawDB)
+        }
+
+        try writeInPool(db) { rawDB in
+            let affected = try PendingInvitesStore.sweepExpired(nowMs: nowMs, in: rawDB)
+            XCTAssertEqual(affected, 1, "Only the past-deadline .pending row flips")
+        }
+
+        try db.readSQL { rawDB in
+            let liveRow = try XCTUnwrap(try PendingInvitesStore.read(token: live.token, in: rawDB))
+            XCTAssertEqual(liveRow.status, .pending)
+
+            let expiredRow = try XCTUnwrap(try PendingInvitesStore.read(token: expired.token, in: rawDB))
+            XCTAssertEqual(expiredRow.status, .expired)
+
+            let revokedRow = try XCTUnwrap(try PendingInvitesStore.read(token: alreadyRevoked.token, in: rawDB))
+            XCTAssertEqual(revokedRow.status, .revoked, "sweep does not touch non-.pending rows")
+        }
+    }
+
+    func testSweepExpiredIdempotentSecondRun() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs: Int64 = 1_700_000_000_000
+        let expired = sample(
+            token: "t1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            createdAtMs: nowMs - 48 * 60 * 60 * 1000
+        )
+        try writeInPool(db) { rawDB in
+            try PendingInvitesStore.insert(expired, in: rawDB)
+        }
+        try writeInPool(db) { rawDB in
+            _ = try PendingInvitesStore.sweepExpired(nowMs: nowMs, in: rawDB)
+        }
+        try writeInPool(db) { rawDB in
+            let affected = try PendingInvitesStore.sweepExpired(nowMs: nowMs, in: rawDB)
+            XCTAssertEqual(affected, 0, "Second sweep finds no .pending past deadline")
+        }
+    }
 }
