@@ -25,6 +25,8 @@ struct OnboardingView: View {
     @Environment(InviteAcceptReader.self) private var inviteAcceptReader
     @Environment(OrgReader.self) private var orgReader
     @State private var showingAcceptSheet: Bool = false
+    enum TeamSubStep: Equatable { case choice, create, join, waiting }
+    @State private var teamSubStep: TeamSubStep = .choice
     let onDone: () -> Void
 
     var body: some View {
@@ -47,6 +49,19 @@ struct OnboardingView: View {
         }
         .onChange(of: permissions.fdaGranted) { _, granted in
             if step == .fda && granted { step = .team }
+        }
+        .onChange(of: orgReader.state) { _, newState in
+            // Phase 5.5.B — admin path: org create success → .done.
+            if step == .team, teamSubStep == .create, case .loaded = newState {
+                step = .done
+            }
+        }
+        .onChange(of: inviteAcceptReader.state) { _, newState in
+            // Invitee path: invite accept success closes sheet (existing) or deep-link auto-fetch
+            // landed on .otpEntry — keep waiting view; on .success — done.
+            if step == .team, case .success = newState {
+                step = .done
+            }
         }
         .sheet(isPresented: $showingAcceptSheet) {
             AcceptInviteSheet()
@@ -153,21 +168,37 @@ struct OnboardingView: View {
         }
     }
 
+    @ViewBuilder
     private var teamStep: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Team")
-                .font(.subheadline.weight(.semibold))
-            Text("Has someone invited you to a team? Accept the invite — otherwise skip and create your personal org later.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Button("Accept invite") {
-                showingAcceptSheet = true
+        switch teamSubStep {
+        case .choice:
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Team")
+                    .font(.subheadline.weight(.semibold))
+                Text("Set up how Leaf shares your work signal with teammates.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Create new team") { teamSubStep = .create }
+                    .buttonStyle(.borderedProminent)
+                Button("Join existing team") { teamSubStep = .join }
+                    .buttonStyle(.bordered)
+                Button("Skip for now") { step = .done }
+                    .buttonStyle(.link)
+                    .font(.caption)
             }
-            .buttonStyle(.borderedProminent)
-            Button("Skip for now") { step = .done }
-                .buttonStyle(.link)
-                .font(.caption)
+        case .create:
+            CreateTeamStepView(onCancel: { teamSubStep = .choice })
+        case .join:
+            JoinTeamStepView(
+                onAdvance: { teamSubStep = .waiting },
+                onCancel: { teamSubStep = .choice }
+            )
+        case .waiting:
+            WaitingForInviteView(
+                onManualPaste: { showingAcceptSheet = true },
+                onCancel: { teamSubStep = .join }
+            )
         }
     }
 

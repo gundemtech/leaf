@@ -26,7 +26,7 @@ import LeafCorePrivate
 @MainActor
 @Observable
 final class OrgReader {
-    enum State {
+    enum State: Equatable {
         case loading
         case empty
         case loaded(Org, [TeamMember])
