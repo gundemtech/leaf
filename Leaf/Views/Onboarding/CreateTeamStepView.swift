@@ -29,7 +29,7 @@ struct CreateTeamStepView: View {
                 Text("YOUR DISPLAY NAME")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                TextField("e.g. Anton", text: $displayName)
+                TextField("e.g. Sasha", text: $displayName)
                     .textFieldStyle(.roundedBorder)
                     .disabled(submitted)
             }

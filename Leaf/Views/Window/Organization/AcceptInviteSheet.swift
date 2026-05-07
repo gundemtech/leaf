@@ -118,7 +118,7 @@ struct AcceptInviteSheet: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text("YOUR DISPLAY NAME").leafLabelStyle()
-                    TextField("e.g. Anton", text: $displayNameInput)
+                    TextField("e.g. Sasha", text: $displayNameInput)
                         .textFieldStyle(.roundedBorder)
                         .font(.leafBody)
                         .disabled(disabled)
