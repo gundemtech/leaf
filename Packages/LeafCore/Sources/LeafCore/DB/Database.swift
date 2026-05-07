@@ -1270,6 +1270,49 @@ public final class Database: @unchecked Sendable {
             try PendingInvitesStore.updateStatus(token: token, status: status, in: db)
         }
     }
+
+    // MARK: - Pending invites (Phase 5.5.C — read / sweep / delete / poll-stamp)
+
+    /// Read all `pending_invites` rows visible to UI list (excludes `.consumed`),
+    /// ordered by `created_at_ms` DESC. Reader pool — mode-agnostic.
+    public func readAllPendingInvites() throws -> [PendingInvite] {
+        try pool.read { db in
+            try PendingInvitesStore.readAllExcludingConsumed(in: db)
+        }
+    }
+
+    /// Read all `pending_invites` rows filtered by exact status (used by poll loop).
+    public func readAllPendingInvitesByStatus(_ status: PendingInviteStatus) throws -> [PendingInvite] {
+        try pool.read { db in
+            try PendingInvitesStore.readAll(status: status, in: db)
+        }
+    }
+
+    /// DELETE `pending_invites` row by PK. Idempotent — silent no-op on missing row.
+    public func deletePendingInvite(token: String) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try PendingInvitesStore.delete(token: token, in: db)
+        }
+    }
+
+    /// UPDATE `pending_invites.last_polled_at_ms`. Idempotent — silent no-op on missing token.
+    public func updatePendingInviteLastPolledAt(token: String, atMs: Int64) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try PendingInvitesStore.updateLastPolledAt(token: token, atMs: atMs, in: db)
+        }
+    }
+
+    /// Sweep `.pending` rows past `expires_at_ms` deadline → `.expired`. Returns affected count.
+    /// Used by `PendingInvitesService.{loadVisible,pollPending}` (D8 — sweep at TeamView .onAppear
+    /// + post-Refresh).
+    public func sweepExpiredPendingInvites(nowMs: Int64) throws -> Int {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        return try pool.write { db in
+            try PendingInvitesStore.sweepExpired(nowMs: nowMs, in: db)
+        }
+    }
 }
 
 // MARK: - EventRecord conversion

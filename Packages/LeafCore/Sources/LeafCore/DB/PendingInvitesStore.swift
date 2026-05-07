@@ -100,6 +100,30 @@ public struct PendingInvitesStore: Sendable {
         return rows.compactMap(Self.mapRow)
     }
 
+    /// Phase 5.5.C — SELECT all rows where `status != 'consumed'`, ordered by
+    /// `created_at_ms` DESC. Used by UI list (consumed rows hidden — admin-side
+    /// mental model "row пропал = colleague joined" per spec D1).
+    public static func readAllExcludingConsumed(in db: GRDB.Database) throws -> [PendingInvite] {
+        let rows = try Row.fetchAll(
+            db,
+            sql: """
+                SELECT \(Schema.PendingInvites.token),
+                       \(Schema.PendingInvites.otp),
+                       \(Schema.PendingInvites.inviteePubkeyHex),
+                       \(Schema.PendingInvites.inviteeDisplayNameHint),
+                       \(Schema.PendingInvites.createdAtMs),
+                       \(Schema.PendingInvites.expiresAtMs),
+                       \(Schema.PendingInvites.status),
+                       \(Schema.PendingInvites.lastPolledAtMs)
+                FROM \(Schema.PendingInvites.tableName)
+                WHERE \(Schema.PendingInvites.status) != ?
+                ORDER BY \(Schema.PendingInvites.createdAtMs) DESC
+                """,
+            arguments: [PendingInviteStatus.consumed.rawValue]
+        )
+        return rows.compactMap(Self.mapRow)
+    }
+
     /// UPDATE status. Silent no-op if token missing (idempotent — UI Refresh
     /// path may be called against just-revoked rows).
     public static func updateStatus(
