@@ -16,6 +16,7 @@ import CryptoKit
 import Foundation
 import Observation
 import OSLog
+import SwiftUI
 import LeafCore
 #if LEAF_PROD
 import LeafCorePrivate
@@ -27,13 +28,23 @@ final class InviteAcceptReader {
     enum State: Equatable {
         case idle
         case fetching
-        case otpEntry(blob: InviteBlob, attempts: Int)
+        case otpEntry(blob: InviteBlob, attempts: Int, prefillOTP: String?)
         case accepting
         case success(orgName: String, memberCount: Int)
         case error(message: String, recoverable: Bool)
     }
 
     private(set) var state: State = .idle
+
+    /// Phase 5.5.B — invitee onboarding записывает displayName на JoinTeamStepView; AcceptInviteSheet
+    /// auto-uses на submit. Если пусто — fall back to NSFullUserName (set'ится один раз on first read).
+    @ObservationIgnored
+    @AppStorage("inviteeDisplayName") private(set) var savedDisplayName: String = ""
+
+    /// Public setter для CreateTeam / JoinTeam onboarding views. Read-only вне этого Reader'а.
+    func saveInviteeDisplayName(_ name: String) {
+        savedDisplayName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     private var service: InviteAcceptService?
     private var database: LeafCore.Database?
@@ -78,7 +89,7 @@ final class InviteAcceptReader {
             do {
                 let svc = try self.ensureService()
                 let blob = try await svc.fetchInvite(token: token)
-                self.state = .otpEntry(blob: blob, attempts: 0)
+                self.state = .otpEntry(blob: blob, attempts: 0, prefillOTP: nil)
             } catch {
                 self.logger.error("fetchInvite failed: \(String(describing: error), privacy: .public)")
                 self.state = .error(message: self.userFacingMessage(for: error),
@@ -87,8 +98,32 @@ final class InviteAcceptReader {
         }
     }
 
-    func submitOTP(otp: String, displayName: String) {
-        guard case .otpEntry(let blob, let attempts) = state else { return }
+    /// Phase 5.5.B — single deep-link path: parse + fetch + auto-prefill OTP.
+    func fetch(inviteURL: URL) {
+        state = .fetching
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let svc = try self.ensureService()
+                let result = try await svc.fetchInvite(inviteURL: inviteURL)
+                self.state = .otpEntry(blob: result.blob, attempts: 0, prefillOTP: result.otp)
+            } catch {
+                self.logger.error("fetchInvite(URL) failed: \(String(describing: error), privacy: .public)")
+                self.state = .error(message: self.userFacingMessage(for: error),
+                                    recoverable: self.isRecoverable(error))
+            }
+        }
+    }
+
+    func submitOTP(otp: String, displayName: String? = nil) {
+        guard case .otpEntry(let blob, let attempts, _) = state else { return }
+        let resolvedName: String = {
+            let trimmed = (displayName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return trimmed }
+            let stored = savedDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !stored.isEmpty { return stored }
+            return NSFullUserName()
+        }()
         state = .accepting
         Task { @MainActor [weak self] in
             guard let self else { return }
@@ -96,7 +131,7 @@ final class InviteAcceptReader {
                 let svc = try self.ensureService()
                 let accepted = try await svc.acceptInvite(blob: blob,
                                                           otp: otp,
-                                                          displayName: displayName)
+                                                          displayName: resolvedName)
                 let count: Int
                 if let db = self.database,
                    let members = try? db.readTeamMembers(orgID: accepted.orgID) {
@@ -107,7 +142,7 @@ final class InviteAcceptReader {
                 self.state = .success(orgName: accepted.orgName, memberCount: count)
             } catch LeafError.inviteOTPInvalid {
                 // Stay in OTP entry — invitee retries locally без re-fetch.
-                self.state = .otpEntry(blob: blob, attempts: attempts + 1)
+                self.state = .otpEntry(blob: blob, attempts: attempts + 1, prefillOTP: nil)
             } catch {
                 self.logger.error("acceptInvite failed: \(String(describing: error), privacy: .public)")
                 self.state = .error(message: self.userFacingMessage(for: error),
@@ -161,6 +196,10 @@ final class InviteAcceptReader {
                 return "Couldn’t open local database. Try restarting the app."
             case .notImplemented:
                 return "Invite acceptance isn’t available in this build."
+            case .inviteAlreadyConsumed:
+                return "Invite was already opened or expired. Ask admin to send a new one."
+            case .inviteURLMalformed:
+                return "Invite link is broken. Ask admin to copy and resend it."
             default:
                 return "Couldn’t accept the invite. See Console for details."
             }
@@ -177,7 +216,8 @@ final class InviteAcceptReader {
         case .relayUnreachable, .invalidPayload:
             return true
         case .inviteAlreadyAccepted, .inviteNotFound, .inviteBlobMalformed,
-             .keyFileUnavailable, .keyFileCorrupted, .databaseUnavailable, .notImplemented:
+             .keyFileUnavailable, .keyFileCorrupted, .databaseUnavailable, .notImplemented,
+             .inviteAlreadyConsumed, .inviteURLMalformed:
             return false
         default:
             return false

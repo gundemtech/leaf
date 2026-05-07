@@ -66,7 +66,7 @@ struct AcceptInviteSheet: View {
             pubkeyShare
             tokenStep(disabled: true)
             HStack { Spacer(); ProgressView(); Spacer() }
-        case .otpEntry(_, let attempts):
+        case .otpEntry(_, let attempts, _):
             otpStep(attempts: attempts, disabled: false)
         case .accepting:
             otpStep(attempts: 0, disabled: true)
@@ -245,7 +245,7 @@ struct AcceptInviteSheet: View {
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
-            } else if case .otpEntry(_, let attempts) = reader.state, attempts >= 5 {
+            } else if case .otpEntry(_, let attempts, _) = reader.state, attempts >= 5 {
                 Button("Discard + ask admin") {
                     reader.discardAndReset()
                     dismiss()
