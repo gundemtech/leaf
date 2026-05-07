@@ -62,9 +62,28 @@ final class InviteOutboxReader {
             do {
                 let svc = try self.ensureService()
                 let outbound = try await svc.generateInvite(inviteePubkeyHex: trimmed)
+                self.persistPendingInvite(outbound)
                 self.state = .ready(outbound)
             } catch {
                 self.logger.error("generateInvite failed: \(String(describing: error), privacy: .public)")
+                self.state = .error(message: self.userFacingMessage(for: error))
+            }
+        }
+    }
+
+    /// Phase 5.5.B — accept formatted JoinCode (or legacy hex) directly.
+    func generate(inviteeJoinCode: String) {
+        let trimmed = inviteeJoinCode.trimmingCharacters(in: .whitespacesAndNewlines)
+        state = .generating
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let svc = try self.ensureService()
+                let outbound = try await svc.generateInvite(inviteeJoinCode: trimmed)
+                self.persistPendingInvite(outbound)
+                self.state = .ready(outbound)
+            } catch {
+                self.logger.error("generateInvite(joinCode) failed: \(String(describing: error), privacy: .public)")
                 self.state = .error(message: self.userFacingMessage(for: error))
             }
         }
@@ -82,6 +101,7 @@ final class InviteOutboxReader {
             do {
                 let svc = try self.ensureService()
                 try await svc.revokeInvite(token: token)
+                self.markPendingInviteRevoked(token: token)
             } catch {
                 self.logger.error("revokeInvite (best-effort) failed: \(String(describing: error), privacy: .public)")
             }
@@ -90,6 +110,37 @@ final class InviteOutboxReader {
 
     func dismiss() {
         state = .idle
+    }
+
+    // MARK: - Pending invites persistence (Phase 5.5.B)
+
+    private func persistPendingInvite(_ outbound: InviteOutbound) {
+        guard let db = self.database else { return }
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let row = PendingInvite(
+            token: outbound.token,
+            otp: outbound.otp,
+            inviteePubkeyHex: outbound.inviteePubkeyHex,
+            inviteeDisplayNameHint: nil,
+            createdAtMs: nowMs,
+            expiresAtMs: outbound.expiresAtMs,
+            status: .pending,
+            lastPolledAtMs: nil
+        )
+        do {
+            try db.insertPendingInvite(row)
+        } catch {
+            logger.error("persistPendingInvite failed: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    private func markPendingInviteRevoked(token: String) {
+        guard let db = self.database else { return }
+        do {
+            try db.updatePendingInviteStatus(token: token, status: .revoked)
+        } catch {
+            logger.error("markPendingInviteRevoked failed: \(String(describing: error), privacy: .public)")
+        }
     }
 
     // MARK: - Internals
@@ -127,6 +178,10 @@ final class InviteOutboxReader {
                 return "Couldn’t reach the relay (\(reason)). Check your network and try again."
             case .inviteRequestRejected(let reason):
                 return "Invite request rejected (\(reason))."
+            case .joinCodeMalformed:
+                return "Invitee Join code is unrecognized. Ask invitee to copy it again from app."
+            case .joinCodeChecksumMismatch:
+                return "Invitee Join code has typos. Ask invitee to copy it again."
             case .notImplemented:
                 return "Invite generation isn’t available in this build."
             default:

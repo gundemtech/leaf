@@ -1251,6 +1251,25 @@ public final class Database: @unchecked Sendable {
         Logger(subsystem: "tech.gundem.leaf.core", category: "db")
             .warning("Plaintext SQLite detected at \(path, privacy: .public), renamed to \(backup.path, privacy: .public). Starting fresh encrypted DB.")
     }
+
+    // MARK: - Pending invites (Phase 5.5.B)
+
+    /// Append a `pending_invites` row. Mirror `upsertOrg` / `insertTeamMember` ordering —
+    /// caller (InviteOutboxReader) controls PK uniqueness via relay-issued token.
+    public func insertPendingInvite(_ row: PendingInvite) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try PendingInvitesStore.insert(row, in: db)
+        }
+    }
+
+    /// UPDATE pending_invites.status. Idempotent silent no-op if token missing.
+    public func updatePendingInviteStatus(token: String, status: PendingInviteStatus) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try PendingInvitesStore.updateStatus(token: token, status: status, in: db)
+        }
+    }
 }
 
 // MARK: - EventRecord conversion
