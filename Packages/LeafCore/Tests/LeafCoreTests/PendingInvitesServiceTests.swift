@@ -234,6 +234,33 @@ final class PendingInvitesServiceTests: XCTestCase {
         )
     }
 
+    func testRevokeLocalSyncFlipsBeforeRelayCall() throws {
+        // Spec D4 — DB write must complete synchronously without awaiting relay.
+        let db = try makeDatabase()
+        try db.insertPendingInvite(samplePending(token: "tlocal_____________________________"))
+
+        let svc = makeService(database: db)
+        try svc.revokeLocal(token: "tlocal_____________________________")
+
+        let row = try XCTUnwrap(try db.readAllPendingInvites().first {
+            $0.token == "tlocal_____________________________"
+        })
+        XCTAssertEqual(row.status, .revoked)
+    }
+
+    func testTryRelayDeleteNeverThrows() async throws {
+        let db = try makeDatabase()
+        try db.insertPendingInvite(samplePending(token: "tdel_______________________________"))
+        PendingMockURLProtocol.handler = { req in
+            (HTTPURLResponse(url: req.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!, Data())
+        }
+
+        let svc = makeService(database: db)
+        // Just calling — no try because tryRelayDelete is non-throwing best-effort.
+        await svc.tryRelayDelete(token: "tdel_______________________________")
+        // No-op success criterion: completes without throwing.
+    }
+
     func testRevokeNonexistentTokenIdempotent() async throws {
         let db = try makeDatabase()
         PendingMockURLProtocol.handler = { req in

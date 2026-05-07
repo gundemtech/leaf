@@ -50,7 +50,9 @@ final class PendingInvitesReader {
     }
 
     /// Sync sweep + read. Idempotent — safe to call repeatedly from .onAppear.
+    /// Clears any stale poll outcome banner (review fix #4).
     func refresh() {
+        pollMessage = nil
         do {
             let svc = try ensureService()
             let rows = try svc.loadVisible()
@@ -81,22 +83,33 @@ final class PendingInvitesReader {
         }
     }
 
+    /// Spec D4 — immediate UI feedback. Sync DB flip + state update happen BEFORE
+    /// any await; relay DELETE fires in background best-effort task.
     func revoke(token: String) {
+        do {
+            let svc = try ensureService()
+            try svc.revokeLocal(token: token)
+            let rows = try svc.loadVisible()
+            state = .loaded(rows: rows)
+            pollMessage = nil
+        } catch {
+            logger.error("revoke (local) failed: \(String(describing: error), privacy: .public)")
+            state = .error(message: userFacingMessage(for: error))
+            return
+        }
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
                 let svc = try self.ensureService()
-                try await svc.revoke(token: token)
-                let rows = try svc.loadVisible()
-                self.state = .loaded(rows: rows)
+                await svc.tryRelayDelete(token: token)
             } catch {
-                self.logger.error("revoke failed: \(String(describing: error), privacy: .public)")
-                self.state = .error(message: self.userFacingMessage(for: error))
+                self.logger.error("revoke (relay) failed: \(String(describing: error), privacy: .public)")
             }
         }
     }
 
     func dismiss(token: String) {
+        pollMessage = nil
         do {
             let svc = try ensureService()
             try svc.dismiss(token: token)

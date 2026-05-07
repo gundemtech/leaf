@@ -59,17 +59,31 @@ public struct PendingInvitesService: Sendable {
         return PollOutcome(consumed: consumed, stillPending: stillPending, networkErrors: networkErrors)
     }
 
-    /// Best-effort relay DELETE + local status flip → `.revoked`. DB write authoritative —
-    /// если relay throws, row остаётся `.revoked` локально. Mirror
-    /// `InviteOutboxReader.revokeAndDismiss` precedent (5.2.D).
-    public func revoke(token: String) async throws {
+    /// Sync local status flip → `.revoked`. Used by `PendingInvitesReader.revoke`
+    /// для immediate UI feedback (spec D4) — caller dispatches relay DELETE separately
+    /// via `tryRelayDelete(token:)`.
+    public func revokeLocal(token: String) throws {
+        try database.updatePendingInviteStatus(token: token, status: .revoked)
+    }
+
+    /// Best-effort relay DELETE. Never throws — failure logged by caller, local truth
+    /// authoritative. Token one-shot consume is bound to `memberPubkeyHex` crypto;
+    /// operational risk низкий per spec §8.
+    public func tryRelayDelete(token: String) async {
         do {
             try await relayClient.deleteInvite(token: token)
         } catch {
-            // Best-effort. Token one-shot consume is bound to `memberPubkeyHex` crypto;
-            // operational risk низкий per spec §8.
+            // Best-effort.
         }
-        try database.updatePendingInviteStatus(token: token, status: .revoked)
+    }
+
+    /// Combined sync DB flip + async relay DELETE. Mirror `InviteOutboxReader.revokeAndDismiss`
+    /// precedent (5.2.D): DB write authoritative even on relay failure. Reader uses split
+    /// `revokeLocal` + `tryRelayDelete` instead для immediate UI feedback (D4); this method
+    /// remains для test harness и any future caller wanting one-shot semantics.
+    public func revoke(token: String) async throws {
+        try revokeLocal(token: token)
+        await tryRelayDelete(token: token)
     }
 
     /// Hard DELETE row from DB. Used by [Dismiss] action на terminal-state rows.
