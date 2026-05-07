@@ -29,4 +29,9 @@ public enum LeafError: Error, Sendable {
     // Phase 5.3.D (consumer: KeyRotationService.removeMember preflight) —
     // admin cannot kick themselves out of their own org.
     case cannotRemoveSelfFromTeam
+    // Phase 5.5.A (consumers: JoinCode value type + InviteURL value type) —
+    // surfaced when callers wrap value-type errors into LeafError.
+    case joinCodeMalformed
+    case joinCodeChecksumMismatch
+    case inviteURLMalformed
 }
