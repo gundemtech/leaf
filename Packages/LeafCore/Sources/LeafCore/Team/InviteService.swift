@@ -113,6 +113,23 @@ public struct InviteService: Sendable {
                               inviteePubkeyHex: lowercased)
     }
 
+    /// Phase 5.5.B — admin pastes invitee Join code (formatted base32-Crockford OR legacy hex).
+    /// Decodes to 32-byte pubkey via `JoinCode.decode`, then delegates to `generateInvite(inviteePubkeyHex:)`.
+    /// Wraps `JoinCodeError` cases в LeafError для UI consumer'ов (mirror existing error model).
+    public func generateInvite(inviteeJoinCode: String) async throws -> InviteOutbound {
+        let pubkey: Data
+        switch JoinCode.decode(inviteeJoinCode) {
+        case .success(let bytes):
+            pubkey = bytes
+        case .failure(.malformed):
+            throw LeafError.joinCodeMalformed
+        case .failure(.checksumMismatch):
+            throw LeafError.joinCodeChecksumMismatch
+        }
+        let hex = pubkey.map { String(format: "%02x", $0) }.joined()
+        return try await generateInvite(inviteePubkeyHex: hex)
+    }
+
     /// Admin-side revoke: best-effort DELETE on relay (idempotent — relay returns 204).
     public func revokeInvite(token: String) async throws {
         try await relayClient.deleteInvite(token: token)

@@ -386,4 +386,41 @@ final class InviteServiceTests: XCTestCase {
         XCTAssertEqual(req.url?.path, "/v1/invite/tok_to_revoke")
         XCTAssertEqual(req.httpMethod, "DELETE")
     }
+
+    // MARK: - Phase 5.5.B JoinCode overload
+
+    func testGenerateInvite_JoinCode_FormattedDelegatesToHex() async throws {
+        stub201(token: "tok_jc1", expiresAtMs: 1_700_086_400_000)
+        let svc = makeService()
+        let pubkey = Data(repeating: 0x42, count: 32)
+        let joinCode = try JoinCode.encode(pubkey: pubkey)
+
+        let outbound = try await svc.generateInvite(inviteeJoinCode: joinCode)
+
+        let expectedHex = pubkey.map { String(format: "%02x", $0) }.joined()
+        XCTAssertEqual(outbound.inviteePubkeyHex, expectedHex)
+        XCTAssertEqual(outbound.token, "tok_jc1")
+    }
+
+    func testGenerateInvite_JoinCode_LegacyHexAccepted() async throws {
+        stub201(token: "tok_jc2", expiresAtMs: 1_700_086_400_000)
+        let svc = makeService()
+        let pubkey = Data(repeating: 0x99, count: 32)
+        let hex = pubkey.map { String(format: "%02x", $0) }.joined()
+
+        let outbound = try await svc.generateInvite(inviteeJoinCode: hex)
+
+        XCTAssertEqual(outbound.inviteePubkeyHex, hex)
+    }
+
+    func testGenerateInvite_JoinCode_MalformedThrowsLeafError() async throws {
+        stub201(token: "irrelevant", expiresAtMs: 1)
+        let svc = makeService()
+        do {
+            _ = try await svc.generateInvite(inviteeJoinCode: "garbage-input-not-a-code")
+            XCTFail("expected throw")
+        } catch LeafError.joinCodeMalformed {
+            // expected
+        }
+    }
 }
