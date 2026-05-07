@@ -2,9 +2,11 @@
 //  GenerateInviteSheet.swift
 //  Leaf
 //
-//  Phase 5.2.D — admin invite-generation sheet. State machine routed
-//  through InviteOutboxReader. Step 1 (input pubkey hex) → Step 2 (token+OTP
-//  copy + countdown). Discard / Revoke+Done close the sheet.
+//  Phase 5.5.B — admin invite-generation. Two input modes:
+//   1. Paste invitee Join code (clipboard auto-detect on appear; manual paste fallback).
+//   2. Send "ask to join" template — admin first шлёт invitee app + onboarding hint, ждёт Join code в clipboard.
+//
+//  Output: одна `leaf://invite/<token>#<otp>` deep-link с Copy / Mail / Messages кнопками + countdown.
 //
 
 import SwiftUI
@@ -13,127 +15,135 @@ import LeafCore
 
 struct GenerateInviteSheet: View {
     @Environment(InviteOutboxReader.self) private var reader
+    @Environment(OrgReader.self) private var orgReader
+    @Environment(InviteURLHandler.self) private var urlHandler
     @Environment(\.dismiss) private var dismiss
-    @State private var pubkeyInput: String = ""
+    @State private var joinCodeInput: String = ""
+    @State private var inputMode: InputMode = .paste
 
-    private let hexRegex = /^[0-9a-fA-F]{64}$/
+    enum InputMode: String, CaseIterable, Identifiable {
+        case paste = "Paste Join code"
+        case template = "Send template"
+        var id: String { rawValue }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
             header
-
             content
-
             Spacer(minLength: 0)
             footer
         }
         .padding(28)
-        .frame(width: 560, height: 540)
-    }
-
-    // MARK: - Header
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("INVITE")
-                .leafLabelStyle()
-            Text("Generate invite")
-                .font(.leafHeadline)
-                .foregroundStyle(.leafInk)
+        .frame(width: 560, height: 580)
+        .onAppear {
+            // Auto-detect Join code в clipboard.
+            if case .joinCode = urlHandler.probeClipboard(),
+               let raw = NSPasteboard.general.string(forType: .string) {
+                // Берём raw text — JoinCode.decode сам канонизирует.
+                joinCodeInput = extractJoinCodeCandidate(from: raw)
+            }
         }
     }
 
-    // MARK: - Content (state-routed)
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("INVITE").leafLabelStyle()
+            Text("Add a team member").font(.leafHeadline).foregroundStyle(.leafInk)
+        }
+    }
 
     @ViewBuilder
     private var content: some View {
         switch reader.state {
-        case .idle:
-            step1(disabled: false)
+        case .idle, .error:
+            modePicker
+            modeContent(disabled: false)
+            if case .error(let m) = reader.state {
+                Text(m).font(.leafBody).foregroundStyle(.red).lineSpacing(3)
+            }
         case .generating:
-            step1(disabled: true)
+            modePicker
+            modeContent(disabled: true)
             HStack { Spacer(); ProgressView(); Spacer() }
         case .ready(let outbound):
-            step1(disabled: true)
-            step2(outbound: outbound)
-        case .error(let message):
-            step1(disabled: false)
-            Text(message)
-                .font(.leafBody)
-                .foregroundStyle(.red)
-                .lineSpacing(3)
+            readyOutput(outbound: outbound)
         }
     }
 
-    // MARK: - Step 1
+    private var modePicker: some View {
+        Picker("", selection: $inputMode) {
+            ForEach(InputMode.allCases) { m in Text(m.rawValue).tag(m) }
+        }
+        .pickerStyle(.segmented)
+    }
 
-    private func step1(disabled: Bool) -> some View {
-        GlassCard(padding: 20) {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("STEP 1 · INVITEE SHARES THEIR PUBKEY WITH YOU").leafLabelStyle()
-
-                TextField("64-character hex", text: $pubkeyInput, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(.body, design: .monospaced))
-                    .lineLimit(2, reservesSpace: true)
-                    .disabled(disabled)
-
-                HStack {
-                    Spacer()
-                    Button("Generate invite") {
-                        let trimmed = pubkeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
-                        reader.generate(inviteePubkeyHex: trimmed)
+    @ViewBuilder
+    private func modeContent(disabled: Bool) -> some View {
+        switch inputMode {
+        case .paste:
+            GlassCard(padding: 20) {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("PASTE INVITEE'S JOIN CODE").leafLabelStyle()
+                    TextField("ABCD-EFGH-…", text: $joinCodeInput, axis: .vertical)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(.body, design: .monospaced))
+                        .lineLimit(2, reservesSpace: true)
+                        .disabled(disabled)
+                    HStack {
+                        Spacer()
+                        Button("Generate invite") {
+                            reader.generate(inviteeJoinCode: joinCodeInput)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(disabled || joinCodeInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(disabled || !isValidPubkey)
+                }
+            }
+        case .template:
+            GlassCard(padding: 20) {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("SEND ASK-TO-JOIN TEMPLATE").leafLabelStyle()
+                    Text("Pick a teammate to invite. They'll install Leaf, copy their Join code, and send it back to you.")
+                        .font(.leafCaption).foregroundStyle(.leafInk.opacity(0.7))
+                    ShareTemplateButton(
+                        templateBody: ShareTemplate.compose(.askToJoin(orgName: orgName)),
+                        mailSubject: "Join Leaf team — \(orgName)"
+                    )
                 }
             }
         }
     }
 
-    // MARK: - Step 2
-
-    private func step2(outbound: InviteOutbound) -> some View {
+    private func readyOutput(outbound: InviteOutbound) -> some View {
         GlassCard(padding: 20) {
             VStack(alignment: .leading, spacing: 16) {
-                Text("STEP 2 · SEND TO INVITEE (Slack/Telegram)").leafLabelStyle()
+                Text("SEND INVITE LINK").leafLabelStyle()
+                Text("One link contains everything. Send via Mail / Messages or copy and paste anywhere.")
+                    .font(.leafCaption).foregroundStyle(.leafInk.opacity(0.7))
 
-                copyRow(label: "TOKEN", value: outbound.token)
-                Divider().opacity(0.3)
-                copyRow(label: "OTP", value: outbound.otp, displayOverride: formatOTP(outbound.otp))
-                Divider().opacity(0.3)
+                let url = InviteURL.compose(token: outbound.token, otp: outbound.otp)
+                Text(url.absoluteString)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.leafInk)
+                    .textSelection(.enabled)
+                    .lineLimit(3)
 
-                HStack {
-                    TimelineView(.periodic(from: .now, by: 1)) { context in
-                        Text(countdownText(expiresAtMs: outbound.expiresAtMs, now: context.date))
-                            .font(.leafCaption)
-                            .foregroundStyle(.leafInk.opacity(0.6))
-                    }
-                    Spacer()
+                ShareTemplateButton(
+                    templateBody: ShareTemplate.compose(.adminShare(
+                        displayName: inviteeDisplayNameHint(),
+                        inviteURL: url
+                    )),
+                    mailSubject: "Your Leaf invite link"
+                )
+
+                TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                    Text(countdownText(expiresAtMs: outbound.expiresAtMs, now: ctx.date))
+                        .font(.leafCaption).foregroundStyle(.leafInk.opacity(0.6))
                 }
             }
         }
     }
-
-    private func copyRow(label: String, value: String, displayOverride: String? = nil) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(label).leafLabelStyle()
-                Text(displayOverride ?? value)
-                    .font(.system(.body, design: .monospaced))
-                    .foregroundStyle(.leafInk)
-                    .textSelection(.enabled)
-            }
-            Spacer()
-            Button("Copy") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(value, forType: .string)
-            }
-            .buttonStyle(.bordered)
-        }
-    }
-
-    // MARK: - Footer
 
     private var footer: some View {
         HStack {
@@ -142,9 +152,7 @@ struct GenerateInviteSheet: View {
                 dismiss()
             }
             .buttonStyle(.bordered)
-
             Spacer()
-
             if case .ready = reader.state {
                 Button("Revoke + Done") {
                     reader.revokeAndDismiss()
@@ -157,15 +165,23 @@ struct GenerateInviteSheet: View {
 
     // MARK: - Helpers
 
-    private var isValidPubkey: Bool {
-        let trimmed = pubkeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.wholeMatch(of: hexRegex) != nil
+    private var orgName: String {
+        if case .loaded(let org, _) = orgReader.state { return org.name }
+        return "your team"
     }
 
-    private func formatOTP(_ otp: String) -> String {
-        guard otp.count == 6 else { return otp }
-        let i = otp.index(otp.startIndex, offsetBy: 3)
-        return "\(otp[..<i]) · \(otp[i...])"
+    private func inviteeDisplayNameHint() -> String {
+        // pending_invites сохраняет hint только если onboarding передал; сейчас не передаём → fallback "там"
+        // (template читается естественно). Future polish — surface hint при `display_name_hint != nil`.
+        return "там"
+    }
+
+    private func extractJoinCodeCandidate(from raw: String) -> String {
+        // Берём первый whitespace-разделённый token который JoinCode.decode принимает.
+        for token in raw.split(whereSeparator: { $0.isWhitespace }) {
+            if case .success = JoinCode.decode(String(token)) { return String(token) }
+        }
+        return raw
     }
 
     private func countdownText(expiresAtMs: Int64, now: Date = Date()) -> String {
@@ -174,12 +190,8 @@ struct GenerateInviteSheet: View {
         let h = remainingSec / 3600
         let m = (remainingSec % 3600) / 60
         let s = remainingSec % 60
-        if h > 0 {
-            return "Expires in \(h)h \(m)m"
-        }
-        if m > 0 {
-            return "Expires in \(m)m \(s)s"
-        }
+        if h > 0 { return "Expires in \(h)h \(m)m" }
+        if m > 0 { return "Expires in \(m)m \(s)s" }
         return remainingSec > 0 ? "Expires in \(s)s" : "Expired"
     }
 }
