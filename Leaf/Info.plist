@@ -48,5 +48,18 @@
 	<string>$(GITHUB_OAUTH_CLIENT_ID)</string>
 	<key>LeafSlackOAuthClientID</key>
 	<string>$(SLACK_OAUTH_CLIENT_ID)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>tech.gundem.leaf.invite</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>leaf</string>
+			</array>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+		</dict>
+	</array>
 </dict>
 </plist>
