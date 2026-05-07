@@ -2,16 +2,11 @@
 //  AcceptInviteSheet.swift
 //  Leaf
 //
-//  Phase 5.2.E — invitee accept-invite sheet. State machine routed
-//  through InviteAcceptReader. Two-step flow:
-//   Step 1: invitee shares own pubkey hex (Copy) + pastes admin token →
-//           "Fetch invite" → relay GET (one-shot consumes invite).
-//   Step 2: blob in RAM → invitee enters OTP + display name → "Accept" →
-//           local decode + DB write. Wrong OTP retried locally без re-fetch
-//           до 5 раз; после — "Discard + ask admin" CTA surfaces.
-//
-//  Mirror GenerateInviteSheet (5.2.D) shape: header / state-routed content
-//  ViewBuilder / footer.
+//  Phase 5.5.B — invitee accept-invite. Three input paths converge на InviteAcceptReader:
+//   1. Deep-link `leaf://invite/...` clicked while sheet is open → urlHandler.handle dispatches fetch.
+//   2. Sheet auto-detect on appear: probeClipboard → inviteURL → fetch(inviteURL:).
+//   3. Manual paste fallback (юзер вставляет deep-link / token text).
+//  OTP auto-prefills из URL fragment если deep-link path; иначе требует input.
 //
 
 import SwiftUI
@@ -21,12 +16,11 @@ import LeafCore
 struct AcceptInviteSheet: View {
     @Environment(InviteAcceptReader.self) private var reader
     @Environment(OrgReader.self) private var orgReader
+    @Environment(InviteURLHandler.self) private var urlHandler
     @Environment(\.dismiss) private var dismiss
-
-    @State private var tokenInput: String = ""
+    @State private var pasteInput: String = ""
     @State private var otpInput: String = ""
     @State private var displayNameInput: String = ""
-    @State private var myPubkeyHex: String = ""
 
     private let otpRegex = /^\d{6}$/
 
@@ -38,38 +32,38 @@ struct AcceptInviteSheet: View {
             footer
         }
         .padding(28)
-        .frame(width: 560, height: 640)
-        .onAppear { loadMyPubkey() }
-    }
-
-    // MARK: - Header
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("ACCEPT INVITE")
-                .leafLabelStyle()
-            Text("Join your team")
-                .font(.leafHeadline)
-                .foregroundStyle(.leafInk)
+        .frame(width: 560, height: 600)
+        .onAppear {
+            displayNameInput = reader.savedDisplayName.isEmpty ? NSFullUserName() : reader.savedDisplayName
+            autoDetectFromClipboard()
+        }
+        .onChange(of: reader.state) { _, newState in
+            // Auto-prefill OTP textfield если reader пришёл в otpEntry с prefill.
+            if case .otpEntry(_, _, let prefill?) = newState, otpInput.isEmpty {
+                otpInput = prefill
+            }
         }
     }
 
-    // MARK: - Content (state-routed)
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("ACCEPT INVITE").leafLabelStyle()
+            Text("Join your team").font(.leafHeadline).foregroundStyle(.leafInk)
+        }
+    }
 
     @ViewBuilder
     private var content: some View {
         switch reader.state {
         case .idle:
-            pubkeyShare
-            tokenStep(disabled: false)
+            pasteCard(disabled: false)
         case .fetching:
-            pubkeyShare
-            tokenStep(disabled: true)
+            pasteCard(disabled: true)
             HStack { Spacer(); ProgressView(); Spacer() }
         case .otpEntry(_, let attempts, _):
-            otpStep(attempts: attempts, disabled: false)
+            otpCard(attempts: attempts, disabled: false)
         case .accepting:
-            otpStep(attempts: 0, disabled: true)
+            otpCard(attempts: 0, disabled: true)
             HStack { Spacer(); ProgressView(); Spacer() }
         case .success(let orgName, let memberCount):
             successCard(orgName: orgName, memberCount: memberCount)
@@ -78,69 +72,44 @@ struct AcceptInviteSheet: View {
         }
     }
 
-    // MARK: - Step 0 — share my pubkey
-
-    private var pubkeyShare: some View {
+    private func pasteCard(disabled: Bool) -> some View {
         GlassCard(padding: 20) {
             VStack(alignment: .leading, spacing: 14) {
-                Text("STEP 1 · SHARE YOUR PUBKEY WITH ADMIN").leafLabelStyle()
-                Text("Send this hex string to your admin (Slack/Telegram). They’ll use it to encrypt your invite.")
-                    .font(.leafCaption)
-                    .foregroundStyle(.leafInk.opacity(0.7))
-                HStack(alignment: .firstTextBaseline) {
-                    Text(myPubkeyHex.isEmpty ? "—" : myPubkeyHex)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(.leafInk)
-                        .textSelection(.enabled)
-                        .lineLimit(2)
-                    Spacer()
-                    Button("Copy") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(myPubkeyHex, forType: .string)
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(myPubkeyHex.isEmpty)
-                }
-            }
-        }
-    }
-
-    // MARK: - Step 1 — paste token
-
-    private func tokenStep(disabled: Bool) -> some View {
-        GlassCard(padding: 20) {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("STEP 2 · PASTE INVITE TOKEN FROM ADMIN").leafLabelStyle()
-                TextField("Token from admin (Slack/Telegram)", text: $tokenInput, axis: .vertical)
+                Text("PASTE INVITE LINK").leafLabelStyle()
+                Text("Paste the `leaf://invite/...` link admin sent you. Or open the link itself — Leaf auto-fills.")
+                    .font(.leafCaption).foregroundStyle(.leafInk.opacity(0.7))
+                TextField("leaf://invite/...", text: $pasteInput, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
                     .lineLimit(2, reservesSpace: true)
                     .disabled(disabled)
                 HStack {
                     Spacer()
-                    Button("Fetch invite") {
-                        let trimmed = tokenInput.trimmingCharacters(in: .whitespacesAndNewlines)
-                        reader.fetch(token: trimmed)
+                    Button("Use link") {
+                        if let url = parseInviteURL(from: pasteInput) {
+                            reader.fetch(inviteURL: url)
+                        } else {
+                            // Fallback: plain token (legacy alpha.10/11 path) — still supported via fetch(token:).
+                            let trimmed = pasteInput.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if !trimmed.isEmpty { reader.fetch(token: trimmed) }
+                        }
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(disabled || trimmedToken.isEmpty)
+                    .disabled(disabled || pasteInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
     }
 
-    // MARK: - Step 2 — OTP + display name
-
-    private func otpStep(attempts: Int, disabled: Bool) -> some View {
+    private func otpCard(attempts: Int, disabled: Bool) -> some View {
         GlassCard(padding: 20) {
             VStack(alignment: .leading, spacing: 16) {
-                Text("STEP 3 · ENTER OTP + YOUR NAME").leafLabelStyle()
-                Text("Invite fetched. Now enter the 6-digit OTP from admin and pick how you’ll show up to the team.")
-                    .font(.leafCaption)
-                    .foregroundStyle(.leafInk.opacity(0.7))
+                Text("VERIFY + JOIN").leafLabelStyle()
+                Text("Enter the 6-digit verification code from admin (or auto-filled from invite link).")
+                    .font(.leafCaption).foregroundStyle(.leafInk.opacity(0.7))
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("OTP").leafLabelStyle()
+                    Text("VERIFICATION CODE").leafLabelStyle()
                     TextField("123456", text: $otpInput)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(.body, design: .monospaced))
@@ -149,7 +118,7 @@ struct AcceptInviteSheet: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text("YOUR DISPLAY NAME").leafLabelStyle()
-                    TextField("e.g. Bob", text: $displayNameInput)
+                    TextField("e.g. Anton", text: $displayNameInput)
                         .textFieldStyle(.roundedBorder)
                         .font(.leafBody)
                         .disabled(disabled)
@@ -157,60 +126,48 @@ struct AcceptInviteSheet: View {
 
                 if attempts > 0 {
                     Text(attempts >= 5
-                         ? "Too many wrong attempts. Discard and ask admin to send a new invite."
-                         : "OTP didn’t match — try again (\(attempts)/5).")
-                        .font(.leafCaption)
-                        .foregroundStyle(.red)
+                         ? "Too many wrong codes. Discard and ask admin to send a new link."
+                         : "Code didn't match — try again (\(attempts)/5).")
+                        .font(.leafCaption).foregroundStyle(.red)
                 }
 
                 HStack {
                     Spacer()
-                    Button("Accept invite") {
+                    Button("Join team") {
                         let otp = otpInput.trimmingCharacters(in: .whitespacesAndNewlines)
                         let dn = displayNameInput.trimmingCharacters(in: .whitespacesAndNewlines)
                         reader.submitOTP(otp: otp, displayName: dn)
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(disabled || !isValidOTP || trimmedDisplayName.isEmpty || attempts >= 5)
+                    .disabled(disabled || !isValidOTP || displayNameInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || attempts >= 5)
                 }
             }
         }
     }
 
-    // MARK: - Success
-
     private func successCard(orgName: String, memberCount: Int) -> some View {
         GlassCard(padding: 24) {
             VStack(alignment: .leading, spacing: 12) {
                 Label("Joined \(orgName)", systemImage: "checkmark.circle.fill")
-                    .font(.leafHeadline)
-                    .foregroundStyle(.green)
-                Text("You’re now part of a team with \(memberCount) member\(memberCount == 1 ? "" : "s"). The Organization and Team tabs are updated.")
-                    .font(.leafBody)
-                    .foregroundStyle(.leafInk.opacity(0.85))
-                    .lineSpacing(3)
+                    .font(.leafHeadline).foregroundStyle(.green)
+                Text("You're now part of a team with \(memberCount) member\(memberCount == 1 ? "" : "s").")
+                    .font(.leafBody).foregroundStyle(.leafInk.opacity(0.85)).lineSpacing(3)
             }
         }
     }
 
-    // MARK: - Error
-
     private func errorCard(message: String, recoverable: Bool) -> some View {
         GlassCard(padding: 24) {
             VStack(alignment: .leading, spacing: 16) {
-                Label("Couldn’t accept invite", systemImage: "exclamationmark.triangle.fill")
-                    .font(.leafBody.weight(.semibold))
-                    .foregroundStyle(.red)
-                Text(message)
-                    .font(.leafBody)
-                    .foregroundStyle(.leafInk)
-                    .lineSpacing(3)
+                Label("Couldn't accept invite", systemImage: "exclamationmark.triangle.fill")
+                    .font(.leafBody.weight(.semibold)).foregroundStyle(.red)
+                Text(message).font(.leafBody).foregroundStyle(.leafInk).lineSpacing(3)
                 if recoverable {
                     HStack {
                         Spacer()
                         Button("Try again") {
                             reader.discardAndReset()
-                            tokenInput = ""
+                            pasteInput = ""
                             otpInput = ""
                         }
                         .buttonStyle(.bordered)
@@ -220,8 +177,6 @@ struct AcceptInviteSheet: View {
         }
     }
 
-    // MARK: - Footer
-
     private var footer: some View {
         HStack {
             Button("Discard") {
@@ -229,9 +184,7 @@ struct AcceptInviteSheet: View {
                 dismiss()
             }
             .buttonStyle(.bordered)
-
             Spacer()
-
             if case .success = reader.state {
                 Button("Done") {
                     orgReader.refresh()
@@ -257,24 +210,21 @@ struct AcceptInviteSheet: View {
 
     // MARK: - Helpers
 
-    private var trimmedToken: String {
-        tokenInput.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func autoDetectFromClipboard() {
+        if case .inviteURL(let url) = urlHandler.probeClipboard() {
+            reader.fetch(inviteURL: url)
+        }
     }
 
-    private var trimmedDisplayName: String {
-        displayNameInput.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func parseInviteURL(from raw: String) -> URL? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed) else { return nil }
+        if case .success = InviteURL.parse(url) { return url }
+        return nil
     }
 
     private var isValidOTP: Bool {
         let trimmed = otpInput.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.wholeMatch(of: otpRegex) != nil
-    }
-
-    private func loadMyPubkey() {
-        do {
-            myPubkeyHex = try reader.myPubkeyHex()
-        } catch {
-            myPubkeyHex = ""
-        }
     }
 }
