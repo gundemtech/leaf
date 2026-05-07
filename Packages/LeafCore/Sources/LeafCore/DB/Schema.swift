@@ -136,6 +136,24 @@ public enum Schema {
         /// Partial index — query "unposted rows" cheap (drained on launch via Task.detached).
         public static let indexUnposted = "rotation_outbox_unposted"
     }
+
+    /// Phase 5.5.A — admin-side cache of issued invites (token + OTP + invitee
+    /// pubkey hint). One row per active invite; lifecycle in `PendingInviteStatus`.
+    /// PK — `token` (32-char base64url, unique per relay). OTP at rest acceptable
+    /// (same SQLCipher DB as teamKey, no incremental risk).
+    public enum PendingInvites {
+        public static let tableName = "pending_invites"
+        public static let token = "token"
+        public static let otp = "otp"
+        public static let inviteePubkeyHex = "invitee_pubkey_hex"
+        public static let inviteeDisplayNameHint = "invitee_display_name_hint"
+        public static let createdAtMs = "created_at_ms"
+        public static let expiresAtMs = "expires_at_ms"
+        public static let status = "status"
+        public static let lastPolledAtMs = "last_polled_at_ms"
+
+        public static let indexStatus = "idx_pending_invites_status"
+    }
 }
 
 /// Канонические `collector_id` значения. Литералы — public, чтобы тесты
