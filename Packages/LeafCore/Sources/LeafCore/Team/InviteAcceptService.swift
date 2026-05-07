@@ -62,6 +62,28 @@ public struct InviteAcceptService: Sendable {
         return InviteBlob(bytes: fetched.blob)
     }
 
+    /// Phase 5.5.B — invitee receives single deep-link `leaf://invite/<token>#<otp>`. Parse +
+    /// fetch + return blob alongside OTP так, чтобы caller (Reader) auto-prefilled OTP в UI.
+    /// `inviteNotFound` от relay re-maps в `.inviteAlreadyConsumed` (per 5.5.B UX — explicit "уже консумлено / истекло"
+    /// message vs old "not found" generic).
+    public func fetchInvite(inviteURL url: URL) async throws -> (blob: InviteBlob, otp: String) {
+        let token: String
+        let otp: String
+        switch InviteURL.parse(url) {
+        case .success(let parsed):
+            token = parsed.token
+            otp = parsed.otp
+        case .failure:
+            throw LeafError.inviteURLMalformed
+        }
+        do {
+            let blob = try await fetchInvite(token: token)
+            return (blob: blob, otp: otp)
+        } catch LeafError.inviteNotFound {
+            throw LeafError.inviteAlreadyConsumed
+        }
+    }
+
     /// Decrypts blob with derived wrapKey (ECDH(invitee_priv, admin_pub_from_header) +
     /// KDF(otp)) → materializes org/team_members/team_keys + writes teamKey file.
     /// Throws inviteAlreadyAccepted / inviteOTPInvalid / inviteBlobMalformed.

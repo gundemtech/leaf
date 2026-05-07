@@ -375,4 +375,52 @@ final class InviteAcceptServiceTests: XCTestCase {
         }
         XCTAssertEqual(codec.decodeCalls, 0)
     }
+
+    // MARK: - Phase 5.5.B InviteURL overload
+
+    func testFetchInvite_URL_ParsesAndDelegates() async throws {
+        let blobBytes = Data([0x02] + (0..<140).map { _ in UInt8.random(in: 0...255) })
+        let b64url = blobBytes.base64URLNoPad
+        AcceptServiceMockURLProtocol.handler = { req in
+            XCTAssertEqual(req.httpMethod, "GET")
+            XCTAssertTrue(req.url!.path.hasSuffix("/v1/invite/aBc012XyZ_KJI98hgFEdcBA5678901ab"))
+            let body = """
+            {"blob":"\(b64url)","expires_at_ms":1700086400000}
+            """.data(using: .utf8)!
+            let resp = HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil,
+                                       headerFields: ["Content-Type": "application/json"])!
+            return (resp, body)
+        }
+        let svc = makeService()
+        let url = URL(string: "leaf://invite/aBc012XyZ_KJI98hgFEdcBA5678901ab#654321")!
+        let result = try await svc.fetchInvite(inviteURL: url)
+        XCTAssertEqual(result.blob.bytes, blobBytes)
+        XCTAssertEqual(result.otp, "654321")
+    }
+
+    func testFetchInvite_URL_MalformedThrowsLeafError() async throws {
+        let svc = makeService()
+        do {
+            _ = try await svc.fetchInvite(inviteURL: URL(string: "https://wrong/scheme")!)
+            XCTFail("expected throw")
+        } catch LeafError.inviteURLMalformed {
+            // expected
+        }
+    }
+
+    func testFetchInvite_URL_ConsumedRelayMapsToInviteAlreadyConsumed() async throws {
+        AcceptServiceMockURLProtocol.handler = { req in
+            let resp = HTTPURLResponse(url: req.url!, statusCode: 404, httpVersion: nil,
+                                       headerFields: nil)!
+            return (resp, nil)
+        }
+        let svc = makeService()
+        let url = URL(string: "leaf://invite/aBc012XyZ_KJI98hgFEdcBA5678901ab#000000")!
+        do {
+            _ = try await svc.fetchInvite(inviteURL: url)
+            XCTFail("expected throw")
+        } catch LeafError.inviteAlreadyConsumed {
+            // expected — overload remaps inviteNotFound → inviteAlreadyConsumed для UX clarity
+        }
+    }
 }
