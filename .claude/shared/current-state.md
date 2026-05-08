@@ -8,7 +8,7 @@ _Срез "где мы сейчас" за 30 секунд. История — в
 
 ## Где мы
 
-- **Whitepaper v1.10** в `leaf-docs.gundem.tech`. Структура `01-vision / 02-product / 03-architecture / 04-market / 05-reference`.
+- **Whitepaper v0.1-beta** (team-first re-positioning, 2026-05-08) в `leaf-docs.gundem.tech`. Byterover-style структура: `getting-started / memory-architecture / llm-providers / ai-tool-connectors / activity-connectors / surfaces / team-sharing / privacy-security / cookbook / faqs / reference`. Стратегические решения — `docs/reference/decisions.md`, открытые вопросы — `docs/reference/open-questions.md`.
 - **Section A done (Phase 0-2).** Foundation: 3-target Xcode project, `LeafCore`/`LeafCorePrivate` SPM split, GRDB 7 + SQLCipher, Agent + 4 collectors, Derived Insights Engine, Native UI, stdio MCP server.
 - **Section B done (Phase 3.0-3.5).** Distribution: Apple Developer ID + notarytool + Sparkle 2 + R2/CF + EdDSA appcast.
 - **Layer B MVP closed (Phase 4.1-4.5).** Linear / GitHub / Slack OAuth + polling.
@@ -23,7 +23,7 @@ _Срез "где мы сейчас" за 30 секунд. История — в
 
 ## Архитектура
 
-Полная картина — `.claude/shared/architecture.md` + whitepaper `leaf-docs/docs/03-architecture/`. TL;DR: two surfaces (Native UI primary + MCP bonus), opt-in transparency + Share Controls, granularity L1-L5, Layer A (NSWorkspace/CGEventSource/EventKit/Focus/AX/FSEvents/Claude Code hooks), Layer B MVP = Linear+GitHub+Slack, presence relay через Cloudflare DO + AES-GCM, 21 SQLCipher tables (12 base + presence_state M005 + org/team_members/team_keys M006-M008 + rotation_outbox M009 + pending_invites M010), zero LLM в MVP, Sparkle 2 + EdDSA + R2 distribution. **12 MCP tools** total.
+Полная картина — `.claude/shared/architecture.md` + whitepaper `leaf-docs/docs/memory-architecture/`. TL;DR substrate'а: MCP primary surface (Cursor / Claude Code / Claude Desktop) + Native macOS app + Phase 5 E2E team relay. Layer A (NSWorkspace/CGEventSource/EventKit/Focus/AX/FSEvents/Claude Code hooks), Layer B MVP = Linear+GitHub+Slack, granularity L1-L5, Share Controls, presence relay через **Cloudflare DO + AES-GCM** (фактически built, whitepaper v0.1-beta планирует миграцию на Supabase + XChaCha20-Poly1305 — substrate готов, миграция отдельным треком), 21 SQLCipher tables (12 base + presence_state M005 + org/team_members/team_keys M006-M008 + rotation_outbox M009 + pending_invites M010), zero-LLM substrate (whitepaper планирует tier-based summarization: on-device Apple FM / BYOK / Leaf Cloud — отдельный track), Sparkle 2 + EdDSA + R2 distribution. **12 MCP tools** total.
 
 ## Следующим
 
@@ -41,6 +41,8 @@ _Срез "где мы сейчас" за 30 секунд. История — в
 
 ## Open tensions
 
-Живут в `leaf-docs/docs/05-reference/open-tensions.md`. Топ-2:
+Substrate-level (технические, не в whitepaper):
 - **OT-1** distributed deletion локальной forever-history у ex-teammates.
 - **OT-2** storage compression для forever retention.
+
+Стратегические open questions (whitepaper) — `leaf-docs/docs/reference/open-questions.md`.
