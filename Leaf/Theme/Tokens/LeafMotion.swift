@@ -27,8 +27,23 @@ enum LeafMotion {
     }
 }
 
+/// Track 2 / D1 — debug override for reduce-motion (TokensPreview toggle).
+/// `\.accessibilityReduceMotion` is read-only in macOS 14+ SDK, so push override
+/// via a separate writable key. `LeafAnimationModifier` reads both — either being
+/// true collapses to .linear(duration: 0).
+private struct LeafReduceMotionOverrideKey: EnvironmentKey {
+    static let defaultValue: Bool = false
+}
+
+extension EnvironmentValues {
+    var leafReduceMotionOverride: Bool {
+        get { self[LeafReduceMotionOverrideKey.self] }
+        set { self[LeafReduceMotionOverrideKey.self] = newValue }
+    }
+}
+
 extension View {
-    /// Apply a Leaf motion token, honouring accessibilityReduceMotion.
+    /// Apply a Leaf motion token, honouring accessibilityReduceMotion + leafReduceMotionOverride.
     /// `value` triggers re-evaluation; same semantics as native .animation(_:value:).
     func leafAnimation<V: Equatable>(_ animation: Animation, value: V) -> some View {
         modifier(LeafAnimationModifier(animation: animation, value: value))
@@ -38,9 +53,11 @@ extension View {
 private struct LeafAnimationModifier<V: Equatable>: ViewModifier {
     let animation: Animation
     let value: V
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) private var systemReduce
+    @Environment(\.leafReduceMotionOverride)  private var debugReduce
 
     func body(content: Content) -> some View {
-        content.animation(reduceMotion ? .linear(duration: 0) : animation, value: value)
+        let reduce = systemReduce || debugReduce
+        return content.animation(reduce ? .linear(duration: 0) : animation, value: value)
     }
 }

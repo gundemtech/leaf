@@ -118,7 +118,19 @@ struct LeafApp: App {
             CommandGroup(replacing: .appSettings) {
                 OpenSettingsCommand(windowState: windowState)
             }
+            #if DEBUG
+            CommandGroup(after: .windowArrangement) {
+                OpenTokensPreviewCommand()
+            }
+            #endif
         }
+
+        #if DEBUG
+        Window("Tokens Preview", id: "tokens-preview") {
+            TokensPreviewScreen()
+        }
+        .defaultSize(width: 1100, height: 800)
+        #endif
 
         MenuBarExtra("Leaf", systemImage: "leaf") {
             MenuBarContent()
@@ -167,3 +179,17 @@ private struct OpenSettingsCommand: View {
         .keyboardShortcut(",", modifiers: .command)
     }
 }
+
+#if DEBUG
+/// Track 2 / D1 — debug-only ⌘⌥T menu item открывающее TokensPreviewScreen.
+/// Скрывается из release builds (#if DEBUG), но файлы компилятся для тестов.
+private struct OpenTokensPreviewCommand: View {
+    @Environment(\.openWindow) private var openWindow
+    var body: some View {
+        Button("Tokens Preview") {
+            openWindow(id: "tokens-preview")
+        }
+        .keyboardShortcut("t", modifiers: [.command, .option])
+    }
+}
+#endif
