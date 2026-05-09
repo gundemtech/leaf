@@ -19,6 +19,7 @@ struct OrganismsSection: View {
             LeafEmptyStatePreview()
             LeafToolbarPreview()
             LeafTabPreview()
+            LeafProgressPreview()
         }
     }
 }
