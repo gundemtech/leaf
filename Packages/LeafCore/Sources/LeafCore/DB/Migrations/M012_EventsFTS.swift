@@ -7,6 +7,12 @@ import GRDB
 /// Tokenizer `unicode61` Unicode-aware + `remove_diacritics 2` (ru/en mix) +
 /// `tokenchars '_-'` для snake_case + kebab-case identifiers.
 /// Idempotent через `IF NOT EXISTS` — reopen DB безопасно.
+///
+/// **Sidecar `events_fts_meta`** — contentless FTS5 не возвращает значения UNINDEXED
+/// колонок при SELECT (даже после MATCH). Поэтому для retrieval `event_id` / `body_kind`
+/// поверх matched rowid'а держим side table `(fts_rowid, event_id, body_kind)`,
+/// записывается атомарно вместе с FTS5 INSERT'ом в `EventsFullTextStore.indexEvent`.
+/// Index `idx_events_fts_meta_event_id` для reverse lookup (D3 needs).
 public extension DatabaseMigrator {
     mutating func registerMigration012EventsFTS() {
         registerMigration("012_events_fts") { db in
@@ -18,6 +24,19 @@ public extension DatabaseMigrator {
                     tokenize = "unicode61 remove_diacritics 2 tokenchars '_-'",
                     content = ''
                 )
+                """)
+
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS events_fts_meta (
+                    fts_rowid INTEGER PRIMARY KEY,
+                    event_id INTEGER NOT NULL,
+                    body_kind TEXT NOT NULL
+                )
+                """)
+
+            try db.execute(sql: """
+                CREATE INDEX IF NOT EXISTS idx_events_fts_meta_event_id
+                ON events_fts_meta (event_id)
                 """)
         }
     }

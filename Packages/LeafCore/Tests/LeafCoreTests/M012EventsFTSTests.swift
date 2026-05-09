@@ -61,4 +61,37 @@ final class M012EventsFTSTests: XCTestCase {
             XCTAssertEqual(applied.count, 13)
         }
     }
+
+    func testM012_CreatesSidecarMetaTable() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        try db.readSQL { rawDB in
+            // Sidecar table exists.
+            let names = try String.fetchAll(
+                rawDB,
+                sql: "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                arguments: [Schema.EventsFTSMeta.tableName]
+            )
+            XCTAssertEqual(names, [Schema.EventsFTSMeta.tableName])
+
+            // Columns: fts_rowid PK / event_id NOT NULL / body_kind NOT NULL.
+            let pragmaRows = try Row.fetchAll(rawDB, sql: "PRAGMA table_info(events_fts_meta)")
+            let cols = pragmaRows.compactMap { $0["name"] as String? }
+            XCTAssertEqual(Set(cols), Set(["fts_rowid", "event_id", "body_kind"]))
+
+            let pkCols = pragmaRows
+                .filter { ($0["pk"] as Int? ?? 0) > 0 }
+                .compactMap { $0["name"] as String? }
+            XCTAssertEqual(pkCols, ["fts_rowid"], "fts_rowid is the sole PK")
+
+            // Index for reverse-lookup by event_id exists.
+            let indexes = try String.fetchAll(
+                rawDB,
+                sql: "SELECT name FROM sqlite_master WHERE type='index' AND name=?",
+                arguments: [Schema.EventsFTSMeta.indexEventID]
+            )
+            XCTAssertEqual(indexes, [Schema.EventsFTSMeta.indexEventID])
+        }
+    }
 }

@@ -187,6 +187,19 @@ public enum Schema {
         public static let eventID = "event_id"
     }
 
+    /// Phase Track-1 D2 — sidecar table mapping FTS5 rowid → (event_id, body_kind).
+    /// Contentless `events_fts` does not retain UNINDEXED column values, so the
+    /// side table is the source of truth для retrieval после MATCH (search() join +
+    /// D3 reverse-lookup). Composite write atomic в `EventsFullTextStore.indexEvent`.
+    public enum EventsFTSMeta {
+        public static let tableName = "events_fts_meta"
+        public static let ftsRowID = "fts_rowid"
+        public static let eventID = "event_id"
+        public static let bodyKind = "body_kind"
+
+        public static let indexEventID = "idx_events_fts_meta_event_id"
+    }
+
     /// Phase Track-1 D2 — body provenance tags. Single source of truth between
     /// EventsFullTextStore body extraction + D3 query path filter clauses.
     public enum BodyKinds {

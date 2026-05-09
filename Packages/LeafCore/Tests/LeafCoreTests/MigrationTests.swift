@@ -431,8 +431,9 @@ final class MigrationTests: XCTestCase {
     /// Sanity — после полного open видим все application tables в `sqlite_master`,
     /// то есть migration registration order не ломает existing tables.
     /// Phase 5.5.A добавляет `pending_invites` (M010).
-    /// Phase Track-1 D2 добавляет `events_fts` (M012) — FTS5 shadow tables
-    /// (`events_fts_data`/`_idx`/`_docsize`/`_config`) исключаются из expected.
+    /// Phase Track-1 D2 добавляет `events_fts` (M012) — FTS5 internal shadow tables
+    /// (`events_fts_data`/`_idx`/`_docsize`/`_config`) исключаются явно по имени,
+    /// чтобы load-bearing sidecar `events_fts_meta` не прятался под wildcard.
     /// Phase Track-1 D2 добавляет `event_links` (M013).
     func testMigration006To010CoexistWithEarlier() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
@@ -446,7 +447,7 @@ final class MigrationTests: XCTestCase {
                     WHERE type='table'
                       AND name NOT LIKE 'sqlite_%'
                       AND name <> 'grdb_migrations'
-                      AND name NOT LIKE 'events_fts_%'
+                      AND name NOT IN ('events_fts_data', 'events_fts_idx', 'events_fts_docsize', 'events_fts_config')
                     """
             ))
             let expected: Set<String> = [
@@ -461,6 +462,7 @@ final class MigrationTests: XCTestCase {
                 Schema.RotationOutbox.tableName,
                 Schema.PendingInvites.tableName,
                 Schema.EventsFTS.tableName,
+                Schema.EventsFTSMeta.tableName,
                 Schema.EventLinks.tableName
             ]
             XCTAssertEqual(tables, expected)
