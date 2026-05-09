@@ -113,8 +113,15 @@ SQLCipher таблицы:
 - `team_members` — long-term X25519 pubkeys.
 - `team_keys` — history team key rotations.
 - `org` — organization metadata (1 row).
+- `events_fts` — FTS5 contentless virtual table over D1 bodies (Phase Track-1 D2 M012); `events_fts_meta` sidecar `(fts_rowid, event_id, body_kind)` retrieves matches.
+- `event_links` — cross-source association graph (Phase Track-1 D2 M013): `(from_event_id, link_kind, target_kind, target_ref, confidence, created_at_ms)` composite PK + reverse-lookup index.
+- `decisions` — DecisionDetector hits (Phase Track-1 D3 M014): `(event_id UNIQUE → events.id logical FK, topic_keywords_json, reasoning_excerpt, confidence, detected_at_ms)`.
+- `open_questions` — OpenQuestionDetector hits + resolution flow (D3 M014): `(event_id UNIQUE, question_excerpt, alternatives_json, slack_thread_ts/linear_issue_ref/github_pr_ref context refs, resolved_by_event_id NULLABLE, opened_at_ms, resolved_at_ms NULLABLE)` + 4 partial filtered indexes.
+- `blockers` — BlockerPatternDetector + LinearStuckScanner hits (D3 M014): `(target_kind, target_ref, blocker_kind, blocker_excerpt, detected_by_event_id, started_at_ms, resolved_at_ms NULLABLE, resolved_by_event_id NULLABLE)` + partial unique `idx_blockers_open` WHERE resolved IS NULL (один OPEN blocker per target).
+- `where_stopped_log` — append-only WhereStoppedDeriver snapshots (D3 M014): `(generated_at_ms, anchor_event_id NULLABLE, excerpt, wip_signals_json)`. Заменяет планировавшийся sessions extension (substrate не имеет sessions table).
+- `detector_offsets` — per-detector cursor (D3 M014): `(detector_kind PK, cursor_event_id, last_run_at_ms)` pre-seeded `decision`/`open_question`/`blocker_pattern`. Scheduled detectors (linear_stuck, where_stopped) cursor не используют.
 
-Миграции — через GRDB migrations framework.
+Миграции — через GRDB migrations framework. Текущий счёт: M001..M014 (28 таблиц включая virtual + sidecar).
 
 ## Share Controls (ADR-020)
 Юзер контролирует что именно видно команде. Default — пустой whitelist, ничего не шарится.
