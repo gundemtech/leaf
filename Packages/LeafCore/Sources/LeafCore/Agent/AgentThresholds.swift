@@ -97,6 +97,21 @@ public struct AgentThresholds: Sendable, Hashable {
     /// `rotation_outbox`. Default 60s — consistent with presence WS heartbeat in 5.4
     /// contract; member-removal latency feels live-team.
     public let rotationFetchIntervalSec: TimeInterval
+    /// Phase Track-1 D3: how often `DetectorPipeline.runIncremental` runs against
+    /// newly-flushed events. The cursor model in `detector_offsets` is incremental
+    /// + idempotent (per-event INSERT OR IGNORE), so a periodic timer is functionally
+    /// equivalent to a strict per-flush hook with at most one timer-period of detection
+    /// latency. Decoupled from collectors keeps moat boundary clean (no collector-side
+    /// dependency on detector layer). Default 30s — fast enough for "show within next
+    /// MCP tool call" UX while leaving ample headroom under heaviest write tick.
+    public let detectorIncrementalIntervalSec: TimeInterval
+    /// Phase Track-1 D3: how often `DetectorPipeline.runScheduled` runs against the
+    /// LinearStuck scanner + WhereStoppedDeriver. Independent from incremental cadence
+    /// because (a) these scanners read AGGREGATE state (not per-event) so don't need
+    /// per-event freshness, and (b) `WhereStoppedDeriver.idleSeconds` is the natural
+    /// floor — running more often just produces nil outputs. Default 300s mirrors the
+    /// prod `idleThresholdSec` ceiling; production override in moat.
+    public let detectorScheduledIntervalSec: TimeInterval
 
     public init(
         idlePollIntervalSec: TimeInterval,
@@ -126,7 +141,9 @@ public struct AgentThresholds: Sendable, Hashable {
         slackPollIntervalSec: TimeInterval = 300,
         slackOAuthClientID: String = "",
         attentionWindowPollIntervalSec: TimeInterval = 30,
-        rotationFetchIntervalSec: TimeInterval = 60
+        rotationFetchIntervalSec: TimeInterval = 60,
+        detectorIncrementalIntervalSec: TimeInterval = 30,
+        detectorScheduledIntervalSec: TimeInterval = 300
     ) {
         self.idlePollIntervalSec = idlePollIntervalSec
         self.idleThresholdSec = idleThresholdSec
@@ -156,6 +173,8 @@ public struct AgentThresholds: Sendable, Hashable {
         self.slackOAuthClientID = slackOAuthClientID
         self.attentionWindowPollIntervalSec = attentionWindowPollIntervalSec
         self.rotationFetchIntervalSec = rotationFetchIntervalSec
+        self.detectorIncrementalIntervalSec = detectorIncrementalIntervalSec
+        self.detectorScheduledIntervalSec = detectorScheduledIntervalSec
     }
 
     public static let weakDefaults = AgentThresholds(
@@ -186,6 +205,8 @@ public struct AgentThresholds: Sendable, Hashable {
         slackPollIntervalSec: 300,
         slackOAuthClientID: "",
         attentionWindowPollIntervalSec: 30,
-        rotationFetchIntervalSec: 60
+        rotationFetchIntervalSec: 60,
+        detectorIncrementalIntervalSec: 30,
+        detectorScheduledIntervalSec: 300
     )
 }

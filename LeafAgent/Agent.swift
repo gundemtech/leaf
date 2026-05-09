@@ -277,6 +277,25 @@ enum AgentMain {
         )
         AgentLifetime.rotationFetchScheduler = rotationFetchScheduler
 
+        // Phase Track-1 D3 — DetectorPipeline periodic invocation.
+        // `runIncremental` runs on a periodic timer (functionally equivalent to a
+        // strict per-flush hook because the cursor model is incremental + idempotent;
+        // see DetectorScheduler doc comment for the architectural rationale).
+        // `runScheduled` runs on a separate idle-cadence timer for LinearStuck +
+        // WhereStopped aggregate scanners. Prod factory `prodDetectorMoat()` lands
+        // in a follow-up commit; until then both build configs share `.publicSubstrate`
+        // (no-op detectors → zero detection writes, but the schedulers still tick
+        // benignly so the wire-up is exercised).
+        let detectorMoat: DetectorMoat = .publicSubstrate
+        let detectorScheduler = DetectorScheduler(
+            database: database,
+            moat: detectorMoat,
+            incrementalIntervalSec: agentThresholds.detectorIncrementalIntervalSec,
+            scheduledIntervalSec: agentThresholds.detectorScheduledIntervalSec,
+            logger: detectorLogger
+        )
+        AgentLifetime.detectorScheduler = detectorScheduler
+
         // Kick off writer + collectors + scheduler.
         // `start()` на writer/idle — fire-and-forget Task внутри; на activeApp — запускаем
         // через DispatchQueue.main.async чтобы NSWorkspace observer'у был доступен main runloop.
@@ -290,6 +309,7 @@ enum AgentMain {
         if let gc = githubCollector { Task { await gc.start() } }
         if let sc = slackCollector { Task { await sc.start() } }
         Task { await rotationFetchScheduler.start() }
+        Task { await detectorScheduler.start() }
 
         // Shutdown порядок: maintenance → fsEvents → claudeCode → linear → github → slack → writer.
         // fsEvents первым из collectors — закрываем приём callback'ов до того как
@@ -300,7 +320,10 @@ enum AgentMain {
         // chain'а minimizes overall stop latency. writer последним — drain буфера
         // attention/idle в DB перед exit.
         installSignalHandlers {
-            // Phase 5.3.E — stop rotationFetchScheduler first (independent from writer
+            // Phase Track-1 D3 — stop detectorScheduler first (purely read-side from
+            // collectors' POV; safe to drain immediately, blocks no further writes).
+            if let d = AgentLifetime.detectorScheduler { await d.stop() }
+            // Phase 5.3.E — stop rotationFetchScheduler next (independent from writer
             // chain; safe to drain while collectors still emit).
             if let r = AgentLifetime.rotationFetchScheduler { await r.stop() }
             if let m = AgentLifetime.maintenance { await m.stop() }
@@ -338,4 +361,6 @@ enum AgentLifetime {
     nonisolated(unsafe) static var slackCollector: SlackCollector?
     // Phase 5.3.E — peer-side rotation fetch loop.
     nonisolated(unsafe) static var rotationFetchScheduler: RotationFetchScheduler?
+    // Phase Track-1 D3 — periodic detector pipeline (incremental + scheduled passes).
+    nonisolated(unsafe) static var detectorScheduler: DetectorScheduler?
 }

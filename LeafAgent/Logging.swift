@@ -15,3 +15,4 @@ nonisolated let fsEventsLogger = Logger(subsystem: "tech.gundem.leaf.agent", cat
 nonisolated let linearLogger = Logger(subsystem: "tech.gundem.leaf.agent", category: "linear-collector")
 nonisolated let githubLogger = Logger(subsystem: "tech.gundem.leaf.agent", category: "github-collector")
 nonisolated let slackLogger = Logger(subsystem: "tech.gundem.leaf.agent", category: "slack-collector")
+nonisolated let detectorLogger = Logger(subsystem: "tech.gundem.leaf.agent", category: "detectors")
