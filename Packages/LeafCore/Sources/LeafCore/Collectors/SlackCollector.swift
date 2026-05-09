@@ -29,6 +29,10 @@ public actor SlackCollector {
     private let backfillWindowDays: Int
     private let logger: Logger
     private let restartTriggerName: String
+    /// Phase Track-1 D1 — max threads fan-out'ed per tick. Defaults to Int.max
+    /// (no cap) so existing tests and stub paths are unaffected. Production wiring
+    /// in LeafAgent injects SlackBudgets.maxThreadsPerTick (moat constant).
+    private let maxThreadsPerTick: Int
 
     private var loopTask: Task<Void, Never>?
     private var notifyToken: NSObjectProtocol?
@@ -45,6 +49,7 @@ public actor SlackCollector {
         refresher: SlackTokenRefresher,
         intervalSec: TimeInterval,
         backfillWindowDays: Int,
+        maxThreadsPerTick: Int = Int.max,
         restartTriggerName: String = SlackOAuthEndpoints.integrationChangedNotificationName,
         logger: Logger
     ) {
@@ -53,6 +58,7 @@ public actor SlackCollector {
         self.refresher = refresher
         self.intervalSec = intervalSec
         self.backfillWindowDays = backfillWindowDays
+        self.maxThreadsPerTick = maxThreadsPerTick
         self.restartTriggerName = restartTriggerName
         self.logger = logger
     }
@@ -275,19 +281,118 @@ public actor SlackCollector {
                 )
             }
 
-        // 6a'. Phase 4.7.A — thread reply aggregate events. Subset of `count`
-        // (replies are still messages). Emit'ится отдельным event_kind рядом
-        // с `message_authored_aggregate` чтобы downstream insights могли
-        // distinguish "initiation vs reply" без re-parsing payload.
-        let threadReplyEvents: [RawEvent] = tick.channelMessageCounts
-            .filter { $0.threadReplyCount > 0 }
-            .map {
-                Self.makeThreadReplyEvent(
-                    channel: $0,
+        // 6a'. Phase 4.7.A / Track-1 D1 — thread reply aggregate events.
+        //
+        // OLD path (pre-D1): count-only events from threadReplyCount field.
+        // NEW path (D1): conversations.replies fan-out per active thread found
+        // in messages field. Fan-out is bounded by maxThreadsPerTick (moat constant
+        // injected at init, defaults to Int.max for tests/stub).
+        //
+        // When messages field is populated (ProdSlackAPIProvider), we use fan-out.
+        // When messages field is nil (stub/test without per-message data), we fall
+        // back to old count-only approach for backward compat.
+        let hasPerMessageData = tick.channelMessageCounts.contains { $0.messages != nil }
+        var threadReplyEvents: [RawEvent] = []
+        if hasPerMessageData {
+            // D1 fan-out path: collect (channelID, threadTs) tuples from messages
+            // where threadTs is non-nil (message belongs to a thread).
+            // De-dupe by (channelID, threadTs), take prefix(maxThreadsPerTick).
+            var seen = Set<String>()
+            var threads: [(channelID: String, threadTs: String)] = []
+            for channel in tick.channelMessageCounts {
+                for msg in (channel.messages ?? []) {
+                    guard let threadTs = msg.threadTs else { continue }
+                    let key = "\(msg.channelID):\(threadTs)"
+                    if seen.insert(key).inserted {
+                        threads.append((channelID: msg.channelID, threadTs: threadTs))
+                    }
+                }
+            }
+            let limited = Array(threads.prefix(maxThreadsPerTick))
+            for thread in limited {
+                let threadSourceID = "slack:thread:\(thread.channelID):\(thread.threadTs)"
+                // Read per-thread cursor from collector_offsets.
+                let cursor: String?
+                do {
+                    let offset = try database.readOffset(
+                        collectorID: CollectorID.slackPolling,
+                        sourceID: threadSourceID
+                    )
+                    if let lastMs = offset?.lastModifiedMs, lastMs > 0 {
+                        // Convert ms back to Slack ts format (seconds.microseconds).
+                        let secs = Double(lastMs) / 1000.0
+                        cursor = String(format: "%.6f", secs)
+                    } else {
+                        cursor = nil
+                    }
+                } catch {
+                    logger.error("readOffset thread failed: \(String(describing: error), privacy: .public)")
+                    cursor = nil
+                }
+
+                let batch: SlackThreadReplyBatch
+                do {
+                    batch = try await provider.fetchThreadReplies(
+                        accessToken: refreshed.accessToken,
+                        channelID: thread.channelID,
+                        threadTs: thread.threadTs,
+                        ownerUserID: userID,
+                        oldest: cursor
+                    )
+                } catch is RateLimitError {
+                    logger.warning("fetchThreadReplies 429 for thread \(thread.threadTs, privacy: .public) — breaking fan-out")
+                    break
+                } catch {
+                    logger.error("fetchThreadReplies failed: \(String(describing: error), privacy: .public)")
+                    continue
+                }
+
+                // Build event and advance cursor.
+                let event = Self.makeThreadReplyFanOutEvent(
+                    batch: batch,
+                    channelID: thread.channelID,
+                    threadTs: thread.threadTs,
                     periodStartMs: tick.periodStartMs,
                     periodEndMs: tick.periodEndMs
                 )
+                threadReplyEvents.append(event)
+
+                // Advance per-thread cursor to latest reply ts.
+                let allRecords = ([batch.parent].compactMap { $0 }) + batch.replies
+                let latestTsMs: Int64? = allRecords.compactMap { rec -> Int64? in
+                    guard let secs = Double(rec.ts) else { return nil }
+                    return Int64(secs * 1000)
+                }.max()
+
+                if let latestMs = latestTsMs {
+                    let threadOffset = CollectorOffset(
+                        collectorID: CollectorID.slackPolling,
+                        sourceID: threadSourceID,
+                        byteOffset: 0,
+                        inode: nil,
+                        size: 0,
+                        lastModifiedMs: latestMs,
+                        updatedMs: Int64(now.timeIntervalSince1970 * 1000)
+                    )
+                    do {
+                        try database.writeEventsAndOffset([], offset: threadOffset)
+                    } catch {
+                        logger.error("persist thread cursor failed: \(String(describing: error), privacy: .public)")
+                    }
+                }
             }
+        } else {
+            // Fallback: count-only events (pre-D1 path, stub / no per-message data).
+            threadReplyEvents = tick.channelMessageCounts
+                .filter { $0.threadReplyCount > 0 }
+                .map {
+                    Self.makeThreadReplyEvent(
+                        channel: $0,
+                        periodStartMs: tick.periodStartMs,
+                        periodEndMs: tick.periodEndMs
+                    )
+                }
+        }
 
         // 6b. Huddle transition event — emit только если state различается с
         // последним DB-зафиксированным huddle event'ом. .unknown → skip
@@ -522,6 +627,23 @@ public actor SlackCollector {
         if channel.reactionsCount > 0 {
             payload["reactions_count"] = String(channel.reactionsCount)
         }
+        // Phase Track-1 D1 — per-message records (BodyCap-applied at moat boundary).
+        // Emit `messages_json` key when provider populated the messages field.
+        // NO top-level `body` key for this event_kind — multiple messages per tick,
+        // no single canonical body (consistent with spec §3.5 / §4.4).
+        // If any message text contains the BodyCap sentinel "[truncated:" → set body_truncated.
+        if let messages = channel.messages, !messages.isEmpty {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            if let data = try? encoder.encode(messages),
+               let str = String(data: data, encoding: .utf8) {
+                payload[Schema.EventPayloadKeys.messagesJson] = str
+            }
+            let anyTruncated = messages.contains { $0.text.contains("[truncated:") }
+            if anyTruncated {
+                payload[Schema.EventPayloadKeys.bodyTruncated] = "true"
+            }
+        }
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(periodEndMs) / 1000.0),
             signalType: .action,
@@ -530,8 +652,9 @@ public actor SlackCollector {
         )
     }
 
-    /// Phase 4.7.A — thread reply aggregate event. Same shape pattern что
-    /// `message_authored_aggregate`, distinct event_kind, count=subset.
+    /// Phase 4.7.A — thread reply aggregate event (count-only fallback path).
+    /// Used when per-message data is not available (stub / pre-D1 path).
+    /// Same shape pattern что `message_authored_aggregate`, distinct event_kind.
     private static func makeThreadReplyEvent(
         channel: SlackChannelMessageCount,
         periodStartMs: Int64,
@@ -549,6 +672,50 @@ public actor SlackCollector {
                 "period_start_ms": String(periodStartMs),
                 "period_end_ms": String(periodEndMs)
             ]
+        )
+    }
+
+    /// Phase Track-1 D1 — thread reply fan-out event from `conversations.replies`.
+    /// Carries top-level `body` (parent text, BodyCap-applied at provider boundary)
+    /// + `thread_replies_json` (per-reply records). Parent body_truncated set if
+    /// parent text contains the BodyCap sentinel "[truncated:".
+    private static func makeThreadReplyFanOutEvent(
+        batch: SlackThreadReplyBatch,
+        channelID: String,
+        threadTs: String,
+        periodStartMs: Int64,
+        periodEndMs: Int64
+    ) -> RawEvent {
+        var payload: [String: String] = [
+            "source": "slack",
+            "event_kind": "slack_thread_reply_aggregate",
+            "channel_id": channelID,
+            "thread_ts": threadTs,
+            "reply_count": String(batch.replies.count),
+            "period_start_ms": String(periodStartMs),
+            "period_end_ms": String(periodEndMs)
+        ]
+        // Parent body (BodyCap-applied at moat boundary).
+        if let parent = batch.parent, !parent.text.isEmpty {
+            payload[Schema.EventPayloadKeys.body] = parent.text
+            if parent.text.contains("[truncated:") {
+                payload[Schema.EventPayloadKeys.bodyTruncated] = "true"
+            }
+        }
+        // Per-reply records as JSON array.
+        if !batch.replies.isEmpty {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            if let data = try? encoder.encode(batch.replies),
+               let str = String(data: data, encoding: .utf8) {
+                payload[Schema.EventPayloadKeys.threadRepliesJson] = str
+            }
+        }
+        return RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(periodEndMs) / 1000.0),
+            signalType: .action,
+            bundleID: nil,
+            payload: payload
         )
     }
 
@@ -666,25 +833,42 @@ public actor SlackCollector {
     /// отсутствует == 0 ИЛИ pre-4.7.B без bucket'а").
     /// ADR-010: filename / preview / permalink — отбрасываются на provider-side
     /// parsing'е, в payload не попадают.
+    /// Phase Track-1 D1 — `attachments_json` key added when provider populated
+    /// the files field with per-file metadata. Uses shared `AttachmentMeta` shape
+    /// for cross-provider uniformity.
     static func makeFileUploadedAggregateEvent(
         summary: SlackFileUploadSummary,
         nowMs: Int64
     ) -> RawEvent {
-        RawEvent(
+        var payload: [String: String] = [
+            "source": "slack",
+            "event_kind": "slack_file_uploaded_aggregate",
+            "count": String(summary.count),
+            "image_count": String(summary.typesSummary["image"] ?? 0),
+            "code_count": String(summary.typesSummary["code"] ?? 0),
+            "doc_count": String(summary.typesSummary["doc"] ?? 0),
+            "other_count": String(summary.typesSummary["other"] ?? 0),
+            "period_start_ms": String(summary.periodStartMs),
+            "period_end_ms": String(summary.periodEndMs)
+        ]
+        // Phase Track-1 D1 — per-file metadata as AttachmentMeta for uniform
+        // cross-provider payload shape (name + mime + size_bytes).
+        if let files = summary.files, !files.isEmpty {
+            let attachments = files.map { f in
+                AttachmentMeta(name: f.name, mime: f.mimetype, sizeBytes: f.size)
+            }
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            if let data = try? encoder.encode(attachments),
+               let str = String(data: data, encoding: .utf8) {
+                payload[Schema.EventPayloadKeys.attachmentsJson] = str
+            }
+        }
+        return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0),
             signalType: .action,
             bundleID: nil,
-            payload: [
-                "source": "slack",
-                "event_kind": "slack_file_uploaded_aggregate",
-                "count": String(summary.count),
-                "image_count": String(summary.typesSummary["image"] ?? 0),
-                "code_count": String(summary.typesSummary["code"] ?? 0),
-                "doc_count": String(summary.typesSummary["doc"] ?? 0),
-                "other_count": String(summary.typesSummary["other"] ?? 0),
-                "period_start_ms": String(summary.periodStartMs),
-                "period_end_ms": String(summary.periodEndMs)
-            ]
+            payload: payload
         )
     }
 

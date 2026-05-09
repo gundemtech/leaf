@@ -82,6 +82,27 @@ public protocol SlackAPIProvider: Sendable {
         userID: String,
         since: Int64
     ) async throws -> SlackFileUploadSummary
+
+    /// Phase Track-1 D1 — `conversations.replies` (Tier 3) fan-out for one thread.
+    /// Returns parent message + replies for threads where the owner participated.
+    /// `channelID` — Slack channel_id (not name). `threadTs` — parent message ts.
+    /// `ownerUserID` — authed user ID; replies filtered to owner-authored OR all
+    ///   replies in owner-started threads (UC4).
+    /// `oldest` — Slack ts cursor string for incremental fetch (nil = from start).
+    ///
+    /// Throws `RateLimitError.retryAfter(seconds)` on HTTP 429 so collector can
+    /// break out of the fan-out loop and preserve per-thread cursors of already-
+    /// processed threads.
+    ///
+    /// ADR-010 §6 amendment: text captured on-device only; relay path (Share Controls
+    /// filter applied before encryption) never carries raw text.
+    func fetchThreadReplies(
+        accessToken: String,
+        channelID: String,
+        threadTs: String,
+        ownerUserID: String,
+        oldest: String?
+    ) async throws -> SlackThreadReplyBatch
 }
 
 /// Результат одного Slack tick'а. Huddle state — point-in-time snapshot;
@@ -146,6 +167,95 @@ public enum SlackHuddleState: String, Sendable, Hashable {
     }
 }
 
+/// Phase Track-1 D1 — per-message record captured from `search.messages` `match.text`.
+/// BodyCap applied at provider boundary (LeafCorePrivate moat); text here is already
+/// capped. ADR-010 §6 amendment: message text allowed on-device only, never relayed.
+/// `channelID` enables thread fan-out cursor keying. `threadTs` non-nil → message
+/// is either a thread initiation or a reply (use threadTs != ts to distinguish).
+public struct SlackMessageRecord: Codable, Sendable, Hashable {
+    /// Message timestamp in Slack ts format ("1614800000.000100"). Unique ID per channel.
+    public let ts: String
+    /// Thread root ts. Non-nil → message belongs to a thread. If `ts == threadTs`
+    /// the message started the thread; otherwise it is a reply.
+    public let threadTs: String?
+    /// Channel ID for thread fan-out cursor keying.
+    public let channelID: String
+    /// Message text, BodyCap-applied at provider boundary. Empty string if provider
+    /// could not read text (permissions / parse failure — graceful degrade).
+    public let text: String
+    /// Attachments (file uploads within this message). Empty if none.
+    public let attachments: [AttachmentMeta]
+
+    enum CodingKeys: String, CodingKey {
+        case ts
+        case threadTs = "thread_ts"
+        case channelID = "channel_id"
+        case text
+        case attachments
+    }
+
+    public init(
+        ts: String,
+        threadTs: String?,
+        channelID: String,
+        text: String,
+        attachments: [AttachmentMeta] = []
+    ) {
+        self.ts = ts
+        self.threadTs = threadTs
+        self.channelID = channelID
+        self.text = text
+        self.attachments = attachments
+    }
+}
+
+/// Phase Track-1 D1 — per-file metadata from `search.files` or `search.messages` file
+/// attachments. Captures name + mime + size; ADR-010: content / preview / permalink
+/// never read. Use `AttachmentMeta(name:mime:sizeBytes:)` for cross-provider uniformity
+/// when embedding in event payload.
+public struct SlackFileMeta: Codable, Sendable, Hashable {
+    public let name: String
+    /// IANA MIME type as returned by Slack (e.g. "image/png", "text/plain").
+    public let mimetype: String
+    /// File size in bytes (Slack `file.size` field). Nil if not present in response.
+    public let size: Int?
+
+    public init(name: String, mimetype: String, size: Int?) {
+        self.name = name
+        self.mimetype = mimetype
+        self.size = size
+    }
+}
+
+/// Phase Track-1 D1 — result of `conversations.replies` fan-out for one thread.
+/// `parent` is the top-level message that started the thread (text BodyCap-applied).
+/// `replies` are the sub-messages in the thread authored by ownerUserID or belonging
+/// to a thread owned by the user (per UC4 spec).
+/// `nextCursor` is the Slack `response_metadata.next_cursor` for pagination
+/// (nil = no more pages in the window). Used to advance per-thread cursor.
+public struct SlackThreadReplyBatch: Sendable {
+    /// Parent (root) message of the thread. Nil if the API couldn't fetch it
+    /// (e.g., channel no longer accessible) — batch still processable via replies.
+    public let parent: SlackMessageRecord?
+    /// Reply messages authored by or in a thread of the owner.
+    public let replies: [SlackMessageRecord]
+    /// Slack response_metadata.next_cursor for this thread. Nil = fully consumed.
+    public let nextCursor: String?
+
+    public init(
+        parent: SlackMessageRecord?,
+        replies: [SlackMessageRecord],
+        nextCursor: String?
+    ) {
+        self.parent = parent
+        self.replies = replies
+        self.nextCursor = nextCursor
+    }
+
+    /// Empty sentinel — used by stub and graceful-degrade paths.
+    public static let empty = SlackThreadReplyBatch(parent: nil, replies: [], nextCursor: nil)
+}
+
 /// Bucket: количество self-authored сообщений в одном канале за период tick'а.
 /// `channelName` — public name канала ("engineering"), либо литерал `"DM"` для
 /// IM/MPIM (одна корзина на все DMs — anonymization, ADR-010).
@@ -155,22 +265,32 @@ public enum SlackHuddleState: String, Sendable, Hashable {
 /// `threadReplyCount` (Phase 4.7.A) — subset of `count` где `thread_ts != ts`
 /// (т.е. message — это reply в чужом thread'е, не initiation). Aggregate
 /// numeric. ADR-010: text/permalink не сохраняются как и раньше.
+/// `messages` (Phase Track-1 D1) — optional per-message records with BodyCap-applied
+/// text, populated by ProdSlackAPIProvider. Nil for stub / graceful-degrade paths.
+/// Existing callers that only read `count` / `reactionsCount` / `threadReplyCount`
+/// are unaffected (additive field with default nil).
 public struct SlackChannelMessageCount: Sendable, Hashable {
     public let channelName: String
     public let count: Int
     public let reactionsCount: Int
     public let threadReplyCount: Int
+    /// Phase Track-1 D1 — per-message records (BodyCap-applied at moat boundary).
+    /// Nil = not populated (stub / non-prod path). Empty array = provider returned
+    /// no messages for this channel in the tick window (degenerate but valid).
+    public let messages: [SlackMessageRecord]?
 
     public init(
         channelName: String,
         count: Int,
         reactionsCount: Int = 0,
-        threadReplyCount: Int = 0
+        threadReplyCount: Int = 0,
+        messages: [SlackMessageRecord]? = nil
     ) {
         self.channelName = channelName
         self.count = count
         self.reactionsCount = reactionsCount
         self.threadReplyCount = threadReplyCount
+        self.messages = messages
     }
 }
 
@@ -263,6 +383,9 @@ public struct SlackMentionChannelCount: Sendable, Hashable {
 /// collector emit'ит aggregate с count=0 чтобы downstream видел observation continuity.
 /// ADR-010: filename / preview / permalink / thumbs — НИКОГДА не читаются на
 /// provider-side; провайдер извлекает только mimetype для bucket'ирования.
+/// `files` (Phase Track-1 D1) — optional per-file metadata populated by
+/// ProdSlackAPIProvider. Existing consumers that only read `count`/`typesSummary`
+/// are unaffected (additive field, default nil).
 public struct SlackFileUploadSummary: Sendable, Hashable {
     public let count: Int
     /// Canonical buckets: "image" / "code" / "doc" / "other". Bucket с 0 files —
@@ -270,17 +393,22 @@ public struct SlackFileUploadSummary: Sendable, Hashable {
     public let typesSummary: [String: Int]
     public let periodStartMs: Int64
     public let periodEndMs: Int64
+    /// Phase Track-1 D1 — per-file metadata (name + mime + size). Nil = not populated
+    /// (stub / graceful-degrade path). Empty array = provider returned no files.
+    public let files: [SlackFileMeta]?
 
     public init(
         count: Int,
         typesSummary: [String: Int],
         periodStartMs: Int64,
-        periodEndMs: Int64
+        periodEndMs: Int64,
+        files: [SlackFileMeta]? = nil
     ) {
         self.count = count
         self.typesSummary = typesSummary
         self.periodStartMs = periodStartMs
         self.periodEndMs = periodEndMs
+        self.files = files
     }
 
     /// Graceful sentinel: provider не смог определить state (401 / 429 / network /
@@ -337,5 +465,15 @@ public struct StubSlackAPIProvider: SlackAPIProvider {
         since: Int64
     ) async throws -> SlackFileUploadSummary {
         .empty(periodStartMs: 0, periodEndMs: 0)
+    }
+
+    public func fetchThreadReplies(
+        accessToken: String,
+        channelID: String,
+        threadTs: String,
+        ownerUserID: String,
+        oldest: String?
+    ) async throws -> SlackThreadReplyBatch {
+        .empty
     }
 }

@@ -44,6 +44,13 @@ public enum SlackOAuthEndpoints {
     /// ADR-010: provider извлекает ТОЛЬКО `file.mimetype`; filenames / previews /
     /// permalinks игнорируются на parsing'е. Требует scope `files:read`.
     public static let searchFiles = URL(string: "https://slack.com/api/search.files")!
+    /// `conversations.replies` — Tier 3. Thread fan-out for Track-1 D1.
+    /// Query `?channel=<id>&ts=<threadTs>&oldest=<cursor>&limit=N`.
+    /// Provider filters replies where `user == ownerUserID` OR thread parent
+    /// authored by owner. ADR-010: text captured on-device only, never relayed.
+    /// Requires scope `channels:history`, `groups:history`, `im:history`, `mpim:history`
+    /// (same scopes as conversations.history, already in userScopes since Phase 4.6.A.3).
+    public static let conversationsReplies = URL(string: "https://slack.com/api/conversations.replies")!
 
     /// Public redirect URI для Slack OAuth `/oauth/v2/authorize` и token exchange.
     /// Slack distributed-app distribution требует HTTPS на redirect URI; loopback
