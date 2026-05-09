@@ -142,4 +142,128 @@ final class RelayBodyLeakageTests: XCTestCase {
             XCTAssertFalse(stateJSON.contains(parentText))
         }
     }
+
+    func testEventLinksTargetRef_DoesNotLeakIntoPresenceState() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let event = RawEvent(
+            timestamp: Date(),
+            signalType: .action,
+            bundleID: "linear",
+            payload: [
+                "event_kind": "linear_issue_updated",
+                Schema.EventPayloadKeys.body: "discusses LEAF-127"
+            ]
+        )
+        let presenceState: [String: Any] = ["assigned_count": 7]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: CollectorID.linearPolling, sourceID: "linear:test", nowMs: nowMs),
+            presence: (provider: .linear, state: presenceState, derivedMode: nil),
+            knownLinearPrefixes: ["LEAF"],
+            nowMs: nowMs
+        )
+
+        // Confirm the link DID get derived (otherwise the assertion below is vacuous).
+        let linkCount = try db.readSQL { rawDB in
+            try Int.fetchOne(rawDB, sql: "SELECT COUNT(*) FROM event_links WHERE target_ref = ?",
+                             arguments: ["LEAF-127"]) ?? 0
+        }
+        XCTAssertEqual(linkCount, 1, "Sanity: link should exist before asserting it does not leak")
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty)
+            XCTAssertFalse(stateJSON.contains("LEAF-127"),
+                           "event_links target_ref MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testFTSBodies_DoNotLeakIntoPresenceState() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let bodyText = "SECRET-FTS-BODY-MARKER-99887"
+        let event = RawEvent(
+            timestamp: Date(),
+            signalType: .action,
+            bundleID: "linear",
+            payload: [
+                "event_kind": "linear_issue_updated",
+                Schema.EventPayloadKeys.body: bodyText
+            ]
+        )
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: CollectorID.linearPolling, sourceID: "linear:test", nowMs: nowMs),
+            presence: (provider: .linear, state: ["assigned_count": 1], derivedMode: nil),
+            knownLinearPrefixes: [],
+            nowMs: nowMs
+        )
+
+        // Confirm body was indexed in FTS (sanity). Contentless FTS5 stores no column data,
+        // so we sanity-check via the sidecar meta table written atomically with each FTS row.
+        let ftsCount = try db.readSQL { rawDB in
+            try Int.fetchOne(rawDB, sql: "SELECT COUNT(*) FROM events_fts_meta WHERE body_kind = ?",
+                             arguments: [Schema.BodyKinds.linearDesc]) ?? 0
+        }
+        XCTAssertEqual(ftsCount, 1, "Sanity: body should be indexed before asserting it does not leak")
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty)
+            XCTAssertFalse(stateJSON.contains(bodyText),
+                           "FTS-indexed body MUST NOT appear in presence_state.state_json")
+        }
+    }
+
+    func testCrossDatabaseIsolation_FTSAndEventLinks_NotInPresenceFlow() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+
+        // GitHub event with a PR body containing LEAF-450 and a Slack-style PR URL marker.
+        let prBody = "Adds support for LEAF-450 — see https://github.com/o/r/pull/9 for context"
+        let event = RawEvent(
+            timestamp: Date(),
+            signalType: .action,
+            bundleID: "github",
+            payload: [
+                "event_kind": "gh_pr_opened",
+                Schema.EventPayloadKeys.body: prBody,
+                Schema.EventPayloadKeys.requestedReviewersJson: #"["alice"]"#,
+                Schema.EventPayloadKeys.additions: "10",
+                Schema.EventPayloadKeys.deletions: "2"
+            ]
+        )
+
+        // Presence carries only structured PR metrics — no body text, no link refs.
+        let presenceState: [String: Any] = [
+            "review_count": 1,
+            "additions": 10,
+            "deletions": 2
+        ]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: CollectorID.githubPolling, sourceID: "github:test", nowMs: nowMs),
+            presence: (provider: .github, state: presenceState, derivedMode: nil),
+            knownLinearPrefixes: ["LEAF"],
+            nowMs: nowMs
+        )
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty)
+            // Body text MUST NOT be in presence_state.
+            XCTAssertFalse(stateJSON.contains("Adds support"),
+                           "PR body excerpt must not appear in presence_state")
+            XCTAssertFalse(stateJSON.contains(prBody),
+                           "PR body must not appear in presence_state")
+            // Link target_refs MUST NOT be in presence_state.
+            XCTAssertFalse(stateJSON.contains("LEAF-450"),
+                           "Linear ID target_ref must not appear in presence_state")
+            XCTAssertFalse(stateJSON.contains("o/r/pull/9"),
+                           "PR URL target_ref must not appear in presence_state")
+            XCTAssertFalse(stateJSON.contains("alice"),
+                           "Reviewer login target_ref must not appear in presence_state")
+        }
+    }
 }
