@@ -46,6 +46,31 @@ public enum LinearIDExtractor {
         }
         return nil
     }
+
+    /// Phase Track-1 D2 — returns ALL Linear-ID matches from `text`, ordered by
+    /// appearance, deduped (preserving first-seen order). Empty `knownPrefixes`
+    /// → []. No matches → []. Sibling to `extract(text:knownPrefixes:)` (which
+    /// returns first match only); `extract` semantics untouched.
+    public static func extractAll(text: String, knownPrefixes: Set<String>) -> [String] {
+        guard !text.isEmpty, !knownPrefixes.isEmpty else { return [] }
+        let range = NSRange(text.startIndex..., in: text)
+        let matches = pattern.matches(in: text, options: [], range: range)
+        var seen = Set<String>()
+        var out: [String] = []
+        for match in matches {
+            guard
+                let prefixRange = Range(match.range(at: 1), in: text),
+                let fullRange = Range(match.range, in: text)
+            else { continue }
+            let prefix = String(text[prefixRange])
+            guard knownPrefixes.contains(prefix) else { continue }
+            let id = String(text[fullRange])
+            if seen.insert(id).inserted {
+                out.append(id)
+            }
+        }
+        return out
+    }
 }
 
 /// Phase 4.7.A — in-memory TTL cache для Linear team-key prefixes.

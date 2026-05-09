@@ -148,4 +148,25 @@ final class LinearIDExtractorTests: XCTestCase {
         func increment() { count += 1 }
         func get() -> Int { count }
     }
+
+    func testExtractAll_MultipleMatches_OrderedDedup() {
+        let result = LinearIDExtractor.extractAll(
+            text: "LEAF-127 and LEAF-200 and LEAF-127 again",
+            knownPrefixes: ["LEAF"]
+        )
+        XCTAssertEqual(result, ["LEAF-127", "LEAF-200"])
+    }
+
+    func testExtractAll_EmptyKnownPrefixes_ReturnsEmpty() {
+        let result = LinearIDExtractor.extractAll(text: "LEAF-127", knownPrefixes: [])
+        XCTAssertTrue(result.isEmpty)
+    }
+
+    func testExtractAll_NoMatches_ReturnsEmpty() {
+        let result = LinearIDExtractor.extractAll(
+            text: "no matches here at all",
+            knownPrefixes: ["LEAF"]
+        )
+        XCTAssertTrue(result.isEmpty)
+    }
 }
