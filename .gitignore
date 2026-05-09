@@ -3,6 +3,8 @@
 .claude/shared/drafts/
 # Phase-execution планы — внутренние: ship timeline, trade-offs, moat boundaries
 .claude/plans/
+# Superpowers git worktrees — генерируются using-git-worktrees skill, локально
+.claude/worktrees/
 
 # Логи
 excalidraw.log
