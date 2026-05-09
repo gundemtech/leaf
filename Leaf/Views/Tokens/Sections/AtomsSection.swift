@@ -11,6 +11,7 @@ struct AtomsSection: View {
         VStack(alignment: .leading, spacing: LeafSpace.xl) {
             Text("Atoms").font(LeafType.title.large).foregroundStyle(LeafColor.text.primary)
             LeafIconPreview()
+            LeafDotPreview()
         }
     }
 }
