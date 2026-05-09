@@ -30,6 +30,12 @@ enum MCPMain {
 
         MCPLog.info("leaf-mcp v\(MCPConstants.serverVersion) starting (prod=\(prodMode))")
 
+        // Phase Track-1 D3 — DetectorMoat injection point. Prod factory
+        // (`prodDetectorMoat()`) lands in Commit 10; until then both branches
+        // share `.publicSubstrate` (no-op detectors → empty hits, query path
+        // still works через FTS+links).
+        let detectorMoat: DetectorMoat = .publicSubstrate
+
         let dbURL = DatabasePath.defaultURL()
         let timelineTool = GetTimelineTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
         let findLastActivityTool = FindLastActivityTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
@@ -48,6 +54,18 @@ enum MCPMain {
         let workloadPulseTool = GetWorkloadPulseTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
         let reviewActivityTool = GetReviewActivityTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
         let crossProviderThreadTool = GetCrossProviderThreadTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
+        let queryActivityTool = QueryActivityTool(
+            dbURL: dbURL, dbConfig: dbConfig,
+            dbEncryption: dbEncryption, detectorMoat: detectorMoat
+        )
+        let getDecisionTool = GetDecisionTool(
+            dbURL: dbURL, dbConfig: dbConfig,
+            dbEncryption: dbEncryption, detectorMoat: detectorMoat
+        )
+        let currentWorkTool = CurrentWorkTool(
+            dbURL: dbURL, dbConfig: dbConfig,
+            dbEncryption: dbEncryption, detectorMoat: detectorMoat
+        )
 
         // Notifications (`notifications/*`) обрабатываются Dispatcher'ом через
         // id == nil short-circuit — отдельный handler регистрировать не нужно.
@@ -65,7 +83,10 @@ enum MCPMain {
                 GetCurrentPresenceTool.definition,
                 GetWorkloadPulseTool.definition,
                 GetReviewActivityTool.definition,
-                GetCrossProviderThreadTool.definition
+                GetCrossProviderThreadTool.definition,
+                QueryActivityTool.definition,
+                GetDecisionTool.definition,
+                CurrentWorkTool.definition
             ]),
             "tools/call": ToolsCallHandler(registry: [
                 "get_timeline": timelineTool,
@@ -79,7 +100,10 @@ enum MCPMain {
                 "get_current_presence": currentPresenceTool,
                 "get_workload_pulse": workloadPulseTool,
                 "get_review_activity": reviewActivityTool,
-                "get_cross_provider_thread": crossProviderThreadTool
+                "get_cross_provider_thread": crossProviderThreadTool,
+                "leaf_query_activity": queryActivityTool,
+                "leaf_get_decision": getDecisionTool,
+                "leaf_current_work": currentWorkTool
             ])
         ])
 
