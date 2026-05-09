@@ -12,6 +12,7 @@ struct OrganismsSection: View {
             Text("Organisms").font(LeafType.title.large).foregroundStyle(LeafColor.text.primary)
             LeafCardPreview()
             LeafSectionPreview()
+            LeafNavRowPreview()
         }
     }
 }
