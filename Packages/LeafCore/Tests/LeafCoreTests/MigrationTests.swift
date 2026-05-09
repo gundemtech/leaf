@@ -463,7 +463,12 @@ final class MigrationTests: XCTestCase {
                 Schema.PendingInvites.tableName,
                 Schema.EventsFTS.tableName,
                 Schema.EventsFTSMeta.tableName,
-                Schema.EventLinks.tableName
+                Schema.EventLinks.tableName,
+                Schema.Decisions.tableName,
+                Schema.OpenQuestions.tableName,
+                Schema.Blockers.tableName,
+                Schema.WhereStoppedLog.tableName,
+                Schema.DetectorOffsets.tableName
             ]
             XCTAssertEqual(tables, expected)
         }

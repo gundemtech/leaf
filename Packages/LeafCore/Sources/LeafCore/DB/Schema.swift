@@ -246,6 +246,101 @@ public enum Schema {
         public static let githubPR = "github_pr"
         public static let githubUser = "github_user"
     }
+
+    /// Phase Track-1 D3 — decision detector hits (one row per source event).
+    /// `event_id` — logical FK на `events.id` (UNIQUE — per-event idempotency).
+    /// SQL FOREIGN KEY не объявляется (repo convention — см. M013_EventLinks).
+    public enum Decisions {
+        public static let tableName = "decisions"
+        public static let id = "id"
+        public static let eventID = "event_id"
+        public static let topicKeywordsJSON = "topic_keywords_json"
+        public static let reasoningExcerpt = "reasoning_excerpt"
+        public static let confidence = "confidence"
+        public static let detectedAtMs = "detected_at_ms"
+
+        public static let indexDetectedAt = "idx_decisions_detected_at"
+    }
+
+    /// Phase Track-1 D3 — open question detector hits + resolution flow.
+    /// `event_id` UNIQUE (per-event idempotency). `resolved_by_event_id` —
+    /// nullable logical FK на `events.id`, заполняется при матче resolving
+    /// event'а (см. resolution flow в DetectorPipeline).
+    public enum OpenQuestions {
+        public static let tableName = "open_questions"
+        public static let id = "id"
+        public static let eventID = "event_id"
+        public static let questionExcerpt = "question_excerpt"
+        public static let alternativesJSON = "alternatives_json"
+        public static let slackThreadTs = "slack_thread_ts"
+        public static let linearIssueRef = "linear_issue_ref"
+        public static let githubPRRef = "github_pr_ref"
+        public static let resolvedByEventID = "resolved_by_event_id"
+        public static let openedAtMs = "opened_at_ms"
+        public static let resolvedAtMs = "resolved_at_ms"
+
+        public static let indexUnresolved = "idx_open_questions_unresolved"
+        public static let indexSlack = "idx_open_questions_slack"
+        public static let indexLinear = "idx_open_questions_linear"
+        public static let indexPR = "idx_open_questions_pr"
+    }
+
+    /// Phase Track-1 D3 — blocker hits (один OPEN blocker per
+    /// `(target_kind, target_ref)`, partial unique index `idx_blockers_open`).
+    /// Resolved rows исключены из uniqueness — позволяет повторно открывать
+    /// blocker после resolve. `detected_by_event_id` / `resolved_by_event_id` —
+    /// nullable logical FKs на `events.id`.
+    public enum Blockers {
+        public static let tableName = "blockers"
+        public static let id = "id"
+        public static let targetKind = "target_kind"
+        public static let targetRef = "target_ref"
+        public static let blockerKind = "blocker_kind"
+        public static let blockerExcerpt = "blocker_excerpt"
+        public static let detectedByEventID = "detected_by_event_id"
+        public static let startedAtMs = "started_at_ms"
+        public static let resolvedAtMs = "resolved_at_ms"
+        public static let resolvedByEventID = "resolved_by_event_id"
+
+        public static let indexOpen = "idx_blockers_open"
+        public static let indexTarget = "idx_blockers_target"
+    }
+
+    /// Phase Track-1 D3 — append-only "where I stopped" snapshots генерируемые
+    /// `WhereStoppedDeriver` (scheduled detector). `anchor_event_id` — nullable
+    /// logical FK на `events.id` (anchor может быть derived window без single
+    /// canonical event).
+    public enum WhereStoppedLog {
+        public static let tableName = "where_stopped_log"
+        public static let id = "id"
+        public static let generatedAtMs = "generated_at_ms"
+        public static let anchorEventID = "anchor_event_id"
+        public static let excerpt = "excerpt"
+        public static let wipSignalsJSON = "wip_signals_json"
+
+        public static let indexGeneratedAt = "idx_where_stopped_generated_at"
+    }
+
+    /// Phase Track-1 D3 — per-detector progress cursor для incremental
+    /// per-event detector pipeline. PK — `detector_kind`. Pre-seeded в
+    /// миграции тремя строками (`decision`, `open_question`,
+    /// `blocker_pattern`). Scheduled detectors (linear_stuck, where_stopped)
+    /// cursor не используют.
+    public enum DetectorOffsets {
+        public static let tableName = "detector_offsets"
+        public static let detectorKind = "detector_kind"
+        public static let cursorEventID = "cursor_event_id"
+        public static let lastRunAtMs = "last_run_at_ms"
+    }
+
+    /// Phase Track-1 D3 — `detector_kind` discriminators for
+    /// `detector_offsets.detector_kind`. Single source of truth между
+    /// migration pre-seed + DetectorPipeline cursor reads.
+    public enum DetectorKinds {
+        public static let decision = "decision"
+        public static let openQuestion = "open_question"
+        public static let blockerPattern = "blocker_pattern"
+    }
 }
 
 /// Канонические `collector_id` значения. Литералы — public, чтобы тесты
