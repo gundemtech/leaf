@@ -13,6 +13,7 @@ struct OrganismsSection: View {
             LeafCardPreview()
             LeafSectionPreview()
             LeafNavRowPreview()
+            LeafListRowPreview()
         }
     }
 }
