@@ -12,6 +12,7 @@ struct MoleculesSection: View {
             Text("Molecules").font(LeafType.title.large).foregroundStyle(LeafColor.text.primary)
             LeafButtonPreview()
             LeafIconButtonPreview()
+            LeafPillPreview()
         }
     }
 }
