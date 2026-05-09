@@ -107,7 +107,18 @@ public enum DetectorPipeline {
                 if let hit = moat.decision.detect(body: body, kind: bodyKind, eventTsMs: tsMs) {
                     let inserted = try DecisionsStore.insertOrIgnore(
                         eventID: eventID, hit: hit, detectedAtMs: tsMs, in: db)
-                    if inserted { return }
+                    if inserted {
+                        // Same transaction as the INSERT — failure rolls back both.
+                        let contexts = try resolutionContexts(eventID: eventID,
+                                                              payload: dict,
+                                                              in: db)
+                        _ = try OpenQuestionsStore.markResolved(
+                            matchingContexts: contexts,
+                            resolvedByEventID: eventID,
+                            resolvedAtMs: tsMs,
+                            in: db)
+                        return
+                    }
                 }
             case Schema.DetectorKinds.openQuestion:
                 if let hit = moat.openQuestion.detect(body: body, kind: bodyKind) {
@@ -211,6 +222,43 @@ public enum DetectorPipeline {
         }
         let matches = LinearIDExtractor.extractAll(text: body, knownPrefixes: Set<String>())
         return matches.first
+    }
+
+    /// Builds resolution context for a "verdict" event (the decision that may
+    /// answer prior open questions). Combines collector-attributed payload
+    /// keys (`thread_ts` / `linked_linear_id` / `linked_github_pr`) with the
+    /// D2 link graph so cross-source decisions (e.g. Slack DECIDE that links
+    /// back to a Linear issue or GitHub PR via event_links) still resolve.
+    private static func resolutionContexts(eventID: Int64,
+                                           payload: [String: Any],
+                                           in db: GRDB.Database) throws -> ResolutionContexts {
+        let threadTS = payload["thread_ts"] as? String
+
+        var linearRefs = Set<String>()
+        if let s = payload["linked_linear_id"] as? String, !s.isEmpty {
+            linearRefs.insert(s)
+        }
+        var prRefs = Set<String>()
+        if let s = payload["linked_github_pr"] as? String, !s.isEmpty {
+            prRefs.insert(s)
+        }
+
+        for link in try EventLinksStore.linksFrom(eventID: eventID, in: db) {
+            switch link.targetKind {
+            case Schema.TargetKinds.linearIssue:
+                linearRefs.insert(link.targetRef)
+            case Schema.TargetKinds.githubPR:
+                prRefs.insert(link.targetRef)
+            default:
+                continue
+            }
+        }
+
+        return ResolutionContexts(
+            slackThreadTS: threadTS,
+            linearIssueRefs: Array(linearRefs),
+            githubPRRefs: Array(prRefs)
+        )
     }
 
     /// Picks `(target_kind, target_ref)` for blocker writes.

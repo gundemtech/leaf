@@ -112,6 +112,22 @@ final class DetectorPipelineIncrementalTests: XCTestCase {
         }
     }
 
+    /// Direct insert into `event_links` for resolution-flow tests — avoids
+    /// pulling in LeafCorePrivate moat extractors (PR URL / hash regex).
+    private func insertLink(_ db: LeafCore.Database,
+                            fromEventID: Int64,
+                            targetKind: String,
+                            targetRef: String,
+                            tsMs: Int64) throws {
+        try db.writeSQL { rawDB in
+            try rawDB.execute(sql: """
+                INSERT OR IGNORE INTO event_links
+                    (from_event_id, link_kind, target_kind, target_ref, confidence, created_at_ms)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, arguments: [fromEventID, "linear_id_in_text", targetKind, targetRef, 0.5, tsMs])
+        }
+    }
+
     // MARK: - Tests
 
     func testCursorAdvancesPastProcessedEvents() throws {
@@ -265,5 +281,124 @@ final class DetectorPipelineIncrementalTests: XCTestCase {
 
         XCTAssertEqual(try decisionCount(db), 2, "first decision idempotent; second new")
         XCTAssertEqual(try cursor(db, kind: "decision"), 3)
+    }
+
+    // MARK: - Resolution flow
+
+    /// Helper — fetch `(resolved_by_event_id, resolved_at_ms)` for a single open
+    /// question (asserts there's exactly one row).
+    private func openQuestionResolution(_ db: LeafCore.Database) throws -> (Int64?, Int64?) {
+        try db.readSQL { rawDB in
+            let row = try Row.fetchOne(rawDB, sql: """
+                SELECT resolved_by_event_id, resolved_at_ms FROM open_questions
+                """)
+            return (row?["resolved_by_event_id"] as Int64?,
+                    row?["resolved_at_ms"] as Int64?)
+        }
+    }
+
+    func testResolutionFlow_SlackThread() throws {
+        let db = try openDB()
+        // Open question in Slack thread T1.
+        try writeEvent(db, tsMs: 1_000, payload: [
+            "event_kind": "slack_thread_reply_aggregate",
+            "body": "What QUESTION should we ask?",
+            "thread_ts": "1700000000.111"
+        ])
+        try DetectorPipeline.runIncremental(moat: sentinelMoat(), nowMs: 9_999, in: db)
+        let pre = try openQuestionResolution(db)
+        XCTAssertNil(pre.0)
+        XCTAssertNil(pre.1)
+
+        // Decision in same thread — must resolve the question.
+        try writeEvent(db, tsMs: 2_500, payload: [
+            "event_kind": "slack_thread_reply_aggregate",
+            "body": "We DECIDE on polling",
+            "thread_ts": "1700000000.111"
+        ])
+        try DetectorPipeline.runIncremental(moat: sentinelMoat(), nowMs: 9_999, in: db)
+
+        let post = try openQuestionResolution(db)
+        XCTAssertEqual(post.0, 2, "resolved_by_event_id == decision event id")
+        XCTAssertEqual(post.1, 2_500, "resolved_at_ms == decision ts")
+    }
+
+    func testResolutionFlow_LinearIssue() throws {
+        let db = try openDB()
+        // Open question on LEAF-127.
+        try writeEvent(db, tsMs: 1_000, payload: [
+            "event_kind": "linear_issue_updated",
+            "body": "QUESTION: which encryption?",
+            "linked_linear_id": "LEAF-127"
+        ])
+        try DetectorPipeline.runIncremental(moat: sentinelMoat(), nowMs: 9_999, in: db)
+        XCTAssertNil(try openQuestionResolution(db).0)
+
+        // Decision event with no payload-level linear ref — seed event_links
+        // directly so resolution context derivation finds LEAF-127 via D2 graph.
+        try writeEvent(db, tsMs: 3_000, payload: [
+            "event_kind": "slack_thread_reply_aggregate",
+            "body": "We DECIDE to use AES-GCM"
+        ])
+        try insertLink(db, fromEventID: 2,
+                       targetKind: Schema.TargetKinds.linearIssue,
+                       targetRef: "LEAF-127",
+                       tsMs: 3_000)
+        try DetectorPipeline.runIncremental(moat: sentinelMoat(), nowMs: 9_999, in: db)
+
+        let post = try openQuestionResolution(db)
+        XCTAssertEqual(post.0, 2)
+        XCTAssertEqual(post.1, 3_000)
+    }
+
+    func testResolutionFlow_GitHubPR() throws {
+        let db = try openDB()
+        // Open question references PR via payload key (collector-attributed).
+        try writeEvent(db, tsMs: 1_000, payload: [
+            "event_kind": "gh_pr_review_comment_authored",
+            "body": "QUESTION: rebase or squash?",
+            "linked_github_pr": "owner/repo/pull/42"
+        ])
+        try DetectorPipeline.runIncremental(moat: sentinelMoat(), nowMs: 9_999, in: db)
+        XCTAssertNil(try openQuestionResolution(db).0)
+
+        // Decision in any context — link to same PR via event_links seed.
+        try writeEvent(db, tsMs: 4_000, payload: [
+            "event_kind": "slack_thread_reply_aggregate",
+            "body": "We DECIDE to squash"
+        ])
+        try insertLink(db, fromEventID: 2,
+                       targetKind: Schema.TargetKinds.githubPR,
+                       targetRef: "owner/repo/pull/42",
+                       tsMs: 4_000)
+        try DetectorPipeline.runIncremental(moat: sentinelMoat(), nowMs: 9_999, in: db)
+
+        let post = try openQuestionResolution(db)
+        XCTAssertEqual(post.0, 2)
+        XCTAssertEqual(post.1, 4_000)
+    }
+
+    func testResolutionFlow_NoMatch_LeavesUnresolved() throws {
+        let db = try openDB()
+        // Open question on LEAF-99 in Slack thread T1.
+        try writeEvent(db, tsMs: 1_000, payload: [
+            "event_kind": "linear_issue_updated",
+            "body": "QUESTION about config",
+            "linked_linear_id": "LEAF-99"
+        ])
+        try DetectorPipeline.runIncremental(moat: sentinelMoat(), nowMs: 9_999, in: db)
+
+        // Decision on a disjoint Linear issue + different Slack thread.
+        try writeEvent(db, tsMs: 2_000, payload: [
+            "event_kind": "slack_thread_reply_aggregate",
+            "body": "We DECIDE to deprecate API",
+            "thread_ts": "1700999999.000",
+            "linked_linear_id": "LEAF-200"
+        ])
+        try DetectorPipeline.runIncremental(moat: sentinelMoat(), nowMs: 9_999, in: db)
+
+        let post = try openQuestionResolution(db)
+        XCTAssertNil(post.0, "disjoint context — open question stays unresolved")
+        XCTAssertNil(post.1)
     }
 }
