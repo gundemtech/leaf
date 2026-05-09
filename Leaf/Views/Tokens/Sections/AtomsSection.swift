@@ -13,6 +13,7 @@ struct AtomsSection: View {
             LeafIconPreview()
             LeafDotPreview()
             LeafDividerPreview()
+            LeafSpacerPreview()
         }
     }
 }
