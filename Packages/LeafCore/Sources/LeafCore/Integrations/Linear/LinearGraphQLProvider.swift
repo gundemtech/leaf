@@ -203,8 +203,22 @@ public struct LinearCycleSnapshot: Sendable, Hashable {
     public static let empty = LinearCycleSnapshot(teams: [], observedAtMs: 0)
 }
 
+/// Phase Track-1 D1 — captured Linear issue comment body for FTS5 / decision
+/// detection. ADR-010 §6 amended — bodies allowed on-device, never in relay.
+public struct LinearCommentBody: Codable, Sendable, Hashable {
+    public let commentID: String
+    public let createdAtMs: Int64
+    public let body: String
+
+    public init(commentID: String, createdAtMs: Int64, body: String) {
+        self.commentID = commentID
+        self.createdAtMs = createdAtMs
+        self.body = body
+    }
+}
+
 /// Один issue в batch'е — public-safe metadata (whitepaper Section 6 Action signal).
-/// Bodies / comment text НЕ хранятся (ADR-010 won't-list).
+/// Track-1 D1: description + comment bodies + attachment metadata added (on-device only).
 public struct LinearIssueSnapshot: Sendable, Hashable {
     /// e.g. "LEA-123" — self-authored label, public-safe.
     public let issueKey: String
@@ -246,6 +260,20 @@ public struct LinearIssueSnapshot: Sendable, Hashable {
     /// Slack / другие external links). 0 если attachments пусты.
     /// (`linkedGitHubPRCount + linkedSlackMessageCount + other`).
     public let linkedAttachmentCount: Int
+    /// Phase Track-1 D1 — issue.description body (markdown). nil if Linear returned null.
+    /// On-device only (ADR-010 §6 amendment). Already cap-truncated by provider (BodyCap).
+    public let description: String?
+    /// Phase Track-1 D1 — true if description was truncated by BodyCap in the provider.
+    /// Lets LinearCollector.makeEvent emit `body_truncated` payload key without importing
+    /// LeafCorePrivate (circular dependency prevention).
+    public let descriptionTruncated: Bool
+    /// Phase Track-1 D1 — captured comment bodies for issues touched in this tick.
+    /// Already cap-truncated by provider (BodyCap). Empty = no viewer comments in window.
+    /// (`commentCountInWindow` retained as fallback count for backward compat.)
+    public let comments: [LinearCommentBody]
+    /// Phase Track-1 D1 — attachment metadata (name / mime / size_bytes); NEVER content.
+    /// Empty array = no attachments on issue.
+    public let attachments: [AttachmentMeta]
 
     public init(
         issueKey: String,
@@ -259,7 +287,11 @@ public struct LinearIssueSnapshot: Sendable, Hashable {
         linkedGitHubPRCount: Int = 0,
         linkedGitHubTopRepo: String? = nil,
         linkedSlackMessageCount: Int = 0,
-        linkedAttachmentCount: Int = 0
+        linkedAttachmentCount: Int = 0,
+        description: String? = nil,
+        descriptionTruncated: Bool = false,
+        comments: [LinearCommentBody] = [],
+        attachments: [AttachmentMeta] = []
     ) {
         self.issueKey = issueKey
         self.title = title
@@ -273,6 +305,10 @@ public struct LinearIssueSnapshot: Sendable, Hashable {
         self.linkedGitHubTopRepo = linkedGitHubTopRepo
         self.linkedSlackMessageCount = linkedSlackMessageCount
         self.linkedAttachmentCount = linkedAttachmentCount
+        self.description = description
+        self.descriptionTruncated = descriptionTruncated
+        self.comments = comments
+        self.attachments = attachments
     }
 }
 

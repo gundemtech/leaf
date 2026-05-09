@@ -1663,6 +1663,153 @@ final class LinearCollectorTests: XCTestCase {
         }
     }
 
+    // MARK: - Phase Track-1 D1 — body / attachments / comment bodies in payload
+
+    /// Track-1 D1: snapshot.description flows into events.payload["body"] key.
+    /// Test MUST query issue_updated (existing event_kind), NOT linear_issue_updated.
+    func testTick_PopulatesBodyPayloadKey_TrackD1() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockLinearGraphQLProvider()
+        let baseMs: Int64 = 1_700_000_000_000
+        await provider.setBatch(LinearIssueBatch(
+            issues: [
+                LinearIssueSnapshot(
+                    issueKey: "LEA-D1", title: "OAuth refactor", status: "In Progress",
+                    project: "Leaf", teamKey: "LEA", updatedAtMs: baseMs,
+                    description: "Refactor OAuth refresh"
+                )
+            ],
+            cursorMs: baseMs
+        ))
+
+        let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
+        let collector = LinearCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7,
+            logger: logger,
+            userDefaultsSuiteName: makeIsolatedSuiteName()
+        )
+        _ = await collector.performTick()
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1000) / 1000),
+            end: Date(timeIntervalSince1970: TimeInterval(baseMs + 5000) / 1000)
+        ))
+
+        // Filter to issue_updated event (not workload_pulse)
+        let issueEvent = try XCTUnwrap(
+            stored.first { $0.payload["event_kind"] == "issue_updated" && $0.payload["issue_key"] == "LEA-D1" },
+            "Expected an issue_updated event for LEA-D1"
+        )
+        XCTAssertEqual(issueEvent.payload[Schema.EventPayloadKeys.body], "Refactor OAuth refresh",
+                       "Track-1 D1: description should appear as 'body' payload key")
+        XCTAssertNil(issueEvent.payload[Schema.EventPayloadKeys.bodyTruncated],
+                     "Short body — body_truncated should not be set")
+    }
+
+    /// Track-1 D1: snapshot.attachments encode as JSON in payload["attachments_json"].
+    func testTick_AttachmentsJSONShape_TrackD1() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockLinearGraphQLProvider()
+        let baseMs: Int64 = 1_700_000_001_000
+        let attachments = [
+            AttachmentMeta(name: "Design Spec", mime: "image/png", sizeBytes: 204800),
+            AttachmentMeta(name: "PR Draft", mime: nil, sizeBytes: nil)
+        ]
+        await provider.setBatch(LinearIssueBatch(
+            issues: [
+                LinearIssueSnapshot(
+                    issueKey: "LEA-D1-att", title: "With attachments", status: "In Progress",
+                    project: "Leaf", teamKey: "LEA", updatedAtMs: baseMs,
+                    attachments: attachments
+                )
+            ],
+            cursorMs: baseMs
+        ))
+
+        let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
+        let collector = LinearCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7,
+            logger: logger,
+            userDefaultsSuiteName: makeIsolatedSuiteName()
+        )
+        _ = await collector.performTick()
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1000) / 1000),
+            end: Date(timeIntervalSince1970: TimeInterval(baseMs + 5000) / 1000)
+        ))
+
+        let issueEvent = try XCTUnwrap(
+            stored.first { $0.payload["event_kind"] == "issue_updated" && $0.payload["issue_key"] == "LEA-D1-att" }
+        )
+        let attachJson = try XCTUnwrap(
+            issueEvent.payload[Schema.EventPayloadKeys.attachmentsJson],
+            "Track-1 D1: attachments_json must be present"
+        )
+        let decoded = try JSONDecoder().decode([AttachmentMeta].self, from: Data(attachJson.utf8))
+        XCTAssertEqual(decoded.count, 2)
+        XCTAssertEqual(decoded[0].name, "Design Spec")
+        XCTAssertEqual(decoded[0].mime, "image/png")
+        XCTAssertEqual(decoded[0].sizeBytes, 204800)
+        XCTAssertEqual(decoded[1].name, "PR Draft")
+        XCTAssertNil(decoded[1].mime)
+        XCTAssertNil(decoded[1].sizeBytes)
+    }
+
+    /// Track-1 D1: when provider signals descriptionTruncated=true, collector emits body_truncated="true".
+    /// (BodyCap truncation itself is a provider-level concern — tested in ProdLinearGraphQLProviderTests.)
+    func testTick_AppliesBodyCap_TrackD1() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockLinearGraphQLProvider()
+        let baseMs: Int64 = 1_700_000_002_000
+        // Simulate a snapshot that's already been BodyCap-truncated by the prod
+        // provider. The actual capped length is irrelevant for this test — we
+        // only verify that descriptionTruncated=true flows to body_truncated payload.
+        let cappedBody = "x...content elided\n…[truncated:70000]"
+        await provider.setBatch(LinearIssueBatch(
+            issues: [
+                LinearIssueSnapshot(
+                    issueKey: "LEA-D1-cap", title: "Big description", status: "In Progress",
+                    project: "Leaf", teamKey: "LEA", updatedAtMs: baseMs,
+                    description: cappedBody,
+                    descriptionTruncated: true
+                )
+            ],
+            cursorMs: baseMs
+        ))
+
+        let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
+        let collector = LinearCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7,
+            logger: logger,
+            userDefaultsSuiteName: makeIsolatedSuiteName()
+        )
+        _ = await collector.performTick()
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1000) / 1000),
+            end: Date(timeIntervalSince1970: TimeInterval(baseMs + 5000) / 1000)
+        ))
+
+        let issueEvent = try XCTUnwrap(
+            stored.first { $0.payload["event_kind"] == "issue_updated" && $0.payload["issue_key"] == "LEA-D1-cap" }
+        )
+        XCTAssertEqual(issueEvent.payload[Schema.EventPayloadKeys.bodyTruncated], "true",
+                       "Track-1 D1: descriptionTruncated=true → body_truncated payload key present")
+        let body = try XCTUnwrap(issueEvent.payload[Schema.EventPayloadKeys.body])
+        XCTAssertTrue(body.contains("[truncated:70000]"),
+                      "Track-1 D1: payload body contains truncation sentinel; got: \(body.suffix(50))")
+    }
+
     /// Empty priorityTransitions → no priority event emitted.
     func testTickDoesNotEmitPriorityEventWhenEmpty() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)

@@ -330,6 +330,32 @@ public actor LinearCollector {
         if issue.linkedAttachmentCount > 0 {
             payload["linked_attachment_count"] = String(issue.linkedAttachmentCount)
         }
+        // Phase Track-1 D1 — body / comment bodies / attachment metadata.
+        // BodyCap truncation is applied in the provider (LeafCorePrivate moat boundary).
+        // Snapshot carries already-capped strings + descriptionTruncated flag.
+        // Empty values → key omitted (consistent with existing convention).
+        if let desc = issue.description, !desc.isEmpty {
+            payload[Schema.EventPayloadKeys.body] = desc
+            if issue.descriptionTruncated {
+                payload[Schema.EventPayloadKeys.bodyTruncated] = "true"
+            }
+        }
+        if !issue.comments.isEmpty {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            if let data = try? encoder.encode(issue.comments),
+               let str = String(data: data, encoding: .utf8) {
+                payload[Schema.EventPayloadKeys.commentBodiesJson] = str
+            }
+        }
+        if !issue.attachments.isEmpty {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            if let data = try? encoder.encode(issue.attachments),
+               let str = String(data: data, encoding: .utf8) {
+                payload[Schema.EventPayloadKeys.attachmentsJson] = str
+            }
+        }
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(issue.updatedAtMs) / 1000.0),
             signalType: .action,
