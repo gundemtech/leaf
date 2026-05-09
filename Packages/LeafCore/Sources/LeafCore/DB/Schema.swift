@@ -176,6 +176,30 @@ public enum Schema {
         public static let mentionCount = "mention_count"
         public static let linkCount = "link_count"
     }
+
+    /// Phase Track-1 D2 — FTS5 contentless virtual table over event bodies
+    /// (commit_msg / linear_desc / linear_comment / slack_msg / slack_thread_*
+    /// / gh_pr / gh_issue_comment / gh_pr_review_comment).
+    public enum EventsFTS {
+        public static let tableName = "events_fts"
+        public static let body = "body"
+        public static let bodyKind = "body_kind"
+        public static let eventID = "event_id"
+    }
+
+    /// Phase Track-1 D2 — body provenance tags. Single source of truth between
+    /// EventsFullTextStore body extraction + D3 query path filter clauses.
+    public enum BodyKinds {
+        public static let commitMsg = "commit_msg"
+        public static let linearDesc = "linear_desc"
+        public static let linearComment = "linear_comment"
+        public static let slackMsg = "slack_msg"
+        public static let slackThreadParent = "slack_thread_parent"
+        public static let slackThreadReply = "slack_thread_reply"
+        public static let ghPR = "gh_pr"
+        public static let ghIssueComment = "gh_issue_comment"
+        public static let ghPRReviewComment = "gh_pr_review_comment"
+    }
 }
 
 /// Канонические `collector_id` значения. Литералы — public, чтобы тесты
