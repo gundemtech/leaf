@@ -1,5 +1,11 @@
 // Phase Track-1 D1 — privacy regression: bodies must never reach presence_state JSON.
 // Acceptance gate per Track 1 contract §6 (bodies on-device only — relay never sees).
+//
+// Phase Track-1 D3 — extension: detector excerpts (decision / open_question /
+// blocker / where_stopped) must also stay on-device. DetectorPipeline runs
+// in a separate timer-driven invocation (see Commit 9), not embedded in the
+// write helper, so the tests below call `runIncremental` / `runScheduled`
+// explicitly after the write.
 
 import XCTest
 import GRDB
@@ -264,6 +270,323 @@ final class RelayBodyLeakageTests: XCTestCase {
                            "PR URL target_ref must not appear in presence_state")
             XCTAssertFalse(stateJSON.contains("alice"),
                            "Reviewer login target_ref must not appear in presence_state")
+        }
+    }
+
+    // MARK: - D3 detector sentinel moats
+    //
+    // Inline body-substring stubs so the public substrate's no-op detectors
+    // don't gate test coverage. Each stub emits a hit whose excerpt embeds
+    // the sentinel; the tests then assert the sentinel reaches the detector
+    // table (positive — confirms pipeline ran) but NEVER reaches
+    // `presence_state.state_json` (the privacy invariant).
+
+    private struct SentinelDecisionMoat: DecisionDetectorProtocol {
+        let sentinel: String
+        func detect(body: String, kind: BodyKind, eventTsMs: Int64) -> DecisionHit? {
+            guard body.contains(sentinel) else { return nil }
+            return DecisionHit(topicKeywords: ["sentinel"],
+                               reasoningExcerpt: "Decision: \(sentinel)",
+                               confidence: 0.9)
+        }
+    }
+
+    private struct SentinelOpenQuestionMoat: OpenQuestionDetectorProtocol {
+        let sentinel: String
+        func detect(body: String, kind: BodyKind) -> OpenQuestionHit? {
+            guard body.contains(sentinel) else { return nil }
+            return OpenQuestionHit(questionExcerpt: "Question: \(sentinel)",
+                                   alternatives: nil)
+        }
+    }
+
+    private struct SentinelBlockerPatternMoat: BlockerPatternDetectorProtocol {
+        let sentinel: String
+        func detect(body: String, kind: BodyKind) -> BlockerPatternHit? {
+            guard body.contains(sentinel) else { return nil }
+            return BlockerPatternHit(blockerExcerpt: "Blocker: \(sentinel)")
+        }
+    }
+
+    private struct SentinelWhereStoppedDeriver: WhereStoppedDeriverProtocol {
+        let sentinel: String
+        var idleSeconds: Int { 60 }
+        func derive(
+            in db: GRDB.Database,
+            sinceMs: Int64,
+            untilMs: Int64
+        ) throws -> WhereStoppedOutput? {
+            WhereStoppedOutput(
+                excerpt: "Stopped at: \(sentinel)",
+                wipSignals: WipSignals(commitWip: false, ciFailing: false, midEdit: false),
+                anchorEventID: nil
+            )
+        }
+    }
+
+    private func sentinelMoat(
+        decisionSentinel: String? = nil,
+        openQuestionSentinel: String? = nil,
+        blockerSentinel: String? = nil,
+        whereStoppedSentinel: String? = nil
+    ) -> DetectorMoat {
+        DetectorMoat(
+            decision: decisionSentinel.map { SentinelDecisionMoat(sentinel: $0) }
+                ?? NoOpDecisionDetector(),
+            openQuestion: openQuestionSentinel.map { SentinelOpenQuestionMoat(sentinel: $0) }
+                ?? NoOpOpenQuestionDetector(),
+            blockerPattern: blockerSentinel.map { SentinelBlockerPatternMoat(sentinel: $0) }
+                ?? NoOpBlockerPatternDetector(),
+            linearStuck: NoOpLinearStuckScanner(),
+            whereStopped: whereStoppedSentinel.map { SentinelWhereStoppedDeriver(sentinel: $0) }
+                ?? NoOpWhereStoppedDeriver(),
+            absence: ExactMatchAbsence()
+        )
+    }
+
+    // MARK: - D3 detector privacy regression
+
+    func testDecisionExcerpt_DoesNotLeakIntoPresenceState() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let sentinel = "ZZZZ-DECISION-SENTINEL-ZZZZ"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let event = RawEvent(
+            timestamp: Date(),
+            signalType: .action,
+            bundleID: "com.linear.linear",
+            payload: [
+                "event_kind": "linear_issue_updated",
+                Schema.EventPayloadKeys.body: "We DECIDE: \(sentinel)"
+            ]
+        )
+        let presenceState: [String: Any] = ["assigned_count": 3]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: CollectorID.linearPolling, sourceID: "linear:test", nowMs: nowMs),
+            presence: (provider: .linear, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+
+        // Pipeline runs SEPARATELY from the write helper (Commit 9 architecture).
+        try DetectorPipeline.runIncremental(
+            moat: sentinelMoat(decisionSentinel: sentinel), nowMs: nowMs, in: db
+        )
+
+        // Positive: sentinel landed in detector table (otherwise negative is vacuous).
+        let inDecisions = try db.readSQL { rawDB in
+            try Bool.fetchOne(rawDB, sql:
+                "SELECT count(*)>0 FROM decisions WHERE reasoning_excerpt LIKE '%' || ? || '%'",
+                arguments: [sentinel]) ?? false
+        }
+        XCTAssertTrue(inDecisions, "Sanity: sentinel should be in decisions before asserting it does not leak")
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty)
+            XCTAssertFalse(stateJSON.contains(sentinel),
+                           "Decision reasoning_excerpt MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testOpenQuestionExcerpt_DoesNotLeakIntoPresenceState() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let sentinel = "ZZZZ-OPENQ-SENTINEL-ZZZZ"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let event = RawEvent(
+            timestamp: Date(),
+            signalType: .action,
+            bundleID: "com.linear.linear",
+            payload: [
+                "event_kind": "linear_issue_updated",
+                Schema.EventPayloadKeys.body: "Open question: \(sentinel)?",
+                "linked_linear_id": "LEAF-42"
+            ]
+        )
+        let presenceState: [String: Any] = ["assigned_count": 1]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: CollectorID.linearPolling, sourceID: "linear:test", nowMs: nowMs),
+            presence: (provider: .linear, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+
+        try DetectorPipeline.runIncremental(
+            moat: sentinelMoat(openQuestionSentinel: sentinel), nowMs: nowMs, in: db
+        )
+
+        let inQuestions = try db.readSQL { rawDB in
+            try Bool.fetchOne(rawDB, sql:
+                "SELECT count(*)>0 FROM open_questions WHERE question_excerpt LIKE '%' || ? || '%'",
+                arguments: [sentinel]) ?? false
+        }
+        XCTAssertTrue(inQuestions, "Sanity: sentinel should be in open_questions before asserting it does not leak")
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty)
+            XCTAssertFalse(stateJSON.contains(sentinel),
+                           "OpenQuestion question_excerpt MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testBlockerExcerpt_DoesNotLeakIntoPresenceState() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let sentinel = "ZZZZ-BLOCKER-SENTINEL-ZZZZ"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let event = RawEvent(
+            timestamp: Date(),
+            signalType: .action,
+            bundleID: "com.linear.linear",
+            payload: [
+                "event_kind": "linear_issue_updated",
+                Schema.EventPayloadKeys.body: "We are BLOCKED: \(sentinel)",
+                "linked_linear_id": "LEAF-7"
+            ]
+        )
+        let presenceState: [String: Any] = ["assigned_count": 5]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: CollectorID.linearPolling, sourceID: "linear:test", nowMs: nowMs),
+            presence: (provider: .linear, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+
+        try DetectorPipeline.runIncremental(
+            moat: sentinelMoat(blockerSentinel: sentinel), nowMs: nowMs, in: db
+        )
+
+        let inBlockers = try db.readSQL { rawDB in
+            try Bool.fetchOne(rawDB, sql:
+                "SELECT count(*)>0 FROM blockers WHERE blocker_excerpt LIKE '%' || ? || '%'",
+                arguments: [sentinel]) ?? false
+        }
+        XCTAssertTrue(inBlockers, "Sanity: sentinel should be in blockers before asserting it does not leak")
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty)
+            XCTAssertFalse(stateJSON.contains(sentinel),
+                           "Blocker blocker_excerpt MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testWhereStoppedExcerpt_DoesNotLeakIntoPresenceState() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let sentinel = "ZZZZ-WHERESTOPPED-SENTINEL-ZZZZ"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        // Write any presence-bearing event so presence_state row exists for the
+        // negative assertion. WhereStopped does not depend on event payload —
+        // the deriver is invoked unconditionally by runScheduled.
+        let event = RawEvent(
+            timestamp: Date(),
+            signalType: .action,
+            bundleID: "com.apple.dt.Xcode",
+            payload: ["event_kind": "focus_session_started"]
+        )
+        let presenceState: [String: Any] = ["status": "active"]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: CollectorID.linearPolling, sourceID: "linear:test", nowMs: nowMs),
+            presence: (provider: .linear, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+
+        // runScheduled invokes WhereStoppedDeriver — separate from runIncremental.
+        try DetectorPipeline.runScheduled(
+            moat: sentinelMoat(whereStoppedSentinel: sentinel), nowMs: nowMs, in: db
+        )
+
+        let inLog = try db.readSQL { rawDB in
+            try Bool.fetchOne(rawDB, sql:
+                "SELECT count(*)>0 FROM where_stopped_log WHERE excerpt LIKE '%' || ? || '%'",
+                arguments: [sentinel]) ?? false
+        }
+        XCTAssertTrue(inLog, "Sanity: sentinel should be in where_stopped_log before asserting it does not leak")
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty)
+            XCTAssertFalse(stateJSON.contains(sentinel),
+                           "WhereStopped excerpt MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testCrossTableIsolation_AllDetectorTablesClean() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        // Distinct sentinel per detector — single body triggers all three
+        // per-event detectors via substring matching; runScheduled handles
+        // WhereStopped separately.
+        let decisionSentinel = "ZZZZ-XTABLE-DECISION-ZZZZ"
+        let openQSentinel = "ZZZZ-XTABLE-OPENQ-ZZZZ"
+        let blockerSentinel = "ZZZZ-XTABLE-BLOCKER-ZZZZ"
+        let whereStoppedSentinel = "ZZZZ-XTABLE-WHERESTOPPED-ZZZZ"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+
+        // One event whose body contains all three per-event sentinels →
+        // all three detectors fire on the same body within one pipeline pass.
+        let body = "DECIDE: \(decisionSentinel) | QUESTION: \(openQSentinel) | BLOCKED: \(blockerSentinel)"
+        let event = RawEvent(
+            timestamp: Date(),
+            signalType: .action,
+            bundleID: "com.linear.linear",
+            payload: [
+                "event_kind": "linear_issue_updated",
+                Schema.EventPayloadKeys.body: body,
+                "linked_linear_id": "LEAF-100"
+            ]
+        )
+        let presenceState: [String: Any] = ["assigned_count": 2]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: CollectorID.linearPolling, sourceID: "linear:test", nowMs: nowMs),
+            presence: (provider: .linear, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+
+        let moat = sentinelMoat(
+            decisionSentinel: decisionSentinel,
+            openQuestionSentinel: openQSentinel,
+            blockerSentinel: blockerSentinel,
+            whereStoppedSentinel: whereStoppedSentinel
+        )
+        try DetectorPipeline.runIncremental(moat: moat, nowMs: nowMs, in: db)
+        try DetectorPipeline.runScheduled(moat: moat, nowMs: nowMs, in: db)
+
+        // Positive sanity: each sentinel landed in its own detector table.
+        try db.readSQL { rawDB in
+            let inDecisions = try Bool.fetchOne(rawDB, sql:
+                "SELECT count(*)>0 FROM decisions WHERE reasoning_excerpt LIKE '%' || ? || '%'",
+                arguments: [decisionSentinel]) ?? false
+            XCTAssertTrue(inDecisions, "Sanity: decisions populated")
+
+            let inOpenQ = try Bool.fetchOne(rawDB, sql:
+                "SELECT count(*)>0 FROM open_questions WHERE question_excerpt LIKE '%' || ? || '%'",
+                arguments: [openQSentinel]) ?? false
+            XCTAssertTrue(inOpenQ, "Sanity: open_questions populated")
+
+            let inBlockers = try Bool.fetchOne(rawDB, sql:
+                "SELECT count(*)>0 FROM blockers WHERE blocker_excerpt LIKE '%' || ? || '%'",
+                arguments: [blockerSentinel]) ?? false
+            XCTAssertTrue(inBlockers, "Sanity: blockers populated")
+
+            let inWhereStopped = try Bool.fetchOne(rawDB, sql:
+                "SELECT count(*)>0 FROM where_stopped_log WHERE excerpt LIKE '%' || ? || '%'",
+                arguments: [whereStoppedSentinel]) ?? false
+            XCTAssertTrue(inWhereStopped, "Sanity: where_stopped_log populated")
+        }
+
+        // Negative invariant: NONE of the sentinels appear in presence_state.
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty)
+            XCTAssertFalse(stateJSON.contains(decisionSentinel),
+                           "Decision sentinel must not appear in presence_state.state_json")
+            XCTAssertFalse(stateJSON.contains(openQSentinel),
+                           "OpenQuestion sentinel must not appear in presence_state.state_json")
+            XCTAssertFalse(stateJSON.contains(blockerSentinel),
+                           "Blocker sentinel must not appear in presence_state.state_json")
+            XCTAssertFalse(stateJSON.contains(whereStoppedSentinel),
+                           "WhereStopped sentinel must not appear in presence_state.state_json")
         }
     }
 }
