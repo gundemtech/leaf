@@ -15,6 +15,7 @@ struct MoleculesSection: View {
             LeafPillPreview()
             LeafBadgePreview()
             LeafTogglePreview()
+            LeafInputPreview()
         }
     }
 }
