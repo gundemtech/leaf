@@ -19,11 +19,11 @@ final class ShareEventTypeRegistryTests: XCTestCase {
         XCTAssertEqual(Set(raws).count, raws.count, "All event_kind raws must be unique")
     }
 
-    /// Phase 4.7.C — registry total 43 keys (4.7.B baseline 33 + 4.7.C 10).
-    /// Если ломается при добавлении в 4.8/далее — обновить counter сознательно.
+    /// Track 1 D3 — registry total 48 keys (4.7.C baseline 43 + D3 5 semantic facts).
+    /// Если ломается при добавлении в новые phase'ы — обновить counter сознательно.
     func testPhase47CRegistrySize() {
-        XCTAssertEqual(ShareEventTypeKey.allCases.count, 43,
-                       "Phase 4.7.C total = 33 prior + 10 new = 43 keys total")
+        XCTAssertEqual(ShareEventTypeKey.allCases.count, 48,
+                       "Track 1 D3 total = 43 prior + 5 new (semantic facts) = 48 keys total")
     }
 
     /// Discussions default OFF (нишевые). Verify that key design intent сохранён.

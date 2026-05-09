@@ -71,6 +71,16 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     case linearDocumentEdited = "linear_document_edited"
     case linearInitiativeObserved = "linear_initiative_observed"
     case githubPullRequestReviewThreadResolved = "pr_review_thread_resolved"
+
+    // MARK: - Phase Track-1 D3 — semantic detection facts
+    // Default OFF: detector outputs expose deeper inference than raw events
+    // (decisions / open questions / blockers извлекаются из тел сообщений
+    // post-D1). Per Track 1 contract §5.3 — opt-in only, юзер сам включает.
+    case decisionDetected = "decision_detected"
+    case openQuestionOpened = "open_question_opened"
+    case openQuestionResolved = "open_question_resolved"
+    case blockerStarted = "blocker_started"
+    case blockerResolved = "blocker_resolved"
 }
 
 /// Phase 4.7.A — onboarding default enabled-state per event_kind.
@@ -148,6 +158,15 @@ public enum ShareEventTypeDefaults {
         // Skeleton — могут вернуть 0 events на workspaces без feature; OFF.
         .init(key: .linearDocumentEdited, defaultEnabled: false),
         .init(key: .linearInitiativeObserved, defaultEnabled: false),
-        .init(key: .githubPullRequestReviewThreadResolved, defaultEnabled: true)
+        .init(key: .githubPullRequestReviewThreadResolved, defaultEnabled: true),
+
+        // Phase Track-1 D3 — semantic detection facts. Все OFF by default:
+        // detector outputs выводят более глубокий смысл из bodies (см. §5.3
+        // контракта Track 1), юзер должен явно opt-in перед broadcast.
+        .init(key: .decisionDetected, defaultEnabled: false),
+        .init(key: .openQuestionOpened, defaultEnabled: false),
+        .init(key: .openQuestionResolved, defaultEnabled: false),
+        .init(key: .blockerStarted, defaultEnabled: false),
+        .init(key: .blockerResolved, defaultEnabled: false)
     ]
 }
