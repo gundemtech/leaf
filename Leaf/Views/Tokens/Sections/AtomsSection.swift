@@ -12,6 +12,7 @@ struct AtomsSection: View {
             Text("Atoms").font(LeafType.title.large).foregroundStyle(LeafColor.text.primary)
             LeafIconPreview()
             LeafDotPreview()
+            LeafDividerPreview()
         }
     }
 }
