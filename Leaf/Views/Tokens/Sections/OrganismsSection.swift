@@ -15,6 +15,7 @@ struct OrganismsSection: View {
             LeafNavRowPreview()
             LeafListRowPreview()
             LeafStatusPillPreview()
+            LeafBannerPreview()
         }
     }
 }
