@@ -11,6 +11,7 @@ struct MoleculesSection: View {
         VStack(alignment: .leading, spacing: LeafSpace.xl) {
             Text("Molecules").font(LeafType.title.large).foregroundStyle(LeafColor.text.primary)
             LeafButtonPreview()
+            LeafIconButtonPreview()
         }
     }
 }
