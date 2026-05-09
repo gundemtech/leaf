@@ -341,6 +341,14 @@ public enum Schema {
         public static let openQuestion = "open_question"
         public static let blockerPattern = "blocker_pattern"
     }
+
+    /// Phase Track-1 D3 — `blocker_kind` discriminators for `blockers.blocker_kind`.
+    /// Single source of truth between BlockersStore callers (per-event pattern
+    /// detector + scheduled LinearStuck scanner) и downstream readers.
+    public enum BlockerKinds {
+        public static let patternBlockedOn = "pattern_blocked_on"
+        public static let linearStuck = "linear_stuck"
+    }
 }
 
 /// Канонические `collector_id` значения. Литералы — public, чтобы тесты

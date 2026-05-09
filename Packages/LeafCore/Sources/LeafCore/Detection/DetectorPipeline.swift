@@ -44,6 +44,92 @@ public enum DetectorPipeline {
         }
     }
 
+    /// Scheduled (idle-trigger) pass. Called by Agent timer (cadence wired in
+    /// the Agent integration commit). Mirrors `runIncremental`'s pool wiring —
+    /// takes the LeafCore `Database` so failure inside any sub-step rolls back
+    /// inside a single writer transaction.
+    ///
+    /// Two responsibilities:
+    /// 1. LinearStuck — emits a `linear_stuck` blocker for each currently-stuck
+    ///    Linear issue (partial-unique idx_blockers_open dedupes across runs)
+    ///    AND auto-resolves prior open `linear_stuck` blockers whose target_ref
+    ///    no longer appears in the current stuck set, attributing the resolve
+    ///    to the most recent `status_transition` event for that issue.
+    /// 2. WhereStopped — appends one snapshot row to `where_stopped_log` if the
+    ///    deriver emits an output (nil = "not idle enough yet", caller skips).
+    public static func runScheduled(
+        moat: DetectorMoat,
+        nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000),
+        in db: Database
+    ) throws {
+        try db.writeSQL { rawDB in
+            // 1. LinearStuck: emit blockers + auto-resolve transitioned ones.
+            let stuckHits = try moat.linearStuck.currentlyStuck(in: rawDB, nowMs: nowMs)
+            let stuckRefs = Set(stuckHits.map(\.issueRef))
+            for hit in stuckHits {
+                _ = try BlockersStore.insertOpenIfAbsent(
+                    targetKind: Schema.TargetKinds.linearIssue,
+                    targetRef: hit.issueRef,
+                    blockerKind: Schema.BlockerKinds.linearStuck,
+                    excerpt: nil,
+                    detectedByEventID: nil,
+                    startedAtMs: hit.lastStatusTransitionAtMs,
+                    in: rawDB
+                )
+            }
+            try autoResolveLinearStuck(currentlyStuck: stuckRefs,
+                                       nowMs: nowMs,
+                                       in: rawDB)
+
+            // 2. WhereStopped: append if deriver emits.
+            // sinceMs = last snapshot time (0 on first run); deriver decides
+            // whether the elapsed idle window crosses its threshold.
+            let sinceMs: Int64 = (try Int64.fetchOne(rawDB, sql:
+                "SELECT MAX(generated_at_ms) FROM where_stopped_log")) ?? 0
+            if let out = try moat.whereStopped.derive(
+                in: rawDB, sinceMs: sinceMs, untilMs: nowMs)
+            {
+                try WhereStoppedLogStore.append(out,
+                                                generatedAtMs: nowMs,
+                                                in: rawDB)
+            }
+        }
+    }
+
+    /// For each open `linear_stuck` blocker whose target_ref is NOT in the
+    /// current stuck set, find the most recent `status_transition` event for
+    /// that issue and mark the blocker resolved with that event as attribution.
+    /// Issues without a recorded transition stay open — we do not fabricate a
+    /// resolve timestamp (could happen if events were retention-pruned).
+    ///
+    /// Linear collector emits `payload.event_kind = "status_transition"` with
+    /// `payload.issue_key = <REF>` (см. LinearCollector.makeTransitionEvent).
+    private static func autoResolveLinearStuck(currentlyStuck: Set<String>,
+                                               nowMs: Int64,
+                                               in db: GRDB.Database) throws {
+        let openRefs: [String] = try String.fetchAll(db, sql: """
+            SELECT target_ref FROM blockers
+             WHERE blocker_kind = ? AND resolved_at_ms IS NULL
+        """, arguments: [Schema.BlockerKinds.linearStuck])
+        for ref in openRefs where !currentlyStuck.contains(ref) {
+            let row = try Row.fetchOne(db, sql: """
+                SELECT id, ts FROM events
+                 WHERE json_extract(payload_json, '$.event_kind') = 'status_transition'
+                   AND json_extract(payload_json, '$.issue_key') = ?
+                 ORDER BY ts DESC LIMIT 1
+            """, arguments: [ref])
+            if let row {
+                try BlockersStore.resolve(
+                    targetKind: Schema.TargetKinds.linearIssue,
+                    targetRef: ref,
+                    resolvedAtMs: row["ts"],
+                    resolvedByEventID: row["id"],
+                    in: db
+                )
+            }
+        }
+    }
+
     // MARK: - Per-kind pass
 
     private static func processDetector(kind: String,
@@ -140,7 +226,7 @@ public enum DetectorPipeline {
                     let inserted = try BlockersStore.insertOpenIfAbsent(
                         targetKind: tk,
                         targetRef: tr,
-                        blockerKind: "pattern_blocked_on",
+                        blockerKind: Schema.BlockerKinds.patternBlockedOn,
                         excerpt: hit.blockerExcerpt,
                         detectedByEventID: eventID,
                         startedAtMs: tsMs,
