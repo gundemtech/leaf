@@ -515,15 +515,56 @@ public actor GitHubCollector {
         }
         // Phase 4.7.A — per-event-kind extension fields. Reserved baseline keys
         // ("source"/"event_kind"/"repo"/"title"/"number"/"sha"/"branch"/
-        // "cycle_seconds"/"review_delay_seconds") cannot be overridden via metadata
-        // — guards против accidental shadowing. Other keys merge in.
+        // "cycle_seconds"/"review_delay_seconds" + Track-1 D1 body/PR metadata keys)
+        // cannot be overridden via metadata — guards против accidental shadowing.
+        // Other keys merge in.
         if let metadata = snapshot.metadata {
             let reserved: Set<String> = [
                 "source", "event_kind", "repo", "title", "number", "sha", "branch",
-                "cycle_seconds", "review_delay_seconds"
+                "cycle_seconds", "review_delay_seconds",
+                // Track-1 D1 — body + PR metadata keys also reserved
+                Schema.EventPayloadKeys.body,
+                Schema.EventPayloadKeys.bodyTruncated,
+                Schema.EventPayloadKeys.attachmentsJson,
+                Schema.EventPayloadKeys.filesCount,
+                Schema.EventPayloadKeys.additions,
+                Schema.EventPayloadKeys.deletions,
+                Schema.EventPayloadKeys.requestedReviewersJson,
+                Schema.EventPayloadKeys.mentionCount,
+                Schema.EventPayloadKeys.linkCount,
             ]
             for (key, value) in metadata where !reserved.contains(key) {
                 payload[key] = value
+            }
+        }
+        // Track-1 D1 — body + bodyTruncated (BodyCap-applied at moat boundary).
+        if let body = snapshot.body, !body.isEmpty {
+            payload[Schema.EventPayloadKeys.body] = body
+            if snapshot.bodyTruncated {
+                payload[Schema.EventPayloadKeys.bodyTruncated] = "true"
+            }
+        }
+        // Track-1 D1 / Phase 4.8 — PR metadata payload keys.
+        if let pr = snapshot.prMetadata {
+            payload[Schema.EventPayloadKeys.filesCount] = String(pr.filesCount)
+            payload[Schema.EventPayloadKeys.additions] = String(pr.additions)
+            payload[Schema.EventPayloadKeys.deletions] = String(pr.deletions)
+            payload[Schema.EventPayloadKeys.mentionCount] = String(pr.mentionCount)
+            payload[Schema.EventPayloadKeys.linkCount] = String(pr.linkCount)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            if let data = try? encoder.encode(pr.requestedReviewers),
+               let str = String(data: data, encoding: .utf8) {
+                payload[Schema.EventPayloadKeys.requestedReviewersJson] = str
+            }
+        }
+        // Track-1 D1 — attachments (release.assets + inline images from PR/comment bodies).
+        if !snapshot.attachments.isEmpty {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            if let data = try? encoder.encode(snapshot.attachments),
+               let str = String(data: data, encoding: .utf8) {
+                payload[Schema.EventPayloadKeys.attachmentsJson] = str
             }
         }
         return RawEvent(

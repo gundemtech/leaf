@@ -100,9 +100,44 @@ public struct GitHubEventBatch: Sendable, Hashable {
     public static let empty = GitHubEventBatch(events: [], cursorMs: nil)
 }
 
+/// Phase Track-1 D1 — PR-specific numeric metadata captured from
+/// `payload.pull_request` REST fields. Bridges Phase 4.8 carry-over metrics
+/// (files_count / additions / deletions / requested_reviewers) + body-derived
+/// counts (mention_count / link_count) across the LeafCorePrivate moat.
+///
+/// ADR-010 §6 amendment: PR body captured on-device only; relay never sees bodies.
+/// The counts here are derived from the raw body BEFORE BodyCap truncation to
+/// preserve accurate signal; requestedReviewers is anonymized login array (no PII).
+public struct PRMetadata: Codable, Sendable, Hashable {
+    public let filesCount: Int
+    public let additions: Int
+    public let deletions: Int
+    /// Requested reviewer logins. Public-safe: GitHub logins are non-PII by design.
+    public let requestedReviewers: [String]
+    public let mentionCount: Int
+    public let linkCount: Int
+
+    public init(
+        filesCount: Int,
+        additions: Int,
+        deletions: Int,
+        requestedReviewers: [String],
+        mentionCount: Int,
+        linkCount: Int
+    ) {
+        self.filesCount = filesCount
+        self.additions = additions
+        self.deletions = deletions
+        self.requestedReviewers = requestedReviewers
+        self.mentionCount = mentionCount
+        self.linkCount = linkCount
+    }
+}
+
 /// Один event в batch'е — public-safe metadata (whitepaper Section 6 Action signal).
-/// Bodies / comment text / file diffs НЕ хранятся (ADR-010 won't-list); commit message —
-/// только первая строка (subject), всё после `\n` отбрасывается на уровне provider'а.
+/// Track-1 D1 §6 amendment: PR body / issue-comment body / commit full message
+/// captured on-device (SQLCipher); relay never sees. `body` field = already
+/// BodyCap-truncated at the LeafCorePrivate moat boundary.
 public struct GitHubEventSnapshot: Sendable, Hashable {
     /// REST events `id` — used for parser-side dedup внутри одного fetch'а
     /// (cursor-by-timestamp imperfect для events с identical `created_at`).
@@ -138,6 +173,20 @@ public struct GitHubEventSnapshot: Sendable, Hashable {
     /// `linked_linear_id`). `nil` или empty dict — не emit'им keys в payload (отличает
     /// "не знаем" от пустого значения). Existing baseline event_kinds оставляют nil.
     public let metadata: [String: String]?
+    /// Phase Track-1 D1 — already BodyCap-truncated body text (PR body / comment text /
+    /// full commit message). Moat boundary: truncation applied inside LeafCorePrivate.
+    /// `nil` = body not available for this event_kind (e.g. branch_created, release events).
+    public let body: String?
+    /// Phase Track-1 D1 — true if `body` was truncated by BodyCap at the moat boundary.
+    /// Architectural workaround: LeafCore cannot import LeafCorePrivate, so the truncation
+    /// flag is bridged via this field rather than re-computing in the collector.
+    public let bodyTruncated: Bool
+    /// Phase Track-1 D1 / Phase 4.8 carry-over — PR-specific numeric metadata.
+    /// `nil` for non-PR events (commit_pushed / issue_comment / release etc).
+    public let prMetadata: PRMetadata?
+    /// Phase Track-1 D1 — attachments for this event. For release_published: release.assets[].
+    /// For PR/comment events: inline images parsed from the body. Empty array = no attachments.
+    public let attachments: [AttachmentMeta]
 
     public init(
         eventID: String,
@@ -150,7 +199,11 @@ public struct GitHubEventSnapshot: Sendable, Hashable {
         createdAtMs: Int64,
         cycleSeconds: Int? = nil,
         reviewDelaySeconds: Int? = nil,
-        metadata: [String: String]? = nil
+        metadata: [String: String]? = nil,
+        body: String? = nil,
+        bodyTruncated: Bool = false,
+        prMetadata: PRMetadata? = nil,
+        attachments: [AttachmentMeta] = []
     ) {
         self.eventID = eventID
         self.eventKind = eventKind
@@ -163,6 +216,10 @@ public struct GitHubEventSnapshot: Sendable, Hashable {
         self.cycleSeconds = cycleSeconds
         self.reviewDelaySeconds = reviewDelaySeconds
         self.metadata = metadata
+        self.body = body
+        self.bodyTruncated = bodyTruncated
+        self.prMetadata = prMetadata
+        self.attachments = attachments
     }
 }
 
