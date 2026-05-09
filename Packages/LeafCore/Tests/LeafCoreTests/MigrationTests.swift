@@ -433,6 +433,7 @@ final class MigrationTests: XCTestCase {
     /// Phase 5.5.A добавляет `pending_invites` (M010).
     /// Phase Track-1 D2 добавляет `events_fts` (M012) — FTS5 shadow tables
     /// (`events_fts_data`/`_idx`/`_docsize`/`_config`) исключаются из expected.
+    /// Phase Track-1 D2 добавляет `event_links` (M013).
     func testMigration006To010CoexistWithEarlier() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
@@ -459,7 +460,8 @@ final class MigrationTests: XCTestCase {
                 Schema.TeamKeys.tableName,
                 Schema.RotationOutbox.tableName,
                 Schema.PendingInvites.tableName,
-                Schema.EventsFTS.tableName
+                Schema.EventsFTS.tableName,
+                Schema.EventLinks.tableName
             ]
             XCTAssertEqual(tables, expected)
         }

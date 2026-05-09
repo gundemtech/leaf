@@ -200,6 +200,39 @@ public enum Schema {
         public static let ghIssueComment = "gh_issue_comment"
         public static let ghPRReviewComment = "gh_pr_review_comment"
     }
+
+    /// Phase Track-1 D2 — cross-source association graph row.
+    /// Composite PK `(from_event_id, link_kind, target_ref)` dedupes per-event-per-target.
+    /// `from_event_id` — logical FK to `events.id` (no SQL FOREIGN KEY per repo
+    /// convention). Reverse index supports D3 query "events linked to target X".
+    public enum EventLinks {
+        public static let tableName = "event_links"
+        public static let fromEventID = "from_event_id"
+        public static let linkKind = "link_kind"
+        public static let targetKind = "target_kind"
+        public static let targetRef = "target_ref"
+        public static let confidence = "confidence"
+        public static let createdAtMs = "created_at_ms"
+
+        public static let indexTarget = "idx_event_links_target"
+    }
+
+    /// Phase Track-1 D2 — link_kind discriminators. Numeric confidence values
+    /// are private (LeafCorePrivate `LinkConfidence`).
+    public enum LinkKinds {
+        public static let linearIDInText = "linear_id_in_text"
+        public static let branchNameLinearRef = "branch_name_linear_ref"
+        public static let prURLInSlack = "pr_url_in_slack"
+        public static let prNumberHashRef = "pr_number_hash_ref"
+        public static let reviewerAssigned = "reviewer_assigned"
+    }
+
+    /// Phase Track-1 D2 — target_kind discriminators for `event_links.target_kind`.
+    public enum TargetKinds {
+        public static let linearIssue = "linear_issue"
+        public static let githubPR = "github_pr"
+        public static let githubUser = "github_user"
+    }
 }
 
 /// Канонические `collector_id` значения. Литералы — public, чтобы тесты
