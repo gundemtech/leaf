@@ -154,6 +154,28 @@ public enum Schema {
 
         public static let indexStatus = "idx_pending_invites_status"
     }
+
+    /// Phase Track-1 D1 — canonical names for new payload keys carrying bodies +
+    /// attachment metadata + Phase 4.8 PR metrics. Single source of truth for
+    /// collectors + D2 FTS5 + D3 detector query paths.
+    ///
+    /// Note: these are JSON keys inside the `events.payload_json` blob — not
+    /// column names like the sibling enums in this namespace.
+    public enum EventPayloadKeys {
+        public static let body = "body"
+        public static let bodyTruncated = "body_truncated"
+        public static let attachmentsJson = "attachments_json"
+        public static let commentBodiesJson = "comment_bodies_json"
+        public static let threadRepliesJson = "thread_replies_json"
+        public static let messagesJson = "messages_json"
+        // GitHub PR metadata (Phase 4.8 carry-over)
+        public static let filesCount = "files_count"
+        public static let additions = "additions"
+        public static let deletions = "deletions"
+        public static let requestedReviewersJson = "requested_reviewers_json"
+        public static let mentionCount = "mention_count"
+        public static let linkCount = "link_count"
+    }
 }
 
 /// Канонические `collector_id` значения. Литералы — public, чтобы тесты
