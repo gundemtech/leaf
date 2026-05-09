@@ -144,7 +144,9 @@ Sub-phase specs own exact migration content; this is the cross-phase shape.
 |---|---|---|
 | `events.payload` | Add JSON fields: `body`, `attachments[]` (filename / mime / size only) | D1 |
 | `events.payload` (GitHub PR events) | Add `files_count`, `additions`, `deletions`, `requested_reviewers[]`, `mention_count`, `link_count` (Phase 4.8 carry-over) | D1 |
-| `sessions` | Add `wip_signals JSON`, `where_stopped_excerpt TEXT NULLABLE` | D3 |
+| `where_stopped_log` (NEW) | New table `(id PK, generated_at_ms, anchor_event_id NULLABLE → events, excerpt TEXT, wip_signals_json JSON)`. Replaces planned `sessions` extension — `sessions` table not present in substrate (Derived Insights Engine computes sessions on-the-fly); D3 introduces dedicated log to keep scope minimal. | D3 |
+
+> **Amendment 2026-05-09 (D3 spec):** §5.2 `sessions` extension replaced with dedicated `where_stopped_log` table. Reason: substrate does not have a `sessions` table — Derived Insights Engine computes sessions on-the-fly. Creating the table only for `WhereStopped` output would be scope creep. Living-doc process per §14.
 
 ### 5.3 New ShareEventTypeKey entries (registered for future Track 2)
 
