@@ -282,11 +282,15 @@ enum AgentMain {
         // strict per-flush hook because the cursor model is incremental + idempotent;
         // see DetectorScheduler doc comment for the architectural rationale).
         // `runScheduled` runs on a separate idle-cadence timer for LinearStuck +
-        // WhereStopped aggregate scanners. Prod factory `prodDetectorMoat()` lands
-        // in a follow-up commit; until then both build configs share `.publicSubstrate`
-        // (no-op detectors → zero detection writes, but the schedulers still tick
-        // benignly so the wire-up is exercised).
+        // WhereStopped aggregate scanners. Prod build wires `prodDetectorMoat()`
+        // (LeafCorePrivate moat: pattern catalogues + threshold constants);
+        // substrate build stays on `.publicSubstrate` so wiring is still
+        // exercised in CI without shipping detection content.
+        #if LEAF_PROD
+        let detectorMoat: DetectorMoat = prodDetectorMoat()
+        #else
         let detectorMoat: DetectorMoat = .publicSubstrate
+        #endif
         let detectorScheduler = DetectorScheduler(
             database: database,
             moat: detectorMoat,

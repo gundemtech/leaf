@@ -30,11 +30,17 @@ enum MCPMain {
 
         MCPLog.info("leaf-mcp v\(MCPConstants.serverVersion) starting (prod=\(prodMode))")
 
-        // Phase Track-1 D3 — DetectorMoat injection point. Prod factory
-        // (`prodDetectorMoat()`) lands in Commit 10; until then both branches
-        // share `.publicSubstrate` (no-op detectors → empty hits, query path
-        // still works через FTS+links).
+        // Phase Track-1 D3 — DetectorMoat injection point. Prod build wires
+        // `prodDetectorMoat()` (LeafCorePrivate moat: pattern catalogues +
+        // threshold constants + Levenshtein fuzz match). Substrate build keeps
+        // `.publicSubstrate` (no-op detectors — `leaf_query_activity` still
+        // works через FTS+links, `leaf_get_decision` / `leaf_current_work`
+        // gracefully return empty results).
+        #if LEAF_PROD
+        let detectorMoat: DetectorMoat = prodDetectorMoat()
+        #else
         let detectorMoat: DetectorMoat = .publicSubstrate
+        #endif
 
         let dbURL = DatabasePath.defaultURL()
         let timelineTool = GetTimelineTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
