@@ -11,6 +11,7 @@ struct OrganismsSection: View {
         VStack(alignment: .leading, spacing: LeafSpace.xl) {
             Text("Organisms").font(LeafType.title.large).foregroundStyle(LeafColor.text.primary)
             LeafCardPreview()
+            LeafSectionPreview()
         }
     }
 }
