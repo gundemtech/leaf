@@ -70,28 +70,67 @@ public final class Database: @unchecked Sendable {
 
     // MARK: - Writes
 
-    public func write(_ event: RawEvent) throws {
+    public func write(
+        _ event: RawEvent,
+        knownLinearPrefixes: Set<String> = [],
+        derivers: LinkDerivers = .publicSubstrate
+    ) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
 
-        let record = try EventRecord.make(from: event)
-
         try pool.write { db in
-            var mutableRecord = record
-            try mutableRecord.insert(db)
+            _ = try Self.writeEventAndDerived(
+                event, knownLinearPrefixes: knownLinearPrefixes, derivers: derivers, in: db
+            )
         }
     }
 
-    public func write(_ events: [RawEvent]) throws {
+    public func write(
+        _ events: [RawEvent],
+        knownLinearPrefixes: Set<String> = [],
+        derivers: LinkDerivers = .publicSubstrate
+    ) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         guard !events.isEmpty else { return }
 
-        let records = try events.map(EventRecord.make(from:))
-
         try pool.write { db in
-            for var record in records {
-                try record.insert(db)
+            for event in events {
+                _ = try Self.writeEventAndDerived(
+                    event, knownLinearPrefixes: knownLinearPrefixes, derivers: derivers, in: db
+                )
             }
         }
+    }
+
+    /// Phase Track-1 D2 — single insertion path used by all three public write
+    /// entry-points. Keeps event insert + FTS5 row insert + link derivation
+    /// atomic within one `pool.write {}` block. Returns the inserted event id.
+    private static func writeEventAndDerived(
+        _ event: RawEvent,
+        knownLinearPrefixes: Set<String>,
+        derivers: LinkDerivers,
+        in db: GRDB.Database
+    ) throws -> Int64 {
+        var record = try EventRecord.make(from: event)
+        try record.insert(db)
+        guard let eventID = record.id else { throw LeafError.invalidPayload }
+        let tsMs = Int64(event.timestamp.timeIntervalSince1970 * 1000)
+
+        try EventsFullTextStore.indexEvent(
+            eventID: eventID,
+            signalType: event.signalType.rawValue,
+            bundleID: event.bundleID,
+            payload: event.payload,
+            in: db
+        )
+        try EventLinksStore.deriveLinks(
+            eventID: eventID,
+            ts: tsMs,
+            payload: event.payload,
+            knownLinearPrefixes: knownLinearPrefixes,
+            derivers: derivers,
+            in: db
+        )
+        return eventID
     }
 
     // MARK: - Reads
@@ -257,15 +296,17 @@ public final class Database: @unchecked Sendable {
         presence: (provider: PresenceStateWriter.Provider,
                    state: [String: Any],
                    derivedMode: String?)?,
+        knownLinearPrefixes: Set<String> = [],
+        derivers: LinkDerivers = .publicSubstrate,
         nowMs: Int64
     ) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
 
-        let records = try events.map(EventRecord.make(from:))
-
         try pool.write { db in
-            for var record in records {
-                try record.insert(db)
+            for event in events {
+                _ = try Self.writeEventAndDerived(
+                    event, knownLinearPrefixes: knownLinearPrefixes, derivers: derivers, in: db
+                )
             }
             try Self.upsertOffset(offset, in: db)
             if let presence {
