@@ -46,6 +46,7 @@ public final class Database: @unchecked Sendable {
         migrator.registerMigration008TeamKeys()
         migrator.registerMigration009RotationOutbox()
         migrator.registerMigration010PendingInvites()
+        migrator.registerMigration011EventKindIndex()
         try migrator.migrate(pool)
 
         return Database(pool: pool, config: config, mode: .writer)
