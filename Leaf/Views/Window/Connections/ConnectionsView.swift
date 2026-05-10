@@ -62,7 +62,8 @@ struct ConnectionsView: View {
 
     private var providerBlocks: some View {
         VStack(alignment: .leading, spacing: LeafSpace.xl) {
-            LeafSection(
+            providerSection(
+                logoAsset: "leaf-brand-linear",
                 title: "Linear",
                 description: "Read-only access — issue activity (assigned, updated, completed) into your local timeline."
             ) {
@@ -71,7 +72,8 @@ struct ConnectionsView: View {
                 }
             }
 
-            LeafSection(
+            providerSection(
+                logoAsset: "leaf-brand-github",
                 title: "GitHub",
                 description: "Read-only access — self-authored events (commits, PRs, issues, reviews) into your local timeline."
             ) {
@@ -80,7 +82,8 @@ struct ConnectionsView: View {
                 }
             }
 
-            LeafSection(
+            providerSection(
+                logoAsset: "leaf-brand-slack",
                 title: "Slack",
                 description: "Read-only access — self-authored message counts per channel and huddle minutes into your local timeline."
             ) {
@@ -88,6 +91,36 @@ struct ConnectionsView: View {
                     slackContent
                 }
             }
+        }
+    }
+
+    /// Mirrors LeafSection (Organism O2) layout but prepends a 24pt brand
+    /// logo to the title row. Logo renders in original colour (Asset Catalog
+    /// imageset has no `template-rendering-intent` flag), so Linear gradient,
+    /// Slack 4-colour, and GitHub Octocat all retain their brand fill.
+    private func providerSection<Content: View>(
+        logoAsset: String,
+        title: String,
+        description: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: LeafSpace.md) {
+            HStack(alignment: .center, spacing: LeafSpace.sm) {
+                Image(logoAsset)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: LeafIconSize.lg.pt, height: LeafIconSize.lg.pt)
+                VStack(alignment: .leading, spacing: LeafSpace.xxs) {
+                    Text(title)
+                        .font(LeafSectionTokens.titleFont)
+                        .foregroundStyle(LeafColor.text.primary)
+                    Text(description)
+                        .font(LeafSectionTokens.descriptionFont)
+                        .foregroundStyle(LeafColor.text.secondary)
+                }
+            }
+            content()
         }
     }
 
