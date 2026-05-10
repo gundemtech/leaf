@@ -52,7 +52,10 @@ struct RootView: View {
                     }
                 }
         }
-        .frame(minWidth: 920, minHeight: 620)
+        .frame(
+            minWidth:  LeafWindowLayoutTokens.windowMinWidth,
+            minHeight: LeafWindowLayoutTokens.windowMinHeight
+        )
     }
 
     @ViewBuilder

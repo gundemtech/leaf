@@ -27,6 +27,13 @@ import LeafCore
 
 private let knownLinearPrefixesForHero: Set<String> = ["LEAF"]
 
+/// Hero caption fallback truncation when no Linear ID matches the active
+/// session's contextLabel — caps at this many chars before middle-truncating
+/// (window titles get long fast: "leaf — D1 Design finish — caffeinate ◂…").
+/// Tuned so the caption reads cleanly on the default window's hero region
+/// without bleeding into next line.
+private let heroContextMaxLength: Int = 40
+
 struct HomeView: View {
     @Environment(InsightsReader.self) private var reader
     @Environment(WindowState.self) private var windowState
@@ -69,7 +76,7 @@ struct HomeView: View {
             )
             Spacer()
         }
-        .frame(minHeight: 480)
+        .frame(minHeight: LeafEmptyStateTokens.centeredMinHeight)
     }
 
     @ViewBuilder
@@ -83,7 +90,7 @@ struct HomeView: View {
             )
             Spacer()
         }
-        .frame(minHeight: 480)
+        .frame(minHeight: LeafEmptyStateTokens.centeredMinHeight)
     }
 
     @ViewBuilder
@@ -219,7 +226,7 @@ private struct HeroBlock: View {
             if let linearID = LinearIDExtractor.extract(text: context, knownPrefixes: knownLinearPrefixesForHero) {
                 parts.append(linearID)
             } else {
-                parts.append(truncateMiddle(context, maxLength: 40))
+                parts.append(truncateMiddle(context, maxLength: heroContextMaxLength))
             }
         }
 
