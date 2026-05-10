@@ -2,13 +2,16 @@
 //  OnboardingView.swift
 //  Leaf
 //
-//  Phase 3.4 — first-launch UX. 4-step inline state machine рендерится
+//  Phase 3.4 — first-launch UX. 5-step inline state machine рендерится
 //  в popover вместо normal MenuBarContent когда `!hasCompletedOnboarding`.
 //  Auto-advance через `.onChange(of: permissions.axGranted/fdaGranted)`
 //  + 1s polling в onAppear (UX-priority: instant grant detection).
-//  'Skip for now' escape hatch на каждом permission step — на случай
-//  broken deep-link или передумавшего юзера. Permission banner потом
-//  покроет в normal popover.
+//
+//  Track 2 / D4 — inline migration to D1 atoms (LeafType / LeafButton / LeafColor /
+//  LeafSpace / LeafIcons). NOT LeafOnboardingStepLayout — popover constraint
+//  (320pt fixed, MenuBarExtra contentSize). Step dots: Circles preserved (popover-
+//  compact); accent vs border.subtle tint. State machine + .sheet + .onChange chain
+//  preserved 1:1.
 //
 
 import SwiftUI
@@ -30,12 +33,12 @@ struct OnboardingView: View {
     let onDone: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: LeafSpace.md) {
             header
-            Divider()
+            LeafDivider()
             stepContent
         }
-        .padding(14)
+        .padding(LeafSpace.lg)
         .frame(width: 320)
         .onAppear {
             permissions.refresh()
@@ -51,14 +54,11 @@ struct OnboardingView: View {
             if step == .fda && granted { step = .team }
         }
         .onChange(of: orgReader.state) { _, newState in
-            // Phase 5.5.B — admin path: org create success → .done.
             if step == .team, teamSubStep == .create, case .loaded = newState {
                 step = .done
             }
         }
         .onChange(of: inviteAcceptReader.state) { _, newState in
-            // Invitee path: invite accept success closes sheet (existing) or deep-link auto-fetch
-            // landed on .otpEntry — keep waiting view; on .success — done.
             if step == .team, case .success = newState {
                 step = .done
             }
@@ -77,13 +77,14 @@ struct OnboardingView: View {
     // MARK: - Header
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: LeafSpace.sm) {
+            HStack(spacing: LeafSpace.xs) {
                 Image.leafAsset(LeafIcons.brand.leafFill)
                     .frame(width: 14, height: 14)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(LeafColor.accent.primary)
                 Text("Welcome to Leaf")
-                    .font(.headline)
+                    .font(LeafType.title.small)
+                    .foregroundStyle(LeafColor.text.primary)
                 Spacer()
             }
             stepDots
@@ -91,10 +92,10 @@ struct OnboardingView: View {
     }
 
     private var stepDots: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: LeafSpace.xs) {
             ForEach(OnboardingStep.allCases, id: \.self) { s in
                 Circle()
-                    .fill(s.index <= step.index ? Color.accentColor : Color.secondary.opacity(0.3))
+                    .fill(s.index <= step.index ? LeafColor.accent.primary : LeafColor.border.subtle)
                     .frame(width: 6, height: 6)
             }
         }
@@ -114,58 +115,70 @@ struct OnboardingView: View {
     }
 
     private var welcomeStep: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: LeafSpace.md) {
             Text("Leaf quietly tracks your work — apps, focus sessions, and AI usage — and lives in the menu bar.")
-                .font(.callout)
+                .font(LeafType.body.regular)
+                .foregroundStyle(LeafColor.text.primary)
                 .fixedSize(horizontal: false, vertical: true)
-            Button("Get started") { step = .ax }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.defaultAction)
+            HStack {
+                Spacer()
+                LeafButton("Get started", variant: .primary, size: .sm, action: { step = .ax })
+            }
         }
     }
 
     private var axStep: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: LeafSpace.md) {
             Text("Accessibility")
-                .font(.subheadline.weight(.semibold))
+                .font(LeafType.title.small)
+                .foregroundStyle(LeafColor.text.primary)
             Text("Lets Leaf see which app is in front and how long you focus.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(LeafType.body.small)
+                .foregroundStyle(LeafColor.text.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
-                Button("Grant Accessibility") {
-                    permissions.triggerAXPrompt()
-                    permissions.openAXSettings()
-                }
-                .buttonStyle(.borderedProminent)
+                LeafButton(
+                    "Grant Accessibility",
+                    variant: .primary,
+                    size: .sm,
+                    action: {
+                        permissions.triggerAXPrompt()
+                        permissions.openAXSettings()
+                    }
+                )
                 Spacer()
                 grantStatus(granted: permissions.axGranted)
             }
-            Button("Skip for now") { step = .fda }
-                .buttonStyle(.link)
-                .font(.caption)
+            HStack {
+                Spacer()
+                LeafButton("Skip for now", variant: .ghost, size: .sm, action: { step = .fda })
+            }
         }
     }
 
     private var fdaStep: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: LeafSpace.md) {
             Text("Full Disk Access")
-                .font(.subheadline.weight(.semibold))
+                .font(LeafType.title.small)
+                .foregroundStyle(LeafColor.text.primary)
             Text("Lets Leaf watch folders like ~/Documents for file activity.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(LeafType.body.small)
+                .foregroundStyle(LeafColor.text.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
-                Button("Open System Settings") {
-                    permissions.openFDASettings()
-                }
-                .buttonStyle(.borderedProminent)
+                LeafButton(
+                    "Open System Settings",
+                    variant: .primary,
+                    size: .sm,
+                    action: permissions.openFDASettings
+                )
                 Spacer()
                 grantStatus(granted: permissions.fdaGranted)
             }
-            Button("Skip for now") { step = .team }
-                .buttonStyle(.link)
-                .font(.caption)
+            HStack {
+                Spacer()
+                LeafButton("Skip for now", variant: .ghost, size: .sm, action: { step = .team })
+            }
         }
     }
 
@@ -173,20 +186,20 @@ struct OnboardingView: View {
     private var teamStep: some View {
         switch teamSubStep {
         case .choice:
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: LeafSpace.md) {
                 Text("Team")
-                    .font(.subheadline.weight(.semibold))
+                    .font(LeafType.title.small)
+                    .foregroundStyle(LeafColor.text.primary)
                 Text("Set up how Leaf shares your work signal with teammates.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(LeafType.body.small)
+                    .foregroundStyle(LeafColor.text.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Button("Create new team") { teamSubStep = .create }
-                    .buttonStyle(.borderedProminent)
-                Button("Join existing team") { teamSubStep = .join }
-                    .buttonStyle(.bordered)
-                Button("Skip for now") { step = .done }
-                    .buttonStyle(.link)
-                    .font(.caption)
+                LeafButton("Create new team", variant: .primary, size: .sm, action: { teamSubStep = .create })
+                LeafButton("Join existing team", variant: .secondary, size: .sm, action: { teamSubStep = .join })
+                HStack {
+                    Spacer()
+                    LeafButton("Skip for now", variant: .ghost, size: .sm, action: { step = .done })
+                }
             }
         case .create:
             CreateTeamStepView(onCancel: { teamSubStep = .choice })
@@ -204,30 +217,37 @@ struct OnboardingView: View {
     }
 
     private var doneStep: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label("All set", image: LeafIcons.status.successFill)
-                .foregroundStyle(.green)
-                .font(.subheadline)
+        VStack(alignment: .leading, spacing: LeafSpace.md) {
+            LeafIconLabel(
+                icon: .asset(LeafIcons.status.successFill),
+                title: "All set",
+                iconTint: LeafColor.status.success,
+                titleStyle: LeafType.title.small
+            )
             Text("Leaf is collecting in the background. Open Settings → Folders to add directories you want to track.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(LeafType.body.small)
+                .foregroundStyle(LeafColor.text.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Button("Finish") { onDone() }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.defaultAction)
+            HStack {
+                Spacer()
+                LeafButton("Finish", variant: .primary, size: .sm, action: onDone)
+            }
         }
     }
 
     @ViewBuilder
     private func grantStatus(granted: Bool) -> some View {
         if granted {
-            Label("Granted", image: LeafIcons.status.successFill)
-                .foregroundStyle(.green)
-                .font(.caption)
+            LeafIconLabel(
+                icon: .asset(LeafIcons.status.successFill),
+                title: "Granted",
+                iconTint: LeafColor.status.success,
+                titleStyle: LeafType.body.small
+            )
         } else {
             Text("Waiting…")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(LeafType.body.small)
+                .foregroundStyle(LeafColor.text.secondary)
         }
     }
 }
