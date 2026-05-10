@@ -30,4 +30,12 @@ enum LeafMetricTokens {
         static let flatColor: Color   = LeafColor.text.tertiary
         static let arrowSize: CGFloat = 11
     }
+
+    /// Sparkline — minimal trend stroke. Static path, no axis, no labels.
+    /// minHeight surfaced as a token so layout sizing is one-line tunable.
+    enum Sparkline {
+        static let strokeWidth: CGFloat = 1.5
+        static let color:       Color   = LeafColor.accent.primary
+        static let minHeight:   CGFloat = 24
+    }
 }

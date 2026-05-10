@@ -13,7 +13,7 @@ struct MetricsSection: View {
             LeafMetricInlinePreview()
             LeafMetricAmbientPreview()
             LeafMetricDeltaPreview()
-            // LeafSparklinePreview()       — added by Task 38
+            LeafSparklinePreview()
         }
     }
 }
