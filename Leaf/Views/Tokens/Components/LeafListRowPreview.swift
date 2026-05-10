@@ -27,7 +27,7 @@ struct LeafListRowPreview: View {
                 LeafListRow(
                     primary: "Both slots",
                     secondary: "linear · LEAF-142",
-                    leading: { LeafIcon(systemName: "checkmark.circle", size: .md, tint: LeafColor.status.success) },
+                    leading: { LeafIcon(asset: LeafIcons.status.success, size: .md, tint: LeafColor.status.success) },
                     trailing: { LeafBadge(text: "Done", variant: .accent) }
                 )
             }

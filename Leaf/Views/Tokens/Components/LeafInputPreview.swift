@@ -19,7 +19,7 @@ struct LeafInputPreview: View {
 
             VStack(alignment: .leading, spacing: LeafSpace.sm) {
                 LeafInput(text: $rest, placeholder: "Rest (md)")
-                LeafInput(text: $withIcon, placeholder: "With prefix icon", prefixIcon: "magnifyingglass")
+                LeafInput(text: $withIcon, placeholder: "With prefix icon", prefixIcon: .system(LeafIcons.nav.searchSF))
                 LeafInput(text: $withError, placeholder: "Email", error: "Enter a valid email")
                 LeafInput(text: $disabled, placeholder: "Disabled", disabled: true)
                 LeafInput(text: $lg, placeholder: "Large (lg)", size: .lg)

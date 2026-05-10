@@ -1,53 +1,44 @@
 //
 //  LeafNavRowPreview.swift
-//  Track 2 / D1 — TokensPreview entry for Organism O3 LeafNavRow.
+//  Track 2 / D1 — TokensPreview entry for Organism O3 LeafNavRow. Renders the
+//  full Sidebar set so every nav glyph is visible in the design system.
 //
 
 import SwiftUI
 
 #if DEBUG
 struct LeafNavRowPreview: View {
-    @State private var homeSelected = true
-    @State private var teamSelected = false
-    @State private var settingsSelected = false
+    @State private var selected: WindowSection = .home
+
+    private let rows: [(WindowSection, Int?, String?)] = [
+        (.home,         nil, nil),
+        (.activity,     5,   nil),
+        (.team,         3,   nil),
+        (.connections,  nil, nil),
+        (.organization, nil, nil),
+        (.settings,     nil, "⌘,"),
+        (.profile,      nil, nil),
+    ]
 
     var body: some View {
         VStack(alignment: .leading, spacing: LeafSpace.md) {
             Text("LeafNavRow").font(LeafType.title.medium).foregroundStyle(LeafColor.text.primary)
 
             VStack(alignment: .leading, spacing: LeafSpace.xxs) {
-                LeafNavRow(
-                    icon: .asset(LeafIcons.nav.home),
-                    title: "Home",
-                    isSelected: $homeSelected,
-                    onTap: {
-                        homeSelected = true
-                        teamSelected = false
-                        settingsSelected = false
-                    }
-                )
-                LeafNavRow(
-                    icon: .asset(LeafIcons.nav.team),
-                    title: "Team",
-                    badge: 3,
-                    isSelected: $teamSelected,
-                    onTap: {
-                        homeSelected = false
-                        teamSelected = true
-                        settingsSelected = false
-                    }
-                )
-                LeafNavRow(
-                    icon: .asset(LeafIcons.nav.settings),
-                    title: "Settings",
-                    shortcut: "⌘,",
-                    isSelected: $settingsSelected,
-                    onTap: {
-                        homeSelected = false
-                        teamSelected = false
-                        settingsSelected = true
-                    }
-                )
+                ForEach(rows, id: \.0) { tuple in
+                    let section = tuple.0
+                    LeafNavRow(
+                        icon: section.iconIsSystem ? .system(section.icon) : .asset(section.icon),
+                        title: section.title,
+                        badge: tuple.1,
+                        shortcut: tuple.2,
+                        isSelected: Binding(
+                            get: { selected == section },
+                            set: { _ in selected = section }
+                        ),
+                        onTap: { selected = section }
+                    )
+                }
             }
             .frame(width: 240)
 

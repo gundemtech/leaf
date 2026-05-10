@@ -16,7 +16,7 @@ struct LeafToolbarPreview: View {
             VStack(spacing: LeafSpace.md) {
                 LeafToolbar(
                     leading: {
-                        LeafIconButton(systemName: "sidebar.left", variant: .ghost, size: .sm, action: {})
+                        LeafIconButton(asset: LeafIcons.nav.sidebar, variant: .ghost, size: .sm, action: {})
                     },
                     center: {
                         Text("Activity")
@@ -25,8 +25,8 @@ struct LeafToolbarPreview: View {
                     },
                     trailing: {
                         HStack(spacing: LeafSpace.xs) {
-                            LeafIconButton(systemName: "magnifyingglass", variant: .ghost, size: .sm, action: {})
-                            LeafIconButton(systemName: "line.3.horizontal.decrease.circle", variant: .ghost, size: .sm, action: {})
+                            LeafIconButton(systemName: LeafIcons.nav.searchSF, variant: .ghost, size: .sm, action: {})
+                            LeafIconButton(systemName: LeafIcons.nav.filterSF, variant: .ghost, size: .sm, action: {})
                         }
                     }
                 )

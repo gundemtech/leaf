@@ -1,17 +1,23 @@
 //
 //  LeafInput.swift
 //  Track 2 / D1 — Molecule M6. Text input with rest/focus/error/disabled states.
-//  Optional prefix icon. Border thickness 1pt rest, 2pt focus/error (raw int OK —
-//  not a padding/radius/cornerRadius value, token guard untouched).
+//  Optional prefix icon (SF Symbol or Asset Catalog). Border thickness 1pt
+//  rest, 2pt focus/error (raw int OK — not a padding/radius/cornerRadius
+//  value, token guard untouched).
 //
 
 import SwiftUI
 
 struct LeafInput: View {
+    enum IconRef {
+        case system(String)
+        case asset(String)
+    }
+
     @Binding var text: String
     let placeholder: String
     var size: LeafInputTokens.Size = .md
-    var prefixIcon: String? = nil
+    var prefixIcon: IconRef? = nil
     var error: String? = nil
     var disabled: Bool = false
 
@@ -20,9 +26,7 @@ struct LeafInput: View {
     var body: some View {
         VStack(alignment: .leading, spacing: LeafSpace.xs) {
             HStack(spacing: LeafSpace.sm) {
-                if let prefixIcon {
-                    LeafIcon(systemName: prefixIcon, size: .md, tint: LeafColor.text.tertiary)
-                }
+                prefixIconView
                 TextField(placeholder, text: $text)
                     .textFieldStyle(.plain)
                     .focused($focused)
@@ -47,6 +51,18 @@ struct LeafInput: View {
                     .font(LeafType.body.small)
                     .foregroundStyle(LeafColor.status.danger)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var prefixIconView: some View {
+        switch prefixIcon {
+        case .system(let name):
+            LeafIcon(systemName: name, size: .md, tint: LeafColor.text.tertiary)
+        case .asset(let name):
+            LeafIcon(asset: name, size: .md, tint: LeafColor.text.tertiary)
+        case .none:
+            EmptyView()
         }
     }
 

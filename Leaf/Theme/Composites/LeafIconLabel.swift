@@ -1,7 +1,8 @@
 //
 //  LeafIconLabel.swift
 //  Track 2 / D1 — Molecule M9. Horizontal icon + text with alignment slot
-//  (leading / centered / trailing). No T3 file — alignment exposed inline.
+//  (leading / centered / trailing). Accepts SF Symbol (`systemName:`) or
+//  Asset Catalog (`asset:`) glyph.
 //
 
 import SwiftUI
@@ -11,7 +12,12 @@ enum LeafIconLabelAlignment {
 }
 
 struct LeafIconLabel: View {
-    let icon: String
+    enum IconRef {
+        case system(String)
+        case asset(String)
+    }
+
+    let icon: IconRef
     let title: String
     var alignment: LeafIconLabelAlignment = .leading
     var iconTint: Color = LeafColor.text.secondary
@@ -21,10 +27,20 @@ struct LeafIconLabel: View {
         HStack(spacing: LeafSpace.sm) {
             if alignment == .trailing { Spacer() }
             if alignment == .centered { Spacer() }
-            LeafIcon(systemName: icon, size: .md, tint: iconTint)
+            iconView
             Text(title).font(titleStyle).foregroundStyle(LeafColor.text.primary)
             if alignment == .centered { Spacer() }
             if alignment == .leading { Spacer() }
+        }
+    }
+
+    @ViewBuilder
+    private var iconView: some View {
+        switch icon {
+        case .system(let name):
+            LeafIcon(systemName: name, size: .md, tint: iconTint)
+        case .asset(let name):
+            LeafIcon(asset: name, size: .md, tint: iconTint)
         }
     }
 }
