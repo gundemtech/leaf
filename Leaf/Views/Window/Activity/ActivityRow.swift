@@ -1,3 +1,14 @@
+//
+//  ActivityRow.swift
+//  Track 2 / D3 — Activity row for one ActivityFeedEntry (raw event from
+//  local/linear/github/slack/ai). Migrated from old palette + decorative
+//  ProviderIcon (purple-Linear / green-Slack chip backgrounds). On D1:
+//  neutral ProviderIcon (LeafColor.surface.inset background, LeafColor.text.
+//  tertiary symbol tint) + LeafListRow. Provider identity carries via
+//  uppercase tag inline with primary text. ×N coalesce count folded into
+//  primary text per spec § OQ-2.
+//
+
 import SwiftUI
 import LeafCore
 
@@ -5,64 +16,47 @@ struct ActivityRow: View {
     let entry: ActivityFeedEntry
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        LeafListRow(
+            primary: composedPrimary,
+            secondary: secondaryText
+        ) {
             ProviderIcon(entry: entry)
-                .frame(width: 32, height: 32)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(providerLabel)
-                        .font(.leafCaption)
-                        .foregroundStyle(.leafMuted)
-                        .textCase(.uppercase)
-                        .kerning(0.6)
-                    Text(displayPrimary)
-                        .font(.leafBody)
-                        .foregroundStyle(.leafInk)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    if entry.mergedCount > 1 {
-                        Text("×\(entry.mergedCount)")
-                            .font(.leafCaption.monospacedDigit())
-                            .foregroundStyle(.leafMuted)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 1)
-                            .background(
-                                Capsule().fill(Color.leafCard.opacity(0.85))
-                            )
-                    }
-                }
-                if let secondary = entry.secondaryText, !secondary.isEmpty {
-                    Text(secondary)
-                        .font(.leafCaption)
-                        .foregroundStyle(.leafMuted)
-                        .lineLimit(1)
-                }
-            }
-            Spacer(minLength: 8)
+                .frame(width: LeafSpace.xxl, height: LeafSpace.xxl)   // 32×32
+        } trailing: {
             Text(relativeTime)
-                .font(.leafCaption.monospacedDigit())
-                .foregroundStyle(.leafMuted)
+                .font(LeafType.mono.small)
+                .foregroundStyle(LeafColor.text.tertiary)
                 .lineLimit(1)
         }
     }
 
-    private var providerLabel: String {
-        switch entry.provider {
-        case .local:   return "Local"
-        case .linear:  return "Linear"
-        case .github:  return "GitHub"
-        case .slack:   return "Slack"
-        case .ai:      return "AI"
-        case .unknown: return "Event"
-        }
+    private var composedPrimary: String {
+        let resolved: String = {
+            if entry.provider == .local,
+               let bundleID = entry.bundleID,
+               entry.primaryText == bundleID {
+                return AppNameResolver.shared.displayName(for: bundleID)
+            }
+            return entry.primaryText
+        }()
+        let suffix = entry.mergedCount > 1 ? " ×\(entry.mergedCount)" : ""
+        return "\(providerLabel) · \(resolved)\(suffix)"
     }
 
-    private var displayPrimary: String {
-        if entry.provider == .local, let bundleID = entry.bundleID,
-           entry.primaryText == bundleID {
-            return AppNameResolver.shared.displayName(for: bundleID)
+    private var secondaryText: String? {
+        guard let s = entry.secondaryText, !s.isEmpty else { return nil }
+        return s
+    }
+
+    private var providerLabel: String {
+        switch entry.provider {
+        case .local:   return "LOCAL"
+        case .linear:  return "LINEAR"
+        case .github:  return "GITHUB"
+        case .slack:   return "SLACK"
+        case .ai:      return "AI"
+        case .unknown: return "EVENT"
         }
-        return entry.primaryText
     }
 
     private var relativeTime: String {
@@ -82,23 +76,22 @@ struct ActivityRow: View {
     }
 }
 
-// MARK: - Provider icon
+// MARK: - Provider icon (neutralised)
 
 private struct ProviderIcon: View {
     let entry: ActivityFeedEntry
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(background)
+            RoundedRectangle(cornerRadius: LeafRadius.sm, style: .continuous)
+                .fill(LeafColor.surface.inset)
             Image(systemName: symbol)
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.leafInk.opacity(0.85))
+                .foregroundStyle(LeafColor.text.tertiary)
         }
     }
 
     private var symbol: String {
-        // Per-event_kind specifics first, then provider fallback.
         switch entry.eventKind {
         case "status_transition": return "arrow.right.circle"
         case "linear_priority_changed": return "exclamationmark.triangle"
@@ -135,17 +128,6 @@ private struct ProviderIcon: View {
         case .slack:   return "bubble.left.and.bubble.right"
         case .ai:      return "sparkles"
         case .unknown: return "circle"
-        }
-    }
-
-    private var background: Color {
-        switch entry.provider {
-        case .local:   return Color.leafCard.opacity(0.85)
-        case .linear:  return Color.purple.opacity(0.18)
-        case .github:  return Color.leafInk.opacity(0.10)
-        case .slack:   return Color.green.opacity(0.18)
-        case .ai:      return Color.leafAccent.opacity(0.22)
-        case .unknown: return Color.leafCard.opacity(0.6)
         }
     }
 }
