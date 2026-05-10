@@ -1,10 +1,10 @@
 //
 //  LeafBannerTokens.swift
-//  Track 2 / D1 — T3 tokens for LeafBanner. Tone enum (info / success / warning
-//  / danger) bundles bg + border + SF Symbol icon name. Tone is a deliberately
-//  nested enum (rather than re-using LeafColor.status) because banners need
-//  faint tinted backgrounds + bordered surfaces, which are derived from status
-//  colors but not directly equivalent to any LeafColor token.
+//  Track 2 / D1 — T3 tokens for LeafBanner. Tone enum (info / success /
+//  warning / danger) maps to a chip tint + leading glyph. The banner itself
+//  sits on a neutral raised surface — only the LeafIconChip carries tone,
+//  which keeps the banner from reading like a flat-tinted sticker and lets
+//  multiple stacked banners coexist without competing for attention.
 //
 
 import SwiftUI
@@ -13,16 +13,9 @@ enum LeafBannerTokens {
     enum Tone {
         case info, success, warning, danger
 
-        var bg: Color {
-            switch self {
-            case .info:    LeafColor.status.info.opacity(0.10)
-            case .success: LeafColor.status.success.opacity(0.10)
-            case .warning: LeafColor.status.warning.opacity(0.12)
-            case .danger:  LeafColor.status.danger.opacity(0.10)
-            }
-        }
-
-        var border: Color {
+        /// Color used for the leading chip's glyph + (at default opacity) its
+        /// background tint. The banner surface itself stays neutral.
+        var tint: Color {
             switch self {
             case .info:    LeafColor.status.info
             case .success: LeafColor.status.success
@@ -42,7 +35,9 @@ enum LeafBannerTokens {
         }
     }
 
-    static let borderOpacity: Double = 0.4
-    static let cornerRadius: CGFloat = LeafRadius.md
-    static let padding:      CGFloat = LeafSpace.md
+    static let cornerRadius: CGFloat = LeafRadius.lg
+    static let padding:      CGFloat = LeafSpace.lg
+    static let chipSize:     LeafIconChipTokens.Size = .md
+    static let titleDescriptionGap: CGFloat = LeafSpace.xxs
+    static let bodyCTAGap:   CGFloat = LeafSpace.sm
 }
