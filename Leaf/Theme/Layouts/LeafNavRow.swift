@@ -38,11 +38,13 @@ struct LeafNavRow: View {
                 }
             }
             .padding(.horizontal, LeafSpace.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: LeafNavRowTokens.height)
             .background(
                 RoundedRectangle(cornerRadius: LeafNavRowTokens.cornerRadius, style: .continuous)
                     .fill(backgroundFill)
             )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { hover = $0 }

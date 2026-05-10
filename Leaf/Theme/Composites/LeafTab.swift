@@ -40,6 +40,7 @@ struct LeafTab<Tab: Hashable & Identifiable>: View {
                                 .frame(height: LeafTabTokens.indicatorHeight)
                         }
                     }
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
