@@ -19,12 +19,12 @@ struct LeafIconButtonPreview: View {
             }
 
             TokensInlineSpec(
-                spec: "LeafIconButton · square · 4 variants (LeafButtonTokens) · 3 sizes",
-                codeSnippet: "LeafIconButton(systemName: \"plus\", variant: .ghost, size: .md) {}"
+                spec: "LeafIconButton · square · 4 variants (LeafButtonTokens) · 3 sizes · icon (asset|system)",
+                codeSnippet: "LeafIconButton(asset: LeafIcons.action.add, variant: .ghost, size: .md) {}"
             )
         }
         .padding(LeafSpace.lg)
-        .background(LeafColor.surface.raised)
+        .background(LeafColor.surface.canvas)
         .clipShape(RoundedRectangle(cornerRadius: LeafRadius.lg, style: .continuous))
     }
 
@@ -35,9 +35,9 @@ struct LeafIconButtonPreview: View {
                 .font(LeafType.mono.small)
                 .foregroundStyle(LeafColor.text.tertiary)
                 .frame(width: 96, alignment: .leading)
-            LeafIconButton(systemName: "plus",      variant: variant, size: .sm) {}
-            LeafIconButton(systemName: "ellipsis",  variant: variant, size: .md) {}
-            LeafIconButton(systemName: "trash",     variant: variant, size: .lg) {}
+            LeafIconButton(asset: LeafIcons.action.add,          variant: variant, size: .sm) {}
+            LeafIconButton(asset: LeafIcons.action.overflow,     variant: variant, size: .md) {}
+            LeafIconButton(asset: LeafIcons.object.trash,        variant: variant, size: .lg) {}
         }
     }
 }
