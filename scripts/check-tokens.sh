@@ -1,104 +1,155 @@
 #!/usr/bin/env bash
-# Track 2 / D1 — token-discipline guard.
+# Track 2 / D1+D2 — token-discipline guard.
 #
-# Fails (exit 1) if Leaf/Theme/ or Leaf/Views/Tokens/ contain raw color literals
-# or raw spacing/radius numbers. D1 coverage is intentionally narrow — D2/D3/D4
-# extend coverage to migrated view folders.
+# Two-tier scope (Track 2 / D2 extension):
+#   • BASE scope        — Leaf/Theme/ + Leaf/Views/Tokens/. Bans raw
+#     colors, raw padding ints, raw cornerRadius ints. Does NOT ban
+#     old-palette references because the palette itself is defined here.
+#   • MIGRATION scope   — Leaf/Views/Window/Home/ +
+#     Leaf/Views/Window/RootView.swift + Leaf/Views/Window/Sidebar.swift.
+#     Inherits BASE checks AND additionally bans old-palette references
+#     (.leafBackground / .leafInk / .leafBody / .leafTitle / .leafCaption
+#      / .leafMuted / .leafAccent / .leafAccentDeep / .leafSignal /
+#      .leafLabelStyle / .leafGlass / GlassCard / LeafGlassGroup).
+#     Formalises 'migrated file = zero old-palette refs'.
 #
-# Allowed inside scope:
-#   - Color("LeafFooBar")           ← Asset Catalog lookup by name (string literal is the asset key, not a raw color)
-#   - LeafColor.* / LeafSpace.* / LeafRadius.* / LeafType.* / LeafElevation.* / LeafGlass.* / LeafMotion.*
+# Allowed inside scope (any tier):
+#   - Color("LeafFooBar")           ← Asset Catalog lookup
+#   - LeafColor.* / LeafSpace.* / LeafRadius.* / LeafType.* /
+#     LeafElevation.* / LeafGlass.* / LeafMotion.*
 #   - Tier 3 component tokens (Leaf<Comp>Tokens.*)
-#   - LeafPrimitive.* (only inside Leaf/Theme/Tokens/LeafPrimitive.swift and other T2 files — internal-only resolves)
 #
-# Disallowed inside scope:
-#   - Color(red:..., green:..., blue:...)
-#   - Color(.<systemColor>) — except inside LeafColor.swift T2 system mapping
-#   - Hex literal #RRGGBB inside string interpolation or comment-as-code
-#   - .padding(<int>) with raw int — must be .padding(LeafSpace.*)
-#   - .frame(width:<int>, height:<int>) with raw int — must use LeafSpace
-#   - cornerRadius:<int> with raw int — must be LeafRadius.*
+# Bash 3.2 compatible — no namerefs. Paths arrive as positional args.
 #
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SCOPE_DIRS=(
+
+# ---- Tier 1: BASE scope (T2 tokens / T3 component tokens) ----
+BASE_PATHS=(
     "${REPO_ROOT}/Leaf/Theme"
     "${REPO_ROOT}/Leaf/Views/Tokens"
 )
 
-EXIT=0
+# ---- Tier 2: MIGRATION scope (D2-migrated app views) ----
+MIGRATION_PATHS=(
+    "${REPO_ROOT}/Leaf/Views/Window/Home"
+    "${REPO_ROOT}/Leaf/Views/Window/RootView.swift"
+    "${REPO_ROOT}/Leaf/Views/Window/Sidebar.swift"
+)
 
-# Allow LeafPrimitive.swift to define raw hex (it's the only place T1 raw values live).
+# Optional self-test override: append extra paths via env var.
+# Self-test sets LEAF_CHECK_TOKENS_EXTRA_FILES to a colon-separated list.
+if [[ -n "${LEAF_CHECK_TOKENS_EXTRA_FILES:-}" ]]; then
+    IFS=':' read -ra EXTRA <<< "$LEAF_CHECK_TOKENS_EXTRA_FILES"
+    for p in "${EXTRA[@]}"; do
+        MIGRATION_PATHS+=("$p")
+    done
+fi
+
+EXIT=0
 LEAF_PRIMITIVE="${REPO_ROOT}/Leaf/Theme/Tokens/LeafPrimitive.swift"
-# Allow LeafColor.swift to map system colours where needed.
 LEAF_COLOR="${REPO_ROOT}/Leaf/Theme/Tokens/LeafColor.swift"
 
-check_pattern() {
+# Iterate over remaining positional args; each can be either dir or file.
+# Args: <label> <pattern> <exclude-regex> <path1> [<path2> ...]
+check_pattern_in_paths() {
     local label="$1"
     local pattern="$2"
-    local exclude="${3:-}"
+    local exclude="$3"
+    shift 3
 
-    for dir in "${SCOPE_DIRS[@]}"; do
-        [[ -d "$dir" ]] || continue
-        local hits
-        if [[ -n "$exclude" ]]; then
-            hits=$(grep -rEn "$pattern" "$dir" --include="*.swift" 2>/dev/null \
-                | grep -vE "$exclude" || true)
-        else
-            hits=$(grep -rEn "$pattern" "$dir" --include="*.swift" 2>/dev/null || true)
+    local hits=""
+    for path in "$@"; do
+        local out=""
+        if [[ -d "$path" ]]; then
+            if [[ -n "$exclude" ]]; then
+                out=$(grep -rEn "$pattern" "$path" --include="*.swift" 2>/dev/null \
+                    | grep -vE "$exclude" || true)
+            else
+                out=$(grep -rEn "$pattern" "$path" --include="*.swift" 2>/dev/null || true)
+            fi
+        elif [[ -f "$path" ]]; then
+            if [[ -n "$exclude" ]]; then
+                out=$(grep -En "$pattern" "$path" 2>/dev/null \
+                    | sed "s|^|${path}:|" \
+                    | grep -vE "$exclude" || true)
+            else
+                out=$(grep -En "$pattern" "$path" 2>/dev/null \
+                    | sed "s|^|${path}:|" || true)
+            fi
         fi
-        if [[ -n "$hits" ]]; then
-            echo "❌ ${label}:"
-            echo "$hits" | sed 's/^/    /'
-            echo
-            EXIT=1
-        fi
+        if [[ -n "$out" ]]; then hits+="${out}"$'\n'; fi
     done
+    if [[ -n "$hits" ]]; then
+        echo "❌ ${label}:"
+        echo "$hits" | sed 's/^/    /'
+        echo
+        EXIT=1
+    fi
 }
 
-# Raw color RGB literal
-check_pattern \
-    "Raw Color(red:..., green:..., blue:...) — use LeafColor.* or LeafPrimitive.*" \
-    'Color\(red:[[:space:]]*[0-9]' \
-    "(${LEAF_PRIMITIVE//./\.})|(${LEAF_COLOR//./\.})"
+# ---- BASE checks (apply to BASE + MIGRATION scopes) ----
 
-# System color shortcut
-check_pattern \
-    "Raw Color(.systemFoo) — use LeafColor.* (system mappings live only in LeafColor.swift)" \
-    'Color\(\.[a-zA-Z]' \
-    "${LEAF_COLOR//./\.}"
+run_base_checks() {
+    check_pattern_in_paths \
+        "Raw Color(red:..., green:..., blue:...) — use LeafColor.* or LeafPrimitive.*" \
+        'Color\(red:[[:space:]]*[0-9]' \
+        "(${LEAF_PRIMITIVE//./\.})|(${LEAF_COLOR//./\.})" \
+        "$@"
+    check_pattern_in_paths \
+        "Raw Color(.systemFoo) — use LeafColor.* (system mappings live only in LeafColor.swift)" \
+        'Color\(\.[a-zA-Z]' \
+        "${LEAF_COLOR//./\.}" \
+        "$@"
+    check_pattern_in_paths \
+        "Hex literal in code — define in LeafPrimitive.swift only" \
+        '#[0-9A-Fa-f]{6}([^"]*)"' \
+        "${LEAF_PRIMITIVE//./\.}" \
+        "$@"
+    check_pattern_in_paths \
+        "Raw .padding(<int>) — use LeafSpace.*" \
+        '\.padding\([0-9]+\)' \
+        "" \
+        "$@"
+    check_pattern_in_paths \
+        "Raw .padding(<edge>, <int>) — use LeafSpace.*" \
+        '\.padding\(\.[a-zA-Z]+,[[:space:]]*[0-9]+\)' \
+        "" \
+        "$@"
+    check_pattern_in_paths \
+        "Raw cornerRadius:<int> — use LeafRadius.*" \
+        'cornerRadius:[[:space:]]*[0-9]+' \
+        "" \
+        "$@"
+    check_pattern_in_paths \
+        "Raw .cornerRadius(<int>) — use LeafRadius.*" \
+        '\.cornerRadius\([0-9]+' \
+        "" \
+        "$@"
+    check_pattern_in_paths \
+        "Raw RoundedRectangle(cornerRadius: <int>) — use LeafRadius.*" \
+        'RoundedRectangle\(cornerRadius:[[:space:]]*[0-9]+' \
+        "" \
+        "$@"
+}
 
-# Hex literal as string (heuristic — match #XXXXXX in code lines, not comments)
-check_pattern \
-    "Hex literal in code — define in LeafPrimitive.swift only" \
-    '#[0-9A-Fa-f]{6}([^"]*)"' \
-    "${LEAF_PRIMITIVE//./\.}"
+run_base_checks "${BASE_PATHS[@]}"
+run_base_checks "${MIGRATION_PATHS[@]}"
 
-# Raw padding integer
-check_pattern \
-    "Raw .padding(<int>) — use LeafSpace.*" \
-    '\.padding\([0-9]+\)'
+# ---- MIGRATION-only checks (old palette refs forbidden) ----
 
-# .padding(.horizontal, <int>) etc with raw int
-check_pattern \
-    "Raw .padding(<edge>, <int>) — use LeafSpace.*" \
-    '\.padding\(\.[a-zA-Z]+,[[:space:]]*[0-9]+\)'
+check_pattern_in_paths \
+    "Old-palette reference — migrated views must use LeafColor.* / LeafType.* / LeafGlass.* exclusively" \
+    '\.leaf(Background|Ink|Muted|Accent|AccentDeep|Signal|LabelStyle|Body|Title|Caption|Metric|Glass|GlassGroup)\b' \
+    "" \
+    "${MIGRATION_PATHS[@]}"
 
-# Raw cornerRadius: parameter form
-check_pattern \
-    "Raw cornerRadius:<int> — use LeafRadius.*" \
-    'cornerRadius:[[:space:]]*[0-9]+'
-
-# Raw .cornerRadius(<int>) modifier form
-check_pattern \
-    "Raw .cornerRadius(<int>) — use LeafRadius.*" \
-    '\.cornerRadius\([0-9]+'
-
-# RoundedRectangle(cornerRadius: <int>) — same enforcement
-check_pattern \
-    "Raw RoundedRectangle(cornerRadius: <int>) — use LeafRadius.*" \
-    'RoundedRectangle\(cornerRadius:[[:space:]]*[0-9]+'
+check_pattern_in_paths \
+    "Old wrapper component — migrated views must use LeafCard / LeafGlass.* (token) instead" \
+    '\b(GlassCard|LeafGlassGroup)\b' \
+    "" \
+    "${MIGRATION_PATHS[@]}"
 
 if [[ $EXIT -ne 0 ]]; then
     echo "✘ Token-discipline guard failed — see above."

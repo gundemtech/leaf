@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Track 2 / D1 — fixture-based test for scripts/check-tokens.sh.
-# Spawns a tmp scope-tree, drops good/bad files, runs the guard, asserts exit code.
+# Track 2 / D1+D2 — fixture-based test for scripts/check-tokens.sh.
+# Spawns a tmp scope-tree (BASE + MIGRATION + file-level), drops good/bad
+# files, runs the guard, asserts exit code. Cleans up via trap.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -27,18 +28,44 @@ assert_fail() {
     fi
 }
 
-# Test workspace — replace SCOPE_DIRS contents temporarily.
+assert_pass_with_extra() {
+    local label="$1"
+    local extras="$2"
+    if LEAF_CHECK_TOKENS_EXTRA_FILES="$extras" "$GUARD" >/dev/null 2>&1; then
+        echo "  ✓ pass: $label"
+    else
+        echo "  ✘ FAIL (expected pass): $label"
+        LEAF_CHECK_TOKENS_EXTRA_FILES="$extras" "$GUARD" || true
+        exit 1
+    fi
+}
+
+assert_fail_with_extra() {
+    local label="$1"
+    local extras="$2"
+    if LEAF_CHECK_TOKENS_EXTRA_FILES="$extras" "$GUARD" >/dev/null 2>&1; then
+        echo "  ✘ FAIL (expected fail): $label"
+        exit 1
+    else
+        echo "  ✓ fail-as-expected: $label"
+    fi
+}
+
 TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"; rm -rf "${REPO_ROOT}/Leaf/Theme/__test_fixture__" "${REPO_ROOT}/Leaf/Views/Tokens/__test_fixture__"' EXIT
+FIXTURE_DIR_BASE="${REPO_ROOT}/Leaf/Theme/__test_fixture__"
+FIXTURE_DIR_MIGR="${REPO_ROOT}/Leaf/Views/Window/Home/__test_fixture__"
+FIXTURE_FILE_LEVEL="${TMP}/__test_fixture_root_view__.swift"
 
-mkdir -p "${REPO_ROOT}/Leaf/Theme/__test_fixture__"
-mkdir -p "${REPO_ROOT}/Leaf/Views/Tokens/__test_fixture__"
+trap 'rm -rf "$TMP" "$FIXTURE_DIR_BASE" "$FIXTURE_DIR_MIGR"' EXIT
 
-# Case 1 — empty scope passes.
-assert_pass "empty fixture"
+mkdir -p "$FIXTURE_DIR_BASE"
+mkdir -p "$FIXTURE_DIR_MIGR"
 
-# Case 2 — clean swift code passes.
-cat > "${REPO_ROOT}/Leaf/Theme/__test_fixture__/Clean.swift" <<'EOF'
+# Case 1 — empty fixtures pass.
+assert_pass "empty fixtures"
+
+# Case 2 — clean swift in BASE scope passes.
+cat > "${FIXTURE_DIR_BASE}/Clean.swift" <<'EOF'
 import SwiftUI
 struct Clean: View {
     var body: some View {
@@ -48,47 +75,108 @@ struct Clean: View {
     }
 }
 EOF
-assert_pass "clean swift"
+assert_pass "clean BASE swift"
 
-# Case 3 — raw Color(red:...) fails.
-cat > "${REPO_ROOT}/Leaf/Theme/__test_fixture__/Raw.swift" <<'EOF'
+# Case 3 — raw Color(red:...) in BASE fails.
+cat > "${FIXTURE_DIR_BASE}/Raw.swift" <<'EOF'
 import SwiftUI
 let bad = Color(red: 0.5, green: 0.5, blue: 0.5)
 EOF
-assert_fail "raw Color(red:)"
-rm "${REPO_ROOT}/Leaf/Theme/__test_fixture__/Raw.swift"
+assert_fail "raw Color(red:) in BASE"
+rm "${FIXTURE_DIR_BASE}/Raw.swift"
 
-# Case 4 — raw .padding(<int>) fails.
-cat > "${REPO_ROOT}/Leaf/Theme/__test_fixture__/Pad.swift" <<'EOF'
+# Case 4 — raw .padding(<int>) in BASE fails.
+cat > "${FIXTURE_DIR_BASE}/Pad.swift" <<'EOF'
 import SwiftUI
 struct X: View { var body: some View { Text("x").padding(12) } }
 EOF
-assert_fail "raw .padding(12)"
-rm "${REPO_ROOT}/Leaf/Theme/__test_fixture__/Pad.swift"
+assert_fail "raw .padding(12) in BASE"
+rm "${FIXTURE_DIR_BASE}/Pad.swift"
 
-# Case 5 — raw cornerRadius fails.
-cat > "${REPO_ROOT}/Leaf/Views/Tokens/__test_fixture__/Corner.swift" <<'EOF'
+# Case 5 — raw cornerRadius in BASE fails (regression for existing rule).
+cat > "${FIXTURE_DIR_BASE}/Corner.swift" <<'EOF'
 import SwiftUI
 struct Y: View { var body: some View { Rectangle().cornerRadius(8) } }
 EOF
-assert_fail "raw cornerRadius:8"
-rm "${REPO_ROOT}/Leaf/Views/Tokens/__test_fixture__/Corner.swift"
+assert_fail "raw cornerRadius:8 in BASE"
+rm "${FIXTURE_DIR_BASE}/Corner.swift"
 
-# Case 6 — RoundedRectangle(cornerRadius: <int>) fails.
-cat > "${REPO_ROOT}/Leaf/Theme/__test_fixture__/Rect.swift" <<'EOF'
+# Case 6 — RoundedRectangle(cornerRadius: <int>) in BASE fails.
+cat > "${FIXTURE_DIR_BASE}/Rect.swift" <<'EOF'
 import SwiftUI
 let r = RoundedRectangle(cornerRadius: 16)
 EOF
-assert_fail "raw RoundedRectangle(cornerRadius: 16)"
-rm "${REPO_ROOT}/Leaf/Theme/__test_fixture__/Rect.swift"
+assert_fail "raw RoundedRectangle(cornerRadius: 16) in BASE"
+rm "${FIXTURE_DIR_BASE}/Rect.swift"
 
-# Case 7 — file with LeafColor.* token reference passes (regression).
-cat > "${REPO_ROOT}/Leaf/Theme/__test_fixture__/Token.swift" <<'EOF'
+# Case 7 — old-palette ref `.leafBody` in BASE PASSES (BASE allows palette).
+cat > "${FIXTURE_DIR_BASE}/OldPaletteOK.swift" <<'EOF'
 import SwiftUI
-let surface = LeafColor.surface.canvas
-let pad: CGFloat = LeafSpace.lg
-let r: CGFloat = LeafRadius.md
+let f = Font.leafBody
 EOF
-assert_pass "tokenized swift"
+assert_pass "old-palette ref allowed in BASE"
+rm "${FIXTURE_DIR_BASE}/OldPaletteOK.swift"
+
+# Case 8 — old-palette ref `.leafBody` in MIGRATION dir FAILS.
+cat > "${FIXTURE_DIR_MIGR}/OldPaletteBad.swift" <<'EOF'
+import SwiftUI
+struct Bad: View { var body: some View { Text("hi").font(.leafBody) } }
+EOF
+assert_fail "old-palette ref forbidden in MIGRATION dir"
+rm "${FIXTURE_DIR_MIGR}/OldPaletteBad.swift"
+
+# Case 9 — GlassCard wrapper in MIGRATION dir FAILS.
+cat > "${FIXTURE_DIR_MIGR}/GlassCardBad.swift" <<'EOF'
+import SwiftUI
+struct Bad: View { var body: some View { GlassCard { Text("x") } } }
+EOF
+assert_fail "GlassCard wrapper forbidden in MIGRATION dir"
+rm "${FIXTURE_DIR_MIGR}/GlassCardBad.swift"
+
+# Case 10 — clean migrated swift in MIGRATION dir passes.
+cat > "${FIXTURE_DIR_MIGR}/CleanMigr.swift" <<'EOF'
+import SwiftUI
+struct Clean: View {
+    var body: some View {
+        Text("hi")
+            .font(LeafType.body.regular)
+            .foregroundStyle(LeafColor.text.primary)
+            .padding(LeafSpace.lg)
+    }
+}
+EOF
+assert_pass "clean MIGRATION swift"
+rm "${FIXTURE_DIR_MIGR}/CleanMigr.swift"
+
+# Case 11 — file-level scope: clean fixture file via env override passes.
+cat > "$FIXTURE_FILE_LEVEL" <<'EOF'
+import SwiftUI
+struct CleanFile: View {
+    var body: some View {
+        Text("hi")
+            .padding(LeafSpace.lg)
+            .foregroundStyle(LeafColor.text.primary)
+    }
+}
+EOF
+assert_pass_with_extra "file-level scope (clean)" "$FIXTURE_FILE_LEVEL"
+
+# Case 12 — file-level scope: raw .padding(<int>) in fixture file fails.
+cat > "$FIXTURE_FILE_LEVEL" <<'EOF'
+import SwiftUI
+struct BadFile: View {
+    var body: some View {
+        Text("hi").padding(40)
+    }
+}
+EOF
+assert_fail_with_extra "file-level scope (raw .padding)" "$FIXTURE_FILE_LEVEL"
+
+# Case 13 — file-level scope: old-palette ref in fixture file fails.
+cat > "$FIXTURE_FILE_LEVEL" <<'EOF'
+import SwiftUI
+struct BadFile: View { var body: some View { Text("hi").font(.leafBody) } }
+EOF
+assert_fail_with_extra "file-level scope (old-palette)" "$FIXTURE_FILE_LEVEL"
 
 echo "All fixture cases passed."
