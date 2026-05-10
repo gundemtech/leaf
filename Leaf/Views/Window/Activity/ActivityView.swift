@@ -1,3 +1,12 @@
+//
+//  ActivityView.swift
+//  Track 2 / D3 — Activity screen on D1 substrate. Two modes via LeafTab —
+//  Sessions (continuous work blocks per app/context) and Raw events (every
+//  captured event, filterable per provider). 5-state UX (loading /
+//  notConfigured / empty / error / loaded). Custom Chip / FilterBar
+//  components dropped — both pickers use D1 LeafTab (organism O9).
+//
+
 import SwiftUI
 import LeafCore
 
@@ -8,18 +17,11 @@ struct ActivityView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: LeafSpace.xl) {
                 header
-                switch reader.state {
-                case .loading:
-                    loadingPlaceholder
-                case .notConfigured(let msg), .empty(let msg), .error(let msg):
-                    placeholder(msg)
-                case .loaded(let snapshot, _):
-                    content(for: snapshot)
-                }
+                stateContent
             }
-            .padding(40)
+            .padding(LeafSpace.xxl)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear { reader.refresh() }
@@ -28,22 +30,63 @@ struct ActivityView: View {
     // MARK: - Header
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: LeafSpace.sm) {
             Text("ACTIVITY · TODAY")
-                .leafLabelStyle()
+                .leafSectionLabel()
+                .foregroundStyle(LeafColor.text.tertiary)
             Text(mode == .sessions
                  ? "Continuous work blocks: app + window/file context."
                  : "Every event the agent has captured today.")
-                .font(.leafBody)
-                .foregroundStyle(.leafMuted)
+                .font(LeafType.body.regular)
+                .foregroundStyle(LeafColor.text.secondary)
+        }
+    }
+
+    // MARK: - State machine UX
+
+    @ViewBuilder
+    private var stateContent: some View {
+        switch reader.state {
+        case .loading:
+            loadingView
+        case .notConfigured(let msg):
+            LeafEmptyState(
+                icon: LeafIcons.status.warning,
+                title: msg
+            )
+        case .empty(let msg):
+            LeafEmptyState(
+                icon: LeafIcons.brand.leaf,
+                title: "Nothing yet today",
+                description: msg
+            )
+        case .error(let msg):
+            LeafBanner(
+                tone: .danger,
+                title: "Couldn't load today's events",
+                description: msg,
+                ctaTitle: "Try again",
+                onCTA: { reader.refresh() }
+            )
+        case .loaded(let snapshot, _):
+            loadedContent(for: snapshot)
+        }
+    }
+
+    private var loadingView: some View {
+        HStack(spacing: LeafSpace.sm) {
+            ProgressView().controlSize(.small)
+            Text("Reading today's events…")
+                .font(LeafType.body.regular)
+                .foregroundStyle(LeafColor.text.tertiary)
         }
     }
 
     // MARK: - Loaded content
 
     @ViewBuilder
-    private func content(for snapshot: InsightsSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 20) {
+    private func loadedContent(for snapshot: InsightsSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: LeafSpace.lg) {
             modePicker
             switch mode {
             case .sessions:
@@ -55,13 +98,11 @@ struct ActivityView: View {
     }
 
     private var modePicker: some View {
-        Picker("", selection: $mode) {
-            ForEach(ActivityMode.allCases, id: \.self) { m in
-                Text(m.title).tag(m)
-            }
-        }
-        .pickerStyle(.segmented)
-        .frame(maxWidth: 240)
+        LeafTab(
+            selection: $mode,
+            tabs: ActivityMode.allCases,
+            label: { $0.title }
+        )
     }
 
     // MARK: - Sessions mode
@@ -69,19 +110,17 @@ struct ActivityView: View {
     @ViewBuilder
     private func sessionsContent(for snapshot: InsightsSnapshot) -> some View {
         let sessions = snapshot.recentSessions.sorted { $0.start > $1.start }
-        if sessions.isEmpty {
-            placeholder("No sessions yet — switch between apps or files for a few minutes.")
-        } else {
-            GlassCard(padding: 8) {
-                VStack(spacing: 0) {
-                    ForEach(Array(sessions.enumerated()), id: \.element.id) { index, session in
-                        SessionRow(session: session)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 10)
-                        if index < sessions.count - 1 {
-                            Divider().opacity(0.3).padding(.leading, 56)
-                        }
-                    }
+        LeafCard(variant: .raised, padding: .tight) {
+            if sessions.isEmpty {
+                inlineEmpty(
+                    title: "No sessions yet",
+                    description: "Switch between apps or files for a few minutes."
+                )
+            } else {
+                listColumn(rows: sessions, leadingIndent: LeafSpace.xxxxl) { session in
+                    SessionRow(session: session)
+                        .padding(.horizontal, LeafSpace.md)
+                        .padding(.vertical, LeafSpace.sm)
                 }
             }
         }
@@ -92,29 +131,52 @@ struct ActivityView: View {
     @ViewBuilder
     private func rawEventsContent(for snapshot: InsightsSnapshot) -> some View {
         let entries = snapshot.recentActivity
-        FilterBar(selected: $selectedFilter, counts: providerCounts(in: entries))
+        VStack(alignment: .leading, spacing: LeafSpace.md) {
+            filterPicker(counts: providerCounts(in: entries))
 
-        if entries.isEmpty {
-            placeholder("No events captured today yet — give the agent a few minutes.")
-        } else {
-            let filtered = entries.filter { selectedFilter.matches($0.provider) }
-            if filtered.isEmpty {
-                placeholder("No \(selectedFilter.title.lowercased()) events in this window.")
+            if entries.isEmpty {
+                LeafCard(variant: .raised, padding: .tight) {
+                    inlineEmpty(
+                        title: "No events yet",
+                        description: "Give the agent a few minutes."
+                    )
+                }
             } else {
-                GlassCard(padding: 8) {
-                    VStack(spacing: 0) {
-                        ForEach(Array(filtered.enumerated()), id: \.element.id) { index, entry in
+                let filtered = entries.filter { selectedFilter.matches($0.provider) }
+                LeafCard(variant: .raised, padding: .tight) {
+                    if filtered.isEmpty {
+                        inlineEmpty(
+                            title: "No \(selectedFilter.title.lowercased()) events",
+                            description: "Nothing in this filter window."
+                        )
+                    } else {
+                        listColumn(rows: filtered, leadingIndent: LeafSpace.xxxxl) { entry in
                             ActivityRow(entry: entry)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 10)
-                            if index < filtered.count - 1 {
-                                Divider().opacity(0.3).padding(.leading, 44)
-                            }
+                                .padding(.horizontal, LeafSpace.md)
+                                .padding(.vertical, LeafSpace.sm)
                         }
                     }
                 }
             }
         }
+    }
+
+    private func filterPicker(counts: [ActivityProvider: Int]) -> some View {
+        LeafTab(
+            selection: $selectedFilter,
+            tabs: ActivityFilter.allCases,
+            label: { filter in
+                let count: Int = {
+                    switch filter {
+                    case .all:    return counts.values.reduce(0, +)
+                    case .local, .linear, .github, .slack, .ai:
+                        guard let p = filter.provider else { return 0 }
+                        return counts[p, default: 0]
+                    }
+                }()
+                return count > 0 ? "\(filter.title) · \(count)" : filter.title
+            }
+        )
     }
 
     private func providerCounts(in entries: [ActivityFeedEntry]) -> [ActivityProvider: Int] {
@@ -125,31 +187,47 @@ struct ActivityView: View {
         return counts
     }
 
-    // MARK: - Placeholders
+    // MARK: - List composition
 
-    private var loadingPlaceholder: some View {
-        HStack {
-            ProgressView()
-                .controlSize(.small)
-            Text("Reading today's events…")
-                .font(.leafBody)
-                .foregroundStyle(.leafMuted)
+    @ViewBuilder
+    private func listColumn<Item: Identifiable, Row: View>(
+        rows: [Item],
+        leadingIndent: CGFloat,
+        @ViewBuilder row: @escaping (Item) -> Row
+    ) -> some View {
+        LazyVStack(spacing: 0) {
+            ForEach(Array(rows.enumerated()), id: \.element.id) { idx, item in
+                row(item)
+                if idx < rows.count - 1 {
+                    LeafDivider(style: .soft)
+                        .padding(.leading, leadingIndent)
+                }
+            }
         }
     }
 
-    private func placeholder(_ text: String) -> some View {
-        Text(text)
-            .font(.leafBody)
-            .foregroundStyle(.leafMuted)
-            .frame(maxWidth: .infinity, alignment: .leading)
+    private func inlineEmpty(title: String, description: String) -> some View {
+        VStack(alignment: .leading, spacing: LeafSpace.xxs) {
+            Text(title)
+                .font(LeafType.body.regular)
+                .foregroundStyle(LeafColor.text.primary)
+            Text(description)
+                .font(LeafType.body.small)
+                .foregroundStyle(LeafColor.text.tertiary)
+        }
+        .padding(.horizontal, LeafSpace.md)
+        .padding(.vertical, LeafSpace.lg)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
 // MARK: - Mode toggle
 
-enum ActivityMode: String, CaseIterable, Hashable {
+enum ActivityMode: String, CaseIterable, Hashable, Identifiable {
     case sessions
     case rawEvents
+
+    var id: String { rawValue }
 
     var title: String {
         switch self {
@@ -159,73 +237,7 @@ enum ActivityMode: String, CaseIterable, Hashable {
     }
 }
 
-// MARK: - Filter bar
-
-private struct FilterBar: View {
-    @Binding var selected: ActivityFilter
-    let counts: [ActivityProvider: Int]
-
-    var body: some View {
-        HStack(spacing: 8) {
-            ForEach(ActivityFilter.allCases) { filter in
-                Chip(
-                    title: filter.title,
-                    count: countText(for: filter),
-                    isSelected: filter == selected
-                ) {
-                    selected = filter
-                }
-            }
-            Spacer()
-        }
-    }
-
-    private func countText(for filter: ActivityFilter) -> String? {
-        switch filter {
-        case .all:
-            let total = counts.values.reduce(0, +)
-            return total == 0 ? nil : "\(total)"
-        case .local, .linear, .github, .slack, .ai:
-            let n = counts[filter.provider!, default: 0]
-            return n == 0 ? nil : "\(n)"
-        }
-    }
-}
-
-private struct Chip: View {
-    let title: String
-    let count: String?
-    let isSelected: Bool
-    let onTap: () -> Void
-
-    var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 6) {
-                Text(title)
-                    .font(.leafBody)
-                if let count {
-                    Text(count)
-                        .font(.leafCaption.monospacedDigit())
-                        .foregroundStyle(isSelected ? Color.white.opacity(0.8) : .leafMuted)
-                }
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(isSelected ? Color.leafAccentDeep : Color.leafCard.opacity(0.7))
-            )
-            .foregroundStyle(isSelected ? Color.white : Color.leafInk)
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(isSelected ? Color.clear : Color.leafInk.opacity(0.08), lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-// MARK: - Filter enum
+// MARK: - Filter enum (preserved as-is — already Identifiable)
 
 enum ActivityFilter: String, CaseIterable, Identifiable {
     case all, local, linear, github, slack, ai
