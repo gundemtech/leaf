@@ -12,7 +12,7 @@ struct MetricsSection: View {
             Text("Metrics").font(LeafType.title.large).foregroundStyle(LeafColor.text.primary)
             LeafMetricInlinePreview()
             LeafMetricAmbientPreview()
-            // LeafMetricDeltaPreview()     — added by Task 37
+            LeafMetricDeltaPreview()
             // LeafSparklinePreview()       — added by Task 38
         }
     }

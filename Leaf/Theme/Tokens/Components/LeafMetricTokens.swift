@@ -21,4 +21,13 @@ enum LeafMetricTokens {
         static let labelFont: Font = LeafType.body.small
         static let labelTracking: CGFloat = 0
     }
+
+    /// Directional delta — colour follows direction; arrow size surfaced as a
+    /// token so the symbol weight is tunable without code edits.
+    enum Delta {
+        static let upColor:   Color   = LeafColor.status.success
+        static let downColor: Color   = LeafColor.status.danger
+        static let flatColor: Color   = LeafColor.text.tertiary
+        static let arrowSize: CGFloat = 11
+    }
 }
