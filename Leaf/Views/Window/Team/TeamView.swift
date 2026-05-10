@@ -1,18 +1,29 @@
+//
+//  TeamView.swift
+//  Track 2 / D3 — Team screen on D1 substrate. Adaptive grid (LazyVGrid with
+//  GridItem(.adaptive(minimum: 240, maximum: 360))) of LeafCard members.
+//  Empty state — gain-framed copy ("You're solo for now"). Error state —
+//  LeafBanner.danger + retry. RemovedFromTeamBanner preempts via RootView.
+//
+//  Self-row hides overflow Menu (compare member.pubkeyHex против myPubHex
+//  resolved from IdentityService.ensureLocalIdentity). 'Add member' CTA
+//  переезжает в LeafSection cta-slot (top-right) — убирает floating
+//  bottom button.
+//
+
 import CryptoKit
 import SwiftUI
 import LeafCore
 
 struct TeamView: View {
     @Environment(OrgReader.self) private var reader
-    @Environment(PendingInvitesReader.self) private var pendingReader  // Phase 5.5.C
+    @Environment(PendingInvitesReader.self) private var pendingReader
     @Environment(WindowState.self) private var windowState
+
     @State private var showingGenerateSheet: Bool = false
-    // Phase 5.3.E — per-row "..." Menu wiring.
     @State private var pendingRemoval: PendingRemoval?
     @State private var myPubHex: String = ""
 
-    /// Identifiable wrapper for `.sheet(item:)` — pendingRemoval transitions
-    /// trigger sheet present.
     private struct PendingRemoval: Identifiable {
         let id = UUID()
         let memberID: String
@@ -21,16 +32,15 @@ struct TeamView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
+            VStack(alignment: .leading, spacing: LeafSpace.xxl) {
                 content
-                Spacer(minLength: 0)
             }
-            .padding(40)
+            .padding(LeafSpace.xxl)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear {
             reader.refresh()
-            pendingReader.refresh()  // Phase 5.5.C — sync sweep + load pending invites
+            pendingReader.refresh()
             loadMyPubHex()
         }
         .sheet(isPresented: $showingGenerateSheet) {
@@ -46,116 +56,133 @@ struct TeamView: View {
         switch reader.state {
         case .loading:
             HStack { Spacer(); ProgressView(); Spacer() }
-                .padding(.top, 80)
+                .padding(.top, LeafSpace.xxxl)
 
         case .empty:
-            emptyCTA
+            emptyContent
 
         case .loaded(_, let members):
-            membersList(members)
+            loadedContent(members)
 
         case .error(let message):
-            errorCard(message: message)
+            errorContent(message)
 
         case .removedFromOrg:
-            // RootView preempts this state with RemovedFromTeamBanner; this branch
-            // is unreachable but required for switch exhaustiveness.
+            // RootView preempts via RemovedFromTeamBanner; defensive EmptyView
+            // for switch exhaustiveness.
             EmptyView()
         }
     }
 
     // MARK: - Empty
 
-    private var emptyCTA: some View {
-        VStack(alignment: .leading, spacing: 28) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("TEAM")
-                    .leafLabelStyle()
-                Text("No team yet.")
-                    .font(.leafHeadline)
-                    .foregroundStyle(.leafInk)
-            }
-
-            Text("Create your org first. Once you have one, you’ll see yourself as the admin and can invite teammates.")
-                .font(.leafBody)
-                .foregroundStyle(.leafInk.opacity(0.85))
-                .lineSpacing(4)
-                .frame(maxWidth: 540, alignment: .leading)
-
-            Button(action: { windowState.section = .organization }) {
-                Text("Go to Organization")
-            }
-            .buttonStyle(.borderedProminent)
-        }
+    private var emptyContent: some View {
+        LeafEmptyState(
+            icon: LeafIcons.nav.team,
+            title: "You're solo for now",
+            description: "Create an org or accept an invite to start sharing presence with teammates.",
+            ctaTitle: "Open Organization",
+            onCTA: { windowState.section = .organization }
+        )
     }
 
     // MARK: - Loaded
 
-    private func membersList(_ members: [TeamMember]) -> some View {
-        VStack(alignment: .leading, spacing: 28) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("TEAM · \(members.count) MEMBER\(members.count == 1 ? "" : "S")")
-                    .leafLabelStyle()
-                Text("Your team")
-                    .font(.leafHeadline)
-                    .foregroundStyle(.leafInk)
-            }
-
-            VStack(spacing: 12) {
-                ForEach(members, id: \.id) { member in
-                    GlassCard(padding: 18) {
-                        memberRow(member)
+    private func loadedContent(_ members: [TeamMember]) -> some View {
+        VStack(alignment: .leading, spacing: LeafSpace.xxl) {
+            LeafSection(title: "Team · \(members.count) member\(members.count == 1 ? "" : "s")") {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 240, maximum: 360), spacing: LeafSpace.md)],
+                    alignment: .leading,
+                    spacing: LeafSpace.md
+                ) {
+                    ForEach(members, id: \.id) { member in
+                        memberCard(member)
                     }
                 }
+            } cta: {
+                addMemberButton
             }
-            .frame(maxWidth: 580, alignment: .leading)
 
-            // Phase 5.5.C — pending invites surface. Section hides itself when no rows.
             PendingInvitesSection()
-
-            Button(action: { showingGenerateSheet = true }) {
-                Label("Add member", systemImage: "plus")
-            }
-            .buttonStyle(.borderedProminent)
         }
     }
 
-    private func memberRow(_ member: TeamMember) -> some View {
-        HStack(spacing: 14) {
-            avatar(for: member.displayName)
+    private var addMemberButton: some View {
+        LeafButton(
+            "Add member",
+            variant: .primary,
+            size: .sm,
+            icon: .asset(LeafIcons.action.add),
+            action: { showingGenerateSheet = true }
+        )
+    }
 
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    Text(member.displayName)
-                        .font(.leafBody)
-                        .foregroundStyle(.leafInk)
-                    roleBadge(member.role)
-                }
-                Text(pubkeyShortHex(member.pubkeyHex))
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.leafInk.opacity(0.55))
-            }
+    private func memberCard(_ member: TeamMember) -> some View {
+        LeafCard(variant: .raised, padding: .regular) {
+            HStack(alignment: .center, spacing: LeafSpace.md) {
+                LeafAvatar(initials: avatarInitials(member.displayName), size: .md)
 
-            Spacer()
-
-            // Phase 5.3.E — per-row "..." Menu, hidden for self-row.
-            if !myPubHex.isEmpty && member.pubkeyHex != myPubHex {
-                Menu {
-                    Button("Remove from team…", role: .destructive) {
-                        pendingRemoval = PendingRemoval(
-                            memberID: member.id,
-                            displayName: member.displayName
-                        )
+                VStack(alignment: .leading, spacing: LeafSpace.xxs) {
+                    HStack(spacing: LeafSpace.sm) {
+                        Text(member.displayName)
+                            .font(LeafType.body.regular)
+                            .foregroundStyle(LeafColor.text.primary)
+                            .lineLimit(1)
+                        roleBadge(member.role)
                     }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .foregroundStyle(.leafInk.opacity(0.5))
+                    Text(pubkeyShortHex(member.pubkeyHex))
+                        .font(LeafType.mono.small)
+                        .foregroundStyle(LeafColor.text.tertiary)
+                        .lineLimit(1)
                 }
-                .menuStyle(.borderlessButton)
-                .frame(width: 28)
+
+                Spacer(minLength: 0)
+
+                if !myPubHex.isEmpty && member.pubkeyHex != myPubHex {
+                    overflowMenu(member)
+                }
             }
         }
     }
+
+    private func overflowMenu(_ member: TeamMember) -> some View {
+        Menu {
+            Button("Remove from team…", role: .destructive) {
+                pendingRemoval = PendingRemoval(
+                    memberID: member.id,
+                    displayName: member.displayName
+                )
+            }
+        } label: {
+            LeafIcon(
+                systemName: "ellipsis",
+                size: .md,
+                tint: LeafColor.text.tertiary
+            )
+        }
+        .menuStyle(.borderlessButton)
+        .frame(width: LeafSpace.xxl)   // 32pt — taps space
+    }
+
+    private func roleBadge(_ role: TeamMemberRole) -> some View {
+        let variant: LeafBadgeTokens.Variant = (role == .admin) ? .accent : .neutral
+        return LeafBadge(text: role.rawValue.uppercased(), variant: variant)
+    }
+
+    // MARK: - Error
+
+    private func errorContent(_ message: String) -> some View {
+        LeafBanner(
+            tone: .danger,
+            title: "Couldn't load team",
+            description: message,
+            ctaTitle: "Try again",
+            onCTA: { reader.refresh() }
+        )
+    }
+
+    // MARK: - Helpers
 
     private func loadMyPubHex() {
         do {
@@ -167,65 +194,18 @@ struct TeamView: View {
         }
     }
 
-    private func avatar(for displayName: String) -> some View {
-        let initials = displayName
+    private func avatarInitials(_ displayName: String) -> String {
+        let parts = displayName
             .split(separator: " ")
             .prefix(2)
             .compactMap { $0.first.map(String.init) }
             .joined()
             .uppercased()
-        return Circle()
-            .fill(Color.leafAccent.opacity(0.2))
-            .frame(width: 36, height: 36)
-            .overlay(
-                Text(initials.isEmpty ? "?" : initials)
-                    .font(.leafBody.monospacedDigit())
-                    .foregroundStyle(.leafAccentDeep)
-            )
-    }
-
-    private func roleBadge(_ role: TeamMemberRole) -> some View {
-        Text(role.rawValue.uppercased())
-            .font(.system(.caption2, design: .monospaced))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(Color.leafAccent.opacity(0.18), in: Capsule())
-            .foregroundStyle(.leafAccentDeep)
+        return parts.isEmpty ? "?" : parts
     }
 
     private func pubkeyShortHex(_ hex: String) -> String {
         guard hex.count >= 16 else { return hex }
-        let prefix = hex.prefix(8)
-        let suffix = hex.suffix(8)
-        return "\(prefix)…\(suffix)"
-    }
-
-    // MARK: - Error
-
-    private func errorCard(message: String) -> some View {
-        VStack(alignment: .leading, spacing: 28) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("TEAM")
-                    .leafLabelStyle()
-                Text("Something went wrong.")
-                    .font(.leafHeadline)
-                    .foregroundStyle(.leafInk)
-            }
-
-            GlassCard(padding: 24) {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text(message)
-                        .font(.leafBody)
-                        .foregroundStyle(.leafInk)
-                        .lineSpacing(4)
-                    HStack {
-                        Spacer()
-                        Button("Retry") { reader.refresh() }
-                            .buttonStyle(.bordered)
-                    }
-                }
-            }
-            .frame(maxWidth: 580, alignment: .leading)
-        }
+        return "\(hex.prefix(8))…\(hex.suffix(8))"
     }
 }

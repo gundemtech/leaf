@@ -1,3 +1,12 @@
+//
+//  OrganizationView.swift
+//  Track 2 / D4 — migrated to LeafSection chain + LeafCard.raised + LeafBanner.
+//  Drop manual ORGANIZATION / Create-your-personal-org / etc leafLabelStyle headers
+//  (LeafSection.title carries hierarchy). emptyContent carries 2 LeafSection blocks
+//  (Organization create + Or-join-team). loadedContent carries 1 LeafSection
+//  (Organization workspace metadata). error → LeafBanner.danger top.
+//
+
 import SwiftUI
 import LeafCore
 
@@ -8,11 +17,11 @@ struct OrganizationView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
+            VStack(alignment: .leading, spacing: LeafSpace.xxl) {
                 content
                 Spacer(minLength: 0)
             }
-            .padding(40)
+            .padding(LeafSpace.xxl)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear { reader.refresh() }
@@ -26,142 +35,101 @@ struct OrganizationView: View {
         switch reader.state {
         case .loading:
             HStack { Spacer(); ProgressView(); Spacer() }
-                .padding(.top, 80)
-
+                .padding(.top, LeafSpace.xxxl)
         case .empty:
-            createCTA
-
+            emptyContent
         case .loaded(let org, _):
-            loadedCard(org: org)
-
+            loadedContent(org: org)
         case .error(let message):
-            errorCard(message: message)
-
+            errorContent(message: message)
         case .removedFromOrg:
-            // RootView preempts this state with RemovedFromTeamBanner; this branch
-            // is unreachable but required for switch exhaustiveness.
+            // RootView preempts this state with RemovedFromTeamBanner.
             EmptyView()
         }
     }
 
-    // MARK: - Empty: Create CTA
+    // MARK: - Empty: create CTA + or-join
 
-    private var createCTA: some View {
-        VStack(alignment: .leading, spacing: 28) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("ORGANIZATION")
-                    .leafLabelStyle()
-                Text("Create your personal org.")
-                    .font(.leafHeadline)
-                    .foregroundStyle(.leafInk)
-            }
-
-            Text("Solo for now — invite teammates after the org is set up. One org per device; the workspace name is just a label, you can change it later.")
-                .font(.leafBody)
-                .foregroundStyle(.leafInk.opacity(0.85))
-                .lineSpacing(4)
-                .frame(maxWidth: 540, alignment: .leading)
-
-            GlassCard(padding: 24) {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("WORKSPACE NAME")
-                        .leafLabelStyle()
-                    TextField("My Workspace", text: $nameInput)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.leafBody)
-                        .onSubmit(submit)
-                    HStack {
-                        Spacer()
-                        Button(action: submit) {
-                            Text("Create personal org")
+    private var emptyContent: some View {
+        VStack(alignment: .leading, spacing: LeafSpace.xxl) {
+            LeafSection(
+                title: "Organization",
+                description: "Create your personal org. Solo for now — invite teammates after the org is set up. One org per device; the workspace name is just a label, you can change it later."
+            ) {
+                LeafCard(variant: .raised, padding: .regular) {
+                    VStack(alignment: .leading, spacing: LeafSpace.md) {
+                        Text("WORKSPACE NAME").leafSectionLabel().foregroundStyle(LeafColor.text.tertiary)
+                        TextField("My Workspace", text: $nameInput)
+                            .textFieldStyle(.roundedBorder)
+                            .font(LeafType.body.regular)
+                            .onSubmit(submit)
+                        HStack {
+                            Spacer()
+                            LeafButton(
+                                "Create personal org",
+                                variant: .primary,
+                                size: .md,
+                                action: submit
+                            )
+                            .disabled(trimmedName.isEmpty)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(trimmedName.isEmpty)
                     }
                 }
             }
-            .frame(maxWidth: 580, alignment: .leading)
 
-            VStack(alignment: .leading, spacing: 12) {
-                Divider().opacity(0.3)
-                    .frame(maxWidth: 580)
-                Text("OR JOIN A TEAM")
-                    .leafLabelStyle()
-                Text("If a teammate invited you, accept the invite instead.")
-                    .font(.leafBody)
-                    .foregroundStyle(.leafInk.opacity(0.75))
-                Button(action: { showingAcceptSheet = true }) {
-                    Text("Accept invite")
-                }
-                .buttonStyle(.bordered)
+            LeafSection(
+                title: "Or join a team",
+                description: "If a teammate invited you, accept the invite instead."
+            ) {
+                LeafButton(
+                    "Accept invite",
+                    variant: .secondary,
+                    size: .md,
+                    action: { showingAcceptSheet = true }
+                )
             }
-            .padding(.top, 4)
         }
     }
 
-    // MARK: - Loaded: org card
+    // MARK: - Loaded: workspace card
 
-    private func loadedCard(org: Org) -> some View {
-        VStack(alignment: .leading, spacing: 28) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("ORGANIZATION")
-                    .leafLabelStyle()
-                Text(org.name)
-                    .font(.leafHeadline)
-                    .foregroundStyle(.leafInk)
-            }
-
-            GlassCard(padding: 24) {
-                VStack(alignment: .leading, spacing: 12) {
-                    row(label: "CREATED",
-                        value: org.createdAt.formatted(date: .abbreviated, time: .shortened))
-                    Divider().opacity(0.3)
+    private func loadedContent(org: Org) -> some View {
+        LeafSection(title: "Organization") {
+            LeafCard(variant: .raised, padding: .regular) {
+                VStack(alignment: .leading, spacing: LeafSpace.md) {
+                    Text(org.name)
+                        .font(LeafType.title.medium)
+                        .foregroundStyle(LeafColor.text.primary)
+                    LeafDivider()
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Created")
+                            .font(LeafType.body.regular)
+                            .foregroundStyle(LeafColor.text.secondary)
+                        Spacer()
+                        Text(org.createdAt.formatted(date: .abbreviated, time: .shortened))
+                            .font(LeafType.mono.regular)
+                            .foregroundStyle(LeafColor.text.primary)
+                    }
+                    LeafDivider()
                     Text("Single-org-per-device — to switch, wipe local data first.")
-                        .font(.leafBody)
-                        .foregroundStyle(.leafInk.opacity(0.7))
-                        .lineSpacing(3)
+                        .font(LeafType.body.small)
+                        .foregroundStyle(LeafColor.text.tertiary)
                 }
             }
-            .frame(maxWidth: 580, alignment: .leading)
-        }
-    }
-
-    private func row(label: String, value: String) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(label).leafLabelStyle()
-            Spacer()
-            Text(value)
-                .font(.leafBody.monospacedDigit())
-                .foregroundStyle(.leafInk)
         }
     }
 
     // MARK: - Error
 
-    private func errorCard(message: String) -> some View {
-        VStack(alignment: .leading, spacing: 28) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("ORGANIZATION")
-                    .leafLabelStyle()
-                Text("Something went wrong.")
-                    .font(.leafHeadline)
-                    .foregroundStyle(.leafInk)
-            }
-
-            GlassCard(padding: 24) {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text(message)
-                        .font(.leafBody)
-                        .foregroundStyle(.leafInk)
-                        .lineSpacing(4)
-                    HStack {
-                        Spacer()
-                        Button("Retry") { reader.refresh() }
-                            .buttonStyle(.bordered)
-                    }
-                }
-            }
-            .frame(maxWidth: 580, alignment: .leading)
+    private func errorContent(message: String) -> some View {
+        VStack(alignment: .leading, spacing: LeafSpace.lg) {
+            LeafBanner(
+                tone: .danger,
+                title: "Couldn't load organization",
+                description: message,
+                ctaTitle: "Retry",
+                onCTA: reader.refresh
+            )
         }
     }
 

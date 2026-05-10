@@ -2,9 +2,11 @@
 //  CreateTeamStepView.swift
 //  Leaf
 //
-//  Phase 5.5.B — onboarding `.team` admin path: enter org name + display name → calls
-//  OrgReader.createPersonalOrg(displayName:) (org name surfaces в OrgService logic per 5.1.D).
-//  На success — caller (OnboardingView) advances to `.done` через .onChange.
+//  Phase 5.5.B — onboarding `.team` admin path: enter display name → calls
+//  OrgReader.createPersonalOrg(displayName:). На success — caller (OnboardingView)
+//  advances to `.done` via .onChange.
+//
+//  Track 2 / D4 — migrated to D1 atoms.
 //
 
 import SwiftUI
@@ -17,34 +19,37 @@ struct CreateTeamStepView: View {
     let onCancel: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: LeafSpace.md) {
             Text("Create new team")
-                .font(.subheadline.weight(.semibold))
+                .font(LeafType.title.small)
+                .foregroundStyle(LeafColor.text.primary)
             Text("Pick how you'll show up to your teammates. You can invite them right after.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(LeafType.body.small)
+                .foregroundStyle(LeafColor.text.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("YOUR DISPLAY NAME")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: LeafSpace.xs) {
+                Text("YOUR DISPLAY NAME").leafSectionLabel().foregroundStyle(LeafColor.text.tertiary)
                 TextField("e.g. Sasha", text: $displayName)
                     .textFieldStyle(.roundedBorder)
+                    .font(LeafType.body.regular)
                     .disabled(submitted)
             }
 
             HStack {
-                Button("Back") { onCancel() }
-                    .buttonStyle(.link)
-                    .font(.caption)
+                LeafButton("Back", variant: .ghost, size: .sm, action: onCancel)
                 Spacer()
-                Button("Create") {
-                    let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-                    submitted = true
-                    orgReader.createPersonalOrg(displayName: trimmed)
-                }
-                .buttonStyle(.borderedProminent)
+                LeafButton(
+                    "Create",
+                    variant: .primary,
+                    size: .sm,
+                    isLoading: submitted,
+                    action: {
+                        let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+                        submitted = true
+                        orgReader.createPersonalOrg(displayName: trimmed)
+                    }
+                )
                 .disabled(submitted || displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }

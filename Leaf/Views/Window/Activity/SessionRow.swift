@@ -1,43 +1,36 @@
+//
+//  SessionRow.swift
+//  Track 2 / D3 — Activity row for one ActivitySession (continuous work block
+//  in one app + window/file context). Migrated from old palette to D1
+//  substrate. Decorative category dot dropped per spec § OQ-6 — app
+//  identity carries via real OS app icon (AppIconResolver) + app name.
+//
+
 import SwiftUI
 import LeafCore
 
-/// Phase 4.10.B — одна строка списка сессий: real app icon, colored category dot,
-/// app name, window/file/URL context, duration.
 struct SessionRow: View {
     let session: ActivitySession
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
+        LeafListRow(
+            primary: AppNameResolver.shared.displayName(for: session.bundleID),
+            secondary: contextLabel
+        ) {
             iconView
-                .frame(width: 32, height: 32)
-
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(Color.leafCategory(session.category))
-                        .frame(width: 6, height: 6)
-                    Text(AppNameResolver.shared.displayName(for: session.bundleID))
-                        .font(.leafBody)
-                        .foregroundStyle(.leafInk)
-                        .lineLimit(1)
-                }
-                if let context = session.contextLabel,
-                   !context.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(context)
-                        .font(.leafCaption)
-                        .foregroundStyle(.leafMuted)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-            }
-
-            Spacer(minLength: 8)
-
+                .frame(width: LeafSpace.xxl, height: LeafSpace.xxl)   // 32×32
+        } trailing: {
             Text(formatDuration(session.duration))
-                .font(.leafCaption.monospacedDigit())
-                .foregroundStyle(.leafMuted)
+                .font(LeafType.mono.small)
+                .foregroundStyle(LeafColor.text.tertiary)
                 .lineLimit(1)
         }
+    }
+
+    private var contextLabel: String? {
+        guard let ctx = session.contextLabel else { return nil }
+        let trimmed = ctx.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : ctx
     }
 
     @ViewBuilder
@@ -47,7 +40,6 @@ struct SessionRow: View {
             Image(nsImage: nsImage)
                 .resizable()
                 .interpolation(.high)
-                .frame(width: 32, height: 32)
         } else {
             fallbackIcon
         }
@@ -58,11 +50,9 @@ struct SessionRow: View {
 
     private var fallbackIcon: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.leafCategory(session.category).opacity(0.18))
-            Image(systemName: "app.dashed")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(Color.leafCategory(session.category))
+            RoundedRectangle(cornerRadius: LeafRadius.sm, style: .continuous)
+                .fill(LeafColor.surface.inset)
+            LeafIcon(asset: LeafIcons.object.appPlaceholder, size: .sm, tint: LeafColor.text.tertiary)
         }
     }
 

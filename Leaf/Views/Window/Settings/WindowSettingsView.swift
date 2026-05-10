@@ -1,4 +1,12 @@
+//
+//  WindowSettingsView.swift
+//  Track 2 / D4 — drop manual top-level header chrome. Pure VStack hosting
+//  4 sub-section views в порядке Background → Folders → Updates → Privacy
+//  (cognitive flow: enable agent → tell it where to look → meta).
+//
+
 import SwiftUI
+import LeafCore
 
 struct WindowSettingsView: View {
     @Environment(LaunchAgentService.self) private var launchAgent
@@ -7,24 +15,13 @@ struct WindowSettingsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("SETTINGS")
-                        .leafLabelStyle()
-                    Text("Settings")
-                        .font(.leafHeadline)
-                        .foregroundStyle(.leafInk)
-                }
-                .padding(.bottom, 4)
-
-                GeneralSettingsSection(launchAgent: launchAgent, updater: updater)
-
+            VStack(alignment: .leading, spacing: LeafSpace.xxl) {
+                BackgroundCollectionSection(launchAgent: launchAgent)
                 FoldersSettings(service: watchedFolders)
-
+                UpdatesSection(updater: updater)
                 PrivacySettingsSection()
             }
-            .padding(.horizontal, 40)
-            .padding(.vertical, 28)
+            .padding(LeafSpace.xxl)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }

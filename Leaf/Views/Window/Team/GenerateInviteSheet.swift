@@ -4,9 +4,11 @@
 //
 //  Phase 5.5.B — admin invite-generation. Two input modes:
 //   1. Paste invitee Join code (clipboard auto-detect on appear; manual paste fallback).
-//   2. Send "ask to join" template — admin first шлёт invitee app + onboarding hint, ждёт Join code в clipboard.
+//   2. Send "ask to join" template — admin first шлёт invitee app + onboarding hint.
 //
 //  Output: одна `leaf://invite/<token>#<otp>` deep-link с Copy / Mail / Messages кнопками + countdown.
+//
+//  Track 2 / D4 — migrated to LeafSheetLayout + LeafCard.raised + LeafTab inputMode picker.
 //
 
 import SwiftUI
@@ -20,35 +22,25 @@ struct GenerateInviteSheet: View {
     @State private var joinCodeInput: String = ""
     @State private var inputMode: InputMode = .paste
 
-    enum InputMode: String, CaseIterable, Identifiable {
+    enum InputMode: String, CaseIterable, Identifiable, Hashable {
         case paste = "Paste Join code"
         case template = "Send template"
         var id: String { rawValue }
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            header
-            content
-            Spacer(minLength: 0)
-            footer
+        LeafSheetLayout(title: "Add a team member", onDismiss: discardAndDismiss) {
+            VStack(alignment: .leading, spacing: LeafSpace.xl) {
+                content
+                Spacer(minLength: 0)
+                footer
+            }
         }
-        .padding(28)
-        .frame(width: 560, height: 580)
         .onAppear {
-            // Auto-detect Join code в clipboard. Re-encode bytes из match → formatted display
-            // (single pasteboard read, no second .string lookup).
             if case .joinCode(let bytes) = urlHandler.probeClipboard(),
                let formatted = try? JoinCode.encode(pubkey: bytes) {
                 joinCodeInput = formatted
             }
-        }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("INVITE").leafLabelStyle()
-            Text("Add a team member").font(.leafHeadline).foregroundStyle(.leafInk)
         }
     }
 
@@ -59,7 +51,7 @@ struct GenerateInviteSheet: View {
             modePicker
             modeContent(disabled: false)
             if case .error(let m) = reader.state {
-                Text(m).font(.leafBody).foregroundStyle(.red).lineSpacing(3)
+                LeafBanner(tone: .danger, title: "Couldn't generate invite", description: m)
             }
         case .generating:
             modePicker
@@ -71,40 +63,44 @@ struct GenerateInviteSheet: View {
     }
 
     private var modePicker: some View {
-        Picker("", selection: $inputMode) {
-            ForEach(InputMode.allCases) { m in Text(m.rawValue).tag(m) }
-        }
-        .pickerStyle(.segmented)
+        LeafTab(
+            selection: $inputMode,
+            tabs: InputMode.allCases,
+            label: \.rawValue
+        )
     }
 
     @ViewBuilder
     private func modeContent(disabled: Bool) -> some View {
         switch inputMode {
         case .paste:
-            GlassCard(padding: 20) {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("PASTE INVITEE'S JOIN CODE").leafLabelStyle()
+            LeafCard(variant: .raised, padding: .regular) {
+                VStack(alignment: .leading, spacing: LeafSpace.md) {
+                    Text("PASTE INVITEE'S JOIN CODE").leafSectionLabel().foregroundStyle(LeafColor.text.tertiary)
                     TextField("ABCD-EFGH-…", text: $joinCodeInput, axis: .vertical)
                         .textFieldStyle(.roundedBorder)
-                        .font(.system(.body, design: .monospaced))
+                        .font(LeafType.mono.regular)
                         .lineLimit(2, reservesSpace: true)
                         .disabled(disabled)
                     HStack {
                         Spacer()
-                        Button("Generate invite") {
-                            reader.generate(inviteeJoinCode: joinCodeInput)
-                        }
-                        .buttonStyle(.borderedProminent)
+                        LeafButton(
+                            "Generate invite",
+                            variant: .primary,
+                            size: .md,
+                            action: { reader.generate(inviteeJoinCode: joinCodeInput) }
+                        )
                         .disabled(disabled || joinCodeInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                 }
             }
         case .template:
-            GlassCard(padding: 20) {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("SEND ASK-TO-JOIN TEMPLATE").leafLabelStyle()
+            LeafCard(variant: .raised, padding: .regular) {
+                VStack(alignment: .leading, spacing: LeafSpace.md) {
+                    Text("SEND ASK-TO-JOIN TEMPLATE").leafSectionLabel().foregroundStyle(LeafColor.text.tertiary)
                     Text("Pick a teammate to invite. They'll install Leaf, copy their Join code, and send it back to you.")
-                        .font(.leafCaption).foregroundStyle(.leafInk.opacity(0.7))
+                        .font(LeafType.body.small)
+                        .foregroundStyle(LeafColor.text.secondary)
                     ShareTemplateButton(
                         templateBody: ShareTemplate.compose(.askToJoin(orgName: orgName)),
                         mailSubject: "Join Leaf team — \(orgName)"
@@ -115,16 +111,17 @@ struct GenerateInviteSheet: View {
     }
 
     private func readyOutput(outbound: InviteOutbound) -> some View {
-        GlassCard(padding: 20) {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("SEND INVITE LINK").leafLabelStyle()
+        LeafCard(variant: .raised, padding: .regular) {
+            VStack(alignment: .leading, spacing: LeafSpace.lg) {
+                Text("SEND INVITE LINK").leafSectionLabel().foregroundStyle(LeafColor.text.tertiary)
                 Text("One link contains everything. Send via Mail / Messages or copy and paste anywhere.")
-                    .font(.leafCaption).foregroundStyle(.leafInk.opacity(0.7))
+                    .font(LeafType.body.small)
+                    .foregroundStyle(LeafColor.text.secondary)
 
                 let url = InviteURL.compose(token: outbound.token, otp: outbound.otp)
                 Text(url.absoluteString)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.leafInk)
+                    .font(LeafType.mono.small)
+                    .foregroundStyle(LeafColor.text.primary)
                     .textSelection(.enabled)
                     .lineLimit(3)
 
@@ -138,7 +135,8 @@ struct GenerateInviteSheet: View {
 
                 TimelineView(.periodic(from: .now, by: 1)) { ctx in
                     Text(countdownText(expiresAtMs: outbound.expiresAtMs, now: ctx.date))
-                        .font(.leafCaption).foregroundStyle(.leafInk.opacity(0.6))
+                        .font(LeafType.body.small)
+                        .foregroundStyle(LeafColor.text.tertiary)
                 }
             }
         }
@@ -146,23 +144,28 @@ struct GenerateInviteSheet: View {
 
     private var footer: some View {
         HStack {
-            Button("Discard") {
-                reader.dismiss()
-                dismiss()
-            }
-            .buttonStyle(.bordered)
+            LeafButton("Discard", variant: .secondary, size: .md, action: discardAndDismiss)
             Spacer()
             if case .ready = reader.state {
-                Button("Revoke + Done") {
-                    reader.revokeAndDismiss()
-                    dismiss()
-                }
-                .buttonStyle(.borderedProminent)
+                LeafButton(
+                    "Revoke + Done",
+                    variant: .primary,
+                    size: .md,
+                    action: {
+                        reader.revokeAndDismiss()
+                        dismiss()
+                    }
+                )
             }
         }
     }
 
     // MARK: - Helpers
+
+    private func discardAndDismiss() {
+        reader.dismiss()
+        dismiss()
+    }
 
     private var orgName: String {
         if case .loaded(let org, _) = orgReader.state { return org.name }
@@ -170,9 +173,6 @@ struct GenerateInviteSheet: View {
     }
 
     private func inviteeDisplayNameHint() -> String {
-        // Admin sheet не знает invitee display name на этапе generation (paste-Join-code path
-        // не несёт имя). Empty → ShareTemplate.adminShare свернёт на neutral greeting "Привет!".
-        // 5.5.C surface name hint когда pending_invites.inviteeDisplayNameHint заполнен.
         return ""
     }
 

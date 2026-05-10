@@ -1,0 +1,70 @@
+//
+//  LeafNavRow.swift
+//  Track 2 / D1 — Organism O3. Sidebar nav row — icon + title + optional
+//  badge + optional keyboard shortcut · states rest / hover / selected.
+//  Accepts SF Symbol (`systemName:`) or Asset Catalog (`asset:`) glyph.
+//
+
+import SwiftUI
+
+struct LeafNavRow: View {
+    enum IconRef {
+        case system(String)
+        case asset(String)
+    }
+
+    let icon: IconRef
+    let title: String
+    var badge: Int? = nil
+    var shortcut: String? = nil
+    @Binding var isSelected: Bool
+    let onTap: () -> Void
+
+    @State private var hover = false
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: LeafSpace.sm) {
+                iconView
+                Text(title)
+                    .font(LeafType.body.regular)
+                    .foregroundStyle(isSelected ? LeafColor.text.primary : LeafColor.text.secondary)
+                Spacer()
+                if let badge, badge > 0 {
+                    LeafBadge(count: badge)
+                }
+                if let shortcut {
+                    LeafKeyboardShortcut(glyphs: shortcut)
+                }
+            }
+            .padding(.horizontal, LeafSpace.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: LeafNavRowTokens.height)
+            .background(
+                RoundedRectangle(cornerRadius: LeafNavRowTokens.cornerRadius, style: .continuous)
+                    .fill(backgroundFill)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+        .leafAnimation(LeafMotion.spring.snappy, value: hover)
+    }
+
+    @ViewBuilder
+    private var iconView: some View {
+        let tint = isSelected ? LeafColor.accent.primary : LeafColor.text.secondary
+        switch icon {
+        case .system(let name):
+            LeafIcon(systemName: name, size: .md, tint: tint)
+        case .asset(let name):
+            LeafIcon(asset: name, size: .md, tint: tint)
+        }
+    }
+
+    private var backgroundFill: Color {
+        if isSelected { return LeafColor.accent.subtle }
+        if hover { return LeafColor.surface.raised }
+        return Color.clear
+    }
+}

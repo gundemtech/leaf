@@ -3,8 +3,9 @@
 //  Leaf
 //
 //  Phase 5.3.E — admin remove-member confirmation sheet. State machine routed
-//  through MemberRemovalReader. Mirror GenerateInviteSheet (5.2.D) shape:
-//  header / state-routed content ViewBuilder / footer.
+//  through MemberRemovalReader.
+//
+//  Track 2 / D4 — migrated to LeafSheetLayout + LeafCard.raised + LeafBanner.
 //
 
 import SwiftUI
@@ -19,27 +20,21 @@ struct RemoveMemberSheet: View {
     let displayName: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            header
-            content
-            Spacer(minLength: 0)
-            footer
-        }
-        .padding(28)
-        .frame(width: 520, height: 380)
-    }
-
-    // MARK: - Header
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("REMOVE MEMBER").leafLabelStyle()
-            Text("Remove \(displayName) from the team?")
-                .font(.leafHeadline).foregroundStyle(.leafInk)
+        LeafSheetLayout(title: "Remove member", onDismiss: dismissAndDiscard) {
+            VStack(alignment: .leading, spacing: LeafSpace.xl) {
+                primaryQuestion
+                content
+                Spacer(minLength: 0)
+                footer
+            }
         }
     }
 
-    // MARK: - Content (state-routed)
+    private var primaryQuestion: some View {
+        Text("Remove \(displayName) from the team?")
+            .font(LeafType.title.medium)
+            .foregroundStyle(LeafColor.text.primary)
+    }
 
     @ViewBuilder
     private var content: some View {
@@ -52,92 +47,78 @@ struct RemoveMemberSheet: View {
         case .success(let outcome, let dn):
             successCard(displayName: dn, outcome: outcome)
         case .error(let message):
-            errorCard(message: message)
+            LeafBanner(tone: .danger, title: "Couldn't remove member", description: message)
         }
     }
 
     private var confirmCard: some View {
-        GlassCard(padding: 20) {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("This rotates the team key. \(displayName) won't be able to send presence under the previous key. They'll see a 'You've been removed' message in their app on next sync.")
-                    .font(.leafBody)
-                    .foregroundStyle(.leafInk)
-                    .lineSpacing(3)
-            }
+        LeafCard(variant: .raised, padding: .regular) {
+            Text("This rotates the team key. \(displayName) won't be able to send presence under the previous key. They'll see a 'You've been removed' message in their app on next sync.")
+                .font(LeafType.body.regular)
+                .foregroundStyle(LeafColor.text.primary)
         }
     }
 
     private func successCard(displayName: String, outcome: RotationOutcome) -> some View {
-        GlassCard(padding: 24) {
-            VStack(alignment: .leading, spacing: 12) {
-                Label("Removed \(displayName)", systemImage: "checkmark.circle.fill")
-                    .font(.leafHeadline).foregroundStyle(.green)
-                if outcome.pendingCount > 0 {
-                    Text("\(outcome.postedCount) of \(outcome.totalCount) peers notified. \(outcome.pendingCount) will sync when online.")
-                        .font(.leafBody).foregroundStyle(.leafInk.opacity(0.85))
-                } else if outcome.postedCount > 0 {
-                    Text("All \(outcome.postedCount) peer\(outcome.postedCount == 1 ? "" : "s") notified.")
-                        .font(.leafBody).foregroundStyle(.leafInk.opacity(0.85))
-                } else {
-                    Text("Local rotation done. No remaining peers to notify.")
-                        .font(.leafBody).foregroundStyle(.leafInk.opacity(0.85))
-                }
+        LeafCard(variant: .raised, padding: .generous) {
+            VStack(alignment: .leading, spacing: LeafSpace.md) {
+                LeafIconLabel(
+                    icon: .asset(LeafIcons.status.successFill),
+                    title: "Removed \(displayName)",
+                    iconTint: LeafColor.status.success,
+                    titleStyle: LeafType.title.small
+                )
+                Text(successSummary(outcome: outcome))
+                    .font(LeafType.body.regular)
+                    .foregroundStyle(LeafColor.text.primary)
             }
         }
     }
 
-    private func errorCard(message: String) -> some View {
-        GlassCard(padding: 24) {
-            VStack(alignment: .leading, spacing: 16) {
-                Label("Couldn't remove member", systemImage: "exclamationmark.triangle.fill")
-                    .font(.leafBody.weight(.semibold))
-                    .foregroundStyle(.red)
-                Text(message)
-                    .font(.leafBody)
-                    .foregroundStyle(.leafInk)
-                    .lineSpacing(3)
-            }
+    private func successSummary(outcome: RotationOutcome) -> String {
+        if outcome.pendingCount > 0 {
+            return "\(outcome.postedCount) of \(outcome.totalCount) peers notified. \(outcome.pendingCount) will sync when online."
+        } else if outcome.postedCount > 0 {
+            return "All \(outcome.postedCount) peer\(outcome.postedCount == 1 ? "" : "s") notified."
+        } else {
+            return "Local rotation done. No remaining peers to notify."
         }
     }
-
-    // MARK: - Footer
 
     private var footer: some View {
         HStack {
-            Button("Cancel") {
-                reader.dismiss()
-                dismiss()
-            }
-            .buttonStyle(.bordered)
-
+            LeafButton("Cancel", variant: .secondary, size: .md, action: dismissAndDiscard)
             Spacer()
-
             switch reader.state {
             case .idle:
-                Button("Remove") {
-                    reader.removeMember(memberID: memberID, displayName: displayName)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.red)
+                LeafButton(
+                    "Remove",
+                    variant: .destructive,
+                    size: .md,
+                    action: { reader.removeMember(memberID: memberID, displayName: displayName) }
+                )
             case .removing:
-                Button("Remove") { }
+                LeafButton("Remove", variant: .destructive, size: .md, isLoading: true, action: {})
                     .disabled(true)
-                    .buttonStyle(.borderedProminent)
-                    .tint(.red)
             case .success:
-                Button("Done") {
-                    orgReader.refresh()
-                    reader.dismiss()
-                    dismiss()
-                }
-                .buttonStyle(.borderedProminent)
+                LeafButton(
+                    "Done",
+                    variant: .primary,
+                    size: .md,
+                    action: {
+                        orgReader.refresh()
+                        reader.dismiss()
+                        dismiss()
+                    }
+                )
             case .error:
-                Button("Close") {
-                    reader.dismiss()
-                    dismiss()
-                }
-                .buttonStyle(.borderedProminent)
+                LeafButton("Close", variant: .primary, size: .md, action: dismissAndDiscard)
             }
         }
+    }
+
+    private func dismissAndDiscard() {
+        reader.dismiss()
+        dismiss()
     }
 }

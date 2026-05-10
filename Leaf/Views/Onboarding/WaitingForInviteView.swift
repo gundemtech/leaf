@@ -3,9 +3,10 @@
 //  Leaf
 //
 //  Phase 5.5.B — onboarding Step 1.5 для invitee: после share Join code'а юзер ждёт
-//  invite link. Auto-progress на (a) `.onOpenURL` (LeafApp dispatches на handler) либо
-//  (b) `applicationDidBecomeActive` clipboard-probe (handler.probeClipboard returns inviteURL).
-//  Manual fallback — "I have the invite link" → opens AcceptInviteSheet.
+//  invite link. Auto-progress на (a) `.onOpenURL` либо (b) `applicationDidBecomeActive`
+//  clipboard-probe. Manual fallback — "I have the invite link" → opens AcceptInviteSheet.
+//
+//  Track 2 / D4 — migrated to D1 atoms (LeafType / LeafButton / LeafColor / LeafSpace).
 //
 
 import SwiftUI
@@ -16,24 +17,22 @@ struct WaitingForInviteView: View {
     let onCancel: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: LeafSpace.md) {
+            HStack(spacing: LeafSpace.sm) {
                 ProgressView().controlSize(.small)
                 Text("Waiting for your team admin…")
-                    .font(.subheadline.weight(.semibold))
+                    .font(LeafType.title.small)
+                    .foregroundStyle(LeafColor.text.primary)
             }
             Text("Open Leaf after admin sends the invite link — it'll auto-fill from clipboard or open via the link itself.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(LeafType.body.small)
+                .foregroundStyle(LeafColor.text.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack {
-                Button("Back") { onCancel() }
-                    .buttonStyle(.link)
-                    .font(.caption)
+                LeafButton("Back", variant: .ghost, size: .sm, action: onCancel)
                 Spacer()
-                Button("I have the invite link") { onManualPaste() }
-                    .buttonStyle(.borderedProminent)
+                LeafButton("I have the invite link", variant: .primary, size: .sm, action: onManualPaste)
             }
         }
     }

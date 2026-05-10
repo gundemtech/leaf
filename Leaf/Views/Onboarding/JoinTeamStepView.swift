@@ -3,10 +3,7 @@
 //  Leaf
 //
 //  Phase 5.5.B — onboarding `.team` invitee path. Step 1: display name + Join code share.
-//  JoinCode encoded із IdentityService.ensureLocalIdentity().publicKey on appear; cached в
-//  @State так что повторные refresh'ы не re-derive. Embedded в pre-filled "inviteeShare" template
-//  (ShareTemplate.compose(.inviteeShare(displayName:, joinCode:))) → ShareTemplateButton отдаёт
-//  Copy / Mail / Messages.
+//  Track 2 / D4 — migrated to D1 atoms.
 //
 
 import SwiftUI
@@ -22,33 +19,32 @@ struct JoinTeamStepView: View {
     let onCancel: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: LeafSpace.md) {
             Text("Join existing team")
-                .font(.subheadline.weight(.semibold))
+                .font(LeafType.title.small)
+                .foregroundStyle(LeafColor.text.primary)
             Text("Pick a name your team will see, then send your Join code to whoever invited you.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(LeafType.body.small)
+                .foregroundStyle(LeafColor.text.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("YOUR DISPLAY NAME")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: LeafSpace.xs) {
+                Text("YOUR DISPLAY NAME").leafSectionLabel().foregroundStyle(LeafColor.text.tertiary)
                 TextField("e.g. Sasha", text: $displayName)
                     .textFieldStyle(.roundedBorder)
+                    .font(LeafType.body.regular)
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("YOUR JOIN CODE")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: LeafSpace.xs) {
+                Text("YOUR JOIN CODE").leafSectionLabel().foregroundStyle(LeafColor.text.tertiary)
                 if joinCode.isEmpty {
                     Text(loadError ?? "Generating…")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(LeafType.body.small)
+                        .foregroundStyle(LeafColor.text.secondary)
                 } else {
                     Text(joinCode)
-                        .font(.system(.caption, design: .monospaced))
+                        .font(LeafType.mono.small)
+                        .foregroundStyle(LeafColor.text.primary)
                         .lineLimit(2)
                         .textSelection(.enabled)
                 }
@@ -65,16 +61,18 @@ struct JoinTeamStepView: View {
             }
 
             HStack {
-                Button("Back") { onCancel() }
-                    .buttonStyle(.link)
-                    .font(.caption)
+                LeafButton("Back", variant: .ghost, size: .sm, action: onCancel)
                 Spacer()
-                Button("I shared it — wait for invite") {
-                    let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-                    acceptReader.saveInviteeDisplayName(trimmed)
-                    onAdvance()
-                }
-                .buttonStyle(.borderedProminent)
+                LeafButton(
+                    "I shared it — wait for invite",
+                    variant: .primary,
+                    size: .sm,
+                    action: {
+                        let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+                        acceptReader.saveInviteeDisplayName(trimmed)
+                        onAdvance()
+                    }
+                )
                 .disabled(joinCode.isEmpty || displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
@@ -87,7 +85,6 @@ struct JoinTeamStepView: View {
     private func loadJoinCode() {
         do {
             let hex = try acceptReader.myPubkeyHex()
-            // Hex → 32 bytes → JoinCode.encode.
             var bytes = Data(capacity: 32)
             var idx = hex.startIndex
             while idx < hex.endIndex {

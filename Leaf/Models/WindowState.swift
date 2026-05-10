@@ -19,16 +19,26 @@ enum WindowSection: String, CaseIterable, Hashable, Codable, Identifiable {
         }
     }
 
+    /// Asset Catalog name (Figma SVG, template-rendered) for sections with
+    /// a custom glyph; SF Symbol name for `.organization` (no custom glyph
+    /// shipped — section будет удалена когда UX уйдёт на single-team модель).
     var icon: String {
         switch self {
-        case .home:         "chart.bar.xaxis"
-        case .activity:     "list.bullet.rectangle"
-        case .team:         "person.2"
-        case .connections:  "link"
-        case .organization: "building.2"
-        case .settings:     "gearshape"
-        case .profile:      "person.crop.circle"
+        case .home:         LeafIcons.nav.home
+        case .activity:     LeafIcons.nav.activity
+        case .team:         LeafIcons.nav.team
+        case .connections:  LeafIcons.nav.connections
+        case .organization: LeafIcons.nav.organizationSF
+        case .settings:     LeafIcons.nav.settings
+        case .profile:      LeafIcons.nav.profile
         }
+    }
+
+    /// True when `icon` is an SF Symbol (system rendering); false when it
+    /// is an Asset Catalog name (template-rendered).
+    var iconIsSystem: Bool {
+        if case .organization = self { return true }
+        return false
     }
 }
 

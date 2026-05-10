@@ -1,10 +1,10 @@
 //
 //  PendingInviteRow.swift
-//  Leaf
-//
-//  Phase 5.5.C — per-row layout for PendingInvitesSection. Status-driven action cluster:
-//  .pending → [Re-share popover] + [Revoke]; .revoked / .expired / .failed → [Dismiss].
-//  .consumed never rendered (filtered at DB-level by readAllPendingInvites per spec D1).
+//  Track 2 / D3 — per-row layout for PendingInvitesSection on D1 substrate.
+//  Status-driven action cluster:
+//    .pending  → [Re-share popover] + [Revoke] (LeafIconButton.bordered/destructive)
+//    .revoked / .expired / .failed → [Dismiss] (LeafButton.secondary)
+//    .consumed → never rendered (filtered at DB-level by readAllPendingInvites).
 //
 
 import SwiftUI
@@ -18,19 +18,19 @@ struct PendingInviteRow: View {
     @State private var showingResharePopover = false
 
     var body: some View {
-        HStack(spacing: 14) {
-            avatar
+        HStack(alignment: .center, spacing: LeafSpace.md) {
+            LeafAvatar(initials: avatarInitials, size: .md)
 
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: LeafSpace.xxs) {
+                HStack(spacing: LeafSpace.sm) {
                     Text(displayLabel)
-                        .font(.leafBody)
-                        .foregroundStyle(.leafInk)
+                        .font(LeafType.body.regular)
+                        .foregroundStyle(LeafColor.text.primary)
                     statusBadge
                 }
                 Text(pubkeyShortHex(invite.inviteePubkeyHex))
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.leafInk.opacity(0.55))
+                    .font(LeafType.mono.small)
+                    .foregroundStyle(LeafColor.text.tertiary)
             }
 
             Spacer()
@@ -41,89 +41,69 @@ struct PendingInviteRow: View {
 
     // MARK: - Subviews
 
-    private var avatar: some View {
-        let initials = displayLabel
+    private var avatarInitials: String {
+        let parts = displayLabel
             .split(separator: " ")
             .prefix(2)
             .compactMap { $0.first.map(String.init) }
             .joined()
             .uppercased()
-        return Circle()
-            .fill(Color.leafAccent.opacity(0.12))
-            .frame(width: 36, height: 36)
-            .overlay(
-                Text(initials.isEmpty ? "?" : initials)
-                    .font(.leafBody.monospacedDigit())
-                    .foregroundStyle(.leafInk.opacity(0.6))
-            )
+        return parts.isEmpty ? "?" : parts
     }
 
     @ViewBuilder
     private var statusBadge: some View {
         switch invite.status {
         case .pending:
-            badge(text: "Awaiting", colour: .leafAccentDeep, fill: Color.leafAccent.opacity(0.18))
+            LeafBadge(text: "Awaiting", variant: .accent)
         case .revoked:
-            badge(text: "Revoked", colour: .leafInk.opacity(0.55), fill: Color.leafInk.opacity(0.08))
+            LeafBadge(text: "Revoked", variant: .neutral)
         case .expired:
-            badge(text: "Expired", colour: .leafInk.opacity(0.55), fill: Color.leafInk.opacity(0.08))
+            LeafBadge(text: "Expired", variant: .neutral)
         case .failed:
-            badge(text: "Failed", colour: .red.opacity(0.85), fill: Color.red.opacity(0.10))
+            LeafBadge(text: "Failed", variant: .neutral)
         case .consumed:
-            // Filtered at DB level — defensive EmptyView для switch exhaustiveness.
             EmptyView()
         }
-    }
-
-    private func badge(text: String, colour: Color, fill: Color) -> some View {
-        Text(text.uppercased())
-            .font(.system(.caption2, design: .monospaced))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(fill, in: Capsule())
-            .foregroundStyle(colour)
     }
 
     @ViewBuilder
     private var actionCluster: some View {
         switch invite.status {
         case .pending:
-            HStack(spacing: 8) {
-                Button {
-                    showingResharePopover = true
-                } label: {
-                    Label("Re-share", systemImage: "square.and.arrow.up")
-                        .labelStyle(.iconOnly)
-                }
-                .buttonStyle(.bordered)
+            HStack(spacing: LeafSpace.sm) {
+                LeafIconButton(
+                    asset: LeafIcons.comm.share,
+                    variant: .secondary,
+                    size: .md,
+                    action: { showingResharePopover = true }
+                )
                 .popover(isPresented: $showingResharePopover) {
                     resharePopoverContent
                 }
 
-                Button(role: .destructive) {
-                    onRevoke()
-                } label: {
-                    Label("Revoke", systemImage: "xmark.circle")
-                        .labelStyle(.iconOnly)
-                }
-                .buttonStyle(.bordered)
+                LeafIconButton(
+                    asset: LeafIcons.action.clear,
+                    variant: .destructive,
+                    size: .md,
+                    action: onRevoke
+                )
             }
         case .revoked, .expired, .failed:
-            Button("Dismiss", action: onDismiss)
-                .buttonStyle(.bordered)
+            LeafButton("Dismiss", variant: .secondary, size: .sm, action: onDismiss)
         case .consumed:
             EmptyView()
         }
     }
 
     private var resharePopoverContent: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: LeafSpace.md) {
             Text("Re-share invite link")
-                .font(.leafLabel)
-                .foregroundStyle(.leafInk)
+                .font(LeafType.title.small)
+                .foregroundStyle(LeafColor.text.primary)
             Text("Sends the same link Leaf already issued — invitee can still open it.")
-                .font(.leafCaption)
-                .foregroundStyle(.leafInk.opacity(0.7))
+                .font(LeafType.body.small)
+                .foregroundStyle(LeafColor.text.secondary)
                 .frame(maxWidth: 280, alignment: .leading)
                 .lineSpacing(2)
 
@@ -135,7 +115,7 @@ struct PendingInviteRow: View {
                 mailSubject: "Your Leaf invite link"
             )
         }
-        .padding(16)
+        .padding(LeafSpace.lg)
     }
 
     // MARK: - Helpers

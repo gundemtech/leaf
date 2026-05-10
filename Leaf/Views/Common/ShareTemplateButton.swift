@@ -3,7 +3,7 @@
 //  Leaf
 //
 //  Phase 5.5.B — three-channel share button: Mail (mailto:) / Messages (sms:) / Copy (NSPasteboard).
-//  Open URL via NSWorkspace.shared.open(_:); Mail/Messages пусть macOS resolves default handler.
+//  Track 2 / D4 — migrated from system .borderedProminent / .bordered to LeafButton primary/secondary.
 //
 
 import SwiftUI
@@ -17,27 +17,25 @@ struct ShareTemplateButton: View {
     var onCopy: (() -> Void)? = nil
 
     var body: some View {
-        HStack(spacing: 8) {
-            Button {
-                copyToPasteboard()
-            } label: {
-                Label("Copy", systemImage: "doc.on.doc")
-            }
-            .buttonStyle(.borderedProminent)
-
-            Button {
-                openMail()
-            } label: {
-                Label("Mail", systemImage: "envelope")
-            }
-            .buttonStyle(.bordered)
-
-            Button {
-                openMessages()
-            } label: {
-                Label("Messages", systemImage: "message")
-            }
-            .buttonStyle(.bordered)
+        HStack(spacing: LeafSpace.sm) {
+            LeafButton(
+                "Copy",
+                variant: .primary,
+                icon: .asset(LeafIcons.comm.copy),
+                action: copyToPasteboard
+            )
+            LeafButton(
+                "Mail",
+                variant: .secondary,
+                icon: .asset(LeafIcons.comm.email),
+                action: openMail
+            )
+            LeafButton(
+                "Messages",
+                variant: .secondary,
+                icon: .asset(LeafIcons.comm.message),
+                action: openMessages
+            )
         }
     }
 
