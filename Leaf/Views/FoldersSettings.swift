@@ -6,6 +6,10 @@
 //  Track 2 / D4 — migrated to LeafSection (cta-slot Add) + LeafCard wrapping
 //  ad-hoc folder rows. LeafEmptyState empty; LeafBanner.danger error.
 //
+//  Track 2 D4-followup — granularity picker switched from `.segmented` (native
+//  blue chrome read foreign on Leaf canvas) to `.menu` popup; per-row toggle
+//  uses empty title (just the switch); description rewritten en, tightened.
+//
 
 import SwiftUI
 import AppKit
@@ -17,7 +21,7 @@ struct FoldersSettings: View {
     var body: some View {
         LeafSection(
             title: "Watched folders",
-            description: "Leaf отслеживает file-level activity (создание, изменение, удаление) только в выбранных папках. L4 (default) — popover показывает только имя папки. L5 — basename файла. Toggle применяется только к новым событиям. История удалённой папки остаётся локально."
+            description: "Leaf tracks file activity (creation, modification, deletion) only inside selected folders. L4 keeps the folder name; L5 also captures file basenames. Toggle applies to new events only."
         ) {
             VStack(alignment: .leading, spacing: LeafSpace.md) {
                 if service.folders.isEmpty {
@@ -58,34 +62,36 @@ struct FoldersSettings: View {
 
     private func folderRow(_ folder: WatchedFolder) -> some View {
         HStack(alignment: .center, spacing: LeafSpace.md) {
-            VStack(alignment: .leading, spacing: LeafSpace.xs) {
+            VStack(alignment: .leading, spacing: LeafSpace.xxs) {
                 Text(URL(fileURLWithPath: folder.path).lastPathComponent)
                     .font(LeafType.body.regular)
                     .foregroundStyle(LeafColor.text.primary)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                HStack(spacing: LeafSpace.md) {
-                    Picker("Granularity", selection: Binding(
-                        get: { folder.maxGranularity },
-                        set: { service.update(id: folder.id, granularity: $0) }
-                    )) {
-                        Text("L4 — folder only").tag(WatchedFolderGranularity.L4)
-                        Text("L5 — file names").tag(WatchedFolderGranularity.L5)
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .frame(maxWidth: 220)
-
-                    LeafToggle(
-                        title: "Enabled",
-                        isOn: Binding(
-                            get: { folder.enabled },
-                            set: { service.update(id: folder.id, enabled: $0) }
-                        )
-                    )
-                }
+                Text(folder.path)
+                    .font(LeafType.body.small)
+                    .foregroundStyle(LeafColor.text.tertiary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
             }
-            Spacer()
+            Spacer(minLength: LeafSpace.md)
+            Picker("Granularity", selection: Binding(
+                get: { folder.maxGranularity },
+                set: { service.update(id: folder.id, granularity: $0) }
+            )) {
+                Text("L4 — folder only").tag(WatchedFolderGranularity.L4)
+                Text("L5 — file names").tag(WatchedFolderGranularity.L5)
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .fixedSize()
+            LeafToggle(
+                title: "",
+                isOn: Binding(
+                    get: { folder.enabled },
+                    set: { service.update(id: folder.id, enabled: $0) }
+                )
+            )
             LeafIconButton(
                 asset: LeafIcons.object.trash,
                 variant: .ghost,

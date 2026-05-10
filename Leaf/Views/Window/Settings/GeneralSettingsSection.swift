@@ -1,8 +1,8 @@
 //
 //  GeneralSettingsSection.swift
 //  Track 2 / D4 — migrated from native Form to LeafSection chain. LaunchAgent
-//  toggle + status row + last-error inline + refresh CTA; Updates section with
-//  version row + Check-for-Updates CTA.
+//  toggle + inline status row + last-error banner; Updates section is a single
+//  horizontal row "version · build" + Check-for-Updates CTA.
 //
 
 import SwiftUI
@@ -32,23 +32,22 @@ struct GeneralSettingsSection: View {
                             )
                         )
 
-                        LeafDivider()
-
-                        statusRow
-
-                        if let error = launchAgent.lastErrorMessage {
-                            LeafDivider()
-                            LeafBanner(tone: .danger, title: "Last error", description: error)
-                        }
-
-                        HStack {
+                        HStack(spacing: LeafSpace.sm) {
+                            LeafDot(tone: statusTone, size: .md)
+                            Text(launchAgent.statusDescription)
+                                .font(LeafType.body.small)
+                                .foregroundStyle(LeafColor.text.secondary)
                             Spacer()
                             LeafButton(
-                                "Refresh status",
-                                variant: .secondary,
+                                "Refresh",
+                                variant: .ghost,
                                 size: .sm,
                                 action: launchAgent.refreshStatus
                             )
+                        }
+
+                        if let error = launchAgent.lastErrorMessage {
+                            LeafBanner(tone: .danger, title: "Last error", description: error)
                         }
                     }
                 }
@@ -59,45 +58,25 @@ struct GeneralSettingsSection: View {
                 description: "Updates served from updates.gundem.tech. Sparkle 2 + EdDSA-signed appcast."
             ) {
                 LeafCard(variant: .raised, padding: .regular) {
-                    VStack(alignment: .leading, spacing: LeafSpace.md) {
-                        versionRow
-                        HStack {
-                            Spacer()
-                            LeafButton(
-                                "Check for Updates…",
-                                variant: .secondary,
-                                size: .sm,
-                                action: updater.checkForUpdates
-                            )
+                    HStack(alignment: .center, spacing: LeafSpace.md) {
+                        VStack(alignment: .leading, spacing: LeafSpace.xxs) {
+                            Text("Leaf \(versionShort)")
+                                .font(LeafType.body.regular)
+                                .foregroundStyle(LeafColor.text.primary)
+                            Text("Build \(versionBuild)")
+                                .font(LeafType.body.small)
+                                .foregroundStyle(LeafColor.text.tertiary)
                         }
+                        Spacer()
+                        LeafButton(
+                            "Check for updates",
+                            variant: .secondary,
+                            size: .sm,
+                            action: updater.checkForUpdates
+                        )
                     }
                 }
             }
-        }
-    }
-
-    private var statusRow: some View {
-        HStack(spacing: LeafSpace.sm) {
-            LeafDot(tone: statusTone, size: .md)
-            Text("Status")
-                .font(LeafType.body.regular)
-                .foregroundStyle(LeafColor.text.primary)
-            Spacer()
-            Text(launchAgent.statusDescription)
-                .font(LeafType.body.regular)
-                .foregroundStyle(LeafColor.text.secondary)
-        }
-    }
-
-    private var versionRow: some View {
-        HStack(spacing: LeafSpace.sm) {
-            Text("Version")
-                .font(LeafType.body.regular)
-                .foregroundStyle(LeafColor.text.primary)
-            Spacer()
-            Text(versionDisplay)
-                .font(LeafType.mono.regular)
-                .foregroundStyle(LeafColor.text.tertiary)
         }
     }
 
@@ -110,10 +89,13 @@ struct GeneralSettingsSection: View {
         }
     }
 
-    private var versionDisplay: String {
+    private var versionShort: String {
         let info = Bundle.main.infoDictionary ?? [:]
-        let short = (info["CFBundleShortVersionString"] as? String) ?? "?"
-        let build = (info["CFBundleVersion"] as? String) ?? "?"
-        return "\(short) (build \(build))"
+        return (info["CFBundleShortVersionString"] as? String) ?? "?"
+    }
+
+    private var versionBuild: String {
+        let info = Bundle.main.infoDictionary ?? [:]
+        return (info["CFBundleVersion"] as? String) ?? "?"
     }
 }
