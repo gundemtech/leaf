@@ -8,7 +8,7 @@ import SwiftUI
 #if DEBUG
 struct LeafSparklinePreview: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: LeafSpace.sm) {
+        VStack(alignment: .leading, spacing: LeafSpace.md) {
             Text("LeafSparkline").font(LeafType.title.medium)
                 .foregroundStyle(LeafColor.text.primary)
 
@@ -28,12 +28,12 @@ struct LeafSparklinePreview: View {
             HStack(alignment: .center, spacing: LeafSpace.md) {
                 LeafMetricAmbient(value: "27", label: "commits")
                 LeafSparkline(values: [1, 3, 2, 5, 4, 7, 6, 9])
-                    .frame(width: 80)
+                    .frame(width: 80, height: 32)
                 LeafMetricDelta(value: "+8", direction: .up)
             }
 
             TokensInlineSpec(
-                spec: "LeafSparkline · accent.primary stroke 1.5pt · round caps · static path · minHeight 24",
+                spec: "LeafSparkline · Catmull-Rom smoothed · accent.primary stroke 1.5pt + 0.18→0 gradient area fill + 4pt terminal dot · static path · minHeight 24",
                 codeSnippet: "LeafSparkline(values: [1, 3, 2, 5, 4, 7, 6, 9])"
             )
         }
@@ -50,7 +50,7 @@ struct LeafSparklinePreview: View {
                 .foregroundStyle(LeafColor.text.tertiary)
                 .frame(width: 160, alignment: .leading)
             LeafSparkline(values: values)
-                .frame(height: 24)
+                .frame(height: 32)
         }
     }
 }
