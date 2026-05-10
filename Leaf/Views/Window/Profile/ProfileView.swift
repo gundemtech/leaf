@@ -55,7 +55,11 @@ struct ProfileView: View {
     private var statTiles: some View {
         if case .loaded(let snapshot, _) = reader.state {
             LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 220, maximum: 320), spacing: LeafSpace.lg)],
+                columns: [
+                    GridItem(.flexible(), spacing: LeafSpace.lg),
+                    GridItem(.flexible(), spacing: LeafSpace.lg),
+                    GridItem(.flexible(), spacing: LeafSpace.lg),
+                ],
                 spacing: LeafSpace.lg
             ) {
                 LeafMetricCard(
@@ -64,7 +68,11 @@ struct ProfileView: View {
                 )
                 LeafMetricCard(
                     title: "Deep work streak",
-                    value: deepStreakValue(snapshot.deepWorkStreak)
+                    value: deepStreakDays(snapshot.deepWorkStreak)
+                )
+                LeafMetricCard(
+                    title: "Total focus",
+                    value: deepStreakHours(snapshot.deepWorkStreak)
                 )
             }
         } else {
@@ -74,14 +82,21 @@ struct ProfileView: View {
         }
     }
 
-    private func deepStreakValue(_ streak: DeepWorkStreak) -> String {
+    /// Day count of the current deep-work streak — parallel format to
+    /// Active streak so both cards read as a "N days" pair.
+    private func deepStreakDays(_ streak: DeepWorkStreak) -> String {
         if streak.days == 0 { return "—" }
-        return "\(streak.days)d \(formatHours(streak.totalSeconds))"
+        return "\(streak.days) day\(streak.days == 1 ? "" : "s")"
     }
 
-    private func formatHours(_ seconds: TimeInterval) -> String {
-        let hours = Int(seconds) / 3600
-        let minutes = (Int(seconds) % 3600) / 60
+    /// Total focused time accumulated during the current deep-work streak.
+    /// Surfaced as its own card to avoid cramming "Nd Mh Km" into one value
+    /// (overflowed the metric card width).
+    private func deepStreakHours(_ streak: DeepWorkStreak) -> String {
+        if streak.totalSeconds < 60 { return "—" }
+        let hours = Int(streak.totalSeconds) / 3600
+        let minutes = (Int(streak.totalSeconds) % 3600) / 60
+        if hours == 0 { return "\(minutes)m" }
         return "\(hours)h \(minutes)m"
     }
 }
