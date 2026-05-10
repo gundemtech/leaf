@@ -1,6 +1,11 @@
 //
 //  LeafSheetLayoutPreview.swift
 //  Track 2 / D1 — TokensPreview entry for Template T2 LeafSheetLayout.
+//  LeafSheetLayout enforces minWidth:480 / minHeight:360 (sheet ergonomic
+//  floor) which exceeds the inline section frame, so the preview renders
+//  a static mockup that diagrams toolbar + content + glass background
+//  using the same tokens. Production usage stays identical to the
+//  codeSnippet below.
 //
 
 import SwiftUI
@@ -12,7 +17,17 @@ struct LeafSheetLayoutPreview: View {
             Text("LeafSheetLayout").font(LeafType.title.medium)
                 .foregroundStyle(LeafColor.text.primary)
 
-            LeafSheetLayout(title: "Invite teammate", onDismiss: {}) {
+            VStack(spacing: 0) {
+                HStack(spacing: 0) {
+                    Text("Invite teammate")
+                        .font(LeafType.title.medium)
+                        .foregroundStyle(LeafColor.text.primary)
+                    Spacer()
+                    LeafIconButton(systemName: "xmark", variant: .ghost, size: .md, action: {})
+                }
+                .padding(.horizontal, LeafSpace.lg)
+                .padding(.vertical, LeafSpace.sm)
+                LeafDivider()
                 VStack(alignment: .leading, spacing: LeafSpace.lg) {
                     Text("Email")
                         .font(LeafType.label)
@@ -27,12 +42,11 @@ struct LeafSheetLayoutPreview: View {
                         LeafProminentButton(action: {}) { Text("Send invite") }
                     }
                 }
+                .padding(LeafSpace.lg)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
-            .frame(width: LeafSheetLayoutTokens.minWidth,
-                   height: LeafSheetLayoutTokens.minHeight)
-            .scaleEffect(0.55, anchor: .topLeading)
-            .frame(width: LeafSheetLayoutTokens.minWidth * 0.55,
-                   height: LeafSheetLayoutTokens.minHeight * 0.55)
+            .frame(height: 280)
+            .leafGlass(.regular, cornerRadius: LeafRadius.lg)
 
             TokensInlineSpec(
                 spec: "LeafSheetLayout · LeafToolbar header · dismiss xmark · glass regular · radius lg · 480×360 min",

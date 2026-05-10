@@ -1,41 +1,59 @@
 //
 //  LeafOnboardingStepLayoutPreview.swift
 //  Track 2 / D1 — TokensPreview entry for Template T4 LeafOnboardingStepLayout.
+//  LeafOnboardingStepLayout uses .frame(maxWidth/Height: .infinity) (full-bleed
+//  step takes whole host window) which doesn't embed cleanly at sub-window
+//  scale, so the preview renders a static mockup that diagrams progress
+//  capsules + content + nav-buttons using the same tokens. Production
+//  usage stays identical to the codeSnippet below.
 //
 
 import SwiftUI
 
 #if DEBUG
 struct LeafOnboardingStepLayoutPreview: View {
+    private let stepIndex = 1
+    private let totalSteps = 4
+
     var body: some View {
         VStack(alignment: .leading, spacing: LeafSpace.sm) {
             Text("LeafOnboardingStepLayout").font(LeafType.title.medium)
                 .foregroundStyle(LeafColor.text.primary)
 
-            LeafOnboardingStepLayout(
-                stepIndex: 1,
-                totalSteps: 4,
-                content: {
-                    VStack(alignment: .leading, spacing: LeafSpace.lg) {
-                        Text("Connect your team")
-                            .font(LeafType.title.large)
-                            .foregroundStyle(LeafColor.text.primary)
-                        Text("Leaf shares only what you opt-in to. Bring up to 50 teammates onto an end-to-end-encrypted relay.")
-                            .font(LeafType.body.regular)
-                            .foregroundStyle(LeafColor.text.tertiary)
+            VStack(spacing: LeafSpace.xl) {
+                HStack(spacing: LeafSpace.xs) {
+                    ForEach(0..<totalSteps, id: \.self) { i in
+                        Capsule()
+                            .fill(i <= stepIndex ? LeafColor.accent.primary : LeafColor.border.subtle)
+                            .frame(height: LeafOnboardingStepLayoutTokens.progressBarHeight)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                },
-                navButtons: {
+                }
+                .padding(.horizontal, LeafSpace.xxl)
+
+                Spacer()
+
+                VStack(alignment: .leading, spacing: LeafSpace.md) {
+                    Text("Connect your team")
+                        .font(LeafType.title.large)
+                        .foregroundStyle(LeafColor.text.primary)
+                    Text("Leaf shares only what you opt-in to. Bring up to 50 teammates onto an end-to-end-encrypted relay.")
+                        .font(LeafType.body.regular)
+                        .foregroundStyle(LeafColor.text.tertiary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Spacer()
+
+                HStack(spacing: LeafSpace.md) {
                     Spacer()
                     LeafSecondaryButton(action: {}) { Text("Back") }
                     LeafProminentButton(action: {}) { Text("Continue") }
                 }
-            )
-            .frame(width: 720, height: 480)
+            }
+            .padding(LeafSpace.xl)
+            .frame(height: 320)
+            .background(LeafColor.surface.canvas)
             .clipShape(RoundedRectangle(cornerRadius: LeafRadius.lg, style: .continuous))
-            .scaleEffect(0.45, anchor: .topLeading)
-            .frame(width: 720 * 0.45, height: 480 * 0.45)
 
             TokensInlineSpec(
                 spec: "LeafOnboardingStepLayout · progress capsules h:4 · content maxWidth 560 · padding xxl · canvas bg",
