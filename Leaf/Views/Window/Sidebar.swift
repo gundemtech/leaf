@@ -1,3 +1,11 @@
+//
+//  Sidebar.swift
+//  Track 2 / D2 — three-group sidebar (LEAF / COLLABORATION / ACCOUNT) на
+//  LeafNavRow (D1 organism O3). Grouping живёт исключительно тут — каждая
+//  Section хардкодит свои WindowSection cases. Badge slot и shortcut slot
+//  пустые (D2 baseline; D3+ может wire'нуть для Activity unread / etc).
+//
+
 import SwiftUI
 
 struct Sidebar: View {
@@ -5,41 +13,37 @@ struct Sidebar: View {
 
     var body: some View {
         List(selection: $selection) {
-            Section {
-                ForEach(WindowSection.allCases) { section in
-                    SidebarRow(section: section, isSelected: section == selection)
-                        .tag(section)
-                }
-            } header: {
-                Text("Leaf")
-                    .leafLabelStyle()
-                    .padding(.bottom, 6)
-            }
+            section(title: "LEAF", items: [.home, .activity])
+            section(title: "COLLABORATION", items: [.team, .connections, .organization])
+            section(title: "ACCOUNT", items: [.settings, .profile])
         }
         .listStyle(.sidebar)
-        .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 260)
     }
-}
 
-private struct SidebarRow: View {
-    let section: WindowSection
-    let isSelected: Bool
-
-    var body: some View {
-        Label {
-            Text(section.title)
-                .font(.leafBody)
-                .foregroundStyle(isSelected ? .leafInk : Color.leafInk.opacity(0.85))
-        } icon: {
-            Group {
-                if section.iconIsSystem {
-                    Image(systemName: section.icon)
-                } else {
-                    Image.leafAsset(section.icon).frame(width: 16, height: 16)
-                }
+    @ViewBuilder
+    private func section(title: String, items: [WindowSection]) -> some View {
+        Section {
+            ForEach(items) { item in
+                navRow(for: item)
+                    .tag(item)
             }
-            .foregroundStyle(isSelected ? .leafAccentDeep : .leafMuted)
+        } header: {
+            Text(title)
+                .leafSectionLabel()
+                .foregroundStyle(LeafColor.text.tertiary)
         }
-        .padding(.vertical, 2)
+    }
+
+    @ViewBuilder
+    private func navRow(for item: WindowSection) -> some View {
+        LeafNavRow(
+            icon: item.iconIsSystem ? .system(item.icon) : .asset(item.icon),
+            title: item.title,
+            isSelected: Binding(
+                get: { selection == item },
+                set: { if $0 { selection = item } }
+            ),
+            onTap: { selection = item }
+        )
     }
 }
