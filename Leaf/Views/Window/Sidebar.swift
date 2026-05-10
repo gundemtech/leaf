@@ -31,8 +31,14 @@ private struct SidebarRow: View {
                 .font(.leafBody)
                 .foregroundStyle(isSelected ? .leafInk : Color.leafInk.opacity(0.85))
         } icon: {
-            Image(systemName: section.icon)
-                .foregroundStyle(isSelected ? .leafAccentDeep : .leafMuted)
+            Group {
+                if section.iconIsSystem {
+                    Image(systemName: section.icon)
+                } else {
+                    Image.leafAsset(section.icon).frame(width: 16, height: 16)
+                }
+            }
+            .foregroundStyle(isSelected ? .leafAccentDeep : .leafMuted)
         }
         .padding(.vertical, 2)
     }

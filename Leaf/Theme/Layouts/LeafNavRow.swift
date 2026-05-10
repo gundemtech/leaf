@@ -2,12 +2,18 @@
 //  LeafNavRow.swift
 //  Track 2 / D1 — Organism O3. Sidebar nav row — icon + title + optional
 //  badge + optional keyboard shortcut · states rest / hover / selected.
+//  Accepts SF Symbol (`systemName:`) or Asset Catalog (`asset:`) glyph.
 //
 
 import SwiftUI
 
 struct LeafNavRow: View {
-    let icon: String
+    enum IconRef {
+        case system(String)
+        case asset(String)
+    }
+
+    let icon: IconRef
     let title: String
     var badge: Int? = nil
     var shortcut: String? = nil
@@ -19,11 +25,7 @@ struct LeafNavRow: View {
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: LeafSpace.sm) {
-                LeafIcon(
-                    systemName: icon,
-                    size: .md,
-                    tint: isSelected ? LeafColor.accent.primary : LeafColor.text.secondary
-                )
+                iconView
                 Text(title)
                     .font(LeafType.body.regular)
                     .foregroundStyle(isSelected ? LeafColor.text.primary : LeafColor.text.secondary)
@@ -45,6 +47,17 @@ struct LeafNavRow: View {
         .buttonStyle(.plain)
         .onHover { hover = $0 }
         .leafAnimation(LeafMotion.spring.snappy, value: hover)
+    }
+
+    @ViewBuilder
+    private var iconView: some View {
+        let tint = isSelected ? LeafColor.accent.primary : LeafColor.text.secondary
+        switch icon {
+        case .system(let name):
+            LeafIcon(systemName: name, size: .md, tint: tint)
+        case .asset(let name):
+            LeafIcon(asset: name, size: .md, tint: tint)
+        }
     }
 
     private var backgroundFill: Color {

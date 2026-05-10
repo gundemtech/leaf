@@ -26,10 +26,18 @@ enum LeafIcon_Action {
 }
 
 enum LeafIcon_Nav {
-    static let sidebar: String = "leaf-nav-sidebar"
-    // search & filter intentionally remain SF Symbols — see header.
-    static let searchSF: String = "magnifyingglass"
-    static let filterSF: String = "line.3.horizontal.decrease.circle"
+    static let sidebar:     String = "leaf-nav-sidebar"
+    static let home:        String = "leaf-nav-home"
+    static let team:        String = "leaf-nav-team"
+    static let settings:    String = "leaf-nav-settings"
+    static let activity:    String = "leaf-nav-activity"
+    static let connections: String = "leaf-nav-connections"
+    static let profile:     String = "leaf-nav-profile"
+    // search / filter / organization intentionally remain SF Symbols.
+    // organization будет removed когда UX уйдёт на single-team модель.
+    static let searchSF:       String = "magnifyingglass"
+    static let filterSF:       String = "line.3.horizontal.decrease.circle"
+    static let organizationSF: String = "building.2"
 }
 
 enum LeafIcon_Comm {

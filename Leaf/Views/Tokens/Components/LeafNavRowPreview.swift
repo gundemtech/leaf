@@ -17,7 +17,7 @@ struct LeafNavRowPreview: View {
 
             VStack(alignment: .leading, spacing: LeafSpace.xxs) {
                 LeafNavRow(
-                    icon: "house",
+                    icon: .asset(LeafIcons.nav.home),
                     title: "Home",
                     isSelected: $homeSelected,
                     onTap: {
@@ -27,7 +27,7 @@ struct LeafNavRowPreview: View {
                     }
                 )
                 LeafNavRow(
-                    icon: "person.2",
+                    icon: .asset(LeafIcons.nav.team),
                     title: "Team",
                     badge: 3,
                     isSelected: $teamSelected,
@@ -38,7 +38,7 @@ struct LeafNavRowPreview: View {
                     }
                 )
                 LeafNavRow(
-                    icon: "gearshape",
+                    icon: .asset(LeafIcons.nav.settings),
                     title: "Settings",
                     shortcut: "⌘,",
                     isSelected: $settingsSelected,
@@ -52,8 +52,8 @@ struct LeafNavRowPreview: View {
             .frame(width: 240)
 
             TokensInlineSpec(
-                spec: "LeafNavRow · 36pt height · rest/hover/selected · accent.subtle bg selected · LeafBadge + LeafKeyboardShortcut slots",
-                codeSnippet: "LeafNavRow(icon: \"house\", title: \"Home\", isSelected: $sel) { tap() }"
+                spec: "LeafNavRow · 36pt height · rest/hover/selected · accent.subtle bg selected · LeafBadge + LeafKeyboardShortcut slots · icon (asset|system)",
+                codeSnippet: "LeafNavRow(icon: .asset(LeafIcons.nav.home), title: \"Home\", isSelected: $sel) { tap() }"
             )
         }
         .padding(LeafSpace.lg)
