@@ -43,7 +43,7 @@ struct LeafBannerPreview: View {
             }
 
             TokensInlineSpec(
-                spec: "LeafBanner · info/success/warning/danger · icon + title + desc + optional CTA + optional dismiss",
+                spec: "LeafBanner · raised surface + LeafIconChip md tone-tinted leading + LeafColor.border.subtle hairline · primary CTA sm + ghost dismiss md · info/success/warning/danger",
                 codeSnippet: "LeafBanner(tone: .info, title: \"…\", description: \"…\")"
             )
         }
