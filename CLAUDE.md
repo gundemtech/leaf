@@ -103,3 +103,27 @@ App-репо **публичный**. Перед каждым `git push` в `gund
 ### Spec
 
 Полное описание — [leaf-docs/infra/specs/2026-05-10-leaf-internal-dashboard-design.md](https://github.com/gundemtech/leaf-docs/blob/main/infra/specs/2026-05-10-leaf-internal-dashboard-design.md).
+
+## Team awareness через leaf-presence MCP
+
+Если у текущей Claude Code сессии есть MCP сервер `leaf-presence` (проверь через mention в tool inventory: `leaf_team_status`, `leaf_handoff_list`, `leaf_question_list` и др.):
+
+**В начале сессии**, если cwd одна из `~/Desktop/Leaf/{leaf,leaf-internal,leaf-docs,leaf-relay}`:
+
+1. Вызови `leaf_handoff_list(scope="me")` — pending handoffs ко мне
+2. Вызови `leaf_question_list(scope="me-target")` — open questions ко мне
+3. Прочитай `leaf://team/drifts/active` — есть ли у меня drift'ы (текущая ветка/план не в `roadmap.yaml`)
+4. Если что-то ненулевое — суммируй первым сообщением: «У тебя N handoffs, M questions, K drifts. [Список одной строкой]. Что разбираем?»
+5. Если всё пусто — не упоминай team awareness, переходи к запросу пользователя.
+
+**Когда пользователь говорит** «спроси Диму X» / «уточни у Антона Y» — используй `leaf_ask_question(to="dima"/"anton", text=..., plan_ref=current_plan, branch_ref=current_branch)` вместо Telegram. Текст question'а ≤ 140 символов.
+
+**Когда видишь open question касающийся текущего плана/ветки** (через `leaf_question_list(scope="me-target")` или `leaf://team/questions/open`) — ответь через `leaf_answer_question(question_id, text)` с текстом ≤ 280 символов, или явно скажи пользователю «не знаю, эскалируй».
+
+**Когда заканчиваешь работу над feature** с незакрытыми TodoWrite items и пользователь подтвердил pause — предложи `leaf_handoff_create(...)` для другого члена команды или для будущей own session.
+
+**Drift response.** Если `leaf://team/drifts/active` показал что моя ветка/план не в roadmap — упомяни пользователю: «branch X не в roadmap.yaml — добавить или это draft?» Не добавляй сам, только спроси.
+
+**Когда НЕ использовать** ask_question / handoff_create:
+- Если вопрос/задача — short, in-flight clarification («какой именно параметр функции?») — это inline conversation, не async question.
+- Если пользователь явно сказал «не пиши Диме / не дёргай команду».
