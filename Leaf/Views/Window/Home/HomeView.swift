@@ -27,11 +27,11 @@ import LeafCore
 
 private let knownLinearPrefixesForHero: Set<String> = ["LEAF"]
 
-/// Hero app-icon size — 40pt. Squircle включает ~10% внутреннего padding'а,
-/// визуальное «тело» ≈ 36pt, что близко к line-height `title.large` (28pt
-/// font ≈ 34pt line-height). Иконка визуально лежит «по одной линии» с title.
-/// Не входит в LeafIconSize tokens (.xl = 32pt) — hero единственный consumer.
-private let heroIconSize: CGFloat = 40
+/// Hero app-icon size — 36pt. С `heroIconAnchor` (top = title cap-top) icon
+/// верхней гранью лежит на линии cap-top'а заголовка, нижней — на середине
+/// caption. Не входит в LeafIconSize tokens (.xl = 32pt) — hero единственный
+/// consumer 36pt.
+private let heroIconSize: CGFloat = 36
 
 /// Bleached leaf-green for cosmetic accent tints (provider row icons,
 /// RIGHT NOW column headers). `accent.subtle` в dark mode = 35%-alpha
@@ -41,17 +41,23 @@ extension Color {
     static var leafAccentBleached: Color { LeafColor.accent.primary.opacity(0.6) }
 }
 
-/// Custom alignment guide — центрирует hero icon по центру title-line,
-/// не по центру всей пары (title+caption). Без этого `.center` HStack
-/// тянет иконку вниз к мидпойнту между title и caption.
+/// Custom alignment guide — пинит icon top к title cap-top, не center-to-center.
+/// Title frame включает leading выше cap-line'а (для 28pt SF Pro Display
+/// semibold ≈ 7pt сверху над «T»), поэтому icon center = title frame center
+/// визуально ставит squircle выше cap-line'а. Cap-top считаем как
+/// `firstTextBaseline - capHeight`; capHeight ≈ 0.71 от font size для SF Pro
+/// Display semibold (Apple metrics; 0.71 — empirical, не доку из Apple).
 extension VerticalAlignment {
-    private struct HeroTitleCenter: AlignmentID {
+    private struct HeroIconAnchor: AlignmentID {
         static func defaultValue(in context: ViewDimensions) -> CGFloat {
-            context[VerticalAlignment.center]
+            context[VerticalAlignment.top]
         }
     }
-    static let heroTitleCenter = VerticalAlignment(HeroTitleCenter.self)
+    static let heroIconAnchor = VerticalAlignment(HeroIconAnchor.self)
 }
+
+/// Cap-height ratio для SF Pro Display semibold — empirical.
+private let heroTitleCapHeightRatio: CGFloat = 0.71
 
 /// Hero caption fallback truncation when no Linear ID matches the active
 /// session's contextLabel — caps at this many chars before middle-truncating
@@ -243,17 +249,19 @@ private struct HeroBlock: View {
     ) -> some View {
         if let bundleID,
            let nsImage = AppIconResolver.shared.icon(for: bundleID, size: heroIconSize) {
-            HStack(alignment: .heroTitleCenter, spacing: LeafSpace.md) {
+            HStack(alignment: .heroIconAnchor, spacing: LeafSpace.md) {
                 Image(nsImage: nsImage)
                     .resizable()
                     .interpolation(.high)
                     .aspectRatio(contentMode: .fit)
                     .frame(width: heroIconSize, height: heroIconSize)
-                    .alignmentGuide(.heroTitleCenter) { $0.height / 2 }
+                    .alignmentGuide(.heroIconAnchor) { $0[.top] }
                 VStack(alignment: .leading, spacing: LeafSpace.xs) {
                     title
                         .font(LeafType.title.large)
-                        .alignmentGuide(.heroTitleCenter) { $0.height / 2 }
+                        .alignmentGuide(.heroIconAnchor) { d in
+                            d[.firstTextBaseline] - 28 * heroTitleCapHeightRatio
+                        }
                     caption
                         .font(LeafType.body.small)
                 }
