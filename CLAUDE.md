@@ -72,3 +72,34 @@ App-репо **публичный**. Перед каждым `git push` в `gund
 - `/sync-docs <тема>` — синхронизация решения в whitepaper (leaf-docs).
 - `/pre-push-leaf` — ручная проверка diff перед пушем в публичный app-репо.
 - `/audit-brain` — ревизия shared memory (размеры `.claude/shared/*.md`).
+
+## leaf-internal — internal dashboard
+
+Этот репо подаёт данные на внутренний дашборд `leaf-internal.gundem.tech` (приватный, под basic auth, только Антон + Дима).
+
+### Когда обновлять architecture.yaml
+
+После добавления нового компонента в `Packages/LeafCore/Sources/LeafCore/{Detection,Collectors,DB,MCP,E2E}/...`:
+
+1. Открой `~/Desktop/Leaf/leaf-internal/architecture.yaml`.
+2. Найди соответствующий layer (или создай новый).
+3. Добавь component узел (status: in-progress / done / planned / blocked, owner: dima / anton / claude-vps).
+4. Сохрани — settings.json hook автоматом sanitize-публикует и пушит в leaf-internal.
+
+### Когда обновлять roadmap.yaml
+
+После закрытия milestone (Phase X.Y wrap, Track X done): обнови phase-узел status → done + completed_at, parent's progress_pct.
+
+### Handoff/blocked-комменты в плане
+
+В `~/Desktop/Leaf/leaf/.claude/plans/<plan>.md`:
+
+- `<!-- @anton: возьми с Task 12 -->` — handoff
+- `<!-- BLOCKED: ждём merge PR #142 -->` — блокер
+- `<!-- TBD -->` — фаза не расписана
+
+Дашборд парсит и выводит на главной «Требует внимания».
+
+### Spec
+
+Полное описание — [leaf-docs/infra/specs/2026-05-10-leaf-internal-dashboard-design.md](https://github.com/gundemtech/leaf-docs/blob/main/infra/specs/2026-05-10-leaf-internal-dashboard-design.md).
