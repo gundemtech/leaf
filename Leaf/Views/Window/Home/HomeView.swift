@@ -174,31 +174,65 @@ private struct HeroBlock: View {
         let lastSession = snapshot.recentSessions.first
         let focus = focusTotal(snapshot)
 
-        VStack(alignment: .leading, spacing: LeafSpace.xs) {
-            switch heroState(active: active, lastSession: lastSession, focus: focus) {
-            case .active(let session):
+        switch heroState(active: active, lastSession: lastSession, focus: focus) {
+        case .active(let session):
+            heroLayout(bundleID: session.bundleID) {
                 Text(AppNameResolver.shared.displayName(for: session.bundleID))
                     .font(LeafType.title.large)
                     .foregroundStyle(LeafColor.text.primary)
                 Text(activeCaption(session: session))
                     .font(LeafType.body.small)
                     .foregroundStyle(LeafColor.text.tertiary)
+            }
 
-            case .idle(let session):
+        case .idle(let session):
+            heroLayout(bundleID: session.bundleID) {
                 Text("Idle")
                     .font(LeafType.title.large)
                     .foregroundStyle(LeafColor.text.secondary)
                 Text("last: \(AppNameResolver.shared.displayName(for: session.bundleID)) · \(relativePast(session.end))")
                     .font(LeafType.body.small)
                     .foregroundStyle(LeafColor.text.tertiary)
+            }
 
-            case .noData:
+        case .noData:
+            heroLayout(bundleID: nil) {
                 Text("Leaf is listening")
                     .font(LeafType.title.large)
                     .foregroundStyle(LeafColor.text.secondary)
                 Text("Connect a provider in Connections to enrich")
                     .font(LeafType.body.small)
                     .foregroundStyle(LeafColor.text.tertiary)
+            }
+        }
+    }
+
+    /// Hero row: real macOS app icon (32pt — LeafIconSize.xl) ведущим
+    /// элементом + VStack(title, caption). Если bundleID nil или иконка
+    /// не резолвится — рендерим только текст без icon-колонки, чтобы
+    /// layout не уезжал.
+    @ViewBuilder
+    private func heroLayout<Content: View>(
+        bundleID: String?,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        let iconSize = LeafIconSize.xl.pt
+
+        if let bundleID,
+           let nsImage = AppIconResolver.shared.icon(for: bundleID, size: iconSize) {
+            HStack(alignment: .center, spacing: LeafSpace.md) {
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: iconSize, height: iconSize)
+                VStack(alignment: .leading, spacing: LeafSpace.xs) {
+                    content()
+                }
+            }
+        } else {
+            VStack(alignment: .leading, spacing: LeafSpace.xs) {
+                content()
             }
         }
     }
@@ -271,7 +305,11 @@ private struct TodaySection: View {
 
             LeafCard(padding: .regular) {
                 VStack(alignment: .leading, spacing: LeafSpace.md) {
-                    LeafMetricAmbient(value: focusValue, label: focusLabel)
+                    LeafMetricAmbient(
+                        value: focusValue,
+                        label: focusLabel,
+                        valueTint: LeafColor.accent.primary
+                    )
 
                     if !ambientCaptionFragments.isEmpty {
                         Text(ambientCaptionFragments.joined(separator: " · "))
@@ -294,7 +332,7 @@ private struct TodaySection: View {
                             ForEach(Array(providerRows.enumerated()), id: \.offset) { idx, row in
                                 LeafListRow(
                                     primary: row.text,
-                                    leading: { LeafIcon(asset: row.iconAsset, size: .md, tint: LeafColor.text.secondary) }
+                                    leading: { LeafIcon(asset: row.iconAsset, size: .md, tint: LeafColor.accent.primary) }
                                 )
                                 if idx < providerRows.count - 1 {
                                     LeafDivider(style: .soft)
