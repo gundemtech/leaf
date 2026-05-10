@@ -10,12 +10,13 @@ import SwiftUI
 struct LeafMetricAmbient: View {
     let value: String
     let label: String
+    var valueTint: Color = LeafColor.text.primary
 
     var body: some View {
         VStack(alignment: .leading, spacing: LeafSpace.xs) {
             Text(value)
                 .font(LeafMetricTokens.Ambient.valueFont)
-                .foregroundStyle(LeafColor.text.primary)
+                .foregroundStyle(valueTint)
             Text(label)
                 .font(LeafMetricTokens.Ambient.labelFont)
                 .foregroundStyle(LeafColor.text.tertiary)
