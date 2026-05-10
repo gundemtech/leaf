@@ -33,8 +33,13 @@ enum LeafType {
     static let label = Font.system(size: 11, weight: .medium, design: .default)
 
     enum mono {
-        static let regular = Font.system(size: 14, weight: .regular, design: .monospaced)
-        static let small   = Font.system(size: 12, weight: .regular, design: .monospaced)
+        static let regular = Font.system(size: 14, weight: .regular,  design: .monospaced)
+        static let small   = Font.system(size: 12, weight: .regular,  design: .monospaced)
+        /// Track 2 / D3 — large monospaced display for OAuth user codes (GitHub
+        /// device flow `.awaitingAuthorization` state). Single consumer in D3;
+        /// surface as T2 token so we don't sprinkle raw Font.system(size:28)
+        /// across views. No T3 component-token layer — single use-site.
+        static let large   = Font.system(size: 28, weight: .semibold, design: .monospaced)
     }
 }
 
