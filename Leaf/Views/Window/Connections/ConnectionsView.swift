@@ -84,7 +84,7 @@ struct ConnectionsView: View {
         VStack(alignment: .leading, spacing: LeafSpace.xl) {
             providerSection(
                 logoAsset: "leaf-brand-linear",
-                tiledLogo: true,
+                logoTileColor: .black,
                 title: "Linear",
                 description: "Read-only access — issue activity (assigned, updated, completed) into your local timeline."
             ) {
@@ -95,7 +95,7 @@ struct ConnectionsView: View {
 
             providerSection(
                 logoAsset: "leaf-brand-github",
-                tiledLogo: true,
+                logoTileColor: .white,
                 title: "GitHub",
                 description: "Read-only access — self-authored events (commits, PRs, issues, reviews) into your local timeline."
             ) {
@@ -106,7 +106,7 @@ struct ConnectionsView: View {
 
             providerSection(
                 logoAsset: "leaf-brand-slack",
-                tiledLogo: true,
+                logoTileColor: .white,
                 title: "Slack",
                 description: "Read-only access — self-authored message counts per channel and huddle minutes into your local timeline."
             ) {
@@ -117,24 +117,24 @@ struct ConnectionsView: View {
         }
     }
 
-    /// Mirrors LeafSection (Organism O2) layout but prepends a 32pt brand
-    /// logo to the title row, top-aligned to the title's cap-top via
-    /// `.providerLogoAnchor` (matches Home hero icon pattern).
+    /// Mirrors LeafSection (Organism O2) layout but prepends a 28pt brand
+    /// logo on a rounded tile to the title row, top-aligned to the title's
+    /// cap-top via `.providerLogoAnchor` (matches Home hero icon pattern).
     ///
-    /// `tiledLogo: true` wraps the logo in a white rounded tile (LeafRadius.sm)
-    /// — used for GitHub (black Octocat) and Slack (4-colour glyph) so the
-    /// brand mark sits on its canonical white pill. Linear's gradient ball
-    /// is the brand, no tile.
+    /// `logoTileColor` is per-provider because each brand logo file ships in
+    /// a specific contrast variant: GitHub black Octocat + Slack 4-colour glyph
+    /// → white tile; Linear ships as white-on-dark variant → black tile.
+    /// Each on its canonical brand surface; nil = no tile (raw logo).
     private func providerSection<Content: View>(
         logoAsset: String,
-        tiledLogo: Bool,
+        logoTileColor: Color?,
         title: String,
         description: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: LeafSpace.md) {
             HStack(alignment: .providerLogoAnchor, spacing: LeafSpace.sm) {
-                providerLogo(asset: logoAsset, tiled: tiledLogo)
+                providerLogo(asset: logoAsset, tileColor: logoTileColor)
                     .alignmentGuide(.providerLogoAnchor) { $0[.top] }
                 VStack(alignment: .leading, spacing: LeafSpace.xxs) {
                     Text(title)
@@ -152,17 +152,17 @@ struct ConnectionsView: View {
         }
     }
 
-    /// 28pt total dimension. With tile: white RoundedRectangle (LeafRadius.sm)
-    /// + 20pt inner logo centered (~4pt visual padding on each side).
-    /// Without tile: logo at full 28pt.
+    /// 28pt total dimension. With tile: RoundedRectangle (LeafRadius.sm) in
+    /// `tileColor` + 20pt inner logo centered (~4pt padding each side).
+    /// `tileColor: nil` → logo at full 28pt without tile.
     @ViewBuilder
-    private func providerLogo(asset: String, tiled: Bool) -> some View {
+    private func providerLogo(asset: String, tileColor: Color?) -> some View {
         let outer: CGFloat = 28                   // raw — between LeafIconSize.lg (24) and .xl (32)
-        let inner: CGFloat = 20                   // logo glyph inside white tile
-        if tiled {
+        let inner: CGFloat = 20                   // logo glyph inside tile
+        if let tileColor {
             ZStack {
                 RoundedRectangle(cornerRadius: LeafRadius.sm, style: .continuous)
-                    .fill(Color.white)
+                    .fill(tileColor)
                 Image(asset)
                     .resizable()
                     .interpolation(.high)
