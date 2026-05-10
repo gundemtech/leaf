@@ -8,11 +8,11 @@ import SwiftUI
 #if DEBUG
 struct LeafMetricDeltaPreview: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: LeafSpace.sm) {
+        VStack(alignment: .leading, spacing: LeafSpace.md) {
             Text("LeafMetricDelta").font(LeafType.title.medium)
                 .foregroundStyle(LeafColor.text.primary)
 
-            HStack(spacing: LeafSpace.xl) {
+            HStack(spacing: LeafSpace.md) {
                 LeafMetricDelta(value: "+12%", direction: .up)
                 LeafMetricDelta(value: "−4%",  direction: .down)
                 LeafMetricDelta(value: "0%",   direction: .flat)
@@ -24,7 +24,7 @@ struct LeafMetricDeltaPreview: View {
             }
 
             TokensInlineSpec(
-                spec: "LeafMetricDelta · directions up/down/flat · status.success/danger · text.tertiary · arrowSize 11",
+                spec: "LeafMetricDelta · pill chrome · status.success/danger/text.tertiary fg · same colour at 0.12 bg · arrow 10pt · body.small monospaced",
                 codeSnippet: "LeafMetricDelta(value: \"+12%\", direction: .up)"
             )
         }
