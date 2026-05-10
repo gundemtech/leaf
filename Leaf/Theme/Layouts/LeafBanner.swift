@@ -1,9 +1,17 @@
 //
 //  LeafBanner.swift
-//  Track 2 / D1 — Organism O6. Inline notice surface — icon + title +
-//  optional description + optional CTA + optional dismiss. 4 tones
-//  (info / success / warning / danger). Used for non-modal alerts (rotation
-//  banner, sharing-paused banner, update-ready banner).
+//  Track 2 / D1 — Organism O6. Inline notice surface. Neutral raised surface
+//  with a tone-tinted leading LeafIconChip + hairline border in
+//  LeafColor.border.subtle. 4 tones (info / success / warning / danger).
+//  Used for non-modal alerts (rotation banner, sharing-paused banner,
+//  update-ready banner).
+//
+//  Layout:
+//      ┌─ LeafSpace.lg padding ─────────────────────────────────┐
+//      │  ▣  title                                          ✕   │  ← chip + title row + dismiss
+//      │     description                                        │
+//      │     [ CTA ]                                            │  ← optional, separated by sm gap
+//      └────────────────────────────────────────────────────────┘
 //
 
 import SwiftUI
@@ -18,8 +26,9 @@ struct LeafBanner: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: LeafSpace.md) {
-            LeafIcon(asset: tone.icon, size: .md, tint: tone.border)
-            VStack(alignment: .leading, spacing: LeafSpace.xs) {
+            LeafIconChip(asset: tone.icon, size: LeafBannerTokens.chipSize, tint: tone.tint)
+
+            VStack(alignment: .leading, spacing: LeafBannerTokens.titleDescriptionGap) {
                 Text(title)
                     .font(LeafType.title.small)
                     .foregroundStyle(LeafColor.text.primary)
@@ -27,25 +36,28 @@ struct LeafBanner: View {
                     Text(description)
                         .font(LeafType.body.small)
                         .foregroundStyle(LeafColor.text.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 if let ctaTitle, let onCTA {
-                    LeafButton(ctaTitle, variant: .secondary, size: .sm, action: onCTA)
-                        .padding(.top, LeafSpace.xs)
+                    LeafButton(ctaTitle, variant: .primary, size: .sm, action: onCTA)
+                        .padding(.top, LeafBannerTokens.bodyCTAGap)
                 }
             }
-            Spacer()
+
+            Spacer(minLength: 0)
+
             if let onDismiss {
-                LeafIconButton(asset: LeafIcons.action.close, variant: .ghost, size: .sm, action: onDismiss)
+                LeafIconButton(asset: LeafIcons.action.close, variant: .ghost, size: .md, action: onDismiss)
             }
         }
         .padding(LeafBannerTokens.padding)
         .background(
             RoundedRectangle(cornerRadius: LeafBannerTokens.cornerRadius, style: .continuous)
-                .fill(tone.bg)
+                .fill(LeafColor.surface.raised)
         )
         .overlay(
             RoundedRectangle(cornerRadius: LeafBannerTokens.cornerRadius, style: .continuous)
-                .strokeBorder(tone.border.opacity(LeafBannerTokens.borderOpacity), lineWidth: 1)
+                .strokeBorder(LeafColor.border.subtle, lineWidth: 1)
         )
     }
 }
