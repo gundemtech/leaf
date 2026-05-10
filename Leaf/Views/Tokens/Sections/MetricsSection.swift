@@ -14,6 +14,7 @@ struct MetricsSection: View {
             LeafMetricAmbientPreview()
             LeafMetricDeltaPreview()
             LeafSparklinePreview()
+            LeafMetricCardPreview()
         }
     }
 }
