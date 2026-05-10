@@ -3,7 +3,9 @@
 //  Leaf
 //
 //  Минимальный popover: FOCUS TODAY hero + top-3 apps + Open/Quit.
-//  Все детали (per-provider, files, charts) — в главном окне.
+//  Track 2 / D4 — migrated to LeafMenuBarLayout (360pt) + LeafBanner inline
+//  (replaces BannerView wrapper). LeafButton.primary "Open"; native borderless
+//  Quit preserved (macOS conventional pattern).
 //
 
 import SwiftUI
@@ -31,20 +33,17 @@ struct MenuBarContent: View {
     }
 
     private var normalBody: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            if !launchAgent.isEnabled {
-                agentOffBanner
+        LeafMenuBarLayout {
+            VStack(alignment: .leading, spacing: LeafSpace.lg) {
+                if !launchAgent.isEnabled { agentOffBanner }
+                permissionsBanner
+                hero
+                LeafDivider()
+                content
+                LeafDivider()
+                controls
             }
-            permissionsBanner
-            hero
-            Divider().opacity(0.4)
-            content
-            Divider().opacity(0.4)
-            controls
         }
-        .padding(16)
-        .frame(width: 280)
-        .background(Color.leafBackground)
         .onAppear {
             launchAgent.refreshStatus()
             permissions.refresh()
@@ -59,30 +58,30 @@ struct MenuBarContent: View {
     // MARK: - Banners
 
     private var agentOffBanner: some View {
-        BannerView(
-            color: .orange,
+        LeafBanner(
+            tone: .warning,
             title: "Background collection is off",
-            action: "Enable",
-            onTap: openMainWindowToSettings
+            ctaTitle: "Enable",
+            onCTA: openMainWindowToSettings
         )
     }
 
     @ViewBuilder
     private var permissionsBanner: some View {
         if !permissions.axGranted {
-            BannerView(
-                color: .orange,
+            LeafBanner(
+                tone: .warning,
                 title: "Accessibility disabled",
-                action: "Grant",
-                onTap: permissions.openAXSettings
+                ctaTitle: "Grant",
+                onCTA: permissions.openAXSettings
             )
         } else if !permissions.fdaGranted {
-            BannerView(
-                color: .orange,
+            LeafBanner(
+                tone: .warning,
                 title: "Full Disk Access disabled",
-                subtitle: "Watched Folders won't track ~/Documents",
-                action: "Grant",
-                onTap: permissions.openFDASettings
+                description: "Watched Folders won't track ~/Documents",
+                ctaTitle: "Grant",
+                onCTA: permissions.openFDASettings
             )
         }
     }
@@ -90,16 +89,12 @@ struct MenuBarContent: View {
     // MARK: - Hero
 
     private var hero: some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("FOCUS TODAY")
-                    .leafLabelStyle()
-                Text(focusTotalDisplay)
-                    .font(.system(size: 28, weight: .regular, design: .serif))
-                    .foregroundStyle(.leafInk)
-                    .monospacedDigit()
-            }
-            Spacer()
+        VStack(alignment: .leading, spacing: LeafSpace.xs) {
+            Text("FOCUS TODAY").leafSectionLabel().foregroundStyle(LeafColor.text.tertiary)
+            Text(focusTotalDisplay)
+                .font(LeafType.title.large)
+                .foregroundStyle(LeafColor.text.primary)
+                .monospacedDigit()
         }
     }
 
@@ -109,27 +104,23 @@ struct MenuBarContent: View {
     private var content: some View {
         switch reader.state {
         case .loading:
-            ProgressView()
-                .controlSize(.small)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.vertical, 6)
+            HStack { Spacer(); ProgressView().controlSize(.small); Spacer() }
         case .notConfigured(let msg), .empty(let msg), .error(let msg):
             Text(msg)
-                .font(.leafCaption)
-                .foregroundStyle(.leafMuted)
+                .font(LeafType.body.small)
+                .foregroundStyle(LeafColor.text.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 4)
         case .loaded(let snapshot, _):
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: LeafSpace.md) {
                 topAppsList(snapshot.topApps)
                 let lines = providerSummaryLines(snapshot)
                 if !lines.isEmpty {
-                    Divider().opacity(0.3)
-                    VStack(alignment: .leading, spacing: 4) {
+                    LeafDivider()
+                    VStack(alignment: .leading, spacing: LeafSpace.xs) {
                         ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
                             Text(line)
-                                .font(.leafCaption)
-                                .foregroundStyle(.leafInk.opacity(0.8))
+                                .font(LeafType.body.small)
+                                .foregroundStyle(LeafColor.text.secondary)
                                 .lineLimit(1)
                                 .truncationMode(.tail)
                         }
@@ -141,23 +132,30 @@ struct MenuBarContent: View {
 
     private func topAppsList(_ apps: [AppTimeEntry]) -> some View {
         let top = Array(apps.prefix(3))
-        return VStack(alignment: .leading, spacing: 8) {
+        return Group {
             if top.isEmpty {
                 Text("No activity yet today.")
-                    .font(.leafCaption)
-                    .foregroundStyle(.leafMuted)
+                    .font(LeafType.body.small)
+                    .foregroundStyle(LeafColor.text.secondary)
             } else {
-                ForEach(top, id: \.bundleID) { entry in
-                    HStack {
-                        Text(AppNameResolver.shared.displayName(for: entry.bundleID))
-                            .font(.leafBody)
-                            .foregroundStyle(.leafInk)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Spacer()
-                        Text(formatDuration(entry.duration))
-                            .font(.leafBody.monospacedDigit())
-                            .foregroundStyle(.leafMuted)
+                LeafCard(variant: .rest, padding: .tight) {
+                    VStack(spacing: 0) {
+                        ForEach(Array(top.enumerated()), id: \.element.bundleID) { idx, entry in
+                            HStack {
+                                Text(AppNameResolver.shared.displayName(for: entry.bundleID))
+                                    .font(LeafType.body.regular)
+                                    .foregroundStyle(LeafColor.text.primary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                Spacer()
+                                Text(formatDuration(entry.duration))
+                                    .font(LeafType.mono.small)
+                                    .foregroundStyle(LeafColor.text.tertiary)
+                            }
+                            .padding(.horizontal, LeafSpace.sm)
+                            .padding(.vertical, LeafSpace.xs)
+                            if idx < top.count - 1 { LeafDivider() }
+                        }
                     }
                 }
             }
@@ -192,15 +190,18 @@ struct MenuBarContent: View {
     // MARK: - Controls
 
     private var controls: some View {
-        HStack(spacing: 8) {
-            LeafProminentButton(action: openMainWindow) {
-                Label("Open", image: LeafIcons.action.external)
-                    .labelStyle(.titleAndIcon)
-            }
+        HStack(spacing: LeafSpace.sm) {
+            LeafButton(
+                "Open",
+                variant: .primary,
+                size: .sm,
+                icon: .asset(LeafIcons.action.external),
+                action: openMainWindow
+            )
             Spacer()
             Button("Quit") { NSApplication.shared.terminate(nil) }
                 .buttonStyle(.borderless)
-                .foregroundStyle(.leafMuted)
+                .foregroundStyle(LeafColor.text.secondary)
                 .keyboardShortcut("q")
         }
     }
