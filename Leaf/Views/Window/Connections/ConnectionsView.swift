@@ -84,7 +84,7 @@ struct ConnectionsView: View {
         VStack(alignment: .leading, spacing: LeafSpace.xl) {
             providerSection(
                 logoAsset: "leaf-brand-linear",
-                tiledLogo: false,
+                tiledLogo: true,
                 title: "Linear",
                 description: "Read-only access — issue activity (assigned, updated, completed) into your local timeline."
             ) {
@@ -152,13 +152,13 @@ struct ConnectionsView: View {
         }
     }
 
-    /// 32pt total dimension. With tile: white RoundedRectangle (LeafRadius.sm)
-    /// + 22pt inner logo centered (gives ~5pt visual padding on each side).
-    /// Without tile: logo at full 32pt.
+    /// 28pt total dimension. With tile: white RoundedRectangle (LeafRadius.sm)
+    /// + 20pt inner logo centered (~4pt visual padding on each side).
+    /// Without tile: logo at full 28pt.
     @ViewBuilder
     private func providerLogo(asset: String, tiled: Bool) -> some View {
-        let outer: CGFloat = LeafIconSize.xl.pt   // 32pt
-        let inner: CGFloat = 22                   // logo glyph inside white tile
+        let outer: CGFloat = 28                   // raw — between LeafIconSize.lg (24) and .xl (32)
+        let inner: CGFloat = 20                   // logo glyph inside white tile
         if tiled {
             ZStack {
                 RoundedRectangle(cornerRadius: LeafRadius.sm, style: .continuous)
