@@ -56,7 +56,10 @@ FIXTURE_DIR_BASE="${REPO_ROOT}/Leaf/Theme/__test_fixture__"
 FIXTURE_DIR_MIGR="${REPO_ROOT}/Leaf/Views/Window/Home/__test_fixture__"
 FIXTURE_FILE_LEVEL="${TMP}/__test_fixture_root_view__.swift"
 
-trap 'rm -rf "$TMP" "$FIXTURE_DIR_BASE" "$FIXTURE_DIR_MIGR"' EXIT
+FIXTURE_ACTIVITY_DIR="${REPO_ROOT}/Leaf/Views/Window/Activity"
+FIXTURE_CONNECTIONS_DIR="${REPO_ROOT}/Leaf/Views/Window/Connections"
+
+trap 'rm -rf "$TMP" "$FIXTURE_DIR_BASE" "$FIXTURE_DIR_MIGR"; rm -f "$FIXTURE_ACTIVITY_DIR"/__fixture_*.swift "$FIXTURE_CONNECTIONS_DIR"/__fixture_*.swift' EXIT
 
 mkdir -p "$FIXTURE_DIR_BASE"
 mkdir -p "$FIXTURE_DIR_MIGR"
@@ -178,5 +181,63 @@ import SwiftUI
 struct BadFile: View { var body: some View { Text("hi").font(.leafBody) } }
 EOF
 assert_fail_with_extra "file-level scope (old-palette)" "$FIXTURE_FILE_LEVEL"
+
+# === Track 2 / D3 — additional MIGRATION fixtures ===
+#
+# Verify the new MIGRATION paths from D3 are actually iterated:
+#   • Activity dir (dir-level scope)
+#   • Team file-level (TeamView.swift) — sheets in same dir must NOT
+#     fail when they keep old-palette refs
+#   • Connections dir (dir-level scope)
+
+# Case 14 — Activity MIGRATION dir: clean migrated swift passes.
+FIXTURE_ACTIVITY="${FIXTURE_ACTIVITY_DIR}/__fixture_clean_d3.swift"
+cat > "$FIXTURE_ACTIVITY" <<'EOF'
+import SwiftUI
+struct CleanActivity: View {
+    var body: some View {
+        Text("hi")
+            .font(LeafType.body.regular)
+            .foregroundStyle(LeafColor.text.primary)
+            .padding(LeafSpace.lg)
+    }
+}
+EOF
+assert_pass "clean Activity MIGRATION swift"
+rm "$FIXTURE_ACTIVITY"
+
+# Case 15 — Activity MIGRATION dir: old-palette ref triggers fail.
+FIXTURE_ACTIVITY="${FIXTURE_ACTIVITY_DIR}/__fixture_bad_d3.swift"
+cat > "$FIXTURE_ACTIVITY" <<'EOF'
+import SwiftUI
+struct BadActivity: View { var body: some View { Text("x").font(.leafBody) } }
+EOF
+assert_fail "old-palette ref in Activity MIGRATION dir"
+rm "$FIXTURE_ACTIVITY"
+
+# Case 16 — Team file-level scope: TeamView.swift listed file fails on old-palette.
+# (Real TeamView.swift is migrated; reuse the env override mechanism with a
+# fresh tmp file standing in for any file already listed in MIGRATION_PATHS.)
+cat > "$FIXTURE_FILE_LEVEL" <<'EOF'
+import SwiftUI
+struct BadTeam: View { var body: some View { GlassCard { Text("x") } } }
+EOF
+assert_fail_with_extra "Team file-level scope (GlassCard)" "$FIXTURE_FILE_LEVEL"
+
+# Case 17 — Connections MIGRATION dir: clean passes.
+FIXTURE_CONN="${FIXTURE_CONNECTIONS_DIR}/__fixture_clean_d3.swift"
+cat > "$FIXTURE_CONN" <<'EOF'
+import SwiftUI
+struct CleanConnections: View {
+    var body: some View {
+        VStack(spacing: LeafSpace.md) {
+            Text("hi").font(LeafType.title.small)
+        }
+        .padding(LeafSpace.lg)
+    }
+}
+EOF
+assert_pass "clean Connections MIGRATION swift"
+rm "$FIXTURE_CONN"
 
 echo "All fixture cases passed."

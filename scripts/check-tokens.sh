@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # Track 2 / D1+D2 — token-discipline guard.
 #
-# Two-tier scope (Track 2 / D2 extension):
+# Two-tier scope (Track 2 / D2+D3 extension):
 #   • BASE scope        — Leaf/Theme/ + Leaf/Views/Tokens/. Bans raw
 #     colors, raw padding ints, raw cornerRadius ints. Does NOT ban
 #     old-palette references because the palette itself is defined here.
-#   • MIGRATION scope   — Leaf/Views/Window/Home/ +
-#     Leaf/Views/Window/RootView.swift + Leaf/Views/Window/Sidebar.swift.
-#     Inherits BASE checks AND additionally bans old-palette references
-#     (.leafBackground / .leafInk / .leafBody / .leafTitle / .leafCaption
-#      / .leafMuted / .leafAccent / .leafAccentDeep / .leafSignal /
-#      .leafLabelStyle / .leafGlass / GlassCard / LeafGlassGroup).
-#     Formalises 'migrated file = zero old-palette refs'.
+#   • MIGRATION scope   — D2: Leaf/Views/Window/Home/ + RootView.swift +
+#     Sidebar.swift. D3: + Leaf/Views/Window/Activity/ + Team/TeamView.swift
+#     + Team/PendingInvitesSection.swift + Team/PendingInviteRow.swift +
+#     Leaf/Views/Window/Connections/. Inherits BASE checks AND
+#     additionally bans old-palette references. Formalises 'migrated
+#     file = zero old-palette refs'. Sheets (GenerateInviteSheet,
+#     RemoveMemberSheet) deliberately excluded — D4 carry-over.
 #
 # Allowed inside scope (any tier):
 #   - Color("LeafFooBar")           ← Asset Catalog lookup
@@ -36,6 +36,12 @@ MIGRATION_PATHS=(
     "${REPO_ROOT}/Leaf/Views/Window/Home"
     "${REPO_ROOT}/Leaf/Views/Window/RootView.swift"
     "${REPO_ROOT}/Leaf/Views/Window/Sidebar.swift"
+    # Track 2 / D3 additions:
+    "${REPO_ROOT}/Leaf/Views/Window/Activity"
+    "${REPO_ROOT}/Leaf/Views/Window/Team/TeamView.swift"
+    "${REPO_ROOT}/Leaf/Views/Window/Team/PendingInvitesSection.swift"
+    "${REPO_ROOT}/Leaf/Views/Window/Team/PendingInviteRow.swift"
+    "${REPO_ROOT}/Leaf/Views/Window/Connections"
 )
 
 # Optional self-test override: append extra paths via env var.

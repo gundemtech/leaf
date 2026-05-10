@@ -1,9 +1,8 @@
 //
 //  SessionRow.swift
 //  Track 2 / D3 — Activity row for one ActivitySession (continuous work block
-//  in one app + window/file context). Migrated from old palette
-//  (`.leafBody / .leafCaption / .leafInk / .leafMuted / .leafCategory(...)`)
-//  to D1 substrate. Decorative category dot dropped per spec § OQ-6 — app
+//  in one app + window/file context). Migrated from old palette to D1
+//  substrate. Decorative category dot dropped per spec § OQ-6 — app
 //  identity carries via real OS app icon (AppIconResolver) + app name.
 //
 
