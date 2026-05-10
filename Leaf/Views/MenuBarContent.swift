@@ -4,7 +4,7 @@
 //
 //  Минимальный popover: FOCUS TODAY hero + top-3 apps + Open/Quit.
 //  Track 2 / D4 — migrated to LeafMenuBarLayout (360pt) + LeafBanner inline
-//  (replaces BannerView wrapper). LeafButton.primary "Open"; native borderless
+//  (replaces old banner wrapper). LeafButton.primary "Open"; native borderless
 //  Quit preserved (macOS conventional pattern).
 //
 

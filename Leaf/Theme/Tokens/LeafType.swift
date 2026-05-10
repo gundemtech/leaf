@@ -59,10 +59,8 @@ private extension Font {
 extension Text {
     /// Section label style — uppercase + 0.04em tracking (≈0.44pt for 11pt).
     /// Returns `some View` because `.textCase` produces a View, not a Text.
-    /// Named `leafSectionLabel` to avoid colliding with legacy `leafLabelStyle`
-    /// in `Leaf/Theme/Fonts.swift` (Snapshot Replacement migration — old palette
-    /// stays until D4 ships and existing views are migrated). New tokens code
-    /// in `Leaf/Theme/` and `Leaf/Views/Tokens/` MUST use `leafSectionLabel`.
+    /// Canonical section-label text helper across the app (Track 2 / D4 retirement
+    /// completed Snapshot Replacement migration; old palette helper removed).
     func leafSectionLabel() -> some View {
         self.font(LeafType.label)
             .tracking(0.44)
