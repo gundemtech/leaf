@@ -27,10 +27,11 @@ import LeafCore
 
 private let knownLinearPrefixesForHero: Set<String> = ["LEAF"]
 
-/// Hero app-icon size — 48pt. Visually pairs with `title.large` (28pt) by
-/// being ~1.7× tall, читается как «brand identity», не декорация. Не входит
-/// в LeafIconSize tokens (.xl = 32pt, hero — единственный consumer 48pt).
-private let heroIconSize: CGFloat = 48
+/// Hero app-icon size — 40pt. Squircle включает ~10% внутреннего padding'а,
+/// визуальное «тело» ≈ 36pt, что близко к line-height `title.large` (28pt
+/// font ≈ 34pt line-height). Иконка визуально лежит «по одной линии» с title.
+/// Не входит в LeafIconSize tokens (.xl = 32pt) — hero единственный consumer.
+private let heroIconSize: CGFloat = 40
 
 /// Bleached leaf-green for cosmetic accent tints (provider row icons,
 /// RIGHT NOW column headers). `accent.subtle` в dark mode = 35%-alpha
