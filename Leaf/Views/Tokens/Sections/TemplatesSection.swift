@@ -13,6 +13,7 @@ struct TemplatesSection: View {
             LeafWindowLayoutPreview()
             LeafSheetLayoutPreview()
             LeafMenuBarLayoutPreview()
+            LeafOnboardingStepLayoutPreview()
         }
     }
 }
