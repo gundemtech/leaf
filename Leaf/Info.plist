@@ -6,6 +6,8 @@
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -16,50 +18,50 @@
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
-	<key>CFBundleVersion</key>
-	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>LSMinimumSystemVersion</key>
-	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
-	<key>LSUIElement</key>
-	<false/>
-	<key>NSHumanReadableCopyright</key>
-	<string></string>
-	<key>NSSupportsAutomaticGraphicsSwitching</key>
-	<true/>
-	<key>SUFeedURL</key>
-	<string>https://updates.gundem.tech/appcast.xml</string>
-	<key>SUPublicEDKey</key>
-	<string>MzPOBHOfA6rzShhSpfIC+GpvpeSrv0eQKX8b3B7aN3s=</string>
-	<key>SURequireSignedFeed</key>
-	<true/>
-	<key>SUVerifyUpdateBeforeExtraction</key>
-	<true/>
-	<key>SUEnableInstallerLauncherService</key>
-	<false/>
-	<key>SUAutomaticallyUpdate</key>
-	<false/>
-	<key>SUEnableAutomaticChecks</key>
-	<true/>
-	<key>SUScheduledCheckInterval</key>
-	<integer>86400</integer>
-	<key>LeafLinearOAuthClientID</key>
-	<string>$(LINEAR_OAUTH_CLIENT_ID)</string>
-	<key>LeafGitHubOAuthClientID</key>
-	<string>$(GITHUB_OAUTH_CLIENT_ID)</string>
-	<key>LeafSlackOAuthClientID</key>
-	<string>$(SLACK_OAUTH_CLIENT_ID)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
 			<key>CFBundleURLName</key>
 			<string>tech.gundem.leaf.invite</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>leaf</string>
 			</array>
-			<key>CFBundleTypeRole</key>
-			<string>Viewer</string>
 		</dict>
 	</array>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+	<key>LSUIElement</key>
+	<false/>
+	<key>LeafGitHubOAuthClientID</key>
+	<string>$(GITHUB_OAUTH_CLIENT_ID)</string>
+	<key>LeafLinearOAuthClientID</key>
+	<string>$(LINEAR_OAUTH_CLIENT_ID)</string>
+	<key>LeafSlackOAuthClientID</key>
+	<string>$(SLACK_OAUTH_CLIENT_ID)</string>
+	<key>NSHumanReadableCopyright</key>
+	<string></string>
+	<key>NSSupportsAutomaticGraphicsSwitching</key>
+	<true/>
+	<key>SUAutomaticallyUpdate</key>
+	<false/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUEnableInstallerLauncherService</key>
+	<false/>
+	<key>SUFeedURL</key>
+	<string>https://updates.gundem.tech/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>MzPOBHOfA6rzShhSpfIC+GpvpeSrv0eQKX8b3B7aN3s=</string>
+	<key>SURequireSignedFeed</key>
+	<true/>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
 </dict>
 </plist>
