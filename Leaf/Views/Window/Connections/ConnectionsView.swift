@@ -15,6 +15,26 @@ import SwiftUI
 import Combine
 import LeafCore
 
+/// Pin provider logo top to the title's cap-top (visual top edge of glyphs),
+/// not the title-frame top — frame includes leading. Mirrors the Home hero
+/// `heroIconAnchor` pattern; recomputed per-screen because title font size
+/// differs (Connections uses LeafType.title.medium = 22pt).
+extension VerticalAlignment {
+    private struct ProviderLogoAnchor: AlignmentID {
+        static func defaultValue(in context: ViewDimensions) -> CGFloat {
+            context[VerticalAlignment.top]
+        }
+    }
+    static let providerLogoAnchor = VerticalAlignment(ProviderLogoAnchor.self)
+}
+
+/// SF Pro Display semibold cap-height ratio (empirical) — same constant as
+/// HomeView.heroTitleCapHeightRatio. Title cap-top ≈ baseline − fontSize × ratio.
+private let providerTitleCapHeightRatio: CGFloat = 0.71
+/// LeafType.title.medium font size — kept inline to compute the alignment
+/// guide; if the section title token changes, update here too.
+private let providerTitleFontSize: CGFloat = 22
+
 struct ConnectionsView: View {
     @Environment(LinearOAuthService.self) private var linearOAuth
     @Environment(GitHubOAuthService.self) private var githubOAuth
@@ -64,6 +84,7 @@ struct ConnectionsView: View {
         VStack(alignment: .leading, spacing: LeafSpace.xl) {
             providerSection(
                 logoAsset: "leaf-brand-linear",
+                tiledLogo: false,
                 title: "Linear",
                 description: "Read-only access — issue activity (assigned, updated, completed) into your local timeline."
             ) {
@@ -74,6 +95,7 @@ struct ConnectionsView: View {
 
             providerSection(
                 logoAsset: "leaf-brand-github",
+                tiledLogo: true,
                 title: "GitHub",
                 description: "Read-only access — self-authored events (commits, PRs, issues, reviews) into your local timeline."
             ) {
@@ -84,6 +106,7 @@ struct ConnectionsView: View {
 
             providerSection(
                 logoAsset: "leaf-brand-slack",
+                tiledLogo: true,
                 title: "Slack",
                 description: "Read-only access — self-authored message counts per channel and huddle minutes into your local timeline."
             ) {
@@ -94,33 +117,65 @@ struct ConnectionsView: View {
         }
     }
 
-    /// Mirrors LeafSection (Organism O2) layout but prepends a 24pt brand
-    /// logo to the title row. Logo renders in original colour (Asset Catalog
-    /// imageset has no `template-rendering-intent` flag), so Linear gradient,
-    /// Slack 4-colour, and GitHub Octocat all retain their brand fill.
+    /// Mirrors LeafSection (Organism O2) layout but prepends a 32pt brand
+    /// logo to the title row, top-aligned to the title's cap-top via
+    /// `.providerLogoAnchor` (matches Home hero icon pattern).
+    ///
+    /// `tiledLogo: true` wraps the logo in a white rounded tile (LeafRadius.sm)
+    /// — used for GitHub (black Octocat) and Slack (4-colour glyph) so the
+    /// brand mark sits on its canonical white pill. Linear's gradient ball
+    /// is the brand, no tile.
     private func providerSection<Content: View>(
         logoAsset: String,
+        tiledLogo: Bool,
         title: String,
         description: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: LeafSpace.md) {
-            HStack(alignment: .center, spacing: LeafSpace.sm) {
-                Image(logoAsset)
-                    .resizable()
-                    .interpolation(.high)
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: LeafIconSize.lg.pt, height: LeafIconSize.lg.pt)
+            HStack(alignment: .providerLogoAnchor, spacing: LeafSpace.sm) {
+                providerLogo(asset: logoAsset, tiled: tiledLogo)
+                    .alignmentGuide(.providerLogoAnchor) { $0[.top] }
                 VStack(alignment: .leading, spacing: LeafSpace.xxs) {
                     Text(title)
                         .font(LeafSectionTokens.titleFont)
                         .foregroundStyle(LeafColor.text.primary)
+                        .alignmentGuide(.providerLogoAnchor) { d in
+                            d[.firstTextBaseline] - providerTitleFontSize * providerTitleCapHeightRatio
+                        }
                     Text(description)
                         .font(LeafSectionTokens.descriptionFont)
                         .foregroundStyle(LeafColor.text.secondary)
                 }
             }
             content()
+        }
+    }
+
+    /// 32pt total dimension. With tile: white RoundedRectangle (LeafRadius.sm)
+    /// + 22pt inner logo centered (gives ~5pt visual padding on each side).
+    /// Without tile: logo at full 32pt.
+    @ViewBuilder
+    private func providerLogo(asset: String, tiled: Bool) -> some View {
+        let outer: CGFloat = LeafIconSize.xl.pt   // 32pt
+        let inner: CGFloat = 22                   // logo glyph inside white tile
+        if tiled {
+            ZStack {
+                RoundedRectangle(cornerRadius: LeafRadius.sm, style: .continuous)
+                    .fill(Color.white)
+                Image(asset)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: inner, height: inner)
+            }
+            .frame(width: outer, height: outer)
+        } else {
+            Image(asset)
+                .resizable()
+                .interpolation(.high)
+                .aspectRatio(contentMode: .fit)
+                .frame(width: outer, height: outer)
         }
     }
 
