@@ -60,7 +60,7 @@ struct LivePresenceWidget: View {
         VStack(alignment: .leading, spacing: LeafSpace.xs) {
             Text(title)
                 .leafSectionLabel()
-                .foregroundStyle(LeafColor.text.tertiary)
+                .foregroundStyle(LeafColor.accent.primary.opacity(0.6))
 
             if !connected {
                 Text("Not connected")

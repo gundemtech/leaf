@@ -27,6 +27,31 @@ import LeafCore
 
 private let knownLinearPrefixesForHero: Set<String> = ["LEAF"]
 
+/// Hero app-icon size — 48pt. Visually pairs with `title.large` (28pt) by
+/// being ~1.7× tall, читается как «brand identity», не декорация. Не входит
+/// в LeafIconSize tokens (.xl = 32pt, hero — единственный consumer 48pt).
+private let heroIconSize: CGFloat = 48
+
+/// Bleached leaf-green for cosmetic accent tints (provider row icons,
+/// RIGHT NOW column headers). `accent.subtle` в dark mode = 35%-alpha
+/// dark-green fill — для foreground tint'а нечитаем. Используем
+/// primary с opacity'ом — тот же hue, мягче читается.
+extension Color {
+    static var leafAccentBleached: Color { LeafColor.accent.primary.opacity(0.6) }
+}
+
+/// Custom alignment guide — центрирует hero icon по центру title-line,
+/// не по центру всей пары (title+caption). Без этого `.center` HStack
+/// тянет иконку вниз к мидпойнту между title и caption.
+extension VerticalAlignment {
+    private struct HeroTitleCenter: AlignmentID {
+        static func defaultValue(in context: ViewDimensions) -> CGFloat {
+            context[VerticalAlignment.center]
+        }
+    }
+    static let heroTitleCenter = VerticalAlignment(HeroTitleCenter.self)
+}
+
 /// Hero caption fallback truncation when no Linear ID matches the active
 /// session's contextLabel — caps at this many chars before middle-truncating
 /// (window titles get long fast: "leaf — D1 Design finish — caffeinate ◂…").
@@ -176,63 +201,66 @@ private struct HeroBlock: View {
 
         switch heroState(active: active, lastSession: lastSession, focus: focus) {
         case .active(let session):
-            heroLayout(bundleID: session.bundleID) {
-                Text(AppNameResolver.shared.displayName(for: session.bundleID))
-                    .font(LeafType.title.large)
-                    .foregroundStyle(LeafColor.text.primary)
-                Text(activeCaption(session: session))
-                    .font(LeafType.body.small)
+            heroLayout(
+                bundleID: session.bundleID,
+                title: Text(AppNameResolver.shared.displayName(for: session.bundleID))
+                    .foregroundStyle(LeafColor.text.primary),
+                caption: Text(activeCaption(session: session))
                     .foregroundStyle(LeafColor.text.tertiary)
-            }
+            )
 
         case .idle(let session):
-            heroLayout(bundleID: session.bundleID) {
-                Text("Idle")
-                    .font(LeafType.title.large)
-                    .foregroundStyle(LeafColor.text.secondary)
-                Text("last: \(AppNameResolver.shared.displayName(for: session.bundleID)) · \(relativePast(session.end))")
-                    .font(LeafType.body.small)
+            heroLayout(
+                bundleID: session.bundleID,
+                title: Text("Idle")
+                    .foregroundStyle(LeafColor.text.secondary),
+                caption: Text("last: \(AppNameResolver.shared.displayName(for: session.bundleID)) · \(relativePast(session.end))")
                     .foregroundStyle(LeafColor.text.tertiary)
-            }
+            )
 
         case .noData:
-            heroLayout(bundleID: nil) {
-                Text("Leaf is listening")
-                    .font(LeafType.title.large)
-                    .foregroundStyle(LeafColor.text.secondary)
-                Text("Connect a provider in Connections to enrich")
-                    .font(LeafType.body.small)
+            heroLayout(
+                bundleID: nil,
+                title: Text("Leaf is listening")
+                    .foregroundStyle(LeafColor.text.secondary),
+                caption: Text("Connect a provider in Connections to enrich")
                     .foregroundStyle(LeafColor.text.tertiary)
-            }
+            )
         }
     }
 
-    /// Hero row: real macOS app icon (32pt — LeafIconSize.xl) ведущим
-    /// элементом + VStack(title, caption). Если bundleID nil или иконка
-    /// не резолвится — рендерим только текст без icon-колонки, чтобы
-    /// layout не уезжал.
+    /// Hero row: real macOS app icon (heroIconSize) ведущим элементом +
+    /// VStack(title, caption). Иконка центруется по центру title-line через
+    /// custom `VerticalAlignment.heroTitleCenter` — `.center` HStack тянул бы
+    /// её к мидпойнту между title и caption (визуально ниже title).
+    /// Fallback (bundleID nil или icon не резолвится) — текст без icon-колонки.
     @ViewBuilder
-    private func heroLayout<Content: View>(
+    private func heroLayout(
         bundleID: String?,
-        @ViewBuilder content: () -> Content
+        title: Text,
+        caption: Text
     ) -> some View {
-        let iconSize = LeafIconSize.xl.pt
-
         if let bundleID,
-           let nsImage = AppIconResolver.shared.icon(for: bundleID, size: iconSize) {
-            HStack(alignment: .center, spacing: LeafSpace.md) {
+           let nsImage = AppIconResolver.shared.icon(for: bundleID, size: heroIconSize) {
+            HStack(alignment: .heroTitleCenter, spacing: LeafSpace.md) {
                 Image(nsImage: nsImage)
                     .resizable()
                     .interpolation(.high)
                     .aspectRatio(contentMode: .fit)
-                    .frame(width: iconSize, height: iconSize)
+                    .frame(width: heroIconSize, height: heroIconSize)
+                    .alignmentGuide(.heroTitleCenter) { $0.height / 2 }
                 VStack(alignment: .leading, spacing: LeafSpace.xs) {
-                    content()
+                    title
+                        .font(LeafType.title.large)
+                        .alignmentGuide(.heroTitleCenter) { $0.height / 2 }
+                    caption
+                        .font(LeafType.body.small)
                 }
             }
         } else {
             VStack(alignment: .leading, spacing: LeafSpace.xs) {
-                content()
+                title.font(LeafType.title.large)
+                caption.font(LeafType.body.small)
             }
         }
     }
@@ -332,7 +360,7 @@ private struct TodaySection: View {
                             ForEach(Array(providerRows.enumerated()), id: \.offset) { idx, row in
                                 LeafListRow(
                                     primary: row.text,
-                                    leading: { LeafIcon(asset: row.iconAsset, size: .md, tint: LeafColor.accent.primary) }
+                                    leading: { LeafIcon(asset: row.iconAsset, size: .md, tint: .leafAccentBleached) }
                                 )
                                 if idx < providerRows.count - 1 {
                                     LeafDivider(style: .soft)
