@@ -38,8 +38,8 @@ struct LeafSheetLayoutPreview: View {
                     Spacer()
                     HStack(spacing: LeafSpace.md) {
                         Spacer()
-                        LeafSecondaryButton(action: {}) { Text("Cancel") }
-                        LeafProminentButton(action: {}) { Text("Send invite") }
+                        LeafButton("Cancel", variant: .secondary, action: {})
+                        LeafButton("Send invite", variant: .primary, action: {})
                     }
                 }
                 .padding(LeafSpace.lg)

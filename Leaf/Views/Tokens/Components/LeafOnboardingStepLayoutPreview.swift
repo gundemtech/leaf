@@ -46,8 +46,8 @@ struct LeafOnboardingStepLayoutPreview: View {
 
                 HStack(spacing: LeafSpace.md) {
                     Spacer()
-                    LeafSecondaryButton(action: {}) { Text("Back") }
-                    LeafProminentButton(action: {}) { Text("Continue") }
+                    LeafButton("Back", variant: .secondary, action: {})
+                    LeafButton("Continue", variant: .primary, action: {})
                 }
             }
             .padding(LeafSpace.xl)
