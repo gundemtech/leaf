@@ -19,7 +19,8 @@ struct BannerView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 6) {
-            Image(systemName: "exclamationmark.triangle.fill")
+            Image.leafAsset(LeafIcons.status.warningFill)
+                .frame(width: 14, height: 14)
                 .foregroundStyle(color)
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)

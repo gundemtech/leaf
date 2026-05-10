@@ -148,7 +148,7 @@ struct AcceptInviteSheet: View {
     private func successCard(orgName: String, memberCount: Int) -> some View {
         GlassCard(padding: 24) {
             VStack(alignment: .leading, spacing: 12) {
-                Label("Joined \(orgName)", systemImage: "checkmark.circle.fill")
+                Label("Joined \(orgName)", image: LeafIcons.status.successFill)
                     .font(.leafHeadline).foregroundStyle(.green)
                 Text("You're now part of a team with \(memberCount) member\(memberCount == 1 ? "" : "s").")
                     .font(.leafBody).foregroundStyle(.leafInk.opacity(0.85)).lineSpacing(3)
@@ -159,7 +159,7 @@ struct AcceptInviteSheet: View {
     private func errorCard(message: String, recoverable: Bool) -> some View {
         GlassCard(padding: 24) {
             VStack(alignment: .leading, spacing: 16) {
-                Label("Couldn't accept invite", systemImage: "exclamationmark.triangle.fill")
+                Label("Couldn't accept invite", image: LeafIcons.status.warningFill)
                     .font(.leafBody.weight(.semibold)).foregroundStyle(.red)
                 Text(message).font(.leafBody).foregroundStyle(.leafInk).lineSpacing(3)
                 if recoverable {

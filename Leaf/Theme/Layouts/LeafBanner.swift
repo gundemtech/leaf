@@ -18,8 +18,7 @@ struct LeafBanner: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: LeafSpace.md) {
-            Image(systemName: tone.icon)
-                .foregroundStyle(tone.border)
+            LeafIcon(asset: tone.icon, size: .md, tint: tone.border)
             VStack(alignment: .leading, spacing: LeafSpace.xs) {
                 Text(title)
                     .font(LeafType.title.small)
@@ -36,7 +35,7 @@ struct LeafBanner: View {
             }
             Spacer()
             if let onDismiss {
-                LeafIconButton(systemName: "xmark", variant: .ghost, size: .sm, action: onDismiss)
+                LeafIconButton(asset: LeafIcons.action.close, variant: .ghost, size: .sm, action: onDismiss)
             }
         }
         .padding(LeafBannerTokens.padding)

@@ -66,7 +66,7 @@ struct PendingInvitesSection: View {
                     Text("Refreshing…")
                 }
             } else {
-                Label("Refresh", systemImage: "arrow.clockwise")
+                Label("Refresh", image: LeafIcons.action.refresh)
             }
         }
         .buttonStyle(.bordered)
@@ -75,14 +75,16 @@ struct PendingInvitesSection: View {
 
     private func pollOutcomeBanner(message: String) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: "info.circle")
+            Image.leafAsset(LeafIcons.status.info)
+                .frame(width: 16, height: 16)
                 .foregroundStyle(.leafAccentDeep)
             Text(message)
                 .font(.leafBody)
                 .foregroundStyle(.leafInk)
             Spacer()
             Button(action: { reader.acknowledgePollMessage() }) {
-                Image(systemName: "xmark")
+                Image.leafAsset(LeafIcons.action.close)
+                    .frame(width: 12, height: 12)
                     .foregroundStyle(.leafInk.opacity(0.5))
             }
             .buttonStyle(.borderless)
@@ -98,7 +100,8 @@ struct PendingInvitesSection: View {
                 .leafLabelStyle()
             GlassCard(padding: 18) {
                 HStack(spacing: 12) {
-                    Image(systemName: "exclamationmark.triangle")
+                    Image.leafAsset(LeafIcons.status.warning)
+                        .frame(width: 16, height: 16)
                         .foregroundStyle(.red.opacity(0.85))
                     Text(message)
                         .font(.leafBody)

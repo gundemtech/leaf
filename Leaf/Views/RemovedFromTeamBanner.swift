@@ -16,8 +16,8 @@ struct RemovedFromTeamBanner: View {
     var body: some View {
         VStack(spacing: 24) {
             Spacer()
-            Image(systemName: "person.crop.circle.badge.exclamationmark")
-                .font(.system(size: 64))
+            Image.leafAsset(LeafIcons.object.userError)
+                .frame(width: 64, height: 64)
                 .foregroundStyle(.leafAccent)
             VStack(spacing: 12) {
                 Text("You've been removed from \(orgName)")

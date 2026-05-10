@@ -126,7 +126,7 @@ struct ConnectionsSettings: View {
 
         case .reconnectNeeded:
             VStack(alignment: .leading, spacing: 8) {
-                Label("Reconnect needed", systemImage: "exclamationmark.triangle.fill")
+                Label("Reconnect needed", image: LeafIcons.status.warningFill)
                     .foregroundStyle(.orange)
                     .font(.headline)
                 Text("Your Linear session expired and Leaf can't refresh it automatically. Sign in again to resume polling.")
@@ -239,7 +239,7 @@ struct ConnectionsSettings: View {
 
         case .reconnectNeeded:
             VStack(alignment: .leading, spacing: 8) {
-                Label("Reconnect needed", systemImage: "exclamationmark.triangle.fill")
+                Label("Reconnect needed", image: LeafIcons.status.warningFill)
                     .foregroundStyle(.orange)
                     .font(.headline)
                 Text("Your GitHub session expired and Leaf can't refresh it automatically. Sign in again to resume polling.")
@@ -315,7 +315,7 @@ struct ConnectionsSettings: View {
 
         case .reconnectNeeded:
             VStack(alignment: .leading, spacing: 8) {
-                Label("Reconnect needed", systemImage: "exclamationmark.triangle.fill")
+                Label("Reconnect needed", image: LeafIcons.status.warningFill)
                     .foregroundStyle(.orange)
                     .font(.headline)
                 Text("Your Slack session expired and Leaf can't refresh it automatically. Sign in again to resume polling.")

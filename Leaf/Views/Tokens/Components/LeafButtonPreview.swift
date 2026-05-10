@@ -23,15 +23,15 @@ struct LeafButtonPreview: View {
                     .font(LeafType.mono.small)
                     .foregroundStyle(LeafColor.text.tertiary)
                 HStack(spacing: LeafSpace.md) {
-                    LeafButton("Save", variant: .primary, size: .md, icon: "tray.and.arrow.down") {}
+                    LeafButton("Add member", variant: .primary, size: .md, icon: .asset(LeafIcons.action.add)) {}
                     LeafButton("Loading", variant: .primary, size: .md, isLoading: true) {}
-                    LeafButton("Delete", variant: .destructive, size: .md, icon: "trash") {}
+                    LeafButton("Delete", variant: .destructive, size: .md, icon: .asset(LeafIcons.object.trash)) {}
                 }
             }
 
             TokensInlineSpec(
-                spec: "LeafButton · 4 variants · 3 sizes · icon · loading · LeafRadius.md",
-                codeSnippet: "LeafButton(\"Save\", variant: .primary, size: .md, icon: \"tray.and.arrow.down\") {}"
+                spec: "LeafButton · 4 variants · 3 sizes · icon (asset|system) · loading · LeafRadius.md",
+                codeSnippet: "LeafButton(\"Add member\", variant: .primary, icon: .asset(LeafIcons.action.add)) {}"
             )
         }
         .padding(LeafSpace.lg)

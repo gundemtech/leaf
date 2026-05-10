@@ -17,11 +17,12 @@ enum LeafDeltaDirection {
         }
     }
 
+    /// Asset Catalog name (template-rendered Figma SVG) for the directional arrow.
     var arrow: String {
         switch self {
-        case .up:   "arrow.up"
-        case .down: "arrow.down"
-        case .flat: "arrow.right"
+        case .up:   LeafIcons.metric.up
+        case .down: LeafIcons.metric.down
+        case .flat: LeafIcons.metric.flat
         }
     }
 }
@@ -32,8 +33,11 @@ struct LeafMetricDelta: View {
 
     var body: some View {
         HStack(spacing: LeafSpace.xxs) {
-            Image(systemName: direction.arrow)
-                .font(.system(size: LeafMetricTokens.Delta.arrowSize))
+            Image(direction.arrow)
+                .renderingMode(.template)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: LeafMetricTokens.Delta.arrowSize, height: LeafMetricTokens.Delta.arrowSize)
             Text(value)
                 .font(LeafType.body.small.monospacedDigit())
         }

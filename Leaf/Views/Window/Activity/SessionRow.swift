@@ -60,8 +60,8 @@ struct SessionRow: View {
         ZStack {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(Color.leafCategory(session.category).opacity(0.18))
-            Image(systemName: "app.dashed")
-                .font(.system(size: 14, weight: .medium))
+            Image.leafAsset(LeafIcons.object.appPlaceholder)
+                .frame(width: 14, height: 14)
                 .foregroundStyle(Color.leafCategory(session.category))
         }
     }

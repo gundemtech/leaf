@@ -70,7 +70,7 @@ struct RemoveMemberSheet: View {
     private func successCard(displayName: String, outcome: RotationOutcome) -> some View {
         GlassCard(padding: 24) {
             VStack(alignment: .leading, spacing: 12) {
-                Label("Removed \(displayName)", systemImage: "checkmark.circle.fill")
+                Label("Removed \(displayName)", image: LeafIcons.status.successFill)
                     .font(.leafHeadline).foregroundStyle(.green)
                 if outcome.pendingCount > 0 {
                     Text("\(outcome.postedCount) of \(outcome.totalCount) peers notified. \(outcome.pendingCount) will sync when online.")
@@ -89,7 +89,7 @@ struct RemoveMemberSheet: View {
     private func errorCard(message: String) -> some View {
         GlassCard(padding: 24) {
             VStack(alignment: .leading, spacing: 16) {
-                Label("Couldn't remove member", systemImage: "exclamationmark.triangle.fill")
+                Label("Couldn't remove member", image: LeafIcons.status.warningFill)
                     .font(.leafBody.weight(.semibold))
                     .foregroundStyle(.red)
                 Text(message)

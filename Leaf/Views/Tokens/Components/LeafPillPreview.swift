@@ -37,9 +37,9 @@ struct LeafPillPreview: View {
                     .font(LeafType.mono.small)
                     .foregroundStyle(LeafColor.text.tertiary)
                 HStack(spacing: LeafSpace.sm) {
-                    LeafPill(title: "GitHub", tone: .neutral, icon: "chevron.left.forwardslash.chevron.right")
-                    LeafPill(title: "Linear", tone: .accent,  icon: "circle.dotted")
-                    LeafPill(title: "Slack",  tone: .success, icon: "bubble.left.and.bubble.right")
+                    LeafPill(title: "Email",   tone: .neutral, icon: .asset(LeafIcons.comm.email))
+                    LeafPill(title: "Comment", tone: .accent,  icon: .asset(LeafIcons.comm.message))
+                    LeafPill(title: "Share",   tone: .success, icon: .asset(LeafIcons.comm.share))
                 }
             }
 

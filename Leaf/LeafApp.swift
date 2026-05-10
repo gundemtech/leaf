@@ -132,7 +132,7 @@ struct LeafApp: App {
         .defaultSize(width: 1100, height: 800)
         #endif
 
-        MenuBarExtra("Leaf", systemImage: "leaf") {
+        MenuBarExtra("Leaf", image: LeafIcons.brand.leaf) {
             MenuBarContent()
                 .environment(launchAgent)
                 .environment(watchedFolders)

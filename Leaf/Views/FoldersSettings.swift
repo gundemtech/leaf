@@ -28,7 +28,7 @@ struct FoldersSettings: View {
                     Button {
                         addFoldersViaPanel()
                     } label: {
-                        Label("Add…", systemImage: "plus.circle")
+                        Label("Add…", image: LeafIcons.action.addFill)
                     }
                     .buttonStyle(.borderless)
                 }
@@ -63,8 +63,8 @@ struct FoldersSettings: View {
 
     private var emptyState: some View {
         VStack(alignment: .center, spacing: 8) {
-            Image(systemName: "folder.badge.questionmark")
-                .font(.largeTitle)
+            Image.leafAsset(LeafIcons.object.folderEmpty)
+                .frame(width: 32, height: 32)
                 .foregroundStyle(.secondary)
             Text("No watched folders")
                 .font(.headline)
@@ -94,7 +94,7 @@ struct FoldersSettings: View {
                 Button(role: .destructive) {
                     service.remove(id: folder.id)
                 } label: {
-                    Image(systemName: "trash")
+                    Image.leafAsset(LeafIcons.object.trash).frame(width: 14, height: 14)
                 }
                 .buttonStyle(.borderless)
             }

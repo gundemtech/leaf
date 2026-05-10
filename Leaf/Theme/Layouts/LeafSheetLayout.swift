@@ -22,7 +22,7 @@ struct LeafSheetLayout<Content: View>: View {
                 },
                 center: { EmptyView() },
                 trailing: {
-                    LeafIconButton(systemName: "xmark", variant: .ghost, size: .md, action: onDismiss)
+                    LeafIconButton(asset: LeafIcons.action.close, variant: .ghost, size: .md, action: onDismiss)
                 }
             )
             content()

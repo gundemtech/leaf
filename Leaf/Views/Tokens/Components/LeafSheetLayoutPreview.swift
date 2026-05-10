@@ -23,7 +23,7 @@ struct LeafSheetLayoutPreview: View {
                         .font(LeafType.title.medium)
                         .foregroundStyle(LeafColor.text.primary)
                     Spacer()
-                    LeafIconButton(systemName: "xmark", variant: .ghost, size: .md, action: {})
+                    LeafIconButton(asset: LeafIcons.action.close, variant: .ghost, size: .md, action: {})
                 }
                 .padding(.horizontal, LeafSpace.lg)
                 .padding(.vertical, LeafSpace.sm)

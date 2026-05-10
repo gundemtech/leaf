@@ -79,7 +79,8 @@ struct OnboardingView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Image(systemName: "leaf.fill")
+                Image.leafAsset(LeafIcons.brand.leafFill)
+                    .frame(width: 14, height: 14)
                     .foregroundStyle(.green)
                 Text("Welcome to Leaf")
                     .font(.headline)
@@ -204,7 +205,7 @@ struct OnboardingView: View {
 
     private var doneStep: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label("All set", systemImage: "checkmark.circle.fill")
+            Label("All set", image: LeafIcons.status.successFill)
                 .foregroundStyle(.green)
                 .font(.subheadline)
             Text("Leaf is collecting in the background. Open Settings → Folders to add directories you want to track.")
@@ -220,7 +221,7 @@ struct OnboardingView: View {
     @ViewBuilder
     private func grantStatus(granted: Bool) -> some View {
         if granted {
-            Label("Granted", systemImage: "checkmark.circle.fill")
+            Label("Granted", image: LeafIcons.status.successFill)
                 .foregroundStyle(.green)
                 .font(.caption)
         } else {

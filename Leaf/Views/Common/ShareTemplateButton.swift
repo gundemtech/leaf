@@ -21,21 +21,21 @@ struct ShareTemplateButton: View {
             Button {
                 copyToPasteboard()
             } label: {
-                Label("Copy", systemImage: "doc.on.doc")
+                Label("Copy", image: LeafIcons.comm.copy)
             }
             .buttonStyle(.borderedProminent)
 
             Button {
                 openMail()
             } label: {
-                Label("Mail", systemImage: "envelope")
+                Label("Mail", image: LeafIcons.comm.email)
             }
             .buttonStyle(.bordered)
 
             Button {
                 openMessages()
             } label: {
-                Label("Messages", systemImage: "message")
+                Label("Messages", image: LeafIcons.comm.message)
             }
             .buttonStyle(.bordered)
         }

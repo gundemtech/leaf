@@ -2,16 +2,21 @@
 //  LeafButton.swift
 //  Track 2 / D1 — Molecule M1. Composes LeafButtonTokens.
 //  Variants: primary / secondary / ghost / destructive.
-//  Sizes: sm / md / lg. Optional leading icon, loading state replaces label
-//  with ProgressView and disables interaction.
+//  Sizes: sm / md / lg. Optional leading icon (SF Symbol or Asset Catalog),
+//  loading state replaces label with ProgressView and disables interaction.
 //
 
 import SwiftUI
 
 struct LeafButton<Label: View>: View {
+    enum IconRef {
+        case system(String)
+        case asset(String)
+    }
+
     var variant: LeafButtonTokens.Variant = .primary
     var size: LeafButtonTokens.Size = .md
-    var icon: String? = nil
+    var icon: IconRef? = nil
     var isLoading: Bool = false
     let action: () -> Void
     @ViewBuilder let label: () -> Label
@@ -26,7 +31,7 @@ struct LeafButton<Label: View>: View {
                         .controlSize(.small)
                         .tint(LeafButtonTokens.Foreground.resting(variant))
                 } else {
-                    if let icon { Image(systemName: icon) }
+                    iconView
                     label()
                 }
             }
@@ -46,13 +51,29 @@ struct LeafButton<Label: View>: View {
         .leafAnimation(LeafMotion.spring.snappy, value: isHovering)
         .disabled(isLoading)
     }
+
+    @ViewBuilder
+    private var iconView: some View {
+        switch icon {
+        case .system(let name):
+            Image(systemName: name)
+        case .asset(let name):
+            Image(name)
+                .renderingMode(.template)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: LeafIconSize.sm.pt, height: LeafIconSize.sm.pt)
+        case .none:
+            EmptyView()
+        }
+    }
 }
 
 extension LeafButton where Label == Text {
     init(_ title: String,
          variant: LeafButtonTokens.Variant = .primary,
          size: LeafButtonTokens.Size = .md,
-         icon: String? = nil,
+         icon: IconRef? = nil,
          isLoading: Bool = false,
          action: @escaping () -> Void) {
         self.variant = variant

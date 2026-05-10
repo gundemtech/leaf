@@ -92,7 +92,7 @@ struct PendingInviteRow: View {
                 Button {
                     showingResharePopover = true
                 } label: {
-                    Label("Re-share", systemImage: "square.and.arrow.up")
+                    Label("Re-share", image: LeafIcons.comm.share)
                         .labelStyle(.iconOnly)
                 }
                 .buttonStyle(.bordered)
@@ -103,7 +103,7 @@ struct PendingInviteRow: View {
                 Button(role: .destructive) {
                     onRevoke()
                 } label: {
-                    Label("Revoke", systemImage: "xmark.circle")
+                    Label("Revoke", image: LeafIcons.action.clear)
                         .labelStyle(.iconOnly)
                 }
                 .buttonStyle(.bordered)

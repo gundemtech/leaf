@@ -15,26 +15,26 @@ struct LeafEmptyStatePreview: View {
 
             VStack(spacing: LeafSpace.lg) {
                 LeafEmptyState(
-                    icon: "tray",
+                    icon: LeafIcons.object.appPlaceholder,
                     title: "No connections yet",
                     description: "Connect Linear, GitHub, or Slack to start surfacing activity.",
                     ctaTitle: "Connect a source",
                     onCTA: {}
                 )
                 LeafEmptyState(
-                    icon: "person.2",
+                    icon: LeafIcons.object.userError,
                     title: "Just you so far",
                     description: "Invite a teammate to see overlapping focus sessions and presence."
                 )
                 LeafEmptyState(
-                    icon: "magnifyingglass",
+                    icon: LeafIcons.object.folderEmpty,
                     title: "No matches"
                 )
             }
 
             TokensInlineSpec(
-                spec: "LeafEmptyState · 56pt SF Symbol · title + optional desc (maxWidth 360) + optional primary CTA · no mascots",
-                codeSnippet: "LeafEmptyState(icon: \"tray\", title: \"No connections yet\")"
+                spec: "LeafEmptyState · 56pt asset glyph · title + optional desc (maxWidth 360) + optional primary CTA · no mascots",
+                codeSnippet: "LeafEmptyState(icon: LeafIcons.object.folderEmpty, title: \"No matches\")"
             )
         }
         .padding(LeafSpace.lg)

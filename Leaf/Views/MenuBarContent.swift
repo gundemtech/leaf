@@ -194,7 +194,7 @@ struct MenuBarContent: View {
     private var controls: some View {
         HStack(spacing: 8) {
             LeafProminentButton(action: openMainWindow) {
-                Label("Open", systemImage: "arrow.up.right")
+                Label("Open", image: LeafIcons.action.external)
                     .labelStyle(.titleAndIcon)
             }
             Spacer()

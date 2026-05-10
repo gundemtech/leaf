@@ -31,12 +31,13 @@ enum LeafBannerTokens {
             }
         }
 
+        /// Asset Catalog name (template-rendered) for the leading glyph.
         var icon: String {
             switch self {
-            case .info:    "info.circle.fill"
-            case .success: "checkmark.circle.fill"
-            case .warning: "exclamationmark.triangle.fill"
-            case .danger:  "xmark.octagon.fill"
+            case .info:    LeafIcons.status.info
+            case .success: LeafIcons.status.successFill
+            case .warning: LeafIcons.status.warningFill
+            case .danger:  LeafIcons.status.warningFill
             }
         }
     }

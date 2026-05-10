@@ -19,9 +19,9 @@ struct MetricCard: View {
 
         var symbol: String {
             switch self {
-            case .up:   "arrow.up.right"
-            case .down: "arrow.down.right"
-            case .flat: "arrow.right"
+            case .up:   LeafIcons.metric.up
+            case .down: LeafIcons.metric.down
+            case .flat: LeafIcons.metric.flat
             }
         }
 
@@ -48,7 +48,7 @@ struct MetricCard: View {
                     HStack(spacing: 8) {
                         if let trend {
                             HStack(spacing: 3) {
-                                Image(systemName: trend.symbol)
+                                Image.leafAsset(trend.symbol).frame(width: 11, height: 11)
                                 Text(trend.label)
                             }
                             .font(.leafCaption)

@@ -114,7 +114,7 @@ struct TeamView: View {
             PendingInvitesSection()
 
             Button(action: { showingGenerateSheet = true }) {
-                Label("Add member", systemImage: "plus")
+                Label("Add member", image: LeafIcons.action.add)
             }
             .buttonStyle(.borderedProminent)
         }
@@ -148,7 +148,8 @@ struct TeamView: View {
                         )
                     }
                 } label: {
-                    Image(systemName: "ellipsis.circle")
+                    Image.leafAsset(LeafIcons.action.overflowFill)
+                        .frame(width: 16, height: 16)
                         .foregroundStyle(.leafInk.opacity(0.5))
                 }
                 .menuStyle(.borderlessButton)
