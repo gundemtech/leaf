@@ -61,10 +61,10 @@ struct LeafIconButton: View {
 
     @ViewBuilder
     private var iconView: some View {
-        // SF Symbols ship with internal bbox padding (~70% glyph fill);
-        // Asset Catalog SVGs fill ~95% of their 24×24 viewBox. Apply a
-        // 0.85 compensation factor to the asset frame so both render at
-        // visually equivalent sizes.
+        // Both render paths use the same baseSize (button.height × 0.45).
+        // No SF→asset compensation: visual variance between tightly-packed
+        // SVGs (close/trash) и padded SVGs (sidebar/app-placeholder) is
+        // a source-of-truth concern handled in Figma, not at render time.
         let baseSize = size.height * 0.45
         switch source {
         case .system(let name):
@@ -75,7 +75,7 @@ struct LeafIconButton: View {
                 .renderingMode(.template)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
-                .frame(width: baseSize * 0.85, height: baseSize * 0.85)
+                .frame(width: baseSize, height: baseSize)
         }
     }
 }

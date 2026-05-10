@@ -16,7 +16,7 @@ struct LeafToolbarPreview: View {
             VStack(spacing: LeafSpace.md) {
                 LeafToolbar(
                     leading: {
-                        LeafIconButton(asset: LeafIcons.nav.sidebar, variant: .ghost, size: .sm, action: {})
+                        LeafIconButton(asset: LeafIcons.nav.sidebar, variant: .ghost, size: .md, action: {})
                     },
                     center: {
                         Text("Activity")
@@ -25,8 +25,8 @@ struct LeafToolbarPreview: View {
                     },
                     trailing: {
                         HStack(spacing: LeafSpace.xs) {
-                            LeafIconButton(systemName: LeafIcons.nav.searchSF, variant: .ghost, size: .sm, action: {})
-                            LeafIconButton(systemName: LeafIcons.nav.filterSF, variant: .ghost, size: .sm, action: {})
+                            LeafIconButton(systemName: LeafIcons.nav.searchSF, variant: .ghost, size: .md, action: {})
+                            LeafIconButton(systemName: LeafIcons.nav.filterSF, variant: .ghost, size: .md, action: {})
                         }
                     }
                 )
@@ -39,7 +39,7 @@ struct LeafToolbarPreview: View {
                     },
                     center: { EmptyView() },
                     trailing: {
-                        LeafButton("Invite", variant: .primary, size: .sm, action: {})
+                        LeafButton("Invite", variant: .primary, size: .md, action: {})
                     }
                 )
             }
