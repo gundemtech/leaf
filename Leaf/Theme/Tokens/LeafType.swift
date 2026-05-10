@@ -29,7 +29,7 @@ enum LeafType {
 
     static let caption = Font.system(size: 12, weight: .regular, design: .default)
 
-    /// Section labels — uppercase + tracking applied at the Text level via leafLabelStyle().
+    /// Section labels — uppercase + tracking applied at the Text level via `Text.leafSectionLabel()`.
     static let label = Font.system(size: 11, weight: .medium, design: .default)
 
     enum mono {
