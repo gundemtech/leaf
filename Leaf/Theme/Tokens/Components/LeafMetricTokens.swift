@@ -13,4 +13,12 @@ enum LeafMetricTokens {
         static let font: Font = LeafType.body.regular.monospacedDigit()
         static let foreground: Color = LeafColor.text.primary
     }
+
+    /// Ambient metric — large quiet display number paired with a tertiary label.
+    /// No card chrome; sits directly on canvas.
+    enum Ambient {
+        static let valueFont: Font = LeafType.display.regular.monospacedDigit()
+        static let labelFont: Font = LeafType.body.small
+        static let labelTracking: CGFloat = 0
+    }
 }

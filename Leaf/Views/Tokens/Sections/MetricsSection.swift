@@ -11,7 +11,7 @@ struct MetricsSection: View {
         VStack(alignment: .leading, spacing: LeafSpace.xl) {
             Text("Metrics").font(LeafType.title.large).foregroundStyle(LeafColor.text.primary)
             LeafMetricInlinePreview()
-            // LeafMetricAmbientPreview()   — added by Task 36
+            LeafMetricAmbientPreview()
             // LeafMetricDeltaPreview()     — added by Task 37
             // LeafSparklinePreview()       — added by Task 38
         }
