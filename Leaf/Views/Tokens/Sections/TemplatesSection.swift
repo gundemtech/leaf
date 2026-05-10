@@ -1,6 +1,6 @@
 //
 //  TemplatesSection.swift
-//  Track 2 / D1 — Stub. Filled by Tasks 39–42 (LeafWindow/Sheet/MenuBar/OnboardingStep layouts).
+//  Track 2 / D1 — populated by Tasks 39–42 (T1 Window / T2 Sheet / T3 MenuBar / T4 OnboardingStep).
 //
 
 import SwiftUI
@@ -8,10 +8,9 @@ import SwiftUI
 #if DEBUG
 struct TemplatesSection: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: LeafSpace.lg) {
+        VStack(alignment: .leading, spacing: LeafSpace.xl) {
             Text("Templates").font(LeafType.title.large).foregroundStyle(LeafColor.text.primary)
-            Text("Pending — populated by Track 2/D1 Tasks 39–42")
-                .font(LeafType.body.small).foregroundStyle(LeafColor.text.tertiary)
+            LeafWindowLayoutPreview()
         }
     }
 }
