@@ -34,7 +34,7 @@ struct LeafBadgePreview: View {
             }
 
             TokensInlineSpec(
-                spec: "LeafBadge · neutral / accent / numeric · LeafType.mono.small",
+                spec: "LeafBadge · neutral / accent / numeric · LeafType.mono.small · numeric enforces 18pt minSize → 1-digit renders as circle, 2+ digits expand to pill",
                 codeSnippet: "LeafBadge(count: 12)  // or LeafBadge(text: \"NEW\", variant: .accent)"
             )
         }

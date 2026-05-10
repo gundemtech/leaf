@@ -26,7 +26,14 @@ struct LeafBadge: View {
             .foregroundStyle(fg)
             .padding(.horizontal, LeafSpace.xs)
             .padding(.vertical, LeafSpace.xxs)
+            .frame(minWidth: minSize, minHeight: minSize)
             .background(Capsule().fill(bg))
+    }
+
+    /// Numeric badges enforce a square minimum so a single digit renders
+    /// as a circle. Text variants stay content-sized.
+    private var minSize: CGFloat? {
+        variant == .numeric ? LeafBadgeTokens.numericMinSize : nil
     }
 
     private var bg: Color {
