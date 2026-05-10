@@ -1,8 +1,10 @@
 //
 //  GeneralSettingsSection.swift
-//  Track 2 / D4 — migrated from native Form to LeafSection chain. LaunchAgent
-//  toggle + inline status row + last-error banner; Updates section is a single
-//  horizontal row "version · build" + Check-for-Updates CTA.
+//  Track 2 / D4 — migrated from native Form to LeafSection chain. Background
+//  collection card collapses to a single toggle row in the happy path; only
+//  surfaces a LeafBanner with a refresh CTA when the LaunchAgent state is
+//  actionable (requiresApproval, lastErrorMessage). Updates is a single
+//  horizontal row.
 //
 
 import SwiftUI
@@ -32,22 +34,22 @@ struct GeneralSettingsSection: View {
                             )
                         )
 
-                        HStack(spacing: LeafSpace.sm) {
-                            LeafDot(tone: statusTone, size: .md)
-                            Text(launchAgent.statusDescription)
-                                .font(LeafType.body.small)
-                                .foregroundStyle(LeafColor.text.secondary)
-                            Spacer()
-                            LeafButton(
-                                "Refresh",
-                                variant: .ghost,
-                                size: .sm,
-                                action: launchAgent.refreshStatus
-                            )
-                        }
-
                         if let error = launchAgent.lastErrorMessage {
-                            LeafBanner(tone: .danger, title: "Last error", description: error)
+                            LeafBanner(
+                                tone: .danger,
+                                title: "Background agent error",
+                                description: error,
+                                ctaTitle: "Try again",
+                                onCTA: launchAgent.refreshStatus
+                            )
+                        } else if launchAgent.status == .requiresApproval {
+                            LeafBanner(
+                                tone: .warning,
+                                title: "Login Items approval needed",
+                                description: "Open System Settings → General → Login Items and enable Leaf to start collection.",
+                                ctaTitle: "Refresh",
+                                onCTA: launchAgent.refreshStatus
+                            )
                         }
                     }
                 }
@@ -77,15 +79,6 @@ struct GeneralSettingsSection: View {
                     }
                 }
             }
-        }
-    }
-
-    private var statusTone: LeafDotTone {
-        switch launchAgent.status {
-        case .enabled:          return .success
-        case .requiresApproval: return .warning
-        case .notRegistered, .notFound: return .muted
-        @unknown default:       return .muted
         }
     }
 

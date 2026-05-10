@@ -75,16 +75,7 @@ struct FoldersSettings: View {
                     .truncationMode(.middle)
             }
             Spacer(minLength: LeafSpace.md)
-            Picker("Granularity", selection: Binding(
-                get: { folder.maxGranularity },
-                set: { service.update(id: folder.id, granularity: $0) }
-            )) {
-                Text("L4 — folder only").tag(WatchedFolderGranularity.L4)
-                Text("L5 — file names").tag(WatchedFolderGranularity.L5)
-            }
-            .pickerStyle(.menu)
-            .labelsHidden()
-            .fixedSize()
+            granularityMenu(folder)
             LeafToggle(
                 title: "",
                 isOn: Binding(
@@ -102,6 +93,40 @@ struct FoldersSettings: View {
         .padding(.horizontal, LeafSpace.md)
         .padding(.vertical, LeafSpace.md)
         .help(folder.path)
+    }
+
+    /// Compact Leaf-tokenized Menu replacing native macOS Picker chrome
+    /// (default popup background read foreign on Leaf canvas). Renders as a
+    /// LeafColor.surface.inset pill with `L4`/`L5` short label + chevron;
+    /// click reveals the long-form choices in a native Menu.
+    @ViewBuilder
+    private func granularityMenu(_ folder: WatchedFolder) -> some View {
+        Menu {
+            Button("L4 — folder only") {
+                service.update(id: folder.id, granularity: .L4)
+            }
+            Button("L5 — file names") {
+                service.update(id: folder.id, granularity: .L5)
+            }
+        } label: {
+            HStack(spacing: LeafSpace.xs) {
+                Text(folder.maxGranularity == .L4 ? "L4 — folder only" : "L5 — file names")
+                    .font(LeafType.body.small)
+                    .foregroundStyle(LeafColor.text.secondary)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(LeafColor.text.tertiary)
+            }
+            .padding(.horizontal, LeafSpace.sm)
+            .padding(.vertical, LeafSpace.xs)
+            .background(
+                RoundedRectangle(cornerRadius: LeafRadius.sm, style: .continuous)
+                    .fill(LeafColor.surface.inset)
+            )
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
     }
 
     // MARK: - NSOpenPanel
