@@ -24,6 +24,7 @@ struct TokensPreviewScreen: View {
                 TokensElevationSection()
                 TokensGlassSection(forceLegacy: $forceLegacyGlass)
                 TokensMotionSection()
+                TokensIconsSection()
                 AtomsSection()
                 MoleculesSection()
                 OrganismsSection()
