@@ -1,17 +1,27 @@
 //
 //  LeafEmptyStateTokens.swift
-//  Track 2 / D1 — T3 tokens for LeafEmptyState. Centralises the icon size
-//  (56pt large SF Symbol per spec — "no mascots"), description max width, and
-//  vertical padding so empty states across surfaces stay visually consistent
-//  without forking the component.
+//  Track 2 / D1 — T3 tokens for LeafEmptyState. Replaces the bare 56pt
+//  outline glyph with a LeafIconChip xl (64pt squircle holding a 32pt
+//  template glyph) so the visual reads as a contained placeholder, not
+//  a gigantic floating icon. Per-segment vertical gaps replace uniform
+//  stack spacing so the typographic rhythm is tighter near the chip and
+//  more breathable above the CTA.
 //
 
-import CoreGraphics
+import SwiftUI
 
 enum LeafEmptyStateTokens {
-    static let iconSize:            CGFloat = 56
+    static let chipSize:            LeafIconChipTokens.Size = .xl
+    static let chipBackgroundOpacity: Double  = 0.10
     static let descriptionMaxWidth: CGFloat = 360
     static let verticalPadding:     CGFloat = LeafSpace.xxl
-    static let stackSpacing:        CGFloat = LeafSpace.md
-    static let ctaTopPadding:       CGFloat = LeafSpace.sm
+
+    /// Vertical gap between chip and title — tight so they read as one block.
+    static let chipTitleGap:         CGFloat = LeafSpace.lg
+    /// Title→description gap — title.medium has its own line spacing, so we
+    /// only want a small breath here.
+    static let titleDescriptionGap:  CGFloat = LeafSpace.xxs
+    /// Description→CTA gap — slightly larger so the CTA reads as a separate
+    /// affordance, not a continuation of body copy.
+    static let descriptionCTAGap:    CGFloat = LeafSpace.lg
 }
