@@ -1,7 +1,11 @@
 //
 //  LeafIcon.swift
-//  Track 2 / D1 — Atom A1. SF Symbol wrapper with size variant + tint via T2 colour.
-//  No T3 file (atom — T2 sufficient).
+//  Track 2 / D1 — Atom A1. Glyph wrapper with size variant + tint via T2 colour.
+//  Two render paths:
+//    • SF Symbol (`systemName:`) — used for system glyphs we don't override
+//      (search / filter, plus any future SF-only callsites).
+//    • Asset Catalog (`asset:`) — template-rendered SVGs from the Figma
+//      design system, surfaced via the `LeafIcons.*` namespace.
 //
 
 import SwiftUI
@@ -17,15 +21,42 @@ enum LeafIconSize {
     }
 }
 
+private enum LeafIconSource {
+    case system(String)
+    case asset(String)
+}
+
 struct LeafIcon: View {
-    let systemName: String
-    var size: LeafIconSize = .md
-    var tint: Color = LeafColor.text.primary
+    private let source: LeafIconSource
+    private let size: LeafIconSize
+    private let tint: Color
+
+    init(systemName: String, size: LeafIconSize = .md, tint: Color = LeafColor.text.primary) {
+        self.source = .system(systemName)
+        self.size = size
+        self.tint = tint
+    }
+
+    init(asset: String, size: LeafIconSize = .md, tint: Color = LeafColor.text.primary) {
+        self.source = .asset(asset)
+        self.size = size
+        self.tint = tint
+    }
 
     var body: some View {
-        Image(systemName: systemName)
-            .font(.system(size: size.pt, weight: .regular))
-            .foregroundStyle(tint)
-            .frame(width: size.pt, height: size.pt)
+        Group {
+            switch source {
+            case .system(let name):
+                Image(systemName: name)
+                    .font(.system(size: size.pt, weight: .regular))
+            case .asset(let name):
+                Image(name)
+                    .renderingMode(.template)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            }
+        }
+        .foregroundStyle(tint)
+        .frame(width: size.pt, height: size.pt)
     }
 }

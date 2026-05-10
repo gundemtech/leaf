@@ -1,6 +1,7 @@
 //
 //  LeafIconPreview.swift
-//  Track 2 / D1 — TokensPreview entry for Atom A1 LeafIcon.
+//  Track 2 / D1 — TokensPreview entry for Atom A1 LeafIcon. Demonstrates both
+//  render paths: SF Symbol (`systemName:`) and Asset Catalog (`asset:`).
 //
 
 import SwiftUI
@@ -11,15 +12,17 @@ struct LeafIconPreview: View {
         VStack(alignment: .leading, spacing: LeafSpace.sm) {
             Text("LeafIcon").font(LeafType.title.medium).foregroundStyle(LeafColor.text.primary)
             HStack(spacing: LeafSpace.lg) {
-                LeafIcon(systemName: "leaf.fill", size: .sm)
-                LeafIcon(systemName: "leaf.fill", size: .md)
-                LeafIcon(systemName: "leaf.fill", size: .lg)
-                LeafIcon(systemName: "leaf.fill", size: .md, tint: LeafColor.accent.primary)
-                LeafIcon(systemName: "leaf.fill", size: .md, tint: LeafColor.status.danger)
+                LeafIcon(asset: LeafIcons.brand.leafFill, size: .sm)
+                LeafIcon(asset: LeafIcons.brand.leafFill, size: .md)
+                LeafIcon(asset: LeafIcons.brand.leafFill, size: .lg)
+                LeafIcon(asset: LeafIcons.brand.leafFill, size: .md, tint: LeafColor.accent.primary)
+                LeafIcon(asset: LeafIcons.brand.leafFill, size: .md, tint: LeafColor.status.danger)
+                LeafDivider()
+                LeafIcon(systemName: "magnifyingglass", size: .md)
             }
             TokensInlineSpec(
-                spec: "LeafIcon · sm/md/lg · tint via LeafColor.*",
-                codeSnippet: "LeafIcon(systemName: \"leaf.fill\", size: .md, tint: LeafColor.accent.primary)"
+                spec: "LeafIcon · sm/md/lg · tint via LeafColor.* · asset (Figma SVG) | systemName (SF)",
+                codeSnippet: "LeafIcon(asset: LeafIcons.brand.leafFill, size: .md, tint: LeafColor.accent.primary)"
             )
         }
         .padding(LeafSpace.lg)
