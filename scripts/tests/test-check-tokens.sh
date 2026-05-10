@@ -58,8 +58,9 @@ FIXTURE_FILE_LEVEL="${TMP}/__test_fixture_root_view__.swift"
 
 FIXTURE_ACTIVITY_DIR="${REPO_ROOT}/Leaf/Views/Window/Activity"
 FIXTURE_CONNECTIONS_DIR="${REPO_ROOT}/Leaf/Views/Window/Connections"
+FIXTURE_VIEWS_ROOT="${REPO_ROOT}/Leaf/Views"
 
-trap 'rm -rf "$TMP" "$FIXTURE_DIR_BASE" "$FIXTURE_DIR_MIGR"; rm -f "$FIXTURE_ACTIVITY_DIR"/__fixture_*.swift "$FIXTURE_CONNECTIONS_DIR"/__fixture_*.swift' EXIT
+trap 'rm -rf "$TMP" "$FIXTURE_DIR_BASE" "$FIXTURE_DIR_MIGR"; rm -f "$FIXTURE_ACTIVITY_DIR"/__fixture_*.swift "$FIXTURE_CONNECTIONS_DIR"/__fixture_*.swift "$FIXTURE_VIEWS_ROOT"/__fixture_*.swift' EXIT
 
 mkdir -p "$FIXTURE_DIR_BASE"
 mkdir -p "$FIXTURE_DIR_MIGR"
@@ -112,13 +113,16 @@ EOF
 assert_fail "raw RoundedRectangle(cornerRadius: 16) in BASE"
 rm "${FIXTURE_DIR_BASE}/Rect.swift"
 
-# Case 7 — old-palette ref `.leafBody` in BASE PASSES (BASE allows palette).
-cat > "${FIXTURE_DIR_BASE}/OldPaletteOK.swift" <<'EOF'
+# Case 7 — Track 2 / D4 RETIRED tier flips this: old-palette ref in BASE
+# now FAILS because RETIRED scope = entire Leaf/ tree. Pre-D4 Behavior:
+# BASE allowed palette refs (palette files lived there). Post-D4: palette
+# files retired; any old-palette ref anywhere in Leaf/ trips RETIRED.
+cat > "${FIXTURE_DIR_BASE}/OldPaletteRetired.swift" <<'EOF'
 import SwiftUI
 let f = Font.leafBody
 EOF
-assert_pass "old-palette ref allowed in BASE"
-rm "${FIXTURE_DIR_BASE}/OldPaletteOK.swift"
+assert_fail "old-palette ref forbidden by RETIRED tier in any Leaf/ path"
+rm "${FIXTURE_DIR_BASE}/OldPaletteRetired.swift"
 
 # Case 8 — old-palette ref `.leafBody` in MIGRATION dir FAILS.
 cat > "${FIXTURE_DIR_MIGR}/OldPaletteBad.swift" <<'EOF'
@@ -239,5 +243,65 @@ struct CleanConnections: View {
 EOF
 assert_pass "clean Connections MIGRATION swift"
 rm "$FIXTURE_CONN"
+
+# === Track 2 / D4 — RETIRED tier + MIGRATION whole-Views/ fixtures ===
+
+# Case 18 — RETIRED tier: Color.leafInk anywhere in Leaf/ fails.
+cat > "${FIXTURE_DIR_BASE}/Retired1.swift" <<'EOF'
+import SwiftUI
+struct Bad: View { var body: some View { Text("x").foregroundStyle(Color.leafInk) } }
+EOF
+assert_fail "RETIRED: Color.leafInk in BASE scope"
+rm "${FIXTURE_DIR_BASE}/Retired1.swift"
+
+# Case 19 — RETIRED tier: leafLabelStyle in BASE fails.
+cat > "${FIXTURE_DIR_BASE}/Retired2.swift" <<'EOF'
+import SwiftUI
+struct Bad: View { var body: some View { Text("x").leafLabelStyle() } }
+EOF
+assert_fail "RETIRED: .leafLabelStyle() in BASE scope"
+rm "${FIXTURE_DIR_BASE}/Retired2.swift"
+
+# Case 20 — RETIRED tier: GlassCard ref in BASE fails.
+cat > "${FIXTURE_DIR_BASE}/Retired3.swift" <<'EOF'
+import SwiftUI
+struct Bad: View { var body: some View { GlassCard { Text("x") } } }
+EOF
+assert_fail "RETIRED: GlassCard wrapper anywhere"
+rm "${FIXTURE_DIR_BASE}/Retired3.swift"
+
+# Case 21 — RETIRED tier: LeafMetricCard token usage NOT triggers MetricCard ban.
+cat > "${FIXTURE_DIR_BASE}/Allowed.swift" <<'EOF'
+import SwiftUI
+struct Allowed: View { var body: some View { LeafMetricCard(value: "x") } }
+EOF
+assert_pass "RETIRED: LeafMetricCard preserved (exclude regex)"
+rm "${FIXTURE_DIR_BASE}/Allowed.swift"
+
+# Case 22 — MIGRATION = whole Leaf/Views/ minus Tokens/. Clean fixture inside
+# Leaf/Views/ root (not in any sub-dir already listed) passes.
+FIXTURE_VIEWS_GENERIC="${FIXTURE_VIEWS_ROOT}/__fixture_clean_d4.swift"
+cat > "$FIXTURE_VIEWS_GENERIC" <<'EOF'
+import SwiftUI
+struct CleanD4: View {
+    var body: some View {
+        VStack(spacing: LeafSpace.md) {
+            Text("hi").font(LeafType.body.regular).foregroundStyle(LeafColor.text.primary)
+        }
+        .padding(LeafSpace.lg)
+    }
+}
+EOF
+assert_pass "MIGRATION whole-Views/: clean swift in Views/ root"
+rm "$FIXTURE_VIEWS_GENERIC"
+
+# Case 23 — MIGRATION = whole Leaf/Views/. Old-palette ref in any Views/ subdir fails.
+FIXTURE_VIEWS_GENERIC="${FIXTURE_VIEWS_ROOT}/__fixture_bad_d4.swift"
+cat > "$FIXTURE_VIEWS_GENERIC" <<'EOF'
+import SwiftUI
+struct BadD4: View { var body: some View { Text("x").font(.leafBody) } }
+EOF
+assert_fail "MIGRATION whole-Views/: old-palette ref in Views/ root"
+rm "$FIXTURE_VIEWS_GENERIC"
 
 echo "All fixture cases passed."

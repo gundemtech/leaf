@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
-# Track 2 / D1+D2 — token-discipline guard.
+# Track 2 / D1+D2+D3+D4 — token-discipline guard.
 #
-# Two-tier scope (Track 2 / D2+D3 extension):
-#   • BASE scope        — Leaf/Theme/ + Leaf/Views/Tokens/. Bans raw
-#     colors, raw padding ints, raw cornerRadius ints. Does NOT ban
-#     old-palette references because the palette itself is defined here.
-#   • MIGRATION scope   — D2: Leaf/Views/Window/Home/ + RootView.swift +
-#     Sidebar.swift. D3: + Leaf/Views/Window/Activity/ + Team/TeamView.swift
-#     + Team/PendingInvitesSection.swift + Team/PendingInviteRow.swift +
-#     Leaf/Views/Window/Connections/. Inherits BASE checks AND
-#     additionally bans old-palette references. Formalises 'migrated
-#     file = zero old-palette refs'. Sheets (GenerateInviteSheet,
-#     RemoveMemberSheet) deliberately excluded — D4 carry-over.
+# Three-tier scope (final form post-D4):
+#   • BASE scope        — Leaf/Theme/ + Leaf/Views/Tokens/. Bans raw colors,
+#     raw padding ints, raw cornerRadius ints. Does NOT ban old-palette
+#     references because the palette itself is defined here historically;
+#     RETIRED tier (below) catches old-palette regardless of scope.
+#   • MIGRATION scope   — Leaf/Views/ (entire directory minus Tokens/ which
+#     lives under BASE). Inherits BASE checks AND additionally bans
+#     old-palette references (defense-in-depth alongside RETIRED tier).
+#   • RETIRED scope     — Leaf/ (entire tree). Bans old-palette names
+#     anywhere in the codebase. Catches accidental re-introduction via
+#     comments / strings / copy-paste from git history (compile-time
+#     deletion is primary guard; this is secondary).
 #
-# Allowed inside scope (any tier):
+# Allowed inside any scope:
 #   - Color("LeafFooBar")           ← Asset Catalog lookup
 #   - LeafColor.* / LeafSpace.* / LeafRadius.* / LeafType.* /
 #     LeafElevation.* / LeafGlass.* / LeafMotion.*
@@ -31,17 +32,18 @@ BASE_PATHS=(
     "${REPO_ROOT}/Leaf/Views/Tokens"
 )
 
-# ---- Tier 2: MIGRATION scope (D2-migrated app views) ----
+# ---- Tier 2: MIGRATION scope (whole Leaf/Views/ minus Tokens/) ----
+# Single entry: entire Views/ directory. BASE_PATHS includes Views/Tokens/
+# separately; check_pattern_in_paths over MIGRATION_PATHS still scans
+# Views/Tokens/ but BASE rules already apply there — no ill effect, just
+# duplicate-but-consistent enforcement.
 MIGRATION_PATHS=(
-    "${REPO_ROOT}/Leaf/Views/Window/Home"
-    "${REPO_ROOT}/Leaf/Views/Window/RootView.swift"
-    "${REPO_ROOT}/Leaf/Views/Window/Sidebar.swift"
-    # Track 2 / D3 additions:
-    "${REPO_ROOT}/Leaf/Views/Window/Activity"
-    "${REPO_ROOT}/Leaf/Views/Window/Team/TeamView.swift"
-    "${REPO_ROOT}/Leaf/Views/Window/Team/PendingInvitesSection.swift"
-    "${REPO_ROOT}/Leaf/Views/Window/Team/PendingInviteRow.swift"
-    "${REPO_ROOT}/Leaf/Views/Window/Connections"
+    "${REPO_ROOT}/Leaf/Views"
+)
+
+# ---- Tier 3: RETIRED scope (whole Leaf/) ----
+RETIRED_PATHS=(
+    "${REPO_ROOT}/Leaf"
 )
 
 # Optional self-test override: append extra paths via env var.
@@ -147,7 +149,7 @@ run_base_checks "${MIGRATION_PATHS[@]}"
 
 check_pattern_in_paths \
     "Old-palette reference — migrated views must use LeafColor.* / LeafType.* / LeafGlass.* exclusively" \
-    '\.leaf(Background|Ink|Muted|Accent|AccentDeep|Signal|LabelStyle|Body|Title|Caption|Metric|Glass|GlassGroup)\b' \
+    '\.leaf(Background|Ink|Muted|Accent|AccentDeep|Signal|LabelStyle|Body|Title|Caption|Metric)\b' \
     "" \
     "${MIGRATION_PATHS[@]}"
 
@@ -156,6 +158,77 @@ check_pattern_in_paths \
     '\b(GlassCard|LeafGlassGroup)\b' \
     "" \
     "${MIGRATION_PATHS[@]}"
+
+# ---- RETIRED checks (old palette names banned ANYWHERE in Leaf/) ----
+# Defense-in-depth: compile-time deletion is primary guard (token files
+# removed in D4 retirement); this catches accidental re-introduction
+# via comments, strings, or copy-paste from git history.
+
+check_pattern_in_paths \
+    "RETIRED — old-palette Color name (Color.leafInk / leafBackground / etc) — use LeafColor.*" \
+    'Color\.leaf(Ink|Background|Card|Accent|AccentDeep|Signal|Muted)\b' \
+    "" \
+    "${RETIRED_PATHS[@]}"
+
+check_pattern_in_paths \
+    "RETIRED — old-palette ShapeStyle name (.leafInk / .leafBackground / etc on foregroundStyle) — use LeafColor.*" \
+    '\.leaf(Ink|Background|Card|Accent|AccentDeep|Signal|Muted)\b' \
+    "" \
+    "${RETIRED_PATHS[@]}"
+
+check_pattern_in_paths \
+    "RETIRED — old-palette Font name (Font.leafBody / leafHeadline / etc) — use LeafType.*" \
+    'Font\.leaf(Body|Headline|Title|Caption|Label|Metric)\b' \
+    "" \
+    "${RETIRED_PATHS[@]}"
+
+check_pattern_in_paths \
+    "RETIRED — old-palette font call-site (.font(.leafBody) / etc) — use LeafType.*" \
+    '\.font\(\.leaf(Body|Headline|Title|Caption|Label|Metric)\)' \
+    "" \
+    "${RETIRED_PATHS[@]}"
+
+check_pattern_in_paths \
+    "RETIRED — leafLabelStyle() helper — use Text.leafSectionLabel()" \
+    '\.leafLabelStyle\(\)' \
+    "" \
+    "${RETIRED_PATHS[@]}"
+
+check_pattern_in_paths \
+    "RETIRED — GlassCard wrapper — use LeafCard variant" \
+    '\bGlassCard\b' \
+    "" \
+    "${RETIRED_PATHS[@]}"
+
+check_pattern_in_paths \
+    "RETIRED — LeafProminentButton / LeafSecondaryButton / LeafGlassGroup wrappers — use LeafButton + LeafGlass.* token" \
+    '\bLeafProminentButton\b|\bLeafSecondaryButton\b|\bLeafGlassGroup\b' \
+    "" \
+    "${RETIRED_PATHS[@]}"
+
+check_pattern_in_paths \
+    "RETIRED — old MetricCard wrapper — use LeafMetricCard" \
+    '\bMetricCard\b' \
+    'Leaf(MetricCard|MetricTokens|MetricAmbient|MetricDelta|MetricInline|MetricCardPreview)' \
+    "${RETIRED_PATHS[@]}"
+
+check_pattern_in_paths \
+    "RETIRED — old EmptyStateView wrapper — use LeafEmptyState" \
+    '\bEmptyStateView\b' \
+    "" \
+    "${RETIRED_PATHS[@]}"
+
+check_pattern_in_paths \
+    "RETIRED — old BannerView wrapper — use LeafBanner" \
+    '\bBannerView\b' \
+    "" \
+    "${RETIRED_PATHS[@]}"
+
+check_pattern_in_paths \
+    "RETIRED — Color.leafCategory(_:) — categories no longer surfaced as user-facing signal" \
+    'Color\.leafCategory\(|\.leafCategory\(' \
+    "" \
+    "${RETIRED_PATHS[@]}"
 
 if [[ $EXIT -ne 0 ]]; then
     echo "✘ Token-discipline guard failed — see above."
