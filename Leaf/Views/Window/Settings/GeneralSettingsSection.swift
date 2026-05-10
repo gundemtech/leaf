@@ -24,17 +24,22 @@ struct BackgroundCollectionSection: View {
         ) {
             LeafCard(variant: .raised, padding: .regular) {
                 VStack(alignment: .leading, spacing: LeafSpace.md) {
-                    LeafToggle(
-                        title: "Enable background collection",
-                        isOn: Binding(
+                    HStack(spacing: LeafSpace.md) {
+                        Text("Enable background collection")
+                            .font(LeafType.body.regular)
+                            .foregroundStyle(LeafColor.text.primary)
+                        Spacer()
+                        Toggle("", isOn: Binding(
                             get: { launchAgent.isEnabled },
                             set: { newValue in
                                 if newValue { launchAgent.register() }
                                 else        { launchAgent.unregister() }
                             }
-                        )
-                    )
-                    .frame(maxWidth: .infinity)
+                        ))
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .tint(LeafColor.accent.primary)
+                    }
 
                     if let error = launchAgent.lastErrorMessage {
                         LeafBanner(
