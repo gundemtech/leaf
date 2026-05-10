@@ -1,6 +1,6 @@
 //
 //  MetricsSection.swift
-//  Track 2 / D1 — Stub. Filled by Tasks 35–38 (LeafMetricInline / Ambient / Delta / Sparkline).
+//  Track 2 / D1 — populated by Tasks 35–38 (MT1 Inline / MT2 Ambient / MT3 Delta / MT4 Sparkline).
 //
 
 import SwiftUI
@@ -8,10 +8,12 @@ import SwiftUI
 #if DEBUG
 struct MetricsSection: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: LeafSpace.lg) {
+        VStack(alignment: .leading, spacing: LeafSpace.xl) {
             Text("Metrics").font(LeafType.title.large).foregroundStyle(LeafColor.text.primary)
-            Text("Pending — populated by Track 2/D1 Tasks 35–38")
-                .font(LeafType.body.small).foregroundStyle(LeafColor.text.tertiary)
+            LeafMetricInlinePreview()
+            // LeafMetricAmbientPreview()   — added by Task 36
+            // LeafMetricDeltaPreview()     — added by Task 37
+            // LeafSparklinePreview()       — added by Task 38
         }
     }
 }
