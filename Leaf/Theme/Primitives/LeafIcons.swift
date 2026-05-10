@@ -35,8 +35,10 @@ enum LeafIcon_Nav {
     static let profile:     String = "leaf-nav-profile"
     // search / filter / organization intentionally remain SF Symbols.
     // organization будет removed когда UX уйдёт на single-team модель.
+    // SF picks chosen for outline/light visual weight to match the custom
+    // SVG aesthetic (avoid filled-circle variants that contrast heavily).
     static let searchSF:       String = "magnifyingglass"
-    static let filterSF:       String = "line.3.horizontal.decrease.circle"
+    static let filterSF:       String = "line.3.horizontal.decrease"
     static let organizationSF: String = "building.2"
 }
 
