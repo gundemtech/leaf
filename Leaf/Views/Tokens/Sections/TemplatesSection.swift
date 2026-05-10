@@ -12,6 +12,7 @@ struct TemplatesSection: View {
             Text("Templates").font(LeafType.title.large).foregroundStyle(LeafColor.text.primary)
             LeafWindowLayoutPreview()
             LeafSheetLayoutPreview()
+            LeafMenuBarLayoutPreview()
         }
     }
 }
