@@ -11,6 +11,7 @@ struct TemplatesSection: View {
         VStack(alignment: .leading, spacing: LeafSpace.xl) {
             Text("Templates").font(LeafType.title.large).foregroundStyle(LeafColor.text.primary)
             LeafWindowLayoutPreview()
+            LeafSheetLayoutPreview()
         }
     }
 }
