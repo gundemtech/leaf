@@ -37,6 +37,17 @@ enum LeafButtonTokens {
         }
 
         var cornerRadius: CGFloat { LeafRadius.md }
+
+        /// Icon point size matched to the size's font cap-height — used by
+        /// LeafButton's asset render path so custom SVG icons read at the
+        /// same visual weight as the surrounding label text.
+        var iconPt: CGFloat {
+            switch self {
+            case .sm: 13   // body.small
+            case .md: 15   // body.regular
+            case .lg: 17   // body.large
+            }
+        }
     }
 
     enum Background {

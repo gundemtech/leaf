@@ -58,13 +58,14 @@ struct LeafButton<Label: View>: View {
         case .system(let name):
             Image(systemName: name)
         case .asset(let name):
-            // 0.85 compensation — asset SVG glyphs fill more of their bbox
-            // than SF Symbols, so frame is reduced to match visual weight.
+            // Icon pt matches the size's font cap-height (size.iconPt)
+            // so the asset glyph reads at the same visual weight as the
+            // surrounding label text.
             Image(name)
                 .renderingMode(.template)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
-                .frame(width: LeafIconSize.sm.pt * 0.85, height: LeafIconSize.sm.pt * 0.85)
+                .frame(width: size.iconPt, height: size.iconPt)
         case .none:
             EmptyView()
         }
