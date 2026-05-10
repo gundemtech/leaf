@@ -1,9 +1,10 @@
 //
 //  FoldersSettings.swift
-//  Leaf
-//
 //  Phase 2.4b — Settings tab "Folders" с per-folder L4/L5 toggle, enable/disable,
 //  remove, и "Add folder…" через NSOpenPanel.
+//
+//  Track 2 / D4 — migrated to LeafSection (cta-slot Add) + LeafCard wrapping
+//  ad-hoc folder rows. LeafEmptyState empty; LeafBanner.danger error.
 //
 
 import SwiftUI
@@ -14,111 +15,87 @@ struct FoldersSettings: View {
     @Bindable var service: WatchedFoldersService
 
     var body: some View {
-        Form {
-            Section {
+        LeafSection(
+            title: "Watched folders",
+            description: "Leaf отслеживает file-level activity (создание, изменение, удаление) только в выбранных папках. L4 (default) — popover показывает только имя папки. L5 — basename файла. Toggle применяется только к новым событиям. История удалённой папки остаётся локально."
+        ) {
+            VStack(alignment: .leading, spacing: LeafSpace.md) {
                 if service.folders.isEmpty {
-                    emptyState
+                    LeafEmptyState(
+                        icon: LeafIcons.object.folderEmpty,
+                        title: "No watched folders",
+                        description: "Add a folder to track file activity in your projects."
+                    )
                 } else {
-                    folderList
-                }
-            } header: {
-                HStack {
-                    Text("Watched folders")
-                    Spacer()
-                    Button {
-                        addFoldersViaPanel()
-                    } label: {
-                        Label("Add…", image: LeafIcons.action.addFill)
+                    LeafCard(variant: .raised, padding: .tight) {
+                        VStack(spacing: 0) {
+                            let folders = service.folders
+                            ForEach(Array(folders.enumerated()), id: \.element.id) { idx, folder in
+                                folderRow(folder)
+                                if idx < folders.count - 1 {
+                                    LeafDivider()
+                                }
+                            }
+                        }
                     }
-                    .buttonStyle(.borderless)
                 }
-            } footer: {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Leaf отслеживает file-level activity (создание, изменение, удаление) только в выбранных папках.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("L4 (default) — popover показывает только имя папки. L5 — basename файла. Toggle применяется только к новым событиям.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("История удалённой папки остаётся локально. Right-to-deletion — отдельный flow.")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
-            }
 
-            if let error = service.lastErrorMessage {
-                Section {
-                    Text(error)
-                        .foregroundStyle(.red)
-                        .font(.caption)
+                if let error = service.lastErrorMessage {
+                    LeafBanner(tone: .danger, title: "Couldn't add folder", description: error)
                 }
             }
+        } cta: {
+            LeafButton(
+                "Add…",
+                variant: .secondary,
+                size: .sm,
+                icon: .asset(LeafIcons.action.add),
+                action: addFoldersViaPanel
+            )
         }
-        .formStyle(.grouped)
-        .padding()
         .onAppear { service.reload() }
     }
 
-    // MARK: - Sections
-
-    private var emptyState: some View {
-        VStack(alignment: .center, spacing: 8) {
-            Image.leafAsset(LeafIcons.object.folderEmpty)
-                .frame(width: 32, height: 32)
-                .foregroundStyle(.secondary)
-            Text("No watched folders")
-                .font(.headline)
-            Text("Add a folder to track file activity in your projects.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
-    }
-
-    private var folderList: some View {
-        ForEach(service.folders, id: \.id) { folder in
-            folderRow(folder)
-        }
-    }
-
     private func folderRow(_ folder: WatchedFolder) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
+        HStack(alignment: .center, spacing: LeafSpace.md) {
+            VStack(alignment: .leading, spacing: LeafSpace.xs) {
                 Text(URL(fileURLWithPath: folder.path).lastPathComponent)
-                    .font(.body)
+                    .font(LeafType.body.regular)
+                    .foregroundStyle(LeafColor.text.primary)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Spacer()
-                Button(role: .destructive) {
-                    service.remove(id: folder.id)
-                } label: {
-                    Image.leafAsset(LeafIcons.object.trash).frame(width: 14, height: 14)
-                }
-                .buttonStyle(.borderless)
-            }
-            .help(folder.path)
+                HStack(spacing: LeafSpace.md) {
+                    Picker("Granularity", selection: Binding(
+                        get: { folder.maxGranularity },
+                        set: { service.update(id: folder.id, granularity: $0) }
+                    )) {
+                        Text("L4 — folder only").tag(WatchedFolderGranularity.L4)
+                        Text("L5 — file names").tag(WatchedFolderGranularity.L5)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(maxWidth: 220)
 
-            HStack {
-                Picker("Granularity", selection: Binding(
-                    get: { folder.maxGranularity },
-                    set: { service.update(id: folder.id, granularity: $0) }
-                )) {
-                    Text("L4 — folder only").tag(WatchedFolderGranularity.L4)
-                    Text("L5 — file names").tag(WatchedFolderGranularity.L5)
+                    LeafToggle(
+                        title: "Enabled",
+                        isOn: Binding(
+                            get: { folder.enabled },
+                            set: { service.update(id: folder.id, enabled: $0) }
+                        )
+                    )
                 }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 220)
-
-                Toggle("Enabled", isOn: Binding(
-                    get: { folder.enabled },
-                    set: { service.update(id: folder.id, enabled: $0) }
-                ))
-                .toggleStyle(.switch)
             }
+            Spacer()
+            LeafIconButton(
+                asset: LeafIcons.object.trash,
+                variant: .ghost,
+                size: .md,
+                action: { service.remove(id: folder.id) }
+            )
         }
-        .padding(.vertical, 4)
+        .padding(.horizontal, LeafSpace.md)
+        .padding(.vertical, LeafSpace.md)
+        .help(folder.path)
     }
 
     // MARK: - NSOpenPanel
