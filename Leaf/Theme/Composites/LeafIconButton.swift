@@ -61,17 +61,21 @@ struct LeafIconButton: View {
 
     @ViewBuilder
     private var iconView: some View {
-        let pt = size.height * 0.45
+        // SF Symbols ship with internal bbox padding (~70% glyph fill);
+        // Asset Catalog SVGs fill ~95% of their 24×24 viewBox. Apply a
+        // 0.85 compensation factor to the asset frame so both render at
+        // visually equivalent sizes.
+        let baseSize = size.height * 0.45
         switch source {
         case .system(let name):
             Image(systemName: name)
-                .font(.system(size: pt, weight: .regular))
+                .font(.system(size: baseSize, weight: .regular))
         case .asset(let name):
             Image(name)
                 .renderingMode(.template)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
-                .frame(width: pt, height: pt)
+                .frame(width: baseSize * 0.85, height: baseSize * 0.85)
         }
     }
 }

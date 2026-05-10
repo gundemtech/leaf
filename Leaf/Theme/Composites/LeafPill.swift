@@ -35,11 +35,13 @@ struct LeafPill: View {
         case .system(let name):
             Image(systemName: name).font(.system(size: 11))
         case .asset(let name):
+            // 0.85 compensation — asset SVG glyphs fill more of their bbox
+            // than SF Symbols, so frame is reduced to match visual weight.
             Image(name)
                 .renderingMode(.template)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
-                .frame(width: 11, height: 11)
+                .frame(width: 11 * 0.85, height: 11 * 0.85)
         case .none:
             EmptyView()
         }
