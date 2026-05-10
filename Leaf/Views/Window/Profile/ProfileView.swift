@@ -1,3 +1,10 @@
+//
+//  ProfileView.swift
+//  Track 2 / D4 — migrated to LeafAvatar.lg header + LeafMetricCard stats grid.
+//  Caption parameter folded into title (LeafMetricCard substrate doesn't
+//  surface caption — title carries unit semantics).
+//
+
 import SwiftUI
 import LeafCore
 
@@ -9,18 +16,18 @@ struct ProfileView: View {
         return n.isEmpty ? "Local user" : n
     }
 
-    private var initial: String {
+    private var initials: String {
         fullName.first.map { String($0).uppercased() } ?? "?"
     }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
+            VStack(alignment: .leading, spacing: LeafSpace.xxl) {
                 header
                 statTiles
                 Spacer(minLength: 0)
             }
-            .padding(40)
+            .padding(LeafSpace.xxl)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
@@ -28,32 +35,18 @@ struct ProfileView: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(alignment: .center, spacing: 20) {
-            avatar
-            VStack(alignment: .leading, spacing: 4) {
-                Text("PROFILE")
-                    .leafLabelStyle()
+        HStack(alignment: .center, spacing: LeafSpace.lg) {
+            LeafAvatar(initials: initials, size: .lg)
+            VStack(alignment: .leading, spacing: LeafSpace.xs) {
                 Text(fullName)
-                    .font(.leafHeadline)
-                    .foregroundStyle(.leafInk)
+                    .font(LeafType.title.medium)
+                    .foregroundStyle(LeafColor.text.primary)
                 Text("Leaf · Local user")
-                    .font(.leafBody)
-                    .foregroundStyle(.leafMuted)
+                    .font(LeafType.body.regular)
+                    .foregroundStyle(LeafColor.text.secondary)
             }
             Spacer()
         }
-    }
-
-    private var avatar: some View {
-        ZStack {
-            Circle()
-                .fill(Color.leafAccent.opacity(0.18))
-            Text(initial)
-                .font(.system(size: 28, weight: .semibold, design: .serif))
-                .foregroundStyle(.leafAccentDeep)
-        }
-        .frame(width: 64, height: 64)
-        .overlay(Circle().stroke(Color.leafAccent.opacity(0.3), lineWidth: 1))
     }
 
     // MARK: - Stat tiles
@@ -62,26 +55,33 @@ struct ProfileView: View {
     private var statTiles: some View {
         if case .loaded(let snapshot, _) = reader.state {
             LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 220), spacing: 16)],
-                spacing: 16
+                columns: [GridItem(.adaptive(minimum: 220, maximum: 320), spacing: LeafSpace.lg)],
+                spacing: LeafSpace.lg
             ) {
-                MetricCard(
-                    title: "Active days",
-                    value: "\(snapshot.activeDaysInRow)",
-                    caption: "in a row"
+                LeafMetricCard(
+                    title: "Active streak",
+                    value: "\(snapshot.activeDaysInRow) day\(snapshot.activeDaysInRow == 1 ? "" : "s")"
                 )
-                MetricCard(
-                    title: "Deep streak",
-                    value: snapshot.deepWorkStreak.days == 0 ? "—" : "\(snapshot.deepWorkStreak.days)",
-                    caption: snapshot.deepWorkStreak.days == 0
-                        ? "no deep streak yet"
-                        : formatDuration(snapshot.deepWorkStreak.totalSeconds) + " total"
+                LeafMetricCard(
+                    title: "Deep work streak",
+                    value: deepStreakValue(snapshot.deepWorkStreak)
                 )
             }
         } else {
             Text("Stats will appear once the agent collects today's activity.")
-                .font(.leafBody)
-                .foregroundStyle(.leafMuted)
+                .font(LeafType.body.regular)
+                .foregroundStyle(LeafColor.text.secondary)
         }
+    }
+
+    private func deepStreakValue(_ streak: DeepWorkStreak) -> String {
+        if streak.days == 0 { return "—" }
+        return "\(streak.days)d \(formatHours(streak.totalSeconds))"
+    }
+
+    private func formatHours(_ seconds: TimeInterval) -> String {
+        let hours = Int(seconds) / 3600
+        let minutes = (Int(seconds) % 3600) / 60
+        return "\(hours)h \(minutes)m"
     }
 }
