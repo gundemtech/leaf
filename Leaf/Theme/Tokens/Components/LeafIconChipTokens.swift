@@ -10,14 +10,17 @@ import SwiftUI
 
 enum LeafIconChipTokens {
     enum Size {
-        case sm, md, lg
+        case sm, md, lg, xl
 
-        /// Outer container dimension (square).
+        /// Outer container dimension (square). xl is the empty-state hero
+        /// scale — large enough to anchor a centered surface without the
+        /// "gigantic naked glyph" look of a bare 56pt outline.
         var outer: CGFloat {
             switch self {
             case .sm: 24
             case .md: 32
             case .lg: 40
+            case .xl: 64
             }
         }
 
@@ -28,6 +31,7 @@ enum LeafIconChipTokens {
             case .sm: .sm
             case .md: .md
             case .lg: .lg
+            case .xl: .xl
             }
         }
 
@@ -38,6 +42,7 @@ enum LeafIconChipTokens {
             case .sm: LeafRadius.sm
             case .md: LeafRadius.md
             case .lg: LeafRadius.lg
+            case .xl: LeafRadius.xl
             }
         }
     }

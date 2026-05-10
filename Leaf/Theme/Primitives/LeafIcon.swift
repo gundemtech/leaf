@@ -11,12 +11,13 @@
 import SwiftUI
 
 enum LeafIconSize {
-    case sm, md, lg
+    case sm, md, lg, xl
     var pt: CGFloat {
         switch self {
         case .sm: 12
         case .md: 16
         case .lg: 24
+        case .xl: 32
         }
     }
 }
