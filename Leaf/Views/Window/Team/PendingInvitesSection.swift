@@ -1,10 +1,9 @@
 //
 //  PendingInvitesSection.swift
-//  Leaf
-//
-//  Phase 5.5.C — TeamView section between active members list и [Add member] CTA.
-//  Hidden when no visible rows (D6). Section header has [↻ Refresh] button (batch-poll
-//  via PendingInvitesReader.poll()). Per-row actions delegated to PendingInviteRow.
+//  Track 2 / D3 — TeamView section between active members list и [Add member]
+//  CTA on D1 substrate. Hidden when no visible rows (Phase 5.5.C contract D6).
+//  Section header has Refresh CTA via LeafButton.secondary (batch poll via
+//  PendingInvitesReader.poll()). Per-row actions delegated to PendingInviteRow.
 //
 
 import SwiftUI
@@ -18,7 +17,7 @@ struct PendingInvitesSection: View {
         case .loading:
             EmptyView()
         case .error(let message):
-            errorBanner(message)
+            errorContent(message)
         case .loaded(let rows) where rows.isEmpty:
             EmptyView()
         case .loaded(let rows):
@@ -26,92 +25,75 @@ struct PendingInvitesSection: View {
         }
     }
 
-    // MARK: - Subviews
+    // MARK: - Loaded content
 
     private func content(_ rows: [PendingInvite]) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 12) {
-                Text("PENDING INVITES · \(rows.count)")
-                    .leafLabelStyle()
-                Spacer()
-                refreshButton
-            }
+        LeafSection(title: "Pending invites · \(rows.count)") {
+            VStack(alignment: .leading, spacing: LeafSpace.md) {
+                LeafCard(variant: .raised, padding: .tight) {
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(rows.enumerated()), id: \.element.token) { idx, invite in
+                            PendingInviteRow(
+                                invite: invite,
+                                onRevoke: { reader.revoke(token: invite.token) },
+                                onDismiss: { reader.dismiss(token: invite.token) }
+                            )
+                            .padding(.horizontal, LeafSpace.md)
+                            .padding(.vertical, LeafSpace.sm)
 
-            VStack(spacing: 12) {
-                ForEach(rows, id: \.token) { invite in
-                    GlassCard(padding: 18) {
-                        PendingInviteRow(
-                            invite: invite,
-                            onRevoke: { reader.revoke(token: invite.token) },
-                            onDismiss: { reader.dismiss(token: invite.token) }
-                        )
+                            if idx < rows.count - 1 {
+                                LeafDivider(style: .soft)
+                                    .padding(.leading, LeafSpace.xxxl)
+                            }
+                        }
                     }
                 }
-            }
-            .frame(maxWidth: 580, alignment: .leading)
 
-            if let message = reader.pollMessage {
-                pollOutcomeBanner(message: message)
+                if let message = reader.pollMessage {
+                    LeafBanner(
+                        tone: .info,
+                        title: "Poll outcome",
+                        description: message,
+                        onDismiss: { reader.acknowledgePollMessage() }
+                    )
+                }
             }
+        } cta: {
+            refreshButton
         }
     }
 
+    @ViewBuilder
     private var refreshButton: some View {
-        Button {
-            reader.poll()
-        } label: {
-            if reader.isPolling {
-                HStack(spacing: 6) {
-                    ProgressView().controlSize(.small)
-                    Text("Refreshing…")
-                }
-            } else {
-                Label("Refresh", image: LeafIcons.action.refresh)
+        if reader.isPolling {
+            HStack(spacing: LeafSpace.xs) {
+                ProgressView().controlSize(.small)
+                Text("Refreshing…")
+                    .font(LeafType.body.small)
+                    .foregroundStyle(LeafColor.text.secondary)
             }
+        } else {
+            LeafButton(
+                "Refresh",
+                variant: .secondary,
+                size: .sm,
+                icon: .asset(LeafIcons.action.refresh),
+                action: { reader.poll() }
+            )
         }
-        .buttonStyle(.bordered)
-        .disabled(reader.isPolling)
     }
 
-    private func pollOutcomeBanner(message: String) -> some View {
-        HStack(spacing: 12) {
-            Image.leafAsset(LeafIcons.status.info)
-                .frame(width: 16, height: 16)
-                .foregroundStyle(.leafAccentDeep)
-            Text(message)
-                .font(.leafBody)
-                .foregroundStyle(.leafInk)
-            Spacer()
-            Button(action: { reader.acknowledgePollMessage() }) {
-                Image.leafAsset(LeafIcons.action.close)
-                    .frame(width: 12, height: 12)
-                    .foregroundStyle(.leafInk.opacity(0.5))
-            }
-            .buttonStyle(.borderless)
-        }
-        .padding(12)
-        .background(Color.leafAccent.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
-        .frame(maxWidth: 580, alignment: .leading)
-    }
+    // MARK: - Error content
 
-    private func errorBanner(_ message: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("PENDING INVITES")
-                .leafLabelStyle()
-            GlassCard(padding: 18) {
-                HStack(spacing: 12) {
-                    Image.leafAsset(LeafIcons.status.warning)
-                        .frame(width: 16, height: 16)
-                        .foregroundStyle(.red.opacity(0.85))
-                    Text(message)
-                        .font(.leafBody)
-                        .foregroundStyle(.leafInk)
-                    Spacer()
-                    Button("Retry") { reader.refresh() }
-                        .buttonStyle(.bordered)
-                }
-            }
-            .frame(maxWidth: 580, alignment: .leading)
+    private func errorContent(_ message: String) -> some View {
+        LeafSection(title: "Pending invites") {
+            LeafBanner(
+                tone: .danger,
+                title: "Couldn't load pending invites",
+                description: message,
+                ctaTitle: "Try again",
+                onCTA: { reader.refresh() }
+            )
         }
     }
 }
