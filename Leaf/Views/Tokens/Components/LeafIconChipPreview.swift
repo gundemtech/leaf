@@ -30,7 +30,7 @@ struct LeafIconChipPreview: View {
             }
 
             TokensInlineSpec(
-                spec: "LeafIconChip · sm 24 / md 32 / lg 40 squircle · tint glyph + tint @ 0.15 background · LeafRadius.sm/md/lg corners",
+                spec: "LeafIconChip · sm 24 / md 32 / lg 40 / xl 64 squircle · tint glyph + tint @ 0.15 background · LeafRadius.sm/md/lg/xl corners",
                 codeSnippet: "LeafIconChip(asset: LeafIcons.status.info, tint: LeafColor.status.info)"
             )
         }
