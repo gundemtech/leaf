@@ -244,7 +244,7 @@ public actor GitHubCollector {
         var seenPairs = Set<String>()
         var pushedPairs: [(repo: String, sha: String)] = []
         for snapshot in batch.events {
-            guard snapshot.eventKind == "commit_pushed" else { continue }
+            guard snapshot.eventKind == GitHubEventKindKey.commitPushed.rawValue else { continue }
             let repo = snapshot.repoFullName
             guard let sha = snapshot.sha, !sha.isEmpty, !repo.isEmpty else { continue }
             let key = "\(repo)|\(sha)"
@@ -373,7 +373,7 @@ public actor GitHubCollector {
     ) -> RawEvent {
         var payload: [String: String] = [
             "source": "github",
-            "event_kind": "github_notifications_pulse",
+            "event_kind": GitHubEventKindKey.notificationsPulse.rawValue,
             "total_unread": String(summary.totalUnread),
             "observed_at_ms": String(nowMs)
         ]
@@ -397,7 +397,7 @@ public actor GitHubCollector {
     ) -> RawEvent {
         var payload: [String: String] = [
             "source": "github",
-            "event_kind": "pr_awaiting_review_count",
+            "event_kind": GitHubEventKindKey.prAwaitingReviewCount.rawValue,
             "count": String(summary.count),
             "observed_at_ms": String(nowMs)
         ]
@@ -422,7 +422,7 @@ public actor GitHubCollector {
     static func makeActionsRunInitiatedEvent(snapshot: GitHubActionsRunSnapshot) -> RawEvent {
         var payload: [String: String] = [
             "source": "github",
-            "event_kind": "actions_run_initiated",
+            "event_kind": GitHubEventKindKey.actionsRunInitiated.rawValue,
             "run_id": String(snapshot.runID),
             "repo": snapshot.repo,
             "workflow_name": snapshot.workflowName,
@@ -458,7 +458,7 @@ public actor GitHubCollector {
     ) -> RawEvent {
         let payload: [String: String] = [
             "source": "github",
-            "event_kind": "check_runs_status",
+            "event_kind": GitHubEventKindKey.checkRunsStatus.rawValue,
             "repo": repo,
             "sha": sha,
             "total": String(summary.total),
@@ -483,7 +483,7 @@ public actor GitHubCollector {
     ) -> RawEvent {
         let payload: [String: String] = [
             "source": "github",
-            "event_kind": "my_open_pr_count",
+            "event_kind": GitHubEventKindKey.myOpenPRCount.rawValue,
             "count": String(summary.count),
             "observed_at_ms": String(nowMs)
         ]
@@ -495,7 +495,7 @@ public actor GitHubCollector {
         )
     }
 
-    private static func makeEvent(snapshot: GitHubEventSnapshot) -> RawEvent {
+    static func makeEvent(snapshot: GitHubEventSnapshot) -> RawEvent {
         var payload: [String: String] = [
             "source": "github",
             "event_kind": snapshot.eventKind,

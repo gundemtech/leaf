@@ -104,11 +104,22 @@ public enum EventsFullTextStore {
         // descriptions из FTS. Track-3 D1 фиксит, добавляет notification_title.
         if eventKind == "issue_updated" { return Schema.BodyKinds.linearDesc }
         if eventKind == "linear_notification_received" { return Schema.BodyKinds.linearNotificationTitle }
-        if eventKind == "commit_pushed" { return Schema.BodyKinds.commitMsg }
-        if eventKind == "gh_issue_comment_authored" { return Schema.BodyKinds.ghIssueComment }
-        if eventKind == "gh_pr_review_comment_authored" { return Schema.BodyKinds.ghPRReviewComment }
+        if eventKind == GitHubEventKindKey.commitPushed.rawValue { return Schema.BodyKinds.commitMsg }
+        if eventKind == GitHubEventKindKey.issueCommentAuthored.rawValue { return Schema.BodyKinds.ghIssueComment }
+        if eventKind == GitHubEventKindKey.prReviewCommentAuthored.rawValue { return Schema.BodyKinds.ghPRReviewComment }
         if eventKind == "slack_thread_reply_aggregate" { return Schema.BodyKinds.slackThreadParent }
-        if eventKind.hasPrefix("gh_pr_") { return Schema.BodyKinds.ghPR }
+        // Track-3 D2: explicit gh_* cases instead of bare hasPrefix("gh_pr_")
+        // catch-all (which would spuriously match gh_pr_review_thread_resolved
+        // и gh_pr_awaiting_review_count whose body-bearing is nil).
+        if eventKind == GitHubEventKindKey.prOpened.rawValue
+            || eventKind == GitHubEventKindKey.prMerged.rawValue
+            || eventKind == GitHubEventKindKey.prClosed.rawValue {
+            return Schema.BodyKinds.ghPR
+        }
+        if eventKind == GitHubEventKindKey.issueOpened.rawValue
+            || eventKind == GitHubEventKindKey.issueClosed.rawValue {
+            return Schema.BodyKinds.ghIssueComment  // issue body indexed under same kind as issue comments
+        }
         return nil
     }
 

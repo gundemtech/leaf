@@ -173,7 +173,7 @@ final class EventsFullTextStoreTests: XCTestCase {
         let db = try makeDB()
         let eid = try insertRawEventRow(db)
         let payload = [
-            "event_kind": "commit_pushed",
+            "event_kind": "gh_commit_pushed",
             Schema.EventPayloadKeys.body: "fix(auth): tighten token refresh"
         ]
         try db.writeSQL { rawDB in
