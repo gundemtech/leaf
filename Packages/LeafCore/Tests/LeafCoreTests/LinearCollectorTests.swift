@@ -5,6 +5,11 @@
 import XCTest
 import os
 @testable import LeafCore
+// Track-3 D1 — selective GRDB import to avoid `Database` symbol collision
+// with `LeafCore.Database` in test helpers (e.g. `insertFreshIntegration(db: Database)`).
+// Importing only `Row` keeps `Row.fetchOne/fetchAll` available without bringing
+// in GRDB.Database as an ambiguous candidate at type-position.
+import class GRDB.Row
 
 final class LinearCollectorTests: XCTestCase {
     private var tempDir: URL!
@@ -1854,5 +1859,128 @@ final class LinearCollectorTests: XCTestCase {
             stored.first { $0.payload["event_kind"] == "linear_priority_changed" },
             "no priority transitions in batch → no event emitted"
         )
+    }
+
+    // MARK: - Phase Track-3 D1 — hot piggy-back emissions
+
+    /// Track-3 D1 — performTick emits one `linear_comment_reaction_added`
+    /// event per LinearCommentReactionSnapshot in the batch. Provider already
+    /// filters to viewer's own reactions (server-side user.id == viewer.id).
+    func testTickEmitsCommentReactionEvent() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+        let provider = MockLinearGraphQLProvider()
+        await provider.setBatch(LinearIssueBatch(
+            issues: [], cursorMs: nil,
+            commentReactions: [
+                LinearCommentReactionSnapshot(
+                    id: "rxn-1", commentId: "c-1", issueId: "i-1",
+                    issueIdentifier: "LEAF-7", emoji: "thumbsup",
+                    createdAtMs: 1_700_000_100_000
+                )
+            ]
+        ))
+        let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
+        let collector = LinearCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7, logger: logger,
+            userDefaultsSuiteName: makeIsolatedSuiteName()
+        )
+        _ = await collector.performTick()
+        // Filter out always-emitted workload pulse — plan-tests originally asserted
+        // total count but workload pulse fires every tick regardless of inputs.
+        try db.readSQL { rawDB in
+            let rows = try Row.fetchAll(rawDB,
+                sql: "SELECT payload_json FROM events WHERE payload_json LIKE '%\"event_kind\":\"linear_comment_reaction_added\"%' ORDER BY id ASC")
+            XCTAssertEqual(rows.count, 1, "Expected exactly one reaction event in DB")
+            let raw = (rows.first?["payload_json"] as String?) ?? ""
+            XCTAssertTrue(raw.contains("\"event_kind\":\"linear_comment_reaction_added\""))
+            XCTAssertTrue(raw.contains("\"emoji\":\"thumbsup\""))
+            XCTAssertTrue(raw.contains("\"issue_identifier\":\"LEAF-7\""))
+        }
+    }
+
+    /// Track-3 D1 — performTick emits both `linear_relation_added` and
+    /// `linear_relation_removed` events for relationAdditions + relationRemovals
+    /// arrays in the batch.
+    func testTickEmitsRelationAddedAndRemovedEvents() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+        let provider = MockLinearGraphQLProvider()
+        await provider.setBatch(LinearIssueBatch(
+            issues: [], cursorMs: nil,
+            relationAdditions: [
+                LinearRelationSnapshot(
+                    id: "rel-a", fromIssueId: "i-1", fromIssueIdentifier: "LEAF-1",
+                    toIssueId: "i-2", toIssueIdentifier: "LEAF-2",
+                    relationKind: "blocks", transitionedAtMs: 1_700_000_200_000
+                )
+            ],
+            relationRemovals: [
+                LinearRelationSnapshot(
+                    id: "rel-b", fromIssueId: "i-3", fromIssueIdentifier: "LEAF-3",
+                    toIssueId: "i-4", toIssueIdentifier: "LEAF-4",
+                    relationKind: "blocked_by", transitionedAtMs: 1_700_000_300_000
+                )
+            ]
+        ))
+        let collector = LinearCollector(
+            database: db, provider: provider,
+            refresher: LinearTokenRefresher(database: db, clientID: "test-client"),
+            intervalSec: 999, backfillWindowDays: 7, logger: logger,
+            userDefaultsSuiteName: makeIsolatedSuiteName()
+        )
+        _ = await collector.performTick()
+        try db.readSQL { rawDB in
+            // Filter to relation events — workload pulse fires every tick regardless.
+            let rows = try Row.fetchAll(rawDB,
+                sql: "SELECT payload_json FROM events WHERE payload_json LIKE '%\"event_kind\":\"linear_relation_%' ORDER BY id ASC")
+            XCTAssertEqual(rows.count, 2)
+            let texts = rows.compactMap { $0["payload_json"] as String? }
+            XCTAssertTrue(texts.contains(where: { $0.contains("\"event_kind\":\"linear_relation_added\"") }))
+            XCTAssertTrue(texts.contains(where: { $0.contains("\"event_kind\":\"linear_relation_removed\"") }))
+        }
+    }
+
+    /// Track-3 D1 — performTick emits both `linear_triage_item_picked_up` and
+    /// `linear_triage_item_resolved` events; resolved variant includes
+    /// `resolution_kind` payload field derived from WorkflowState.type.
+    func testTickEmitsTriagePickedUpAndResolvedEvents() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+        let provider = MockLinearGraphQLProvider()
+        await provider.setBatch(LinearIssueBatch(
+            issues: [], cursorMs: nil,
+            triagePickedUp: [
+                LinearTriageTransitionSnapshot(
+                    issueId: "i-1", issueIdentifier: "LEAF-5", teamId: "t-1",
+                    toStateName: "Todo", toStateType: "unstarted",
+                    transitionedAtMs: 1_700_000_400_000, resolutionKind: nil
+                )
+            ],
+            triageResolved: [
+                LinearTriageTransitionSnapshot(
+                    issueId: "i-2", issueIdentifier: "LEAF-6", teamId: "t-1",
+                    toStateName: "Cancelled", toStateType: "canceled",
+                    transitionedAtMs: 1_700_000_500_000, resolutionKind: "canceled"
+                )
+            ]
+        ))
+        let collector = LinearCollector(
+            database: db, provider: provider,
+            refresher: LinearTokenRefresher(database: db, clientID: "test-client"),
+            intervalSec: 999, backfillWindowDays: 7, logger: logger,
+            userDefaultsSuiteName: makeIsolatedSuiteName()
+        )
+        _ = await collector.performTick()
+        try db.readSQL { rawDB in
+            // Filter to triage events — workload pulse fires every tick regardless.
+            let rows = try Row.fetchAll(rawDB,
+                sql: "SELECT payload_json FROM events WHERE payload_json LIKE '%\"event_kind\":\"linear_triage_item_%' ORDER BY id ASC")
+            XCTAssertEqual(rows.count, 2)
+            let texts = rows.compactMap { $0["payload_json"] as String? }
+            XCTAssertTrue(texts.contains(where: { $0.contains("\"event_kind\":\"linear_triage_item_picked_up\"") }))
+            XCTAssertTrue(texts.contains(where: { $0.contains("\"event_kind\":\"linear_triage_item_resolved\"") && $0.contains("\"resolution_kind\":\"canceled\"") }))
+        }
     }
 }

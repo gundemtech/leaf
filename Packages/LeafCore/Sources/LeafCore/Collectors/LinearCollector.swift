@@ -237,6 +237,14 @@ public actor LinearCollector {
         // snapshot per tick, NOT state change). Empty при отсутствии feature support.
         let initEvents = batch.initiatives.map { Self.makeInitiativeObservedEvent($0) }
         events.append(contentsOf: initEvents)
+        // Phase Track-3 D1 — hot piggy-back additions: 5 new event_kinds emitted
+        // from the additive LinearIssueBatch arrays added in Task 5. All filtered
+        // by viewer.id server-side in the provider (moat — see ProdLinearGraphQLProvider).
+        events.append(contentsOf: batch.commentReactions.map(Self.makeCommentReactionAddedEvent))
+        events.append(contentsOf: batch.relationAdditions.map(Self.makeRelationAddedEvent))
+        events.append(contentsOf: batch.relationRemovals.map(Self.makeRelationRemovedEvent))
+        events.append(contentsOf: batch.triagePickedUp.map(Self.makeTriagePickedUpEvent))
+        events.append(contentsOf: batch.triageResolved.map(Self.makeTriageResolvedEvent))
         let commentEvents = batch.issues
             .filter { $0.commentCountInWindow > 0 }
             .map { Self.makeCommentEvent(issue: $0, periodEndMs: nowMs) }
@@ -418,6 +426,110 @@ public actor LinearCollector {
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0),
             signalType: .context,
+            bundleID: nil,
+            payload: payload
+        )
+    }
+
+    // MARK: - Phase Track-3 D1 — hot piggy-back emissions
+
+    /// Phase Track-3 D1 — RawEvent for linear_comment_reaction_added.
+    /// Provider already filters reactions to viewer's own (user.id == viewer.id).
+    static func makeCommentReactionAddedEvent(_ r: LinearCommentReactionSnapshot) -> RawEvent {
+        RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(r.createdAtMs) / 1000.0),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "linear",
+                "event_kind": "linear_comment_reaction_added",
+                Schema.EventPayloadKeys.commentId: r.commentId,
+                Schema.EventPayloadKeys.issueId: r.issueId,
+                Schema.EventPayloadKeys.issueIdentifier: r.issueIdentifier,
+                Schema.EventPayloadKeys.emoji: r.emoji,
+                Schema.EventPayloadKeys.reactedAtMs: String(r.createdAtMs)
+            ]
+        )
+    }
+
+    /// Phase Track-3 D1 — RawEvent for linear_relation_added.
+    static func makeRelationAddedEvent(_ r: LinearRelationSnapshot) -> RawEvent {
+        RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(r.transitionedAtMs) / 1000.0),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "linear",
+                "event_kind": "linear_relation_added",
+                Schema.EventPayloadKeys.relationId: r.id,
+                Schema.EventPayloadKeys.fromIssueId: r.fromIssueId,
+                Schema.EventPayloadKeys.fromIssueIdentifier: r.fromIssueIdentifier,
+                Schema.EventPayloadKeys.toIssueId: r.toIssueId,
+                Schema.EventPayloadKeys.toIssueIdentifier: r.toIssueIdentifier,
+                Schema.EventPayloadKeys.relationKind: r.relationKind,
+                Schema.EventPayloadKeys.startedAtMs: String(r.transitionedAtMs)
+            ]
+        )
+    }
+
+    /// Phase Track-3 D1 — RawEvent for linear_relation_removed.
+    static func makeRelationRemovedEvent(_ r: LinearRelationSnapshot) -> RawEvent {
+        RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(r.transitionedAtMs) / 1000.0),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "linear",
+                "event_kind": "linear_relation_removed",
+                Schema.EventPayloadKeys.relationId: r.id,
+                Schema.EventPayloadKeys.fromIssueId: r.fromIssueId,
+                Schema.EventPayloadKeys.fromIssueIdentifier: r.fromIssueIdentifier,
+                Schema.EventPayloadKeys.toIssueId: r.toIssueId,
+                Schema.EventPayloadKeys.toIssueIdentifier: r.toIssueIdentifier,
+                Schema.EventPayloadKeys.relationKind: r.relationKind,
+                Schema.EventPayloadKeys.removedAtMs: String(r.transitionedAtMs)
+            ]
+        )
+    }
+
+    /// Phase Track-3 D1 — RawEvent for linear_triage_item_picked_up.
+    static func makeTriagePickedUpEvent(_ t: LinearTriageTransitionSnapshot) -> RawEvent {
+        RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(t.transitionedAtMs) / 1000.0),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "linear",
+                "event_kind": "linear_triage_item_picked_up",
+                Schema.EventPayloadKeys.issueId: t.issueId,
+                Schema.EventPayloadKeys.issueIdentifier: t.issueIdentifier,
+                Schema.EventPayloadKeys.teamId: t.teamId,
+                Schema.EventPayloadKeys.toStateName: t.toStateName,
+                Schema.EventPayloadKeys.toStateType: t.toStateType,
+                Schema.EventPayloadKeys.startedAtMs: String(t.transitionedAtMs)
+            ]
+        )
+    }
+
+    /// Phase Track-3 D1 — RawEvent for linear_triage_item_resolved.
+    /// `resolution_kind` ∈ {completed, canceled} from WorkflowState.type.
+    static func makeTriageResolvedEvent(_ t: LinearTriageTransitionSnapshot) -> RawEvent {
+        var payload: [String: String] = [
+            "source": "linear",
+            "event_kind": "linear_triage_item_resolved",
+            Schema.EventPayloadKeys.issueId: t.issueId,
+            Schema.EventPayloadKeys.issueIdentifier: t.issueIdentifier,
+            Schema.EventPayloadKeys.teamId: t.teamId,
+            Schema.EventPayloadKeys.toStateName: t.toStateName,
+            Schema.EventPayloadKeys.toStateType: t.toStateType,
+            Schema.EventPayloadKeys.completedAtMs: String(t.transitionedAtMs)
+        ]
+        if let rk = t.resolutionKind {
+            payload[Schema.EventPayloadKeys.resolutionKind] = rk
+        }
+        return RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(t.transitionedAtMs) / 1000.0),
+            signalType: .action,
             bundleID: nil,
             payload: payload
         )
