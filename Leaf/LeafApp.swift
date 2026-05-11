@@ -19,6 +19,17 @@ struct LeafApp: App {
     @State private var watchedFolders = WatchedFoldersService()
     @State private var linearOAuth = LinearOAuthService()
     @State private var githubOAuth = GitHubOAuthService()
+    /// Phase Track-3 D2 — Task 21. Single shared `GitHubScopesReader` for Home /
+    /// Connections / Sidebar forward-trust bindings (Tasks 18–20). Backed by an
+    /// app-side `GitHubScopesService` reading the same `integrations.scope` row
+    /// that `GitHubOAuthService` writes; Agent has its own service instance
+    /// (Task 13) — no shared state needed since both read the same DB row.
+    /// DB open mirrors `GitHubOAuthService.ensureDatabase()` shape (defaultURL +
+    /// ProdConfigs + FileKeyStore encryption). On failure (e.g. FileKeyStore
+    /// race at first launch) we pass `nil` — reader degrades to `.notConfigured`.
+    @State private var githubScopes = GitHubScopesReader(
+        service: LeafApp.makeGitHubScopesService()
+    )
     @State private var slackOAuth = SlackOAuthService()
     @State private var permissions = PermissionsService()
     @State private var updater: UpdaterController
@@ -84,6 +95,7 @@ struct LeafApp: App {
                 .environment(watchedFolders)
                 .environment(linearOAuth)
                 .environment(githubOAuth)
+                .environment(githubScopes)  // Phase Track-3 D2 — Task 21
                 .environment(slackOAuth)
                 .environment(permissions)
                 .environment(updater)
@@ -145,6 +157,37 @@ struct LeafApp: App {
                 .environment(windowState)
         }
         .menuBarExtraStyle(.window)
+    }
+
+    // MARK: - GitHub scopes reader DB bootstrap (Task 21)
+
+    /// Mirrors `GitHubOAuthService.ensureDatabase()` open-shape (default URL +
+    /// ProdConfigs + FileKeyStore-backed encryption). Called once at @State
+    /// initialization for the shared `GitHubScopesReader`. Returns `nil` on
+    /// failure so the reader stays in `.notConfigured` rather than crashing
+    /// the app cold-start (e.g., FileKeyStore race / disk error).
+    private static func makeGitHubScopesService() -> GitHubScopesService? {
+        let url = DatabasePath.defaultURL()
+        #if LEAF_PROD
+        let config = ProdConfigs.database
+        let encryption: EncryptionOptions? = EncryptionOptions(
+            keyProvider: .callback { @Sendable in
+                try FileKeyStore.fetchOrCreate()
+            },
+            preKeyPragmas: ProdConfigs.sqlcipherPragmasPreKey,
+            postKeyPragmas: ProdConfigs.sqlcipherPragmasPostKey
+        )
+        #else
+        let config = DatabaseConfig.weakDefaults
+        let encryption: EncryptionOptions? = nil
+        #endif
+        do {
+            let db = try LeafCore.Database.openForWrite(at: url, config: config, encryption: encryption)
+            return GitHubScopesService(database: db)
+        } catch {
+            leafAppLogger.error("makeGitHubScopesService failed: \(String(describing: error), privacy: .public)")
+            return nil
+        }
     }
 }
 
