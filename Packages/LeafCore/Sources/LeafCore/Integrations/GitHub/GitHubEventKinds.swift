@@ -81,14 +81,19 @@ public enum GitHubEventKindKey: String, CaseIterable, Sendable, Hashable {
 
     /// Subset that ships a body field in payload — body-kind dispatch in
     /// EventsFullTextStore must handle each of these.
+    ///
+    /// Discussion events (`gh_discussion_authored`, `gh_discussion_comment_authored`)
+    /// are intentionally OMITTED: per ADR-010 §6 + Track-3 D2 spec §4.3, discussion
+    /// bodies/titles are not captured (no `Schema.BodyKinds.ghDiscussion` constant).
+    /// The mappers in `ProdGitHubAPIProvider.mapDiscussionEvent` /
+    /// `mapDiscussionCommentEvent` emit `title: ""` and never set a body field.
     public static let bodyBearing: Set<GitHubEventKindKey> = [
         .commitPushed,                  // commit_msg
         .prOpened, .prMerged, .prClosed,   // gh_pr body
-        .issueOpened, .issueClosed,        // FTS dispatch wired in Task 25 (gh_issue_* prefix or explicit cases)
+        .issueOpened, .issueClosed,        // gh_issue_comment (issue body indexed under same body_kind)
         .prReviewCommentAuthored,
         .issueCommentAuthored,
-        .releasePublished,              // gh_release_body
-        .discussionAuthored, .discussionCommentAuthored,
+        .releasePublished,              // gh_release_body (Track-3 D2 §4.3 — formalize for future emit)
         .gistCreated, .gistUpdated,     // gh_gist_description
         .deploymentCreated              // gh_deployment_description
     ]

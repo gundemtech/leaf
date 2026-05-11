@@ -120,7 +120,27 @@ public enum EventsFullTextStore {
             || eventKind == GitHubEventKindKey.issueClosed.rawValue {
             return Schema.BodyKinds.ghIssueComment  // issue body indexed under same kind as issue comments
         }
+        // Track-3 D2 §4.3 — gist description / release body / deployment description
+        // body-kind dispatch. Body field, when present in payload, is routed to the
+        // dedicated body_kind so D3 query path can filter.
+        if eventKind == GitHubEventKindKey.gistCreated.rawValue
+            || eventKind == GitHubEventKindKey.gistUpdated.rawValue {
+            return Schema.BodyKinds.ghGistDescription
+        }
+        if eventKind == GitHubEventKindKey.releasePublished.rawValue {
+            return Schema.BodyKinds.ghReleaseBody
+        }
+        if eventKind == GitHubEventKindKey.deploymentCreated.rawValue {
+            return Schema.BodyKinds.ghDeploymentDescription
+        }
         return nil
+    }
+
+    /// Test-only accessor for `topLevelBodyKind`. Used by `DispatchCoverageTests`
+    /// fence assertion #3 (every `GitHubEventKindKey.bodyBearing` case has a
+    /// dispatch entry). Mirrors private logic — kept thin to avoid drift.
+    public static func bodyKindForTesting(eventKind: String) -> String? {
+        topLevelBodyKind(forEventKind: eventKind)
     }
 
     /// Inserts one FTS5 row + sidecar meta row atomically within the active

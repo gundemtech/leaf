@@ -220,6 +220,80 @@ final class EventsFullTextStoreTests: XCTestCase {
         XCTAssertEqual(rows[0].bodyKind, Schema.BodyKinds.ghPRReviewComment)
     }
 
+    // MARK: - Track-3 D2 — gist / release / deployment body-kind dispatch
+
+    func testIndexEvent_GitHubGistDescription_Created() throws {
+        let db = try makeDB()
+        let eid = try insertRawEventRow(db)
+        let payload = [
+            "event_kind": GitHubEventKindKey.gistCreated.rawValue,
+            Schema.EventPayloadKeys.body: "snippet for hkdf info string sample"
+        ]
+        try db.writeSQL { rawDB in
+            try EventsFullTextStore.indexEvent(
+                eventID: eid, signalType: "action", bundleID: "github", payload: payload, in: rawDB
+            )
+        }
+        let rows = try ftsMetaRowsForEvent(db, eventID: eid)
+        XCTAssertEqual(rows.count, 1)
+        XCTAssertEqual(rows[0].bodyKind, Schema.BodyKinds.ghGistDescription)
+        XCTAssertTrue(try ftsContains(db, eventID: eid, query: "hkdf"))
+    }
+
+    func testIndexEvent_GitHubGistDescription_Updated() throws {
+        let db = try makeDB()
+        let eid = try insertRawEventRow(db)
+        let payload = [
+            "event_kind": GitHubEventKindKey.gistUpdated.rawValue,
+            Schema.EventPayloadKeys.body: "edited description for snippet"
+        ]
+        try db.writeSQL { rawDB in
+            try EventsFullTextStore.indexEvent(
+                eventID: eid, signalType: "action", bundleID: "github", payload: payload, in: rawDB
+            )
+        }
+        let rows = try ftsMetaRowsForEvent(db, eventID: eid)
+        XCTAssertEqual(rows.count, 1)
+        XCTAssertEqual(rows[0].bodyKind, Schema.BodyKinds.ghGistDescription)
+        XCTAssertTrue(try ftsContains(db, eventID: eid, query: "edited"))
+    }
+
+    func testIndexEvent_GitHubReleaseBody() throws {
+        let db = try makeDB()
+        let eid = try insertRawEventRow(db)
+        let payload = [
+            "event_kind": GitHubEventKindKey.releasePublished.rawValue,
+            Schema.EventPayloadKeys.body: "v1.2.0 ships sparkle delta updates"
+        ]
+        try db.writeSQL { rawDB in
+            try EventsFullTextStore.indexEvent(
+                eventID: eid, signalType: "action", bundleID: "github", payload: payload, in: rawDB
+            )
+        }
+        let rows = try ftsMetaRowsForEvent(db, eventID: eid)
+        XCTAssertEqual(rows.count, 1)
+        XCTAssertEqual(rows[0].bodyKind, Schema.BodyKinds.ghReleaseBody)
+        XCTAssertTrue(try ftsContains(db, eventID: eid, query: "sparkle"))
+    }
+
+    func testIndexEvent_GitHubDeploymentDescription() throws {
+        let db = try makeDB()
+        let eid = try insertRawEventRow(db)
+        let payload = [
+            "event_kind": GitHubEventKindKey.deploymentCreated.rawValue,
+            Schema.EventPayloadKeys.body: "promote staging to production"
+        ]
+        try db.writeSQL { rawDB in
+            try EventsFullTextStore.indexEvent(
+                eventID: eid, signalType: "action", bundleID: "github", payload: payload, in: rawDB
+            )
+        }
+        let rows = try ftsMetaRowsForEvent(db, eventID: eid)
+        XCTAssertEqual(rows.count, 1)
+        XCTAssertEqual(rows[0].bodyKind, Schema.BodyKinds.ghDeploymentDescription)
+        XCTAssertTrue(try ftsContains(db, eventID: eid, query: "production"))
+    }
+
     func testIndexEvent_NoBody_NoOp() throws {
         let db = try makeDB()
         let eid = try insertRawEventRow(db)
