@@ -14,6 +14,9 @@
 import SwiftUI
 import Combine
 import LeafCore
+#if LEAF_PROD
+import LeafCorePrivate
+#endif
 
 /// Pin provider logo top to the title's cap-top (visual top edge of glyphs),
 /// not the title-frame top — frame includes leading. Mirrors the Home hero
@@ -39,9 +42,32 @@ struct ConnectionsView: View {
     @Environment(LinearOAuthService.self) private var linearOAuth
     @Environment(GitHubOAuthService.self) private var githubOAuth
     @Environment(SlackOAuthService.self) private var slackOAuth
+    // MARK: requires GitHubScopesReader env injection (Task 21)
+    @Environment(GitHubScopesReader.self) private var scopesReader
 
     @State private var nowTick: Date = Date()
     private let countdownTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    /// Cached parse of `integrations.scope` for `provider = github`. Used by
+    /// the GitHub Scopes section to compute granted vs missing optional —
+    /// `GitHubScopesReader` only exposes `missing` for required-core (per its
+    /// state contract), so optional-scope status needs a separate read.
+    /// Refreshed on `.onAppear` and on the `integrationChangedNotificationName`
+    /// distributed notification (mirrors how `GitHubScopesReader` itself
+    /// invalidates). Empty set is the safe default — section degrades to
+    /// "all missing" rather than crashing if the read fails.
+    @State private var grantedGitHubScopes: Set<String> = []
+
+    /// Per-scope explainer copy (English MVP). Surfaces the user-facing reason
+    /// each missing scope matters next to the inline warning banner. Unknown
+    /// scopes (`repo`, `read:user` baseline) stay silent — they're table-stakes
+    /// not feature gates, so an empty entry signals "no banner".
+    private static let scopeExplainer: [String: String] = [
+        "read:org": "Required to detect Organization context for audit log and project membership.",
+        "read:project": "Required to track ProjectsV2 board activity (cards, iterations, fields).",
+        "security_events": "Recommended: surfaces secret-scanning, code-scanning, and Dependabot alerts.",
+        "read:audit_log": "Recommended: tracks admin actions on your GitHub Organization."
+    ]
 
     var body: some View {
         ScrollView {
@@ -56,9 +82,15 @@ struct ConnectionsView: View {
             linearOAuth.reload()
             githubOAuth.reload()
             slackOAuth.reload()
+            refreshGrantedGitHubScopes()
         }
         .onReceive(countdownTimer) { now in
             nowTick = now
+        }
+        .onReceive(DistributedNotificationCenter.default().publisher(
+            for: NSNotification.Name(GitHubOAuthEndpoints.integrationChangedNotificationName))
+        ) { _ in
+            refreshGrantedGitHubScopes()
         }
     }
 
@@ -99,8 +131,13 @@ struct ConnectionsView: View {
                 title: "GitHub",
                 description: "Read-only access — self-authored events (commits, PRs, issues, reviews) into your local timeline."
             ) {
-                LeafCard(variant: .raised, padding: .regular) {
-                    githubContent
+                VStack(alignment: .leading, spacing: LeafSpace.lg) {
+                    LeafCard(variant: .raised, padding: .regular) {
+                        githubContent
+                    }
+                    if shouldShowScopesSection {
+                        scopesSection
+                    }
                 }
             }
 
@@ -248,9 +285,12 @@ struct ConnectionsView: View {
                 action: { githubOAuth.disconnect() }
             )
         case .connectedScopeOutdated(let login, let connectedAt, _):
-            // Phase Track-3 D2 — Tasks 18-21 add the dedicated re-auth banner /
-            // missing-scopes detail UI. Until then surface as plain connected so
-            // the substrate ships без UI regression.
+            // Phase Track-3 D2 / Task 19 — render header identical to `.connected`
+            // (login + connected timestamp + Disconnect). The Scopes section
+            // rendered alongside (`scopesSection`) carries the missing-scope
+            // banners + Re-authorize CTA, so the connection block itself stays
+            // a clean status pill. Re-auth pressure is also surfaced proactively
+            // by the Home banner (Task 18) and sidebar red dot (Task 20).
             connectedBlock(
                 title: login,
                 connectedAt: connectedAt,
@@ -471,4 +511,192 @@ struct ConnectionsView: View {
         f.unitsStyle = .full
         return f
     }()
+
+    // MARK: - GitHub Scopes section (Task 19)
+
+    /// Render Scopes section under the GitHub block when the connection is
+    /// in either `.connected` (informational — granted-only badges, no warnings,
+    /// no CTA) OR `.connectedScopeOutdated` (full layout — warnings + CTA).
+    /// Skipped for `.notConfigured` / `.unknown` (no GitHub connected) and any
+    /// non-connected state of the underlying `githubOAuth` flow.
+    private var shouldShowScopesSection: Bool {
+        switch scopesReader.state {
+        case .connected, .connectedScopeOutdated:
+            return true
+        case .unknown, .notConfigured:
+            return false
+        }
+    }
+
+    /// Granted scopes intersected with `requested = requiredCore ∪ requiredOptional`.
+    /// Used to render the badge matrix. Scopes outside the requested set
+    /// (legacy grants) are intentionally excluded — the section only documents
+    /// what Leaf asks for, not the full token grant.
+    private var currentGranted: Set<String> {
+        grantedGitHubScopes
+    }
+
+    /// Required-core scopes that are not in `currentGranted`. These render
+    /// as red-tone badges + per-scope LeafBanner.warning explainers.
+    private var missingCore: Set<String> {
+        GitHubScopesService.requiredCore.subtracting(currentGranted)
+    }
+
+    /// Required-optional scopes that are not in `currentGranted`. These
+    /// render as a single subtle hint line (no per-scope banner — they're
+    /// recommended, not blocking).
+    private var missingOptional: Set<String> {
+        GitHubScopesService.requiredOptional.subtracting(currentGranted)
+    }
+
+    /// All scopes Leaf asks for, sorted for stable badge order.
+    private var allRequestedScopes: [String] {
+        Array(GitHubScopesService.requiredCore.union(GitHubScopesService.requiredOptional)).sorted()
+    }
+
+    @ViewBuilder
+    private var scopesSection: some View {
+        LeafSection(
+            title: "Scopes",
+            description: "GitHub OAuth scopes Leaf uses to read your activity."
+        ) {
+            LeafCard(variant: .raised, padding: .regular) {
+                VStack(alignment: .leading, spacing: LeafSpace.md) {
+                    badgeMatrix
+                    if !missingCore.isEmpty {
+                        ForEach(Array(missingCore).sorted(), id: \.self) { scope in
+                            LeafBanner(
+                                tone: .warning,
+                                title: scope,
+                                description: ConnectionsView.scopeExplainer[scope]
+                                    ?? "Required for GitHub integration."
+                            )
+                        }
+                    }
+                    if !missingOptional.isEmpty {
+                        Text("Recommended scopes not granted: \(missingOptional.sorted().joined(separator: ", "))")
+                            .font(LeafType.body.small)
+                            .foregroundStyle(LeafColor.text.tertiary)
+                    }
+                    if !missingCore.isEmpty || !missingOptional.isEmpty {
+                        LeafButton(
+                            "Re-authorize GitHub",
+                            variant: .primary,
+                            size: .md,
+                            action: {
+                                Task {
+                                    await githubOAuth.connect(
+                                        scopes: GitHubScopesService.requested()
+                                    )
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /// Granted/missing badge grid. Wraps via LazyVGrid `.adaptive` because
+    /// the codebase doesn't ship a FlowLayout primitive and a plain HStack
+    /// would clip on narrow Connections pane widths. Scope tokens are short
+    /// (`repo`, `read:org`, `security_events`) so an adaptive minimum of 110pt
+    /// fits 2-3 per row at typical pane widths without truncation.
+    @ViewBuilder
+    private var badgeMatrix: some View {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 110), spacing: LeafSpace.xs, alignment: .leading)],
+            alignment: .leading,
+            spacing: LeafSpace.xs
+        ) {
+            ForEach(allRequestedScopes, id: \.self) { scope in
+                let granted = currentGranted.contains(scope)
+                let core = GitHubScopesService.requiredCore.contains(scope)
+                // LeafBadge ships only `.neutral / .accent / .numeric` — no
+                // `.success / .danger` variant in the substrate. Map intent:
+                // granted → `.accent` (positive emphasis); missing-core +
+                // missing-optional → `.neutral` (the per-scope LeafBanner.warning
+                // below carries the criticality cue, so the badge stays calm).
+                LeafBadge(
+                    text: scope,
+                    variant: granted ? .accent : .neutral
+                )
+                .accessibilityLabel(badgeAccessibilityLabel(scope: scope, granted: granted, core: core))
+            }
+        }
+    }
+
+    private func badgeAccessibilityLabel(scope: String, granted: Bool, core: Bool) -> String {
+        if granted {
+            return "\(scope), granted"
+        }
+        return core ? "\(scope), missing required scope" : "\(scope), missing recommended scope"
+    }
+
+    /// Reads `integrations.scope` for `provider = github` and parses the
+    /// space-separated token list into `grantedGitHubScopes`. Mirrors
+    /// `GitHubScopesService.parseScopeString` semantics exactly. Failure path
+    /// (no integration row, DB read error) → empty set, which makes the
+    /// section render as "all missing" rather than crash. Synchronous because
+    /// `Database.readIntegration` is a single-row query and Connections is
+    /// already main-thread; we trade trivial latency for an inline path that
+    /// avoids a parallel async observable for the same data the reader
+    /// already polls.
+    private func refreshGrantedGitHubScopes() {
+        let parsed = Self.readGrantedGitHubScopes()
+        grantedGitHubScopes = parsed
+    }
+
+    /// Open the canonical app DB (same defaults as `GitHubOAuthService`),
+    /// read the GitHub integration row, parse `scope`. Returns empty set on
+    /// any failure. `static` so closure captures don't bind to `self`.
+    nonisolated private static func readGrantedGitHubScopes() -> Set<String> {
+        do {
+            let db = try Database.openForRead(
+                at: DatabasePath.defaultURL(),
+                config: githubScopesDatabaseConfig(),
+                encryption: githubScopesDatabaseEncryption()
+            )
+            guard let record = try db.readIntegration(provider: .github) else {
+                return []
+            }
+            return parseGitHubScopeString(record.scope)
+        } catch {
+            return []
+        }
+    }
+
+    nonisolated private static func githubScopesDatabaseConfig() -> DatabaseConfig {
+        #if LEAF_PROD
+        return ProdConfigs.database
+        #else
+        return .weakDefaults
+        #endif
+    }
+
+    nonisolated private static func githubScopesDatabaseEncryption() -> EncryptionOptions? {
+        #if LEAF_PROD
+        return EncryptionOptions(
+            keyProvider: .callback { @Sendable in
+                try FileKeyStore.fetchOrCreate()
+            },
+            preKeyPragmas: ProdConfigs.sqlcipherPragmasPreKey,
+            postKeyPragmas: ProdConfigs.sqlcipherPragmasPostKey
+        )
+        #else
+        return nil
+        #endif
+    }
+
+    /// Inline copy of `GitHubScopesService.parseScopeString`. Kept local to
+    /// avoid a public API expansion just for this view; the LeafCore one is
+    /// `internal static` so unreachable from the app target.
+    nonisolated private static func parseGitHubScopeString(_ raw: String?) -> Set<String> {
+        guard let raw else { return [] }
+        let parts = raw
+            .split(whereSeparator: { $0.isWhitespace })
+            .map { String($0) }
+            .filter { !$0.isEmpty }
+        return Set(parts)
+    }
 }
