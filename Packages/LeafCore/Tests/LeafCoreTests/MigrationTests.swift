@@ -468,7 +468,8 @@ final class MigrationTests: XCTestCase {
                 Schema.OpenQuestions.tableName,
                 Schema.Blockers.tableName,
                 Schema.WhereStoppedLog.tableName,
-                Schema.DetectorOffsets.tableName
+                Schema.DetectorOffsets.tableName,
+                Schema.ProviderSnapshots.tableName
             ]
             XCTAssertEqual(tables, expected)
         }

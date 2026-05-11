@@ -349,6 +349,29 @@ public enum Schema {
         public static let patternBlockedOn = "pattern_blocked_on"
         public static let linearStuck = "linear_stuck"
     }
+
+    /// Phase Track-3 D1 — generic per-provider state snapshot table.
+    /// Composite PK `(provider, snapshot_kind)`. snapshot_json holds JSON-encoded
+    /// snapshot bodies used for delta-mode collectors (subscribed issues / custom
+    /// views / project memberships / roadmaps). D2+ may add new provider/kind
+    /// combinations without further migration.
+    public enum ProviderSnapshots {
+        public static let tableName = "provider_snapshots"
+        public static let provider = "provider"
+        public static let snapshotKind = "snapshot_kind"
+        public static let snapshotJSON = "snapshot_json"
+        public static let capturedAtMs = "captured_at_ms"
+    }
+
+    /// Phase Track-3 D1 — canonical snapshot_kind values used by Linear warm/cold
+    /// collectors. Centralized to keep collector code + tests in sync without
+    /// repeating raw string literals.
+    public enum ProviderSnapshotKinds {
+        public static let linearSubscribedIssues = "linear_subscribed_issues"
+        public static let linearCustomViews = "linear_custom_views"
+        public static let linearProjectMemberships = "linear_project_memberships"
+        public static let linearRoadmapState = "linear_roadmap_state"
+    }
 }
 
 /// Канонические `collector_id` значения. Литералы — public, чтобы тесты

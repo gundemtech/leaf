@@ -50,6 +50,7 @@ public final class Database: @unchecked Sendable {
         migrator.registerMigration012EventsFTS()
         migrator.registerMigration013EventLinks()
         migrator.registerMigration014DetectionTables()
+        migrator.registerMigration015ProviderSnapshots()
         try migrator.migrate(pool)
 
         return Database(pool: pool, config: config, mode: .writer)
