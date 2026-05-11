@@ -33,7 +33,7 @@ public enum SlackOAuthEndpoints {
     public static let conversationsHistory = URL(string: "https://slack.com/api/conversations.history")!
     /// `users.getPresence` — Tier 3 (50+ req/min). Per-user presence ("active"|"away").
     /// Phase 4.7.B-9 — emits per-tick `slack_presence_state` pulse (mirror к GitHub
-    /// `github_notifications_pulse`). Self-only call (вызываем для авторизованного юзера).
+    /// `gh_notifications_pulse`). Self-only call (вызываем для авторизованного юзера).
     public static let usersGetPresence = URL(string: "https://slack.com/api/users.getPresence")!
     /// `dnd.info` — Tier 3. Per-user DND state (current dnd + scheduled DND window
     /// + user-set snooze). Phase 4.7.B-10 — emits per-tick `slack_dnd_state` pulse.

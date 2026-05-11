@@ -303,7 +303,7 @@ public struct LinearTicketRef: Codable, Sendable, Equatable {
     }
 }
 
-/// `leaf_current_work.lastCommit` shape — derived from latest `commit_pushed`
+/// `leaf_current_work.lastCommit` shape — derived from latest `gh_commit_pushed`
 /// payload. `pushedAtMs` mirrors `events.ts` for that row.
 public struct CommitRef: Codable, Sendable, Equatable {
     public let sha: String?

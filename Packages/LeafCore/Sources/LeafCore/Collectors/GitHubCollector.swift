@@ -234,7 +234,7 @@ public actor GitHubCollector {
 
         // 5d. Phase 4.7.B-4 — check_runs aggregate per HEAD commit, push-triggered.
         // Bounded cost: K HTTP calls = K unique (repo, sha) pairs across все
-        // commit_pushed snapshots в этом tick'е. Empty pushes → 0 calls (skipped
+        // gh_commit_pushed snapshots в этом tick'е. Empty pushes → 0 calls (skipped
         // entirely). Iterate `batch.events` (snapshots) — preserves repo + sha
         // напрямую, не rely на string lookup в payload. Dedup via Set<String>
         // (`repo|sha`) — handles dual shape: stripped feed → 1 sha per push,
@@ -363,7 +363,7 @@ public actor GitHubCollector {
         )
     }
 
-    /// Phase 4.7.B-1 — `github_notifications_pulse` state event. Эмитится КАЖДЫЙ tick
+    /// Phase 4.7.B-1 — `gh_notifications_pulse` state event. Эмитится КАЖДЫЙ tick
     /// (даже при empty inbox) — нулевой count всё равно signal: "пользователь дочистил
     /// inbox". `signal_type=.context` (state pulse, не user action).
     /// Reasons распакованы в top-level keys (`reason_review_requested_count`) для
@@ -389,7 +389,7 @@ public actor GitHubCollector {
         )
     }
 
-    /// Phase 4.7.B-2 — `pr_awaiting_review_count` state event. Эмитится каждый tick.
+    /// Phase 4.7.B-2 — `gh_pr_awaiting_review_count` state event. Эмитится каждый tick.
     /// `signal_type=.context` (state pulse). `top_repo` поле omitted при `count==0`
     /// или `topRepo==nil` — отличает "нет данных" от "owner/repo:0".
     static func makePRAwaitingReviewCountEvent(
@@ -412,7 +412,7 @@ public actor GitHubCollector {
         )
     }
 
-    /// Phase 4.7.B-3 — `actions_run_initiated` action event per snapshot.
+    /// Phase 4.7.B-3 — `gh_actions_run_initiated` action event per snapshot.
     /// `signal_type=.action` (discrete action — юзер запустил CI run), не `.context`.
     /// Timestamp = run's `created_at` (когда GitHub registered run start), не nowMs —
     /// синхронизируется с реальным moment of action для downstream timeline accuracy.
@@ -446,7 +446,7 @@ public actor GitHubCollector {
         )
     }
 
-    /// Phase 4.7.B-4 — `check_runs_status` state event per (repo, sha) pair.
+    /// Phase 4.7.B-4 — `gh_check_runs_status` state event per (repo, sha) pair.
     /// `signal_type=.context` (state pulse — current CI status of HEAD commit,
     /// не discrete user action). Timestamp = `nowMs` (when collector observed),
     /// не `created_at` of run (this is aggregate snapshot across N runs).
@@ -476,7 +476,7 @@ public actor GitHubCollector {
         )
     }
 
-    /// Phase 4.7.B-2 — `my_open_pr_count` state event. Эмитится каждый tick.
+    /// Phase 4.7.B-2 — `gh_my_open_pr_count` state event. Эмитится каждый tick.
     /// `signal_type=.context` (state pulse).
     static func makeMyOpenPRCountEvent(
         summary: GitHubMyOpenPRsSummary, nowMs: Int64

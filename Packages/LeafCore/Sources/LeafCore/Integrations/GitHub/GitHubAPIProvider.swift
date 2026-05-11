@@ -57,7 +57,7 @@ public protocol GitHubAPIProvider: Sendable {
     ) async throws -> [GitHubActionsRunSnapshot]
 
     /// Phase 4.7.B-4 — `GET /repos/{owner}/{repo}/commits/{sha}/check-runs`.
-    /// Push-triggered (вызывается только при наличии `commit_pushed` events в текущем
+    /// Push-triggered (вызывается только при наличии `gh_commit_pushed` events в текущем
     /// tick'е) — bounded cost: N HTTP calls = N unique (repo, sha) pairs за tick.
     /// Returns aggregate counts по 5 buckets для HEAD commit'а.
     /// ADR-010: `name` of check-run, `output.title` / `output.summary` / `output.text`
@@ -143,29 +143,29 @@ public struct GitHubEventSnapshot: Sendable, Hashable {
     /// (cursor-by-timestamp imperfect для events с identical `created_at`).
     public let eventID: String
     /// Канонический kind после маппинга raw GitHub `type` + `payload.action`.
-    /// Phase 4.6 baseline: "commit_pushed" | "pr_opened" | "pr_merged" | "pr_closed"
-    /// | "issue_opened" | "issue_closed" | "review_submitted".
-    /// Phase 4.7.A additions: "pr_review_comment_authored" | "issue_comment_authored"
-    /// | "release_published" | "branch_created" | "branch_deleted" | "tag_created"
-    /// | "discussion_authored" | "discussion_comment_authored".
+    /// Phase 4.6 baseline: "gh_commit_pushed" | "gh_pr_opened" | "gh_pr_merged" | "gh_pr_closed"
+    /// | "gh_issue_opened" | "gh_issue_closed" | "gh_pr_review_submitted".
+    /// Phase 4.7.A additions: "gh_pr_review_comment_authored" | "gh_issue_comment_authored"
+    /// | "gh_release_published" | "gh_branch_created" | "gh_branch_deleted" | "gh_tag_created"
+    /// | "gh_discussion_authored" | "gh_discussion_comment_authored".
     public let eventKind: String
     /// "owner/name" — self-authored repo identifier, public-safe.
     public let repoFullName: String
-    /// Commit subject (только первая строка) для commit_pushed; PR title; issue title.
+    /// Commit subject (только первая строка) для gh_commit_pushed; PR title; issue title.
     public let title: String
-    /// PR/issue/discussion number; `nil` для commit_pushed / review_submitted без issue context.
+    /// PR/issue/discussion number; `nil` для gh_commit_pushed / gh_pr_review_submitted без issue context.
     public let number: Int?
     /// Commit SHA (short or full) для PushEvent; `nil` для не-push.
     public let sha: String?
-    /// Branch ref (e.g. "main") для PushEvent / branch_created / branch_deleted.
+    /// Branch ref (e.g. "main") для PushEvent / gh_branch_created / gh_branch_deleted.
     public let branch: String?
     /// Epoch ms — становится cursor для следующего polling tick'а (max `createdAtMs`
     /// идёт в `GitHubEventBatch.cursorMs` → `collector_offsets.last_modified_ms`).
     public let createdAtMs: Int64
-    /// Phase 4.6.A.1 — для `pr_merged`: `closed_at - created_at` в секундах. `nil` для
+    /// Phase 4.6.A.1 — для `gh_pr_merged`: `closed_at - created_at` в секундах. `nil` для
     /// других eventKind'ов или если timestamps отсутствуют в payload (clock skew clamped к 0).
     public let cycleSeconds: Int?
-    /// Phase 4.6.A.1 — для `review_submitted`: `review.submitted_at - pull_request.created_at`
+    /// Phase 4.6.A.1 — для `gh_pr_review_submitted`: `review.submitted_at - pull_request.created_at`
     /// в секундах. `nil` для других eventKind'ов или missing timestamps.
     public let reviewDelaySeconds: Int?
     /// Phase 4.7.A — extension slot для new event_kinds с per-kind payload fields
@@ -175,16 +175,16 @@ public struct GitHubEventSnapshot: Sendable, Hashable {
     public let metadata: [String: String]?
     /// Phase Track-1 D1 — already BodyCap-truncated body text (PR body / comment text /
     /// full commit message). Moat boundary: truncation applied inside LeafCorePrivate.
-    /// `nil` = body not available for this event_kind (e.g. branch_created, release events).
+    /// `nil` = body not available for this event_kind (e.g. gh_branch_created, release events).
     public let body: String?
     /// Phase Track-1 D1 — true if `body` was truncated by BodyCap at the moat boundary.
     /// Architectural workaround: LeafCore cannot import LeafCorePrivate, so the truncation
     /// flag is bridged via this field rather than re-computing in the collector.
     public let bodyTruncated: Bool
     /// Phase Track-1 D1 / Phase 4.8 carry-over — PR-specific numeric metadata.
-    /// `nil` for non-PR events (commit_pushed / issue_comment / release etc).
+    /// `nil` for non-PR events (gh_commit_pushed / gh_issue_comment_authored / gh_release_published etc).
     public let prMetadata: PRMetadata?
-    /// Phase Track-1 D1 — attachments for this event. For release_published: release.assets[].
+    /// Phase Track-1 D1 — attachments for this event. For gh_release_published: release.assets[].
     /// For PR/comment events: inline images parsed from the body. Empty array = no attachments.
     public let attachments: [AttachmentMeta]
 
@@ -225,7 +225,7 @@ public struct GitHubEventSnapshot: Sendable, Hashable {
 
 /// Phase 4.7.B-1 — summary одного `/notifications` fetch'а. State snapshot (не events log):
 /// `totalUnread` = что лежит в inbox прямо сейчас, `byReason` — breakdown.
-/// Включается в events feed как single `github_notifications_pulse` event с
+/// Включается в events feed как single `gh_notifications_pulse` event с
 /// `signal_type=.context` (не `.action` — это state pulse, не user action).
 public struct GitHubNotificationsSummary: Sendable, Hashable {
     /// Сумма unread notifications across all reasons. `byReason.values.sum()`,
@@ -253,7 +253,7 @@ public struct GitHubNotificationsSummary: Sendable, Hashable {
 /// Phase 4.7.B-2 — summary `/search/issues?q=review-requested:@me+is:open+is:pr`.
 /// State snapshot: количество PRs ждущих моего review + top repo (most pending PRs)
 /// для self-UI. ADR-010: ни title, ни body items не читаем — только `repository_url`.
-/// Эмитится как `pr_awaiting_review_count` event с `signal_type=.context`.
+/// Эмитится как `gh_pr_awaiting_review_count` event с `signal_type=.context`.
 public struct GitHubReviewQueueSummary: Sendable, Hashable {
     /// Сумма PRs awaiting my review (search.issues `total_count` или len(items[])).
     public let count: Int
@@ -278,7 +278,7 @@ public struct GitHubReviewQueueSummary: Sendable, Hashable {
 
 /// Phase 4.7.B-2 — summary `/search/issues?q=author:@me+is:open+is:pr`.
 /// State snapshot: количество моих open PRs across orgs. ADR-010: ни title, ни body
-/// не читаем — только count. Эмитится как `my_open_pr_count` event, `signal_type=.context`.
+/// не читаем — только count. Эмитится как `gh_my_open_pr_count` event, `signal_type=.context`.
 public struct GitHubMyOpenPRsSummary: Sendable, Hashable {
     /// Сумма моих open PRs.
     public let count: Int

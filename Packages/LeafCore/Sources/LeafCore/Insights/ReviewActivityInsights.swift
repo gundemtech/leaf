@@ -3,11 +3,11 @@ import GRDB
 
 /// Phase 4.7.B-17 — read-side helper for `get_review_activity` MCP tool.
 ///
-/// Aggregates GitHub review activity across `pr_review_*` event_kinds emitted
+/// Aggregates GitHub review activity across `gh_pr_review_*` event_kinds emitted
 /// by Layer B GitHub collector:
-/// - `review_submitted` (Phase 4.6.A.1 review delay) → `reviews_submitted_count`.
-/// - `pr_review_comment_authored` (Phase 4.7.A wide cheap) → `review_comments_count`.
-/// - `pr_review_thread_resolved` — Track C (not yet emitted; helper still
+/// - `gh_pr_review_submitted` (Phase 4.6.A.1 review delay) → `reviews_submitted_count`.
+/// - `gh_pr_review_comment_authored` (Phase 4.7.A wide cheap) → `review_comments_count`.
+/// - `gh_pr_review_thread_resolved` — Track C (not yet emitted; helper still
 ///   counts it so downstream is forward-compatible). Phase 4.7.B will return 0
 ///   for this aggregate until C lands.
 ///
@@ -154,9 +154,9 @@ public enum ReviewActivityInsights {
             }
 
             // 3. linked_prs — distinct (repo, pr_number, linked_linear_id) tuples
-            // на pr_* event'ах с непустым linked_linear_id. Phase 4.7.A `pr_opened`
-            // / `pr_merged` / `pr_closed` / `commit_pushed` могут нести этот field.
-            // Filter: pr_number != "" (commit_pushed без PR context отбрасываем).
+            // на gh_pr_* event'ах с непустым linked_linear_id. Phase 4.7.A `gh_pr_opened`
+            // / `gh_pr_merged` / `gh_pr_closed` / `gh_commit_pushed` могут нести этот field.
+            // Filter: pr_number != "" (gh_commit_pushed без PR context отбрасываем).
             // Period фильтр сохраняется — same window as review aggregates.
             let linkedSQL = """
                 SELECT DISTINCT

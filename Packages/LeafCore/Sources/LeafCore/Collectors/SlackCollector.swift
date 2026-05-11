@@ -428,7 +428,7 @@ public actor SlackCollector {
         }
 
         // 6d. Phase 4.7.B-9 — slack_presence_state pulse. ВСЕГДА emit (per-tick
-        // pulse, mirror к github_notifications_pulse). `nowMs` определяется ниже
+        // pulse, mirror к gh_notifications_pulse). `nowMs` определяется ниже
         // в шаге 7 для cursor — компьютим раньше чтобы передать в event.
         let nowMsForPresence = Int64(now.timeIntervalSince1970 * 1000)
         let presenceEvent = Self.makePresenceStateEvent(
@@ -742,7 +742,7 @@ public actor SlackCollector {
     }
 
     /// Phase 4.7.B-9 — `slack_presence_state` per-tick pulse event. Mirror'ит
-    /// `github_notifications_pulse`: эмитится КАЖДЫЙ non-skipped tick (даже на
+    /// `gh_notifications_pulse`: эмитится КАЖДЫЙ non-skipped tick (даже на
     /// `.unknown` — observation continuity > shrunk row count). `signal_type=.context`
     /// (state pulse, не user action). Payload — minimal enum + observed ts; ничего
     /// PII (ADR-010), `users.getPresence` response в принципе не содержит body.
