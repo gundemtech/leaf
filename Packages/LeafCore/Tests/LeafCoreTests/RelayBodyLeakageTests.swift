@@ -589,4 +589,136 @@ final class RelayBodyLeakageTests: XCTestCase {
                            "WhereStopped sentinel must not appear in presence_state.state_json")
         }
     }
+
+    // MARK: - Track 3 D1 — Linear deep sweep privacy regression
+    //
+    // D1 adds new Linear event_kinds (notifications, reactions, relations,
+    // triage). None of these reach `presence_state` directly — the existing
+    // hot-tier composite writer carries only structured presence counters.
+    // These walkbacks assert that even when a D1 event lands in the events
+    // table, its body / metadata fields never appear in
+    // `presence_state.state_json` (the relay-broadcast surface). Uses the
+    // inline `writeEventsOffsetAndPresence` seeding pattern matching the
+    // existing tests above — simpler than spinning up LinearCollector and
+    // independent of collector boot semantics.
+
+    func testD1NotificationTitleDoesNotLeakIntoPresenceState() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        // Seed presence_state.linear with structured-only state.
+        try db.writeEventsOffsetAndPresence(
+            [],
+            offset: makeOffset(collectorID: CollectorID.linearPolling, sourceID: "linear:test", nowMs: nowMs),
+            presence: (provider: .linear, state: [:] as [String: Any], derivedMode: nil),
+            nowMs: nowMs
+        )
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .context,
+            bundleID: nil,
+            payload: [
+                "source": "linear",
+                "event_kind": "linear_notification_received",
+                "notification_id": "n1",
+                "notification_kind": "issueAssignedToYou",
+                "notification_title": "Alice mentioned you in LEAF-42 rebuild_oauth",
+                "body": "Alice mentioned you in LEAF-42 rebuild_oauth"
+            ]
+        )
+        try db.write(event)
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
+            XCTAssertFalse(stateJSON.contains("rebuild_oauth"),
+                "D1 notification title MUST NOT leak into presence_state.state_json")
+            XCTAssertFalse(stateJSON.contains("Alice mentioned"),
+                "D1 notification title prefix MUST NOT leak")
+        }
+    }
+
+    func testD1ReactionEmojiDoesNotLeakIntoPresenceState() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        try db.writeEventsOffsetAndPresence(
+            [],
+            offset: makeOffset(collectorID: CollectorID.linearPolling, sourceID: "linear:test", nowMs: nowMs),
+            presence: (provider: .linear, state: [:] as [String: Any], derivedMode: nil),
+            nowMs: nowMs
+        )
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "linear",
+                "event_kind": "linear_comment_reaction_added",
+                "comment_id": "c1",
+                "issue_id": "i1",
+                "issue_identifier": "LEAF-7",
+                "emoji": "rocket-unique-marker",
+                "reacted_at_ms": "100"
+            ]
+        )
+        try db.write(event)
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
+            XCTAssertFalse(stateJSON.contains("rocket-unique-marker"),
+                "Reaction emoji MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testD1RelationAndTriageMetadataDoesNotLeakIntoPresenceState() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        try db.writeEventsOffsetAndPresence(
+            [],
+            offset: makeOffset(collectorID: CollectorID.linearPolling, sourceID: "linear:test", nowMs: nowMs),
+            presence: (provider: .linear, state: [:] as [String: Any], derivedMode: nil),
+            nowMs: nowMs
+        )
+        let rel = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "linear",
+                "event_kind": "linear_relation_added",
+                "relation_id": "rel-1",
+                "from_issue_identifier": "LEAF-1",
+                "to_issue_identifier": "LEAF-99-unique-marker",
+                "relation_kind": "blocks",
+                "started_at_ms": "100"
+            ]
+        )
+        let triage = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "linear",
+                "event_kind": "linear_triage_item_resolved",
+                "issue_id": "i1",
+                "issue_identifier": "LEAF-77",
+                "team_id": "t1",
+                "to_state_name": "Done-canary-marker",
+                "to_state_type": "completed",
+                "resolution_kind": "completed",
+                "completed_at_ms": "100"
+            ]
+        )
+        try db.write(rel)
+        try db.write(triage)
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
+            XCTAssertFalse(stateJSON.contains("LEAF-99-unique-marker"),
+                "D1 relation target_identifier MUST NOT leak")
+            XCTAssertFalse(stateJSON.contains("Done-canary-marker"),
+                "D1 triage to_state_name MUST NOT leak")
+        }
+    }
 }
