@@ -1134,6 +1134,43 @@ public final class Database: @unchecked Sendable {
         }
     }
 
+    /// Phase Track-3 D2 — viewer-authored issue refs (`owner/repo#NN`) within
+    /// `sinceMs` lookback, deduped by ref, ordered by `events.ts` DESC, limited
+    /// to `limit`. Used by `GitHubWarmCollector` for bounded fan-out
+    /// `fetchIssueReactions` calls (cap = `issueReactionsTopK`). Emission of
+    /// `gh_issue_opened` already implies the viewer authored the issue
+    /// (REST events feed is filtered to viewer's own events). Reader-mode safe.
+    public func queryRecentViewerAuthoredIssues(sinceMs: Int64, limit: Int) throws -> [String] {
+        guard limit > 0 else { return [] }
+        return try pool.read { db in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT json_extract(\(Schema.Events.payloadJSON), '$.repo') AS repo,
+                       json_extract(\(Schema.Events.payloadJSON), '$.number') AS num,
+                       MAX(\(Schema.Events.ts)) AS ts
+                FROM \(Schema.Events.tableName)
+                WHERE json_extract(\(Schema.Events.payloadJSON), '$.source') = 'github'
+                  AND json_extract(\(Schema.Events.payloadJSON), '$.event_kind') = 'gh_issue_opened'
+                  AND \(Schema.Events.ts) >= ?
+                  AND json_extract(\(Schema.Events.payloadJSON), '$.repo') IS NOT NULL
+                  AND json_extract(\(Schema.Events.payloadJSON), '$.number') IS NOT NULL
+                  AND json_extract(\(Schema.Events.payloadJSON), '$.number') != ''
+                GROUP BY repo, num
+                ORDER BY ts DESC
+                LIMIT ?
+                """,
+                arguments: [sinceMs, limit]
+            )
+            return rows.compactMap { row -> String? in
+                guard
+                    let repo = row["repo"] as String?,
+                    let num = row["num"] as String?,
+                    !num.isEmpty
+                else { return nil }
+                return "\(repo)#\(num)"
+            }
+        }
+    }
+
     // MARK: - Slack collector helpers (Phase 4.4)
 
     /// Phase 4.4 B6 — узкий summary для последнего Slack `huddle_state_change`

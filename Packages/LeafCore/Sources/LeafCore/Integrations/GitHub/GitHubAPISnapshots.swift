@@ -51,7 +51,7 @@ public struct GitHubProjectsV2Snapshot: Sendable, Hashable {
 
 // MARK: - Gists
 
-public struct GitHubGistSnapshot: Sendable, Hashable {
+public struct GitHubGistSnapshot: Sendable, Hashable, Codable {
     public let gistID: String
     public let description: String
     public let isPublic: Bool
@@ -65,7 +65,7 @@ public struct GitHubGistSnapshot: Sendable, Hashable {
 
 // MARK: - Repo invitations
 
-public struct GitHubRepoInvitationSnapshot: Sendable, Hashable {
+public struct GitHubRepoInvitationSnapshot: Sendable, Hashable, Codable {
     public let invitationID: String
     public let repoFullName: String
     public let inviterLogin: String
@@ -78,7 +78,7 @@ public struct GitHubRepoInvitationSnapshot: Sendable, Hashable {
 
 // MARK: - Codespaces
 
-public struct GitHubCodespaceSnapshot: Sendable, Hashable {
+public struct GitHubCodespaceSnapshot: Sendable, Hashable, Codable {
     public let codespaceName: String
     public let repoFullName: String
     public let state: String
@@ -92,7 +92,7 @@ public struct GitHubCodespaceSnapshot: Sendable, Hashable {
 
 // MARK: - Issue reactions
 
-public struct GitHubIssueReactionsSnapshot: Sendable, Hashable {
+public struct GitHubIssueReactionsSnapshot: Sendable, Hashable, Codable {
     public let owner: String
     public let repo: String
     public let issueNumber: Int
