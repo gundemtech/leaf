@@ -670,6 +670,299 @@ final class RelayBodyLeakageTests: XCTestCase {
         }
     }
 
+    // MARK: - Track 3 D2 — GitHub deep sweep privacy regression
+    //
+    // D2 adds 31 new GitHub event_kinds across hot/warm/cold tiers (gists,
+    // releases, deployments, ProjectV2 fields, codespaces, repo invitations,
+    // security alerts, audit log, issue reactions). None of these reach
+    // `presence_state` directly — the existing composite writer carries only
+    // structured presence counters. These walkbacks assert that even when a
+    // D2 event lands in the events table, its body / metadata fields never
+    // appear in `presence_state.state_json` (the relay-broadcast surface).
+    // Mirrors the D1 inline `writeEventsOffsetAndPresence` seeding pattern.
+    //
+    // These are regression sentinels — they pass immediately because no
+    // D2 code currently writes bodies into `presence_state`. The tests
+    // prevent future leakage during refactors.
+
+    func testRelayDoesNotLeakGistDescription() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        try db.writeEventsOffsetAndPresence(
+            [],
+            offset: makeOffset(collectorID: CollectorID.githubPolling, sourceID: "github:test", nowMs: nowMs),
+            presence: (provider: .github, state: [:] as [String: Any], derivedMode: nil),
+            nowMs: nowMs
+        )
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "github",
+                "event_kind": GitHubEventKindKey.gistCreated.rawValue,
+                Schema.EventPayloadKeys.gistId: "g1",
+                Schema.EventPayloadKeys.gistDescription: "BODY_SENTINEL_GIST",
+                Schema.EventPayloadKeys.body: "BODY_SENTINEL_GIST"
+            ]
+        )
+        try db.write(event)
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
+            XCTAssertFalse(stateJSON.contains("BODY_SENTINEL_GIST"),
+                "Gist description body MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testRelayDoesNotLeakReleaseBody() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        try db.writeEventsOffsetAndPresence(
+            [],
+            offset: makeOffset(collectorID: CollectorID.githubPolling, sourceID: "github:test", nowMs: nowMs),
+            presence: (provider: .github, state: [:] as [String: Any], derivedMode: nil),
+            nowMs: nowMs
+        )
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "github",
+                "event_kind": GitHubEventKindKey.releasePublished.rawValue,
+                "repo": "o/r",
+                "tag_name": "v1.2.3",
+                Schema.EventPayloadKeys.body: "BODY_SENTINEL_RELEASE changelog with details"
+            ]
+        )
+        try db.write(event)
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
+            XCTAssertFalse(stateJSON.contains("BODY_SENTINEL_RELEASE"),
+                "Release body MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testRelayDoesNotLeakDeploymentDescription() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        try db.writeEventsOffsetAndPresence(
+            [],
+            offset: makeOffset(collectorID: CollectorID.githubPolling, sourceID: "github:test", nowMs: nowMs),
+            presence: (provider: .github, state: [:] as [String: Any], derivedMode: nil),
+            nowMs: nowMs
+        )
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "github",
+                "event_kind": GitHubEventKindKey.deploymentCreated.rawValue,
+                "repo": "o/r",
+                "environment": "production",
+                Schema.EventPayloadKeys.body: "BODY_SENTINEL_DEPLOY description text"
+            ]
+        )
+        try db.write(event)
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
+            XCTAssertFalse(stateJSON.contains("BODY_SENTINEL_DEPLOY"),
+                "Deployment description MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testRelayDoesNotLeakProjectV2FieldValues() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        try db.writeEventsOffsetAndPresence(
+            [],
+            offset: makeOffset(collectorID: CollectorID.githubPolling, sourceID: "github:test", nowMs: nowMs),
+            presence: (provider: .github, state: [:] as [String: Any], derivedMode: nil),
+            nowMs: nowMs
+        )
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "github",
+                "event_kind": GitHubEventKindKey.projectFieldUpdated.rawValue,
+                "project_id": "p1",
+                "field_name": "Status",
+                Schema.EventPayloadKeys.projectV2NewValue: "BODY_SENTINEL_PROJECTV2_VALUE"
+            ]
+        )
+        try db.write(event)
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
+            XCTAssertFalse(stateJSON.contains("BODY_SENTINEL_PROJECTV2_VALUE"),
+                "ProjectV2 field value MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testRelayDoesNotLeakCodespaceName() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        try db.writeEventsOffsetAndPresence(
+            [],
+            offset: makeOffset(collectorID: CollectorID.githubPolling, sourceID: "github:test", nowMs: nowMs),
+            presence: (provider: .github, state: [:] as [String: Any], derivedMode: nil),
+            nowMs: nowMs
+        )
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "github",
+                "event_kind": GitHubEventKindKey.codespaceStarted.rawValue,
+                Schema.EventPayloadKeys.codespaceName: "BODY_SENTINEL_CODESPACE_NAME",
+                "repo": "o/r"
+            ]
+        )
+        try db.write(event)
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
+            XCTAssertFalse(stateJSON.contains("BODY_SENTINEL_CODESPACE_NAME"),
+                "Codespace name MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testRelayDoesNotLeakRepoInvitationFromLogin() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        try db.writeEventsOffsetAndPresence(
+            [],
+            offset: makeOffset(collectorID: CollectorID.githubPolling, sourceID: "github:test", nowMs: nowMs),
+            presence: (provider: .github, state: [:] as [String: Any], derivedMode: nil),
+            nowMs: nowMs
+        )
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "github",
+                "event_kind": GitHubEventKindKey.repoInvitationReceived.rawValue,
+                "invitation_id": "inv1",
+                "repo": "o/r",
+                Schema.EventPayloadKeys.repoInvitationFromLogin: "BODY_SENTINEL_INVITER_LOGIN"
+            ]
+        )
+        try db.write(event)
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
+            XCTAssertFalse(stateJSON.contains("BODY_SENTINEL_INVITER_LOGIN"),
+                "Repo invitation from-login MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testRelayDoesNotLeakSecurityAlertRule() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        try db.writeEventsOffsetAndPresence(
+            [],
+            offset: makeOffset(collectorID: CollectorID.githubPolling, sourceID: "github:test", nowMs: nowMs),
+            presence: (provider: .github, state: [:] as [String: Any], derivedMode: nil),
+            nowMs: nowMs
+        )
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "github",
+                "event_kind": GitHubEventKindKey.secretAlertObserved.rawValue,
+                "repo": "o/r",
+                "alert_id": "a1",
+                Schema.EventPayloadKeys.alertRule: "BODY_SENTINEL_ALERT_RULE"
+            ]
+        )
+        try db.write(event)
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
+            XCTAssertFalse(stateJSON.contains("BODY_SENTINEL_ALERT_RULE"),
+                "Security alert rule MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testRelayDoesNotLeakAuditAction() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        try db.writeEventsOffsetAndPresence(
+            [],
+            offset: makeOffset(collectorID: CollectorID.githubPolling, sourceID: "github:test", nowMs: nowMs),
+            presence: (provider: .github, state: [:] as [String: Any], derivedMode: nil),
+            nowMs: nowMs
+        )
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "github",
+                "event_kind": GitHubEventKindKey.auditActionObserved.rawValue,
+                "org": "o",
+                Schema.EventPayloadKeys.auditAction: "BODY_SENTINEL_AUDIT_ACTION"
+            ]
+        )
+        try db.write(event)
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
+            XCTAssertFalse(stateJSON.contains("BODY_SENTINEL_AUDIT_ACTION"),
+                "Audit action string MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testRelayDoesNotLeakIssueReactionEmoji() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        try db.writeEventsOffsetAndPresence(
+            [],
+            offset: makeOffset(collectorID: CollectorID.githubPolling, sourceID: "github:test", nowMs: nowMs),
+            presence: (provider: .github, state: [:] as [String: Any], derivedMode: nil),
+            nowMs: nowMs
+        )
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "github",
+                "event_kind": GitHubEventKindKey.issueReactionReceived.rawValue,
+                "repo": "o/r",
+                "issue_number": "42",
+                Schema.EventPayloadKeys.reactionEmoji: "BODY_SENTINEL_REACTION_EMOJI",
+                Schema.EventPayloadKeys.body: "BODY_SENTINEL_REACTION_EMOJI"
+            ]
+        )
+        try db.write(event)
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
+            XCTAssertFalse(stateJSON.contains("BODY_SENTINEL_REACTION_EMOJI"),
+                "Issue reaction emoji MUST NOT leak into presence_state.state_json")
+        }
+    }
+
     func testD1RelationAndTriageMetadataDoesNotLeakIntoPresenceState() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
