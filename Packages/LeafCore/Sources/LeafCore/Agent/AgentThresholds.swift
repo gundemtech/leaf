@@ -92,6 +92,13 @@ public struct AgentThresholds: Sendable, Hashable {
     /// directly by the scheduler (4am local anchor instead) — retained for
     /// symmetry and potential debug overrides.
     public let linearColdPollIntervalSec: TimeInterval
+    /// Phase Track-3 D2 — interval (seconds) for GitHubWarmCollector 15m tier.
+    /// Mirrors `linearWarmPollIntervalSec` (default 900s).
+    public let githubWarmPollIntervalSec: TimeInterval
+    /// Phase Track-3 D2 — interval (seconds) for GitHubColdCollector. Not used
+    /// directly by the scheduler (4am local anchor instead) — retained for
+    /// symmetry and potential debug overrides. Mirrors Linear D1 precedent.
+    public let githubColdPollIntervalSec: TimeInterval
     /// Phase 4.10.B: как часто `ActiveAppCollector` poll'ит frontmost app +
     /// window title для in-app window-change detection (отдельно от NSWorkspace
     /// activation observer'а — тот ловит только app switch'и). Diff suppression
@@ -148,6 +155,8 @@ public struct AgentThresholds: Sendable, Hashable {
         slackOAuthClientID: String = "",
         linearWarmPollIntervalSec: TimeInterval = 900,
         linearColdPollIntervalSec: TimeInterval = 86_400,
+        githubWarmPollIntervalSec: TimeInterval = 900,
+        githubColdPollIntervalSec: TimeInterval = 86_400,
         attentionWindowPollIntervalSec: TimeInterval = 30,
         rotationFetchIntervalSec: TimeInterval = 60,
         detectorIncrementalIntervalSec: TimeInterval = 30,
@@ -181,6 +190,8 @@ public struct AgentThresholds: Sendable, Hashable {
         self.slackOAuthClientID = slackOAuthClientID
         self.linearWarmPollIntervalSec = linearWarmPollIntervalSec
         self.linearColdPollIntervalSec = linearColdPollIntervalSec
+        self.githubWarmPollIntervalSec = githubWarmPollIntervalSec
+        self.githubColdPollIntervalSec = githubColdPollIntervalSec
         self.attentionWindowPollIntervalSec = attentionWindowPollIntervalSec
         self.rotationFetchIntervalSec = rotationFetchIntervalSec
         self.detectorIncrementalIntervalSec = detectorIncrementalIntervalSec
@@ -216,6 +227,8 @@ public struct AgentThresholds: Sendable, Hashable {
         slackOAuthClientID: "",
         linearWarmPollIntervalSec: 900,
         linearColdPollIntervalSec: 86_400,
+        githubWarmPollIntervalSec: 900,
+        githubColdPollIntervalSec: 86_400,
         attentionWindowPollIntervalSec: 30,
         rotationFetchIntervalSec: 60,
         detectorIncrementalIntervalSec: 30,

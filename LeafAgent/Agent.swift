@@ -218,6 +218,51 @@ enum AgentMain {
             )
         }()
 
+        // Phase Track-3 D2 — GitHub warm + cold tiers + ScopesService actor.
+        // Same gating predicate as hot collector (skip if client_id is empty).
+        // ScopesService is shared between warm + cold (both inject scopeService:)
+        // and stored in AgentLifetime so UI/observer code can read scope state.
+        let githubScopesService: GitHubScopesService? = {
+            guard !agentThresholds.githubOAuthClientID.isEmpty else { return nil }
+            return GitHubScopesService(database: database)
+        }()
+        let (githubWarmCollector, githubWarmScheduler, githubColdCollector, githubColdScheduler): (
+            GitHubWarmCollector?, GitHubWarmScheduler?,
+            GitHubColdCollector?, GitHubColdScheduler?
+        ) = {
+            guard !agentThresholds.githubOAuthClientID.isEmpty,
+                  let scopes = githubScopesService else {
+                return (nil, nil, nil, nil)
+            }
+            let warmRefresher = GitHubTokenRefresher(
+                database: database, clientID: agentThresholds.githubOAuthClientID)
+            let coldRefresher = GitHubTokenRefresher(
+                database: database, clientID: agentThresholds.githubOAuthClientID)
+            let warm = GitHubWarmCollector(
+                database: database, provider: githubProvider,
+                refresher: warmRefresher,
+                scopeService: scopes,
+                intervalSec: agentThresholds.githubWarmPollIntervalSec,
+                logger: githubLogger)
+            let warmSched = GitHubWarmScheduler(
+                collector: warm,
+                intervalSec: agentThresholds.githubWarmPollIntervalSec,
+                logger: githubLogger)
+            let cold = GitHubColdCollector(
+                database: database, provider: githubProvider,
+                refresher: coldRefresher,
+                scopeService: scopes,
+                intervalSec: agentThresholds.githubColdPollIntervalSec,
+                logger: githubLogger)
+            let coldSched = GitHubColdScheduler(
+                database: database, collector: cold,
+                loginProvider: {
+                    (try? database.readIntegration(provider: .github))?.workspaceName
+                },
+                logger: githubLogger)
+            return (warm, warmSched, cold, coldSched)
+        }()
+
         // Phase 4.4 — Slack Web API polling collector.
         // Mirror Linear/GitHub: prod parser в moat (ProdSlackAPIProvider — search.messages
         // + users.profile.get mapping + ADR-010 enforcement: bodies/permalinks discard'ятся
@@ -262,6 +307,12 @@ enum AgentMain {
         AgentLifetime.linearWarmScheduler = linearWarmScheduler
         AgentLifetime.linearColdCollector = linearColdCollector
         AgentLifetime.linearColdScheduler = linearColdScheduler
+        // Phase Track-3 D2 — GitHub scope service + warm + cold lifetime slots.
+        AgentLifetime.githubScopesService = githubScopesService
+        AgentLifetime.githubWarmCollector = githubWarmCollector
+        AgentLifetime.githubWarmScheduler = githubWarmScheduler
+        AgentLifetime.githubColdCollector = githubColdCollector
+        AgentLifetime.githubColdScheduler = githubColdScheduler
 
         // Phase 5.3.D — Key rotation orchestrator + RotationOutbox resume.
         // Drains unposted rotation_outbox rows from prior sessions on startup
@@ -363,6 +414,11 @@ enum AgentMain {
         if let ws = linearWarmScheduler { Task { await ws.start() } }
         if let cc = linearColdCollector { Task { await cc.start() } }
         if let cs = linearColdScheduler { Task { await cs.start() } }
+        // Phase Track-3 D2 — start warm + cold GitHub tiers (mirror Linear D1).
+        if let wc = githubWarmCollector { Task { await wc.start() } }
+        if let ws = githubWarmScheduler { Task { await ws.start() } }
+        if let cc = githubColdCollector { Task { await cc.start() } }
+        if let cs = githubColdScheduler { Task { await cs.start() } }
         Task { await rotationFetchScheduler.start() }
         Task { await detectorScheduler.start() }
 
@@ -389,6 +445,13 @@ enum AgentMain {
             if let cc = AgentLifetime.linearColdCollector { await cc.stop() }
             if let ws = AgentLifetime.linearWarmScheduler { await ws.stop() }
             if let wc = AgentLifetime.linearWarmCollector { await wc.stop() }
+            // Phase Track-3 D2 — stop GitHub warm + cold tiers (mirror Linear D1
+            // ordering: cold scheduler → cold collector → warm scheduler → warm
+            // collector). ScopesService is read-only — no stop() needed.
+            if let cs = AgentLifetime.githubColdScheduler { await cs.stop() }
+            if let cc = AgentLifetime.githubColdCollector { await cc.stop() }
+            if let ws = AgentLifetime.githubWarmScheduler { await ws.stop() }
+            if let wc = AgentLifetime.githubWarmCollector { await wc.stop() }
             if let m = AgentLifetime.maintenance { await m.stop() }
             if let f = AgentLifetime.fsEventsCollector { await f.stop() }
             if let c = AgentLifetime.claudeCodeCollector { await c.stop() }
@@ -431,4 +494,12 @@ enum AgentLifetime {
     nonisolated(unsafe) static var linearWarmScheduler: LinearWarmScheduler?
     nonisolated(unsafe) static var linearColdCollector: LinearColdCollector?
     nonisolated(unsafe) static var linearColdScheduler: LinearColdScheduler?
+    // Phase Track-3 D2 — GitHub scope service + warm/cold collectors + their
+    // schedulers. ScopesService is shared between warm + cold and exposed for
+    // UI/observer consumers (Tasks 16/21).
+    nonisolated(unsafe) static var githubScopesService: GitHubScopesService?
+    nonisolated(unsafe) static var githubWarmCollector: GitHubWarmCollector?
+    nonisolated(unsafe) static var githubWarmScheduler: GitHubWarmScheduler?
+    nonisolated(unsafe) static var githubColdCollector: GitHubColdCollector?
+    nonisolated(unsafe) static var githubColdScheduler: GitHubColdScheduler?
 }
