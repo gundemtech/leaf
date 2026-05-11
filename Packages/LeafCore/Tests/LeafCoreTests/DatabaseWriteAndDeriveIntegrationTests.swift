@@ -48,7 +48,7 @@ final class DatabaseWriteAndDeriveIntegrationTests: XCTestCase {
             signalType: .action,
             bundleID: "linear",
             payload: [
-                "event_kind": "linear_issue_updated",
+                "event_kind": "issue_updated",
                 Schema.EventPayloadKeys.body: "Working on LEAF-127"
             ]
         )
@@ -67,7 +67,7 @@ final class DatabaseWriteAndDeriveIntegrationTests: XCTestCase {
         let db = try makeDB()
         let mk: (String) -> RawEvent = { body in
             RawEvent(timestamp: Date(), signalType: .action, bundleID: "linear",
-                     payload: ["event_kind": "linear_issue_updated",
+                     payload: ["event_kind": "issue_updated",
                                Schema.EventPayloadKeys.body: body])
         }
         try db.write([mk("first"), mk("second"), mk("third")], knownLinearPrefixes: [])
@@ -83,7 +83,7 @@ final class DatabaseWriteAndDeriveIntegrationTests: XCTestCase {
             signalType: .action,
             bundleID: "linear",
             payload: [
-                "event_kind": "linear_issue_updated",
+                "event_kind": "issue_updated",
                 Schema.EventPayloadKeys.body: "fixes LEAF-300"
             ]
         )
@@ -110,7 +110,7 @@ final class DatabaseWriteAndDeriveIntegrationTests: XCTestCase {
             signalType: .action,
             bundleID: "linear",
             payload: [
-                "event_kind": "linear_issue_updated",
+                "event_kind": "issue_updated",
                 Schema.EventPayloadKeys.body: "would-be LEAF-500"
             ]
         )

@@ -157,7 +157,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             signalType: .action,
             bundleID: "linear",
             payload: [
-                "event_kind": "linear_issue_updated",
+                "event_kind": "issue_updated",
                 Schema.EventPayloadKeys.body: "discusses LEAF-127"
             ]
         )
@@ -194,7 +194,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             signalType: .action,
             bundleID: "linear",
             payload: [
-                "event_kind": "linear_issue_updated",
+                "event_kind": "issue_updated",
                 Schema.EventPayloadKeys.body: bodyText
             ]
         )
@@ -355,7 +355,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             signalType: .action,
             bundleID: "com.linear.linear",
             payload: [
-                "event_kind": "linear_issue_updated",
+                "event_kind": "issue_updated",
                 Schema.EventPayloadKeys.body: "We DECIDE: \(sentinel)"
             ]
         )
@@ -397,7 +397,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             signalType: .action,
             bundleID: "com.linear.linear",
             payload: [
-                "event_kind": "linear_issue_updated",
+                "event_kind": "issue_updated",
                 Schema.EventPayloadKeys.body: "Open question: \(sentinel)?",
                 "linked_linear_id": "LEAF-42"
             ]
@@ -438,7 +438,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             signalType: .action,
             bundleID: "com.linear.linear",
             payload: [
-                "event_kind": "linear_issue_updated",
+                "event_kind": "issue_updated",
                 Schema.EventPayloadKeys.body: "We are BLOCKED: \(sentinel)",
                 "linked_linear_id": "LEAF-7"
             ]
@@ -530,7 +530,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             signalType: .action,
             bundleID: "com.linear.linear",
             payload: [
-                "event_kind": "linear_issue_updated",
+                "event_kind": "issue_updated",
                 Schema.EventPayloadKeys.body: body,
                 "linked_linear_id": "LEAF-100"
             ]

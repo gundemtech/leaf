@@ -69,7 +69,7 @@ final class EventsFullTextStoreTests: XCTestCase {
         let db = try makeDB()
         let eid = try insertRawEventRow(db)
         let payload = [
-            "event_kind": "linear_issue_updated",
+            "event_kind": "issue_updated",
             Schema.EventPayloadKeys.body: "OAuth refactor"
         ]
         try db.writeSQL { rawDB in
@@ -89,7 +89,7 @@ final class EventsFullTextStoreTests: XCTestCase {
         let eid = try insertRawEventRow(db)
         let comments = #"[{"body":"first"},{"body":"second"},{"body":"third"}]"#
         let payload = [
-            "event_kind": "linear_issue_updated",
+            "event_kind": "issue_updated",
             Schema.EventPayloadKeys.body: "Description here",
             Schema.EventPayloadKeys.commentBodiesJson: comments
         ]
@@ -223,7 +223,7 @@ final class EventsFullTextStoreTests: XCTestCase {
     func testIndexEvent_NoBody_NoOp() throws {
         let db = try makeDB()
         let eid = try insertRawEventRow(db)
-        let payload = ["event_kind": "linear_issue_updated"]
+        let payload = ["event_kind": "issue_updated"]
         try db.writeSQL { rawDB in
             try EventsFullTextStore.indexEvent(
                 eventID: eid, signalType: "action", bundleID: "linear", payload: payload, in: rawDB
@@ -241,19 +241,19 @@ final class EventsFullTextStoreTests: XCTestCase {
         try db.writeSQL { rawDB in
             try EventsFullTextStore.indexEvent(
                 eventID: eHigh, signalType: "action", bundleID: "x",
-                payload: ["event_kind": "linear_issue_updated",
+                payload: ["event_kind": "issue_updated",
                           Schema.EventPayloadKeys.body: "auth auth auth filler filler"],
                 in: rawDB
             )
             try EventsFullTextStore.indexEvent(
                 eventID: eMid, signalType: "action", bundleID: "x",
-                payload: ["event_kind": "linear_issue_updated",
+                payload: ["event_kind": "issue_updated",
                           Schema.EventPayloadKeys.body: "auth filler filler filler filler"],
                 in: rawDB
             )
             try EventsFullTextStore.indexEvent(
                 eventID: eLow, signalType: "action", bundleID: "x",
-                payload: ["event_kind": "linear_issue_updated",
+                payload: ["event_kind": "issue_updated",
                           Schema.EventPayloadKeys.body: "auth filler filler filler filler filler filler filler filler filler"],
                 in: rawDB
             )
@@ -265,6 +265,55 @@ final class EventsFullTextStoreTests: XCTestCase {
         }
         XCTAssertEqual(results, [eHigh, eMid, eLow],
                        "BM25 should order: high TF first, then short doc with TF=1, then long doc with TF=1")
+    }
+
+    /// Track-1 D2 carry-over fix regression: LinearCollector emits event_kind
+    /// "issue_updated" (no "linear_" prefix), but the FTS dispatcher checks
+    /// "linear_issue_updated" — so Linear descriptions never reached the index.
+    /// This test pins the corrected dispatch.
+    func testLinearIssueUpdatedEventKindDispatchesToFTS() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "linear",
+                "event_kind": "issue_updated",
+                "issue_key": "LEAF-12",
+                "title": "test",
+                "status": "In Progress",
+                "project": "",
+                "team_key": "LEAF",
+                Schema.EventPayloadKeys.body: "decided to migrate the auth refresh path"
+            ]
+        )
+        try db.write(event)
+        let hits = try db.readSQL { rawDB in
+            try EventsFullTextStore.search(query: "auth refresh", period: 0...200_000, in: rawDB)
+        }
+        XCTAssertGreaterThan(hits.count, 0, "Linear issue_updated body must index into FTS5 after D1 carry-over fix")
+    }
+
+    func testLinearNotificationReceivedTitleIndexesViaFTS() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 50),
+            signalType: .context,
+            bundleID: nil,
+            payload: [
+                "source": "linear",
+                "event_kind": "linear_notification_received",
+                Schema.EventPayloadKeys.notificationId: "n1",
+                Schema.EventPayloadKeys.notificationKind: "issueAssignedToYou",
+                Schema.EventPayloadKeys.body: "Alice assigned LEAF-99 to you: rework migrations"
+            ]
+        )
+        try db.write(event)
+        let hits = try db.readSQL { rawDB in
+            try EventsFullTextStore.search(query: "rework migrations", period: 0...100_000, in: rawDB)
+        }
+        XCTAssertGreaterThan(hits.count, 0, "linear_notification_received body must FTS-index under linear_notification_title body_kind")
     }
 
     func testSearch_PeriodFilterExcludesOutOfRange() throws {
@@ -290,13 +339,13 @@ final class EventsFullTextStoreTests: XCTestCase {
         try db.writeSQL { rawDB in
             try EventsFullTextStore.indexEvent(
                 eventID: eOld, signalType: "action", bundleID: "x",
-                payload: ["event_kind": "linear_issue_updated",
+                payload: ["event_kind": "issue_updated",
                           Schema.EventPayloadKeys.body: "matchword"],
                 in: rawDB
             )
             try EventsFullTextStore.indexEvent(
                 eventID: eNew, signalType: "action", bundleID: "x",
-                payload: ["event_kind": "linear_issue_updated",
+                payload: ["event_kind": "issue_updated",
                           Schema.EventPayloadKeys.body: "matchword"],
                 in: rawDB
             )

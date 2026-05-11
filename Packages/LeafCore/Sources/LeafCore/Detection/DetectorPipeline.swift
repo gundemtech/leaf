@@ -276,7 +276,12 @@ public enum DetectorPipeline {
     }
 
     private static func topLevelBodyKind(forEventKind eventKind: String) -> BodyKind? {
-        if eventKind == "linear_issue_updated" { return .linearDesc }
+        // Track-1 D2 carry-over fix (Track-3 D1): LinearCollector emits
+        // "issue_updated" (no "linear_" prefix). Parallel of the FTS dispatcher
+        // fix in EventsFullTextStore. Notification body kind not needed here —
+        // detectors only fire on outcome-bearing events (decision/question/
+        // blocker), notifications are surface-only.
+        if eventKind == "issue_updated" { return .linearDesc }
         if eventKind == "commit_pushed" { return .commitMsg }
         if eventKind == "gh_issue_comment_authored" { return .ghIssueComment }
         if eventKind == "gh_pr_review_comment_authored" { return .ghPRReviewComment }

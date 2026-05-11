@@ -203,7 +203,12 @@ public enum EventLinksStore {
     }
 
     private static func topLevelBodyKind(forEventKind eventKind: String) -> String? {
-        if eventKind == "linear_issue_updated" { return Schema.BodyKinds.linearDesc }
+        // Track-1 D2 carry-over fix (Track-3 D1): LinearCollector emits
+        // "issue_updated" (no "linear_" prefix) — parallel of the FTS dispatcher
+        // fix in EventsFullTextStore. Also adds linear_notification_received
+        // dispatch ahead of Task 8.
+        if eventKind == "issue_updated" { return Schema.BodyKinds.linearDesc }
+        if eventKind == "linear_notification_received" { return Schema.BodyKinds.linearNotificationTitle }
         if eventKind == "commit_pushed" { return Schema.BodyKinds.commitMsg }
         if eventKind == "gh_issue_comment_authored" { return Schema.BodyKinds.ghIssueComment }
         if eventKind == "gh_pr_review_comment_authored" { return Schema.BodyKinds.ghPRReviewComment }
