@@ -17,39 +17,41 @@ import Foundation
 /// SQL queries.
 public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     // MARK: - Phase 4.4 baseline (already shipped в alpha.5/6)
+    // Track-3 D2: GitHub rawValues renamed to canonical `gh_*` form via M016
+    // (Swift identifiers preserved for call-site stability).
     case slackMessageAuthored = "message_authored_aggregate"
     case slackHuddleStateChange = "huddle_state_change"
     case linearIssueUpdated = "issue_updated"
-    case githubCommitPushed = "commit_pushed"
-    case githubPROpened = "pr_opened"
-    case githubPRMerged = "pr_merged"
-    case githubPRClosed = "pr_closed"
-    case githubReviewSubmitted = "review_submitted"
-    case githubIssueOpened = "issue_opened"
-    case githubIssueClosed = "issue_closed"
+    case githubCommitPushed = "gh_commit_pushed"
+    case githubPROpened = "gh_pr_opened"
+    case githubPRMerged = "gh_pr_merged"
+    case githubPRClosed = "gh_pr_closed"
+    case githubReviewSubmitted = "gh_pr_review_submitted"
+    case githubIssueOpened = "gh_issue_opened"
+    case githubIssueClosed = "gh_issue_closed"
 
     // MARK: - Phase 4.6.B (alpha.7)
     case linearStatusTransition = "status_transition"
 
     // MARK: - Phase 4.7.A — wide cheap (this commit)
-    case githubPRReviewCommentAuthored = "pr_review_comment_authored"
-    case githubIssueCommentAuthored = "issue_comment_authored"
-    case githubReleasePublished = "release_published"
-    case githubBranchCreated = "branch_created"
-    case githubBranchDeleted = "branch_deleted"
-    case githubTagCreated = "tag_created"
-    case githubDiscussionAuthored = "discussion_authored"
-    case githubDiscussionCommentAuthored = "discussion_comment_authored"
+    case githubPRReviewCommentAuthored = "gh_pr_review_comment_authored"
+    case githubIssueCommentAuthored = "gh_issue_comment_authored"
+    case githubReleasePublished = "gh_release_published"
+    case githubBranchCreated = "gh_branch_created"
+    case githubBranchDeleted = "gh_branch_deleted"
+    case githubTagCreated = "gh_tag_created"
+    case githubDiscussionAuthored = "gh_discussion_authored"
+    case githubDiscussionCommentAuthored = "gh_discussion_comment_authored"
     case slackThreadReplyAggregate = "slack_thread_reply_aggregate"
     case slackStatusChange = "slack_status_change"
     case linearCommentAuthored = "linear_comment_authored"
 
     // MARK: - Phase 4.7.B — presence-first first-class APIs (this commit)
-    case githubNotificationsPulse = "github_notifications_pulse"
-    case githubPRAwaitingReviewCount = "pr_awaiting_review_count"
-    case githubMyOpenPRCount = "my_open_pr_count"
-    case githubActionsRunInitiated = "actions_run_initiated"
-    case githubCheckRunsStatus = "check_runs_status"
+    case githubNotificationsPulse = "gh_notifications_pulse"
+    case githubPRAwaitingReviewCount = "gh_pr_awaiting_review_count"
+    case githubMyOpenPRCount = "gh_my_open_pr_count"
+    case githubActionsRunInitiated = "gh_actions_run_initiated"
+    case githubCheckRunsStatus = "gh_check_runs_status"
     case linearAssignedWorkloadPulse = "linear_assigned_workload_pulse"
     case linearCycleProgress = "linear_cycle_progress"
     case slackPresenceState = "slack_presence_state"
@@ -70,7 +72,7 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     case linearProjectUpdateAuthored = "linear_project_update_authored"
     case linearDocumentEdited = "linear_document_edited"
     case linearInitiativeObserved = "linear_initiative_observed"
-    case githubPullRequestReviewThreadResolved = "pr_review_thread_resolved"
+    case githubPullRequestReviewThreadResolved = "gh_pr_review_thread_resolved"
 
     // MARK: - Phase Track-1 D3 — semantic detection facts
     // Default OFF: detector outputs expose deeper inference than raw events
@@ -101,6 +103,45 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     case linearCustomViewDeleted = "linear_custom_view_deleted"
     case linearProjectMembershipAdded = "linear_project_membership_added"
     case linearProjectMembershipRemoved = "linear_project_membership_removed"
+
+    // MARK: - Phase Track-3 D2 — GitHub deep sweep (31 new kinds, all default OFF per ADR-020)
+
+    // Hot tier (7)
+    case githubIssueLocked = "gh_issue_locked"
+    case githubIssueUnlocked = "gh_issue_unlocked"
+    case githubWorkflowManualTriggered = "gh_workflow_manual_triggered"
+    case githubDeploymentCreated = "gh_deployment_created"
+    case githubDeploymentStatusChanged = "gh_deployment_status_changed"
+    case githubRepoCreated = "gh_repo_created"
+    case githubRepoForked = "gh_repo_forked"
+
+    // Warm tier (13)
+    case githubProjectCardMoved = "gh_project_card_moved"
+    case githubProjectIterationChanged = "gh_project_iteration_changed"
+    case githubProjectFieldUpdated = "gh_project_field_updated"
+    case githubGistCreated = "gh_gist_created"
+    case githubGistUpdated = "gh_gist_updated"
+    case githubGistDeleted = "gh_gist_deleted"
+    case githubRepoInvitationReceived = "gh_repo_invitation_received"
+    case githubRepoInvitationAccepted = "gh_repo_invitation_accepted"
+    case githubCodespaceCreated = "gh_codespace_created"
+    case githubCodespaceStarted = "gh_codespace_started"
+    case githubCodespaceStopped = "gh_codespace_stopped"
+    case githubCodespaceDeleted = "gh_codespace_deleted"
+    case githubIssueReactionReceived = "gh_issue_reaction_received"
+
+    // Cold tier (11)
+    case githubRepoStarred = "gh_repo_starred"
+    case githubRepoUnstarred = "gh_repo_unstarred"
+    case githubRepoWatched = "gh_repo_watched"
+    case githubRepoUnwatched = "gh_repo_unwatched"
+    case githubSecretAlertObserved = "gh_secret_alert_observed"
+    case githubSecretAlertResolved = "gh_secret_alert_resolved"
+    case githubCodeAlertObserved = "gh_code_alert_observed"
+    case githubCodeAlertResolved = "gh_code_alert_resolved"
+    case githubDependabotAlertObserved = "gh_dependabot_alert_observed"
+    case githubDependabotAlertResolved = "gh_dependabot_alert_resolved"
+    case githubAuditActionObserved = "gh_audit_action_observed"
 }
 
 /// Phase 4.7.A — onboarding default enabled-state per event_kind.
@@ -130,7 +171,9 @@ public enum ShareEventTypeDefaults {
         .init(key: .githubPROpened, defaultEnabled: true),
         .init(key: .githubPRMerged, defaultEnabled: true),
         .init(key: .githubPRClosed, defaultEnabled: true),
-        .init(key: .githubReviewSubmitted, defaultEnabled: true),
+        // Track-3 D2: re-treated as new (discriminator-only upgrade adds state field);
+        // flipped OFF per testNewD2GitHubKindsAllDefaultOff.
+        .init(key: .githubReviewSubmitted, defaultEnabled: false),
         .init(key: .githubIssueOpened, defaultEnabled: true),
         .init(key: .githubIssueClosed, defaultEnabled: true),
 
@@ -209,6 +252,44 @@ public enum ShareEventTypeDefaults {
         .init(key: .linearCustomViewUpdated, defaultEnabled: false),
         .init(key: .linearCustomViewDeleted, defaultEnabled: false),
         .init(key: .linearProjectMembershipAdded, defaultEnabled: false),
-        .init(key: .linearProjectMembershipRemoved, defaultEnabled: false)
+        .init(key: .linearProjectMembershipRemoved, defaultEnabled: false),
+
+        // Phase Track-3 D2 — GitHub deep sweep. All default OFF per ADR-020
+        // (capture-everything locally, share-selectively). User opts in via
+        // Share Controls UI per provider expansion.
+        // Hot tier (7)
+        .init(key: .githubIssueLocked, defaultEnabled: false),
+        .init(key: .githubIssueUnlocked, defaultEnabled: false),
+        .init(key: .githubWorkflowManualTriggered, defaultEnabled: false),
+        .init(key: .githubDeploymentCreated, defaultEnabled: false),
+        .init(key: .githubDeploymentStatusChanged, defaultEnabled: false),
+        .init(key: .githubRepoCreated, defaultEnabled: false),
+        .init(key: .githubRepoForked, defaultEnabled: false),
+        // Warm tier (13)
+        .init(key: .githubProjectCardMoved, defaultEnabled: false),
+        .init(key: .githubProjectIterationChanged, defaultEnabled: false),
+        .init(key: .githubProjectFieldUpdated, defaultEnabled: false),
+        .init(key: .githubGistCreated, defaultEnabled: false),
+        .init(key: .githubGistUpdated, defaultEnabled: false),
+        .init(key: .githubGistDeleted, defaultEnabled: false),
+        .init(key: .githubRepoInvitationReceived, defaultEnabled: false),
+        .init(key: .githubRepoInvitationAccepted, defaultEnabled: false),
+        .init(key: .githubCodespaceCreated, defaultEnabled: false),
+        .init(key: .githubCodespaceStarted, defaultEnabled: false),
+        .init(key: .githubCodespaceStopped, defaultEnabled: false),
+        .init(key: .githubCodespaceDeleted, defaultEnabled: false),
+        .init(key: .githubIssueReactionReceived, defaultEnabled: false),
+        // Cold tier (11)
+        .init(key: .githubRepoStarred, defaultEnabled: false),
+        .init(key: .githubRepoUnstarred, defaultEnabled: false),
+        .init(key: .githubRepoWatched, defaultEnabled: false),
+        .init(key: .githubRepoUnwatched, defaultEnabled: false),
+        .init(key: .githubSecretAlertObserved, defaultEnabled: false),
+        .init(key: .githubSecretAlertResolved, defaultEnabled: false),
+        .init(key: .githubCodeAlertObserved, defaultEnabled: false),
+        .init(key: .githubCodeAlertResolved, defaultEnabled: false),
+        .init(key: .githubDependabotAlertObserved, defaultEnabled: false),
+        .init(key: .githubDependabotAlertResolved, defaultEnabled: false),
+        .init(key: .githubAuditActionObserved, defaultEnabled: false)
     ]
 }

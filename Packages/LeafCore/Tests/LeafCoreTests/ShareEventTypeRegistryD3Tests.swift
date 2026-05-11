@@ -10,8 +10,9 @@ final class ShareEventTypeRegistryD3Tests: XCTestCase {
             XCTAssertTrue(allKeys.contains(key), "Missing D3 key \(key)")
         }
         // Track-3 D1 grew registry 48 → 66 (18 Linear deep-sweep kinds).
+        // Track-3 D2 grew registry 66 → 97 (31 GitHub deep-sweep kinds).
         // D3 keys' presence above is the core invariant; size is sanity-only.
-        XCTAssertEqual(ShareEventTypeKey.allCases.count, 66)
+        XCTAssertEqual(ShareEventTypeKey.allCases.count, 97)
     }
 
     func testAllD3KeysDefaultOff() {
