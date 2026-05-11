@@ -175,6 +175,47 @@ public enum Schema {
         public static let requestedReviewersJson = "requested_reviewers_json"
         public static let mentionCount = "mention_count"
         public static let linkCount = "link_count"
+        // Phase Track-3 D1 — Linear deep sweep payload keys.
+        // Snapshot-diff derived events use `observedAtMs` (= nowMs);
+        // Linear-side timestamps use specific field names.
+        public static let notificationId = "notification_id"
+        public static let notificationKind = "notification_kind"
+        public static let notificationTitle = "notification_title"
+        public static let issueId = "issue_id"
+        public static let issueIdentifier = "issue_identifier"
+        public static let commentId = "comment_id"
+        public static let relationId = "relation_id"
+        public static let fromIssueId = "from_issue_id"
+        public static let fromIssueIdentifier = "from_issue_identifier"
+        public static let toIssueId = "to_issue_id"
+        public static let toIssueIdentifier = "to_issue_identifier"
+        public static let relationKind = "relation_kind"
+        public static let emoji = "emoji"
+        public static let teamId = "team_id"
+        public static let toStateName = "to_state_name"
+        public static let toStateType = "to_state_type"
+        public static let resolutionKind = "resolution_kind"
+        public static let cycleId = "cycle_id"
+        public static let cycleNumber = "cycle_number"
+        public static let cycleName = "cycle_name"
+        public static let viewId = "view_id"
+        public static let viewName = "view_name"
+        public static let roadmapId = "roadmap_id"
+        public static let roadmapName = "roadmap_name"
+        public static let projectId = "project_id"
+        public static let projectName = "project_name"
+        public static let stateEnum = "state_enum"
+        public static let issuesCompletedCount = "issues_completed_count"
+        public static let progress = "progress"
+        public static let observedAtMs = "observed_at_ms"
+        public static let receivedAtMs = "received_at_ms"
+        public static let readAtMs = "read_at_ms"
+        public static let archivedAtMs = "archived_at_ms"
+        public static let reactedAtMs = "reacted_at_ms"
+        public static let startedAtMs = "started_at_ms"
+        public static let endsAtMs = "ends_at_ms"
+        public static let completedAtMs = "completed_at_ms"
+        public static let removedAtMs = "removed_at_ms"
     }
 
     /// Phase Track-1 D2 — FTS5 contentless virtual table over event bodies
@@ -212,6 +253,8 @@ public enum Schema {
         public static let ghPR = "gh_pr"
         public static let ghIssueComment = "gh_issue_comment"
         public static let ghPRReviewComment = "gh_pr_review_comment"
+        // Phase Track-3 D1 — Linear notification titles routed through FTS.
+        public static let linearNotificationTitle = "linear_notification_title"
     }
 
     /// Phase Track-1 D2 — cross-source association graph row.
@@ -391,6 +434,15 @@ public enum CollectorID {
     /// Phase 4.4 — Slack REST polling collector. `sourceID = "slack:<team_id>:<user_id>"`.
     /// `lastModifiedMs` хранит cursor (epoch ms newest processed message `ts`).
     public static let slackPolling = "slack_polling"
+    /// Phase Track-3 D1 — Linear warm-tier (15m) state sweep:
+    /// notifications + cycles + subscribed_issues. sourceID format:
+    /// `linear:notifications:<workspaceID>`, `linear:cycles:<workspaceID>`.
+    public static let linearWarmPolling = "linear_warm_polling"
+    /// Phase Track-3 D1 — Linear cold-tier (4am local) state sweep:
+    /// roadmaps + customViews + projectMemberships. sourceID:
+    /// `linear:cold:<workspaceID>`. `lastModifiedMs` holds last cold tick ms
+    /// (catch-up gate uses `now - lastModifiedMs > 24h` to trigger immediate tick).
+    public static let linearColdPolling = "linear_cold_polling"
 }
 
 /// Канонические `provider` значения для `integrations` таблицы. Литералы —
