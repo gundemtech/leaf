@@ -216,6 +216,36 @@ public enum Schema {
         public static let endsAtMs = "ends_at_ms"
         public static let completedAtMs = "completed_at_ms"
         public static let removedAtMs = "removed_at_ms"
+        // Phase Track-3 D2 — GitHub D2 payload keys.
+        public static let prReviewState = "pr_review_state"
+        public static let workflowName = "workflow_name"
+        public static let workflowRef = "workflow_ref"
+        public static let deploymentEnvironment = "deployment_environment"
+        public static let deploymentState = "deployment_state"
+        public static let repositoryVisibility = "repository_visibility"
+        public static let forkeeFullName = "forkee_full_name"
+        public static let gistId = "gist_id"
+        public static let gistDescription = "gist_description"
+        public static let projectV2Id = "projectv2_id"
+        public static let projectV2CardId = "projectv2_card_id"
+        public static let projectV2FieldName = "projectv2_field_name"
+        public static let projectV2OldValue = "projectv2_old_value"
+        public static let projectV2NewValue = "projectv2_new_value"
+        public static let iterationId = "iteration_id"
+        public static let codespaceName = "codespace_name"
+        public static let codespaceState = "codespace_state"
+        public static let repoInvitationId = "repo_invitation_id"
+        public static let repoInvitationFromLogin = "repo_invitation_from_login"
+        public static let repoFullName = "repo_full_name"
+        public static let reactionEmoji = "reaction_emoji"
+        public static let reactionCount = "reaction_count"
+        public static let reactionDelta = "reaction_delta"
+        public static let alertNumber = "alert_number"
+        public static let alertSeverity = "alert_severity"
+        public static let alertRule = "alert_rule"
+        public static let dependabotPackageName = "dependabot_package_name"
+        public static let auditAction = "audit_action"
+        public static let auditActorLogin = "audit_actor_login"
     }
 
     /// Phase Track-1 D2 — FTS5 contentless virtual table over event bodies
@@ -255,6 +285,10 @@ public enum Schema {
         public static let ghPRReviewComment = "gh_pr_review_comment"
         // Phase Track-3 D1 — Linear notification titles routed through FTS.
         public static let linearNotificationTitle = "linear_notification_title"
+        // Phase Track-3 D2 — GitHub D2 body provenance.
+        public static let ghGistDescription = "gh_gist_description"
+        public static let ghReleaseBody = "gh_release_body"
+        public static let ghDeploymentDescription = "gh_deployment_description"
     }
 
     /// Phase Track-1 D2 — cross-source association graph row.
@@ -414,6 +448,22 @@ public enum Schema {
         public static let linearCustomViews = "linear_custom_views"
         public static let linearProjectMemberships = "linear_project_memberships"
         public static let linearRoadmapState = "linear_roadmap_state"
+
+        // GitHub D2 — singleton snapshot kinds (no per-key suffix).
+        public static let githubStarredRepos = "github_starred_repos"
+        public static let githubWatchedRepos = "github_watched_repos"
+        public static let githubGists = "github_gists"
+        public static let githubCodespaces = "github_codespaces"
+        public static let githubRepoInvitations = "github_repo_invitations"
+        public static let githubAuditCursor = "github_audit_cursor" // Cursor (last-processed audit event id), not state snapshot
+
+        // GitHub D2 — parameterized snapshot kind prefixes (composite key embedded in value).
+        // Callers compose: `Schema.ProviderSnapshotKinds.githubProjectV2ItemsPrefix + projectID`.
+        public static let githubProjectV2ItemsPrefix = "github_projectv2_items:"
+        public static let githubIssueReactionsPrefix = "github_issue_reactions:"
+        public static let githubSecretAlertsPrefix = "github_secret_alerts:"
+        public static let githubCodeAlertsPrefix = "github_code_alerts:"
+        public static let githubDependabotAlertsPrefix = "github_dependabot_alerts:"
     }
 }
 
@@ -443,6 +493,13 @@ public enum CollectorID {
     /// `linear:cold:<workspaceID>`. `lastModifiedMs` holds last cold tick ms
     /// (catch-up gate uses `now - lastModifiedMs > 24h` to trigger immediate tick).
     public static let linearColdPolling = "linear_cold_polling"
+    /// Phase Track-3 D2 — GitHub warm-tier (15m): projectsV2 + gists + invitations
+    /// + codespaces + issue-reactions. sourceID `github:warm:<login>`.
+    public static let githubWarmPolling = "github_warm_polling"
+    /// Phase Track-3 D2 — GitHub cold-tier (4am local). sourceID `github:cold:<login>`.
+    /// `lastModifiedMs` holds last cold tick ms (catch-up gate uses
+    /// `now - lastModifiedMs > 24h`).
+    public static let githubColdPolling = "github_cold_polling"
 }
 
 /// Канонические `provider` значения для `integrations` таблицы. Литералы —
