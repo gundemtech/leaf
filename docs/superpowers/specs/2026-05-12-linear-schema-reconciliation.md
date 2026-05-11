@@ -145,9 +145,6 @@ query LeafWarm($notifSince: DateTimeOrDuration!) {
 **Full query rewrite:**
 ```graphql
 query LeafCold {
-  initiatives(first: 25) {
-    nodes { id name status health }
-  }
   customViews(first: 50) {
     nodes { id name team { id } updatedAt }
   }
@@ -158,9 +155,10 @@ query LeafCold {
 ```
 
 **Parser changes:**
-- Remove `parseRoadmaps` / drop calls. `LinearColdBatch.roadmaps` field retained (= empty array always) to keep `LinearColdBatch` Sendable Hashable surface backward-compatible (no public type change).
-- `parseProjectMemberships`: read `dataDict["projects"].nodes` (list of projects with id+name) instead of `dataDict["viewer"]["projectMemberships"].nodes[].project`. Map each project to existing `LinearProjectMembershipSnapshot(projectId, projectName)`.
-- `parseInitiatives` (new): map `dataDict["initiatives"].nodes` to existing `LinearInitiativeObservedSnapshot` or equivalent. **Note:** Track-3 D1 design originally placed initiatives in hot tier via `viewer.initiatives` fragment with `observedAtMs = tick timestamp` heartbeat semantic. Reconciliation **moves initiative observation to cold tier** since (a) cold tier is the natural home for top-level workspace state snapshots, (b) hot tier piggy-back was already disabled and moving is cleaner than re-adding to hot. Event_kind `linear_initiative_observed` remains (registered in ShareEventTypeKey). Cold tier emits one event per initiative per cold tick (~daily) — semantically same as design intent (heartbeat-per-day instead of heartbeat-per-hot-tick).
+- Remove `parseColdRoadmaps` / drop call. `LinearColdBatch.roadmaps` field retained (= empty array always) to keep `LinearColdBatch` Sendable Hashable Public init surface backward-compatible (no public type change).
+- `parseColdMemberships`: rewrite to read `dataDict["projects"].nodes` (list of projects with id+name) instead of `dataDict["viewer"]["projectMemberships"].nodes[].project`. Signature changes from `viewerDict: [String: Any]?` to `dataDict: [String: Any]?`. Map each project to existing `LinearProjectMembershipSnapshot(projectId, projectName)`.
+
+**Initiative observation stays in hot tier (LeafPoll)** per Phase 4.7.C original design. Hot-tier query gets a new top-level `initiatives(first: 25) { nodes { id name status } }` piggy-back block (symmetric with existing `projectUpdates` and `documents` top-level piggy-backs). `parseInitiatives` signature changes from `viewerDict: [String: Any]?` to `dataDict: [String: Any]`. `observedAtMs = nowMs` semantic preserved (heartbeat-per-hot-tick).
 
 ### 4.4 Snapshot table M015
 
@@ -192,7 +190,8 @@ Approach: **targeted edits + selective regen**, not full 4239-line rewrite.
 
 - `Fixtures.LeafWarm.notificationsMixedSubtypes` — IssueNotification + DocumentNotification graceful (non-Issue subtype lacks `issue` field, parser does not crash).
 - `Fixtures.LeafWarm.subscribedViaIssuesFilter` — `subscribed: issues(filter)` top-level alias path.
-- `Fixtures.LeafCold.initiativesAndCustomViewsAndProjectMemberships` — three top-level fields in single response.
+- `Fixtures.LeafCold.customViewsAndProjectMemberships` — two top-level fields in single response (initiative moved to hot tier).
+- `Fixtures.LeafPoll.initiativesTopLevel` — top-level `initiatives` field response (replaces removed `viewer.initiatives` fragment).
 - `Fixtures.LeafCold.noRoadmapsField` — assert parser does not crash when `roadmaps` key absent (it must not be in query).
 - `Fixtures.LeafPoll.relationChangesEnabled` — synthesize `relationChanges` payload (no real workspace data — synthesize from introspection truth: `[{ identifier: "GUN-42", type: "blocks" }, { identifier: "GUN-43", type: "related" }]`).
 - `Fixtures.LeafPoll.cycleCurrentProgress` — `activeCycle.currentProgress: 0.42` not `progress`.
