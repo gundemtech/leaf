@@ -109,6 +109,23 @@ final class GitHubCollectorTests: XCTestCase {
             return contributionsCalendarToReturn
         }
 
+        // Phase Track-3 D2 — warm + cold tier mock conformance (no-op defaults; specific
+        // expectations come in Tasks 8/10 collector tests).
+        func fetchProjectsV2State(accessToken: String, login: String, topN: Int) async throws -> GitHubProjectsV2Snapshot { .empty }
+        func fetchGists(accessToken: String, login: String) async throws -> [GitHubGistSnapshot] { [] }
+        func fetchRepoInvitations(accessToken: String) async throws -> [GitHubRepoInvitationSnapshot] { [] }
+        func fetchCodespaces(accessToken: String) async throws -> [GitHubCodespaceSnapshot] { [] }
+        func fetchIssueReactions(accessToken: String, owner: String, repo: String, issueNumber: Int) async throws -> GitHubIssueReactionsSnapshot {
+            .empty(owner: owner, repo: repo, issueNumber: issueNumber, nowMs: 0)
+        }
+        func fetchStarredRepos(accessToken: String, login: String) async throws -> [GitHubStarredRepoSnapshot] { [] }
+        func fetchWatchedRepos(accessToken: String, login: String) async throws -> [GitHubWatchedRepoSnapshot] { [] }
+        func fetchSecretScanningAlerts(accessToken: String, owner: String, repo: String) async throws -> [GitHubSecurityAlertSnapshot] { [] }
+        func fetchCodeScanningAlerts(accessToken: String, owner: String, repo: String) async throws -> [GitHubSecurityAlertSnapshot] { [] }
+        func fetchDependabotAlerts(accessToken: String, owner: String, repo: String) async throws -> [GitHubSecurityAlertSnapshot] { [] }
+        func fetchOrganizations(accessToken: String) async throws -> [GitHubOrgSnapshot] { [] }
+        func fetchOrgAuditLog(accessToken: String, org: String, since: Int64?) async throws -> GitHubOrgAuditLogBatch { .empty }
+
         func setBatch(_ batch: GitHubEventBatch) {
             self.batchToReturn = batch
         }
