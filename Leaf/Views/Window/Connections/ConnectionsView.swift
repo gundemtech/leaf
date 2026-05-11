@@ -690,11 +690,14 @@ struct ConnectionsView: View {
 
     /// Inline copy of `GitHubScopesService.parseScopeString`. Kept local to
     /// avoid a public API expansion just for this view; the LeafCore one is
-    /// `internal static` so unreachable from the app target.
+    /// `internal static` so unreachable from the app target. Splits on both
+    /// commas and whitespace because GitHub's token-exchange response uses
+    /// comma-separated scope strings, while the legacy `X-OAuth-Scopes`
+    /// header form is space-separated.
     nonisolated private static func parseGitHubScopeString(_ raw: String?) -> Set<String> {
         guard let raw else { return [] }
         let parts = raw
-            .split(whereSeparator: { $0.isWhitespace })
+            .split(whereSeparator: { $0.isWhitespace || $0 == "," })
             .map { String($0) }
             .filter { !$0.isEmpty }
         return Set(parts)

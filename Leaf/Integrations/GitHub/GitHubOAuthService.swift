@@ -28,17 +28,20 @@ import LeafCorePrivate
 
 private let oauthLogger = Logger(subsystem: "tech.gundem.leaf.app", category: "github-oauth")
 
-/// Parses GitHub's space-separated `X-OAuth-Scopes` form into a set of
-/// tokens. Mirrors `GitHubScopesService.parseScopeString` exactly so the
-/// app-target derivation in `reload()` / `finishConnect()` and the
-/// LeafCore actor stay observationally identical for any input.
+/// Parses GitHub's scope string into a set of tokens. GitHub's OAuth
+/// token-exchange JSON response returns scope as **comma-separated**
+/// (e.g. `"repo,read:user,read:org"`); the legacy `X-OAuth-Scopes` HTTP
+/// header form is space-separated. Split on both — mirrors
+/// `GitHubScopesService.parseScopeString` exactly so the app-target
+/// derivation in `reload()` / `finishConnect()` stays observationally
+/// identical to the LeafCore actor for any input.
 ///
 /// `nil` (no integrations row column) → empty set, treated downstream as
 /// "no scopes granted" → all required core surfaced as missing.
 private func parseScopeString(_ raw: String?) -> Set<String> {
     guard let raw else { return [] }
     let parts = raw
-        .split(whereSeparator: { $0.isWhitespace })
+        .split(whereSeparator: { $0.isWhitespace || $0 == "," })
         .map { String($0) }
         .filter { !$0.isEmpty }
     return Set(parts)

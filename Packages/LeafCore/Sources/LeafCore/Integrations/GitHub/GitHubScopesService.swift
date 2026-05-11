@@ -131,11 +131,15 @@ public actor GitHubScopesService {
         }
     }
 
-    /// GitHub returns space-separated. Multi-space tolerant; trim per token;
-    /// empty / whitespace-only → empty set.
+    /// GitHub's OAuth token-exchange JSON response returns the granted scope
+    /// as a **comma-separated** string (e.g. `"repo,read:user,read:org"`),
+    /// while the legacy `X-OAuth-Scopes` HTTP header form is space-separated.
+    /// Split on both — multi-space tolerant; trim per token; empty / whitespace-
+    /// only → empty set. Without comma support, every token-exchange response
+    /// would parse to a single weird token and surface as "all scopes missing".
     static func parseScopeString(_ raw: String) -> Set<String> {
         let parts = raw
-            .split(whereSeparator: { $0.isWhitespace })
+            .split(whereSeparator: { $0.isWhitespace || $0 == "," })
             .map { String($0) }
             .filter { !$0.isEmpty }
         return Set(parts)

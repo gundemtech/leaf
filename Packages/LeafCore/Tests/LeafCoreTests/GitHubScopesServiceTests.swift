@@ -157,6 +157,42 @@ final class GitHubScopesServiceTests: XCTestCase {
         XCTAssertEqual(granted, ["repo", "read:user"])
     }
 
+    /// GitHub's OAuth token-exchange JSON returns scope as comma-separated
+    /// (`"repo,read:user,read:org"`); whitespace-only split would produce
+    /// a single weird token. Regression: pre-fix, `repo,read:user,read:org`
+    /// parsed to `{"repo,read:user,read:org"}` → `requiredCore.subtracting`
+    /// returned the FULL `requiredCore` (none of the canonical scope strings
+    /// matched the joined token), surfacing as "all scopes missing" in the UI
+    /// even though the user had granted everything via OAuth.
+    func testCommaSeparatedScopeFromTokenExchangeParsesCorrectly() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        try db.upsertIntegration(IntegrationRecord(
+            provider: .github,
+            workspaceID: "o", workspaceName: "n",
+            accessToken: "t", refreshToken: nil, expiresAt: nil,
+            scope: "repo,read:user,read:org,read:project,security_events,read:audit_log",
+            connectedAt: now, updatedAt: now
+        ))
+
+        let s = GitHubScopesService(database: db)
+        let granted = await s.currentGranted()
+        XCTAssertEqual(granted, ["repo", "read:user", "read:org", "read:project", "security_events", "read:audit_log"])
+
+        let missing = await s.missing()
+        XCTAssertTrue(missing.isEmpty, "All requiredCore scopes were granted; missing must be empty")
+
+        let missingOpt = await s.missingOptional()
+        XCTAssertTrue(missingOpt.isEmpty, "All requiredOptional scopes were granted; missingOptional must be empty")
+    }
+
+    /// Mixed comma + space (defensive — neither GitHub format docs guarantee
+    /// uniform separator). Split must handle both characters in a single pass.
+    func testMixedCommaAndSpaceSeparatorsParsesCorrectly() {
+        let granted = GitHubScopesService.parseScopeString("repo, read:user,  read:org read:project")
+        XCTAssertEqual(granted, ["repo", "read:user", "read:org", "read:project"])
+    }
+
     /// Empty `scope` column → granted empty → missing == full requiredCore.
     func testEmptyScopeYieldsEmptyGranted() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
