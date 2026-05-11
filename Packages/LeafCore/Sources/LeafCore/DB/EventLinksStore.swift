@@ -49,8 +49,8 @@ public enum EventLinksStore {
             }
         }
 
-        // 2) Branch name → Linear (commit_pushed only). Moat extractor via derivers.
-        if eventKind == "commit_pushed",
+        // 2) Branch name → Linear (gh_commit_pushed only). Moat extractor via derivers.
+        if eventKind == GitHubEventKindKey.commitPushed.rawValue,
            let branch = payload["branch"],
            !knownLinearPrefixes.isEmpty,
            let id = derivers.extractBranchLinearID(branch, knownLinearPrefixes) {
@@ -209,9 +209,9 @@ public enum EventLinksStore {
         // dispatch ahead of Task 8.
         if eventKind == "issue_updated" { return Schema.BodyKinds.linearDesc }
         if eventKind == "linear_notification_received" { return Schema.BodyKinds.linearNotificationTitle }
-        if eventKind == "commit_pushed" { return Schema.BodyKinds.commitMsg }
-        if eventKind == "gh_issue_comment_authored" { return Schema.BodyKinds.ghIssueComment }
-        if eventKind == "gh_pr_review_comment_authored" { return Schema.BodyKinds.ghPRReviewComment }
+        if eventKind == GitHubEventKindKey.commitPushed.rawValue { return Schema.BodyKinds.commitMsg }
+        if eventKind == GitHubEventKindKey.issueCommentAuthored.rawValue { return Schema.BodyKinds.ghIssueComment }
+        if eventKind == GitHubEventKindKey.prReviewCommentAuthored.rawValue { return Schema.BodyKinds.ghPRReviewComment }
         if eventKind == "slack_thread_reply_aggregate" { return Schema.BodyKinds.slackThreadParent }
         if eventKind.hasPrefix("gh_pr_") { return Schema.BodyKinds.ghPR }
         return nil

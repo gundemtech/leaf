@@ -215,10 +215,10 @@ public struct QueryEngine: Sendable {
                  ORDER BY ts DESC LIMIT 1
             """)
 
-            // current_branch: latest commit_pushed payload.branch.
+            // current_branch: latest gh_commit_pushed payload.branch.
             let currentBranch: String? = try String.fetchOne(rawDB, sql: """
                 SELECT json_extract(payload_json, '$.branch') FROM events
-                 WHERE json_extract(payload_json, '$.event_kind') = 'commit_pushed'
+                 WHERE json_extract(payload_json, '$.event_kind') = 'gh_commit_pushed'
                    AND json_extract(payload_json, '$.branch') IS NOT NULL
                  ORDER BY ts DESC LIMIT 1
             """)
@@ -255,14 +255,14 @@ public struct QueryEngine: Sendable {
                 )
             }
 
-            // last_commit: latest commit_pushed projection.
+            // last_commit: latest gh_commit_pushed projection.
             let lastCommit: CommitRef? = try Row.fetchOne(rawDB, sql: """
                 SELECT ts,
                        json_extract(payload_json, '$.sha')     AS sha,
                        json_extract(payload_json, '$.body')    AS message,
                        json_extract(payload_json, '$.branch')  AS branch
                   FROM events
-                 WHERE json_extract(payload_json, '$.event_kind') = 'commit_pushed'
+                 WHERE json_extract(payload_json, '$.event_kind') = 'gh_commit_pushed'
                  ORDER BY ts DESC LIMIT 1
             """).map { row in
                 CommitRef(

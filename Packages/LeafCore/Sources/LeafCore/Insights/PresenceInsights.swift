@@ -209,10 +209,10 @@ public enum PresenceInsights {
                 in: rawDB
             )
 
-            // 6. events count — actions_run_initiated с status='in_progress'
+            // 6. events count — gh_actions_run_initiated с status='in_progress'
             // за последние 24h (independent от period; CI runs short-lived).
             github["actions_runs_in_progress"] = try Self.countEvents(
-                eventKind: "actions_run_initiated",
+                eventKind: GitHubEventKindKey.actionsRunInitiated.rawValue,
                 statusFilter: "in_progress",
                 sinceMs: actionsLookbackMs,
                 in: rawDB

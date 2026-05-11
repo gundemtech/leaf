@@ -32,7 +32,7 @@ final class DatabaseGitHubQueriesTests: XCTestCase {
             bundleID: nil,
             payload: [
                 "source": "github",
-                "event_kind": "commit_pushed",
+                "event_kind": "gh_commit_pushed",
                 "repo": repo,
                 "title": "test",
                 "sha": "abc"
@@ -112,7 +112,7 @@ final class DatabaseGitHubQueriesTests: XCTestCase {
                 bundleID: nil,
                 payload: [
                     "source": "github",
-                    "event_kind": "pr_opened",
+                    "event_kind": "gh_pr_opened",
                     "repo": "octocat/C"
                 ]
             )

@@ -188,7 +188,7 @@ final class DetectorPipelineIncrementalTests: XCTestCase {
     func testDecisionWriteForCommitMsg() throws {
         let db = try openDB()
         try writeEvent(db, tsMs: 2_500, payload: [
-            "event_kind": "commit_pushed",
+            "event_kind": "gh_commit_pushed",
             "body": "feat: DECIDE on EdDSA signing"
         ])
 
@@ -258,7 +258,7 @@ final class DetectorPipelineIncrementalTests: XCTestCase {
             "body": "DECIDE on relay design"
         ])
         try writeEvent(db, tsMs: 2_000, payload: [
-            "event_kind": "commit_pushed",
+            "event_kind": "gh_commit_pushed",
             "body": "no signal here"
         ])
 
@@ -269,7 +269,7 @@ final class DetectorPipelineIncrementalTests: XCTestCase {
         // Add new event after first run, then reset cursor → backfill must re-process
         // both events without duplicating decision row.
         try writeEvent(db, tsMs: 3_000, payload: [
-            "event_kind": "commit_pushed",
+            "event_kind": "gh_commit_pushed",
             "body": "DECIDE: ship alpha.12"
         ])
         try db.writeSQL { rawDB in

@@ -104,16 +104,29 @@ private struct ProviderIcon: View {
         case "linear_project_update_authored": return "megaphone"
         case "linear_initiative_observed": return "flag"
         case "issue_updated": return "list.bullet.clipboard"
-        case "commit_pushed": return "arrow.up.circle"
-        case "pr_opened", "pr_closed", "pr_merged": return "arrow.triangle.pull"
-        case "pr_review_comment_authored", "pr_review_thread_resolved", "review_submitted":
+        case GitHubEventKindKey.commitPushed.rawValue: return "arrow.up.circle"
+        case GitHubEventKindKey.prOpened.rawValue,
+             GitHubEventKindKey.prClosed.rawValue,
+             GitHubEventKindKey.prMerged.rawValue:
+            return "arrow.triangle.pull"
+        case GitHubEventKindKey.prReviewCommentAuthored.rawValue,
+             GitHubEventKindKey.prReviewThreadResolved.rawValue,
+             GitHubEventKindKey.prReviewSubmitted.rawValue:
             return "checkmark.bubble"
-        case "issue_opened", "issue_closed", "issue_comment_authored":
+        case GitHubEventKindKey.issueOpened.rawValue,
+             GitHubEventKindKey.issueClosed.rawValue,
+             GitHubEventKindKey.issueCommentAuthored.rawValue:
             return "ladybug"
-        case "branch_created", "branch_deleted": return "arrow.triangle.branch"
-        case "tag_created", "release_published": return "tag.fill"
-        case "discussion_authored", "discussion_comment_authored": return "text.bubble"
-        case "actions_run_initiated": return "gearshape.2"
+        case GitHubEventKindKey.branchCreated.rawValue,
+             GitHubEventKindKey.branchDeleted.rawValue:
+            return "arrow.triangle.branch"
+        case GitHubEventKindKey.tagCreated.rawValue,
+             GitHubEventKindKey.releasePublished.rawValue:
+            return "tag.fill"
+        case GitHubEventKindKey.discussionAuthored.rawValue,
+             GitHubEventKindKey.discussionCommentAuthored.rawValue:
+            return "text.bubble"
+        case GitHubEventKindKey.actionsRunInitiated.rawValue: return "gearshape.2"
         case "message_authored_aggregate", "slack_thread_reply_aggregate": return "message"
         case "slack_mention_received_aggregate": return "at"
         case "slack_file_uploaded_aggregate": return "paperclip"

@@ -294,7 +294,7 @@ final class PresenceStateWriterTests: XCTestCase {
                 timestamp: base.addingTimeInterval(TimeInterval(i * 30)),
                 signalType: .action,
                 bundleID: "com.example",
-                payload: ["event_kind": "commit_pushed"]
+                payload: ["event_kind": "gh_commit_pushed"]
             )
         }
         let offset = CollectorOffset(
@@ -355,7 +355,7 @@ final class PresenceStateWriterTests: XCTestCase {
                 timestamp: base,
                 signalType: .action,
                 bundleID: "com.example",
-                payload: ["event_kind": "commit_pushed"]
+                payload: ["event_kind": "gh_commit_pushed"]
             )
         ]
         let offset = CollectorOffset(

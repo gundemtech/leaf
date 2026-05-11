@@ -105,7 +105,7 @@ public enum ReviewActivityInsights {
                 SELECT json_extract(\(Schema.Events.payloadJSON), '$.event_kind') AS k, COUNT(*) AS c
                 FROM \(Schema.Events.tableName)
                 WHERE json_extract(\(Schema.Events.payloadJSON), '$.source') = 'github'
-                  AND json_extract(\(Schema.Events.payloadJSON), '$.event_kind') IN ('review_submitted', 'pr_review_comment_authored', 'pr_review_thread_resolved')
+                  AND json_extract(\(Schema.Events.payloadJSON), '$.event_kind') IN ('gh_pr_review_submitted', 'gh_pr_review_comment_authored', 'gh_pr_review_thread_resolved')
                   AND \(Schema.Events.ts) >= ? AND \(Schema.Events.ts) < ?
                   \(repo != nil ? "AND json_extract(\(Schema.Events.payloadJSON), '$.repo') = ?" : "")
                 GROUP BY k
@@ -117,9 +117,9 @@ public enum ReviewActivityInsights {
                 let kind = row["k"] as? String ?? ""
                 let count = (row["c"] as? Int64).map { Int($0) } ?? 0
                 switch kind {
-                case "review_submitted": reviewsSubmitted = count
-                case "pr_review_comment_authored": reviewComments = count
-                case "pr_review_thread_resolved": threadResolved = count
+                case GitHubEventKindKey.prReviewSubmitted.rawValue: reviewsSubmitted = count
+                case GitHubEventKindKey.prReviewCommentAuthored.rawValue: reviewComments = count
+                case GitHubEventKindKey.prReviewThreadResolved.rawValue: threadResolved = count
                 default: break
                 }
             }
@@ -129,11 +129,11 @@ public enum ReviewActivityInsights {
             let byRepoSQL = """
                 SELECT
                   json_extract(\(Schema.Events.payloadJSON), '$.repo') AS repo,
-                  SUM(CASE WHEN json_extract(\(Schema.Events.payloadJSON), '$.event_kind') = 'review_submitted' THEN 1 ELSE 0 END) AS reviews,
-                  SUM(CASE WHEN json_extract(\(Schema.Events.payloadJSON), '$.event_kind') = 'pr_review_comment_authored' THEN 1 ELSE 0 END) AS comments
+                  SUM(CASE WHEN json_extract(\(Schema.Events.payloadJSON), '$.event_kind') = 'gh_pr_review_submitted' THEN 1 ELSE 0 END) AS reviews,
+                  SUM(CASE WHEN json_extract(\(Schema.Events.payloadJSON), '$.event_kind') = 'gh_pr_review_comment_authored' THEN 1 ELSE 0 END) AS comments
                 FROM \(Schema.Events.tableName)
                 WHERE json_extract(\(Schema.Events.payloadJSON), '$.source') = 'github'
-                  AND json_extract(\(Schema.Events.payloadJSON), '$.event_kind') IN ('review_submitted', 'pr_review_comment_authored', 'pr_review_thread_resolved')
+                  AND json_extract(\(Schema.Events.payloadJSON), '$.event_kind') IN ('gh_pr_review_submitted', 'gh_pr_review_comment_authored', 'gh_pr_review_thread_resolved')
                   AND \(Schema.Events.ts) >= ? AND \(Schema.Events.ts) < ?
                   \(repo != nil ? "AND json_extract(\(Schema.Events.payloadJSON), '$.repo') = ?" : "")
                   AND json_extract(\(Schema.Events.payloadJSON), '$.repo') IS NOT NULL

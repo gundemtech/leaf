@@ -210,7 +210,7 @@ final class InsightsSnapshotTests: XCTestCase {
             deepSessionMinSec: 1500,
             githubEventsCount: 5,
             githubByRepo: [RepoCountEntry(repo: "octocat/leaf", count: 5)],
-            githubByEventKind: [EventKindCountEntry(eventKind: "pr_merged", count: 3)],
+            githubByEventKind: [EventKindCountEntry(eventKind: "gh_pr_merged", count: 3)],
             githubPRCycleStats: cycle,
             githubReviewDelayStats: delay
         )

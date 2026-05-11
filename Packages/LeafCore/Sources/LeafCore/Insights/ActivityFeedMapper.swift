@@ -248,50 +248,50 @@ public enum ActivityFeedMapper {
         var secondary: String? = nil
 
         switch kind {
-        case "commit_pushed":
+        case GitHubEventKindKey.commitPushed.rawValue:
             guard let repo else { return nil }
             primary = branch.map { "\(repo): pushed to \($0)" } ?? "\(repo): pushed"
             secondary = sha
-        case "pr_opened":
+        case GitHubEventKindKey.prOpened.rawValue:
             primary = formatPR(repo: repo, number: number, suffix: "opened")
             secondary = nil
-        case "pr_closed":
+        case GitHubEventKindKey.prClosed.rawValue:
             primary = formatPR(repo: repo, number: number, suffix: "closed")
-        case "pr_merged":
+        case GitHubEventKindKey.prMerged.rawValue:
             primary = formatPR(repo: repo, number: number, suffix: "merged")
-        case "pr_review_comment_authored":
+        case GitHubEventKindKey.prReviewCommentAuthored.rawValue:
             primary = formatPR(repo: repo, number: number, suffix: "review comment")
-        case "pr_review_thread_resolved":
+        case GitHubEventKindKey.prReviewThreadResolved.rawValue:
             primary = formatPR(repo: repo, number: number, suffix: "thread resolved")
-        case "review_submitted":
+        case GitHubEventKindKey.prReviewSubmitted.rawValue:
             primary = formatPR(repo: repo, number: number, suffix: "review submitted")
-        case "issue_opened":
+        case GitHubEventKindKey.issueOpened.rawValue:
             primary = formatIssue(repo: repo, number: number, suffix: "issue opened")
-        case "issue_closed":
+        case GitHubEventKindKey.issueClosed.rawValue:
             primary = formatIssue(repo: repo, number: number, suffix: "issue closed")
         case "issue_updated":
             primary = formatIssue(repo: repo, number: number, suffix: "issue updated")
-        case "issue_comment_authored":
+        case GitHubEventKindKey.issueCommentAuthored.rawValue:
             primary = formatIssue(repo: repo, number: number, suffix: "comment")
-        case "branch_created":
+        case GitHubEventKindKey.branchCreated.rawValue:
             guard let repo else { return nil }
             primary = "\(repo): branch \(branch ?? "?") created"
-        case "branch_deleted":
+        case GitHubEventKindKey.branchDeleted.rawValue:
             guard let repo else { return nil }
             primary = "\(repo): branch \(branch ?? "?") deleted"
-        case "tag_created":
+        case GitHubEventKindKey.tagCreated.rawValue:
             guard let repo else { return nil }
             let tag = sanitize(payload["tag"]) ?? "?"
             primary = "\(repo): tag \(tag)"
-        case "release_published":
+        case GitHubEventKindKey.releasePublished.rawValue:
             guard let repo else { return nil }
             let tag = sanitize(payload["tag"]) ?? sanitize(payload["name"]) ?? "release"
             primary = "\(repo): release \(tag)"
-        case "discussion_authored":
+        case GitHubEventKindKey.discussionAuthored.rawValue:
             primary = repo.map { "\($0): discussion" } ?? "Discussion"
-        case "discussion_comment_authored":
+        case GitHubEventKindKey.discussionCommentAuthored.rawValue:
             primary = repo.map { "\($0): discussion comment" } ?? "Discussion comment"
-        case "actions_run_initiated":
+        case GitHubEventKindKey.actionsRunInitiated.rawValue:
             guard let repo else { return nil }
             let workflow = sanitize(payload["workflow_name"]) ?? "workflow"
             primary = "\(repo): \(workflow) run"
@@ -399,10 +399,10 @@ public enum ActivityFeedMapper {
     /// representing a discrete user action. They're surfaced via the Live
     /// Presence widget instead.
     static let skippedKinds: Set<String> = [
-        "github_notifications_pulse",
-        "pr_awaiting_review_count",
-        "my_open_pr_count",
-        "check_runs_status",
+        GitHubEventKindKey.notificationsPulse.rawValue,
+        GitHubEventKindKey.prAwaitingReviewCount.rawValue,
+        GitHubEventKindKey.myOpenPRCount.rawValue,
+        GitHubEventKindKey.checkRunsStatus.rawValue,
         "slack_presence_state",
         "slack_dnd_state",
         "linear_assigned_workload_pulse",

@@ -80,7 +80,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             signalType: .action,
             bundleID: "com.github.github",
             payload: [
-                "event_kind": "pr_opened",
+                "event_kind": "gh_pr_opened",
                 "repo": "o/r",
                 Schema.EventPayloadKeys.body: bodyText,
                 Schema.EventPayloadKeys.additions: "50"

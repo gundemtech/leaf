@@ -282,9 +282,9 @@ public enum DetectorPipeline {
         // detectors only fire on outcome-bearing events (decision/question/
         // blocker), notifications are surface-only.
         if eventKind == "issue_updated" { return .linearDesc }
-        if eventKind == "commit_pushed" { return .commitMsg }
-        if eventKind == "gh_issue_comment_authored" { return .ghIssueComment }
-        if eventKind == "gh_pr_review_comment_authored" { return .ghPRReviewComment }
+        if eventKind == GitHubEventKindKey.commitPushed.rawValue { return .commitMsg }
+        if eventKind == GitHubEventKindKey.issueCommentAuthored.rawValue { return .ghIssueComment }
+        if eventKind == GitHubEventKindKey.prReviewCommentAuthored.rawValue { return .ghPRReviewComment }
         if eventKind == "slack_thread_reply_aggregate" { return .slackThreadParent }
         if eventKind.hasPrefix("gh_pr_") { return .ghPR }
         return nil

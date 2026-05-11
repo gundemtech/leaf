@@ -106,11 +106,11 @@ final class QueryEngineQueryActivityTests: XCTestCase {
     func testWithFilter_RoutesThroughFTS() throws {
         let db = try openWriter()
         try writeEvent(db, tsMs: 1_000, payload: [
-            "event_kind": "commit_pushed",
+            "event_kind": "gh_commit_pushed",
             Schema.EventPayloadKeys.body: "auth refactor — moved refresh logic"
         ])
         try writeEvent(db, tsMs: 2_000, payload: [
-            "event_kind": "commit_pushed",
+            "event_kind": "gh_commit_pushed",
             Schema.EventPayloadKeys.body: "unrelated payments hotfix"
         ])
 
@@ -160,7 +160,7 @@ final class QueryEngineQueryActivityTests: XCTestCase {
         let bigBody = String(repeating: "x", count: 600)
         for i in 1...200 {
             try writeEvent(db, tsMs: Int64(i), payload: [
-                "event_kind": "commit_pushed",
+                "event_kind": "gh_commit_pushed",
                 Schema.EventPayloadKeys.body: bigBody
             ])
         }
@@ -183,7 +183,7 @@ final class QueryEngineQueryActivityTests: XCTestCase {
         let bigBody = String(repeating: "y", count: 600)
         for i in 1...200 {
             try writeEvent(db, tsMs: Int64(i), payload: [
-                "event_kind": "commit_pushed",
+                "event_kind": "gh_commit_pushed",
                 Schema.EventPayloadKeys.body: bigBody
             ])
         }
@@ -258,7 +258,7 @@ final class QueryEngineQueryActivityTests: XCTestCase {
     func testLinksComposition() throws {
         let db = try openWriter()
         try writeEvent(db, tsMs: 5_000, payload: [
-            "event_kind": "commit_pushed",
+            "event_kind": "gh_commit_pushed",
             Schema.EventPayloadKeys.body: "LEAF-42 implement auth refactor"
         ])
         let engine = makeEngine()

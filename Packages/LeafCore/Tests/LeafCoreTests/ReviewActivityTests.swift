@@ -38,7 +38,7 @@ final class ReviewActivityTests: XCTestCase {
     ) -> RawEvent {
         var payload: [String: String] = [
             "source": "github",
-            "event_kind": "review_submitted",
+            "event_kind": "gh_pr_review_submitted",
             "repo": repo,
             "title": "",
             "number": prNumber.map(String.init) ?? "",
@@ -64,7 +64,7 @@ final class ReviewActivityTests: XCTestCase {
     ) -> RawEvent {
         var payload: [String: String] = [
             "source": "github",
-            "event_kind": "pr_review_comment_authored",
+            "event_kind": "gh_pr_review_comment_authored",
             "repo": repo,
             "title": "",
             "number": prNumber.map(String.init) ?? "",
@@ -91,7 +91,7 @@ final class ReviewActivityTests: XCTestCase {
     ) -> RawEvent {
         var payload: [String: String] = [
             "source": "github",
-            "event_kind": "pr_opened",
+            "event_kind": "gh_pr_opened",
             "repo": repo,
             "title": "",
             "number": String(prNumber),

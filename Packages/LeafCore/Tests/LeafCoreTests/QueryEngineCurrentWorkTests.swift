@@ -71,12 +71,12 @@ final class QueryEngineCurrentWorkTests: XCTestCase {
     func testCurrentBranch_FromLatestCommitPushed() throws {
         let db = try openWriter()
         try writeEvent(db, tsMs: 1_000, payload: [
-            "event_kind": "commit_pushed",
+            "event_kind": "gh_commit_pushed",
             "branch": "main",
             Schema.EventPayloadKeys.body: "old commit"
         ])
         try writeEvent(db, tsMs: 5_000, payload: [
-            "event_kind": "commit_pushed",
+            "event_kind": "gh_commit_pushed",
             "branch": "feature/track-1-D3",
             Schema.EventPayloadKeys.body: "newer commit"
         ])
@@ -140,13 +140,13 @@ final class QueryEngineCurrentWorkTests: XCTestCase {
     func testLastCommit_FromLatestCommitPushed() throws {
         let db = try openWriter()
         try writeEvent(db, tsMs: 1_000, payload: [
-            "event_kind": "commit_pushed",
+            "event_kind": "gh_commit_pushed",
             "sha": "abc123",
             "branch": "main",
             Schema.EventPayloadKeys.body: "old commit"
         ])
         try writeEvent(db, tsMs: 7_000, payload: [
-            "event_kind": "commit_pushed",
+            "event_kind": "gh_commit_pushed",
             "sha": "def456",
             "branch": "feature/x",
             Schema.EventPayloadKeys.body: "latest commit message"

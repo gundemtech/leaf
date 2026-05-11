@@ -1108,7 +1108,7 @@ public final class Database: @unchecked Sendable {
     // MARK: - GitHub collector helpers (Phase 4.7.B-3)
 
     /// Phase 4.7.B-3 — derive top-N repos для bounded fan-out actions/runs polling.
-    /// Возвращает "owner/repo" identifier'ы упорядоченные по count `commit_pushed`
+    /// Возвращает "owner/repo" identifier'ы упорядоченные по count `gh_commit_pushed`
     /// events DESC начиная с `sinceMs` (typically `now - 7 days`).
     /// Используется `GitHubCollector.performTick()` перед `fetchActionsRunsForActor` —
     /// ограничивает per-tick HTTP cost N calls (one per repo) и фокусирует на
@@ -1122,7 +1122,7 @@ public final class Database: @unchecked Sendable {
                        COUNT(*) AS c
                 FROM \(Schema.Events.tableName)
                 WHERE json_extract(\(Schema.Events.payloadJSON), '$.source') = 'github'
-                  AND json_extract(\(Schema.Events.payloadJSON), '$.event_kind') = 'commit_pushed'
+                  AND json_extract(\(Schema.Events.payloadJSON), '$.event_kind') = 'gh_commit_pushed'
                   AND \(Schema.Events.ts) >= ?
                   AND json_extract(\(Schema.Events.payloadJSON), '$.repo') IS NOT NULL
                 GROUP BY repo

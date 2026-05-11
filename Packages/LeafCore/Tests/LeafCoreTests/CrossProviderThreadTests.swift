@@ -67,7 +67,7 @@ final class CrossProviderThreadTests: XCTestCase {
             bundleID: nil,
             payload: [
                 "source": "github",
-                "event_kind": "commit_pushed",
+                "event_kind": "gh_commit_pushed",
                 "repo": repo,
                 "title": "feat: real commit subject SHOULD NOT surface",
                 "number": "",
@@ -90,7 +90,7 @@ final class CrossProviderThreadTests: XCTestCase {
             bundleID: nil,
             payload: [
                 "source": "github",
-                "event_kind": "pr_opened",
+                "event_kind": "gh_pr_opened",
                 "repo": repo,
                 "title": "Real PR title — leaks bad",
                 "number": String(prNumber),
@@ -177,9 +177,9 @@ final class CrossProviderThreadTests: XCTestCase {
         XCTAssertEqual(returned[0]["source"] as? String, "linear")
         XCTAssertEqual(returned[0]["event_kind"] as? String, "issue_updated")
         XCTAssertEqual(returned[1]["source"] as? String, "github")
-        XCTAssertEqual(returned[1]["event_kind"] as? String, "commit_pushed")
+        XCTAssertEqual(returned[1]["event_kind"] as? String, "gh_commit_pushed")
         XCTAssertEqual(returned[2]["source"] as? String, "github")
-        XCTAssertEqual(returned[2]["event_kind"] as? String, "pr_opened")
+        XCTAssertEqual(returned[2]["event_kind"] as? String, "gh_pr_opened")
 
         // ADR-010 — `title` filtered out из commit & PR payloads.
         let commitPayload = try XCTUnwrap(returned[1]["payload"] as? [String: Any])
