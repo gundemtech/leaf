@@ -38,8 +38,8 @@ Track 3 D1 ship'нулся, smoke test выявил **10 schema-drift bugs** в 
 
 Из 18 новых D1 event_kinds (registry 48 → 66):
 
-- **17 work** post-reconciliation (notification trio, subscription added/removed, cycle started/completed, comment reaction added, relation added/removed, triage pick-up/resolved, priority/label×2/assignee/cycle-changed/estimate, custom-view ×3, project-membership added/removed).
-- **1 zero-emit** permanent (`linear_roadmap_state_observed`).
+- **16 work** post-reconciliation (notification trio, subscription added/removed, cycle started/completed, comment reaction added, relation added, triage pick-up/resolved, priority/label×2/assignee/cycle-changed/estimate, custom-view ×3, project-membership added/removed).
+- **2 zero-emit** permanent: `linear_relation_removed` (Linear lost add/remove discriminator) + `linear_roadmap_state_observed` (Linear deprecated `roadmaps`).
 
 Baseline 14 hot-tier event_kinds (Track 3 D1 era) — все восстанавливаются после fixes #6/#10/#14.
 
@@ -83,7 +83,7 @@ Baseline 14 hot-tier event_kinds (Track 3 D1 era) — все восстанав�
 
 **Parser changes (private statics in same file):**
 - `parseActiveCycle` (and equivalents): read `cycle["currentProgress"]` as primary; fallback `cycle["progress"]` removed.
-- `parseRelationChanges`: re-enable. Iterate `historyNode["relationChanges"] as? [[String: Any]]` (treat `null` as empty); for each entry read `identifier: String` (relation kind: `"blocks"`, `"blocked_by"`, `"related"`, `"duplicate"`, etc) + `type: String` (direction discriminator returned by Linear). **Direction discrimination:** Linear's `IssueRelationHistoryPayload.type` carries the action verb — empirically `"create"` (relation added) vs `"delete"` (relation removed). Implementation reads `type` and dispatches: `"create"` → emit `linear_relation_added`; `"delete"` → emit `linear_relation_removed`; any other value → log warning and skip (defensive). If the actual `type` value set differs in live workspace probes during implementation, update parser dispatch in same commit and document the verb set in code comment. Conservative fallback (only `linear_relation_added` emitted) if no real relation-change sample is available before merge — defer `linear_relation_removed` correctness to next smoke with relation activity.
+- `parseRelationChanges`: re-enable in restricted form. `IssueRelationHistoryPayload` has only `identifier: String!` (the related issue's identifier, e.g. `"GUN-42"`) and `type: String!` (the relation kind: `"blocks"`, `"blocked_by"`, `"related"`, `"duplicate"`). **Direction is unobservable** — Linear's API no longer surfaces an add/remove discriminator on history entries, and `relatedIssue` nested fragment is removed (only string identifier remains; no UUID issue ID). Implementation: emit **only `linear_relation_added` events** per non-null `relationChanges` entry; `linear_relation_removed` remains permanent zero-emit until v1.1 (which would need cache-diff approach against prior tick's relation set). Parser constructs `LinearRelationSnapshot` with `toIssueId = ""` (no longer queryable; identifier-only) + `toIssueIdentifier = payload.identifier` + `relationKind = payload.type`. Down-grades `linear_relation_removed` count to 0 in registry-still-on state; `linear_relation_added` is now the sole signal.
 - `parseLabelChanges`: confirm `null` treated as empty (likely already so per current parser; verify in fixture test).
 
 ### 4.2 `LeafWarm` (warm tier, line ~1747 in moat file)
