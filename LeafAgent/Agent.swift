@@ -148,6 +148,46 @@ enum AgentMain {
             )
         }()
 
+        // Phase Track-3 D1 — Linear warm + cold tiers. Both depend on a
+        // working OAuth integration (same gate as hot LinearCollector — skip
+        // if client_id is empty). Reuse the same `linearProvider` instance —
+        // protocol now carries fetchWarmState / fetchColdState.
+        let (linearWarmCollector, linearWarmScheduler, linearColdCollector, linearColdScheduler): (
+            LinearWarmCollector?, LinearWarmScheduler?,
+            LinearColdCollector?, LinearColdScheduler?
+        ) = {
+            guard !agentThresholds.linearOAuthClientID.isEmpty else {
+                return (nil, nil, nil, nil)
+            }
+            let warmRefresher = LinearTokenRefresher(
+                database: database, clientID: agentThresholds.linearOAuthClientID)
+            let coldRefresher = LinearTokenRefresher(
+                database: database, clientID: agentThresholds.linearOAuthClientID)
+            let warm = LinearWarmCollector(
+                database: database, provider: linearProvider,
+                refresher: warmRefresher,
+                intervalSec: agentThresholds.linearWarmPollIntervalSec,
+                backfillWindowDays: agentThresholds.backfillWindowDays,
+                logger: linearLogger)
+            let warmSched = LinearWarmScheduler(
+                collector: warm,
+                intervalSec: agentThresholds.linearWarmPollIntervalSec,
+                logger: linearLogger)
+            let cold = LinearColdCollector(
+                database: database, provider: linearProvider,
+                refresher: coldRefresher,
+                intervalSec: agentThresholds.linearColdPollIntervalSec,
+                logger: linearLogger)
+            let coldSched = LinearColdScheduler(
+                database: database, collector: cold,
+                workspaceIDProvider: {
+                    // `try?` collapses throws+Optional → IntegrationRecord?.
+                    (try? database.readIntegration(provider: .linear))?.workspaceID
+                },
+                logger: linearLogger)
+            return (warm, warmSched, cold, coldSched)
+        }()
+
         // Phase 4.3 — GitHub REST events polling collector.
         // Mirror Linear: prod parser в moat (ProdGitHubAPIProvider — REST event
         // mapping + ADR-010 enforcement), public Stub no-op для CI/dev. Empty
@@ -217,6 +257,11 @@ enum AgentMain {
         AgentLifetime.linearCollector = linearCollector
         AgentLifetime.githubCollector = githubCollector
         AgentLifetime.slackCollector = slackCollector
+        // Phase Track-3 D1 — Linear warm + cold lifetime slots.
+        AgentLifetime.linearWarmCollector = linearWarmCollector
+        AgentLifetime.linearWarmScheduler = linearWarmScheduler
+        AgentLifetime.linearColdCollector = linearColdCollector
+        AgentLifetime.linearColdScheduler = linearColdScheduler
 
         // Phase 5.3.D — Key rotation orchestrator + RotationOutbox resume.
         // Drains unposted rotation_outbox rows from prior sessions on startup
@@ -312,6 +357,12 @@ enum AgentMain {
         if let lc = linearCollector { Task { await lc.start() } }
         if let gc = githubCollector { Task { await gc.start() } }
         if let sc = slackCollector { Task { await sc.start() } }
+        // Phase Track-3 D1 — start warm + cold Linear tiers (collectors first,
+        // then their schedulers — symmetric with hot collector ordering).
+        if let wc = linearWarmCollector { Task { await wc.start() } }
+        if let ws = linearWarmScheduler { Task { await ws.start() } }
+        if let cc = linearColdCollector { Task { await cc.start() } }
+        if let cs = linearColdScheduler { Task { await cs.start() } }
         Task { await rotationFetchScheduler.start() }
         Task { await detectorScheduler.start() }
 
@@ -330,6 +381,14 @@ enum AgentMain {
             // Phase 5.3.E — stop rotationFetchScheduler next (independent from writer
             // chain; safe to drain while collectors still emit).
             if let r = AgentLifetime.rotationFetchScheduler { await r.stop() }
+            // Phase Track-3 D1 — stop Linear warm + cold tiers before maintenance.
+            // Order: cold scheduler → cold collector → warm scheduler → warm collector
+            // (schedulers first so they don't kick off a final tick into a stopped
+            // collector).
+            if let cs = AgentLifetime.linearColdScheduler { await cs.stop() }
+            if let cc = AgentLifetime.linearColdCollector { await cc.stop() }
+            if let ws = AgentLifetime.linearWarmScheduler { await ws.stop() }
+            if let wc = AgentLifetime.linearWarmCollector { await wc.stop() }
             if let m = AgentLifetime.maintenance { await m.stop() }
             if let f = AgentLifetime.fsEventsCollector { await f.stop() }
             if let c = AgentLifetime.claudeCodeCollector { await c.stop() }
@@ -367,4 +426,9 @@ enum AgentLifetime {
     nonisolated(unsafe) static var rotationFetchScheduler: RotationFetchScheduler?
     // Phase Track-1 D3 — periodic detector pipeline (incremental + scheduled passes).
     nonisolated(unsafe) static var detectorScheduler: DetectorScheduler?
+    // Phase Track-3 D1 — Linear warm/cold collectors + their schedulers.
+    nonisolated(unsafe) static var linearWarmCollector: LinearWarmCollector?
+    nonisolated(unsafe) static var linearWarmScheduler: LinearWarmScheduler?
+    nonisolated(unsafe) static var linearColdCollector: LinearColdCollector?
+    nonisolated(unsafe) static var linearColdScheduler: LinearColdScheduler?
 }

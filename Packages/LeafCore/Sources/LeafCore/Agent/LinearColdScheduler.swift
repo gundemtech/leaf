@@ -12,10 +12,10 @@ import os
 public actor LinearColdScheduler {
     private let database: Database
     private let collector: LinearColdCollector
-    private let workspaceIDProvider: () -> String?
+    private let workspaceIDProvider: @Sendable () -> String?
     private let logger: Logger
     /// Override clock for tests.
-    private let clock: () -> Date
+    private let clock: @Sendable () -> Date
     private let calendar: Calendar
 
     private var task: Task<Void, Never>?
@@ -23,9 +23,9 @@ public actor LinearColdScheduler {
     public init(
         database: Database,
         collector: LinearColdCollector,
-        workspaceIDProvider: @escaping () -> String?,
+        workspaceIDProvider: @escaping @Sendable () -> String?,
         logger: Logger,
-        clock: @escaping () -> Date = { Date() },
+        clock: @escaping @Sendable () -> Date = { Date() },
         calendar: Calendar = Calendar.current
     ) {
         self.database = database

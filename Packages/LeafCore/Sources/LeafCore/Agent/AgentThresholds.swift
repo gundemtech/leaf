@@ -86,6 +86,12 @@ public struct AgentThresholds: Sendable, Hashable {
     /// что Linear/GitHub — committed в `Production.xcconfig`, hardcoded в moat copy
     /// для Agent target (no INFOPLIST_FILE). Empty string → collector skip.
     public let slackOAuthClientID: String
+    /// Phase Track-3 D1 — interval (seconds) for LinearWarmCollector 15m tier.
+    public let linearWarmPollIntervalSec: TimeInterval
+    /// Phase Track-3 D1 — interval (seconds) for LinearColdCollector. Not used
+    /// directly by the scheduler (4am local anchor instead) — retained for
+    /// symmetry and potential debug overrides.
+    public let linearColdPollIntervalSec: TimeInterval
     /// Phase 4.10.B: как часто `ActiveAppCollector` poll'ит frontmost app +
     /// window title для in-app window-change detection (отдельно от NSWorkspace
     /// activation observer'а — тот ловит только app switch'и). Diff suppression
@@ -140,6 +146,8 @@ public struct AgentThresholds: Sendable, Hashable {
         githubOAuthClientID: String = "",
         slackPollIntervalSec: TimeInterval = 300,
         slackOAuthClientID: String = "",
+        linearWarmPollIntervalSec: TimeInterval = 900,
+        linearColdPollIntervalSec: TimeInterval = 86_400,
         attentionWindowPollIntervalSec: TimeInterval = 30,
         rotationFetchIntervalSec: TimeInterval = 60,
         detectorIncrementalIntervalSec: TimeInterval = 30,
@@ -171,6 +179,8 @@ public struct AgentThresholds: Sendable, Hashable {
         self.githubOAuthClientID = githubOAuthClientID
         self.slackPollIntervalSec = slackPollIntervalSec
         self.slackOAuthClientID = slackOAuthClientID
+        self.linearWarmPollIntervalSec = linearWarmPollIntervalSec
+        self.linearColdPollIntervalSec = linearColdPollIntervalSec
         self.attentionWindowPollIntervalSec = attentionWindowPollIntervalSec
         self.rotationFetchIntervalSec = rotationFetchIntervalSec
         self.detectorIncrementalIntervalSec = detectorIncrementalIntervalSec
@@ -204,6 +214,8 @@ public struct AgentThresholds: Sendable, Hashable {
         githubOAuthClientID: "",
         slackPollIntervalSec: 300,
         slackOAuthClientID: "",
+        linearWarmPollIntervalSec: 900,
+        linearColdPollIntervalSec: 86_400,
         attentionWindowPollIntervalSec: 30,
         rotationFetchIntervalSec: 60,
         detectorIncrementalIntervalSec: 30,
