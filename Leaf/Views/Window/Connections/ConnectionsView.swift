@@ -247,6 +247,15 @@ struct ConnectionsView: View {
                 connectedAt: connectedAt,
                 action: { githubOAuth.disconnect() }
             )
+        case .connectedScopeOutdated(let login, let connectedAt, _):
+            // Phase Track-3 D2 — Tasks 18-21 add the dedicated re-auth banner /
+            // missing-scopes detail UI. Until then surface as plain connected so
+            // the substrate ships без UI regression.
+            connectedBlock(
+                title: login,
+                connectedAt: connectedAt,
+                action: { githubOAuth.disconnect() }
+            )
         case .reconnectNeeded:
             reconnectBlock(
                 description: "Your GitHub session expired and Leaf can't refresh it automatically. Sign in again to resume polling.",
