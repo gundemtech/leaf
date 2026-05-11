@@ -19,11 +19,31 @@ final class ShareEventTypeRegistryTests: XCTestCase {
         XCTAssertEqual(Set(raws).count, raws.count, "All event_kind raws must be unique")
     }
 
-    /// Track 1 D3 — registry total 48 keys (4.7.C baseline 43 + D3 5 semantic facts).
+    /// Track 3 D1 — registry total 66 keys (Track-1 D3 baseline 48 + Track-3 D1 18 Linear deep sweep).
     /// Если ломается при добавлении в новые phase'ы — обновить counter сознательно.
-    func testPhase47CRegistrySize() {
-        XCTAssertEqual(ShareEventTypeKey.allCases.count, 48,
-                       "Track 1 D3 total = 43 prior + 5 new (semantic facts) = 48 keys total")
+    func testRegistrySize66AfterD1() {
+        XCTAssertEqual(ShareEventTypeKey.allCases.count, 66,
+                       "Registry must contain 66 keys after Track-3 D1 (48 baseline + 18 new)")
+    }
+
+    /// Phase Track-3 D1 — все 18 новых Linear kinds default OFF per ADR-020
+    /// (capture-everything locally, share-selectively).
+    func testTrack3D1KindsAreDefaultOff() {
+        let d1Keys: Set<ShareEventTypeKey> = [
+            .linearCommentReactionAdded, .linearRelationAdded, .linearRelationRemoved,
+            .linearTriageItemPickedUp, .linearTriageItemResolved,
+            .linearNotificationReceived, .linearNotificationRead, .linearNotificationArchived,
+            .linearSubscriptionAdded, .linearSubscriptionRemoved,
+            .linearCycleStarted, .linearCycleCompleted,
+            .linearRoadmapStateObserved,
+            .linearCustomViewCreated, .linearCustomViewUpdated, .linearCustomViewDeleted,
+            .linearProjectMembershipAdded, .linearProjectMembershipRemoved
+        ]
+        XCTAssertEqual(d1Keys.count, 18, "D1 spec mandates 18 new kinds")
+        let map = Dictionary(uniqueKeysWithValues: ShareEventTypeDefaults.all.map { ($0.key, $0.defaultEnabled) })
+        for k in d1Keys {
+            XCTAssertEqual(map[k], false, "D1 kind \(k.rawValue) must default OFF per ADR-020")
+        }
     }
 
     /// Discussions default OFF (нишевые). Verify that key design intent сохранён.

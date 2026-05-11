@@ -81,6 +81,26 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     case openQuestionResolved = "open_question_resolved"
     case blockerStarted = "blocker_started"
     case blockerResolved = "blocker_resolved"
+
+    // MARK: - Phase Track-3 D1 — Linear deep sweep (18 new kinds, all default OFF)
+    case linearCommentReactionAdded = "linear_comment_reaction_added"
+    case linearRelationAdded = "linear_relation_added"
+    case linearRelationRemoved = "linear_relation_removed"
+    case linearTriageItemPickedUp = "linear_triage_item_picked_up"
+    case linearTriageItemResolved = "linear_triage_item_resolved"
+    case linearNotificationReceived = "linear_notification_received"
+    case linearNotificationRead = "linear_notification_read"
+    case linearNotificationArchived = "linear_notification_archived"
+    case linearSubscriptionAdded = "linear_subscription_added"
+    case linearSubscriptionRemoved = "linear_subscription_removed"
+    case linearCycleStarted = "linear_cycle_started"
+    case linearCycleCompleted = "linear_cycle_completed"
+    case linearRoadmapStateObserved = "linear_roadmap_state_observed"
+    case linearCustomViewCreated = "linear_custom_view_created"
+    case linearCustomViewUpdated = "linear_custom_view_updated"
+    case linearCustomViewDeleted = "linear_custom_view_deleted"
+    case linearProjectMembershipAdded = "linear_project_membership_added"
+    case linearProjectMembershipRemoved = "linear_project_membership_removed"
 }
 
 /// Phase 4.7.A — onboarding default enabled-state per event_kind.
@@ -167,6 +187,28 @@ public enum ShareEventTypeDefaults {
         .init(key: .openQuestionOpened, defaultEnabled: false),
         .init(key: .openQuestionResolved, defaultEnabled: false),
         .init(key: .blockerStarted, defaultEnabled: false),
-        .init(key: .blockerResolved, defaultEnabled: false)
+        .init(key: .blockerResolved, defaultEnabled: false),
+
+        // Phase Track-3 D1 — Linear deep sweep. All default OFF per ADR-020
+        // (capture-everything locally, share-selectively). User opts in via
+        // Share Controls UI per provider expansion.
+        .init(key: .linearCommentReactionAdded, defaultEnabled: false),
+        .init(key: .linearRelationAdded, defaultEnabled: false),
+        .init(key: .linearRelationRemoved, defaultEnabled: false),
+        .init(key: .linearTriageItemPickedUp, defaultEnabled: false),
+        .init(key: .linearTriageItemResolved, defaultEnabled: false),
+        .init(key: .linearNotificationReceived, defaultEnabled: false),
+        .init(key: .linearNotificationRead, defaultEnabled: false),
+        .init(key: .linearNotificationArchived, defaultEnabled: false),
+        .init(key: .linearSubscriptionAdded, defaultEnabled: false),
+        .init(key: .linearSubscriptionRemoved, defaultEnabled: false),
+        .init(key: .linearCycleStarted, defaultEnabled: false),
+        .init(key: .linearCycleCompleted, defaultEnabled: false),
+        .init(key: .linearRoadmapStateObserved, defaultEnabled: false),
+        .init(key: .linearCustomViewCreated, defaultEnabled: false),
+        .init(key: .linearCustomViewUpdated, defaultEnabled: false),
+        .init(key: .linearCustomViewDeleted, defaultEnabled: false),
+        .init(key: .linearProjectMembershipAdded, defaultEnabled: false),
+        .init(key: .linearProjectMembershipRemoved, defaultEnabled: false)
     ]
 }
