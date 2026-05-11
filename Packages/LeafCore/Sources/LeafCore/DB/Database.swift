@@ -323,6 +323,39 @@ public final class Database: @unchecked Sendable {
         }
     }
 
+    /// Phase Track-3 D1 — atomic `events` + multi-offset + multi-snapshot UPSERT.
+    /// Generalized form of `writeEventsAndOffset` for warm/cold collectors that
+    /// (a) advance several offsets per tick (e.g. notifications + cycles cursors
+    /// independently) and (b) update one or more provider_snapshots rows.
+    ///
+    /// All arrays may be empty (partial updates allowed). Single GRDB transaction:
+    /// on any throw → full rollback (events not written, cursors not advanced,
+    /// snapshots not upserted).
+    public func writeEventsOffsetsAndSnapshots(
+        events: [RawEvent],
+        offsets: [CollectorOffset],
+        snapshots: [ProviderSnapshot],
+        knownLinearPrefixes: Set<String> = [],
+        derivers: LinkDerivers = .publicSubstrate
+    ) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        guard !events.isEmpty || !offsets.isEmpty || !snapshots.isEmpty else { return }
+
+        try pool.write { db in
+            for event in events {
+                _ = try Self.writeEventAndDerived(
+                    event, knownLinearPrefixes: knownLinearPrefixes, derivers: derivers, in: db
+                )
+            }
+            for offset in offsets {
+                try Self.upsertOffset(offset, in: db)
+            }
+            for snapshot in snapshots {
+                try ProviderSnapshotsStore.upsert(snapshot, in: db)
+            }
+        }
+    }
+
     // MARK: - Offset helpers (private)
 
     private static func fetchOffset(
