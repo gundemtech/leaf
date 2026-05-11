@@ -15,6 +15,14 @@ public protocol LinearGraphQLProvider: Sendable {
     /// `nil` = bootstrap: provider решает window сам (default 7d backwards).
     /// Возвращает batch + cursor; throws на network/parsing failures.
     func fetchIssues(accessToken: String, since: Int64?) async throws -> LinearIssueBatch
+    /// Phase Track-3 D1 — warm tier (15m) state sweep: notifications + cycles
+    /// + subscribed issues. Single GraphQL call combining 3 top-level fields.
+    /// `cursors.notificationsSince` / `cursors.cyclesSince` nil → 7-day backfill.
+    func fetchWarmState(accessToken: String, cursors: LinearWarmCursors) async throws -> LinearWarmBatch
+    /// Phase Track-3 D1 — cold tier (4am local) state sweep: roadmaps +
+    /// customViews + projectMemberships. Single GraphQL call. No cursor —
+    /// snapshot diff on the collector side.
+    func fetchColdState(accessToken: String) async throws -> LinearColdBatch
 }
 
 /// Результат одного GraphQL fetch'а. `cursorMs` — `max(updatedAt)` across `issues`,
@@ -53,6 +61,14 @@ public struct LinearIssueBatch: Sendable, Hashable {
     /// Phase 4.7.C — Initiatives membership snapshot (skeleton). Empty при
     /// отсутствии feature support / на legacy plans.
     public let initiatives: [LinearInitiativeSnapshot]
+    /// Phase Track-3 D1 — hot piggy-back additions. Each array is additive on
+    /// existing `fetchIssues` GraphQL query (no extra HTTP calls). Defaults are
+    /// `[]` so all pre-Track-3 callers stay compile-clean.
+    public let commentReactions: [LinearCommentReactionSnapshot]
+    public let relationAdditions: [LinearRelationSnapshot]
+    public let relationRemovals: [LinearRelationSnapshot]
+    public let triagePickedUp: [LinearTriageTransitionSnapshot]
+    public let triageResolved: [LinearTriageTransitionSnapshot]
 
     public init(
         issues: [LinearIssueSnapshot],
@@ -67,7 +83,12 @@ public struct LinearIssueBatch: Sendable, Hashable {
         estimateTransitions: [LinearEstimateTransitionSnapshot] = [],
         projectUpdates: [LinearProjectUpdateSnapshot] = [],
         documents: [LinearDocumentSnapshot] = [],
-        initiatives: [LinearInitiativeSnapshot] = []
+        initiatives: [LinearInitiativeSnapshot] = [],
+        commentReactions: [LinearCommentReactionSnapshot] = [],
+        relationAdditions: [LinearRelationSnapshot] = [],
+        relationRemovals: [LinearRelationSnapshot] = [],
+        triagePickedUp: [LinearTriageTransitionSnapshot] = [],
+        triageResolved: [LinearTriageTransitionSnapshot] = []
     ) {
         self.issues = issues
         self.cursorMs = cursorMs
@@ -82,13 +103,15 @@ public struct LinearIssueBatch: Sendable, Hashable {
         self.projectUpdates = projectUpdates
         self.documents = documents
         self.initiatives = initiatives
+        self.commentReactions = commentReactions
+        self.relationAdditions = relationAdditions
+        self.relationRemovals = relationRemovals
+        self.triagePickedUp = triagePickedUp
+        self.triageResolved = triageResolved
     }
 
     public static let empty = LinearIssueBatch(
-        issues: [], cursorMs: nil, transitions: [], workload: .empty, cycles: .empty,
-        priorityTransitions: [], labelTransitions: [], assigneeTransitions: [],
-        cycleTransitions: [], estimateTransitions: [], projectUpdates: [],
-        documents: [], initiatives: []
+        issues: [], cursorMs: nil
     )
 }
 
@@ -554,11 +577,262 @@ public struct LinearPriorityTransitionSnapshot: Sendable, Hashable {
     }
 }
 
+// MARK: - Phase Track-3 D1 — hot piggy-back snapshot types
+
+/// Phase Track-3 D1 — viewer's comment reaction event (filtered server-side
+/// to `user.id == viewer.id` so only own reactions enter the batch).
+/// ADR-010: emoji shortcode + IDs only — no third-party identity / message body.
+public struct LinearCommentReactionSnapshot: Sendable, Hashable {
+    public let id: String
+    public let commentId: String
+    public let issueId: String
+    public let issueIdentifier: String
+    public let emoji: String
+    public let createdAtMs: Int64
+
+    public init(id: String, commentId: String, issueId: String, issueIdentifier: String, emoji: String, createdAtMs: Int64) {
+        self.id = id
+        self.commentId = commentId
+        self.issueId = issueId
+        self.issueIdentifier = issueIdentifier
+        self.emoji = emoji
+        self.createdAtMs = createdAtMs
+    }
+}
+
+/// Phase Track-3 D1 — issue relation transition snapshot. `relationKind` is one of
+/// {blocks, blocked_by, related, duplicate} (Linear API enum, public substrate).
+public struct LinearRelationSnapshot: Sendable, Hashable {
+    public let id: String
+    public let fromIssueId: String
+    public let fromIssueIdentifier: String
+    public let toIssueId: String
+    public let toIssueIdentifier: String
+    public let relationKind: String
+    public let transitionedAtMs: Int64
+
+    public init(id: String, fromIssueId: String, fromIssueIdentifier: String,
+                toIssueId: String, toIssueIdentifier: String,
+                relationKind: String, transitionedAtMs: Int64) {
+        self.id = id
+        self.fromIssueId = fromIssueId
+        self.fromIssueIdentifier = fromIssueIdentifier
+        self.toIssueId = toIssueId
+        self.toIssueIdentifier = toIssueIdentifier
+        self.relationKind = relationKind
+        self.transitionedAtMs = transitionedAtMs
+    }
+}
+
+/// Phase Track-3 D1 — triage queue transition snapshot. `resolutionKind` is
+/// `nil` for picked_up flavor; `completed` | `canceled` for resolved flavor.
+/// Provider discriminates picked_up vs resolved by reading `toStateType`
+/// (Linear's WorkflowState.type enum is public API).
+public struct LinearTriageTransitionSnapshot: Sendable, Hashable {
+    public let issueId: String
+    public let issueIdentifier: String
+    public let teamId: String
+    public let toStateName: String
+    public let toStateType: String
+    public let transitionedAtMs: Int64
+    public let resolutionKind: String?
+
+    public init(issueId: String, issueIdentifier: String, teamId: String,
+                toStateName: String, toStateType: String,
+                transitionedAtMs: Int64, resolutionKind: String?) {
+        self.issueId = issueId
+        self.issueIdentifier = issueIdentifier
+        self.teamId = teamId
+        self.toStateName = toStateName
+        self.toStateType = toStateType
+        self.transitionedAtMs = transitionedAtMs
+        self.resolutionKind = resolutionKind
+    }
+}
+
+// MARK: - Phase Track-3 D1 — warm-tier snapshot types
+
+/// Phase Track-3 D1 — single Linear notification entry.
+/// `readAtMs` / `archivedAtMs` are non-nil when the corresponding transition
+/// has occurred — collector emits `_read` / `_archived` flavors when those
+/// timestamps are newer than the warm cursor.
+public struct LinearNotificationSnapshot: Sendable, Hashable {
+    public let id: String
+    public let kind: String
+    public let issueId: String?
+    public let issueIdentifier: String?
+    public let title: String
+    public let createdAtMs: Int64
+    public let readAtMs: Int64?
+    public let archivedAtMs: Int64?
+
+    public init(id: String, kind: String, issueId: String?, issueIdentifier: String?,
+                title: String, createdAtMs: Int64, readAtMs: Int64?, archivedAtMs: Int64?) {
+        self.id = id
+        self.kind = kind
+        self.issueId = issueId
+        self.issueIdentifier = issueIdentifier
+        self.title = title
+        self.createdAtMs = createdAtMs
+        self.readAtMs = readAtMs
+        self.archivedAtMs = archivedAtMs
+    }
+}
+
+/// Phase Track-3 D1 — viewer's currently-subscribed issue identity for diff.
+public struct LinearSubscribedIssueSnapshot: Sendable, Hashable {
+    public let id: String
+    public let identifier: String
+    public init(id: String, identifier: String) {
+        self.id = id
+        self.identifier = identifier
+    }
+}
+
+/// Phase Track-3 D1 — cycle lifecycle snapshot. Provider buckets started vs
+/// completed by timestamp filter; collector emits one event per snapshot.
+public struct LinearCycleLifecycleSnapshot: Sendable, Hashable {
+    public let id: String
+    public let number: Int
+    public let teamId: String
+    public let name: String?
+    public let startsAtMs: Int64
+    public let endsAtMs: Int64
+    public let completedAtMs: Int64?
+    public let progress: Double?
+    public let issuesCompletedCount: Int?
+
+    public init(id: String, number: Int, teamId: String, name: String?,
+                startsAtMs: Int64, endsAtMs: Int64, completedAtMs: Int64?,
+                progress: Double?, issuesCompletedCount: Int?) {
+        self.id = id
+        self.number = number
+        self.teamId = teamId
+        self.name = name
+        self.startsAtMs = startsAtMs
+        self.endsAtMs = endsAtMs
+        self.completedAtMs = completedAtMs
+        self.progress = progress
+        self.issuesCompletedCount = issuesCompletedCount
+    }
+}
+
+/// Phase Track-3 D1 — bundled output of a single warm-tier GraphQL call.
+/// Provider returns pre-bucketed cycle started/completed; collector applies
+/// subscribed-issues diff against the prior snapshot.
+public struct LinearWarmBatch: Sendable, Hashable {
+    public let notifications: [LinearNotificationSnapshot]
+    public let notificationCursorMs: Int64?
+    public let cyclesStarted: [LinearCycleLifecycleSnapshot]
+    public let cyclesCompleted: [LinearCycleLifecycleSnapshot]
+    public let cyclesCursorMs: Int64?
+    public let subscribedIssueIds: [LinearSubscribedIssueSnapshot]
+
+    public init(
+        notifications: [LinearNotificationSnapshot] = [],
+        notificationCursorMs: Int64? = nil,
+        cyclesStarted: [LinearCycleLifecycleSnapshot] = [],
+        cyclesCompleted: [LinearCycleLifecycleSnapshot] = [],
+        cyclesCursorMs: Int64? = nil,
+        subscribedIssueIds: [LinearSubscribedIssueSnapshot] = []
+    ) {
+        self.notifications = notifications
+        self.notificationCursorMs = notificationCursorMs
+        self.cyclesStarted = cyclesStarted
+        self.cyclesCompleted = cyclesCompleted
+        self.cyclesCursorMs = cyclesCursorMs
+        self.subscribedIssueIds = subscribedIssueIds
+    }
+
+    public static let empty = LinearWarmBatch()
+}
+
+// MARK: - Phase Track-3 D1 — cold-tier snapshot types
+
+/// Phase Track-3 D1 — per-project entry inside a roadmap.
+public struct LinearRoadmapProjectSnapshot: Sendable, Hashable {
+    public let projectId: String
+    public let projectName: String
+    public let stateEnum: String
+
+    public init(projectId: String, projectName: String, stateEnum: String) {
+        self.projectId = projectId
+        self.projectName = projectName
+        self.stateEnum = stateEnum
+    }
+}
+
+/// Phase Track-3 D1 — roadmap snapshot. Collector emits one
+/// `linear_roadmap_state_observed` event per (roadmap × project) pair every
+/// cold tick (heartbeat-per-tick — mirrors `linear_initiative_observed`).
+public struct LinearRoadmapSnapshot: Sendable, Hashable {
+    public let id: String
+    public let name: String?
+    public let projects: [LinearRoadmapProjectSnapshot]
+
+    public init(id: String, name: String?, projects: [LinearRoadmapProjectSnapshot]) {
+        self.id = id
+        self.name = name
+        self.projects = projects
+    }
+}
+
+/// Phase Track-3 D1 — custom view identity for diff.
+public struct LinearCustomViewSnapshot: Sendable, Hashable {
+    public let id: String
+    public let name: String
+    public let teamId: String?
+    public let updatedAtMs: Int64
+
+    public init(id: String, name: String, teamId: String?, updatedAtMs: Int64) {
+        self.id = id
+        self.name = name
+        self.teamId = teamId
+        self.updatedAtMs = updatedAtMs
+    }
+}
+
+/// Phase Track-3 D1 — viewer's project membership identity for diff.
+public struct LinearProjectMembershipSnapshot: Sendable, Hashable {
+    public let projectId: String
+    public let projectName: String
+
+    public init(projectId: String, projectName: String) {
+        self.projectId = projectId
+        self.projectName = projectName
+    }
+}
+
+/// Phase Track-3 D1 — bundled output of cold-tier GraphQL call.
+public struct LinearColdBatch: Sendable, Hashable {
+    public let roadmaps: [LinearRoadmapSnapshot]
+    public let customViews: [LinearCustomViewSnapshot]
+    public let projectMemberships: [LinearProjectMembershipSnapshot]
+
+    public init(
+        roadmaps: [LinearRoadmapSnapshot] = [],
+        customViews: [LinearCustomViewSnapshot] = [],
+        projectMemberships: [LinearProjectMembershipSnapshot] = []
+    ) {
+        self.roadmaps = roadmaps
+        self.customViews = customViews
+        self.projectMemberships = projectMemberships
+    }
+
+    public static let empty = LinearColdBatch()
+}
+
 /// Stub для CI / dev-без-moat сборок. Никогда не делает HTTP call,
 /// возвращает `.empty` — LinearCollector tick проходит no-op.
 public struct StubLinearGraphQLProvider: LinearGraphQLProvider {
     public init() {}
     public func fetchIssues(accessToken: String, since: Int64?) async throws -> LinearIssueBatch {
+        .empty
+    }
+    public func fetchWarmState(accessToken: String, cursors: LinearWarmCursors) async throws -> LinearWarmBatch {
+        .empty
+    }
+    public func fetchColdState(accessToken: String) async throws -> LinearColdBatch {
         .empty
     }
 }

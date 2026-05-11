@@ -35,6 +35,16 @@ final class LinearCollectorTests: XCTestCase {
             return batchToReturn
         }
 
+        // Track-3 D1: stub for protocol surface; not exercised by hot-tier tests.
+        func fetchWarmState(accessToken: String, cursors: LinearWarmCursors) async throws -> LinearWarmBatch {
+            .empty
+        }
+
+        // Track-3 D1: stub for protocol surface; not exercised by hot-tier tests.
+        func fetchColdState(accessToken: String) async throws -> LinearColdBatch {
+            .empty
+        }
+
         func setBatch(_ batch: LinearIssueBatch) {
             self.batchToReturn = batch
         }
