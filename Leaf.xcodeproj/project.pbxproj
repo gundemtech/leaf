@@ -338,10 +338,12 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = LeafAgent/LeafAgent.entitlements;
 				CODE_SIGN_STYLE = Automatic;
+				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
 				CURRENT_PROJECT_VERSION = 14;
 				DEVELOPMENT_TEAM = 4LZ84Z78M7;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = LeafAgent/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -369,10 +371,12 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = LeafAgent/LeafAgent.entitlements;
 				CODE_SIGN_STYLE = Automatic;
+				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
 				CURRENT_PROJECT_VERSION = 14;
 				DEVELOPMENT_TEAM = 4LZ84Z78M7;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = LeafAgent/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
