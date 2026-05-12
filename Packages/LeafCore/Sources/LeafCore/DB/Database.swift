@@ -52,6 +52,7 @@ public final class Database: @unchecked Sendable {
         migrator.registerMigration014DetectionTables()
         migrator.registerMigration015ProviderSnapshots()
         migrator.registerMigration016NormalizeGitHubEventKinds()
+        migrator.registerMigration017NormalizeSlackEventKinds()
         try migrator.migrate(pool)
 
         return Database(pool: pool, config: config, mode: .writer)
