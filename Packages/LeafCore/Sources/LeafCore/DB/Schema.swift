@@ -272,6 +272,29 @@ public enum Schema {
         public static let removedUserIdsJson = "removed_user_ids_json"
         public static let oldName = "old_name"
         public static let newName = "new_name"
+
+        // Phase Track-4 S2 — AppleScript surface payload keys.
+        public static let docPath = "doc_path"
+        public static let project = "project"
+        public static let scheme = "scheme"
+        public static let buildState = "build_state"
+        public static let ideBundleID = "ide_bundle_id"
+        public static let track = "track"
+        public static let artist = "artist"
+        public static let playerState = "player_state"
+        public static let noteTitle = "note_title"
+        public static let listName = "list_name"
+        public static let completedCountDelta = "completed_count_delta"
+        public static let viewMode = "view_mode"
+        public static let visibleDateRangeDays = "visible_date_range_days"
+        public static let mailboxName = "mailbox_name"
+        public static let meetingState = "meeting_state"
+        public static let meetingTopic = "meeting_topic"
+        public static let tabs = "tabs"
+        public static let activeWindowID = "active_window_id"
+        public static let tabTitle = "title"
+        public static let tabURL = "url"
+        public static let browser = "browser"
     }
 
     /// Phase Track-1 D2 — FTS5 contentless virtual table over event bodies
