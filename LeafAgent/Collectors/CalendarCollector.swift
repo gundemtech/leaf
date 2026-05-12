@@ -73,7 +73,11 @@ final class CalendarCollector: @unchecked Sendable {
         guard granted else { return }
         let now = Date()
         let windowStart = now.addingTimeInterval(-300)
-        let predicate = store.predicateForEvents(withStart: windowStart, end: now, calendars: nil)
+        // Pass explicit calendars list — hidden/disabled calendars excluded
+        // per spec line 43. Avoids "Holidays"-style all-day visibility events
+        // tripping the meeting boolean if the isAllDay guard ever weakens.
+        let calendars = store.calendars(for: .event)
+        let predicate = store.predicateForEvents(withStart: windowStart, end: now, calendars: calendars)
         let events = store.events(matching: predicate)
         let isInMeeting = events.contains { item in
             // Boundary reads ONLY .startDate / .endDate / .isAllDay / .status —
