@@ -502,4 +502,12 @@ enum AgentLifetime {
     nonisolated(unsafe) static var githubWarmScheduler: GitHubWarmScheduler?
     nonisolated(unsafe) static var githubColdCollector: GitHubColdCollector?
     nonisolated(unsafe) static var githubColdScheduler: GitHubColdScheduler?
+    // Phase Track-3 D3 — Slack scope service + warm/cold collectors + their
+    // schedulers. ScopesService is shared between warm + cold and exposed for
+    // UI/observer consumers (mirror GitHub D2 precedent).
+    nonisolated(unsafe) static var slackScopesService: SlackScopesService?
+    nonisolated(unsafe) static var slackWarmCollector: SlackWarmCollector?
+    nonisolated(unsafe) static var slackWarmScheduler: SlackWarmScheduler?
+    nonisolated(unsafe) static var slackColdCollector: SlackColdCollector?
+    nonisolated(unsafe) static var slackColdScheduler: SlackColdScheduler?
 }
