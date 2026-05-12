@@ -143,6 +143,13 @@ public struct AgentThresholds: Sendable, Hashable {
     /// of the prior emission (collapses rapid Mission-Control gesture sweeps).
     /// Default 2s.
     public let spaceTransitionCoalesceWindowSec: TimeInterval
+    /// Phase Track-4 S2: default per-adapter AppleScript timeout in seconds.
+    /// Adapters can override (Zoom uses 3.0s) via
+    /// `appleScriptPerAppTimeoutOverridesJson`.
+    public let appleScriptDefaultTimeoutSec: Double
+    /// Phase Track-4 S2: JSON dict of bundleID → seconds, parsed in moat.
+    /// Default `{"us.zoom.xos":3.0}`.
+    public let appleScriptPerAppTimeoutOverridesJson: String
 
     public init(
         idlePollIntervalSec: TimeInterval,
@@ -183,7 +190,9 @@ public struct AgentThresholds: Sendable, Hashable {
         detectorScheduledIntervalSec: TimeInterval = 300,
         calendarPollIntervalSec: TimeInterval = 60,
         focusModePollIntervalSec: TimeInterval = 60,
-        spaceTransitionCoalesceWindowSec: TimeInterval = 2
+        spaceTransitionCoalesceWindowSec: TimeInterval = 2,
+        appleScriptDefaultTimeoutSec: Double = 1.0,
+        appleScriptPerAppTimeoutOverridesJson: String = "{\"us.zoom.xos\":3.0}"
     ) {
         self.idlePollIntervalSec = idlePollIntervalSec
         self.idleThresholdSec = idleThresholdSec
@@ -224,6 +233,8 @@ public struct AgentThresholds: Sendable, Hashable {
         self.calendarPollIntervalSec = calendarPollIntervalSec
         self.focusModePollIntervalSec = focusModePollIntervalSec
         self.spaceTransitionCoalesceWindowSec = spaceTransitionCoalesceWindowSec
+        self.appleScriptDefaultTimeoutSec = appleScriptDefaultTimeoutSec
+        self.appleScriptPerAppTimeoutOverridesJson = appleScriptPerAppTimeoutOverridesJson
     }
 
     public static let weakDefaults = AgentThresholds(
@@ -265,6 +276,8 @@ public struct AgentThresholds: Sendable, Hashable {
         detectorScheduledIntervalSec: 300,
         calendarPollIntervalSec: 60,
         focusModePollIntervalSec: 60,
-        spaceTransitionCoalesceWindowSec: 2
+        spaceTransitionCoalesceWindowSec: 2,
+        appleScriptDefaultTimeoutSec: 1.0,
+        appleScriptPerAppTimeoutOverridesJson: "{\"us.zoom.xos\":3.0}"
     )
 }
