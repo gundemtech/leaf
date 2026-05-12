@@ -12,6 +12,14 @@ public enum BodyKind: String, Sendable, Equatable, CaseIterable {
     case ghPR = "gh_pr"
     case ghIssueComment = "gh_issue_comment"
     case ghPRReviewComment = "gh_pr_review_comment"
+    // Phase Track-3 D3 — Slack body provenance (canvas + bookmark titles per
+    // ADR-010 §6). Mirrors `Schema.BodyKinds.slackCanvasTitle` /
+    // `slackBookmarkTitle` so DetectorPipeline.topLevelBodyKind can dispatch
+    // body-bearing Slack events to detectors. Bodies for canvas/bookmark are
+    // user-named structured resources — they are body-bearing (FTS-indexed)
+    // even though current substrate detectors do not fire on them.
+    case slackCanvasTitle = "slack_canvas_title"
+    case slackBookmarkTitle = "slack_bookmark_title"
 }
 
 public struct DecisionHit: Sendable, Equatable {

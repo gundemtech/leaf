@@ -287,6 +287,18 @@ public enum DetectorPipeline {
         if eventKind == GitHubEventKindKey.prReviewCommentAuthored.rawValue { return .ghPRReviewComment }
         if eventKind == "slack_thread_reply_aggregate" { return .slackThreadParent }
         if eventKind.hasPrefix("gh_pr_") { return .ghPR }
+        // Phase Track-3 D3 — Slack canvas + bookmark titles. Mirrors
+        // EventsFullTextStore.topLevelBodyKind so any future Slack detectors
+        // (or coverage fences asserting parity between FTS + detector dispatch
+        // tables) find a typed entry here.
+        if eventKind == SlackEventKindKey.slackCanvasCreated.rawValue
+            || eventKind == SlackEventKindKey.slackCanvasEdited.rawValue {
+            return .slackCanvasTitle
+        }
+        if eventKind == SlackEventKindKey.slackBookmarkAdded.rawValue
+            || eventKind == SlackEventKindKey.slackBookmarkRemoved.rawValue {
+            return .slackBookmarkTitle
+        }
         return nil
     }
 
