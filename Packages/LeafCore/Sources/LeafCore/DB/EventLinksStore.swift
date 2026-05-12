@@ -231,6 +231,19 @@ public enum EventLinksStore {
         if eventKind == GitHubEventKindKey.deploymentCreated.rawValue {
             return Schema.BodyKinds.ghDeploymentDescription
         }
+        // Track-3 D4 — Slack canvas + bookmark titles (D3 §4.3). Per ADR-010 §6,
+        // canvas/bookmark titles are user-named structured resources (not
+        // message bodies); body field is FTS-indexed AND a target for
+        // cross-source link derivation (e.g. LEAF-NN refs inside canvas titles).
+        // Mirrors FTS lines 139-149.
+        if eventKind == SlackEventKindKey.slackCanvasCreated.rawValue
+            || eventKind == SlackEventKindKey.slackCanvasEdited.rawValue {
+            return Schema.BodyKinds.slackCanvasTitle
+        }
+        if eventKind == SlackEventKindKey.slackBookmarkAdded.rawValue
+            || eventKind == SlackEventKindKey.slackBookmarkRemoved.rawValue {
+            return Schema.BodyKinds.slackBookmarkTitle
+        }
         if eventKind.hasPrefix("gh_pr_") { return Schema.BodyKinds.ghPR }
         return nil
     }

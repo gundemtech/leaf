@@ -142,4 +142,16 @@ final class DispatchCoverageTests: XCTestCase {
             )
         }
     }
+
+    /// #10 — every Slack body-bearing case has a body-kind dispatch entry in
+    /// `EventLinksStore.topLevelBodyKind`. Parallels test #7 (FTS).
+    func testEverySlackBodyBearingKindHasEventLinksDispatchEntry() {
+        for kind in SlackEventKindKey.bodyBearing {
+            let bodyKind = EventLinksStore.bodyKindForTesting(eventKind: kind.rawValue)
+            XCTAssertNotNil(
+                bodyKind,
+                "Body-bearing Slack event_kind \(kind.rawValue) must have an EventLinksStore dispatch entry"
+            )
+        }
+    }
 }
