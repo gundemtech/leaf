@@ -178,6 +178,22 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     case systemSlept                      = "system_slept"
     case systemWoke                       = "system_woke"
     case spaceSwitched                    = "space_switched"
+
+    // MARK: - Phase Track-4 S2 — AppleScript surface (14 new kinds, all default OFF per ADR-020)
+    case xcodeActiveDocChanged            = "xcode_active_doc_changed"
+    case xcodeBuildStateChanged           = "xcode_build_state_changed"
+    case jetbrainsActiveDocChanged        = "jetbrains_active_doc_changed"
+    case musicTrackChanged                = "music_track_changed"
+    case spotifyTrackChanged              = "spotify_track_changed"
+    case notesActiveTitleChanged          = "notes_active_title_changed"
+    case reminderCompleted                = "reminder_completed"
+    case calendarAppViewChanged           = "calendar_app_view_changed"
+    case mailActiveMailboxChanged         = "mail_active_mailbox_changed"
+    case zoomMeetingStateChanged          = "zoom_meeting_state_changed"
+    case zoomMeetingNameObserved          = "zoom_meeting_name_observed"
+    case safariTabsChanged                = "safari_tabs_changed"
+    case chromeTabsChanged                = "chrome_tabs_changed"
+    case arcTabsChanged                   = "arc_tabs_changed"
 }
 
 /// Phase 4.7.A — onboarding default enabled-state per event_kind.
@@ -362,6 +378,22 @@ public enum ShareEventTypeDefaults {
         .init(key: .systemUnlocked, defaultEnabled: false),
         .init(key: .systemSlept, defaultEnabled: false),
         .init(key: .systemWoke, defaultEnabled: false),
-        .init(key: .spaceSwitched, defaultEnabled: false)
+        .init(key: .spaceSwitched, defaultEnabled: false),
+
+        // Phase Track-4 S2 — AppleScript surface. All default OFF per ADR-020.
+        .init(key: .xcodeActiveDocChanged, defaultEnabled: false),
+        .init(key: .xcodeBuildStateChanged, defaultEnabled: false),
+        .init(key: .jetbrainsActiveDocChanged, defaultEnabled: false),
+        .init(key: .musicTrackChanged, defaultEnabled: false),
+        .init(key: .spotifyTrackChanged, defaultEnabled: false),
+        .init(key: .notesActiveTitleChanged, defaultEnabled: false),
+        .init(key: .reminderCompleted, defaultEnabled: false),
+        .init(key: .calendarAppViewChanged, defaultEnabled: false),
+        .init(key: .mailActiveMailboxChanged, defaultEnabled: false),
+        .init(key: .zoomMeetingStateChanged, defaultEnabled: false),
+        .init(key: .zoomMeetingNameObserved, defaultEnabled: false),
+        .init(key: .safariTabsChanged, defaultEnabled: false),
+        .init(key: .chromeTabsChanged, defaultEnabled: false),
+        .init(key: .arcTabsChanged, defaultEnabled: false)
     ]
 }

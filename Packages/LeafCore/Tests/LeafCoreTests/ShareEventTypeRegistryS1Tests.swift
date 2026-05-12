@@ -25,8 +25,8 @@ final class ShareEventTypeRegistryS1Tests: XCTestCase {
 
     /// #2 — total registry size is exactly 125 (116 baseline + 9 new).
     func testRegistrySizeIs125() {
-        XCTAssertEqual(ShareEventTypeKey.allCases.count, 125)
-        XCTAssertEqual(ShareEventTypeDefaults.all.count, 125)
+        XCTAssertEqual(ShareEventTypeKey.allCases.count, 139)
+        XCTAssertEqual(ShareEventTypeDefaults.all.count, 139)
     }
 
     /// #3 — every new S1 key defaults to OFF (ADR-020).
