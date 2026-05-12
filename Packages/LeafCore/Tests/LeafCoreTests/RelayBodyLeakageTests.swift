@@ -1014,4 +1014,307 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "D1 triage to_state_name MUST NOT leak")
         }
     }
+
+    // MARK: - Track 3 D3 — Slack deep sweep privacy regression
+    //
+    // D3 adds 21 new Slack event_kinds across hot/warm/cold tiers. Only 4 are
+    // body-bearing per ADR-010 §6 (canvas + bookmark titles — user-named
+    // structured resources). Body-bearing tests assert the sentinel reaches
+    // FTS (sanity — pipeline ran) but does NOT leak into `presence_state`.
+    // Dropped-text tests assert sentinels injected into payload fields that
+    // are NOT body-indexed by design (pin itemRef / reminder id / scheduled
+    // message id / custom emoji name / usergroup membership IDs) reach neither
+    // FTS nor presence_state. The dropped-text sentinels guard against
+    // accidental leakage if a future refactor mirrors a metadata field into
+    // `body` or `state_json`.
+
+    // MARK: Body-bearing positive (canvas + bookmark)
+
+    func testCanvasTitleSentinelReachesFTSButNotPresence() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let sentinel = "ZZZZ-CANVAS-TITLE-SENTINEL-ZZZZ"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "slack",
+                "event_kind": SlackEventKindKey.slackCanvasCreated.rawValue,
+                Schema.EventPayloadKeys.canvasId: "c1",
+                Schema.EventPayloadKeys.bookmarkTitle: sentinel,
+                Schema.EventPayloadKeys.body: sentinel
+            ]
+        )
+        let presenceState: [String: Any] = ["presence": "active"]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: CollectorID.slackPolling, sourceID: "slack:test", nowMs: nowMs),
+            presence: (provider: .slack, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+
+        // Sanity: canvas title indexed in FTS via the slack_canvas_title body_kind.
+        let ftsCount = try db.readSQL { rawDB in
+            try Int.fetchOne(rawDB, sql:
+                "SELECT COUNT(*) FROM events_fts_meta WHERE body_kind = ?",
+                arguments: [Schema.BodyKinds.slackCanvasTitle]) ?? 0
+        }
+        XCTAssertEqual(ftsCount, 1,
+            "Sanity: canvas title should be indexed under slack_canvas_title before asserting it does not leak")
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql:
+                "SELECT state_json FROM presence_state WHERE provider='slack'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
+            XCTAssertFalse(stateJSON.contains(sentinel),
+                "Slack canvas title MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testBookmarkTitleSentinelReachesFTSButNotPresence() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let sentinel = "ZZZZ-BOOKMARK-TITLE-SENTINEL-ZZZZ"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "slack",
+                "event_kind": SlackEventKindKey.slackBookmarkAdded.rawValue,
+                Schema.EventPayloadKeys.channelId: "C1",
+                Schema.EventPayloadKeys.bookmarkId: "b1",
+                Schema.EventPayloadKeys.bookmarkTitle: sentinel,
+                Schema.EventPayloadKeys.bookmarkURL: "https://example.com",
+                Schema.EventPayloadKeys.body: sentinel
+            ]
+        )
+        let presenceState: [String: Any] = ["presence": "active"]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: CollectorID.slackPolling, sourceID: "slack:test", nowMs: nowMs),
+            presence: (provider: .slack, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+
+        let ftsCount = try db.readSQL { rawDB in
+            try Int.fetchOne(rawDB, sql:
+                "SELECT COUNT(*) FROM events_fts_meta WHERE body_kind = ?",
+                arguments: [Schema.BodyKinds.slackBookmarkTitle]) ?? 0
+        }
+        XCTAssertEqual(ftsCount, 1,
+            "Sanity: bookmark title should be indexed under slack_bookmark_title before asserting it does not leak")
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql:
+                "SELECT state_json FROM presence_state WHERE provider='slack'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
+            XCTAssertFalse(stateJSON.contains(sentinel),
+                "Slack bookmark title MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    // MARK: Dropped-text negative (pin / reminder / scheduled / emoji / usergroup)
+    //
+    // For each test the sentinel is injected into a payload field on a Slack
+    // event_kind whose body_kind dispatch in `EventsFullTextStore` is
+    // intentionally absent. Assertions:
+    //  (1) sentinel did NOT reach `events_fts_meta` (no body_kind row carries
+    //      the sentinel via its body column);
+    //  (2) sentinel did NOT reach `presence_state.state_json`.
+    // The events_fts_meta count check is sufficient because FTS rows are
+    // written only via `EventsFullTextStore.indexEvent`, and that store skips
+    // events whose event_kind has no `topLevelBodyKind` dispatch entry AND
+    // whose payload lacks the JSON-array fan-out keys (commentBodiesJson /
+    // threadRepliesJson / messagesJson). None of the five negative event_kinds
+    // ship any of those.
+
+    func testPinMessageBodyNeverReachesFTSOrPresence() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let sentinel = "ZZZZ-PIN-MESSAGE-SENTINEL-ZZZZ"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        // Sentinel deliberately placed in itemRef — a captured metadata field
+        // — to prove that even captured-but-non-body-bearing fields cannot
+        // surface into FTS or presence_state.
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "slack",
+                "event_kind": SlackEventKindKey.slackPinAdded.rawValue,
+                Schema.EventPayloadKeys.channelId: "C1",
+                Schema.EventPayloadKeys.itemRef: sentinel,
+                Schema.EventPayloadKeys.pinnedAtMs: "100"
+            ]
+        )
+        let presenceState: [String: Any] = ["presence": "active"]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: CollectorID.slackPolling, sourceID: "slack:test", nowMs: nowMs),
+            presence: (provider: .slack, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+
+        try db.readSQL { rawDB in
+            let ftsHits = try Int.fetchOne(rawDB, sql:
+                "SELECT COUNT(*) FROM events_fts_meta") ?? 0
+            XCTAssertEqual(ftsHits, 0,
+                "Pin events MUST NOT produce FTS rows (no body-kind dispatch entry)")
+            let stateJSON = (try Row.fetchOne(rawDB, sql:
+                "SELECT state_json FROM presence_state WHERE provider='slack'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.contains(sentinel),
+                "Pin itemRef sentinel MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testReminderTextNeverReachesFTSOrPresence() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let sentinel = "ZZZZ-REMINDER-TEXT-SENTINEL-ZZZZ"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "slack",
+                "event_kind": SlackEventKindKey.slackReminderCreated.rawValue,
+                Schema.EventPayloadKeys.reminderId: sentinel,
+                Schema.EventPayloadKeys.dueTs: "200"
+            ]
+        )
+        let presenceState: [String: Any] = ["presence": "active"]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: CollectorID.slackPolling, sourceID: "slack:test", nowMs: nowMs),
+            presence: (provider: .slack, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+
+        try db.readSQL { rawDB in
+            let ftsHits = try Int.fetchOne(rawDB, sql:
+                "SELECT COUNT(*) FROM events_fts_meta") ?? 0
+            XCTAssertEqual(ftsHits, 0,
+                "Reminder events MUST NOT produce FTS rows (reminder.text is dropped at provider boundary)")
+            let stateJSON = (try Row.fetchOne(rawDB, sql:
+                "SELECT state_json FROM presence_state WHERE provider='slack'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.contains(sentinel),
+                "Reminder id sentinel MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testScheduledMessageTextNeverReachesFTSOrPresence() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let sentinel = "ZZZZ-SCHEDULED-MSG-SENTINEL-ZZZZ"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "slack",
+                "event_kind": SlackEventKindKey.slackMessageScheduled.rawValue,
+                Schema.EventPayloadKeys.scheduledMessageId: sentinel,
+                Schema.EventPayloadKeys.scheduledFor: "200",
+                Schema.EventPayloadKeys.channelId: "C1"
+            ]
+        )
+        let presenceState: [String: Any] = ["presence": "active"]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: CollectorID.slackPolling, sourceID: "slack:test", nowMs: nowMs),
+            presence: (provider: .slack, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+
+        try db.readSQL { rawDB in
+            let ftsHits = try Int.fetchOne(rawDB, sql:
+                "SELECT COUNT(*) FROM events_fts_meta") ?? 0
+            XCTAssertEqual(ftsHits, 0,
+                "Scheduled-message events MUST NOT produce FTS rows (scheduled body is dropped at provider boundary)")
+            let stateJSON = (try Row.fetchOne(rawDB, sql:
+                "SELECT state_json FROM presence_state WHERE provider='slack'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.contains(sentinel),
+                "Scheduled message id sentinel MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testCustomEmojiURLNeverReachesFTSOrPresence() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let sentinel = "ZZZZ-EMOJI-URL-SENTINEL-ZZZZ"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        // Cold tier captures emoji_name only — image URL is dropped at the
+        // provider boundary. Inject sentinel via emoji_name to confirm even
+        // captured fields do not surface in FTS or presence_state.
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "slack",
+                "event_kind": SlackEventKindKey.slackCustomEmojiAdded.rawValue,
+                Schema.EventPayloadKeys.emojiName: sentinel,
+                Schema.EventPayloadKeys.workspaceId: "W1"
+            ]
+        )
+        let presenceState: [String: Any] = ["presence": "active"]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: CollectorID.slackPolling, sourceID: "slack:test", nowMs: nowMs),
+            presence: (provider: .slack, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+
+        try db.readSQL { rawDB in
+            let ftsHits = try Int.fetchOne(rawDB, sql:
+                "SELECT COUNT(*) FROM events_fts_meta") ?? 0
+            XCTAssertEqual(ftsHits, 0,
+                "Custom emoji events MUST NOT produce FTS rows (image URL is dropped at provider boundary)")
+            let stateJSON = (try Row.fetchOne(rawDB, sql:
+                "SELECT state_json FROM presence_state WHERE provider='slack'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.contains(sentinel),
+                "Custom emoji name sentinel MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testUsergroupProfileDataNeverReachesFTSOrPresence() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let sentinel = "ZZZZ-USERGROUP-PROFILE-SENTINEL-ZZZZ"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        // Cold tier captures only added/removed user IDs — never user profile
+        // (display name / email / avatar). Inject sentinel into the captured
+        // ID array to confirm even captured fields cannot surface.
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "slack",
+                "event_kind": SlackEventKindKey.slackUsergroupMembershipChanged.rawValue,
+                Schema.EventPayloadKeys.groupId: "G1",
+                Schema.EventPayloadKeys.addedUserIdsJson: #"[""# + sentinel + #""]"#,
+                Schema.EventPayloadKeys.removedUserIdsJson: "[]",
+                Schema.EventPayloadKeys.workspaceId: "W1"
+            ]
+        )
+        let presenceState: [String: Any] = ["presence": "active"]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: CollectorID.slackPolling, sourceID: "slack:test", nowMs: nowMs),
+            presence: (provider: .slack, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+
+        try db.readSQL { rawDB in
+            let ftsHits = try Int.fetchOne(rawDB, sql:
+                "SELECT COUNT(*) FROM events_fts_meta") ?? 0
+            XCTAssertEqual(ftsHits, 0,
+                "Usergroup membership events MUST NOT produce FTS rows (no body-kind dispatch entry)")
+            let stateJSON = (try Row.fetchOne(rawDB, sql:
+                "SELECT state_json FROM presence_state WHERE provider='slack'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.contains(sentinel),
+                "Usergroup membership user-ID sentinel MUST NOT leak into presence_state.state_json")
+        }
+    }
 }
