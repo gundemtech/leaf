@@ -19,8 +19,8 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     // MARK: - Phase 4.4 baseline (already shipped в alpha.5/6)
     // Track-3 D2: GitHub rawValues renamed to canonical `gh_*` form via M016
     // (Swift identifiers preserved for call-site stability).
-    case slackMessageAuthored = "message_authored_aggregate"
-    case slackHuddleStateChange = "huddle_state_change"
+    case slackMessageAuthored = "slack_message_authored_aggregate"
+    case slackHuddleStateChange = "slack_huddle_state_change"
     case linearIssueUpdated = "issue_updated"
     case githubCommitPushed = "gh_commit_pushed"
     case githubPROpened = "gh_pr_opened"
@@ -142,6 +142,31 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     case githubDependabotAlertObserved = "gh_dependabot_alert_observed"
     case githubDependabotAlertResolved = "gh_dependabot_alert_resolved"
     case githubAuditActionObserved = "gh_audit_action_observed"
+
+    // MARK: - Phase Track-3 D3 — Slack deep sweep (19 new kinds, all default OFF per ADR-020)
+
+    // Warm tier (13)
+    case slackReactionAdded               = "slack_reaction_added"
+    case slackPinAdded                    = "slack_pin_added"
+    case slackPinRemoved                  = "slack_pin_removed"
+    case slackBookmarkAdded               = "slack_bookmark_added"
+    case slackBookmarkRemoved             = "slack_bookmark_removed"
+    case slackReminderCreated             = "slack_reminder_created"
+    case slackReminderCompleted           = "slack_reminder_completed"
+    case slackMessageScheduled            = "slack_message_scheduled"
+    case slackMessageSentScheduled        = "slack_message_sent_scheduled"
+    case slackItemSaved                   = "slack_item_saved"
+    case slackItemUnsaved                 = "slack_item_unsaved"
+    case slackChannelJoined               = "slack_channel_joined"
+    case slackChannelLeft                 = "slack_channel_left"
+
+    // Cold tier (6)
+    case slackCanvasCreated               = "slack_canvas_created"
+    case slackCanvasEdited                = "slack_canvas_edited"
+    case slackCustomEmojiAdded            = "slack_custom_emoji_added"
+    case slackUsergroupMembershipChanged  = "slack_usergroup_membership_changed"
+    case slackChannelRenamed              = "slack_channel_renamed"
+    case slackChannelArchived             = "slack_channel_archived"
 }
 
 /// Phase 4.7.A — onboarding default enabled-state per event_kind.
@@ -290,6 +315,30 @@ public enum ShareEventTypeDefaults {
         .init(key: .githubCodeAlertResolved, defaultEnabled: false),
         .init(key: .githubDependabotAlertObserved, defaultEnabled: false),
         .init(key: .githubDependabotAlertResolved, defaultEnabled: false),
-        .init(key: .githubAuditActionObserved, defaultEnabled: false)
+        .init(key: .githubAuditActionObserved, defaultEnabled: false),
+
+        // Phase Track-3 D3 — Slack deep sweep. All default OFF per ADR-020
+        // (capture-everything locally, share-selectively).
+        // Warm tier (13)
+        .init(key: .slackReactionAdded, defaultEnabled: false),
+        .init(key: .slackPinAdded, defaultEnabled: false),
+        .init(key: .slackPinRemoved, defaultEnabled: false),
+        .init(key: .slackBookmarkAdded, defaultEnabled: false),
+        .init(key: .slackBookmarkRemoved, defaultEnabled: false),
+        .init(key: .slackReminderCreated, defaultEnabled: false),
+        .init(key: .slackReminderCompleted, defaultEnabled: false),
+        .init(key: .slackMessageScheduled, defaultEnabled: false),
+        .init(key: .slackMessageSentScheduled, defaultEnabled: false),
+        .init(key: .slackItemSaved, defaultEnabled: false),
+        .init(key: .slackItemUnsaved, defaultEnabled: false),
+        .init(key: .slackChannelJoined, defaultEnabled: false),
+        .init(key: .slackChannelLeft, defaultEnabled: false),
+        // Cold tier (6)
+        .init(key: .slackCanvasCreated, defaultEnabled: false),
+        .init(key: .slackCanvasEdited, defaultEnabled: false),
+        .init(key: .slackCustomEmojiAdded, defaultEnabled: false),
+        .init(key: .slackUsergroupMembershipChanged, defaultEnabled: false),
+        .init(key: .slackChannelRenamed, defaultEnabled: false),
+        .init(key: .slackChannelArchived, defaultEnabled: false)
     ]
 }

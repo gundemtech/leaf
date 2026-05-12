@@ -22,14 +22,14 @@ final class ShareEventTypeRegistryTests: XCTestCase {
     /// Track 3 D1 — registry total 66 keys (Track-1 D3 baseline 48 + Track-3 D1 18 Linear deep sweep).
     /// Если ломается при добавлении в новые phase'ы — обновить counter сознательно.
     func testRegistrySize66AfterD1() {
-        // Superseded by testCount97 after Track-3 D2 — kept as historical anchor.
+        // Superseded by testCount116 after Track-3 D3 — kept as historical anchor.
         XCTAssertGreaterThanOrEqual(ShareEventTypeKey.allCases.count, 66,
                        "Registry must contain at least 66 keys (Track-3 D1 baseline)")
     }
 
-    /// Track 3 D2 — registry total 97 keys (66 baseline + 31 new GitHub deep sweep).
-    func testCount97() {
-        XCTAssertEqual(ShareEventTypeKey.allCases.count, 97)
+    /// Track 3 D3 — registry total 116 keys (97 post-D2 + 19 new Slack deep sweep).
+    func testCount116() {
+        XCTAssertEqual(ShareEventTypeKey.allCases.count, 116)
     }
 
     /// Track 3 D2 — все GitHub keys must use the canonical `gh_*` rawValue
