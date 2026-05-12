@@ -136,6 +136,35 @@ final class SlackCollectorTests: XCTestCase {
             return nextThreadReplyBatch
         }
 
+        // Phase Track-3 D3 — warm/cold protocol stubs. Existing SlackCollector tests
+        // never call these (collector wiring lands in Tasks 12 / 14); returning
+        // `.empty` keeps SlackAPIProvider conformance compiling.
+        func fetchWarmState(
+            accessToken: String,
+            userID: String,
+            scopes: SlackScopesChecking,
+            priorMemberChannels: SlackMemberChannelsTopList?,
+            priorPinsPerChannel: [SlackChannelPinsSnapshot],
+            priorBookmarksPerChannel: [SlackChannelBookmarksSnapshot],
+            priorReminders: SlackRemindersSnapshot,
+            priorScheduledMessages: SlackScheduledMessagesSnapshot,
+            priorStars: SlackStarsSnapshot,
+            since: Int64?,
+            now: Int64
+        ) async throws -> SlackWarmBatch {
+            .empty
+        }
+
+        func fetchColdState(
+            accessToken: String,
+            userID: String,
+            scopes: SlackScopesChecking,
+            topChannels: SlackMemberChannelsTopList,
+            now: Int64
+        ) async throws -> SlackColdBatch {
+            .empty
+        }
+
         func setResult(_ result: SlackTickResult) { nextResult = result }
         func setPresence(_ presence: SlackPresenceState) { nextPresence = presence }
         func setPresenceShouldThrow(_ shouldThrow: Bool) { presenceShouldThrow = shouldThrow }
