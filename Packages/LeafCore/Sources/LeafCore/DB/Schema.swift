@@ -495,15 +495,21 @@ public enum Schema {
         public static let githubDependabotAlertsPrefix = "github_dependabot_alerts:"
 
         // Slack D3 — warm-tier (15m) snapshot kinds. Per-channel fans live under
-        // singleton snapshots as JSON arrays of channel-keyed records (top-10
-        // member-channels cap applied by collector before persistence).
-        public static let slackMemberChannelsTop10 = "slack_member_channels_top10"
+        // singleton snapshots as JSON arrays of channel-keyed records.
+        //
+        // `slackMemberChannels` holds the FULL set of member channels (not a
+        // top-10 cap) — diff source for `slack_channel_joined/_left`. Top-10
+        // fan-out cap is applied AT FAN-OUT TIME (pins/bookmarks per-channel,
+        // cold conversations.info) via `rankTop10ByLatestTs`, never to the
+        // persisted snapshot. C3 review fix (D3 follow-up): persisting the
+        // top-10 cap caused false-positive join/left events whenever a member
+        // channel slid out of the top-10 ranking by activity.
+        public static let slackMemberChannels = "slack_member_channels"
         public static let slackPinsPerChannel = "slack_pins_per_channel"
         public static let slackBookmarksPerChannel = "slack_bookmarks_per_channel"
         public static let slackReminders = "slack_reminders"
         public static let slackScheduledMessages = "slack_scheduled_messages"
         public static let slackStars = "slack_stars"
-        public static let slackUserConversations = "slack_user_conversations"
 
         // Slack D3 — cold-tier (4am local daily) snapshot kinds.
         public static let slackCanvasesPerChannel = "slack_canvases_per_channel"

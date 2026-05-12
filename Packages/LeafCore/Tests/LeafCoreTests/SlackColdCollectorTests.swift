@@ -166,7 +166,7 @@ final class SlackColdCollectorTests: XCTestCase {
         let list = SlackMemberChannelsTopList(channels: channels)
         let data = try JSONEncoder().encode(list)
         let json = String(data: data, encoding: .utf8)!
-        try seedPriorSnapshot(db, kind: Schema.ProviderSnapshotKinds.slackUserConversations, json: json)
+        try seedPriorSnapshot(db, kind: Schema.ProviderSnapshotKinds.slackMemberChannels, json: json)
     }
 
     // MARK: - Tests

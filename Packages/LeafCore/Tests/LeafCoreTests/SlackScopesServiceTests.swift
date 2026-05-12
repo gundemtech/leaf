@@ -2,21 +2,36 @@ import XCTest
 @testable import LeafCore
 
 final class SlackScopesServiceTests: XCTestCase {
-    func testRequiredCoreNineScopes() {
-        XCTAssertEqual(SlackScopesService.requiredCore.count, 9)
+    func testRequiredCoreContainsHistoryAndReadFamilies() {
+        XCTAssertEqual(SlackScopesService.requiredCore.count, 13)
         XCTAssertTrue(SlackScopesService.requiredCore.contains("users:read"))
         XCTAssertTrue(SlackScopesService.requiredCore.contains("files:read"))
+        // *:history family — conversations.history etc.
+        for scope in ["channels:history", "groups:history", "im:history", "mpim:history"] {
+            XCTAssertTrue(SlackScopesService.requiredCore.contains(scope), "\(scope) missing")
+        }
+        // *:read family — users.conversations needs at least one of these;
+        // requesting all four covers public + private + DM + group-DM listings
+        // (C2 anti-regression — without these `slack_channel_joined/_left`
+        // never fire because the membership snapshot is never written).
+        for scope in ["channels:read", "groups:read", "im:read", "mpim:read"] {
+            XCTAssertTrue(SlackScopesService.requiredCore.contains(scope), "\(scope) missing")
+        }
     }
 
     func testRequiredOptionalNineScopes() {
         XCTAssertEqual(SlackScopesService.requiredOptional.count, 9)
         XCTAssertTrue(SlackScopesService.requiredOptional.contains("reactions:read"))
         XCTAssertTrue(SlackScopesService.requiredOptional.contains("canvases:read"))
+        // chat.scheduledMessages.list requires chat:write — must match the
+        // SlackWarmCollector scope gate (C1 anti-regression).
+        XCTAssertTrue(SlackScopesService.requiredOptional.contains("chat:write"))
+        XCTAssertFalse(SlackScopesService.requiredOptional.contains("chat:read"))
     }
 
     func testRequestedReturnsUnionSorted() {
         let requested = SlackScopesService.requested()
-        XCTAssertEqual(requested.count, 18)
+        XCTAssertEqual(requested.count, 22)  // 13 core + 9 optional
         XCTAssertEqual(requested, requested.sorted(), "Must be sorted (deterministic)")
     }
 

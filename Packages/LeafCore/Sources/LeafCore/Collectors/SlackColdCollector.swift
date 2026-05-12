@@ -18,9 +18,10 @@
 //   4. conversations.info (per top-10 channel) → slack_channel_renamed /
 //      slack_channel_archived (name change + isArchived false→true).
 //
-//  Per-channel fan-out (canvases + channels_info) consumes the warm-tier
-//  `slack_user_conversations` snapshot — keeps the cold tier bounded by the
-//  same top-N member-channels set.
+//  Per-channel fan-out (canvases + channels_info) reads the warm-tier
+//  `slack_member_channels` full-set snapshot and locally caps to top-N by
+//  `latestTs` — the persisted snapshot intentionally holds the full set so
+//  warm-tier join/left diffing is correct (C3 review fix).
 //
 //  Bootstrap discipline: first tick with no prior snapshot per slot writes
 //  the snapshot but emits zero diff events; Day-2+ ticks produce the normal
@@ -129,12 +130,16 @@ public actor SlackColdCollector {
         let sourceID = "slack:cold:\(teamID)"
         let workspaceID = teamID
 
-        // 4. Top channels for fan-out — written by the warm tier under
-        // `slack_user_conversations`. Empty when warm hasn't run yet (cold
-        // gracefully no-ops the per-channel groups on its first tick).
-        let topChannels: SlackMemberChannelsTopList =
-            readSnapshotValue(kind: Schema.ProviderSnapshotKinds.slackUserConversations)
+        // 4. Top channels for fan-out — read the FULL member set persisted by
+        // the warm tier under `slack_member_channels`, then locally cap to top-10
+        // by `latestTs` for the provider's per-channel sub-fans. Empty when warm
+        // hasn't run yet (cold gracefully no-ops the per-channel groups on its
+        // first tick). C3 review fix: warm now persists the full set rather
+        // than the cap (cap is applied at fan-out time, not at persist time).
+        let fullMemberSet: SlackMemberChannelsTopList =
+            readSnapshotValue(kind: Schema.ProviderSnapshotKinds.slackMemberChannels)
             ?? .empty
+        let topChannels = SlackWarmCollector.rankTop10ByLatestTs(from: fullMemberSet.channels)
 
         // 5. Read prior cold snapshots + row-presence flags (bootstrap gate).
         let priorCanvases: SlackCanvasesSnapshot =

@@ -36,6 +36,7 @@ public actor SlackScopesService {
     /// Re-auth banner surface'ит missing core сразу как блокер.
     public static let requiredCore: Set<String> = [
         "users:read", "users.profile:read", "search:read",
+        "channels:read", "groups:read", "im:read", "mpim:read",
         "channels:history", "groups:history", "im:history", "mpim:history",
         "dnd:read", "files:read"
     ]
@@ -45,7 +46,7 @@ public actor SlackScopesService {
     /// Banner упоминает, но не блокирует.
     public static let requiredOptional: Set<String> = [
         "reactions:read", "pins:read", "bookmarks:read", "reminders:read",
-        "chat:read", "stars:read", "canvases:read", "emoji:read", "usergroups:read"
+        "chat:write", "stars:read", "canvases:read", "emoji:read", "usergroups:read"
     ]
 
     /// Sorted union — OAuth authorize URL scope param construction.
@@ -134,7 +135,7 @@ public actor SlackScopesService {
     /// in `authed_user.scope` as a **comma-separated** string. Split on both
     /// commas AND whitespace (multi-space tolerant; trim per token; empty
     /// → empty set) for forward-compat with any format variation.
-    static func parseScopeString(_ raw: String) -> Set<String> {
+    public static func parseScopeString(_ raw: String) -> Set<String> {
         let parts = raw
             .split(whereSeparator: { $0.isWhitespace || $0 == "," })
             .map { String($0) }

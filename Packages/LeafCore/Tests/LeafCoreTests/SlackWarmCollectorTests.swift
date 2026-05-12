@@ -192,16 +192,17 @@ final class SlackWarmCollectorTests: XCTestCase {
         XCTAssertFalse(r.skipped)
         XCTAssertEqual(r.eventsEmitted, 0, "Bootstrap discipline: first tick writes snapshots, emits zero events")
 
-        // All seven snapshots written.
+        // All six warm snapshots written (C3 fix consolidated the redundant
+        // `slackUserConversations` mirror into the single `slackMemberChannels`
+        // full-set snapshot — cold reads the same row warm writes).
         try db.readSQL { raw in
             for kind in [
-                Schema.ProviderSnapshotKinds.slackMemberChannelsTop10,
+                Schema.ProviderSnapshotKinds.slackMemberChannels,
                 Schema.ProviderSnapshotKinds.slackPinsPerChannel,
                 Schema.ProviderSnapshotKinds.slackBookmarksPerChannel,
                 Schema.ProviderSnapshotKinds.slackReminders,
                 Schema.ProviderSnapshotKinds.slackScheduledMessages,
-                Schema.ProviderSnapshotKinds.slackStars,
-                Schema.ProviderSnapshotKinds.slackUserConversations
+                Schema.ProviderSnapshotKinds.slackStars
             ] {
                 XCTAssertNotNil(
                     try ProviderSnapshotsStore.read(provider: "slack", snapshotKind: kind, in: raw),
@@ -217,7 +218,7 @@ final class SlackWarmCollectorTests: XCTestCase {
 
         // Seed prior member-channels snapshot with one channel.
         let priorJSON = #"{"channels":[{"id":"C1","name":"general","latestTs":100}]}"#
-        try seedPriorSnapshot(db, kind: Schema.ProviderSnapshotKinds.slackMemberChannelsTop10, json: priorJSON)
+        try seedPriorSnapshot(db, kind: Schema.ProviderSnapshotKinds.slackMemberChannels, json: priorJSON)
 
         let p = SpyProvider()
         await p.setBatch(SlackWarmBatch(
@@ -244,7 +245,7 @@ final class SlackWarmCollectorTests: XCTestCase {
         try insertSlackIntegration(db)
 
         let priorJSON = #"{"channels":[{"id":"C1","name":"general","latestTs":100},{"id":"C2","name":"random","latestTs":200}]}"#
-        try seedPriorSnapshot(db, kind: Schema.ProviderSnapshotKinds.slackMemberChannelsTop10, json: priorJSON)
+        try seedPriorSnapshot(db, kind: Schema.ProviderSnapshotKinds.slackMemberChannels, json: priorJSON)
 
         let p = SpyProvider()
         await p.setBatch(SlackWarmBatch(
@@ -584,11 +585,16 @@ final class SlackWarmCollectorTests: XCTestCase {
         XCTAssertFalse(r.skipped)
     }
 
-    func testTopTenCapAppliedToMemberChannelsSnapshot() async throws {
+    func testFullMemberSetPersistedNoCap_C3Regression() async throws {
+        // C3 review fix (D3 follow-up): persisting a top-N cap of the member
+        // channel list caused false-positive `slack_channel_joined/_left`
+        // events whenever the user's #11 channel bubbled into the top-10 by
+        // activity. The snapshot must hold the FULL member set; top-N capping
+        // is the provider's responsibility at fan-out time.
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertSlackIntegration(db)
 
-        // Provider returns 20 channels — collector must persist exactly 10.
+        // Provider returns 20 member channels.
         var channels: [SlackMemberChannel] = []
         for i in 1...20 {
             channels.append(SlackMemberChannel(id: "C\(i)", name: "ch-\(i)", latestTs: Int64(1000 - i)))
@@ -610,15 +616,56 @@ final class SlackWarmCollectorTests: XCTestCase {
         try db.readSQL { raw in
             let snap = try ProviderSnapshotsStore.read(
                 provider: "slack",
-                snapshotKind: Schema.ProviderSnapshotKinds.slackMemberChannelsTop10,
+                snapshotKind: Schema.ProviderSnapshotKinds.slackMemberChannels,
                 in: raw
             )
             XCTAssertNotNil(snap)
-            // Persisted JSON should reference exactly 10 channel ids — assert by
-            // counting "\"id\":" occurrences in the JSON string.
             let occurrences = snap!.snapshotJSON.components(separatedBy: "\"id\":").count - 1
-            XCTAssertEqual(occurrences, 10, "Top-10 cap must persist exactly 10 channels")
+            XCTAssertEqual(occurrences, 20, "Full member set must persist — no cap at snapshot layer")
         }
+    }
+
+    func testRankChurnDoesNotEmitFalseJoinLeft_C3Regression() async throws {
+        // C3 review fix: when user has >10 active channels, the prior snapshot
+        // captured the full membership. Even if recency-ranking churn moves
+        // channel #11 into top-10 on the next tick (and #1 drops to #11),
+        // the FULL-set diff must emit zero events because membership itself
+        // is unchanged.
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertSlackIntegration(db)
+
+        // Seed prior FULL set of 15 channels (all members, varied latestTs).
+        var priorChannels = ""
+        for i in 1...15 {
+            if i > 1 { priorChannels += "," }
+            priorChannels += #"{"id":"C\#(i)","name":"ch\#(i)","latestTs":\#(i * 100)}"#
+        }
+        let priorJSON = #"{"channels":[\#(priorChannels)]}"#
+        try seedPriorSnapshot(db, kind: Schema.ProviderSnapshotKinds.slackMemberChannels, json: priorJSON)
+
+        // Current batch — same 15 channels, every channel's latestTs flipped
+        // (C1 now most recent, C15 least). Massive rank churn, zero membership
+        // change.
+        var currChannels: [SlackMemberChannel] = []
+        for i in 1...15 {
+            currChannels.append(SlackMemberChannel(id: "C\(i)", name: "ch\(i)", latestTs: Int64((16 - i) * 100)))
+        }
+        let p = SpyProvider()
+        await p.setBatch(SlackWarmBatch(
+            memberChannelsTopList: SlackMemberChannelsTopList(channels: currChannels),
+            reactions: .empty,
+            pinsPerChannel: [],
+            bookmarksPerChannel: [],
+            reminders: .empty,
+            scheduledMessages: .empty,
+            stars: .empty
+        ))
+
+        let c = makeCollector(db, p)
+        let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
+        XCTAssertEqual(r.eventsEmitted, 0, "rank churn over identical membership must emit zero join/left events")
+        XCTAssertEqual(try eventCount(db, eventKind: SlackEventKindKey.slackChannelJoined.rawValue), 0)
+        XCTAssertEqual(try eventCount(db, eventKind: SlackEventKindKey.slackChannelLeft.rawValue), 0)
     }
 
     func testCursorAdvancedToTickNowOnSuccess() async throws {

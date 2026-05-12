@@ -136,7 +136,7 @@ public actor SlackWarmCollector {
         ))?.lastModifiedMs
 
         let priorMemberChannels: SlackMemberChannelsTopList? =
-            readSnapshotValue(kind: Schema.ProviderSnapshotKinds.slackMemberChannelsTop10)
+            readSnapshotValue(kind: Schema.ProviderSnapshotKinds.slackMemberChannels)
         let priorPins: [SlackChannelPinsSnapshot] =
             readSnapshotArray(kind: Schema.ProviderSnapshotKinds.slackPinsPerChannel)
         let priorPinsRowPresent = snapshotRowPresent(kind: Schema.ProviderSnapshotKinds.slackPinsPerChannel)
@@ -176,16 +176,21 @@ public actor SlackWarmCollector {
             return TickResult(skipped: false, eventsEmitted: 0)
         }
 
-        // 6. Apply top-10 cap before any persistence / fan-out.
-        let topList = Self.rankTop10ByLatestTs(from: batch.memberChannelsTopList.channels)
+        // 6. Diff source = FULL member set from provider (persisted as-is to
+        //    `slackMemberChannels`). Top-N fan-out cap for per-channel sub-fans
+        //    (pins / bookmarks) is the provider's internal responsibility —
+        //    it consumes `priorMemberChannels` for its own ranking.
+        //    C3 review fix: persisting the cap caused false-positive join/left
+        //    events on rank churn (>10 active channels).
+        let fullMemberSet = batch.memberChannelsTopList
 
         // 7. Build events.
         var events: [RawEvent] = []
         let workspaceID = teamID
 
-        // 7a. Channel joined/left (user_conversations diff).
+        // 7a. Channel joined/left — diff on FULL set, not top-N cap.
         if await scopes.has("channels:read") {
-            let diff = Self.userConversationsDiff(prior: priorMemberChannels, current: topList)
+            let diff = Self.userConversationsDiff(prior: priorMemberChannels, current: fullMemberSet)
             for ch in diff.joined {
                 events.append(Self.makeChannelJoinedEvent(
                     channel: ch, workspaceID: workspaceID, userID: userID, observedAtMs: nowMs
@@ -300,8 +305,12 @@ public actor SlackWarmCollector {
         )
 
         let snapshots: [ProviderSnapshot] = [
-            makeSnapshot(kind: Schema.ProviderSnapshotKinds.slackMemberChannelsTop10,
-                         encoding: SlackMemberChannelsTopList(channels: topList.channels),
+            // Persist the FULL member set — diff source for join/left + fan-out
+            // root for cold tier (cold caps locally via rankTop10ByLatestTs).
+            // C3 review fix: previously persisted top-10 cap caused false-
+            // positive transitions on rank churn.
+            makeSnapshot(kind: Schema.ProviderSnapshotKinds.slackMemberChannels,
+                         encoding: fullMemberSet,
                          nowMs: nowMs),
             makeSnapshot(kind: Schema.ProviderSnapshotKinds.slackPinsPerChannel,
                          encoding: batch.pinsPerChannel, nowMs: nowMs),
@@ -312,13 +321,7 @@ public actor SlackWarmCollector {
             makeSnapshot(kind: Schema.ProviderSnapshotKinds.slackScheduledMessages,
                          encoding: batch.scheduledMessages, nowMs: nowMs),
             makeSnapshot(kind: Schema.ProviderSnapshotKinds.slackStars,
-                         encoding: batch.stars, nowMs: nowMs),
-            // user_conversations snapshot mirrors the top-10 list contents — kept
-            // as a separate snapshot_kind so cold-tier per-channel fan-out can
-            // read it without coupling to the warm-tier joined/left diff source.
-            makeSnapshot(kind: Schema.ProviderSnapshotKinds.slackUserConversations,
-                         encoding: SlackMemberChannelsTopList(channels: topList.channels),
-                         nowMs: nowMs)
+                         encoding: batch.stars, nowMs: nowMs)
         ]
 
         // 9. Atomic write.

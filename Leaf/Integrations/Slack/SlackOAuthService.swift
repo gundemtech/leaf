@@ -77,15 +77,29 @@ final class SlackOAuthService {
 
     // MARK: - Public API
 
-    /// Перечитывает row из DB → выставляет `.connected`, `.notConnected`, или
-    /// `.reconnectNeeded` если refresher (B3) удалил row из-за invalid_grant.
+    /// Перечитывает row из DB → выставляет `.connected`,
+    /// `.connectedScopeOutdated`, `.notConnected`, или `.reconnectNeeded` если
+    /// refresher (B3) удалил row из-за invalid_grant. Scope-outdated detection
+    /// mirrors GitHubOAuthService.reload — `requiredCore.subtracting(granted)`
+    /// drives both this state AND the parallel `SlackScopesReader` observable
+    /// consumed by Home banner / Sidebar dot / Connections section (I1 review fix).
     func reload() {
         do {
             let db = try ensureDatabase()
             let denied = isRefreshDenialFlagSet()
             if let record = try db.readIntegration(provider: .slack) {
                 clearRefreshDenialFlag()
-                state = .connected(workspaceName: record.workspaceName, connectedAt: record.connectedAt)
+                let granted = SlackScopesService.parseScopeString(record.scope)
+                let missingCore = SlackScopesService.requiredCore.subtracting(granted)
+                if missingCore.isEmpty {
+                    state = .connected(workspaceName: record.workspaceName, connectedAt: record.connectedAt)
+                } else {
+                    state = .connectedScopeOutdated(
+                        workspaceName: record.workspaceName,
+                        connectedAt: record.connectedAt,
+                        missing: missingCore
+                    )
+                }
             } else if denied {
                 state = .reconnectNeeded
             } else {
@@ -206,7 +220,21 @@ final class SlackOAuthService {
             clearRefreshDenialFlag()
             postRestartNotification()
 
-            state = .connected(workspaceName: record.workspaceName, connectedAt: record.connectedAt)
+            // Slack may grant a partial scope set (user declined some).
+            // Mirror GitHubOAuthService — surface `.connectedScopeOutdated`
+            // if any core scope is missing so the re-auth banner / Sidebar
+            // dot / Connections explainer engage immediately (I1 review fix).
+            let granted = SlackScopesService.parseScopeString(record.scope)
+            let missingCore = SlackScopesService.requiredCore.subtracting(granted)
+            if missingCore.isEmpty {
+                state = .connected(workspaceName: record.workspaceName, connectedAt: record.connectedAt)
+            } else {
+                state = .connectedScopeOutdated(
+                    workspaceName: record.workspaceName,
+                    connectedAt: record.connectedAt,
+                    missing: missingCore
+                )
+            }
         } catch let error as LoopbackCallbackError {
             switch error {
             case .timeout:

@@ -14,11 +14,12 @@
 
 import Foundation
 
-// MARK: - Member channels (user_conversations top-10 ranking)
+// MARK: - Member channels (users.conversations full set + fan-out ranking)
 
 /// One channel the authed user is a member of, with the latest message ts the
-/// API reported (used for top-10 ranking by recency). `latestTs` is `nil` when
-/// Slack omitted the field (e.g., channel has no messages or member-only metadata).
+/// API reported (used for top-N ranking by recency at fan-out time).
+/// `latestTs` is `nil` when Slack omitted the field (e.g. channel has no
+/// messages or member-only metadata).
 public struct SlackMemberChannel: Sendable, Hashable, Codable {
     public let id: String
     public let name: String
@@ -31,7 +32,18 @@ public struct SlackMemberChannel: Sendable, Hashable, Codable {
     }
 }
 
-/// Top-N member channels ranked by `latestTs` desc (collector enforces N=10).
+/// Set of member channels — interpretation is contextual:
+///   • Persisted snapshot (`slackMemberChannels` kind) holds the FULL set —
+///     this is the diff source for `slack_channel_joined/_left`. Storing the
+///     full set is required to avoid false-positive transitions when channel
+///     ranking churns (C3 review fix, D3 follow-up).
+///   • As provider input (`fetchColdState.topChannels`) and per-channel
+///     fan-out target list (pins/bookmarks/conversations.info), the value is
+///     the top-N cap produced by `rankTop10ByLatestTs`. The cap is applied
+///     at fan-out time, never to persisted state.
+///
+/// Type-name retained for minimum-churn fix — the value type is fundamentally
+/// `{channels: [SlackMemberChannel]}` regardless of interpretation.
 public struct SlackMemberChannelsTopList: Sendable, Hashable, Codable {
     public let channels: [SlackMemberChannel]
 
