@@ -199,7 +199,7 @@ public struct SlackStarsSnapshot: Sendable, Hashable, Codable {
 
 /// One canvas. `channelID` is `nil` for free-floating canvases (not channel-bound).
 /// `title` is the canvas's own title field (structured metadata), not body content.
-public struct SlackCanvas: Sendable, Hashable {
+public struct SlackCanvas: Sendable, Hashable, Codable {
     public let channelID: String?
     public let canvasID: String
     public let title: String
@@ -213,7 +213,7 @@ public struct SlackCanvas: Sendable, Hashable {
     }
 }
 
-public struct SlackCanvasesSnapshot: Sendable, Hashable {
+public struct SlackCanvasesSnapshot: Sendable, Hashable, Codable {
     public let canvases: [SlackCanvas]
 
     public init(canvases: [SlackCanvas]) {
@@ -228,7 +228,7 @@ public struct SlackCanvasesSnapshot: Sendable, Hashable {
 /// Workspace custom emoji catalog snapshot — names only. ADR-010: emoji image
 /// content (URLs / bytes) is never captured; only the name set is retained for
 /// added/removed diff emission.
-public struct SlackEmojiSnapshot: Sendable, Hashable {
+public struct SlackEmojiSnapshot: Sendable, Hashable, Codable {
     public let emojiNames: Set<String>
 
     public init(emojiNames: Set<String>) {
@@ -242,7 +242,7 @@ public struct SlackEmojiSnapshot: Sendable, Hashable {
 
 /// One usergroup with its member set. `userIDs` is captured as-is for membership
 /// diff; downstream Share Controls / anonymization apply at the relay boundary.
-public struct SlackUsergroup: Sendable, Hashable {
+public struct SlackUsergroup: Sendable, Hashable, Codable {
     public let id: String
     public let name: String
     public let userIDs: Set<String>
@@ -254,7 +254,7 @@ public struct SlackUsergroup: Sendable, Hashable {
     }
 }
 
-public struct SlackUsergroupsSnapshot: Sendable, Hashable {
+public struct SlackUsergroupsSnapshot: Sendable, Hashable, Codable {
     public let groups: [SlackUsergroup]
 
     public init(groups: [SlackUsergroup]) {
@@ -269,7 +269,7 @@ public struct SlackUsergroupsSnapshot: Sendable, Hashable {
 /// One channel's identity snapshot — used to detect rename / archive transitions
 /// across cold ticks. Name and archived flag are structured channel state, not
 /// message bodies.
-public struct SlackChannelInfo: Sendable, Hashable {
+public struct SlackChannelInfo: Sendable, Hashable, Codable {
     public let channelID: String
     public let name: String
     public let isArchived: Bool
@@ -281,7 +281,7 @@ public struct SlackChannelInfo: Sendable, Hashable {
     }
 }
 
-public struct SlackChannelsInfoSnapshot: Sendable, Hashable {
+public struct SlackChannelsInfoSnapshot: Sendable, Hashable, Codable {
     public let channels: [SlackChannelInfo]
 
     public init(channels: [SlackChannelInfo]) {

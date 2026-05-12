@@ -23,9 +23,12 @@ public struct SlackEmojiDiffResult: Sendable, Hashable {
     }
 }
 
-// MARK: - SlackColdCollector (placeholder; Task 14 promotes to actor)
+// MARK: - SlackColdCollector — static diff helpers (Task 14 promotes the
+// type itself to a `public actor` in `SlackColdCollector.swift`; helpers stay
+// as `static` methods so they remain composable from the actor body without
+// hopping isolation domains).
 
-public enum SlackColdCollector {
+extension SlackColdCollector {
 
     /// Pure: canvases diff. "created" = canvasID newly observed; "edited" =
     /// canvasID present in both and `current.lastEditedMs > prior.lastEditedMs`.

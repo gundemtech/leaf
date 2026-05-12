@@ -264,6 +264,14 @@ public enum Schema {
         public static let scheduledMessageId = "scheduled_message_id"
         public static let scheduledFor = "scheduled_for"
         public static let savedAtMs = "saved_at_ms"
+        // Slack D3 cold-tier (Task 14).
+        public static let canvasId = "canvas_id"
+        public static let emojiName = "emoji_name"
+        public static let groupId = "group_id"
+        public static let addedUserIdsJson = "added_user_ids_json"
+        public static let removedUserIdsJson = "removed_user_ids_json"
+        public static let oldName = "old_name"
+        public static let newName = "new_name"
     }
 
     /// Phase Track-1 D2 — FTS5 contentless virtual table over event bodies
@@ -496,6 +504,12 @@ public enum Schema {
         public static let slackScheduledMessages = "slack_scheduled_messages"
         public static let slackStars = "slack_stars"
         public static let slackUserConversations = "slack_user_conversations"
+
+        // Slack D3 — cold-tier (4am local daily) snapshot kinds.
+        public static let slackCanvasesPerChannel = "slack_canvases_per_channel"
+        public static let slackEmojiList = "slack_emoji_list"
+        public static let slackUsergroups = "slack_usergroups"
+        public static let slackChannelsInfo = "slack_channels_info"
     }
 }
 

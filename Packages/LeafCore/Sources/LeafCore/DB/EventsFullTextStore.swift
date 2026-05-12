@@ -133,6 +133,20 @@ public enum EventsFullTextStore {
         if eventKind == GitHubEventKindKey.deploymentCreated.rawValue {
             return Schema.BodyKinds.ghDeploymentDescription
         }
+        // Track-3 D3 Task 14 — Slack canvas title body-kind dispatch.
+        // Per ADR-010 §6, canvas titles are user-named structured resources
+        // (not message bodies) and route through FTS via the `body` field.
+        if eventKind == SlackEventKindKey.slackCanvasCreated.rawValue
+            || eventKind == SlackEventKindKey.slackCanvasEdited.rawValue {
+            return Schema.BodyKinds.slackCanvasTitle
+        }
+        // Track-3 D3 Task 14 — Slack bookmark title body-kind dispatch (Task 12
+        // gap closed here; bookmark cases were declared body-bearing but lacked
+        // a dispatch entry until canvas titles were also wired).
+        if eventKind == SlackEventKindKey.slackBookmarkAdded.rawValue
+            || eventKind == SlackEventKindKey.slackBookmarkRemoved.rawValue {
+            return Schema.BodyKinds.slackBookmarkTitle
+        }
         return nil
     }
 
