@@ -167,6 +167,17 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     case slackUsergroupMembershipChanged  = "slack_usergroup_membership_changed"
     case slackChannelRenamed              = "slack_channel_renamed"
     case slackChannelArchived             = "slack_channel_archived"
+
+    // MARK: - Phase Track-4 S1 — Architecture catch-up (9 new kinds, all default OFF per ADR-020)
+    case meetingStateEntered              = "meeting_state_entered"
+    case meetingStateExited               = "meeting_state_exited"
+    case focusModeEnabled                 = "focus_mode_enabled"
+    case focusModeDisabled                = "focus_mode_disabled"
+    case systemLocked                     = "system_locked"
+    case systemUnlocked                   = "system_unlocked"
+    case systemSlept                      = "system_slept"
+    case systemWoke                       = "system_woke"
+    case spaceSwitched                    = "space_switched"
 }
 
 /// Phase 4.7.A — onboarding default enabled-state per event_kind.
@@ -339,6 +350,18 @@ public enum ShareEventTypeDefaults {
         .init(key: .slackCustomEmojiAdded, defaultEnabled: false),
         .init(key: .slackUsergroupMembershipChanged, defaultEnabled: false),
         .init(key: .slackChannelRenamed, defaultEnabled: false),
-        .init(key: .slackChannelArchived, defaultEnabled: false)
+        .init(key: .slackChannelArchived, defaultEnabled: false),
+
+        // Phase Track-4 S1 — Architecture catch-up. All default OFF per
+        // ADR-020 (capture-everything locally, share-selectively).
+        .init(key: .meetingStateEntered, defaultEnabled: false),
+        .init(key: .meetingStateExited, defaultEnabled: false),
+        .init(key: .focusModeEnabled, defaultEnabled: false),
+        .init(key: .focusModeDisabled, defaultEnabled: false),
+        .init(key: .systemLocked, defaultEnabled: false),
+        .init(key: .systemUnlocked, defaultEnabled: false),
+        .init(key: .systemSlept, defaultEnabled: false),
+        .init(key: .systemWoke, defaultEnabled: false),
+        .init(key: .spaceSwitched, defaultEnabled: false)
     ]
 }
