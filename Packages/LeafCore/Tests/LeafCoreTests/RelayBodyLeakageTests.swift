@@ -1317,4 +1317,128 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "Usergroup membership user-ID sentinel MUST NOT leak into presence_state.state_json")
         }
     }
+
+    // MARK: - Phase Track-4 S1 — Architecture catch-up walkbacks
+
+    /// Adversarial payload with fake meeting title MUST NOT reach
+    /// `presence_state.state_json`. Collectors are designed to never include
+    /// title (compile-time via MeetingObservation), but this defence layer
+    /// catches a future regression where a collector accidentally adds the
+    /// field.
+    func testMeetingStateEventDoesNotLeakIntoPresenceState_S1() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let titleMarker = "SECRET-MEETING-TITLE-MARKER-S1"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let event = RawEvent(
+            timestamp: Date(),
+            signalType: .context,
+            bundleID: nil,
+            payload: [
+                "event_kind": "meeting_state_entered",
+                "state": "in_meeting",
+                "title": titleMarker
+            ]
+        )
+        let presenceState: [String: Any] = ["dummy": true]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: "calendar", sourceID: "calendar:test", nowMs: nowMs),
+            presence: (provider: .linear, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql:
+                "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.contains(titleMarker),
+                "Meeting title MUST NOT appear in presence_state.state_json")
+        }
+    }
+
+    /// Same shape for focus_mode_* events — fake mode name MUST NOT leak.
+    func testFocusModeEventDoesNotLeakIntoPresenceState_S1() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let modeNameMarker = "SECRET-FOCUS-MODE-NAME-MARKER-S1"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let event = RawEvent(
+            timestamp: Date(),
+            signalType: .context,
+            bundleID: nil,
+            payload: [
+                "event_kind": "focus_mode_enabled",
+                "state": "focused",
+                "mode_name": modeNameMarker
+            ]
+        )
+        let presenceState: [String: Any] = ["dummy": true]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: "focus", sourceID: "focus:test", nowMs: nowMs),
+            presence: (provider: .linear, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql:
+                "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.contains(modeNameMarker),
+                "Focus mode name MUST NOT appear in presence_state.state_json")
+        }
+    }
+
+    /// Same shape for system_locked event — adversarial host marker MUST NOT leak.
+    func testSystemStateEventDoesNotLeakIntoPresenceState_S1() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let hostMarker = "SECRET-HOSTNAME-MARKER-S1"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let event = RawEvent(
+            timestamp: Date(),
+            signalType: .context,
+            bundleID: nil,
+            payload: [
+                "event_kind": "system_locked",
+                "host": hostMarker
+            ]
+        )
+        let presenceState: [String: Any] = ["dummy": true]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: "system_state", sourceID: "system_state:test", nowMs: nowMs),
+            presence: (provider: .linear, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql:
+                "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.contains(hostMarker),
+                "System hostname MUST NOT appear in presence_state.state_json")
+        }
+    }
+
+    /// Same shape for space_switched event — fake space identifier MUST NOT leak.
+    func testSpaceSwitchedEventDoesNotLeakIntoPresenceState_S1() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let spaceIDMarker = "SECRET-SPACE-IDENTIFIER-MARKER-S1"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let event = RawEvent(
+            timestamp: Date(),
+            signalType: .context,
+            bundleID: nil,
+            payload: [
+                "event_kind": "space_switched",
+                "space_id": spaceIDMarker
+            ]
+        )
+        let presenceState: [String: Any] = ["dummy": true]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: "spaces", sourceID: "spaces:test", nowMs: nowMs),
+            presence: (provider: .linear, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql:
+                "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.contains(spaceIDMarker),
+                "Space identifier MUST NOT appear in presence_state.state_json")
+        }
+    }
 }
