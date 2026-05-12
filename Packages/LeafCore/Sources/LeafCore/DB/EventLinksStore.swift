@@ -244,7 +244,15 @@ public enum EventLinksStore {
             || eventKind == SlackEventKindKey.slackBookmarkRemoved.rawValue {
             return Schema.BodyKinds.slackBookmarkTitle
         }
-        if eventKind.hasPrefix("gh_pr_") { return Schema.BodyKinds.ghPR }
+        // Track-3 D4 — explicit gh_pr_* cases instead of `hasPrefix("gh_pr_")`
+        // catch-all (which would spuriously match `gh_pr_review_thread_resolved`
+        // and `gh_pr_awaiting_review_count` — both body-less — and attempt body
+        // indexing on empty fields). Mirrors FTS lines 114-118.
+        if eventKind == GitHubEventKindKey.prOpened.rawValue
+            || eventKind == GitHubEventKindKey.prMerged.rawValue
+            || eventKind == GitHubEventKindKey.prClosed.rawValue {
+            return Schema.BodyKinds.ghPR
+        }
         return nil
     }
 

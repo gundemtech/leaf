@@ -154,4 +154,21 @@ final class DispatchCoverageTests: XCTestCase {
             )
         }
     }
+
+    /// #11 — non-body-bearing `gh_pr_*` event_kinds must return nil from
+    /// `EventLinksStore.topLevelBodyKind`. Guards against re-introduction of
+    /// the `hasPrefix("gh_pr_")` catch-all that would route these through
+    /// `Schema.BodyKinds.ghPR` and attempt body indexing on empty fields.
+    func testNonBodyBearingGitHubPRKindsReturnNilFromEventLinks() {
+        let nonBodyBearing = [
+            GitHubEventKindKey.prReviewThreadResolved.rawValue,
+            GitHubEventKindKey.prAwaitingReviewCount.rawValue
+        ]
+        for raw in nonBodyBearing {
+            XCTAssertNil(
+                EventLinksStore.bodyKindForTesting(eventKind: raw),
+                "EventLinksStore must NOT dispatch a body-kind for non-body-bearing \(raw)"
+            )
+        }
+    }
 }
