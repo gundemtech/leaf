@@ -40,6 +40,12 @@ final class SlackOAuthService {
         case exchangingToken
         case fetchingWorkspace
         case connected(workspaceName: String, connectedAt: Date)
+        /// Phase Track-3 D3 — token still valid but Slack scopes incomplete after
+        /// scope-bump release (D3 added 9 new optional scopes for warm/cold
+        /// coverage). UI surface'ит banner + red dot + re-authorize CTA
+        /// (Tasks 19-21). Connection остаётся usable для endpoints с already-granted
+        /// scope; warm/cold gated calls degrade gracefully.
+        case connectedScopeOutdated(workspaceName: String, connectedAt: Date, missing: Set<String>)
         /// refresh_token revoked / expired (SlackTokenRefresher Phase 4.4 B3
         /// сделает deleteIntegration + UserDefaults flag + DistributedNotification).
         /// UI показывает orange "Reconnect needed". Cleared на successful
@@ -92,7 +98,23 @@ final class SlackOAuthService {
     }
 
     /// Запускает full PKCE flow. Caller — UI button "Connect Slack".
+    /// Convenience overload preserving the existing call shape; delegates to
+    /// `connect(scopes:)` with the canonical `SlackScopesService.requested()`
+    /// (D3 scope-bump baseline = required core ∪ optional).
     func connect() async {
+        await connect(scopes: SlackScopesService.requested())
+    }
+
+    /// Phase Track-3 D3 — explicit-scope overload for re-auth flows that need
+    /// to request a different scope set than the static default. Tests + the
+    /// future re-auth ceremony pass the exact scope list they want; the
+    /// convenience overload above delegates here with
+    /// `SlackScopesService.requested()` so existing UI sites compile unchanged.
+    func connect(scopes: [String]) async {
+        await connectInternal(scopeParameter: scopes.joined(separator: ","))
+    }
+
+    private func connectInternal(scopeParameter: String) async {
         guard let clientID = readClientID() else {
             state = .error(message: "SLACK_OAUTH_CLIENT_ID is not configured. See Config/Production.xcconfig.")
             return
@@ -103,7 +125,7 @@ final class SlackOAuthService {
         let port = SlackOAuthEndpoints.loopbackPort
         let authorizeURL: URL
         do {
-            authorizeURL = try buildAuthorizeURL(clientID: clientID, challenge: challenge)
+            authorizeURL = try buildAuthorizeURL(clientID: clientID, challenge: challenge, scopeParameter: scopeParameter)
         } catch {
             state = .error(message: "Failed to build authorize URL: \(error.localizedDescription)")
             return
@@ -226,16 +248,17 @@ final class SlackOAuthService {
         return id
     }
 
-    private func buildAuthorizeURL(clientID: String, challenge: PKCE.Challenge) throws -> URL {
+    private func buildAuthorizeURL(clientID: String, challenge: PKCE.Challenge, scopeParameter: String) throws -> URL {
         var components = URLComponents(url: SlackOAuthEndpoints.authorize, resolvingAgainstBaseURL: false)
         // Slack v2 разделяет bot/user scopes:
         //   `scope` — bot-token scopes (мы их НЕ запрашиваем — нужен user-token only)
-        //   `user_scope` — user-token scopes (наши `users:read,users.profile:read,search:read`)
+        //   `user_scope` — user-token scopes (D3: comma-separated from
+        //   SlackScopesService.requested() via connect(scopes:) overload)
         // Slack accepts PKCE с `code_challenge_method=S256` для distributed/public apps
         // с 2026-03-30. `redirect_uri` обязателен exact-match с тем что в app config.
         components?.queryItems = [
             URLQueryItem(name: "client_id", value: clientID),
-            URLQueryItem(name: "user_scope", value: SlackOAuthEndpoints.userScopes),
+            URLQueryItem(name: "user_scope", value: scopeParameter),
             URLQueryItem(name: "redirect_uri", value: SlackOAuthEndpoints.redirectURI),
             URLQueryItem(name: "state", value: challenge.state),
             URLQueryItem(name: "code_challenge", value: challenge.challenge),

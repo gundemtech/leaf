@@ -377,6 +377,15 @@ struct ConnectionsView: View {
                 connectedAt: connectedAt,
                 action: { slackOAuth.disconnect() }
             )
+        case .connectedScopeOutdated(let workspaceName, let connectedAt, _):
+            // Phase Track-3 D3 — Tasks 19-21 add the dedicated re-auth banner /
+            // missing-scopes detail UI. Until then surface as plain connected so
+            // the substrate ships без UI regression.
+            connectedBlock(
+                title: workspaceName,
+                connectedAt: connectedAt,
+                action: { slackOAuth.disconnect() }
+            )
         case .reconnectNeeded:
             reconnectBlock(
                 description: "Your Slack session expired and Leaf can't refresh it automatically. Sign in again to resume polling.",
