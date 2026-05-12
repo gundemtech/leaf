@@ -132,6 +132,17 @@ public struct AgentThresholds: Sendable, Hashable {
     /// floor — running more often just produces nil outputs. Default 300s mirrors the
     /// prod `idleThresholdSec` ceiling; production override in moat.
     public let detectorScheduledIntervalSec: TimeInterval
+    /// Phase Track-4 S1: how often `CalendarCollector` polls `EKEventStore` for
+    /// overlap with the current moment. Default 60s.
+    public let calendarPollIntervalSec: TimeInterval
+    /// Phase Track-4 S1: how often `FocusModeCollector` polls
+    /// `INFocusStatusCenter.default.focusStatus`. Default 60s — mirrors
+    /// `calendarPollIntervalSec`.
+    public let focusModePollIntervalSec: TimeInterval
+    /// Phase Track-4 S1: drop space-switched emissions within this many seconds
+    /// of the prior emission (collapses rapid Mission-Control gesture sweeps).
+    /// Default 2s.
+    public let spaceTransitionCoalesceWindowSec: TimeInterval
 
     public init(
         idlePollIntervalSec: TimeInterval,
@@ -169,7 +180,10 @@ public struct AgentThresholds: Sendable, Hashable {
         attentionWindowPollIntervalSec: TimeInterval = 30,
         rotationFetchIntervalSec: TimeInterval = 60,
         detectorIncrementalIntervalSec: TimeInterval = 30,
-        detectorScheduledIntervalSec: TimeInterval = 300
+        detectorScheduledIntervalSec: TimeInterval = 300,
+        calendarPollIntervalSec: TimeInterval = 60,
+        focusModePollIntervalSec: TimeInterval = 60,
+        spaceTransitionCoalesceWindowSec: TimeInterval = 2
     ) {
         self.idlePollIntervalSec = idlePollIntervalSec
         self.idleThresholdSec = idleThresholdSec
@@ -207,6 +221,9 @@ public struct AgentThresholds: Sendable, Hashable {
         self.rotationFetchIntervalSec = rotationFetchIntervalSec
         self.detectorIncrementalIntervalSec = detectorIncrementalIntervalSec
         self.detectorScheduledIntervalSec = detectorScheduledIntervalSec
+        self.calendarPollIntervalSec = calendarPollIntervalSec
+        self.focusModePollIntervalSec = focusModePollIntervalSec
+        self.spaceTransitionCoalesceWindowSec = spaceTransitionCoalesceWindowSec
     }
 
     public static let weakDefaults = AgentThresholds(
@@ -245,6 +262,9 @@ public struct AgentThresholds: Sendable, Hashable {
         attentionWindowPollIntervalSec: 30,
         rotationFetchIntervalSec: 60,
         detectorIncrementalIntervalSec: 30,
-        detectorScheduledIntervalSec: 300
+        detectorScheduledIntervalSec: 300,
+        calendarPollIntervalSec: 60,
+        focusModePollIntervalSec: 60,
+        spaceTransitionCoalesceWindowSec: 2
     )
 }
