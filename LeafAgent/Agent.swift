@@ -371,6 +371,24 @@ enum AgentMain {
             return (warm, warmSched, cold, coldSched)
         }()
 
+        // Phase Track-4 S1 — Architecture catch-up collectors. Substrate-only
+        // Layer A observers (Calendar / Focus / system state / spaces). No
+        // OAuth, no external API. Calendar / Focus are TCC-gated and degrade
+        // to no-op on denial; system state and spaces require no permissions.
+        let calendarCollector = CalendarCollector(
+            writer: writer,
+            pollIntervalSec: agentThresholds.calendarPollIntervalSec
+        )
+        let focusModeCollector = FocusModeCollector(
+            writer: writer,
+            pollIntervalSec: agentThresholds.focusModePollIntervalSec
+        )
+        let systemStateCollector = SystemStateCollector(writer: writer)
+        let spacesCollector = SpacesCollector(
+            writer: writer,
+            coalesceWindowSec: agentThresholds.spaceTransitionCoalesceWindowSec
+        )
+
         AgentLifetime.writer = writer
         AgentLifetime.activeAppCollector = activeAppCollector
         AgentLifetime.idleCollector = idleCollector
@@ -397,6 +415,11 @@ enum AgentMain {
         AgentLifetime.slackWarmScheduler = slackWarmScheduler
         AgentLifetime.slackColdCollector = slackColdCollector
         AgentLifetime.slackColdScheduler = slackColdScheduler
+        // Phase Track-4 S1 — Architecture catch-up lifetime slots.
+        AgentLifetime.calendarCollector = calendarCollector
+        AgentLifetime.focusModeCollector = focusModeCollector
+        AgentLifetime.systemStateCollector = systemStateCollector
+        AgentLifetime.spacesCollector = spacesCollector
 
         // Phase 5.3.D — Key rotation orchestrator + RotationOutbox resume.
         // Drains unposted rotation_outbox rows from prior sessions on startup
@@ -509,6 +532,14 @@ enum AgentMain {
         // where collectors also expose start/stop).
         if let ws = slackWarmScheduler { Task { await ws.start() } }
         if let cs = slackColdScheduler { Task { await cs.start() } }
+        // Phase Track-4 S1 — start Architecture catch-up collectors. Calendar
+        // and Focus are async (TCC permission request + poll task); System +
+        // Spaces dispatch their observer registration on main queue (callbacks
+        // fire on `queue: .main`, collectors are @MainActor-isolated).
+        Task { await calendarCollector.start() }
+        Task { await focusModeCollector.start() }
+        DispatchQueue.main.async { systemStateCollector.start() }
+        DispatchQueue.main.async { spacesCollector.start() }
         Task { await rotationFetchScheduler.start() }
         Task { await detectorScheduler.start() }
 
@@ -548,6 +579,13 @@ enum AgentMain {
             // ScopesService is read-only — no stop() needed.
             if let cs = AgentLifetime.slackColdScheduler { await cs.stop() }
             if let ws = AgentLifetime.slackWarmScheduler { await ws.stop() }
+            // Phase Track-4 S1 — stop Architecture catch-up collectors.
+            // Order: spaces / system (synchronous observer removal, on main)
+            // → focus / calendar (async cancel of poll task + observer).
+            await MainActor.run { AgentLifetime.spacesCollector?.stop() }
+            await MainActor.run { AgentLifetime.systemStateCollector?.stop() }
+            if let f = AgentLifetime.focusModeCollector { await f.stop() }
+            if let c = AgentLifetime.calendarCollector { await c.stop() }
             if let m = AgentLifetime.maintenance { await m.stop() }
             if let f = AgentLifetime.fsEventsCollector { await f.stop() }
             if let c = AgentLifetime.claudeCodeCollector { await c.stop() }
@@ -606,4 +644,9 @@ enum AgentLifetime {
     nonisolated(unsafe) static var slackWarmScheduler: SlackWarmScheduler?
     nonisolated(unsafe) static var slackColdCollector: SlackColdCollector?
     nonisolated(unsafe) static var slackColdScheduler: SlackColdScheduler?
+    // Phase Track-4 S1 — Architecture catch-up collectors (Layer A).
+    nonisolated(unsafe) static var calendarCollector: CalendarCollector?
+    nonisolated(unsafe) static var focusModeCollector: FocusModeCollector?
+    nonisolated(unsafe) static var systemStateCollector: SystemStateCollector?
+    nonisolated(unsafe) static var spacesCollector: SpacesCollector?
 }
