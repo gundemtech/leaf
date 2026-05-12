@@ -20,12 +20,27 @@ import Combine
 ///
 /// Default is OFF for every (bundleID, field) pair — opt-in is always explicit.
 public final class LocalAppsStore: ObservableObject, @unchecked Sendable {
+    /// Phase Track-4 S2 — shared UserDefaults suite between LeafAgent
+    /// (`tech.gundem.leaf.agent`) and the main app (`tech.gundem.leaf`).
+    /// Mirrors the OAuth pattern (`LinearOAuthEndpoints.userDefaultsSuite`
+    /// etc): both processes read/write the same plist so the Settings UI
+    /// can talk to the Agent's collector without an IPC channel.
+    public static let sharedSuiteName = "tech.gundem.leaf"
+
+    /// Default backing store: the shared suite, falling back to `.standard`
+    /// if suite creation fails (matches OAuth defensive pattern).
+    /// `nonisolated(unsafe)` — UserDefaults is Apple-NSObject (not Sendable
+    /// per its declaration) but is documented as thread-safe by Apple, and
+    /// matches the OAuth-suite global-let pattern shipped since Phase 4.2.
+    public nonisolated(unsafe) static let sharedDefaults: UserDefaults =
+        UserDefaults(suiteName: sharedSuiteName) ?? .standard
+
     private let defaults: UserDefaults
     private let lock = NSLock()
     private var enabledCache: [String: Bool] = [:]
     private var subFieldCache: [String: [String: Bool]] = [:]
 
-    public init(defaults: UserDefaults = .standard) {
+    public init(defaults: UserDefaults = LocalAppsStore.sharedDefaults) {
         self.defaults = defaults
     }
 
@@ -40,7 +55,12 @@ public final class LocalAppsStore: ObservableObject, @unchecked Sendable {
         defaults.set(enabled, forKey: Self.enabledKey(bundleID))
         enabledCache[bundleID] = enabled
         lock.unlock()
-        objectWillChange.send()
+        // SwiftUI requires objectWillChange on main. We hop async so the
+        // Agent's @MainActor collector + the main app's SwiftUI Settings
+        // surface both observe predictably regardless of caller actor.
+        DispatchQueue.main.async { [self] in
+            self.objectWillChange.send()
+        }
     }
 
     public func isSubFieldOptedIn(_ bundleID: String, field: String) -> Bool {
@@ -56,7 +76,9 @@ public final class LocalAppsStore: ObservableObject, @unchecked Sendable {
         bucket[field] = optedIn
         subFieldCache[bundleID] = bucket
         lock.unlock()
-        objectWillChange.send()
+        DispatchQueue.main.async { [self] in
+            self.objectWillChange.send()
+        }
     }
 
     private static func enabledKey(_ bundleID: String) -> String {

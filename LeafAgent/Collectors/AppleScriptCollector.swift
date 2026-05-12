@@ -65,8 +65,13 @@ final class AppleScriptCollector {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         // Extract → mutate → write back. Swift 6 forbids passing actor-isolated
         // subscript inout across an async boundary; we serialize the mutation
-        // through a local copy. (`any AppleScriptAdapter` is a value-typed
-        // existential, so the copy preserves per-tick state-machine progress.)
+        // through a local copy.
+        //
+        // Prod adapters currently keep per-tick state inside a class-backed
+        // `StateMachineBox`, so the value-copy is effectively a no-op for them
+        // (the reference makes mutations visible across copies). We still
+        // write back for correctness — a future struct-state adapter (no box)
+        // would rely on this to retain its state machine progress.
         var adapter = adapters[index]
         let outcome = await AppleScriptDispatchLogic.tickAdapter(
             &adapter,

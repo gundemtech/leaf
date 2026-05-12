@@ -20,7 +20,10 @@ public final class AppleScriptPermissionStore {
 
     private let defaults: UserDefaults
 
-    public init(defaults: UserDefaults = .standard) {
+    /// Phase Track-4 S2 — default backing store mirrors `LocalAppsStore`'s
+    /// cross-process suite so the Settings UI badge ("Granted" / "Denied" /
+    /// "Waiting") and the Agent's collector observe the same TCC state.
+    public init(defaults: UserDefaults = LocalAppsStore.sharedDefaults) {
         self.defaults = defaults
     }
 

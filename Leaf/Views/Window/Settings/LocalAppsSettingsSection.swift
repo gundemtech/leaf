@@ -210,9 +210,9 @@ private struct AppIconView: View {
             Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
                 .resizable()
                 .frame(width: 28, height: 28)
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: LeafRadius.sm, style: .continuous))
         } else {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
+            RoundedRectangle(cornerRadius: LeafRadius.sm, style: .continuous)
                 .fill(LeafColor.surface.inset)
                 .frame(width: 28, height: 28)
                 .overlay(
