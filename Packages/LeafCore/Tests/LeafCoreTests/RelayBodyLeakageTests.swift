@@ -1441,4 +1441,216 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "Space identifier MUST NOT appear in presence_state.state_json")
         }
     }
+
+    // MARK: - Phase Track-4 S2 — AppleScript surface walkbacks
+
+    /// Helper: assert that an adversarial payload field never reaches
+    /// `presence_state.state_json` after `writeEventsOffsetAndPresence`.
+    /// Each S2 event_kind below gets a dedicated walkback so a regression
+    /// at the per-adapter layer would surface a clear failure.
+    private func assertS2DoesNotLeak(
+        eventKind: String,
+        extraPayload: [String: String],
+        markers: [String],
+        collectorID: String,
+        file: StaticString = #file,
+        line: UInt = #line
+    ) throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        var payload: [String: String] = ["event_kind": eventKind]
+        for (k, v) in extraPayload { payload[k] = v }
+        let event = RawEvent(
+            timestamp: Date(),
+            signalType: .attention,
+            bundleID: nil,
+            payload: payload
+        )
+        let presenceState: [String: Any] = ["dummy": true]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: collectorID, sourceID: "\(collectorID):test", nowMs: nowMs),
+            presence: (provider: .linear, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql:
+                "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            for m in markers {
+                XCTAssertFalse(stateJSON.contains(m),
+                    "Marker '\(m)' MUST NOT appear in presence_state.state_json for \(eventKind)",
+                    file: file, line: line)
+            }
+        }
+    }
+
+    func testRelayDoesNotLeakXcodeActiveDocBody_S2() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "xcode_active_doc_changed",
+            extraPayload: ["doc_path": "/p", "body": "SECRET-XCODE-DOC-BODY-S2"],
+            markers: ["SECRET-XCODE-DOC-BODY-S2"],
+            collectorID: "applescript_xcode"
+        )
+    }
+
+    func testRelayDoesNotLeakXcodeBuildLogOutput_S2() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "xcode_build_state_changed",
+            extraPayload: ["build_state": "failed", "log_output": "SECRET-XCODE-BUILD-LOG-S2"],
+            markers: ["SECRET-XCODE-BUILD-LOG-S2"],
+            collectorID: "applescript_xcode"
+        )
+    }
+
+    func testRelayDoesNotLeakJetBrainsDocContent_S2() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "jetbrains_active_doc_changed",
+            extraPayload: [
+                "ide_bundle_id": "com.jetbrains.pycharm",
+                "doc_path": "/p.py",
+                "content": "SECRET-JETBRAINS-CONTENT-S2"
+            ],
+            markers: ["SECRET-JETBRAINS-CONTENT-S2"],
+            collectorID: "applescript_jetbrains"
+        )
+    }
+
+    func testRelayDoesNotLeakMusicLyrics_S2() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "music_track_changed",
+            extraPayload: ["track": "T", "artist": "A", "lyrics": "SECRET-MUSIC-LYRICS-S2"],
+            markers: ["SECRET-MUSIC-LYRICS-S2"],
+            collectorID: "applescript_music"
+        )
+    }
+
+    func testRelayDoesNotLeakSpotifyLyrics_S2() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "spotify_track_changed",
+            extraPayload: ["track": "T", "artist": "A", "lyrics": "SECRET-SPOTIFY-LYRICS-S2"],
+            markers: ["SECRET-SPOTIFY-LYRICS-S2"],
+            collectorID: "applescript_spotify"
+        )
+    }
+
+    func testRelayDoesNotLeakNotesBody_S2() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "notes_active_title_changed",
+            extraPayload: [
+                "note_title": "T",
+                "body": "SECRET-NOTE-BODY-MARKER-S2",
+                "plaintext": "SECRET-NOTE-PLAINTEXT-MARKER-S2"
+            ],
+            markers: ["SECRET-NOTE-BODY-MARKER-S2", "SECRET-NOTE-PLAINTEXT-MARKER-S2"],
+            collectorID: "applescript_notes"
+        )
+    }
+
+    func testRelayDoesNotLeakReminderTitle_S2() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "reminder_completed",
+            extraPayload: [
+                "list_name": "Inbox",
+                "completed_count_delta": "3",
+                "reminder_title": "SECRET-REMINDER-TITLE-S2",
+                "notes": "SECRET-REMINDER-NOTES-S2"
+            ],
+            markers: ["SECRET-REMINDER-TITLE-S2", "SECRET-REMINDER-NOTES-S2"],
+            collectorID: "applescript_reminders"
+        )
+    }
+
+    func testRelayDoesNotLeakCalendarEventTitle_S2() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "calendar_app_view_changed",
+            extraPayload: [
+                "view_mode": "week",
+                "visible_date_range_days": "7",
+                "event_title": "SECRET-EVENT-TITLE-S2",
+                "attendees": "SECRET-ATTENDEES-LIST-S2"
+            ],
+            markers: ["SECRET-EVENT-TITLE-S2", "SECRET-ATTENDEES-LIST-S2"],
+            collectorID: "applescript_calendar"
+        )
+    }
+
+    func testRelayDoesNotLeakMailBodyOrSubject_S2() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "mail_active_mailbox_changed",
+            extraPayload: [
+                "mailbox_name": "Inbox",
+                "body": "SECRET-MAIL-BODY-S2",
+                "subject": "SECRET-MAIL-SUBJECT-S2",
+                "from": "SECRET-MAIL-FROM-S2"
+            ],
+            markers: ["SECRET-MAIL-BODY-S2", "SECRET-MAIL-SUBJECT-S2", "SECRET-MAIL-FROM-S2"],
+            collectorID: "applescript_mail"
+        )
+    }
+
+    func testRelayDoesNotLeakZoomAttendees_S2() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "zoom_meeting_state_changed",
+            extraPayload: [
+                "meeting_state": "in_meeting",
+                "attendees": "SECRET-ZOOM-ATTENDEES-LIST-S2",
+                "password": "SECRET-ZOOM-PASSWORD-S2"
+            ],
+            markers: ["SECRET-ZOOM-ATTENDEES-LIST-S2", "SECRET-ZOOM-PASSWORD-S2"],
+            collectorID: "applescript_zoom"
+        )
+    }
+
+    func testRelayDoesNotLeakZoomTopic_S2() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "zoom_meeting_name_observed",
+            extraPayload: [
+                "meeting_topic": "T",
+                "password": "SECRET-ZOOM-NAME-PASSWORD-S2",
+                "chat_history": "SECRET-ZOOM-CHAT-S2"
+            ],
+            markers: ["SECRET-ZOOM-NAME-PASSWORD-S2", "SECRET-ZOOM-CHAT-S2"],
+            collectorID: "applescript_zoom"
+        )
+    }
+
+    func testRelayDoesNotLeakSafariCookiesOrSource_S2() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "safari_tabs_changed",
+            extraPayload: [
+                "tabs": "[]",
+                "cookies": "SECRET-SAFARI-COOKIES-S2",
+                "source": "SECRET-SAFARI-SOURCE-S2",
+                "history": "SECRET-SAFARI-HISTORY-S2"
+            ],
+            markers: ["SECRET-SAFARI-COOKIES-S2", "SECRET-SAFARI-SOURCE-S2", "SECRET-SAFARI-HISTORY-S2"],
+            collectorID: "applescript_safari"
+        )
+    }
+
+    func testRelayDoesNotLeakChromeCookiesOrSource_S2() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "chrome_tabs_changed",
+            extraPayload: [
+                "tabs": "[]",
+                "cookies": "SECRET-CHROME-COOKIES-S2",
+                "source": "SECRET-CHROME-SOURCE-S2"
+            ],
+            markers: ["SECRET-CHROME-COOKIES-S2", "SECRET-CHROME-SOURCE-S2"],
+            collectorID: "applescript_chrome"
+        )
+    }
+
+    func testRelayDoesNotLeakArcCookiesOrSource_S2() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "arc_tabs_changed",
+            extraPayload: [
+                "tabs": "[]",
+                "cookies": "SECRET-ARC-COOKIES-S2",
+                "source": "SECRET-ARC-SOURCE-S2"
+            ],
+            markers: ["SECRET-ARC-COOKIES-S2", "SECRET-ARC-SOURCE-S2"],
+            collectorID: "applescript_arc"
+        )
+    }
 }
