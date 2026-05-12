@@ -213,8 +213,34 @@ public enum EventLinksStore {
         if eventKind == GitHubEventKindKey.issueCommentAuthored.rawValue { return Schema.BodyKinds.ghIssueComment }
         if eventKind == GitHubEventKindKey.prReviewCommentAuthored.rawValue { return Schema.BodyKinds.ghPRReviewComment }
         if eventKind == "slack_thread_reply_aggregate" { return Schema.BodyKinds.slackThreadParent }
+        // Track-3 D4 — gh_issue_* body dispatch. Issue body indexed under the
+        // same body_kind as issue comments (mirrors FTS lines 119-122).
+        if eventKind == GitHubEventKindKey.issueOpened.rawValue
+            || eventKind == GitHubEventKindKey.issueClosed.rawValue {
+            return Schema.BodyKinds.ghIssueComment
+        }
+        // Track-3 D4 — gist description / release body / deployment description
+        // dispatch (mirrors FTS lines 126-135). Missed in D2 — closed here.
+        if eventKind == GitHubEventKindKey.gistCreated.rawValue
+            || eventKind == GitHubEventKindKey.gistUpdated.rawValue {
+            return Schema.BodyKinds.ghGistDescription
+        }
+        if eventKind == GitHubEventKindKey.releasePublished.rawValue {
+            return Schema.BodyKinds.ghReleaseBody
+        }
+        if eventKind == GitHubEventKindKey.deploymentCreated.rawValue {
+            return Schema.BodyKinds.ghDeploymentDescription
+        }
         if eventKind.hasPrefix("gh_pr_") { return Schema.BodyKinds.ghPR }
         return nil
+    }
+
+    /// Test-only accessor for `topLevelBodyKind`. Used by `DispatchCoverageTests`
+    /// parity fence — every `bodyBearing` event_kind across `GitHubEventKindKey`
+    /// + `SlackEventKindKey` must have a dispatch entry here. Mirrors the
+    /// `EventsFullTextStore.bodyKindForTesting` shim pattern (line 156).
+    public static func bodyKindForTesting(eventKind: String) -> String? {
+        topLevelBodyKind(forEventKind: eventKind)
     }
 
     private static func isSlackBody(_ kind: String) -> Bool {
