@@ -72,17 +72,30 @@ struct HomeView: View {
     // MARK: requires GitHubScopesReader env injection (Task 21)
     @Environment(GitHubScopesReader.self) private var scopesReader
     @Environment(GitHubOAuthService.self) private var githubOAuth
+    // MARK: requires SlackScopesReader env injection (Phase Track-3 D3 / Task 18)
+    @Environment(SlackScopesReader.self) private var slackScopes
+    @Environment(SlackOAuthService.self) private var slackOAuth
 
     /// Session-local dismiss flag for the proactive GitHub re-auth banner.
     /// Persisted across the same launch via UserDefaults keyed by
     /// `AppSessionID.current` so a fresh launch (new UUID) re-shows the banner.
     @State private var reauthBannerDismissed = false
+    /// Same per-launch dismiss pattern, separate key — Slack banner is
+    /// independent of GitHub banner; dismissing one must not silence the other.
+    @State private var slackReauthBannerDismissed = false
 
     private static let reauthBannerDismissKey = "github.reauth.bannerDismissedSessionID"
+    private static let slackReauthBannerDismissKey = "slack.reauth.bannerDismissedSessionID"
 
     private var shouldShowReauthBanner: Bool {
         guard !reauthBannerDismissed else { return false }
         let saved = UserDefaults.standard.string(forKey: Self.reauthBannerDismissKey)
+        return saved != AppSessionID.current
+    }
+
+    private var shouldShowSlackReauthBanner: Bool {
+        guard !slackReauthBannerDismissed else { return false }
+        let saved = UserDefaults.standard.string(forKey: Self.slackReauthBannerDismissKey)
         return saved != AppSessionID.current
     }
 
@@ -91,6 +104,10 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: LeafSpace.xl) {
                 if case let .connectedScopeOutdated(missing) = scopesReader.state, shouldShowReauthBanner {
                     reauthBanner(missingCount: missing.count)
+                }
+
+                if case let .connectedScopeOutdated(missing) = slackScopes.state, shouldShowSlackReauthBanner {
+                    slackReauthBanner(missingCount: missing.count)
                 }
 
                 switch reader.state {
@@ -136,6 +153,29 @@ struct HomeView: View {
                 UserDefaults.standard.set(AppSessionID.current,
                                           forKey: Self.reauthBannerDismissKey)
                 reauthBannerDismissed = true
+            }
+        )
+    }
+
+    /// Phase Track-3 D3 / Task 19 — proactive Slack scope-bump banner. Mirrors
+    /// the GitHub banner above byte-for-byte; uses an independent per-launch
+    /// `AppSessionID.current` dismiss key so the two providers' banners are
+    /// silenced separately. CTA calls `slackOAuth.connect()` — its default
+    /// arg path uses `SlackScopesService.requested()` (see Task 10).
+    @ViewBuilder
+    private func slackReauthBanner(missingCount: Int) -> some View {
+        LeafBanner(
+            tone: .warning,
+            title: "Slack permissions need a refresh",
+            description: "\(missingCount) new event type\(missingCount == 1 ? "" : "s") \(missingCount == 1 ? "is" : "are") blocked until you re-authorize.",
+            ctaTitle: "Re-authorize Slack",
+            onCTA: {
+                Task { await slackOAuth.connect() }
+            },
+            onDismiss: {
+                UserDefaults.standard.set(AppSessionID.current,
+                                          forKey: Self.slackReauthBannerDismissKey)
+                slackReauthBannerDismissed = true
             }
         )
     }
