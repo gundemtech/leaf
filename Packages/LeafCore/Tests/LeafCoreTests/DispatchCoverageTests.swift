@@ -184,4 +184,20 @@ final class DispatchCoverageTests: XCTestCase {
             )
         }
     }
+
+    /// #13 — every Slack body-bearing case has a body-kind dispatch entry in
+    /// `DetectorPipeline.topLevelBodyKind`. Parallels test #7 (FTS) + #10
+    /// (EventLinks). Defense-in-depth fence — currently passes since D3 wired
+    /// canvas + bookmark dispatch into DetectorPipeline; this guards against
+    /// future drift if a new Slack body-bearing case is added without updating
+    /// the Detector dispatcher.
+    func testEverySlackBodyBearingKindHasDetectorPipelineDispatchEntry() {
+        for kind in SlackEventKindKey.bodyBearing {
+            let bodyKind = DetectorPipeline.bodyKindForTesting(eventKind: kind.rawValue)
+            XCTAssertNotNil(
+                bodyKind,
+                "Body-bearing Slack event_kind \(kind.rawValue) must have a DetectorPipeline dispatch entry"
+            )
+        }
+    }
 }
