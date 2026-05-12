@@ -20,6 +20,13 @@ public enum BodyKind: String, Sendable, Equatable, CaseIterable {
     // even though current substrate detectors do not fire on them.
     case slackCanvasTitle = "slack_canvas_title"
     case slackBookmarkTitle = "slack_bookmark_title"
+    // Phase Track-3 D4 — GitHub D2 body provenance (gist description /
+    // release body / deployment description). Mirrors `Schema.BodyKinds.*` and
+    // the FTS dispatch (`EventsFullTextStore.topLevelBodyKind` lines 126-135).
+    // Detectors fire on these like any other user-authored text body.
+    case ghGistDescription = "gh_gist_description"
+    case ghReleaseBody = "gh_release_body"
+    case ghDeploymentDescription = "gh_deployment_description"
 }
 
 public struct DecisionHit: Sendable, Equatable {

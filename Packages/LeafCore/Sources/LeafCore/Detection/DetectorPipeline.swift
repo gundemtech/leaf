@@ -286,6 +286,25 @@ public enum DetectorPipeline {
         if eventKind == GitHubEventKindKey.issueCommentAuthored.rawValue { return .ghIssueComment }
         if eventKind == GitHubEventKindKey.prReviewCommentAuthored.rawValue { return .ghPRReviewComment }
         if eventKind == "slack_thread_reply_aggregate" { return .slackThreadParent }
+        // Track-3 D4 — gh_issue_* body dispatch (mirrors FTS lines 119-122).
+        // Issue body indexed under same body_kind as issue comments.
+        if eventKind == GitHubEventKindKey.issueOpened.rawValue
+            || eventKind == GitHubEventKindKey.issueClosed.rawValue {
+            return .ghIssueComment
+        }
+        // Track-3 D4 — gist description / release body / deployment description
+        // dispatch (mirrors FTS lines 126-135). Detectors fire on these like
+        // any other user-authored text body.
+        if eventKind == GitHubEventKindKey.gistCreated.rawValue
+            || eventKind == GitHubEventKindKey.gistUpdated.rawValue {
+            return .ghGistDescription
+        }
+        if eventKind == GitHubEventKindKey.releasePublished.rawValue {
+            return .ghReleaseBody
+        }
+        if eventKind == GitHubEventKindKey.deploymentCreated.rawValue {
+            return .ghDeploymentDescription
+        }
         if eventKind.hasPrefix("gh_pr_") { return .ghPR }
         // Phase Track-3 D3 — Slack canvas + bookmark titles. Mirrors
         // EventsFullTextStore.topLevelBodyKind so any future Slack detectors
@@ -300,6 +319,15 @@ public enum DetectorPipeline {
             return .slackBookmarkTitle
         }
         return nil
+    }
+
+    /// Test-only accessor for `topLevelBodyKind`. Returns the raw `String?`
+    /// rather than the typed `BodyKind?` so `DispatchCoverageTests` can use a
+    /// uniform parity-assertion shape across FTS / EventLinks / Detector
+    /// dispatchers. Mirrors `EventsFullTextStore.bodyKindForTesting` (line 156)
+    /// and `EventLinksStore.bodyKindForTesting`.
+    public static func bodyKindForTesting(eventKind: String) -> String? {
+        topLevelBodyKind(forEventKind: eventKind)?.rawValue
     }
 
     private static func decodeStringArray(_ raw: String, key: String) -> [String] {

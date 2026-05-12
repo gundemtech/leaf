@@ -171,4 +171,17 @@ final class DispatchCoverageTests: XCTestCase {
             )
         }
     }
+
+    /// #12 — every GitHub body-bearing case has a body-kind dispatch entry in
+    /// `DetectorPipeline.topLevelBodyKind`. Parallels test #3 (FTS) + #9
+    /// (EventLinks). Test routes via the `bodyKindForTesting` shim.
+    func testEveryGitHubBodyBearingKindHasDetectorPipelineDispatchEntry() {
+        for kind in GitHubEventKindKey.bodyBearing {
+            let bodyKind = DetectorPipeline.bodyKindForTesting(eventKind: kind.rawValue)
+            XCTAssertNotNil(
+                bodyKind,
+                "Body-bearing GitHub event_kind \(kind.rawValue) must have a DetectorPipeline dispatch entry"
+            )
+        }
+    }
 }
