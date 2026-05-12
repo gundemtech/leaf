@@ -200,4 +200,20 @@ final class DispatchCoverageTests: XCTestCase {
             )
         }
     }
+
+    /// #14 — non-body-bearing `gh_pr_*` event_kinds must return nil from
+    /// `DetectorPipeline.topLevelBodyKind`. Parallels test #11 (EventLinks).
+    /// Guards against re-introduction of the `hasPrefix("gh_pr_")` catch-all.
+    func testNonBodyBearingGitHubPRKindsReturnNilFromDetectorPipeline() {
+        let nonBodyBearing = [
+            GitHubEventKindKey.prReviewThreadResolved.rawValue,
+            GitHubEventKindKey.prAwaitingReviewCount.rawValue
+        ]
+        for raw in nonBodyBearing {
+            XCTAssertNil(
+                DetectorPipeline.bodyKindForTesting(eventKind: raw),
+                "DetectorPipeline must NOT dispatch a body-kind for non-body-bearing \(raw)"
+            )
+        }
+    }
 }

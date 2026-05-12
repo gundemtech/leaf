@@ -305,7 +305,16 @@ public enum DetectorPipeline {
         if eventKind == GitHubEventKindKey.deploymentCreated.rawValue {
             return .ghDeploymentDescription
         }
-        if eventKind.hasPrefix("gh_pr_") { return .ghPR }
+        // Track-3 D4 — explicit gh_pr_* cases instead of `hasPrefix("gh_pr_")`
+        // catch-all (which would spuriously match `gh_pr_review_thread_resolved`
+        // and `gh_pr_awaiting_review_count` — both body-less — and route them to
+        // detectors with empty body strings). Mirrors FTS lines 114-118 and the
+        // EventLinksStore D4 fix.
+        if eventKind == GitHubEventKindKey.prOpened.rawValue
+            || eventKind == GitHubEventKindKey.prMerged.rawValue
+            || eventKind == GitHubEventKindKey.prClosed.rawValue {
+            return .ghPR
+        }
         // Phase Track-3 D3 — Slack canvas + bookmark titles. Mirrors
         // EventsFullTextStore.topLevelBodyKind so any future Slack detectors
         // (or coverage fences asserting parity between FTS + detector dispatch
