@@ -81,7 +81,17 @@ public enum SlackOAuthEndpoints {
     /// Phase 4.7.B-12 — added `files:read` for `search.files` (file upload
     /// aggregate). Combined re-consent с `dnd:read` (B-10) — юзер проходит
     /// Disconnect → Connect один раз для обоих новых scope'ов.
+    @available(*, deprecated, message: "Use SlackScopesService.requested() for live scope set.")
     public static let userScopes = "users:read,users.profile:read,search:read,channels:history,groups:history,im:history,mpim:history,dnd:read,files:read"
+
+    /// Phase Track-3 D3 — canonical comma-separated user_scope parameter built
+    /// from `SlackScopesService.requested()` (required core ∪ optional). Slack's
+    /// authorize URL accepts `user_scope` as comma-separated (NOT space — что у
+    /// GitHub Device Flow). Replaces the static `userScopes` constant в new call
+    /// sites (Task 10).
+    public static func requestedScopeParameter() -> String {
+        SlackScopesService.requested().joined(separator: ",")
+    }
 
     /// DistributedNotification name, постится при connect/disconnect/refreshDenied.
     /// Слушают: ConnectionsSettings (UI re-render), SlackCollector (Phase 4.4 reload).
