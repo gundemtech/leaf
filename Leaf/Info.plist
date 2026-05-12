@@ -43,6 +43,10 @@
 	<string>$(LINEAR_OAUTH_CLIENT_ID)</string>
 	<key>LeafSlackOAuthClientID</key>
 	<string>$(SLACK_OAUTH_CLIENT_ID)</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Leaf reads only whether you're currently in a meeting — never event titles, attendees, or location.</string>
+	<key>NSFocusStatusUsageDescription</key>
+	<string>Leaf reads only whether your Focus mode is on or off.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string></string>
 	<key>NSSupportsAutomaticGraphicsSwitching</key>

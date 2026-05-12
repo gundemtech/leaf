@@ -13,6 +13,8 @@ import Foundation
 import SwiftUI
 import AppKit
 import ApplicationServices
+import EventKit
+import Intents
 import OSLog
 
 @MainActor
@@ -20,18 +22,28 @@ import OSLog
 final class PermissionsService {
     private(set) var axGranted: Bool = false
     private(set) var fdaGranted: Bool = false
+    /// Phase Track-4 S1 — Calendar full-access TCC grant state.
+    private(set) var calendarGranted: Bool = false
+    /// Phase Track-4 S1 — Focus status TCC grant state.
+    private(set) var focusGranted: Bool = false
 
     private var pollTimer: Timer?
     private let axCheck: @Sendable () -> Bool
     private let fdaCheck: @Sendable () -> Bool
+    private let calendarCheck: @Sendable () -> Bool
+    private let focusCheck: @Sendable () -> Bool
     private let logger = Logger(subsystem: "tech.gundem.leaf.app", category: "permissions")
 
     init(
         axCheck: @escaping @Sendable () -> Bool = { AXIsProcessTrusted() },
-        fdaCheck: @escaping @Sendable () -> Bool = { PermissionsService.defaultFDAProbe() }
+        fdaCheck: @escaping @Sendable () -> Bool = { PermissionsService.defaultFDAProbe() },
+        calendarCheck: @escaping @Sendable () -> Bool = { PermissionsService.defaultCalendarProbe() },
+        focusCheck: @escaping @Sendable () -> Bool = { PermissionsService.defaultFocusProbe() }
     ) {
         self.axCheck = axCheck
         self.fdaCheck = fdaCheck
+        self.calendarCheck = calendarCheck
+        self.focusCheck = focusCheck
         refresh()
     }
 
@@ -40,6 +52,8 @@ final class PermissionsService {
     func refresh() {
         axGranted = axCheck()
         fdaGranted = fdaCheck()
+        calendarGranted = calendarCheck()
+        focusGranted = focusCheck()
     }
 
     // MARK: - Polling
@@ -79,6 +93,36 @@ final class PermissionsService {
         openSystemSettings("Privacy_AllFiles")
     }
 
+    // MARK: - Phase Track-4 S1 — Calendar + Focus grant flow
+
+    /// Triggers Calendar permission prompt via EventKit. On first call shows
+    /// the system modal; on subsequent calls (denial state cached by TCC) the
+    /// callback fires immediately with the current status. Deep-link to
+    /// Settings via `openCalendarSettings()` is the graceful re-grant path.
+    func triggerCalendarPrompt() {
+        Task {
+            let store = EKEventStore()
+            if #available(macOS 14.0, *) {
+                _ = try? await store.requestFullAccessToEvents()
+            }
+            await MainActor.run { self.refresh() }
+        }
+    }
+
+    func triggerFocusPrompt() {
+        INFocusStatusCenter.default.requestAuthorization { [weak self] _ in
+            Task { @MainActor in self?.refresh() }
+        }
+    }
+
+    func openCalendarSettings() {
+        openSystemSettings("Privacy_Calendars")
+    }
+
+    func openFocusSettings() {
+        openSystemSettings("Privacy_Focus")
+    }
+
     private func openSystemSettings(_ pane: String) {
         guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)") else {
             logger.error("invalid System Settings URL for pane \(pane, privacy: .public)")
@@ -109,6 +153,21 @@ final class PermissionsService {
         } catch {
             return false
         }
+    }
+
+    /// Phase Track-4 S1 — Calendar probe. `.fullAccess` is the only state we
+    /// accept; `.writeOnly` / `.denied` / `.restricted` / `.notDetermined` all
+    /// return false.
+    nonisolated static func defaultCalendarProbe() -> Bool {
+        if #available(macOS 14.0, *) {
+            return EKEventStore.authorizationStatus(for: .event) == .fullAccess
+        }
+        return false
+    }
+
+    /// Phase Track-4 S1 — Focus probe.
+    nonisolated static func defaultFocusProbe() -> Bool {
+        INFocusStatusCenter.default.authorizationStatus == .authorized
     }
 }
 
