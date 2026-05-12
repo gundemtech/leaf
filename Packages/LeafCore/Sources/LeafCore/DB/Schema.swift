@@ -289,6 +289,9 @@ public enum Schema {
         public static let ghGistDescription = "gh_gist_description"
         public static let ghReleaseBody = "gh_release_body"
         public static let ghDeploymentDescription = "gh_deployment_description"
+        // Phase Track-3 D3 — Slack body provenance (canvas + bookmark titles per ADR-010 §6).
+        public static let slackCanvasTitle = "slack_canvas_title"
+        public static let slackBookmarkTitle = "slack_bookmark_title"
     }
 
     /// Phase Track-1 D2 — cross-source association graph row.
@@ -500,6 +503,13 @@ public enum CollectorID {
     /// `lastModifiedMs` holds last cold tick ms (catch-up gate uses
     /// `now - lastModifiedMs > 24h`).
     public static let githubColdPolling = "github_cold_polling"
+    /// Phase Track-3 D3 — Slack warm-tier (15m): reactions + pins + bookmarks +
+    /// reminders + scheduled + stars + user.conversations. sourceID `slack:warm:<workspaceID>`.
+    public static let slackWarmPolling = "slack_warm_polling"
+    /// Phase Track-3 D3 — Slack cold-tier (4am local). sourceID `slack:cold:<workspaceID>`.
+    /// `lastModifiedMs` holds last cold tick ms (catch-up gate uses
+    /// `now - lastModifiedMs > 24h`).
+    public static let slackColdPolling = "slack_cold_polling"
 }
 
 /// Канонические `provider` значения для `integrations` таблицы. Литералы —
