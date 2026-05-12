@@ -1193,7 +1193,7 @@ public final class Database: @unchecked Sendable {
     /// Возвращает (state, ts_ms) последнего slack huddle_state_change context-event,
     /// или nil если ни одного нет в DB. Используется SlackCollector для transition
     /// detection. Фильтр по `signal_type='context'` + JSON1 `payload.source='slack'`
-    /// + `payload.event_kind='huddle_state_change'` исключает action events
+    /// + `payload.event_kind='slack_huddle_state_change'` исключает action events
     /// (message aggregates) и события других providers.
     public func readLatestSlackHuddleEvent() throws -> SlackHuddleEventSummary? {
         try pool.read { db in
@@ -1203,7 +1203,7 @@ public final class Database: @unchecked Sendable {
                 FROM \(Schema.Events.tableName)
                 WHERE \(Schema.Events.signalType) = ?
                   AND json_extract(\(Schema.Events.payloadJSON), '$.source') = 'slack'
-                  AND json_extract(\(Schema.Events.payloadJSON), '$.event_kind') = 'huddle_state_change'
+                  AND json_extract(\(Schema.Events.payloadJSON), '$.event_kind') = 'slack_huddle_state_change'
                   AND json_extract(\(Schema.Events.payloadJSON), '$.state') IS NOT NULL
                 ORDER BY \(Schema.Events.ts) DESC
                 LIMIT 1

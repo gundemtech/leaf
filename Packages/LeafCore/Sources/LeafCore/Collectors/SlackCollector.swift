@@ -614,7 +614,7 @@ public actor SlackCollector {
         // message ts (count > 1 не имеет single moment).
         var payload: [String: String] = [
             "source": "slack",
-            "event_kind": "message_authored_aggregate",
+            "event_kind": SlackEventKindKey.slackMessageAuthored.rawValue,
             "channel_name": channel.channelName,
             "count": String(channel.count),
             "period_start_ms": String(periodStartMs),
@@ -881,7 +881,7 @@ public actor SlackCollector {
             bundleID: nil,
             payload: [
                 "source": "slack",
-                "event_kind": "huddle_state_change",
+                "event_kind": SlackEventKindKey.slackHuddleStateChange.rawValue,
                 "state": state.rawValue
             ]
         )

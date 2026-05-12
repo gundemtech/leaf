@@ -127,10 +127,10 @@ private struct ProviderIcon: View {
              GitHubEventKindKey.discussionCommentAuthored.rawValue:
             return "text.bubble"
         case GitHubEventKindKey.actionsRunInitiated.rawValue: return "gearshape.2"
-        case "message_authored_aggregate", "slack_thread_reply_aggregate": return "message"
+        case "slack_message_authored_aggregate", "slack_thread_reply_aggregate": return "message"
         case "slack_mention_received_aggregate": return "at"
         case "slack_file_uploaded_aggregate": return "paperclip"
-        case "huddle_state_change": return "person.wave.2"
+        case "slack_huddle_state_change": return "person.wave.2"
         case "slack_status_change": return "face.smiling"
         default: break
         }

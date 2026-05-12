@@ -9,8 +9,8 @@ import LeafMCPProtocol
 /// Output payload (versioned `version: 1` через `ToolResponseBuilder`):
 ///   - `period`, `from`, `to` — окно
 ///   - `messagesCount` — сумма count'ов action events
-///     `payload.source='slack' AND event_kind='message_authored_aggregate'`
-///   - `huddleMinutes` — derived из context events `huddle_state_change`
+///     `payload.source='slack' AND event_kind='slack_message_authored_aggregate'`
+///   - `huddleMinutes` — derived из context events `slack_huddle_state_change`
 ///   - `byChannel[]` — `{channel, count}`, top-5 by count DESC.
 ///     DM channels уже слиты в "DM" bucket на parser-level (ADR-010).
 ///

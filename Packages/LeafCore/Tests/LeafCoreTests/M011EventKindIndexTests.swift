@@ -53,7 +53,7 @@ final class M011EventKindIndexTests: XCTestCase {
         try db.readSQL { rawDB in
             let applied = try String.fetchAll(rawDB, sql: "SELECT identifier FROM grdb_migrations ORDER BY identifier")
             XCTAssertTrue(applied.contains("011_event_kind_index"))
-            XCTAssertEqual(applied.count, 16)
+            XCTAssertEqual(applied.count, 17)
         }
     }
 }

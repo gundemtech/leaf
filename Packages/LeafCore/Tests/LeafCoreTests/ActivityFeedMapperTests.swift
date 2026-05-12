@@ -94,7 +94,7 @@ final class ActivityFeedMapperTests: XCTestCase {
     // MARK: - Slack
 
     func testMapsSlackMessageAuthoredAggregate() {
-        let payload = #"{"source":"slack","event_kind":"message_authored_aggregate","channel_name":"engineering","count":"5","reactions_count":"3"}"#
+        let payload = #"{"source":"slack","event_kind":"slack_message_authored_aggregate","channel_name":"engineering","count":"5","reactions_count":"3"}"#
         let entry = ActivityFeedMapper.map(
             id: 30, timestampMs: ts, signalType: "action", bundleID: nil, payloadJSON: payload
         )
@@ -104,7 +104,7 @@ final class ActivityFeedMapperTests: XCTestCase {
     }
 
     func testMapsHuddleStateChange() {
-        let payload = #"{"source":"slack","event_kind":"huddle_state_change","state":"in_a_huddle"}"#
+        let payload = #"{"source":"slack","event_kind":"slack_huddle_state_change","state":"in_a_huddle"}"#
         let entry = ActivityFeedMapper.map(
             id: 31, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
         )
@@ -165,7 +165,7 @@ final class ActivityFeedMapperTests: XCTestCase {
 
         // Slack message aggregate with text field.
         let slackPayload = """
-        {"source":"slack","event_kind":"message_authored_aggregate","channel_name":"eng","count":"1","text":"\(sentinel)","preview":"\(sentinel)","message_text":"\(sentinel)"}
+        {"source":"slack","event_kind":"slack_message_authored_aggregate","channel_name":"eng","count":"1","text":"\(sentinel)","preview":"\(sentinel)","message_text":"\(sentinel)"}
         """
         let slack = ActivityFeedMapper.map(
             id: 52, timestampMs: ts, signalType: "action", bundleID: nil, payloadJSON: slackPayload

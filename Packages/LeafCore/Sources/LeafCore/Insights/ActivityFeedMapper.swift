@@ -346,7 +346,7 @@ public enum ActivityFeedMapper {
         var secondary: String? = nil
 
         switch kind {
-        case "message_authored_aggregate":
+        case "slack_message_authored_aggregate":
             guard let channel else { return nil }
             let count = sanitize(payload["count"]) ?? "1"
             primary = "\(channel): \(count) message\(count == "1" ? "" : "s")"
@@ -372,7 +372,7 @@ public enum ActivityFeedMapper {
                     return "\(v) \(label)"
                 }
             if !parts.isEmpty { secondary = parts.joined(separator: " · ") }
-        case "huddle_state_change":
+        case "slack_huddle_state_change":
             let state = sanitize(payload["state"]) ?? "?"
             primary = "Huddle: \(state)"
         case "slack_status_change":

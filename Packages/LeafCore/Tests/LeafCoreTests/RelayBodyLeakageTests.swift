@@ -115,7 +115,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             signalType: .action,
             bundleID: "com.tinyspeck.slackmacgap",
             payload: [
-                "event_kind": "message_authored_aggregate",
+                "event_kind": "slack_message_authored_aggregate",
                 "channel_name": "general",
                 Schema.EventPayloadKeys.messagesJson: messagesJSON
             ]
