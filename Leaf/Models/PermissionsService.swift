@@ -15,6 +15,7 @@ import AppKit
 import ApplicationServices
 import EventKit
 import Intents
+import LeafCore
 import OSLog
 
 @MainActor
@@ -27,6 +28,14 @@ final class PermissionsService {
     /// Phase Track-4 S1 — Focus status TCC grant state.
     private(set) var focusGranted: Bool = false
 
+    /// Phase Track-4 S2 — shared Local Apps preference store (per-app enabled
+    /// flag + per-(app, sub-field) opt-in). Backed by UserDefaults; both the
+    /// Settings UI and the Agent's `AppleScriptCollector` read this store.
+    let localAppsStore: LocalAppsStore
+    /// Phase Track-4 S2 — TCC state cache for per-app AppleScript grants
+    /// (24h denial backoff). Same UserDefaults backing as the Agent's instance.
+    let localAppsPermissionStore: AppleScriptPermissionStore
+
     private var pollTimer: Timer?
     private let axCheck: @Sendable () -> Bool
     private let fdaCheck: @Sendable () -> Bool
@@ -38,12 +47,16 @@ final class PermissionsService {
         axCheck: @escaping @Sendable () -> Bool = { AXIsProcessTrusted() },
         fdaCheck: @escaping @Sendable () -> Bool = { PermissionsService.defaultFDAProbe() },
         calendarCheck: @escaping @Sendable () -> Bool = { PermissionsService.defaultCalendarProbe() },
-        focusCheck: @escaping @Sendable () -> Bool = { PermissionsService.defaultFocusProbe() }
+        focusCheck: @escaping @Sendable () -> Bool = { PermissionsService.defaultFocusProbe() },
+        localAppsStore: LocalAppsStore = LocalAppsStore(),
+        localAppsPermissionStore: AppleScriptPermissionStore = AppleScriptPermissionStore()
     ) {
         self.axCheck = axCheck
         self.fdaCheck = fdaCheck
         self.calendarCheck = calendarCheck
         self.focusCheck = focusCheck
+        self.localAppsStore = localAppsStore
+        self.localAppsPermissionStore = localAppsPermissionStore
         refresh()
     }
 
@@ -121,6 +134,27 @@ final class PermissionsService {
 
     func openFocusSettings() {
         openSystemSettings("Privacy_Focus")
+    }
+
+    // MARK: - Phase Track-4 S2 — Local Apps grant flow
+
+    /// Deep-link to System Settings → Privacy → Automation. Used when the
+    /// user denied TCC for an AppleScript adapter and wants to re-grant.
+    func openAutomationSettings() {
+        openSystemSettings("Privacy_Automation")
+    }
+
+    /// Settings UI calls this when the user flips the Local Apps toggle for
+    /// `bundleID`. Wraps `LocalAppsStore.setEnabled` so the Observable
+    /// surface is in sync.
+    func setLocalAppEnabled(_ bundleID: String, _ enabled: Bool) {
+        localAppsStore.setEnabled(bundleID, enabled)
+    }
+
+    /// Settings UI calls this when the user flips a per-app sub-field opt-in
+    /// (Mail "mailboxName" / Zoom "ownMeetingTopic").
+    func setLocalAppSubFieldOptedIn(_ bundleID: String, field: String, optedIn: Bool) {
+        localAppsStore.setSubFieldOptedIn(bundleID, field: field, optedIn: optedIn)
     }
 
     private func openSystemSettings(_ pane: String) {
