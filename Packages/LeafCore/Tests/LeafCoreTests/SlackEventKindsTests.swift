@@ -43,13 +43,6 @@ final class SlackEventKindsTests: XCTestCase {
                        "Duplicate rawValue across cases")
     }
 
-    func testRequestedCoreSize() {
-        XCTAssertEqual(SlackEventKindKey.requestedCore().count, 9,
-                       "Existing 9 scopes: users:read, users.profile:read, search:read, channels:history, groups:history, im:history, mpim:history, dnd:read, files:read")
-    }
-
-    func testRequestedOptionalSize() {
-        XCTAssertEqual(SlackEventKindKey.requestedOptional().count, 9,
-                       "9 new D3 scopes")
-    }
+    // Scope-catalogue tests moved to `SlackScopesServiceTests` in Task 8 —
+    // catalogues now live on `SlackScopesService`, not `SlackEventKindKey`.
 }

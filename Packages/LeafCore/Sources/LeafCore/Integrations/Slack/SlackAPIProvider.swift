@@ -12,21 +12,8 @@
 
 import Foundation
 
-/// Phase Track-3 D3 — minimal scope-check protocol decoupling warm/cold collectors
-/// from the `SlackScopesService` actor that Task 8 will introduce.
-///
-/// Why a protocol shim:
-/// - Warm/cold collectors (Tasks 12 / 14) land before the scopes service actor.
-/// - Tests need a synchronous fake that does not require a Database round-trip
-///   nor a running OAuth flow.
-/// - Task 8 conforms the production actor to this protocol; no collector code
-///   changes when the actor lands. Mirrors GitHub D2 `GitHubScopesChecking` precedent.
-public protocol SlackScopesChecking: Sendable {
-    /// Returns `true` iff the named scope is part of the active Slack integration's
-    /// granted scope set. Unknown / empty / disconnected integrations return
-    /// `false` (caller treats as "not granted" → skip gated endpoint).
-    func has(_ scope: String) async -> Bool
-}
+// Note: `SlackScopesChecking` protocol now lives in `SlackScopesChecking.swift`
+// (Task 8 extracted it into its own file alongside `SlackScopesService`).
 
 public protocol SlackAPIProvider: Sendable {
     /// One tick = (huddle state + message counts batched per channel since `since`).

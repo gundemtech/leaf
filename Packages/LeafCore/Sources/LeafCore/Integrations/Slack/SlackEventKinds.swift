@@ -59,21 +59,8 @@ public enum SlackEventKindKey: String, CaseIterable, Sendable, Hashable {
         .slackBookmarkAdded, .slackBookmarkRemoved
     ]
 
-    /// Scopes without which Slack baseline collector cannot function.
-    /// Re-auth banner surfaces missing core as actionable blocker.
-    public static func requestedCore() -> [String] {
-        [
-            "users:read", "users.profile:read", "search:read",
-            "channels:history", "groups:history", "im:history", "mpim:history",
-            "dnd:read", "files:read"
-        ].sorted()
-    }
-
-    /// Scopes that unlock D3 features. Banner surfaces missing optional informationally.
-    public static func requestedOptional() -> [String] {
-        [
-            "reactions:read", "pins:read", "bookmarks:read", "reminders:read",
-            "chat:read", "stars:read", "canvases:read", "emoji:read", "usergroups:read"
-        ].sorted()
-    }
+    // Scope catalogues (`requiredCore` / `requiredOptional` / `requested()`)
+    // moved to `SlackScopesService` in Task 8 — single source of truth for
+    // OAuth scope sets mirrors the GitHub D2 separation precedent
+    // (`GitHubScopesService` owns scope catalogues; `GitHubEventKindKey` does not).
 }
