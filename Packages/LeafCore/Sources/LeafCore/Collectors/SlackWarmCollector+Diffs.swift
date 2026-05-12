@@ -37,9 +37,15 @@ public struct SlackUserConversationsDiffResult: Sendable, Hashable {
     }
 }
 
-// MARK: - SlackWarmCollector (placeholder; Task 12 promotes to actor)
+// MARK: - SlackWarmCollector — pure static diff helpers
+//
+// The actor body lives in `SlackWarmCollector.swift` (Task 12). This file
+// hosts the pure helpers as an extension on the actor type — callable via
+// `SlackWarmCollector.<helper>` from both the actor's `performTick` and
+// outside (unit tests, future cold-tier reuse where shape coincides).
+//
 
-public enum SlackWarmCollector {
+extension SlackWarmCollector {
 
     /// Pure: rank channels by `latestTs` desc; `nil` latestTs ranks last;
     /// deterministic tie-break on `id` ascending; cap at top-10.

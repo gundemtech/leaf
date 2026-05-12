@@ -246,6 +246,24 @@ public enum Schema {
         public static let dependabotPackageName = "dependabot_package_name"
         public static let auditAction = "audit_action"
         public static let auditActorLogin = "audit_actor_login"
+        // Phase Track-3 D3 — Slack warm/cold payload keys.
+        public static let workspaceId = "workspace_id"
+        public static let userId = "user_id"
+        public static let channelId = "channel_id"
+        public static let channelName = "channel_name"
+        public static let itemRef = "item_ref"
+        public static let emojiBucket = "emoji_bucket"
+        public static let pinnedAtMs = "pinned_at_ms"
+        public static let bookmarkId = "bookmark_id"
+        public static let bookmarkTitle = "title"
+        public static let bookmarkURL = "url"
+        public static let lastEditedMs = "last_edited_ms"
+        public static let reminderId = "reminder_id"
+        public static let dueTs = "due_ts"
+        public static let completedTs = "completed_ts"
+        public static let scheduledMessageId = "scheduled_message_id"
+        public static let scheduledFor = "scheduled_for"
+        public static let savedAtMs = "saved_at_ms"
     }
 
     /// Phase Track-1 D2 — FTS5 contentless virtual table over event bodies
@@ -467,6 +485,17 @@ public enum Schema {
         public static let githubSecretAlertsPrefix = "github_secret_alerts:"
         public static let githubCodeAlertsPrefix = "github_code_alerts:"
         public static let githubDependabotAlertsPrefix = "github_dependabot_alerts:"
+
+        // Slack D3 — warm-tier (15m) snapshot kinds. Per-channel fans live under
+        // singleton snapshots as JSON arrays of channel-keyed records (top-10
+        // member-channels cap applied by collector before persistence).
+        public static let slackMemberChannelsTop10 = "slack_member_channels_top10"
+        public static let slackPinsPerChannel = "slack_pins_per_channel"
+        public static let slackBookmarksPerChannel = "slack_bookmarks_per_channel"
+        public static let slackReminders = "slack_reminders"
+        public static let slackScheduledMessages = "slack_scheduled_messages"
+        public static let slackStars = "slack_stars"
+        public static let slackUserConversations = "slack_user_conversations"
     }
 }
 

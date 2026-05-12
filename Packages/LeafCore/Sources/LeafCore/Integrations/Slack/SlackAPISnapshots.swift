@@ -19,7 +19,7 @@ import Foundation
 /// One channel the authed user is a member of, with the latest message ts the
 /// API reported (used for top-10 ranking by recency). `latestTs` is `nil` when
 /// Slack omitted the field (e.g., channel has no messages or member-only metadata).
-public struct SlackMemberChannel: Sendable, Hashable {
+public struct SlackMemberChannel: Sendable, Hashable, Codable {
     public let id: String
     public let name: String
     public let latestTs: Int64?
@@ -32,7 +32,7 @@ public struct SlackMemberChannel: Sendable, Hashable {
 }
 
 /// Top-N member channels ranked by `latestTs` desc (collector enforces N=10).
-public struct SlackMemberChannelsTopList: Sendable, Hashable {
+public struct SlackMemberChannelsTopList: Sendable, Hashable, Codable {
     public let channels: [SlackMemberChannel]
 
     public init(channels: [SlackMemberChannel]) {
@@ -75,7 +75,7 @@ public struct SlackReactionsBatch: Sendable, Hashable {
 /// Per-channel pin id-set used for set-diff emission. Only item refs (the
 /// "channelID:messageTs" composite or "file:fileID") are retained — ADR-010
 /// forbids pinned-message body capture in this tier.
-public struct SlackChannelPinsSnapshot: Sendable, Hashable {
+public struct SlackChannelPinsSnapshot: Sendable, Hashable, Codable {
     public let channelID: String
     public let pinItemRefs: [String]
 
@@ -90,7 +90,7 @@ public struct SlackChannelPinsSnapshot: Sendable, Hashable {
 /// One bookmark on a channel. `title` and `link` are structured user metadata
 /// (not message bodies) and are captured directly — these are the bookmark's
 /// reason-for-existing fields surfaced by Slack's bookmarks API.
-public struct SlackBookmark: Sendable, Hashable {
+public struct SlackBookmark: Sendable, Hashable, Codable {
     public let channelID: String
     public let id: String
     public let title: String
@@ -107,7 +107,7 @@ public struct SlackBookmark: Sendable, Hashable {
 }
 
 /// Per-channel bookmarks snapshot used for diffing (added / removed / edited).
-public struct SlackChannelBookmarksSnapshot: Sendable, Hashable {
+public struct SlackChannelBookmarksSnapshot: Sendable, Hashable, Codable {
     public let channelID: String
     public let bookmarks: [SlackBookmark]
 
@@ -121,7 +121,7 @@ public struct SlackChannelBookmarksSnapshot: Sendable, Hashable {
 
 /// One reminder. `dueTs` / `completedTs` are epoch ms; either can be nil for
 /// reminders that are not yet due or not yet completed.
-public struct SlackReminder: Sendable, Hashable {
+public struct SlackReminder: Sendable, Hashable, Codable {
     public let id: String
     public let dueTs: Int64?
     public let completedTs: Int64?
@@ -133,7 +133,7 @@ public struct SlackReminder: Sendable, Hashable {
     }
 }
 
-public struct SlackRemindersSnapshot: Sendable, Hashable {
+public struct SlackRemindersSnapshot: Sendable, Hashable, Codable {
     public let reminders: [SlackReminder]
 
     public init(reminders: [SlackReminder]) {
@@ -147,7 +147,7 @@ public struct SlackRemindersSnapshot: Sendable, Hashable {
 
 /// One scheduled-but-not-yet-sent message. `sent` flips to `true` once Slack's
 /// scheduler has dispatched it (diff between ticks emits `sent` event).
-public struct SlackScheduledMessage: Sendable, Hashable {
+public struct SlackScheduledMessage: Sendable, Hashable, Codable {
     public let id: String
     public let channelID: String
     public let scheduledFor: Int64
@@ -161,7 +161,7 @@ public struct SlackScheduledMessage: Sendable, Hashable {
     }
 }
 
-public struct SlackScheduledMessagesSnapshot: Sendable, Hashable {
+public struct SlackScheduledMessagesSnapshot: Sendable, Hashable, Codable {
     public let messages: [SlackScheduledMessage]
 
     public init(messages: [SlackScheduledMessage]) {
@@ -175,7 +175,7 @@ public struct SlackScheduledMessagesSnapshot: Sendable, Hashable {
 
 /// One starred (saved) item. `itemRef` is the canonical "channelID:messageTs"
 /// composite or "file:fileID" — message bodies / file contents never captured.
-public struct SlackStarItem: Sendable, Hashable {
+public struct SlackStarItem: Sendable, Hashable, Codable {
     public let itemRef: String
     public let savedAtMs: Int64
 
@@ -185,7 +185,7 @@ public struct SlackStarItem: Sendable, Hashable {
     }
 }
 
-public struct SlackStarsSnapshot: Sendable, Hashable {
+public struct SlackStarsSnapshot: Sendable, Hashable, Codable {
     public let stars: [SlackStarItem]
 
     public init(stars: [SlackStarItem]) {
