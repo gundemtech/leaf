@@ -293,6 +293,84 @@ enum AgentMain {
             )
         }()
 
+        // Phase Track-3 D3 — Slack warm + cold tiers + ScopesService actor.
+        // Same gating predicate as hot collector (skip if client_id is empty).
+        // ScopesService is shared between warm + cold (both inject scopes:)
+        // and stored in AgentLifetime so UI/observer code can read scope state.
+        let slackScopesService: SlackScopesService? = {
+            guard !agentThresholds.slackOAuthClientID.isEmpty else { return nil }
+            return SlackScopesService(database: database)
+        }()
+        let (slackWarmCollector, slackWarmScheduler, slackColdCollector, slackColdScheduler): (
+            SlackWarmCollector?, SlackWarmScheduler?,
+            SlackColdCollector?, SlackColdScheduler?
+        ) = {
+            guard !agentThresholds.slackOAuthClientID.isEmpty,
+                  let scopes = slackScopesService else {
+                return (nil, nil, nil, nil)
+            }
+            // Per-tier refresher instances (mirror GitHub D2 — refresher is cheap,
+            // and avoids any actor-isolation surprises between tiers).
+            let warmRefresher = SlackTokenRefresher(
+                database: database,
+                clientID: agentThresholds.slackOAuthClientID
+            )
+            let coldRefresher = SlackTokenRefresher(
+                database: database,
+                clientID: agentThresholds.slackOAuthClientID
+            )
+            // workspaceID format is "<team>:<user>". Collectors prefer the
+            // integration record (single source of truth) and only fall back to
+            // these closures if the record's format is malformed — passing
+            // matching readers keeps semantics consistent with hot collector.
+            let workspaceIDProvider: @Sendable () -> String? = {
+                guard let id = (try? database.readIntegration(provider: .slack))?.workspaceID
+                else { return nil }
+                let parts = id.split(separator: ":", omittingEmptySubsequences: false)
+                guard parts.count == 2, !parts[0].isEmpty else { return nil }
+                return String(parts[0])
+            }
+            let userIDProvider: @Sendable () -> String? = {
+                guard let id = (try? database.readIntegration(provider: .slack))?.workspaceID
+                else { return nil }
+                let parts = id.split(separator: ":", omittingEmptySubsequences: false)
+                guard parts.count == 2, !parts[1].isEmpty else { return nil }
+                return String(parts[1])
+            }
+            let warm = SlackWarmCollector(
+                database: database,
+                provider: slackProvider,
+                tokenRefresher: warmRefresher,
+                scopes: scopes,
+                workspaceIDProvider: workspaceIDProvider,
+                userIDProvider: userIDProvider,
+                clock: { Date() },
+                logger: slackLogger
+            )
+            let warmSched = SlackWarmScheduler(
+                collector: warm,
+                intervalSec: agentThresholds.slackWarmPollIntervalSec,
+                logger: slackLogger
+            )
+            let cold = SlackColdCollector(
+                database: database,
+                provider: slackProvider,
+                tokenRefresher: coldRefresher,
+                scopes: scopes,
+                workspaceIDProvider: workspaceIDProvider,
+                userIDProvider: userIDProvider,
+                clock: { Date() },
+                logger: slackLogger
+            )
+            let coldSched = SlackColdScheduler(
+                database: database,
+                collector: cold,
+                workspaceIDProvider: workspaceIDProvider,
+                logger: slackLogger
+            )
+            return (warm, warmSched, cold, coldSched)
+        }()
+
         AgentLifetime.writer = writer
         AgentLifetime.activeAppCollector = activeAppCollector
         AgentLifetime.idleCollector = idleCollector
@@ -313,6 +391,12 @@ enum AgentMain {
         AgentLifetime.githubWarmScheduler = githubWarmScheduler
         AgentLifetime.githubColdCollector = githubColdCollector
         AgentLifetime.githubColdScheduler = githubColdScheduler
+        // Phase Track-3 D3 — Slack scope service + warm + cold lifetime slots.
+        AgentLifetime.slackScopesService = slackScopesService
+        AgentLifetime.slackWarmCollector = slackWarmCollector
+        AgentLifetime.slackWarmScheduler = slackWarmScheduler
+        AgentLifetime.slackColdCollector = slackColdCollector
+        AgentLifetime.slackColdScheduler = slackColdScheduler
 
         // Phase 5.3.D — Key rotation orchestrator + RotationOutbox resume.
         // Drains unposted rotation_outbox rows from prior sessions on startup
@@ -419,6 +503,12 @@ enum AgentMain {
         if let ws = githubWarmScheduler { Task { await ws.start() } }
         if let cc = githubColdCollector { Task { await cc.start() } }
         if let cs = githubColdScheduler { Task { await cs.start() } }
+        // Phase Track-3 D3 — start Slack warm + cold schedulers. Collectors
+        // themselves are passive (no start()/stop() — driven entirely by
+        // schedulers' tick loop, different shape from GitHub D2 / Linear D1
+        // where collectors also expose start/stop).
+        if let ws = slackWarmScheduler { Task { await ws.start() } }
+        if let cs = slackColdScheduler { Task { await cs.start() } }
         Task { await rotationFetchScheduler.start() }
         Task { await detectorScheduler.start() }
 
@@ -452,6 +542,12 @@ enum AgentMain {
             if let cc = AgentLifetime.githubColdCollector { await cc.stop() }
             if let ws = AgentLifetime.githubWarmScheduler { await ws.stop() }
             if let wc = AgentLifetime.githubWarmCollector { await wc.stop() }
+            // Phase Track-3 D3 — stop Slack warm + cold schedulers. Slack
+            // collectors are passive (no stop()), driven entirely by the
+            // schedulers' tick loop — stopping the scheduler is sufficient.
+            // ScopesService is read-only — no stop() needed.
+            if let cs = AgentLifetime.slackColdScheduler { await cs.stop() }
+            if let ws = AgentLifetime.slackWarmScheduler { await ws.stop() }
             if let m = AgentLifetime.maintenance { await m.stop() }
             if let f = AgentLifetime.fsEventsCollector { await f.stop() }
             if let c = AgentLifetime.claudeCodeCollector { await c.stop() }
