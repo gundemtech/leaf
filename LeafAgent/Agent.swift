@@ -389,6 +389,27 @@ enum AgentMain {
             coalesceWindowSec: agentThresholds.spaceTransitionCoalesceWindowSec
         )
 
+        // Phase Track-4 S2 — AppleScript surface. Public substrate ships an
+        // empty adapter registry; the moat-side ProdAppleScriptAdapterRegistry
+        // (LeafCorePrivate) wires the 12 per-app adapters under LEAF_PROD.
+        let appleScriptBridge = AppleScriptBridge.production()
+        let appleScriptPermissionStore = AppleScriptPermissionStore()
+        let localAppsStore = LocalAppsStore()
+        let appleScriptRegistry: any AppleScriptAdapterRegistry = {
+            #if LEAF_PROD
+            return ProdAppleScriptAdapterRegistry()
+            #else
+            return EmptyAppleScriptAdapterRegistry()
+            #endif
+        }()
+        let appleScriptCollector = AppleScriptCollector(
+            bridge: appleScriptBridge,
+            permissionStore: appleScriptPermissionStore,
+            localAppsStore: localAppsStore,
+            registry: appleScriptRegistry,
+            writer: writer
+        )
+
         AgentLifetime.writer = writer
         AgentLifetime.activeAppCollector = activeAppCollector
         AgentLifetime.idleCollector = idleCollector
@@ -420,6 +441,8 @@ enum AgentMain {
         AgentLifetime.focusModeCollector = focusModeCollector
         AgentLifetime.systemStateCollector = systemStateCollector
         AgentLifetime.spacesCollector = spacesCollector
+        // Phase Track-4 S2 — AppleScript surface.
+        AgentLifetime.appleScriptCollector = appleScriptCollector
 
         // Phase 5.3.D — Key rotation orchestrator + RotationOutbox resume.
         // Drains unposted rotation_outbox rows from prior sessions on startup
@@ -540,6 +563,10 @@ enum AgentMain {
         Task { await focusModeCollector.start() }
         DispatchQueue.main.async { systemStateCollector.start() }
         DispatchQueue.main.async { spacesCollector.start() }
+        // Phase Track-4 S2 — start AppleScript collector. Public substrate
+        // registry is empty (start() is a no-op); Prod registry spawns one
+        // polling Task per adapter.
+        Task { await appleScriptCollector.start() }
         Task { await rotationFetchScheduler.start() }
         Task { await detectorScheduler.start() }
 
@@ -579,6 +606,9 @@ enum AgentMain {
             // ScopesService is read-only — no stop() needed.
             if let cs = AgentLifetime.slackColdScheduler { await cs.stop() }
             if let ws = AgentLifetime.slackWarmScheduler { await ws.stop() }
+            // Phase Track-4 S2 — stop AppleScript collector before S1
+            // collectors. Polling tasks cancel cooperatively.
+            if let a = AgentLifetime.appleScriptCollector { await a.stop() }
             // Phase Track-4 S1 — stop Architecture catch-up collectors.
             // Order: spaces / system (synchronous observer removal, on main)
             // → focus / calendar (async cancel of poll task + observer).
@@ -649,4 +679,6 @@ enum AgentLifetime {
     nonisolated(unsafe) static var focusModeCollector: FocusModeCollector?
     nonisolated(unsafe) static var systemStateCollector: SystemStateCollector?
     nonisolated(unsafe) static var spacesCollector: SpacesCollector?
+    // Phase Track-4 S2 — AppleScript surface orchestrator.
+    nonisolated(unsafe) static var appleScriptCollector: AppleScriptCollector?
 }
