@@ -17,7 +17,7 @@
 import SwiftUI
 
 enum OnboardingStep: String, CaseIterable {
-    case welcome, ax, fda, team, done
+    case welcome, ax, fda, observers, team, done
 
     var index: Int { Self.allCases.firstIndex(of: self) ?? 0 }
 }
@@ -106,11 +106,12 @@ struct OnboardingView: View {
     @ViewBuilder
     private var stepContent: some View {
         switch step {
-        case .welcome: welcomeStep
-        case .ax:      axStep
-        case .fda:     fdaStep
-        case .team:    teamStep
-        case .done:    doneStep
+        case .welcome:   welcomeStep
+        case .ax:        axStep
+        case .fda:       fdaStep
+        case .observers: observersStep
+        case .team:      teamStep
+        case .done:      doneStep
         }
     }
 
@@ -174,6 +175,50 @@ struct OnboardingView: View {
                 )
                 Spacer()
                 grantStatus(granted: permissions.fdaGranted)
+            }
+            HStack {
+                Spacer()
+                LeafButton("Skip for now", variant: .ghost, size: .sm, action: { step = .observers })
+            }
+        }
+    }
+
+    // Phase Track-4 S1 — Calendar + Focus permission grant step. Inserted
+    // between `.fda` and `.team` per Architecture catch-up spec.
+    private var observersStep: some View {
+        VStack(alignment: .leading, spacing: LeafSpace.md) {
+            Text("Calendar & Focus")
+                .font(LeafType.title.small)
+                .foregroundStyle(LeafColor.text.primary)
+            Text("Lets Leaf see when you're in a meeting or Focus mode — never event titles, attendees, or Focus mode names.")
+                .font(LeafType.body.small)
+                .foregroundStyle(LeafColor.text.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                LeafButton(
+                    "Grant Calendar",
+                    variant: .primary,
+                    size: .sm,
+                    action: {
+                        permissions.triggerCalendarPrompt()
+                        permissions.openCalendarSettings()
+                    }
+                )
+                Spacer()
+                grantStatus(granted: permissions.calendarGranted)
+            }
+            HStack {
+                LeafButton(
+                    "Grant Focus",
+                    variant: .primary,
+                    size: .sm,
+                    action: {
+                        permissions.triggerFocusPrompt()
+                        permissions.openFocusSettings()
+                    }
+                )
+                Spacer()
+                grantStatus(granted: permissions.focusGranted)
             }
             HStack {
                 Spacer()
