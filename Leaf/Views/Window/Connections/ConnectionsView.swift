@@ -44,6 +44,8 @@ struct ConnectionsView: View {
     @Environment(SlackOAuthService.self) private var slackOAuth
     // MARK: requires GitHubScopesReader env injection (Task 21)
     @Environment(GitHubScopesReader.self) private var scopesReader
+    // MARK: requires SlackScopesReader env injection (Phase Track-3 D3 / Task 18)
+    @Environment(SlackScopesReader.self) private var slackScopes
 
     @State private var nowTick: Date = Date()
     private let countdownTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -58,6 +60,10 @@ struct ConnectionsView: View {
     /// "all missing" rather than crashing if the read fails.
     @State private var grantedGitHubScopes: Set<String> = []
 
+    /// Same pattern for Slack — D3 Task 20. `SlackScopesReader` exposes only
+    /// missing-core; optional-scope rendering needs the granted set independently.
+    @State private var grantedSlackScopes: Set<String> = []
+
     /// Per-scope explainer copy (English MVP). Surfaces the user-facing reason
     /// each missing scope matters next to the inline warning banner. Unknown
     /// scopes (`repo`, `read:user` baseline) stay silent — they're table-stakes
@@ -67,6 +73,21 @@ struct ConnectionsView: View {
         "read:project": "Required to track ProjectsV2 board activity (cards, iterations, fields).",
         "security_events": "Recommended: surfaces secret-scanning, code-scanning, and Dependabot alerts.",
         "read:audit_log": "Recommended: tracks admin actions on your GitHub Organization."
+    ]
+
+    /// Per-scope explainer copy для Slack — D3 Task 20. Только missing-core
+    /// scope'ы получают per-scope LeafBanner.warning; missing-optional —
+    /// single subtle hint, без объяснения per scope.
+    private static let slackScopeExplainer: [String: String] = [
+        "users:read": "Required to resolve usernames and identify self-authored messages.",
+        "users.profile:read": "Required to read your profile (status, presence) for huddle and Focus integration.",
+        "search:read": "Required to find your messages and files for per-action attribution.",
+        "channels:history": "Required to read public-channel message history you posted to.",
+        "groups:history": "Required to read private-channel message history you posted to.",
+        "im:history": "Required to read DM history you participated in.",
+        "mpim:history": "Required to read group-DM history you participated in.",
+        "dnd:read": "Required to capture Do Not Disturb intervals as Focus context.",
+        "files:read": "Required to track files you uploaded for activity attribution."
     ]
 
     var body: some View {
@@ -83,6 +104,7 @@ struct ConnectionsView: View {
             githubOAuth.reload()
             slackOAuth.reload()
             refreshGrantedGitHubScopes()
+            refreshGrantedSlackScopes()
         }
         .onReceive(countdownTimer) { now in
             nowTick = now
@@ -91,6 +113,11 @@ struct ConnectionsView: View {
             for: NSNotification.Name(GitHubOAuthEndpoints.integrationChangedNotificationName))
         ) { _ in
             refreshGrantedGitHubScopes()
+        }
+        .onReceive(DistributedNotificationCenter.default().publisher(
+            for: NSNotification.Name(SlackOAuthEndpoints.integrationChangedNotificationName))
+        ) { _ in
+            refreshGrantedSlackScopes()
         }
     }
 
@@ -147,8 +174,13 @@ struct ConnectionsView: View {
                 title: "Slack",
                 description: "Read-only access — self-authored message counts per channel and huddle minutes into your local timeline."
             ) {
-                LeafCard(variant: .raised, padding: .regular) {
-                    slackContent
+                VStack(alignment: .leading, spacing: LeafSpace.lg) {
+                    LeafCard(variant: .raised, padding: .regular) {
+                        slackContent
+                    }
+                    if shouldShowSlackScopesSection {
+                        slackScopesSection
+                    }
                 }
             }
         }
@@ -710,5 +742,117 @@ struct ConnectionsView: View {
             .map { String($0) }
             .filter { !$0.isEmpty }
         return Set(parts)
+    }
+
+    // MARK: - Slack Scopes section (Phase Track-3 D3 / Task 20)
+
+    /// Mirrors `shouldShowScopesSection` for Slack — section renders when
+    /// `slackScopes.state` is either `.connected` (informational matrix, no
+    /// banners) or `.connectedScopeOutdated` (warning banners + Re-authorize
+    /// CTA). Hidden in `.unknown` / `.notConfigured`.
+    private var shouldShowSlackScopesSection: Bool {
+        switch slackScopes.state {
+        case .connected, .connectedScopeOutdated:
+            return true
+        case .unknown, .notConfigured:
+            return false
+        }
+    }
+
+    private var currentGrantedSlack: Set<String> {
+        grantedSlackScopes
+    }
+
+    private var missingSlackCore: Set<String> {
+        SlackScopesService.requiredCore.subtracting(currentGrantedSlack)
+    }
+
+    private var missingSlackOptional: Set<String> {
+        SlackScopesService.requiredOptional.subtracting(currentGrantedSlack)
+    }
+
+    private var allRequestedSlackScopes: [String] {
+        Array(SlackScopesService.requiredCore
+            .union(SlackScopesService.requiredOptional)).sorted()
+    }
+
+    @ViewBuilder
+    private var slackScopesSection: some View {
+        LeafSection(
+            title: "Scopes",
+            description: "Slack OAuth scopes Leaf uses to read your activity."
+        ) {
+            LeafCard(variant: .raised, padding: .regular) {
+                VStack(alignment: .leading, spacing: LeafSpace.md) {
+                    slackBadgeMatrix
+                    if !missingSlackCore.isEmpty {
+                        ForEach(Array(missingSlackCore).sorted(), id: \.self) { scope in
+                            LeafBanner(
+                                tone: .warning,
+                                title: scope,
+                                description: ConnectionsView.slackScopeExplainer[scope]
+                                    ?? "Required for Slack integration."
+                            )
+                        }
+                    }
+                    if !missingSlackOptional.isEmpty {
+                        Text("Recommended scopes not granted: \(missingSlackOptional.sorted().joined(separator: ", "))")
+                            .font(LeafType.body.small)
+                            .foregroundStyle(LeafColor.text.tertiary)
+                    }
+                    if !missingSlackCore.isEmpty || !missingSlackOptional.isEmpty {
+                        LeafButton(
+                            "Re-authorize Slack",
+                            variant: .primary,
+                            size: .md,
+                            action: {
+                                Task { await slackOAuth.connect() }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var slackBadgeMatrix: some View {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 110), spacing: LeafSpace.xs, alignment: .leading)],
+            alignment: .leading,
+            spacing: LeafSpace.xs
+        ) {
+            ForEach(allRequestedSlackScopes, id: \.self) { scope in
+                let granted = currentGrantedSlack.contains(scope)
+                let core = SlackScopesService.requiredCore.contains(scope)
+                LeafBadge(
+                    text: scope,
+                    variant: granted ? .accent : .neutral
+                )
+                .accessibilityLabel(badgeAccessibilityLabel(scope: scope, granted: granted, core: core))
+            }
+        }
+    }
+
+    /// Mirrors `refreshGrantedGitHubScopes` — reads `integrations.scope` for
+    /// `provider = slack` synchronously on main thread (single-row query).
+    private func refreshGrantedSlackScopes() {
+        grantedSlackScopes = Self.readGrantedSlackScopes()
+    }
+
+    nonisolated private static func readGrantedSlackScopes() -> Set<String> {
+        do {
+            let db = try Database.openForRead(
+                at: DatabasePath.defaultURL(),
+                config: githubScopesDatabaseConfig(),
+                encryption: githubScopesDatabaseEncryption()
+            )
+            guard let record = try db.readIntegration(provider: .slack) else {
+                return []
+            }
+            return parseGitHubScopeString(record.scope)
+        } catch {
+            return []
+        }
     }
 }
