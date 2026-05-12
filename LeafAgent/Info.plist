@@ -26,5 +26,7 @@
 	<string>Leaf reads only whether you're currently in a meeting — never event titles, attendees, or location.</string>
 	<key>NSFocusStatusUsageDescription</key>
 	<string>Leaf reads only whether your Focus mode is on or off.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Leaf observes which app and file you're working on through Apple's automation API. Never reads document content, email body, or message text.</string>
 </dict>
 </plist>
