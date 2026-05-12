@@ -12,9 +12,10 @@
 //  единственно one source of truth for selection visuals: LeafNavRow.
 //
 //  Track 3 D2 — Connections nav row gains a small red attention dot when
-//  GitHubScopesReader signals `.connectedScopeOutdated`. Linear/Slack scope
-//  readers будут wire'нуты в Track 3 D4 — пока только GitHub. Dot rendered
-//  как `LeafDot(tone: .danger, size: .sm)` overlay topTrailing на nav row
+//  GitHubScopesReader signals `.connectedScopeOutdated`. Track 3 D3 extends
+//  the OR-condition to also fire when SlackScopesReader is outdated; Linear
+//  scope reader будет wire'нут в Track 3 D4. Dot rendered как
+//  `LeafDot(tone: .danger, size: .sm)` overlay topTrailing на nav row
 //  (LeafNavRow API не трогаем — `badge: Int?` это отдельная количественная
 //  семантика, attention dot — bool urgency cue, ортогонально).
 //
@@ -25,6 +26,7 @@ struct Sidebar: View {
     @Binding var selection: WindowSection
 
     @Environment(GitHubScopesReader.self) private var githubScopes
+    @Environment(SlackScopesReader.self) private var slackScopes
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -38,9 +40,11 @@ struct Sidebar: View {
     }
 
     /// True when any wired provider scope-status reader signals outdated.
-    /// D2 wires only GitHub; Track 3 D4 generalizes per-provider scope status.
+    /// D2 wires only GitHub; D3 adds Slack via OR-condition; Track 3 D4
+    /// generalizes per-provider scope status.
     private var connectionsNeedsAttention: Bool {
         if case .connectedScopeOutdated = githubScopes.state { return true }
+        if case .connectedScopeOutdated = slackScopes.state { return true }
         return false
     }
 
