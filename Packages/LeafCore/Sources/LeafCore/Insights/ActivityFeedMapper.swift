@@ -25,6 +25,16 @@ public enum ActivityFeedMapper {
     ) -> ActivityFeedEntry? {
         let timestamp = Date(timeIntervalSince1970: TimeInterval(timestampMs) / 1000.0)
         let payload = parsePayload(payloadJSON)
+        let eventKind = payload["event_kind"] ?? ""
+
+        // Track-4 S4 early dispatch — skip-list + LocalOS whitelist run before
+        // signalType routing. Layer A events (S1+S2+S3) land под various signal
+        // types без `payload["source"]` key, so signalType-based routing alone
+        // would drop them or render without semantic copy.
+        if Self.skippedKinds.contains(eventKind) { return nil }
+        if Self.trackFourLocalOSKinds.contains(eventKind) {
+            return mapLocalOS(id: id, timestamp: timestamp, bundleID: bundleID, kind: eventKind, payload: payload)
+        }
 
         switch signalType {
         case "attention":
@@ -408,6 +418,162 @@ public enum ActivityFeedMapper {
         "linear_assigned_workload_pulse",
         "linear_cycle_progress"
     ]
+
+    /// Track-4 S1+S2+S3 Layer A event_kinds with explicit feed rendering.
+    /// Membership = explicit whitelist; adding new kinds requires updating
+    /// `mapLocalOS` switch. Must match `EventKindIcon.symbol` coverage
+    /// (Track-4 S4 T3) — see `EventKindIconTests.testAllTrack4VisibleKindsMapped`.
+    static let trackFourLocalOSKinds: Set<String> = [
+        // S1 (9)
+        "meeting_state_entered", "meeting_state_exited",
+        "focus_mode_enabled", "focus_mode_disabled",
+        "system_locked", "system_unlocked",
+        "system_slept", "system_woke",
+        "space_switched",
+        // S2 (14)
+        "xcode_active_doc_changed", "xcode_build_state_changed",
+        "jetbrains_active_doc_changed",
+        "music_track_changed", "spotify_track_changed",
+        "notes_active_title_changed", "reminder_completed",
+        "calendar_app_view_changed", "mail_active_mailbox_changed",
+        "zoom_meeting_state_changed", "zoom_meeting_name_observed",
+        "safari_tabs_changed", "chrome_tabs_changed", "arc_tabs_changed",
+        // S3 (10 visible — 3 high-cadence kinds live in `skippedKinds`)
+        "audio_route_changed",
+        "mic_in_use_entered", "mic_in_use_exited",
+        "display_connected", "display_disconnected",
+        "vpn_state_changed", "wifi_state_changed",
+        "screenshot_taken", "download_added",
+        "trash_changed"
+    ]
+
+    // MARK: - Track-4 Local OS (S1 + S2 + S3)
+
+    /// Per-event-kind copy mapping for Track-4 Layer A events. ADR-010 redaction
+    /// discipline: reads ONLY payload fields in the explicit allowlist below.
+    /// Bodies / message texts / file previews / note bodies never enter
+    /// primaryText/secondaryText, even if a future collector accidentally
+    /// stores them in the same payload row.
+    private static func mapLocalOS(
+        id: Int64,
+        timestamp: Date,
+        bundleID: String?,
+        kind: String,
+        payload: [String: String]
+    ) -> ActivityFeedEntry? {
+        let primary: String
+        var secondary: String? = nil
+
+        switch kind {
+        // S1 — system state
+        case "meeting_state_entered": primary = "Meeting started"
+        case "meeting_state_exited":  primary = "Meeting ended"
+        case "focus_mode_enabled":
+            primary = "Focus on"
+            secondary = sanitize(payload["mode"])
+        case "focus_mode_disabled":   primary = "Focus off"
+        case "system_locked":   primary = "Screen locked"
+        case "system_unlocked": primary = "Screen unlocked"
+        case "system_slept":    primary = "System sleep"
+        case "system_woke":     primary = "System wake"
+        case "space_switched":  primary = "Space switched"
+
+        // S2 — IDEs
+        case "xcode_active_doc_changed":
+            let base = sanitize(payload["document_path"]).map(basename(of:)) ?? "—"
+            primary = "Xcode: \(base)"
+        case "xcode_build_state_changed":
+            let state = sanitize(payload["build_state"]) ?? "?"
+            primary = "Xcode: build \(state)"
+        case "jetbrains_active_doc_changed":
+            let base = sanitize(payload["document_path"]).map(basename(of:)) ?? "—"
+            primary = "JetBrains: \(base)"
+
+        // S2 — media
+        case "music_track_changed":
+            primary = "Music: \(sanitize(payload["track_name"]) ?? "—")"
+            secondary = sanitize(payload["artist"])
+        case "spotify_track_changed":
+            primary = "Spotify: \(sanitize(payload["track_name"]) ?? "—")"
+            secondary = sanitize(payload["artist"])
+
+        // S2 — productivity
+        case "notes_active_title_changed":
+            primary = "Notes: \(sanitize(payload["note_title"]) ?? "—")"
+        case "reminder_completed":
+            let count = sanitize(payload["count"]) ?? "1"
+            primary = "Reminders completed: \(count)"
+        case "calendar_app_view_changed":
+            primary = "Calendar: \(sanitize(payload["view"]) ?? "—") view"
+        case "mail_active_mailbox_changed":
+            primary = "Mail: \(sanitize(payload["mailbox"]) ?? "—")"
+
+        // S2 — Zoom
+        case "zoom_meeting_state_changed":
+            let state = sanitize(payload["meeting_state"]) ?? "?"
+            primary = "Zoom: \(state.replacingOccurrences(of: "_", with: " "))"
+        case "zoom_meeting_name_observed":
+            primary = "Zoom: \(sanitize(payload["meeting_topic"]) ?? "—")"
+
+        // S2 — browser tabs
+        case "safari_tabs_changed":
+            primary = "Safari: \(sanitize(payload["tab_count"]) ?? "0") tabs"
+        case "chrome_tabs_changed":
+            primary = "Chrome: \(sanitize(payload["tab_count"]) ?? "0") tabs"
+        case "arc_tabs_changed":
+            primary = "Arc: \(sanitize(payload["tab_count"]) ?? "0") tabs"
+
+        // S3 — audio / mic
+        case "audio_route_changed":
+            primary = "Audio route: \(sanitize(payload["category"]) ?? "—")"
+        case "mic_in_use_entered": primary = "Mic on"
+        case "mic_in_use_exited":  primary = "Mic off"
+
+        // S3 — display
+        case "display_connected":
+            primary = "Display connected"
+            if let n = sanitize(payload["display_count"]) {
+                secondary = n == "1" ? "1 display" : "\(n) displays"
+            }
+        case "display_disconnected":
+            primary = "Display disconnected"
+            if let n = sanitize(payload["display_count"]) {
+                secondary = n == "1" ? "1 display" : "\(n) displays"
+            }
+
+        // S3 — network
+        case "vpn_state_changed":
+            primary = "VPN: \(sanitize(payload["state"]) ?? "—")"
+        case "wifi_state_changed":
+            primary = "Wi-Fi: \(sanitize(payload["state"]) ?? "—")"
+
+        // S3 — files
+        case "screenshot_taken":
+            primary = "Screenshot: \(sanitize(payload["filename"]) ?? "—")"
+        case "download_added":
+            primary = "Download: \(sanitize(payload["filename"]) ?? "—")"
+        case "trash_changed":
+            let action = sanitize(payload["action"]) ?? "?"
+            switch action {
+            case "emptied": primary = "Trash emptied"
+            case "added":   primary = "Trash items added"
+            default:        primary = "Trash: \(action)"
+            }
+
+        default:
+            return nil
+        }
+
+        return ActivityFeedEntry(
+            id: id,
+            timestamp: timestamp,
+            provider: .local,
+            eventKind: kind,
+            primaryText: primary,
+            secondaryText: secondary,
+            bundleID: bundleID
+        )
+    }
 
     /// Trim + drop empties + length-cap. Defends against degenerate or
     /// oversized strings that could leak into `primaryText`.
