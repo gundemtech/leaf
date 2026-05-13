@@ -22,9 +22,13 @@ final class LocalFilesWatcher {
     private let downloadsMatcher = DownloadsMatcher()
     private var trashMatcher: TrashMatcher
 
-    private var screenshotDir: URL = URL(fileURLWithPath: NSHomeDirectory() + "/Desktop")
-    private let downloadsDir = URL(fileURLWithPath: NSHomeDirectory() + "/Downloads")
-    private let trashDir = URL(fileURLWithPath: NSHomeDirectory() + "/.Trash")
+    // Canonicalized paths (resolved symlinks). FSEvents callback delivers
+    // canonical paths via `kFSEventStreamCreateFlagUseCFTypes`, so prefix
+    // dispatch needs the same canonical form to match correctly when the
+    // user's screenshot directory is itself a symlink (I1 review fix).
+    private var screenshotDir: URL = URL(fileURLWithPath: NSHomeDirectory() + "/Desktop").resolvingSymlinksInPath()
+    private let downloadsDir = URL(fileURLWithPath: NSHomeDirectory() + "/Downloads").resolvingSymlinksInPath()
+    private let trashDir = URL(fileURLWithPath: NSHomeDirectory() + "/.Trash").resolvingSymlinksInPath()
 
     private var streamWrapper: AgentFSEventStream?
 
@@ -160,13 +164,13 @@ final class LocalFilesWatcher {
 
     private func resolveScreenshotDir() -> URL {
         if !screenshotDirectoryOverride.isEmpty {
-            return URL(fileURLWithPath: screenshotDirectoryOverride)
+            return URL(fileURLWithPath: screenshotDirectoryOverride).resolvingSymlinksInPath()
         }
         // Read from com.apple.screencapture defaults (CFPreferences).
         if let raw = CFPreferencesCopyAppValue("location" as CFString, "com.apple.screencapture" as CFString) as? String, !raw.isEmpty {
-            return URL(fileURLWithPath: (raw as NSString).expandingTildeInPath)
+            return URL(fileURLWithPath: (raw as NSString).expandingTildeInPath).resolvingSymlinksInPath()
         }
-        return URL(fileURLWithPath: NSHomeDirectory() + "/Desktop")
+        return URL(fileURLWithPath: NSHomeDirectory() + "/Desktop").resolvingSymlinksInPath()
     }
 }
 

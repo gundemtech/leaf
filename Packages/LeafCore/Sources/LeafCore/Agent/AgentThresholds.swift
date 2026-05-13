@@ -166,7 +166,7 @@ public struct AgentThresholds: Sendable, Hashable {
     /// Phase Track-4 S3: testing override для screenshot directory. Empty =
     /// read from `com.apple.screencapture` defaults / fallback `~/Desktop`.
     /// Non-empty = absolute path (для test fixtures).
-    public let screenshotDirectoryOverrideKey: String
+    public let screenshotDirectoryOverridePath: String
 
     public init(
         idlePollIntervalSec: TimeInterval,
@@ -214,7 +214,7 @@ public struct AgentThresholds: Sendable, Hashable {
         clipboardPollIntervalSec: TimeInterval = 60,
         wifiPollIntervalSec: TimeInterval = 60,
         localFilesCoalesceWindowSec: TimeInterval = 2,
-        screenshotDirectoryOverrideKey: String = ""
+        screenshotDirectoryOverridePath: String = ""
     ) {
         self.idlePollIntervalSec = idlePollIntervalSec
         self.idleThresholdSec = idleThresholdSec
@@ -261,7 +261,7 @@ public struct AgentThresholds: Sendable, Hashable {
         self.clipboardPollIntervalSec = clipboardPollIntervalSec
         self.wifiPollIntervalSec = wifiPollIntervalSec
         self.localFilesCoalesceWindowSec = localFilesCoalesceWindowSec
-        self.screenshotDirectoryOverrideKey = screenshotDirectoryOverrideKey
+        self.screenshotDirectoryOverridePath = screenshotDirectoryOverridePath
     }
 
     public static let weakDefaults = AgentThresholds(
@@ -310,6 +310,6 @@ public struct AgentThresholds: Sendable, Hashable {
         clipboardPollIntervalSec: 60,
         wifiPollIntervalSec: 60,
         localFilesCoalesceWindowSec: 2,
-        screenshotDirectoryOverrideKey: ""
+        screenshotDirectoryOverridePath: ""
     )
 }

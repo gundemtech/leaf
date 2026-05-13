@@ -316,8 +316,6 @@ public enum Schema {
         public static let mouseMoves = "mouse_moves"
         public static let appSwitches = "app_switches"
         public static let foregroundApp = "foreground_app"
-
-        public static let indexBucket = "idx_intensity_aggregates_bucket"
     }
 
     /// Phase Track-1 D2 — FTS5 contentless virtual table over event bodies

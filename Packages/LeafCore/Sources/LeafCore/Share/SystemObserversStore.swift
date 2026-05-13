@@ -50,10 +50,14 @@ public final class SystemObserversStore: ObservableObject, @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         if let cached = cache[observer] { return cached }
         let key = Self.key(observer)
+        let value: Bool
         if defaults.object(forKey: key) == nil {
-            return !Self.defaultsOff.contains(observer)
+            value = !Self.defaultsOff.contains(observer)
+        } else {
+            value = defaults.bool(forKey: key)
         }
-        return defaults.bool(forKey: key)
+        cache[observer] = value
+        return value
     }
 
     public func setEnabled(_ observer: String, _ enabled: Bool) {

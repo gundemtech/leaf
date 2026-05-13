@@ -143,7 +143,7 @@ final class IntensityAggregatesStoreTests: XCTestCase {
         }
     }
 
-    func testM018CreatesTableWithIndex() throws {
+    func testM018CreatesTable() throws {
         let db = try openDB()
         try db.readSQL { rawDB in
             let tableExists = try Bool.fetchOne(rawDB, sql: """
@@ -151,11 +151,12 @@ final class IntensityAggregatesStoreTests: XCTestCase {
                  WHERE type='table' AND name='intensity_aggregates'
                 """)
             XCTAssertEqual(tableExists, true)
-            let indexExists = try Bool.fetchOne(rawDB, sql: """
-                SELECT count(*) > 0 FROM sqlite_master
-                 WHERE type='index' AND name='idx_intensity_aggregates_bucket'
-                """)
-            XCTAssertEqual(indexExists, true)
+            // `INTEGER PRIMARY KEY` aliases rowid in SQLite — no separate
+            // sqlite_autoindex row is created. Range scans / lookups use
+            // the implicit rowid B-tree. Explicit CREATE INDEX redundant.
+            let pkColumn = try Row.fetchAll(rawDB, sql: "PRAGMA table_info(intensity_aggregates)")
+                .first { ($0["name"] as String?) == "minute_bucket_ms" }
+            XCTAssertEqual((pkColumn?["pk"] as Int?) ?? 0, 1, "minute_bucket_ms must be the PK")
         }
     }
 }

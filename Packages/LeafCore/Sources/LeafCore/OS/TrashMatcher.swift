@@ -20,6 +20,11 @@ public struct TrashMatcher: Sendable {
     /// Heuristic: large removed-burst (>10) сильно превосходит added → empty;
     /// otherwise если addedCount > 0 → added. Coalesce drops emissions within
     /// coalesceWindowMs of prior emit.
+    ///
+    /// **Known false-negative (I5 code review)**: batch like
+    /// `addedCount=6, removedCount=12` (both > 10 trigger, but ratio<2×) emits
+    /// `.added` despite being empty-like. Acceptable best-effort — Empty
+    /// Trash gestures typically remove 50+ items single-shot, ratio holds.
     public mutating func observe(
         addedCount: Int,
         removedCount: Int,

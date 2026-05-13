@@ -17,7 +17,14 @@ final class DisplayCollector {
     private var stateMachine = DisplayStateMachine()
     private var registered = false
 
-    // Static box keeps weak self alive в C-callback scope.
+    // Static singleton — production runtime has exactly one DisplayCollector
+    // (Agent.main constructs once + retains в AgentLifetime). The static
+    // reference is the C-callback fan-out target since
+    // `CGDisplayRegisterReconfigurationCallback` takes `userInfo:` arg
+    // that maps awkwardly to Swift refcon-pattern. **Test isolation
+    // limitation (I3 review):** unit tests cannot instantiate two
+    // collectors back-to-back without `stop()` between (would orphan
+    // the prior instance reference). Production constraint — fine.
     private static var sharedInstance: DisplayCollector?
 
     init(writer: EventWriter, observersStore: SystemObserversStore) {

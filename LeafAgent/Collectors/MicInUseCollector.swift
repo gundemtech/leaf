@@ -17,6 +17,11 @@ final class MicInUseCollector {
     private let observersStore: SystemObserversStore
     private var stateMachine = MicInUseStateMachine()
     private var listenerBlock: AudioObjectPropertyListenerBlock?
+    /// Cached default input device at start(). **Known limitation (I2 review):**
+    /// если юзер сменит default input device после start (USB mic plug-in),
+    /// listener останется attached к старому. Mirror VPN limitation pattern
+    /// (NEVPNManager.shared() also pins к first profile). Document'но
+    /// acceptable best-effort; revisit if real signal demands live re-attach.
     private var inputDeviceID: AudioDeviceID = 0
     private var listenerInstalled = false
 

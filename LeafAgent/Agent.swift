@@ -442,7 +442,7 @@ enum AgentMain {
             writer: writer,
             observersStore: systemObserversStore,
             coalesceWindowSec: agentThresholds.localFilesCoalesceWindowSec,
-            screenshotDirectoryOverride: agentThresholds.screenshotDirectoryOverrideKey
+            screenshotDirectoryOverride: agentThresholds.screenshotDirectoryOverridePath
         )
 
         AgentLifetime.writer = writer
