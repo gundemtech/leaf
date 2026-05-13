@@ -158,14 +158,10 @@ final class MigrationTests: XCTestCase {
         XCTAssertEqual(Schema.Workspaces.tableName, "workspaces")
         XCTAssertEqual(Schema.Workspaces.id, "id")
         XCTAssertEqual(Schema.Workspaces.createdByMemberID, "created_by_member_id")
-        // Org typealias still resolves to Workspaces — back-compat shim.
-        XCTAssertEqual(Schema.Workspaces.tableName, "workspaces")
 
         XCTAssertEqual(Schema.TeamMembers.tableName, "team_members")
         XCTAssertEqual(Schema.TeamMembers.pubkeyHex, "pubkey_hex")
         XCTAssertEqual(Schema.TeamMembers.removedAtMs, "removed_at_ms")
-        XCTAssertEqual(Schema.TeamMembers.indexWorkspaceActive, "team_members_workspace_active")
-        // Back-compat alias for indexOrgActive still resolves to the new index name.
         XCTAssertEqual(Schema.TeamMembers.indexWorkspaceActive, "team_members_workspace_active")
 
         XCTAssertEqual(Schema.TeamKeys.tableName, "team_keys")

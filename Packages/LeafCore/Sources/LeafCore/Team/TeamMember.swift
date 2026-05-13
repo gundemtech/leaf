@@ -8,8 +8,9 @@ import Foundation
 /// `pubkeyHex` — X25519 32-byte public, hex-encoded (64 chars). Private
 /// 32 байт никогда не попадают в DB — keystore-файл (5.1.D, contract §7).
 ///
-/// Phase Track-5 S2 — `orgID` renamed → `workspaceID`. Backward-compat
-/// `orgID` computed property + init overload retained until Task 12 cleanup.
+/// Phase Track-5 S2 — `orgID` renamed → `workspaceID` (M019). Back-compat
+/// `orgID` computed property + init overload were deleted in Task 12 cleanup;
+/// all call sites must provide `workspaceID` explicitly.
 public struct TeamMember: Sendable, Hashable {
     public let id: String
     public let workspaceID: String

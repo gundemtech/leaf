@@ -10,9 +10,9 @@ import Foundation
 ///
 /// Phase Track-5 S2 — `workspaceID` field added (M019 backfilled column).
 /// Forever-retained per `team_keys` design: old rows нужны для decrypt'а
-/// past presence_history (contract §12). Backward-compat init (deprecated)
-/// retained until Task 12 cleanup; sentinel `workspaceID = ""` для legacy
-/// call sites — sentinel rows never match real-workspace queries.
+/// past presence_history (contract §12). Back-compat init (sentinel
+/// `workspaceID = ""`) was deleted in Task 12 cleanup; all call sites must
+/// provide `workspaceID` explicitly.
 public struct TeamKey: Sendable, Hashable {
     public let id: String
     public let workspaceID: String

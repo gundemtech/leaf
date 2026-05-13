@@ -11,9 +11,11 @@ import GRDB
 public extension DatabaseMigrator {
     mutating func registerMigration006Org() {
         // Track-5 S2: historical migration — hardcoded string literals because
-        // `Schema.Org` is now a typealias to `Schema.Workspaces` (post-M019
-        // naming). M006 ran historically as `org`; M019 then renames →
-        // `workspaces`. Schema constants must not bleed forward into history.
+        // Schema constants resolve to post-M019 names (`workspaces`). M006 ran
+        // historically as `org`; M019 then renames → `workspaces`. Schema
+        // constants must not bleed forward into history. (The Task-12 cleanup
+        // deleted the temporary `Schema.Org` typealias to `Schema.Workspaces`;
+        // historical SQL hard-coding is the permanent solution.)
         registerMigration("006_org") { db in
             try db.create(table: "org", ifNotExists: true) { t in
                 t.primaryKey("id", .text)
