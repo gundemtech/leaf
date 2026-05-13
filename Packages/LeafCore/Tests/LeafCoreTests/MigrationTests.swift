@@ -152,15 +152,21 @@ final class MigrationTests: XCTestCase {
 
     /// Phase 5.1.A — Schema namespaces для team-crypto tables присутствуют
     /// и держат ожидаемые SQL identifier'ы. Sanity для Step 1 (до миграций).
+    /// Track-5 S2: post-M019 expectations — `org` → `workspaces`,
+    /// `team_members_org_active` → `team_members_workspace_active`.
     func testPhase51ASchemaConstantsAreDeclared() throws {
-        XCTAssertEqual(Schema.Org.tableName, "org")
-        XCTAssertEqual(Schema.Org.id, "id")
-        XCTAssertEqual(Schema.Org.createdByMemberID, "created_by_member_id")
+        XCTAssertEqual(Schema.Workspaces.tableName, "workspaces")
+        XCTAssertEqual(Schema.Workspaces.id, "id")
+        XCTAssertEqual(Schema.Workspaces.createdByMemberID, "created_by_member_id")
+        // Org typealias still resolves to Workspaces — back-compat shim.
+        XCTAssertEqual(Schema.Org.tableName, "workspaces")
 
         XCTAssertEqual(Schema.TeamMembers.tableName, "team_members")
         XCTAssertEqual(Schema.TeamMembers.pubkeyHex, "pubkey_hex")
         XCTAssertEqual(Schema.TeamMembers.removedAtMs, "removed_at_ms")
-        XCTAssertEqual(Schema.TeamMembers.indexOrgActive, "team_members_org_active")
+        XCTAssertEqual(Schema.TeamMembers.indexWorkspaceActive, "team_members_workspace_active")
+        // Back-compat alias for indexOrgActive still resolves to the new index name.
+        XCTAssertEqual(Schema.TeamMembers.indexOrgActive, "team_members_workspace_active")
 
         XCTAssertEqual(Schema.TeamKeys.tableName, "team_keys")
         XCTAssertEqual(Schema.TeamKeys.deprecatedAtMs, "deprecated_at_ms")
@@ -176,7 +182,10 @@ final class MigrationTests: XCTestCase {
 
     // MARK: - Phase 5.1.A — Step 2 (M006 org)
 
-    /// M006 — `org` table создана с правильными столбцами.
+    /// M006 — `org` table создана с правильными столбцами. Track-5 S2:
+    /// after M019 the table is renamed to `workspaces` and gains a
+    /// `left_at_ms` column (OQ-T5-2 soft-mark). Asserts post-M019 shape
+    /// because `Database.openForWrite` runs the full migrator chain.
     func testMigration006CreatesOrgTable() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
@@ -185,22 +194,23 @@ final class MigrationTests: XCTestCase {
             let tables = try String.fetchAll(
                 rawDB,
                 sql: "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-                arguments: [Schema.Org.tableName]
+                arguments: [Schema.Workspaces.tableName]
             )
-            XCTAssertEqual(tables, [Schema.Org.tableName])
+            XCTAssertEqual(tables, [Schema.Workspaces.tableName])
 
             let columns = try Row.fetchAll(
                 rawDB,
-                sql: "PRAGMA table_info(\(Schema.Org.tableName))"
+                sql: "PRAGMA table_info(\(Schema.Workspaces.tableName))"
             ).compactMap { $0["name"] as String? }
 
             XCTAssertEqual(
                 Set(columns),
                 Set([
-                    Schema.Org.id,
-                    Schema.Org.name,
-                    Schema.Org.createdAtMs,
-                    Schema.Org.createdByMemberID
+                    Schema.Workspaces.id,
+                    Schema.Workspaces.name,
+                    Schema.Workspaces.createdAtMs,
+                    Schema.Workspaces.createdByMemberID,
+                    Schema.Workspaces.leftAtMs
                 ])
             )
         }
@@ -361,6 +371,7 @@ final class MigrationTests: XCTestCase {
                 Set(byName.keys),
                 Set([
                     Schema.TeamKeys.id,
+                    Schema.TeamKeys.workspaceID,
                     Schema.TeamKeys.generatedAtMs,
                     Schema.TeamKeys.deprecatedAtMs,
                     Schema.TeamKeys.generatedByMemberID

@@ -40,10 +40,12 @@ final class M010PendingInvitesTests: XCTestCase {
                 return (name, row)
             })
 
+            // Track-5 S2: M019 adds `workspace_id` to pending_invites.
             XCTAssertEqual(
                 Set(byName.keys),
                 Set([
                     Schema.PendingInvites.token,
+                    Schema.PendingInvites.workspaceID,
                     Schema.PendingInvites.otp,
                     Schema.PendingInvites.inviteePubkeyHex,
                     Schema.PendingInvites.inviteeDisplayNameHint,

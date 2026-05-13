@@ -97,7 +97,7 @@ public struct InviteAcceptService: Sendable {
         guard !trimmedDN.isEmpty else {
             throw LeafError.invalidPayload
         }
-        guard try database.readOrg() == nil else {
+        guard try database.listWorkspaces(includeLeft: true).isEmpty else {
             throw LeafError.inviteAlreadyAccepted
         }
 
@@ -144,12 +144,12 @@ public struct InviteAcceptService: Sendable {
         // 9. Build domain rows.
         let acceptedAt = now()
         let issuedAt = Date(timeIntervalSince1970: TimeInterval(plaintext.issuedAtMs) / 1000)
-        let org = Org(id: plaintext.orgID,
-                      name: plaintext.orgName,
-                      createdAt: issuedAt,
-                      createdByMemberID: plaintext.adminMemberID)
+        let org = Workspace(id: plaintext.orgID,
+                            name: plaintext.orgName,
+                            createdAt: issuedAt,
+                            createdByMemberID: plaintext.adminMemberID)
         let adminMember = TeamMember(id: plaintext.adminMemberID,
-                                     orgID: plaintext.orgID,
+                                     workspaceID: plaintext.orgID,
                                      role: .admin,
                                      pubkeyHex: adminPubHex,
                                      displayName: plaintext.adminDisplayName,
@@ -157,13 +157,14 @@ public struct InviteAcceptService: Sendable {
                                      removedAt: nil)
         let selfMemberID = generateMemberID()
         let selfMember = TeamMember(id: selfMemberID,
-                                    orgID: plaintext.orgID,
+                                    workspaceID: plaintext.orgID,
                                     role: .member,
                                     pubkeyHex: selfPubHex,
                                     displayName: trimmedDN,
                                     addedAt: acceptedAt,
                                     removedAt: nil)
         let teamKey = TeamKey(id: plaintext.teamKeyID,
+                              workspaceID: plaintext.orgID,
                               generatedAt: issuedAt,
                               deprecatedAt: nil,
                               generatedByMemberID: plaintext.adminMemberID)
@@ -176,7 +177,7 @@ public struct InviteAcceptService: Sendable {
                                       at: keystoreRoot)
 
         // 11. DB writes (sequential — mirror OrgService.createPersonalOrg).
-        try database.upsertOrg(org)
+        try database.upsertWorkspace(org)
         try database.insertTeamMember(adminMember)
         try database.insertTeamMember(selfMember)
         try database.insertTeamKey(teamKey)

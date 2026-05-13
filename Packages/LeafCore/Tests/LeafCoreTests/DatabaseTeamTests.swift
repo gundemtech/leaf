@@ -36,9 +36,9 @@ final class DatabaseTeamTests: XCTestCase {
             createdAt: createdAt,
             createdByMemberID: "member-self"
         )
-        try db.upsertOrg(org)
+        try db.upsertWorkspace(org)
 
-        let loaded = try db.readOrg()
+        let loaded = try db.listWorkspaces(includeLeft: true).first
         XCTAssertNotNil(loaded)
         XCTAssertEqual(loaded?.id, "org-aaaa")
         XCTAssertEqual(loaded?.name, "Personal")
@@ -56,7 +56,7 @@ final class DatabaseTeamTests: XCTestCase {
             createdAt: Date(timeIntervalSince1970: 1_700_000_000),
             createdByMemberID: "member-self"
         )
-        try db.upsertOrg(initial)
+        try db.upsertWorkspace(initial)
 
         let renamed = Org(
             id: "org-aaaa",
@@ -64,16 +64,16 @@ final class DatabaseTeamTests: XCTestCase {
             createdAt: Date(timeIntervalSince1970: 1_700_000_000),
             createdByMemberID: "member-self"
         )
-        try db.upsertOrg(renamed)
+        try db.upsertWorkspace(renamed)
 
-        let loaded = try db.readOrg()
+        let loaded = try db.listWorkspaces(includeLeft: true).first
         XCTAssertEqual(loaded?.name, "Acme Inc", "UPSERT должен был обновить name")
     }
 
     /// Fresh DB без upsert'а → readOrg() == nil.
     func testReadOrgReturnsNilWhenEmpty() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
-        let loaded = try db.readOrg()
+        let loaded = try db.listWorkspaces(includeLeft: true).first
         XCTAssertNil(loaded)
     }
 
@@ -86,7 +86,7 @@ final class DatabaseTeamTests: XCTestCase {
 
         let earlier = TeamMember(
             id: "member-self",
-            orgID: "org-aaaa",
+            workspaceID: "org-aaaa",
             role: .admin,
             pubkeyHex: String(repeating: "ab", count: 32),
             displayName: "Dmitrii",
@@ -95,7 +95,7 @@ final class DatabaseTeamTests: XCTestCase {
         )
         let later = TeamMember(
             id: "member-2",
-            orgID: "org-aaaa",
+            workspaceID: "org-aaaa",
             role: .member,
             pubkeyHex: String(repeating: "cd", count: 32),
             displayName: "Anton",
@@ -105,7 +105,7 @@ final class DatabaseTeamTests: XCTestCase {
         try db.insertTeamMember(earlier)
         try db.insertTeamMember(later)
 
-        let members = try db.readTeamMembers(orgID: "org-aaaa", includeRemoved: true)
+        let members = try db.readTeamMembers(workspaceID: "org-aaaa", includeRemoved: true)
         XCTAssertEqual(members.count, 2)
         XCTAssertEqual(members[0].id, "member-self", "должен быть ordered by addedAt ASC")
         XCTAssertEqual(members[0].role, .admin)
@@ -130,7 +130,7 @@ final class DatabaseTeamTests: XCTestCase {
             )
         }
 
-        let activeOnly = try db.readTeamMembers(orgID: "org-aaaa")
+        let activeOnly = try db.readTeamMembers(workspaceID: "org-aaaa")
         XCTAssertEqual(activeOnly.count, 1)
         XCTAssertEqual(activeOnly[0].id, "member-self")
         XCTAssertNil(activeOnly[0].removedAt)
@@ -151,7 +151,7 @@ final class DatabaseTeamTests: XCTestCase {
             )
         }
 
-        let all = try db.readTeamMembers(orgID: "org-aaaa", includeRemoved: true)
+        let all = try db.readTeamMembers(workspaceID: "org-aaaa", includeRemoved: true)
         XCTAssertEqual(all.count, 2)
         let removed = all.first { $0.id == "member-2" }
         XCTAssertEqual(removed?.removedAt, Date(timeIntervalSince1970: TimeInterval(removedAtMs) / 1000.0))
@@ -165,7 +165,7 @@ final class DatabaseTeamTests: XCTestCase {
         try insertSampleMembers(db, orgID: "org-aaaa")
         let foreign = TeamMember(
             id: "member-foreign",
-            orgID: "org-bbbb",
+            workspaceID: "org-bbbb",
             role: .member,
             pubkeyHex: String(repeating: "ef", count: 32),
             displayName: "Foreign",
@@ -174,11 +174,11 @@ final class DatabaseTeamTests: XCTestCase {
         )
         try db.insertTeamMember(foreign)
 
-        let aMembers = try db.readTeamMembers(orgID: "org-aaaa", includeRemoved: true)
+        let aMembers = try db.readTeamMembers(workspaceID: "org-aaaa", includeRemoved: true)
         XCTAssertEqual(aMembers.count, 2)
         XCTAssertFalse(aMembers.contains { $0.id == "member-foreign" })
 
-        let bMembers = try db.readTeamMembers(orgID: "org-bbbb")
+        let bMembers = try db.readTeamMembers(workspaceID: "org-bbbb")
         XCTAssertEqual(bMembers.count, 1)
         XCTAssertEqual(bMembers[0].id, "member-foreign")
     }
@@ -193,13 +193,14 @@ final class DatabaseTeamTests: XCTestCase {
         let generatedAt = Date(timeIntervalSince1970: 1_700_000_000)
         let key = TeamKey(
             id: "key-rotation-1",
+            workspaceID: "org-aaaa",
             generatedAt: generatedAt,
             deprecatedAt: nil,
             generatedByMemberID: "member-self"
         )
         try db.insertTeamKey(key)
 
-        let active = try db.readActiveTeamKey()
+        let active = try db.readActiveTeamKey(workspaceID: "org-aaaa")
         XCTAssertNotNil(active)
         XCTAssertEqual(active?.id, "key-rotation-1")
         XCTAssertEqual(active?.generatedAt, generatedAt)
@@ -214,6 +215,7 @@ final class DatabaseTeamTests: XCTestCase {
 
         try db.insertTeamKey(TeamKey(
             id: "key-rotation-1",
+            workspaceID: "org-aaaa",
             generatedAt: Date(timeIntervalSince1970: 1_700_000_000),
             deprecatedAt: nil,
             generatedByMemberID: "member-self"
@@ -226,7 +228,7 @@ final class DatabaseTeamTests: XCTestCase {
             )
         }
 
-        let active = try db.readActiveTeamKey()
+        let active = try db.readActiveTeamKey(workspaceID: "org-aaaa")
         XCTAssertNil(active)
     }
 
@@ -237,12 +239,14 @@ final class DatabaseTeamTests: XCTestCase {
 
         let earlier = TeamKey(
             id: "key-rotation-1",
+            workspaceID: "org-aaaa",
             generatedAt: Date(timeIntervalSince1970: 1_700_000_000),
             deprecatedAt: nil,
             generatedByMemberID: "member-self"
         )
         let later = TeamKey(
             id: "key-rotation-2",
+            workspaceID: "org-aaaa",
             generatedAt: Date(timeIntervalSince1970: 1_700_001_000),
             deprecatedAt: nil,
             generatedByMemberID: "member-self"
@@ -250,7 +254,7 @@ final class DatabaseTeamTests: XCTestCase {
         try db.insertTeamKey(earlier)
         try db.insertTeamKey(later)
 
-        let active = try db.readActiveTeamKey()
+        let active = try db.readActiveTeamKey(workspaceID: "org-aaaa")
         XCTAssertEqual(active?.id, "key-rotation-2", "ORDER BY generated_at_ms DESC LIMIT 1 — должна вернуться latest")
     }
 
@@ -261,7 +265,7 @@ final class DatabaseTeamTests: XCTestCase {
     func testReaderModeWriteHelpersThrowDatabaseUnavailable() throws {
         // Сначала writer создаёт schema + один row для contention test'а:
         let writer = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
-        try writer.upsertOrg(Org(
+        try writer.upsertWorkspace(Org(
             id: "org-aaaa",
             name: "Personal",
             createdAt: Date(timeIntervalSince1970: 1_700_000_000),
@@ -270,7 +274,7 @@ final class DatabaseTeamTests: XCTestCase {
 
         let reader = try Database.openForRead(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
-        XCTAssertThrowsError(try reader.upsertOrg(Org(
+        XCTAssertThrowsError(try reader.upsertWorkspace(Org(
             id: "org-bbbb", name: "Other",
             createdAt: Date(timeIntervalSince1970: 1_700_001_000),
             createdByMemberID: "member-self"
@@ -279,7 +283,7 @@ final class DatabaseTeamTests: XCTestCase {
         }
 
         XCTAssertThrowsError(try reader.insertTeamMember(TeamMember(
-            id: "member-x", orgID: "org-aaaa", role: .member,
+            id: "member-x", workspaceID: "org-aaaa", role: .member,
             pubkeyHex: String(repeating: "ab", count: 32),
             displayName: "X",
             addedAt: Date(timeIntervalSince1970: 1_700_001_000),
@@ -290,6 +294,7 @@ final class DatabaseTeamTests: XCTestCase {
 
         XCTAssertThrowsError(try reader.insertTeamKey(TeamKey(
             id: "key-x",
+            workspaceID: "org-aaaa",
             generatedAt: Date(timeIntervalSince1970: 1_700_001_000),
             deprecatedAt: nil,
             generatedByMemberID: "member-self"
@@ -303,7 +308,7 @@ final class DatabaseTeamTests: XCTestCase {
     private func insertSampleMembers(_ db: LeafCore.Database, orgID: String) throws {
         try db.insertTeamMember(TeamMember(
             id: "member-self",
-            orgID: orgID,
+            workspaceID: orgID,
             role: .admin,
             pubkeyHex: String(repeating: "ab", count: 32),
             displayName: "Dmitrii",
@@ -312,7 +317,7 @@ final class DatabaseTeamTests: XCTestCase {
         ))
         try db.insertTeamMember(TeamMember(
             id: "member-2",
-            orgID: orgID,
+            workspaceID: orgID,
             role: .member,
             pubkeyHex: String(repeating: "cd", count: 32),
             displayName: "Anton",

@@ -64,7 +64,7 @@ public struct OrgService: Sendable {
             throw LeafError.invalidPayload
         }
 
-        guard try database.readOrg() == nil else {
+        guard try database.listWorkspaces(includeLeft: true).isEmpty else {
             throw LeafError.orgAlreadyExists
         }
 
@@ -90,14 +90,14 @@ public struct OrgService: Sendable {
         let nowDate = now()
         let member = TeamMember(
             id: selfMemberID,
-            orgID: orgID,
+            workspaceID: orgID,
             role: .admin,
             pubkeyHex: pubkeyHex,
             displayName: trimmed,
             addedAt: nowDate,
             removedAt: nil
         )
-        let org = Org(
+        let org = Workspace(
             id: orgID,
             name: trimmed,
             createdAt: nowDate,
@@ -105,23 +105,26 @@ public struct OrgService: Sendable {
         )
         let teamKey = TeamKey(
             id: teamKeyID,
+            workspaceID: orgID,
             generatedAt: nowDate,
             deprecatedAt: nil,
             generatedByMemberID: selfMemberID
         )
 
-        // Step 7 — DB writes (org → member → team_keys per contract §9 list).
-        try database.upsertOrg(org)
+        // Step 7 — DB writes (workspace → member → team_keys per contract §9 list).
+        try database.upsertWorkspace(org)
         try database.insertTeamMember(member)
         try database.insertTeamKey(teamKey)
 
         return org
     }
 
-    /// Pass-through через `database.readOrg()` — UI 5.1.E использует для
-    /// "show CTA only if nil" логики (UI не должен знать про Database напрямую).
+    /// Pass-through через `database.listWorkspaces().first` — UI 5.1.E
+    /// использует для "show CTA only if nil" логики (UI не должен знать про
+    /// Database напрямую). Track-5 S2: still returns single workspace (Tasks
+    /// 3+ introduce `WorkspaceService` for multi-workspace surface).
     public func currentOrg() throws -> Org? {
-        return try database.readOrg()
+        return try database.listWorkspaces(includeLeft: true).first
     }
 
     /// Default `randomBytes` factory: `SecRandomCopyBytes` под the hood

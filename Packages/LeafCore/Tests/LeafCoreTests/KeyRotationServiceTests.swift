@@ -68,24 +68,25 @@ final class KeyRotationServiceTests: XCTestCase {
         let peerAPubHex = hexEncode(peerAPriv.publicKey.rawRepresentation)
         let peerBPubHex = hexEncode(peerBPriv.publicKey.rawRepresentation)
 
-        try db.upsertOrg(Org(id: orgID, name: "Test Org", createdAt: makeDate(1_700_000_000_000), createdByMemberID: selfMemberID))
+        try db.upsertWorkspace(Org(id: orgID, name: "Test Org", createdAt: makeDate(1_700_000_000_000), createdByMemberID: selfMemberID))
         try db.insertTeamMember(TeamMember(
-            id: selfMemberID, orgID: orgID, role: .admin,
+            id: selfMemberID, workspaceID: orgID, role: .admin,
             pubkeyHex: selfPubHex, displayName: "Self",
             addedAt: makeDate(1_700_000_000_000), removedAt: nil
         ))
         try db.insertTeamMember(TeamMember(
-            id: "peer-a", orgID: orgID, role: .member,
+            id: "peer-a", workspaceID: orgID, role: .member,
             pubkeyHex: peerAPubHex, displayName: "PeerA",
             addedAt: makeDate(1_700_000_000_500), removedAt: nil
         ))
         try db.insertTeamMember(TeamMember(
-            id: "peer-b", orgID: orgID, role: .member,
+            id: "peer-b", workspaceID: orgID, role: .member,
             pubkeyHex: peerBPubHex, displayName: "PeerB",
             addedAt: makeDate(1_700_000_000_600), removedAt: nil
         ))
         try db.insertTeamKey(TeamKey(
             id: priorKeyID,
+            workspaceID: orgID,
             generatedAt: makeDate(1_700_000_000_000),
             deprecatedAt: nil,
             generatedByMemberID: selfMemberID
@@ -165,10 +166,10 @@ final class KeyRotationServiceTests: XCTestCase {
         XCTAssertEqual(codec.encodedPlaintexts.count, 2)
         XCTAssertEqual(kdf.calls.count, 1)
 
-        XCTAssertEqual(try db.readActiveTeamKey()?.id, "11111111-1111-1111-1111-111111111111")
+        XCTAssertEqual(try db.readActiveTeamKey(workspaceID: "org1")?.id, "11111111-1111-1111-1111-111111111111")
         let priorKey = try db.readTeamKey(byID: "00000000-0000-0000-0000-000000000000")
         XCTAssertNotNil(priorKey?.deprecatedAt)
-        let peerB = try db.readTeamMembers(orgID: "org1", includeRemoved: true)
+        let peerB = try db.readTeamMembers(workspaceID: "org1", includeRemoved: true)
             .first(where: { $0.id == "peer-b" })
         XCTAssertNotNil(peerB?.removedAt)
 
@@ -279,8 +280,8 @@ final class KeyRotationServiceTests: XCTestCase {
         XCTAssertEqual(outcome.pendingCount, 2)
 
         // DB STATE STILL COMMITTED
-        XCTAssertEqual(try db.readActiveTeamKey()?.id, "11111111-1111-1111-1111-111111111111")
-        let peerB = try db.readTeamMembers(orgID: "org1", includeRemoved: true)
+        XCTAssertEqual(try db.readActiveTeamKey(workspaceID: "org1")?.id, "11111111-1111-1111-1111-111111111111")
+        let peerB = try db.readTeamMembers(workspaceID: "org1", includeRemoved: true)
             .first(where: { $0.id == "peer-b" })
         XCTAssertNotNil(peerB?.removedAt)
         // 2 unposted rows for resume
@@ -373,14 +374,14 @@ final class KeyRotationServiceTests: XCTestCase {
         let peerPriv = Curve25519.KeyAgreement.PrivateKey()
         let peerPubHex = hexEncode(peerPriv.publicKey.rawRepresentation)
 
-        try db.upsertOrg(Org(id: "org1", name: "Test Org", createdAt: makeDate(1_700_000_000_000), createdByMemberID: "self-mem"))
+        try db.upsertWorkspace(Org(id: "org1", name: "Test Org", createdAt: makeDate(1_700_000_000_000), createdByMemberID: "self-mem"))
         try db.insertTeamMember(TeamMember(
-            id: "self-mem", orgID: "org1", role: .admin,
+            id: "self-mem", workspaceID: "org1", role: .admin,
             pubkeyHex: selfPubHex, displayName: "Self",
             addedAt: makeDate(1_700_000_000_000), removedAt: nil
         ))
         try db.insertTeamMember(TeamMember(
-            id: "peer-b", orgID: "org1", role: .member,
+            id: "peer-b", workspaceID: "org1", role: .member,
             pubkeyHex: peerPubHex, displayName: "PeerB",
             addedAt: makeDate(1_700_000_000_500), removedAt: nil
         ))

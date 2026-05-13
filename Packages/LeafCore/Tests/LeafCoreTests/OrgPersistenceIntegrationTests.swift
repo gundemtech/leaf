@@ -37,10 +37,10 @@ final class OrgPersistenceIntegrationTests: XCTestCase {
         var db: Database? = try openDB()
         let svc1 = OrgService(database: db!, keystoreRoot: keystoreRoot, now: { now })
         let createdOrg = try svc1.createPersonalOrg(displayName: "Personal")
-        let createdMembers = try db!.readTeamMembers(orgID: createdOrg.id)
+        let createdMembers = try db!.readTeamMembers(workspaceID: createdOrg.id)
         XCTAssertEqual(createdMembers.count, 1)
         let createdMember = createdMembers[0]
-        let createdTeamKey = try db!.readActiveTeamKey()!
+        let createdTeamKey = try db!.readActiveTeamKey(workspaceID: createdOrg.id)!
 
         // Close DB pool (deinit DatabasePool releases SQLite handles).
         db = nil
@@ -49,21 +49,21 @@ final class OrgPersistenceIntegrationTests: XCTestCase {
         let db2 = try openDB()
 
         // DB rows match exactly.
-        let reopenedOrg = try db2.readOrg()
+        let reopenedOrg = try db2.listWorkspaces(includeLeft: true).first
         XCTAssertNotNil(reopenedOrg)
         XCTAssertEqual(reopenedOrg?.id, createdOrg.id)
         XCTAssertEqual(reopenedOrg?.name, "Personal")
         XCTAssertEqual(reopenedOrg?.createdAt, now)
         XCTAssertEqual(reopenedOrg?.createdByMemberID, createdMember.id)
 
-        let reopenedMembers = try db2.readTeamMembers(orgID: reopenedOrg!.id)
+        let reopenedMembers = try db2.readTeamMembers(workspaceID: reopenedOrg!.id)
         XCTAssertEqual(reopenedMembers.count, 1)
         XCTAssertEqual(reopenedMembers[0].id, createdMember.id)
         XCTAssertEqual(reopenedMembers[0].role, .admin)
         XCTAssertEqual(reopenedMembers[0].pubkeyHex, createdMember.pubkeyHex)
         XCTAssertEqual(reopenedMembers[0].displayName, "Personal")
 
-        let reopenedTeamKey = try db2.readActiveTeamKey()
+        let reopenedTeamKey = try db2.readActiveTeamKey(workspaceID: reopenedOrg!.id)
         XCTAssertEqual(reopenedTeamKey?.id, createdTeamKey.id)
         XCTAssertEqual(reopenedTeamKey?.generatedAt, now)
         XCTAssertNil(reopenedTeamKey?.deprecatedAt)
@@ -106,9 +106,9 @@ final class OrgPersistenceIntegrationTests: XCTestCase {
         }
 
         // DB state unchanged after rejected second attempt.
-        let org = try db2.readOrg()
+        let org = try db2.listWorkspaces(includeLeft: true).first
         XCTAssertEqual(org?.name, "Personal")
-        let members = try db2.readTeamMembers(orgID: org!.id)
+        let members = try db2.readTeamMembers(workspaceID: org!.id)
         XCTAssertEqual(members.count, 1)
     }
 
@@ -128,7 +128,8 @@ final class OrgPersistenceIntegrationTests: XCTestCase {
         )
         _ = try svc.createPersonalOrg(displayName: "Personal")
 
-        let teamKey = try db.readActiveTeamKey()!
+        let org = try db.listWorkspaces(includeLeft: true).first!
+        let teamKey = try db.readActiveTeamKey(workspaceID: org.id)!
         let onDiskPath = keystoreRoot
             .appendingPathComponent(TeamKeystore.teamKeysSubdir, isDirectory: true)
             .appendingPathComponent("\(teamKey.id).\(TeamKeystore.teamKeyExtension)").path

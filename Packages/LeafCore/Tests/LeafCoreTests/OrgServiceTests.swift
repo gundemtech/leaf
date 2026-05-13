@@ -49,20 +49,20 @@ final class OrgServiceTests: XCTestCase {
         let svc = makeService()
         _ = try svc.createPersonalOrg(displayName: "Personal")
 
-        let org = try db.readOrg()
+        let org = try db.listWorkspaces(includeLeft: true).first
         XCTAssertNotNil(org)
 
-        let members = try db.readTeamMembers(orgID: org!.id)
+        let members = try db.readTeamMembers(workspaceID: org!.id)
         XCTAssertEqual(members.count, 1)
         let self_ = members[0]
 
-        let teamKey = try db.readActiveTeamKey()
+        let teamKey = try db.readActiveTeamKey(workspaceID: org!.id)
         XCTAssertNotNil(teamKey)
 
         // FK chain: org.createdByMemberID == member.id == teamKey.generatedByMemberID.
         XCTAssertEqual(org!.createdByMemberID, self_.id)
         XCTAssertEqual(teamKey!.generatedByMemberID, self_.id)
-        XCTAssertEqual(self_.orgID, org!.id)
+        XCTAssertEqual(self_.workspaceID, org!.id)
     }
 
     // MARK: - 2. Admin role + 64-char hex pubkey
@@ -71,8 +71,8 @@ final class OrgServiceTests: XCTestCase {
         let svc = makeService()
         _ = try svc.createPersonalOrg(displayName: "Personal")
 
-        let org = try db.readOrg()
-        let members = try db.readTeamMembers(orgID: org!.id)
+        let org = try db.listWorkspaces(includeLeft: true).first
+        let members = try db.readTeamMembers(workspaceID: org!.id)
         let self_ = members[0]
 
         XCTAssertEqual(self_.role, .admin)
@@ -93,7 +93,7 @@ final class OrgServiceTests: XCTestCase {
         XCTAssertEqual(returned.name, "Personal")
         XCTAssertEqual(returned.createdAt, now)
 
-        let stored = try db.readOrg()
+        let stored = try db.listWorkspaces(includeLeft: true).first
         XCTAssertEqual(stored?.id, returned.id)
         XCTAssertEqual(stored?.name, "Personal")
         XCTAssertEqual(stored?.createdAt, now)
@@ -107,9 +107,9 @@ final class OrgServiceTests: XCTestCase {
         let svc = makeService(now: now)
         _ = try svc.createPersonalOrg(displayName: "Personal")
 
-        let org = try db.readOrg()!
-        let teamKey = try db.readActiveTeamKey()!
-        let self_ = (try db.readTeamMembers(orgID: org.id))[0]
+        let org = try db.listWorkspaces(includeLeft: true).first!
+        let teamKey = try db.readActiveTeamKey(workspaceID: org.id)!
+        let self_ = (try db.readTeamMembers(workspaceID: org.id))[0]
 
         XCTAssertEqual(teamKey.generatedAt, now)
         XCTAssertNil(teamKey.deprecatedAt)
@@ -141,7 +141,8 @@ final class OrgServiceTests: XCTestCase {
         let svc = makeService()
         _ = try svc.createPersonalOrg(displayName: "Personal")
 
-        let teamKey = try db.readActiveTeamKey()!
+        let org = try db.listWorkspaces(includeLeft: true).first!
+        let teamKey = try db.readActiveTeamKey(workspaceID: org.id)!
         let path = keystoreRoot
             .appendingPathComponent(TeamKeystore.teamKeysSubdir, isDirectory: true)
             .appendingPathComponent("\(teamKey.id).\(TeamKeystore.teamKeyExtension)")
@@ -170,9 +171,9 @@ final class OrgServiceTests: XCTestCase {
         }
 
         // DB row counts unchanged.
-        let org = try db.readOrg()!
+        let org = try db.listWorkspaces(includeLeft: true).first!
         XCTAssertEqual(org.name, "Personal")  // not "Other"
-        let members = try db.readTeamMembers(orgID: org.id)
+        let members = try db.readTeamMembers(workspaceID: org.id)
         XCTAssertEqual(members.count, 1)
     }
 
@@ -189,7 +190,7 @@ final class OrgServiceTests: XCTestCase {
         }
 
         // Nothing written.
-        XCTAssertNil(try db.readOrg())
+        XCTAssertNil(try db.listWorkspaces(includeLeft: true).first)
         XCTAssertFalse(FileManager.default.fileExists(atPath: keystoreRoot.path))
     }
 
@@ -201,9 +202,9 @@ final class OrgServiceTests: XCTestCase {
 
         XCTAssertEqual(returned.name, "Alice")
 
-        let org = try db.readOrg()
+        let org = try db.listWorkspaces(includeLeft: true).first
         XCTAssertEqual(org?.name, "Alice")
-        let members = try db.readTeamMembers(orgID: org!.id)
+        let members = try db.readTeamMembers(workspaceID: org!.id)
         XCTAssertEqual(members[0].displayName, "Alice")
     }
 
@@ -231,8 +232,8 @@ final class OrgServiceTests: XCTestCase {
         let derivedPub = priv.publicKey.rawRepresentation
         let derivedHex = derivedPub.map { String(format: "%02x", $0) }.joined()
 
-        let org = try db.readOrg()!
-        let self_ = (try db.readTeamMembers(orgID: org.id))[0]
+        let org = try db.listWorkspaces(includeLeft: true).first!
+        let self_ = (try db.readTeamMembers(workspaceID: org.id))[0]
         XCTAssertEqual(self_.pubkeyHex, derivedHex)
     }
 
@@ -274,13 +275,13 @@ final class OrgServiceTests: XCTestCase {
         XCTAssertEqual(returned.createdByMemberID, "fixed-uuid-1")
         XCTAssertEqual(returned.id, "fixed-uuid-2")
 
-        let teamKey = try db.readActiveTeamKey()!
+        let teamKey = try db.readActiveTeamKey(workspaceID: returned.id)!
         XCTAssertEqual(teamKey.id, "fixed-uuid-3")
         XCTAssertEqual(teamKey.generatedByMemberID, "fixed-uuid-1")
         XCTAssertEqual(teamKey.generatedAt, now)
 
         // Member fields.
-        let self_ = (try db.readTeamMembers(orgID: returned.id))[0]
+        let self_ = (try db.readTeamMembers(workspaceID: returned.id))[0]
         XCTAssertEqual(self_.id, "fixed-uuid-1")
         XCTAssertEqual(self_.pubkeyHex, fixedPubHex)
         XCTAssertEqual(self_.addedAt, now)
@@ -307,8 +308,8 @@ final class OrgServiceTests: XCTestCase {
         let svc = OrgService(database: db, keystoreRoot: keystoreRoot)
         _ = try svc.createPersonalOrg(displayName: "Alice")
 
-        let org = try db.readOrg()!
-        let self_ = (try db.readTeamMembers(orgID: org.id))[0]
+        let org = try db.listWorkspaces(includeLeft: true).first!
+        let self_ = (try db.readTeamMembers(workspaceID: org.id))[0]
 
         let knownPubHex = knownPriv.publicKey.rawRepresentation
             .map { String(format: "%02x", $0) }.joined()

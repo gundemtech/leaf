@@ -54,15 +54,16 @@ public struct InviteService: Sendable {
         }
         let lowercased = inviteePubkeyHex.lowercased()
 
-        // 2-4. Read DB rows.
-        guard let org = try database.readOrg() else {
+        // 2-4. Read DB rows. Track-5 S2: single-workspace assumption preserved
+        // (multi-workspace plumbing lands in Tasks 3+).
+        guard let org = try database.listWorkspaces(includeLeft: true).first else {
             throw LeafError.databaseUnavailable
         }
-        let members = try database.readTeamMembers(orgID: org.id, includeRemoved: false)
+        let members = try database.readTeamMembers(workspaceID: org.id, includeRemoved: false)
         guard let selfMember = members.first else {
             throw LeafError.databaseUnavailable
         }
-        guard let activeKey = try database.readActiveTeamKey() else {
+        guard let activeKey = try database.readActiveTeamKey(workspaceID: org.id) else {
             throw LeafError.databaseUnavailable
         }
         let teamKeyBytes = try TeamKeystore.readTeamKey(id: activeKey.id, at: keystoreRoot)

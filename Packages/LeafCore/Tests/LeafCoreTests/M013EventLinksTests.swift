@@ -67,7 +67,8 @@ final class M013EventLinksTests: XCTestCase {
         try db.readSQL { rawDB in
             let applied = try String.fetchAll(rawDB, sql: "SELECT identifier FROM grdb_migrations ORDER BY identifier")
             XCTAssertTrue(applied.contains("013_event_links"))
-            XCTAssertEqual(applied.count, 18)
+            // Track-5 S2: chain extended by M019 (workspaces).
+            XCTAssertEqual(applied.count, 19)
         }
     }
 }

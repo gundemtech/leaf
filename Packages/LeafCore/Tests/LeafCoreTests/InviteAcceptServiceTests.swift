@@ -240,12 +240,12 @@ final class InviteAcceptServiceTests: XCTestCase {
         XCTAssertEqual(accepted.selfMemberID, "11111111-1111-4111-8111-111111111111")
 
         // DB rows
-        let org = try XCTUnwrap(db.readOrg())
+        let org = try XCTUnwrap(db.listWorkspaces(includeLeft: true).first)
         XCTAssertEqual(org.id, orgID)
         XCTAssertEqual(org.name, "Acme Org")
         XCTAssertEqual(org.createdByMemberID, adminID)
 
-        let members = try db.readTeamMembers(orgID: orgID)
+        let members = try db.readTeamMembers(workspaceID: orgID)
         XCTAssertEqual(members.count, 2)
         let admin = try XCTUnwrap(members.first(where: { $0.id == adminID }))
         XCTAssertEqual(admin.role, .admin)
@@ -258,7 +258,7 @@ final class InviteAcceptServiceTests: XCTestCase {
         XCTAssertEqual(me.pubkeyHex,
                        inviteePriv.publicKey.rawRepresentation.map { String(format: "%02x", $0) }.joined())
 
-        let activeKey = try XCTUnwrap(db.readActiveTeamKey())
+        let activeKey = try XCTUnwrap(db.readActiveTeamKey(workspaceID: orgID))
         XCTAssertEqual(activeKey.id, teamKeyID)
 
         // Keystore file
@@ -285,7 +285,7 @@ final class InviteAcceptServiceTests: XCTestCase {
             // ok
         }
 
-        XCTAssertNil(try db.readOrg())
+        XCTAssertNil(try db.listWorkspaces(includeLeft: true).first)
         // No keystore file written.
         let dir = try? FileManager.default.contentsOfDirectory(atPath: keystoreRoot.path)
         XCTAssertTrue(dir == nil || dir!.isEmpty,
@@ -296,7 +296,7 @@ final class InviteAcceptServiceTests: XCTestCase {
         // Pre-seed an org row.
         let existingOrgID = UUID().uuidString.lowercased()
         let existingMemberID = UUID().uuidString.lowercased()
-        try db.upsertOrg(Org(id: existingOrgID, name: "Existing",
+        try db.upsertWorkspace(Org(id: existingOrgID, name: "Existing",
                               createdAt: Date(timeIntervalSince1970: 1_699_000_000),
                               createdByMemberID: existingMemberID))
 
@@ -317,7 +317,7 @@ final class InviteAcceptServiceTests: XCTestCase {
         // Codec must NOT have been called — preflight rejected.
         XCTAssertEqual(codec.decodeCalls, 0)
         // Original org row untouched.
-        let org = try XCTUnwrap(db.readOrg())
+        let org = try XCTUnwrap(db.listWorkspaces(includeLeft: true).first)
         XCTAssertEqual(org.id, existingOrgID)
     }
 
@@ -358,7 +358,7 @@ final class InviteAcceptServiceTests: XCTestCase {
         } catch LeafError.inviteBlobMalformed {
             // ok
         }
-        XCTAssertNil(try db.readOrg())
+        XCTAssertNil(try db.listWorkspaces(includeLeft: true).first)
     }
 
     func testAcceptInvite_EmptyDisplayName_RejectedAsInvalidPayload() async throws {

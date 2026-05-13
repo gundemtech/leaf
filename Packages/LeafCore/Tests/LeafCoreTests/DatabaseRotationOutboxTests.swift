@@ -35,7 +35,7 @@ final class DatabaseRotationOutboxTests: XCTestCase {
         selfMemberID: String = "self-mem",
         priorKeyID: String = "key0"
     ) throws {
-        try db.upsertOrg(Org(
+        try db.upsertWorkspace(Org(
             id: orgID,
             name: "Test Org",
             createdAt: makeDate(1_700_000_000_000),
@@ -43,7 +43,7 @@ final class DatabaseRotationOutboxTests: XCTestCase {
         ))
         try db.insertTeamMember(TeamMember(
             id: selfMemberID,
-            orgID: orgID,
+            workspaceID: orgID,
             role: .admin,
             pubkeyHex: String(repeating: "aa", count: 32),
             displayName: "Self",
@@ -52,6 +52,7 @@ final class DatabaseRotationOutboxTests: XCTestCase {
         ))
         try db.insertTeamKey(TeamKey(
             id: priorKeyID,
+            workspaceID: orgID,
             generatedAt: makeDate(1_700_000_000_000),
             deprecatedAt: nil,
             generatedByMemberID: selfMemberID
@@ -94,7 +95,7 @@ final class DatabaseRotationOutboxTests: XCTestCase {
 
     func testCommitRotation_HappyPath_NewActiveOldDeprecated() throws {
         try insertOrgFixture()
-        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        let newKey = TeamKey(id: "key1", workspaceID: "org1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
         let row = sampleOutboxRow()
 
         try db.commitRotation(
@@ -106,7 +107,7 @@ final class DatabaseRotationOutboxTests: XCTestCase {
             outboxRows: [row]
         )
 
-        XCTAssertEqual(try db.readActiveTeamKey()?.id, "key1")
+        XCTAssertEqual(try db.readActiveTeamKey(workspaceID: "org1")?.id, "key1")
         let prior = try db.readTeamKey(byID: "key0")
         XCTAssertNotNil(prior?.deprecatedAt)
         let unposted = try db.readUnpostedRotationOutboxRows()
@@ -117,11 +118,11 @@ final class DatabaseRotationOutboxTests: XCTestCase {
     func testCommitRotation_WithRemovedMember_UpdatesAllThreeTables() throws {
         try insertOrgFixture()
         try db.insertTeamMember(TeamMember(
-            id: "peer-mem", orgID: "org1", role: .member,
+            id: "peer-mem", workspaceID: "org1", role: .member,
             pubkeyHex: String(repeating: "bb", count: 32), displayName: "Peer",
             addedAt: makeDate(1_700_000_000_500), removedAt: nil
         ))
-        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        let newKey = TeamKey(id: "key1", workspaceID: "org1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
         let tombstone = sampleOutboxRow(newKeyID: "key0", priorKeyID: "key0", kind: .tombstone)
 
         try db.commitRotation(
@@ -133,15 +134,15 @@ final class DatabaseRotationOutboxTests: XCTestCase {
             outboxRows: [tombstone]
         )
 
-        let removedMember = try db.readTeamMembers(orgID: "org1", includeRemoved: true)
+        let removedMember = try db.readTeamMembers(workspaceID: "org1", includeRemoved: true)
             .first(where: { $0.id == "peer-mem" })
         XCTAssertNotNil(removedMember?.removedAt)
-        XCTAssertEqual(try db.readActiveTeamKey()?.id, "key1")
+        XCTAssertEqual(try db.readActiveTeamKey(workspaceID: "org1")?.id, "key1")
     }
 
     func testCommitRotation_NilNonNilMismatchThrows() throws {
         try insertOrgFixture()
-        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        let newKey = TeamKey(id: "key1", workspaceID: "org1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
 
         XCTAssertThrowsError(
             try db.commitRotation(
@@ -159,7 +160,7 @@ final class DatabaseRotationOutboxTests: XCTestCase {
 
     func testCommitRotation_FailsWhenPriorTeamKeyMissing() throws {
         try insertOrgFixture()
-        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        let newKey = TeamKey(id: "key1", workspaceID: "org1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
 
         XCTAssertThrowsError(
             try db.commitRotation(
@@ -180,13 +181,14 @@ final class DatabaseRotationOutboxTests: XCTestCase {
         // Insert a second active key so we can deprecate "key0" without sole-active throw.
         try db.insertTeamKey(TeamKey(
             id: "key0b",
+            workspaceID: "org1",
             generatedAt: makeDate(1_700_000_000_500),
             deprecatedAt: nil,
             generatedByMemberID: "self-mem"
         ))
-        try db.deprecateTeamKey(keyID: "key0", at: makeDate(1_700_000_000_750))
+        try db.deprecateTeamKey(workspaceID: "org1", keyID: "key0", at: makeDate(1_700_000_000_750))
 
-        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        let newKey = TeamKey(id: "key1", workspaceID: "org1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
         XCTAssertThrowsError(
             try db.commitRotation(
                 newTeamKey: newKey,
@@ -201,7 +203,7 @@ final class DatabaseRotationOutboxTests: XCTestCase {
 
     func testCommitRotation_FailsWhenRemovedMemberMissing() throws {
         try insertOrgFixture()
-        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        let newKey = TeamKey(id: "key1", workspaceID: "org1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
         XCTAssertThrowsError(
             try db.commitRotation(
                 newTeamKey: newKey,
@@ -217,13 +219,13 @@ final class DatabaseRotationOutboxTests: XCTestCase {
     func testCommitRotation_FailsWhenRemovedMemberAlreadyRemoved() throws {
         try insertOrgFixture()
         try db.insertTeamMember(TeamMember(
-            id: "peer-mem", orgID: "org1", role: .member,
+            id: "peer-mem", workspaceID: "org1", role: .member,
             pubkeyHex: String(repeating: "bb", count: 32), displayName: "Peer",
             addedAt: makeDate(1_700_000_000_500), removedAt: nil
         ))
         try db.markTeamMemberRemoved(memberID: "peer-mem", at: makeDate(1_700_000_000_750))
 
-        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        let newKey = TeamKey(id: "key1", workspaceID: "org1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
         XCTAssertThrowsError(
             try db.commitRotation(
                 newTeamKey: newKey,
@@ -238,7 +240,7 @@ final class DatabaseRotationOutboxTests: XCTestCase {
 
     func testCommitRotation_FailsOnDuplicateOutboxRow() throws {
         try insertOrgFixture()
-        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        let newKey = TeamKey(id: "key1", workspaceID: "org1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
         let row = sampleOutboxRow()
 
         // First commit succeeds
@@ -253,7 +255,7 @@ final class DatabaseRotationOutboxTests: XCTestCase {
 
         // Second commit reuses outbox row with composite PK (peer, "key1") — collision.
         // newTeamKey="key2" / priorTeamKey="key1" (currently active after first commit).
-        let newKey2 = TeamKey(id: "key2", generatedAt: makeDate(1_700_000_002_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        let newKey2 = TeamKey(id: "key2", workspaceID: "org1", generatedAt: makeDate(1_700_000_002_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
         XCTAssertThrowsError(
             try db.commitRotation(
                 newTeamKey: newKey2,
@@ -271,7 +273,7 @@ final class DatabaseRotationOutboxTests: XCTestCase {
     func testMarkRotationOutboxPosted_HappyPath() throws {
         try insertOrgFixture()
         let row = sampleOutboxRow()
-        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        let newKey = TeamKey(id: "key1", workspaceID: "org1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
         try db.commitRotation(
             newTeamKey: newKey, priorTeamKeyID: "key0",
             deprecatedAt: makeDate(1_700_000_001_000),
@@ -291,7 +293,7 @@ final class DatabaseRotationOutboxTests: XCTestCase {
     func testMarkRotationOutboxPosted_IsIdempotentOnAlreadyPosted() throws {
         try insertOrgFixture()
         let row = sampleOutboxRow()
-        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        let newKey = TeamKey(id: "key1", workspaceID: "org1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
         try db.commitRotation(
             newTeamKey: newKey, priorTeamKeyID: "key0",
             deprecatedAt: makeDate(1_700_000_001_000),
@@ -338,7 +340,7 @@ final class DatabaseRotationOutboxTests: XCTestCase {
             createdAtMs: 1_700_000_005_000
         )
 
-        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        let newKey = TeamKey(id: "key1", workspaceID: "org1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
         try db.commitRotation(
             newTeamKey: newKey, priorTeamKeyID: "key0",
             deprecatedAt: makeDate(1_700_000_001_000),
@@ -364,7 +366,7 @@ final class DatabaseRotationOutboxTests: XCTestCase {
         let row2 = sampleOutboxRow(peer: String(repeating: "bb", count: 32), createdAtMs: 1_700_000_001_000)
         let row3 = sampleOutboxRow(peer: String(repeating: "cc", count: 32), createdAtMs: 1_700_000_003_000)
 
-        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        let newKey = TeamKey(id: "key1", workspaceID: "org1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
         try db.commitRotation(
             newTeamKey: newKey, priorTeamKeyID: "key0",
             deprecatedAt: makeDate(1_700_000_001_000),
@@ -382,7 +384,7 @@ final class DatabaseRotationOutboxTests: XCTestCase {
     func testCommitRotation_ReaderModeThrowsDatabaseUnavailable() throws {
         try insertOrgFixture()
         let readerDB = try Database.openForRead(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
-        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        let newKey = TeamKey(id: "key1", workspaceID: "org1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
         XCTAssertThrowsError(
             try readerDB.commitRotation(
                 newTeamKey: newKey,

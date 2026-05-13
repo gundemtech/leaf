@@ -107,26 +107,27 @@ final class RotationFetchServiceTests: XCTestCase {
         let adminPubHex = hexEncode(adminPriv.publicKey.rawRepresentation)
         let peerPubHex = hexEncode(peerPriv.publicKey.rawRepresentation)
 
-        try db.upsertOrg(Org(id: orgID, name: "Test Org",
+        try db.upsertWorkspace(Org(id: orgID, name: "Test Org",
                              createdAt: makeDate(1_700_000_000_000),
                              createdByMemberID: "admin-mem"))
         try db.insertTeamMember(TeamMember(
-            id: "admin-mem", orgID: orgID, role: .admin,
+            id: "admin-mem", workspaceID: orgID, role: .admin,
             pubkeyHex: adminPubHex, displayName: "Admin",
             addedAt: makeDate(1_700_000_000_000), removedAt: nil
         ))
         try db.insertTeamMember(TeamMember(
-            id: selfMemberID, orgID: orgID, role: .member,
+            id: selfMemberID, workspaceID: orgID, role: .member,
             pubkeyHex: selfPubHex, displayName: "Self",
             addedAt: makeDate(1_700_000_000_500), removedAt: nil
         ))
         try db.insertTeamMember(TeamMember(
-            id: "peer-other", orgID: orgID, role: .member,
+            id: "peer-other", workspaceID: orgID, role: .member,
             pubkeyHex: peerPubHex, displayName: "PeerOther",
             addedAt: makeDate(1_700_000_000_600), removedAt: nil
         ))
         try db.insertTeamKey(TeamKey(
             id: priorKeyID,
+            workspaceID: orgID,
             generatedAt: makeDate(1_700_000_000_000),
             deprecatedAt: nil,
             generatedByMemberID: "admin-mem"
@@ -269,7 +270,7 @@ final class RotationFetchServiceTests: XCTestCase {
         XCTAssertEqual(RotationFetchServiceMockURLProtocol.ackCount(), 1)
 
         // DB: self should be marked removed.
-        let allMembers = try db.readTeamMembers(orgID: "org1", includeRemoved: true)
+        let allMembers = try db.readTeamMembers(workspaceID: "org1", includeRemoved: true)
         let selfMember = allMembers.first(where: { $0.id == "self-mem" })
         XCTAssertNotNil(selfMember?.removedAt)
     }
@@ -296,7 +297,7 @@ final class RotationFetchServiceTests: XCTestCase {
         XCTAssertEqual(RotationFetchServiceMockURLProtocol.ackCount(), 0,
                        "Mis-routed tombstone must NOT be acked")
 
-        let allMembers = try db.readTeamMembers(orgID: "org1", includeRemoved: true)
+        let allMembers = try db.readTeamMembers(workspaceID: "org1", includeRemoved: true)
         let selfMember = allMembers.first(where: { $0.id == "self-mem" })
         XCTAssertNil(selfMember?.removedAt)
     }
@@ -411,7 +412,7 @@ final class RotationFetchServiceTests: XCTestCase {
         XCTAssertEqual(outcome.skipped, 0)
         XCTAssertEqual(RotationFetchServiceMockURLProtocol.ackCount(), 1)
 
-        XCTAssertEqual(try db.readActiveTeamKey()?.id, newKeyID)
+        XCTAssertEqual(try db.readActiveTeamKey(workspaceID: "org1")?.id, newKeyID)
         let prior = try db.readTeamKey(byID: priorKeyID)
         XCTAssertNotNil(prior?.deprecatedAt)
 
@@ -451,7 +452,7 @@ final class RotationFetchServiceTests: XCTestCase {
         XCTAssertEqual(outcome2.installed, 1)
 
         // Active key unchanged (still newKeyID).
-        XCTAssertEqual(try db.readActiveTeamKey()?.id, newKeyID)
+        XCTAssertEqual(try db.readActiveTeamKey(workspaceID: "org1")?.id, newKeyID)
     }
 
     /// Promotes `peer-other` (member) to `.admin` so iteration sees 2 admin candidates.
@@ -526,7 +527,7 @@ final class RotationFetchServiceTests: XCTestCase {
         XCTAssertEqual(outcome.installed, 1)
         XCTAssertEqual(outcome.skipped, 0)
         XCTAssertEqual(kdf.calls.count, 2, "Iteration must try both admins (first rejects → second wins); got \(kdf.calls.count) calls")
-        XCTAssertEqual(try db.readActiveTeamKey()?.id, newKeyID)
+        XCTAssertEqual(try db.readActiveTeamKey(workspaceID: "org1")?.id, newKeyID)
     }
 
     func testRotationAllAdminsFail_Skips_NoAck() async throws {
@@ -556,7 +557,7 @@ final class RotationFetchServiceTests: XCTestCase {
         XCTAssertEqual(outcome.installed, 0)
         XCTAssertEqual(RotationFetchServiceMockURLProtocol.ackCount(), 0)
 
-        XCTAssertEqual(try db.readActiveTeamKey()?.id, priorKeyID)
+        XCTAssertEqual(try db.readActiveTeamKey(workspaceID: "org1")?.id, priorKeyID)
         XCTAssertNil(try db.readTeamKey(byID: newKeyID))
     }
 

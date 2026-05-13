@@ -643,60 +643,132 @@ public final class Database: @unchecked Sendable {
         }
     }
 
-    // MARK: - Team (Phase 5.1.B)
+    // MARK: - Workspace (Phase 5.1.B + Track-5 S2)
 
-    /// UPSERT по `id`. Single-row-per-device convention (contract §4) — на DB
-    /// уровне не enforced, идемпотентность создания + update'а `name` и
-    /// `created_by_member_id` зашиты на UPSERT-семантику.
-    public func upsertOrg(_ org: Org) throws {
+    /// UPSERT по `id`. Идемпотентность создания + update'а `name` /
+    /// `created_by_member_id` / `left_at_ms` зашиты на UPSERT-семантику.
+    /// Track-5 S2: renamed from `upsertOrg` and threads `left_at_ms` column.
+    public func upsertWorkspace(_ workspace: Workspace) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         try pool.write { db in
             try db.execute(sql: """
-                INSERT INTO \(Schema.Org.tableName) (
-                    \(Schema.Org.id),
-                    \(Schema.Org.name),
-                    \(Schema.Org.createdAtMs),
-                    \(Schema.Org.createdByMemberID)
-                ) VALUES (?, ?, ?, ?)
-                ON CONFLICT(\(Schema.Org.id)) DO UPDATE SET
-                    \(Schema.Org.name)              = excluded.\(Schema.Org.name),
-                    \(Schema.Org.createdAtMs)       = excluded.\(Schema.Org.createdAtMs),
-                    \(Schema.Org.createdByMemberID) = excluded.\(Schema.Org.createdByMemberID)
+                INSERT INTO \(Schema.Workspaces.tableName) (
+                    \(Schema.Workspaces.id),
+                    \(Schema.Workspaces.name),
+                    \(Schema.Workspaces.createdAtMs),
+                    \(Schema.Workspaces.createdByMemberID),
+                    \(Schema.Workspaces.leftAtMs)
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(\(Schema.Workspaces.id)) DO UPDATE SET
+                    \(Schema.Workspaces.name)              = excluded.\(Schema.Workspaces.name),
+                    \(Schema.Workspaces.createdAtMs)       = excluded.\(Schema.Workspaces.createdAtMs),
+                    \(Schema.Workspaces.createdByMemberID) = excluded.\(Schema.Workspaces.createdByMemberID),
+                    \(Schema.Workspaces.leftAtMs)          = excluded.\(Schema.Workspaces.leftAtMs)
                 """,
                 arguments: [
-                    org.id,
-                    org.name,
-                    Int64(org.createdAt.timeIntervalSince1970 * 1000),
-                    org.createdByMemberID
+                    workspace.id,
+                    workspace.name,
+                    Int64(workspace.createdAt.timeIntervalSince1970 * 1000),
+                    workspace.createdByMemberID,
+                    workspace.leftAt.map { Int64($0.timeIntervalSince1970 * 1000) }
                 ]
             )
         }
     }
 
-    /// Returns the single org row если present (contract §4). `LIMIT 1` —
-    /// defensive под edge case "две rows" (схема не constrain'ит на 1 row).
-    public func readOrg() throws -> Org? {
+    /// Returns the workspace row by id, regardless of `left_at_ms` state.
+    /// Track-5 S2: replaces `readOrg()` single-row lookup.
+    public func readWorkspace(id: String) throws -> Workspace? {
         try pool.read { db in
             let row = try Row.fetchOne(db, sql: """
-                SELECT \(Schema.Org.id), \(Schema.Org.name),
-                       \(Schema.Org.createdAtMs), \(Schema.Org.createdByMemberID)
-                FROM \(Schema.Org.tableName)
+                SELECT \(Schema.Workspaces.id), \(Schema.Workspaces.name),
+                       \(Schema.Workspaces.createdAtMs), \(Schema.Workspaces.createdByMemberID),
+                       \(Schema.Workspaces.leftAtMs)
+                FROM \(Schema.Workspaces.tableName)
+                WHERE \(Schema.Workspaces.id) = ?
                 LIMIT 1
+                """,
+                arguments: [id]
+            )
+            return row.flatMap(Self.mapWorkspaceRow)
+        }
+    }
+
+    /// Lists workspaces ordered by `created_at_ms` ASC.
+    /// `includeLeft: false` (default) filters out soft-marked rows where
+    /// `left_at_ms IS NOT NULL` (OQ-T5-2 — UI hides from active list).
+    public func listWorkspaces(includeLeft: Bool = false) throws -> [Workspace] {
+        try pool.read { db in
+            let filter = includeLeft ? "" : " WHERE \(Schema.Workspaces.leftAtMs) IS NULL"
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT \(Schema.Workspaces.id), \(Schema.Workspaces.name),
+                       \(Schema.Workspaces.createdAtMs), \(Schema.Workspaces.createdByMemberID),
+                       \(Schema.Workspaces.leftAtMs)
+                FROM \(Schema.Workspaces.tableName)\(filter)
+                ORDER BY \(Schema.Workspaces.createdAtMs) ASC
                 """)
-            return row.flatMap(Self.mapOrgRow)
+            return rows.compactMap(Self.mapWorkspaceRow)
+        }
+    }
+
+    /// Soft-marks a workspace left: sets `left_at_ms = at`. Idempotent re-call
+    /// on already-left row is a no-op (silent). Throws `.invalidPayload` if the
+    /// workspace row does not exist. Track-5 S2 OQ-T5-2 — used by
+    /// `WorkspaceService.markLeft` (Task 11).
+    public func markWorkspaceLeft(workspaceID: String, at leftAt: Date) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try db.execute(sql: """
+                UPDATE \(Schema.Workspaces.tableName)
+                SET \(Schema.Workspaces.leftAtMs) = ?
+                WHERE \(Schema.Workspaces.id) = ?
+                  AND \(Schema.Workspaces.leftAtMs) IS NULL
+                """,
+                arguments: [
+                    Int64(leftAt.timeIntervalSince1970 * 1000),
+                    workspaceID
+                ]
+            )
+            if db.changesCount == 1 { return }
+
+            // changesCount == 0: либо already-left (idempotent no-op), либо missing row.
+            let row = try Row.fetchOne(db, sql: """
+                SELECT \(Schema.Workspaces.leftAtMs)
+                FROM \(Schema.Workspaces.tableName)
+                WHERE \(Schema.Workspaces.id) = ?
+                LIMIT 1
+                """,
+                arguments: [workspaceID]
+            )
+            guard row != nil else { throw LeafError.invalidPayload }
+        }
+    }
+
+    /// Clears `left_at_ms = NULL`. Used by `WorkspaceService.rejoin` (Task 11).
+    /// Idempotent — no-op if workspace already active или missing.
+    public func clearWorkspaceLeftAt(workspaceID: String) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try db.execute(sql: """
+                UPDATE \(Schema.Workspaces.tableName)
+                SET \(Schema.Workspaces.leftAtMs) = NULL
+                WHERE \(Schema.Workspaces.id) = ?
+                """,
+                arguments: [workspaceID]
+            )
         }
     }
 
     /// Strict INSERT — re-insert того же UUID — это bug (caller контролирует
-    /// PK). Идемпотентность создания org+self-row на caller'е (5.1.D
-    /// `OrgService.createPersonalOrg` проверяет `readOrg()` first).
+    /// PK). Идемпотентность создания workspace+self-row на caller'е (5.1.D
+    /// `OrgService.createPersonalOrg` проверяет `listWorkspaces()` first).
     public func insertTeamMember(_ member: TeamMember) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         try pool.write { db in
             try db.execute(sql: """
                 INSERT INTO \(Schema.TeamMembers.tableName) (
                     \(Schema.TeamMembers.id),
-                    \(Schema.TeamMembers.orgID),
+                    \(Schema.TeamMembers.workspaceID),
                     \(Schema.TeamMembers.role),
                     \(Schema.TeamMembers.pubkeyHex),
                     \(Schema.TeamMembers.displayName),
@@ -706,7 +778,7 @@ public final class Database: @unchecked Sendable {
                 """,
                 arguments: [
                     member.id,
-                    member.orgID,
+                    member.workspaceID,
                     member.role.rawValue,
                     member.pubkeyHex,
                     member.displayName,
@@ -717,41 +789,45 @@ public final class Database: @unchecked Sendable {
         }
     }
 
-    /// Returns members одной org, ordered by `added_at_ms` ASC.
+    /// Returns members одного workspace, ordered by `added_at_ms` ASC.
     /// `includeRemoved: false` (default) — active members only через partial
-    /// index `team_members_org_active`. UI Team list — default-call.
-    public func readTeamMembers(orgID: String, includeRemoved: Bool = false) throws -> [TeamMember] {
+    /// index `team_members_workspace_active`. UI Team list — default-call.
+    /// Track-5 S2: `orgID:` parameter label renamed → `workspaceID:`.
+    public func readTeamMembers(workspaceID: String, includeRemoved: Bool = false) throws -> [TeamMember] {
         try pool.read { db in
             let sql = """
-                SELECT \(Schema.TeamMembers.id), \(Schema.TeamMembers.orgID),
+                SELECT \(Schema.TeamMembers.id), \(Schema.TeamMembers.workspaceID),
                        \(Schema.TeamMembers.role), \(Schema.TeamMembers.pubkeyHex),
                        \(Schema.TeamMembers.displayName), \(Schema.TeamMembers.addedAtMs),
                        \(Schema.TeamMembers.removedAtMs)
                 FROM \(Schema.TeamMembers.tableName)
-                WHERE \(Schema.TeamMembers.orgID) = ?\
+                WHERE \(Schema.TeamMembers.workspaceID) = ?\
                 \(includeRemoved ? "" : " AND \(Schema.TeamMembers.removedAtMs) IS NULL")
                 ORDER BY \(Schema.TeamMembers.addedAtMs) ASC
                 """
-            let rows = try Row.fetchAll(db, sql: sql, arguments: [orgID])
+            let rows = try Row.fetchAll(db, sql: sql, arguments: [workspaceID])
             return rows.compactMap(Self.mapTeamMemberRow)
         }
     }
 
     /// Strict INSERT — каждая rotation — уникальная запись (history forever-retained,
-    /// contract §12). UUID PK collision = bug.
+    /// contract §12). UUID PK collision = bug. Track-5 S2: persists `workspace_id`
+    /// from the `TeamKey` value (M019 backfilled column).
     public func insertTeamKey(_ key: TeamKey) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         try pool.write { db in
             try db.execute(sql: """
                 INSERT INTO \(Schema.TeamKeys.tableName) (
                     \(Schema.TeamKeys.id),
+                    \(Schema.TeamKeys.workspaceID),
                     \(Schema.TeamKeys.generatedAtMs),
                     \(Schema.TeamKeys.deprecatedAtMs),
                     \(Schema.TeamKeys.generatedByMemberID)
-                ) VALUES (?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?)
                 """,
                 arguments: [
                     key.id,
+                    key.workspaceID,
                     Int64(key.generatedAt.timeIntervalSince1970 * 1000),
                     key.deprecatedAt.map { Int64($0.timeIntervalSince1970 * 1000) },
                     key.generatedByMemberID
@@ -772,14 +848,16 @@ public final class Database: @unchecked Sendable {
             try db.execute(sql: """
                 INSERT INTO \(Schema.TeamKeys.tableName) (
                     \(Schema.TeamKeys.id),
+                    \(Schema.TeamKeys.workspaceID),
                     \(Schema.TeamKeys.generatedAtMs),
                     \(Schema.TeamKeys.deprecatedAtMs),
                     \(Schema.TeamKeys.generatedByMemberID)
-                ) VALUES (?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(\(Schema.TeamKeys.id)) DO NOTHING
                 """,
                 arguments: [
                     key.id,
+                    key.workspaceID,
                     Int64(key.generatedAt.timeIntervalSince1970 * 1000),
                     key.deprecatedAt.map { Int64($0.timeIntervalSince1970 * 1000) },
                     key.generatedByMemberID
@@ -788,19 +866,24 @@ public final class Database: @unchecked Sendable {
         }
     }
 
-    /// Returns latest active rotation (`deprecated_at_ms IS NULL` через partial
-    /// index `team_keys_active`). ORDER+LIMIT — defensive под edge case "две
-    /// active rows" (нормально 1 row, contract'ом на DB-уровне не constraint'ится).
-    public func readActiveTeamKey() throws -> TeamKey? {
+    /// Returns latest active rotation for the given workspace (`deprecated_at_ms IS NULL`
+    /// scoped by `workspace_id`). ORDER+LIMIT — defensive под edge case "две active
+    /// rows" (нормально 1 row, contract'ом на DB-уровне не constraint'ится).
+    /// Track-5 S2: now scoped by `workspaceID` parameter (M019).
+    public func readActiveTeamKey(workspaceID: String) throws -> TeamKey? {
         try pool.read { db in
             let row = try Row.fetchOne(db, sql: """
-                SELECT \(Schema.TeamKeys.id), \(Schema.TeamKeys.generatedAtMs),
+                SELECT \(Schema.TeamKeys.id), \(Schema.TeamKeys.workspaceID),
+                       \(Schema.TeamKeys.generatedAtMs),
                        \(Schema.TeamKeys.deprecatedAtMs), \(Schema.TeamKeys.generatedByMemberID)
                 FROM \(Schema.TeamKeys.tableName)
-                WHERE \(Schema.TeamKeys.deprecatedAtMs) IS NULL
+                WHERE \(Schema.TeamKeys.workspaceID) = ?
+                  AND \(Schema.TeamKeys.deprecatedAtMs) IS NULL
                 ORDER BY \(Schema.TeamKeys.generatedAtMs) DESC
                 LIMIT 1
-                """)
+                """,
+                arguments: [workspaceID]
+            )
             return row.flatMap(Self.mapTeamKeyRow)
         }
     }
@@ -841,28 +924,34 @@ public final class Database: @unchecked Sendable {
     }
 
     /// Marks team_keys row deprecated. Sets `deprecated_at_ms = at`.
-    /// **Sole-active invariant:** throws `LeafError.invalidPayload` если
-    /// deprecating этот key оставит 0 active rows. Caller (5.3.D KeyRotationService)
-    /// должен `insertTeamKey(new)` first в той же tx.
-    /// Idempotent re-call на already-deprecated row preserves original timestamp.
-    /// Throws `LeafError.invalidPayload` если key не существует.
-    public func deprecateTeamKey(keyID: String, at deprecatedAt: Date) throws {
+    /// **Sole-active-per-workspace invariant:** throws `LeafError.invalidPayload`
+    /// если deprecating этот key оставит 0 active rows within `workspaceID`.
+    /// Caller (5.3.D KeyRotationService) должен `insertTeamKey(new)` first в той
+    /// же tx. Idempotent re-call на already-deprecated row preserves original
+    /// timestamp. Throws `LeafError.invalidPayload` если key не существует.
+    /// Track-5 S2: added `workspaceID` parameter so the invariant scopes per
+    /// workspace (M019).
+    public func deprecateTeamKey(workspaceID: String, keyID: String, at deprecatedAt: Date) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         try pool.write { db in
-            // Step 1 — sole-active invariant guard.
+            // Step 1 — sole-active-per-workspace invariant guard.
             let activeCount = try Int.fetchOne(db, sql: """
                 SELECT count(*)
                 FROM \(Schema.TeamKeys.tableName)
-                WHERE \(Schema.TeamKeys.deprecatedAtMs) IS NULL
-                """) ?? 0
+                WHERE \(Schema.TeamKeys.workspaceID) = ?
+                  AND \(Schema.TeamKeys.deprecatedAtMs) IS NULL
+                """,
+                arguments: [workspaceID]
+            ) ?? 0
             if activeCount <= 1 {
                 let targetActive = try Int.fetchOne(db, sql: """
                     SELECT count(*)
                     FROM \(Schema.TeamKeys.tableName)
                     WHERE \(Schema.TeamKeys.id) = ?
+                      AND \(Schema.TeamKeys.workspaceID) = ?
                       AND \(Schema.TeamKeys.deprecatedAtMs) IS NULL
                     """,
-                    arguments: [keyID]
+                    arguments: [keyID, workspaceID]
                 ) ?? 0
                 if targetActive == 1 {
                     // Target is the sole active row — deprecate would leave 0 active.
@@ -909,7 +998,8 @@ public final class Database: @unchecked Sendable {
     public func readTeamKey(byID id: String) throws -> TeamKey? {
         try pool.read { db in
             let row = try Row.fetchOne(db, sql: """
-                SELECT \(Schema.TeamKeys.id), \(Schema.TeamKeys.generatedAtMs),
+                SELECT \(Schema.TeamKeys.id), \(Schema.TeamKeys.workspaceID),
+                       \(Schema.TeamKeys.generatedAtMs),
                        \(Schema.TeamKeys.deprecatedAtMs), \(Schema.TeamKeys.generatedByMemberID)
                 FROM \(Schema.TeamKeys.tableName)
                 WHERE \(Schema.TeamKeys.id) = ?
@@ -961,13 +1051,15 @@ public final class Database: @unchecked Sendable {
             try db.execute(sql: """
                 INSERT INTO \(Schema.TeamKeys.tableName) (
                     \(Schema.TeamKeys.id),
+                    \(Schema.TeamKeys.workspaceID),
                     \(Schema.TeamKeys.generatedAtMs),
                     \(Schema.TeamKeys.deprecatedAtMs),
                     \(Schema.TeamKeys.generatedByMemberID)
-                ) VALUES (?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?)
                 """,
                 arguments: [
                     newTeamKey.id,
+                    newTeamKey.workspaceID,
                     newGeneratedAtMs,
                     newDeprecatedAtMs,
                     newTeamKey.generatedByMemberID
@@ -1286,25 +1378,27 @@ public final class Database: @unchecked Sendable {
         )
     }
 
-    private static func mapOrgRow(_ row: Row) -> Org? {
+    private static func mapWorkspaceRow(_ row: Row) -> Workspace? {
         guard
-            let id = row[Schema.Org.id] as String?,
-            let name = row[Schema.Org.name] as String?,
-            let createdAtMs = row[Schema.Org.createdAtMs] as Int64?,
-            let createdByMemberID = row[Schema.Org.createdByMemberID] as String?
+            let id = row[Schema.Workspaces.id] as String?,
+            let name = row[Schema.Workspaces.name] as String?,
+            let createdAtMs = row[Schema.Workspaces.createdAtMs] as Int64?,
+            let createdByMemberID = row[Schema.Workspaces.createdByMemberID] as String?
         else { return nil }
-        return Org(
+        let leftAtMs = row[Schema.Workspaces.leftAtMs] as Int64?
+        return Workspace(
             id: id,
             name: name,
             createdAt: Date(timeIntervalSince1970: TimeInterval(createdAtMs) / 1000.0),
-            createdByMemberID: createdByMemberID
+            createdByMemberID: createdByMemberID,
+            leftAt: leftAtMs.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000.0) }
         )
     }
 
     private static func mapTeamMemberRow(_ row: Row) -> TeamMember? {
         guard
             let id = row[Schema.TeamMembers.id] as String?,
-            let orgID = row[Schema.TeamMembers.orgID] as String?,
+            let workspaceID = row[Schema.TeamMembers.workspaceID] as String?,
             let roleRaw = row[Schema.TeamMembers.role] as String?,
             let role = TeamMemberRole(rawValue: roleRaw),
             let pubkeyHex = row[Schema.TeamMembers.pubkeyHex] as String?,
@@ -1314,7 +1408,7 @@ public final class Database: @unchecked Sendable {
         let removedAtMs = row[Schema.TeamMembers.removedAtMs] as Int64?
         return TeamMember(
             id: id,
-            orgID: orgID,
+            workspaceID: workspaceID,
             role: role,
             pubkeyHex: pubkeyHex,
             displayName: displayName,
@@ -1326,12 +1420,14 @@ public final class Database: @unchecked Sendable {
     private static func mapTeamKeyRow(_ row: Row) -> TeamKey? {
         guard
             let id = row[Schema.TeamKeys.id] as String?,
+            let workspaceID = row[Schema.TeamKeys.workspaceID] as String?,
             let generatedAtMs = row[Schema.TeamKeys.generatedAtMs] as Int64?,
             let generatedByMemberID = row[Schema.TeamKeys.generatedByMemberID] as String?
         else { return nil }
         let deprecatedAtMs = row[Schema.TeamKeys.deprecatedAtMs] as Int64?
         return TeamKey(
             id: id,
+            workspaceID: workspaceID,
             generatedAt: Date(timeIntervalSince1970: TimeInterval(generatedAtMs) / 1000.0),
             deprecatedAt: deprecatedAtMs.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000.0) },
             generatedByMemberID: generatedByMemberID
@@ -1356,6 +1452,35 @@ public final class Database: @unchecked Sendable {
             addedAt: Date(timeIntervalSince1970: TimeInterval(addedTsMs) / 1000.0),
             updatedAt: Date(timeIntervalSince1970: TimeInterval(updatedMs) / 1000.0)
         )
+    }
+
+    // MARK: - Test/diagnostic helpers (Track-5 S2)
+
+    /// Returns column names of `tableName` via `PRAGMA table_info`. Used by
+    /// schema-shape tests (M019 fresh / backfill / idempotency).
+    public func fetchTableColumns(_ tableName: String) throws -> [String] {
+        try pool.read { db in
+            let rows = try Row.fetchAll(db, sql: "PRAGMA table_info(\(tableName))")
+            return rows.compactMap { $0["name"] as String? }
+        }
+    }
+
+    /// Returns index names attached to `tableName` via `PRAGMA index_list`.
+    public func fetchTableIndexes(_ tableName: String) throws -> [String] {
+        try pool.read { db in
+            let rows = try Row.fetchAll(db, sql: "PRAGMA index_list(\(tableName))")
+            return rows.compactMap { $0["name"] as String? }
+        }
+    }
+
+    /// True if `tableName` is registered in `sqlite_master` as type='table'.
+    public func tableExists(_ tableName: String) throws -> Bool {
+        try pool.read { db in
+            let count = try Int.fetchOne(db, sql: """
+                SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?
+                """, arguments: [tableName]) ?? 0
+            return count > 0
+        }
     }
 
     // MARK: - Helpers

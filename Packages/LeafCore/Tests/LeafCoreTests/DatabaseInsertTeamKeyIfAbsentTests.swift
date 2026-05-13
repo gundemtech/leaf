@@ -23,7 +23,7 @@ final class DatabaseInsertTeamKeyIfAbsentTests: XCTestCase {
     private func makeKey(id: String, generatedAt: Date = Date(timeIntervalSince1970: 1_700_000_000),
                          deprecated: Bool = false, by: String = "self-mem") -> TeamKey {
         TeamKey(
-            id: id, generatedAt: generatedAt,
+            id: id, workspaceID: "org-1", generatedAt: generatedAt,
             deprecatedAt: deprecated ? Date(timeIntervalSince1970: 1_700_000_001) : nil,
             generatedByMemberID: by
         )
@@ -62,7 +62,7 @@ final class DatabaseInsertTeamKeyIfAbsentTests: XCTestCase {
 
     func testAfterInsertReadActiveReturnsRow() throws {
         try db.insertTeamKeyIfAbsent(makeKey(id: "key-1"))
-        let active = try db.readActiveTeamKey()
+        let active = try db.readActiveTeamKey(workspaceID: "org-1")
         XCTAssertEqual(active?.id, "key-1")
     }
 }

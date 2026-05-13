@@ -134,7 +134,7 @@ final class InviteAcceptReader {
                                                           displayName: resolvedName)
                 let count: Int
                 if let db = self.database,
-                   let members = try? db.readTeamMembers(orgID: accepted.orgID) {
+                   let members = try? db.readTeamMembers(workspaceID: accepted.orgID) {
                     count = members.count
                 } else {
                     count = 0

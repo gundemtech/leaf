@@ -32,11 +32,11 @@ final class DatabaseTeamRemovalTests: XCTestCase {
         let removedAt = Date(timeIntervalSince1970: 1_700_002_000)
         try db.markTeamMemberRemoved(memberID: "member-2", at: removedAt)
 
-        let active = try db.readTeamMembers(orgID: "org-aaaa")
+        let active = try db.readTeamMembers(workspaceID: "org-aaaa")
         XCTAssertEqual(active.count, 1, "removed member должен быть исключён партиал-индексом")
         XCTAssertEqual(active[0].id, "member-self")
 
-        let all = try db.readTeamMembers(orgID: "org-aaaa", includeRemoved: true)
+        let all = try db.readTeamMembers(workspaceID: "org-aaaa", includeRemoved: true)
         let removed = all.first { $0.id == "member-2" }
         XCTAssertEqual(removed?.removedAt, removedAt)
     }
@@ -53,7 +53,7 @@ final class DatabaseTeamRemovalTests: XCTestCase {
         try db.markTeamMemberRemoved(memberID: "member-2", at: firstRemovedAt)
         try db.markTeamMemberRemoved(memberID: "member-2", at: secondRemovedAt)
 
-        let all = try db.readTeamMembers(orgID: "org-aaaa", includeRemoved: true)
+        let all = try db.readTeamMembers(workspaceID: "org-aaaa", includeRemoved: true)
         let removed = all.first { $0.id == "member-2" }
         XCTAssertEqual(removed?.removedAt, firstRemovedAt,
             "повторный mark не должен bump'ить timestamp")
@@ -71,7 +71,7 @@ final class DatabaseTeamRemovalTests: XCTestCase {
         }
 
         // Sanity — existing rows не trogany.
-        let all = try db.readTeamMembers(orgID: "org-aaaa", includeRemoved: true)
+        let all = try db.readTeamMembers(workspaceID: "org-aaaa", includeRemoved: true)
         XCTAssertEqual(all.count, 2)
         XCTAssertTrue(all.allSatisfy { $0.removedAt == nil })
     }
@@ -100,10 +100,10 @@ final class DatabaseTeamRemovalTests: XCTestCase {
         try insertSampleKeys(db)
 
         let deprecatedAt = Date(timeIntervalSince1970: 1_700_002_000)
-        try db.deprecateTeamKey(keyID: "key-rotation-1", at: deprecatedAt)
+        try db.deprecateTeamKey(workspaceID: "org-aaaa", keyID: "key-rotation-1", at: deprecatedAt)
 
         // After deprecate — key-rotation-2 остаётся active.
-        let active = try db.readActiveTeamKey()
+        let active = try db.readActiveTeamKey(workspaceID: "org-aaaa")
         XCTAssertEqual(active?.id, "key-rotation-2")
         XCTAssertNil(active?.deprecatedAt)
     }
@@ -114,19 +114,20 @@ final class DatabaseTeamRemovalTests: XCTestCase {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try db.insertTeamKey(TeamKey(
             id: "key-rotation-1",
+            workspaceID: "org-aaaa",
             generatedAt: Date(timeIntervalSince1970: 1_700_000_000),
             deprecatedAt: nil,
             generatedByMemberID: "member-self"
         ))
 
         XCTAssertThrowsError(
-            try db.deprecateTeamKey(keyID: "key-rotation-1", at: Date(timeIntervalSince1970: 1_700_002_000))
+            try db.deprecateTeamKey(workspaceID: "org-aaaa", keyID: "key-rotation-1", at: Date(timeIntervalSince1970: 1_700_002_000))
         ) { error in
             XCTAssertEqual(error as? LeafError, .invalidPayload)
         }
 
         // Sanity — row остаётся active.
-        let active = try db.readActiveTeamKey()
+        let active = try db.readActiveTeamKey(workspaceID: "org-aaaa")
         XCTAssertEqual(active?.id, "key-rotation-1")
         XCTAssertNil(active?.deprecatedAt)
     }
@@ -140,19 +141,19 @@ final class DatabaseTeamRemovalTests: XCTestCase {
 
         // Сначала deprecate'ит key-rotation-1 (active count: 2 → 1).
         let firstDeprecatedAt = Date(timeIntervalSince1970: 1_700_002_000)
-        try db.deprecateTeamKey(keyID: "key-rotation-1", at: firstDeprecatedAt)
+        try db.deprecateTeamKey(workspaceID: "org-aaaa", keyID: "key-rotation-1", at: firstDeprecatedAt)
 
         // Re-deprecate того же key — no-op. Active count = 1 (key-rotation-2),
         // НЕ должно trip'нуть sole-active guard, потому что target уже deprecated.
         let secondDeprecatedAt = Date(timeIntervalSince1970: 1_700_003_000)
-        try db.deprecateTeamKey(keyID: "key-rotation-1", at: secondDeprecatedAt)
+        try db.deprecateTeamKey(workspaceID: "org-aaaa", keyID: "key-rotation-1", at: secondDeprecatedAt)
 
         let row = try db.readTeamKey(byID: "key-rotation-1")
         XCTAssertEqual(row?.deprecatedAt, firstDeprecatedAt,
             "повторный deprecate не должен bump'ить timestamp")
 
         // Sanity — key-rotation-2 всё ещё active.
-        let active = try db.readActiveTeamKey()
+        let active = try db.readActiveTeamKey(workspaceID: "org-aaaa")
         XCTAssertEqual(active?.id, "key-rotation-2")
     }
 
@@ -162,7 +163,7 @@ final class DatabaseTeamRemovalTests: XCTestCase {
         try insertSampleKeys(db)  // 2 active keys, чтобы не trip'нуть sole-active guard
 
         XCTAssertThrowsError(
-            try db.deprecateTeamKey(keyID: "key-nonexistent", at: Date(timeIntervalSince1970: 1_700_002_000))
+            try db.deprecateTeamKey(workspaceID: "org-aaaa", keyID: "key-nonexistent", at: Date(timeIntervalSince1970: 1_700_002_000))
         ) { error in
             XCTAssertEqual(error as? LeafError, .invalidPayload)
         }
@@ -186,7 +187,7 @@ final class DatabaseTeamRemovalTests: XCTestCase {
         let reader = try Database.openForRead(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
         XCTAssertThrowsError(
-            try reader.deprecateTeamKey(keyID: "key-rotation-1", at: Date(timeIntervalSince1970: 1_700_002_000))
+            try reader.deprecateTeamKey(workspaceID: "org-aaaa", keyID: "key-rotation-1", at: Date(timeIntervalSince1970: 1_700_002_000))
         ) { error in
             XCTAssertEqual(error as? LeafError, .databaseUnavailable)
         }
@@ -199,9 +200,9 @@ final class DatabaseTeamRemovalTests: XCTestCase {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertSampleKeys(db)  // key-rotation-1 (older) + key-rotation-2 (newer), оба active
 
-        try db.deprecateTeamKey(keyID: "key-rotation-2", at: Date(timeIntervalSince1970: 1_700_002_000))
+        try db.deprecateTeamKey(workspaceID: "org-aaaa", keyID: "key-rotation-2", at: Date(timeIntervalSince1970: 1_700_002_000))
 
-        let active = try db.readActiveTeamKey()
+        let active = try db.readActiveTeamKey(workspaceID: "org-aaaa")
         XCTAssertEqual(active?.id, "key-rotation-1",
             "после deprecate latest active — readActive возвращает older active")
     }
@@ -234,7 +235,7 @@ final class DatabaseTeamRemovalTests: XCTestCase {
         try insertSampleKeys(db)  // 2 active keys, чтобы deprecate проходил guard
 
         let deprecatedAt = Date(timeIntervalSince1970: 1_700_002_000)
-        try db.deprecateTeamKey(keyID: "key-rotation-1", at: deprecatedAt)
+        try db.deprecateTeamKey(workspaceID: "org-aaaa", keyID: "key-rotation-1", at: deprecatedAt)
 
         let row = try db.readTeamKey(byID: "key-rotation-1")
         XCTAssertNotNil(row)
@@ -269,12 +270,14 @@ final class DatabaseTeamRemovalTests: XCTestCase {
     private func insertSampleKeys(_ db: LeafCore.Database) throws {
         try db.insertTeamKey(TeamKey(
             id: "key-rotation-1",
+            workspaceID: "org-aaaa",
             generatedAt: Date(timeIntervalSince1970: 1_700_000_000),
             deprecatedAt: nil,
             generatedByMemberID: "member-self"
         ))
         try db.insertTeamKey(TeamKey(
             id: "key-rotation-2",
+            workspaceID: "org-aaaa",
             generatedAt: Date(timeIntervalSince1970: 1_700_001_000),
             deprecatedAt: nil,
             generatedByMemberID: "member-self"
@@ -284,7 +287,7 @@ final class DatabaseTeamRemovalTests: XCTestCase {
     private func insertSampleMembers(_ db: LeafCore.Database, orgID: String) throws {
         try db.insertTeamMember(TeamMember(
             id: "member-self",
-            orgID: orgID,
+            workspaceID: orgID,
             role: .admin,
             pubkeyHex: String(repeating: "ab", count: 32),
             displayName: "Dmitrii",
@@ -293,7 +296,7 @@ final class DatabaseTeamRemovalTests: XCTestCase {
         ))
         try db.insertTeamMember(TeamMember(
             id: "member-2",
-            orgID: orgID,
+            workspaceID: orgID,
             role: .member,
             pubkeyHex: String(repeating: "cd", count: 32),
             displayName: "Anton",

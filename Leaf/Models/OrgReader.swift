@@ -61,12 +61,14 @@ final class OrgReader {
     func refresh() {
         do {
             let db = try ensureDatabase()
-            guard let org = try db.readOrg() else {
+            // Track-5 S2: single-workspace assumption preserved (WorkspaceReader
+            // lands in Task 5 with multi-workspace surface).
+            guard let org = try db.listWorkspaces(includeLeft: true).first else {
                 state = .empty
                 return
             }
             // Phase 5.3.E — read all members (incl. removed) for self-removed detection.
-            let allMembers = try db.readTeamMembers(orgID: org.id, includeRemoved: true)
+            let allMembers = try db.readTeamMembers(workspaceID: org.id, includeRemoved: true)
 
             // Self-pubkey lookup: identity X25519 priv → pubkey hex → match team_members.
             // If self.removedAt != nil → banner state (tombstone was applied by
@@ -93,7 +95,7 @@ final class OrgReader {
             let db = try ensureDatabase()
             let svc = OrgService(database: db, keystoreRoot: keystoreRoot)
             let org = try svc.createPersonalOrg(displayName: displayName)
-            let members = try db.readTeamMembers(orgID: org.id)
+            let members = try db.readTeamMembers(workspaceID: org.id)
             state = .loaded(org, members)
         } catch {
             logger.error("OrgReader.createPersonalOrg failed: \(String(describing: error), privacy: .public)")

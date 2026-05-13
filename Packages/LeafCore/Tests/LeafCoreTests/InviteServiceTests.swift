@@ -112,13 +112,13 @@ final class InviteServiceTests: XCTestCase {
         adminPriv = Curve25519.KeyAgreement.PrivateKey()
 
         let pubkeyHex = adminPriv.publicKey.rawRepresentation.map { String(format: "%02x", $0) }.joined()
-        let member = TeamMember(id: memberID, orgID: orgID, role: .admin,
+        let member = TeamMember(id: memberID, workspaceID: orgID, role: .admin,
                                 pubkeyHex: pubkeyHex, displayName: "Admin User",
                                 addedAt: fixedNow, removedAt: nil)
         let org = Org(id: orgID, name: "Test Org", createdAt: fixedNow, createdByMemberID: memberID)
-        let teamKey = TeamKey(id: teamKeyID, generatedAt: fixedNow, deprecatedAt: nil,
+        let teamKey = TeamKey(id: teamKeyID, workspaceID: orgID, generatedAt: fixedNow, deprecatedAt: nil,
                               generatedByMemberID: memberID)
-        try db.upsertOrg(org)
+        try db.upsertWorkspace(org)
         try db.insertTeamMember(member)
         try db.insertTeamKey(teamKey)
         try TeamKeystore.writeTeamKey(teamKeyBytes, id: teamKeyID, at: keystoreRoot)
@@ -309,8 +309,8 @@ final class InviteServiceTests: XCTestCase {
         let db2 = try Database.openForWrite(at: dir.appendingPathComponent("events.sqlite"),
                                             config: .weakDefaults, encryption: .deterministicTest)
         let pub = adminPriv.publicKey.rawRepresentation.map { String(format: "%02x", $0) }.joined()
-        try db2.upsertOrg(Org(id: orgID, name: "X", createdAt: fixedNow, createdByMemberID: memberID))
-        try db2.insertTeamMember(TeamMember(id: memberID, orgID: orgID, role: .admin,
+        try db2.upsertWorkspace(Org(id: orgID, name: "X", createdAt: fixedNow, createdByMemberID: memberID))
+        try db2.insertTeamMember(TeamMember(id: memberID, workspaceID: orgID, role: .admin,
                                             pubkeyHex: pub, displayName: "U",
                                             addedAt: fixedNow, removedAt: nil))
         let nowLocal = fixedNow!

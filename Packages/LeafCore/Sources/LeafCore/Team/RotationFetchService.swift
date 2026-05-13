@@ -49,8 +49,9 @@ public struct RotationFetchService: Sendable {
     /// Drains relay mailbox once. Continue-on-error per blob — failures
     /// accumulate in `skipped`. Returns aggregate outcome.
     public func tick() async -> RotationFetchOutcome {
-        // 1. Preflight — graceful no-op if no org / no identity.
-        guard let org = try? database.readOrg() else {
+        // 1. Preflight — graceful no-op if no workspace / no identity.
+        // Track-5 S2: single-workspace assumption preserved.
+        guard let org = (try? database.listWorkspaces(includeLeft: true))?.first else {
             return .empty
         }
         guard let selfPriv = try? identity() else {
@@ -143,7 +144,7 @@ public struct RotationFetchService: Sendable {
         guard let removedMemberID = plaintext.removedMemberID, !removedMemberID.isEmpty else { return false }
 
         // 5. Verify removedMemberID points to *self* — refuse to mark someone else.
-        guard let allMembers = try? database.readTeamMembers(orgID: orgID, includeRemoved: true) else { return false }
+        guard let allMembers = try? database.readTeamMembers(workspaceID: orgID, includeRemoved: true) else { return false }
         guard let selfMember = allMembers.first(where: { $0.pubkeyHex == selfPubHex }) else { return false }
         guard selfMember.id == removedMemberID else { return false }
 
@@ -176,7 +177,7 @@ public struct RotationFetchService: Sendable {
         let priorKeyID = priorKeyUUID.uuidString.lowercased()
 
         // 2. Build admin candidates: active members with role == .admin, excluding self.
-        guard let activeMembers = try? database.readTeamMembers(orgID: orgID, includeRemoved: false) else {
+        guard let activeMembers = try? database.readTeamMembers(workspaceID: orgID, includeRemoved: false) else {
             return false
         }
         let adminCandidates = activeMembers.filter { $0.role == .admin && $0.pubkeyHex != selfPubHex }
@@ -220,6 +221,7 @@ public struct RotationFetchService: Sendable {
         do {
             try database.insertTeamKeyIfAbsent(TeamKey(
                 id: newKeyID,
+                workspaceID: orgID,
                 generatedAt: nowDate,
                 deprecatedAt: nil,
                 generatedByMemberID: adminID
@@ -228,7 +230,7 @@ public struct RotationFetchService: Sendable {
             return false
         }
         do {
-            try database.deprecateTeamKey(keyID: priorKeyID, at: nowDate)
+            try database.deprecateTeamKey(workspaceID: orgID, keyID: priorKeyID, at: nowDate)
         } catch {
             // .invalidPayload here means priorKey missing locally — orchestrator/peer
             // out of sync. Skip (orphan keystore file harmless).

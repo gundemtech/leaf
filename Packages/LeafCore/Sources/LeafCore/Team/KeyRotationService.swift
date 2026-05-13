@@ -137,8 +137,9 @@ public struct KeyRotationService: Sendable {
     /// + atomic DB commit. Throws on any precondition violation; rollback
     /// automatic. Caller does POST iteration on returned `outboxRows`.
     func performRotation(removingMember: String?) throws -> PreparedRotation {
-        // 1. Preflight — read-only checks
-        guard let org = try database.readOrg() else {
+        // 1. Preflight — read-only checks. Track-5 S2: single-workspace
+        // assumption preserved (Tasks 3+ thread WorkspaceService).
+        guard let org = try database.listWorkspaces(includeLeft: true).first else {
             throw LeafError.invalidPayload
         }
         let selfMemberID = org.createdByMemberID
@@ -147,12 +148,12 @@ public struct KeyRotationService: Sendable {
             throw LeafError.cannotRemoveSelfFromTeam
         }
 
-        guard let priorActiveKey = try database.readActiveTeamKey() else {
+        guard let priorActiveKey = try database.readActiveTeamKey(workspaceID: org.id) else {
             throw LeafError.invalidPayload
         }
         let priorKeyID = priorActiveKey.id
 
-        let activeMembers = try database.readTeamMembers(orgID: org.id, includeRemoved: false)
+        let activeMembers = try database.readTeamMembers(workspaceID: org.id, includeRemoved: false)
 
         var removedMember: TeamMember?
         if let removingMember {
@@ -259,6 +260,7 @@ public struct KeyRotationService: Sendable {
         // 6. Atomic DB tx
         let newTeamKey = TeamKey(
             id: newKeyID,
+            workspaceID: org.id,
             generatedAt: nowDate,
             deprecatedAt: nil,
             generatedByMemberID: selfMemberID
