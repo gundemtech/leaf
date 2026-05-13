@@ -203,6 +203,9 @@ Sub-phase specs own exact migration content; this is the cross-phase shape.
 | `invites` | S1 | `(token uuid PK, workspace_id uuid FK, admin_pubkey text, encrypted_teamkey bytea, expires_at, require_otp bool, otp_hash text NULL, claimed_at NULL, claimed_by_pubkey NULL)`. Magic-link invite resolution. |
 | `apns_tokens` | S1 | `(pubkey text, apns_token text, device_id text, updated_at)`. APNs device-token registry per-pubkey. |
 | `cross_post_log` | S1 | `(message_id uuid FK, channel text [slack/linear], external_ref text, posted_at, error_text text NULL)`. Outbound audit for retry / debug. |
+| `pubkey_registry` | S1 | `(pubkey text PK, auth_id uuid FK → auth.users, display_name text, registered_at timestamptz)`. Maps Supabase Auth user id ↔ Leaf X25519 pubkey. Required for Auth Hook to emit `pubkey` JWT custom claim used in all other tables' RLS policies. |
+
+> **Amendment 2026-05-14 (S1 spec):** §5.1 extended with `pubkey_registry` table. Reason: Supabase Auth issues opaque `auth.uid()`; all other tables' RLS policies reference Leaf-side `pubkey`. The Auth Hook function (`get_pubkey_for_auth_id`) requires an `auth_id ↔ pubkey` lookup table to emit the custom JWT claim. Discovered during S1 implementation — was implicit in contract §5.2 RLS pseudocode (`auth.jwt() ->> 'pubkey'`) but the mapping table was unnamed. Living-doc process per §18.
 
 ### 5.2 Supabase RLS (Row-Level Security) policies
 

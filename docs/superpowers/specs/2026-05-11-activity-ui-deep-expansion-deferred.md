@@ -1,8 +1,8 @@
-# Track 5 — Activity UI Deep Expansion
+# Activity UI Deep Expansion (deferred — reframed)
 
 **Date:** 2026-05-11
-**Status:** Draft (brainstorm-approved, awaiting per-sub-phase implementation plan)
-**Owner:** Dmitrii
+**Status:** **Deferred / reframed (2026-05-14).** Original framing was "Track 5". After 2026-05-13 brainstorm (Anton-led) Track 5 namespace was repurposed to **Collaboration Redesign** — see `2026-05-13-track-5-collaboration-contract.md`. Activity UI surfacing of existing Track-1 D1 bodies / D3 detector hits / AX window_title / Claude Code AI events is **partially subsumed** into Track 5 / S7 (Team UI Redesign — unified feed includes detector hits and direct messages), and remaining Activity-tab-specific surfacing (multi-mode picker, drill-down rail, smart aggregation buckets) remains a future open scope — likely a separate post-Track-5 track. This document is retained for reference content; do not start implementation against it.
+**Owner:** Dmitrii (deferred — re-decide owner after Track 5 ships)
 
 ## Context
 
