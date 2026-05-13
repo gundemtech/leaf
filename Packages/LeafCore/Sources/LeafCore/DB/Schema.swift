@@ -295,6 +295,14 @@ public enum Schema {
         public static let tabTitle = "title"
         public static let tabURL = "url"
         public static let browser = "browser"
+
+        // Phase Track-4 S3 — system observers + intensity payload keys.
+        // (`state` / `count` / `filename` / `action` already canonical baseline.)
+        public static let keystrokeCount = "keystroke_count"
+        public static let mouseMoveCount = "mouse_move_count"
+        public static let appSwitchCount = "app_switch_count"
+        public static let foregroundApp = "foreground_app"
+        public static let audioRoute = "audio_route"
     }
 
     /// Phase Track-4 S3 — per-minute intensity aggregates (CGEventTap counter-only).
