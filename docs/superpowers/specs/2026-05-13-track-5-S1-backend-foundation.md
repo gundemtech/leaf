@@ -498,7 +498,7 @@ supabase stop
 
 ### 12.3 What gets checked in
 
-- `supabase/config.toml` (project ID-less — VPS Claude fills in `[project] id = ...` during link)
+- `supabase/config.toml` — `project_id` set to `"leaf-relay"` (local container-naming label; independent of cloud project ref, which VPS Claude sets via `supabase link --project-ref <ref>`, not by editing this file)
 - `supabase/migrations/*.sql` — all 12 files
 - `supabase/functions/**/*.ts` — function code + shared utils
 - `supabase/tests/database/*.sql` — pgTAP suite
