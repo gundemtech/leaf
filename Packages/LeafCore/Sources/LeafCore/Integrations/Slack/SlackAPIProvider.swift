@@ -12,6 +12,9 @@
 
 import Foundation
 
+// Note: `SlackScopesChecking` protocol now lives in `SlackScopesChecking.swift`
+// (Task 8 extracted it into its own file alongside `SlackScopesService`).
+
 public protocol SlackAPIProvider: Sendable {
     /// One tick = (huddle state + message counts batched per channel since `since`).
     /// `since` — epoch ms cursor (max ts ms из prev'ого batch'а; nil → bootstrap
@@ -103,6 +106,38 @@ public protocol SlackAPIProvider: Sendable {
         ownerUserID: String,
         oldest: String?
     ) async throws -> SlackThreadReplyBatch
+
+    /// Phase Track-3 D3 — fetch warm-tier (15m) batch in one orchestrated round-trip.
+    /// Per-endpoint failure tolerance lives in the implementation; protocol guarantees
+    /// a `SlackWarmBatch` (possibly partially `.empty`) on success. Prior-snapshot
+    /// arguments allow the implementation / collector to short-circuit diffs and
+    /// preserve cursor-style semantics (id-set / per-channel id-list / latestTs rank).
+    /// `since` — epoch ms cursor (nil = bootstrap, no diffs emitted, just persist snapshots).
+    func fetchWarmState(
+        accessToken: String,
+        userID: String,
+        scopes: SlackScopesChecking,
+        priorMemberChannels: SlackMemberChannelsTopList?,
+        priorPinsPerChannel: [SlackChannelPinsSnapshot],
+        priorBookmarksPerChannel: [SlackChannelBookmarksSnapshot],
+        priorReminders: SlackRemindersSnapshot,
+        priorScheduledMessages: SlackScheduledMessagesSnapshot,
+        priorStars: SlackStarsSnapshot,
+        since: Int64?,
+        now: Int64
+    ) async throws -> SlackWarmBatch
+
+    /// Phase Track-3 D3 — fetch cold-tier (4am local daily) batch. `topChannels`
+    /// constrains per-channel fan-out (canvases, channels_info) to the same top-10
+    /// member-channels set the warm tier surfaced, preventing unbounded per-cold-tick
+    /// HTTP cost. Per-endpoint failure tolerance lives in the implementation.
+    func fetchColdState(
+        accessToken: String,
+        userID: String,
+        scopes: SlackScopesChecking,
+        topChannels: SlackMemberChannelsTopList,
+        now: Int64
+    ) async throws -> SlackColdBatch
 }
 
 /// Результат одного Slack tick'а. Huddle state — point-in-time snapshot;
@@ -474,6 +509,32 @@ public struct StubSlackAPIProvider: SlackAPIProvider {
         ownerUserID: String,
         oldest: String?
     ) async throws -> SlackThreadReplyBatch {
+        .empty
+    }
+
+    public func fetchWarmState(
+        accessToken: String,
+        userID: String,
+        scopes: SlackScopesChecking,
+        priorMemberChannels: SlackMemberChannelsTopList?,
+        priorPinsPerChannel: [SlackChannelPinsSnapshot],
+        priorBookmarksPerChannel: [SlackChannelBookmarksSnapshot],
+        priorReminders: SlackRemindersSnapshot,
+        priorScheduledMessages: SlackScheduledMessagesSnapshot,
+        priorStars: SlackStarsSnapshot,
+        since: Int64?,
+        now: Int64
+    ) async throws -> SlackWarmBatch {
+        .empty
+    }
+
+    public func fetchColdState(
+        accessToken: String,
+        userID: String,
+        scopes: SlackScopesChecking,
+        topChannels: SlackMemberChannelsTopList,
+        now: Int64
+    ) async throws -> SlackColdBatch {
         .empty
     }
 }

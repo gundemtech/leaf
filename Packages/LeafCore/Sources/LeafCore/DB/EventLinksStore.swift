@@ -49,8 +49,8 @@ public enum EventLinksStore {
             }
         }
 
-        // 2) Branch name → Linear (commit_pushed only). Moat extractor via derivers.
-        if eventKind == "commit_pushed",
+        // 2) Branch name → Linear (gh_commit_pushed only). Moat extractor via derivers.
+        if eventKind == GitHubEventKindKey.commitPushed.rawValue,
            let branch = payload["branch"],
            !knownLinearPrefixes.isEmpty,
            let id = derivers.extractBranchLinearID(branch, knownLinearPrefixes) {
@@ -203,13 +203,65 @@ public enum EventLinksStore {
     }
 
     private static func topLevelBodyKind(forEventKind eventKind: String) -> String? {
-        if eventKind == "linear_issue_updated" { return Schema.BodyKinds.linearDesc }
-        if eventKind == "commit_pushed" { return Schema.BodyKinds.commitMsg }
-        if eventKind == "gh_issue_comment_authored" { return Schema.BodyKinds.ghIssueComment }
-        if eventKind == "gh_pr_review_comment_authored" { return Schema.BodyKinds.ghPRReviewComment }
+        // Track-1 D2 carry-over fix (Track-3 D1): LinearCollector emits
+        // "issue_updated" (no "linear_" prefix) — parallel of the FTS dispatcher
+        // fix in EventsFullTextStore. Also adds linear_notification_received
+        // dispatch ahead of Task 8.
+        if eventKind == "issue_updated" { return Schema.BodyKinds.linearDesc }
+        if eventKind == "linear_notification_received" { return Schema.BodyKinds.linearNotificationTitle }
+        if eventKind == GitHubEventKindKey.commitPushed.rawValue { return Schema.BodyKinds.commitMsg }
+        if eventKind == GitHubEventKindKey.issueCommentAuthored.rawValue { return Schema.BodyKinds.ghIssueComment }
+        if eventKind == GitHubEventKindKey.prReviewCommentAuthored.rawValue { return Schema.BodyKinds.ghPRReviewComment }
         if eventKind == "slack_thread_reply_aggregate" { return Schema.BodyKinds.slackThreadParent }
-        if eventKind.hasPrefix("gh_pr_") { return Schema.BodyKinds.ghPR }
+        // Track-3 D4 — gh_issue_* body dispatch. Issue body indexed under the
+        // same body_kind as issue comments (mirrors FTS lines 119-122).
+        if eventKind == GitHubEventKindKey.issueOpened.rawValue
+            || eventKind == GitHubEventKindKey.issueClosed.rawValue {
+            return Schema.BodyKinds.ghIssueComment
+        }
+        // Track-3 D4 — gist description / release body / deployment description
+        // dispatch (mirrors FTS lines 126-135). Missed in D2 — closed here.
+        if eventKind == GitHubEventKindKey.gistCreated.rawValue
+            || eventKind == GitHubEventKindKey.gistUpdated.rawValue {
+            return Schema.BodyKinds.ghGistDescription
+        }
+        if eventKind == GitHubEventKindKey.releasePublished.rawValue {
+            return Schema.BodyKinds.ghReleaseBody
+        }
+        if eventKind == GitHubEventKindKey.deploymentCreated.rawValue {
+            return Schema.BodyKinds.ghDeploymentDescription
+        }
+        // Track-3 D4 — Slack canvas + bookmark titles (D3 §4.3). Per ADR-010 §6,
+        // canvas/bookmark titles are user-named structured resources (not
+        // message bodies); body field is FTS-indexed AND a target for
+        // cross-source link derivation (e.g. LEAF-NN refs inside canvas titles).
+        // Mirrors FTS lines 139-149.
+        if eventKind == SlackEventKindKey.slackCanvasCreated.rawValue
+            || eventKind == SlackEventKindKey.slackCanvasEdited.rawValue {
+            return Schema.BodyKinds.slackCanvasTitle
+        }
+        if eventKind == SlackEventKindKey.slackBookmarkAdded.rawValue
+            || eventKind == SlackEventKindKey.slackBookmarkRemoved.rawValue {
+            return Schema.BodyKinds.slackBookmarkTitle
+        }
+        // Track-3 D4 — explicit gh_pr_* cases instead of `hasPrefix("gh_pr_")`
+        // catch-all (which would spuriously match `gh_pr_review_thread_resolved`
+        // and `gh_pr_awaiting_review_count` — both body-less — and attempt body
+        // indexing on empty fields). Mirrors FTS lines 114-118.
+        if eventKind == GitHubEventKindKey.prOpened.rawValue
+            || eventKind == GitHubEventKindKey.prMerged.rawValue
+            || eventKind == GitHubEventKindKey.prClosed.rawValue {
+            return Schema.BodyKinds.ghPR
+        }
         return nil
+    }
+
+    /// Test-only accessor for `topLevelBodyKind`. Used by `DispatchCoverageTests`
+    /// parity fence — every `bodyBearing` event_kind across `GitHubEventKindKey`
+    /// + `SlackEventKindKey` must have a dispatch entry here. Mirrors the
+    /// `EventsFullTextStore.bodyKindForTesting` shim pattern (line 156).
+    public static func bodyKindForTesting(eventKind: String) -> String? {
+        topLevelBodyKind(forEventKind: eventKind)
     }
 
     private static func isSlackBody(_ kind: String) -> Bool {

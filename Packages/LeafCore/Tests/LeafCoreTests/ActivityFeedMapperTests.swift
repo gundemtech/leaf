@@ -66,7 +66,7 @@ final class ActivityFeedMapperTests: XCTestCase {
     // MARK: - GitHub
 
     func testMapsGitHubPROpened() {
-        let payload = #"{"source":"github","event_kind":"pr_opened","repo":"gundemtech/leaf","number":"142"}"#
+        let payload = #"{"source":"github","event_kind":"gh_pr_opened","repo":"gundemtech/leaf","number":"142"}"#
         let entry = ActivityFeedMapper.map(
             id: 20, timestampMs: ts, signalType: "action", bundleID: nil, payloadJSON: payload
         )
@@ -75,7 +75,7 @@ final class ActivityFeedMapperTests: XCTestCase {
     }
 
     func testMapsGitHubCommitPushed() {
-        let payload = #"{"source":"github","event_kind":"commit_pushed","repo":"gundemtech/leaf","branch":"main","sha":"abcdef1234567890"}"#
+        let payload = #"{"source":"github","event_kind":"gh_commit_pushed","repo":"gundemtech/leaf","branch":"main","sha":"abcdef1234567890"}"#
         let entry = ActivityFeedMapper.map(
             id: 21, timestampMs: ts, signalType: "action", bundleID: nil, payloadJSON: payload
         )
@@ -94,7 +94,7 @@ final class ActivityFeedMapperTests: XCTestCase {
     // MARK: - Slack
 
     func testMapsSlackMessageAuthoredAggregate() {
-        let payload = #"{"source":"slack","event_kind":"message_authored_aggregate","channel_name":"engineering","count":"5","reactions_count":"3"}"#
+        let payload = #"{"source":"slack","event_kind":"slack_message_authored_aggregate","channel_name":"engineering","count":"5","reactions_count":"3"}"#
         let entry = ActivityFeedMapper.map(
             id: 30, timestampMs: ts, signalType: "action", bundleID: nil, payloadJSON: payload
         )
@@ -104,7 +104,7 @@ final class ActivityFeedMapperTests: XCTestCase {
     }
 
     func testMapsHuddleStateChange() {
-        let payload = #"{"source":"slack","event_kind":"huddle_state_change","state":"in_a_huddle"}"#
+        let payload = #"{"source":"slack","event_kind":"slack_huddle_state_change","state":"in_a_huddle"}"#
         let entry = ActivityFeedMapper.map(
             id: 31, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
         )
@@ -121,7 +121,7 @@ final class ActivityFeedMapperTests: XCTestCase {
     }
 
     func testSkipsGitHubNotificationsPulse() {
-        let payload = #"{"source":"github","event_kind":"github_notifications_pulse","total_unread":"7"}"#
+        let payload = #"{"source":"github","event_kind":"gh_notifications_pulse","total_unread":"7"}"#
         XCTAssertNil(ActivityFeedMapper.map(
             id: 41, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
         ))
@@ -154,7 +154,7 @@ final class ActivityFeedMapperTests: XCTestCase {
 
         // GitHub generic event with body field.
         let githubPayload = """
-        {"source":"github","event_kind":"pr_opened","repo":"r/x","number":"1","body":"\(sentinel)","title":"\(sentinel)"}
+        {"source":"github","event_kind":"gh_pr_opened","repo":"r/x","number":"1","body":"\(sentinel)","title":"\(sentinel)"}
         """
         let github = ActivityFeedMapper.map(
             id: 51, timestampMs: ts, signalType: "action", bundleID: nil, payloadJSON: githubPayload
@@ -165,7 +165,7 @@ final class ActivityFeedMapperTests: XCTestCase {
 
         // Slack message aggregate with text field.
         let slackPayload = """
-        {"source":"slack","event_kind":"message_authored_aggregate","channel_name":"eng","count":"1","text":"\(sentinel)","preview":"\(sentinel)","message_text":"\(sentinel)"}
+        {"source":"slack","event_kind":"slack_message_authored_aggregate","channel_name":"eng","count":"1","text":"\(sentinel)","preview":"\(sentinel)","message_text":"\(sentinel)"}
         """
         let slack = ActivityFeedMapper.map(
             id: 52, timestampMs: ts, signalType: "action", bundleID: nil, payloadJSON: slackPayload

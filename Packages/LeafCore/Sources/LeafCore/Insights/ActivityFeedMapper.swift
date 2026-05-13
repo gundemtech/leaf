@@ -25,6 +25,16 @@ public enum ActivityFeedMapper {
     ) -> ActivityFeedEntry? {
         let timestamp = Date(timeIntervalSince1970: TimeInterval(timestampMs) / 1000.0)
         let payload = parsePayload(payloadJSON)
+        let eventKind = payload["event_kind"] ?? ""
+
+        // Track-4 S4 early dispatch — skip-list + LocalOS whitelist run before
+        // signalType routing. Layer A events (S1+S2+S3) land под various signal
+        // types без `payload["source"]` key, so signalType-based routing alone
+        // would drop them or render without semantic copy.
+        if Self.skippedKinds.contains(eventKind) { return nil }
+        if Self.trackFourLocalOSKinds.contains(eventKind) {
+            return mapLocalOS(id: id, timestamp: timestamp, bundleID: bundleID, kind: eventKind, payload: payload)
+        }
 
         switch signalType {
         case "attention":
@@ -248,50 +258,50 @@ public enum ActivityFeedMapper {
         var secondary: String? = nil
 
         switch kind {
-        case "commit_pushed":
+        case GitHubEventKindKey.commitPushed.rawValue:
             guard let repo else { return nil }
             primary = branch.map { "\(repo): pushed to \($0)" } ?? "\(repo): pushed"
             secondary = sha
-        case "pr_opened":
+        case GitHubEventKindKey.prOpened.rawValue:
             primary = formatPR(repo: repo, number: number, suffix: "opened")
             secondary = nil
-        case "pr_closed":
+        case GitHubEventKindKey.prClosed.rawValue:
             primary = formatPR(repo: repo, number: number, suffix: "closed")
-        case "pr_merged":
+        case GitHubEventKindKey.prMerged.rawValue:
             primary = formatPR(repo: repo, number: number, suffix: "merged")
-        case "pr_review_comment_authored":
+        case GitHubEventKindKey.prReviewCommentAuthored.rawValue:
             primary = formatPR(repo: repo, number: number, suffix: "review comment")
-        case "pr_review_thread_resolved":
+        case GitHubEventKindKey.prReviewThreadResolved.rawValue:
             primary = formatPR(repo: repo, number: number, suffix: "thread resolved")
-        case "review_submitted":
+        case GitHubEventKindKey.prReviewSubmitted.rawValue:
             primary = formatPR(repo: repo, number: number, suffix: "review submitted")
-        case "issue_opened":
+        case GitHubEventKindKey.issueOpened.rawValue:
             primary = formatIssue(repo: repo, number: number, suffix: "issue opened")
-        case "issue_closed":
+        case GitHubEventKindKey.issueClosed.rawValue:
             primary = formatIssue(repo: repo, number: number, suffix: "issue closed")
         case "issue_updated":
             primary = formatIssue(repo: repo, number: number, suffix: "issue updated")
-        case "issue_comment_authored":
+        case GitHubEventKindKey.issueCommentAuthored.rawValue:
             primary = formatIssue(repo: repo, number: number, suffix: "comment")
-        case "branch_created":
+        case GitHubEventKindKey.branchCreated.rawValue:
             guard let repo else { return nil }
             primary = "\(repo): branch \(branch ?? "?") created"
-        case "branch_deleted":
+        case GitHubEventKindKey.branchDeleted.rawValue:
             guard let repo else { return nil }
             primary = "\(repo): branch \(branch ?? "?") deleted"
-        case "tag_created":
+        case GitHubEventKindKey.tagCreated.rawValue:
             guard let repo else { return nil }
             let tag = sanitize(payload["tag"]) ?? "?"
             primary = "\(repo): tag \(tag)"
-        case "release_published":
+        case GitHubEventKindKey.releasePublished.rawValue:
             guard let repo else { return nil }
             let tag = sanitize(payload["tag"]) ?? sanitize(payload["name"]) ?? "release"
             primary = "\(repo): release \(tag)"
-        case "discussion_authored":
+        case GitHubEventKindKey.discussionAuthored.rawValue:
             primary = repo.map { "\($0): discussion" } ?? "Discussion"
-        case "discussion_comment_authored":
+        case GitHubEventKindKey.discussionCommentAuthored.rawValue:
             primary = repo.map { "\($0): discussion comment" } ?? "Discussion comment"
-        case "actions_run_initiated":
+        case GitHubEventKindKey.actionsRunInitiated.rawValue:
             guard let repo else { return nil }
             let workflow = sanitize(payload["workflow_name"]) ?? "workflow"
             primary = "\(repo): \(workflow) run"
@@ -346,7 +356,7 @@ public enum ActivityFeedMapper {
         var secondary: String? = nil
 
         switch kind {
-        case "message_authored_aggregate":
+        case "slack_message_authored_aggregate":
             guard let channel else { return nil }
             let count = sanitize(payload["count"]) ?? "1"
             primary = "\(channel): \(count) message\(count == "1" ? "" : "s")"
@@ -372,7 +382,7 @@ public enum ActivityFeedMapper {
                     return "\(v) \(label)"
                 }
             if !parts.isEmpty { secondary = parts.joined(separator: " · ") }
-        case "huddle_state_change":
+        case "slack_huddle_state_change":
             let state = sanitize(payload["state"]) ?? "?"
             primary = "Huddle: \(state)"
         case "slack_status_change":
@@ -399,15 +409,177 @@ public enum ActivityFeedMapper {
     /// representing a discrete user action. They're surfaced via the Live
     /// Presence widget instead.
     static let skippedKinds: Set<String> = [
-        "github_notifications_pulse",
-        "pr_awaiting_review_count",
-        "my_open_pr_count",
-        "check_runs_status",
+        GitHubEventKindKey.notificationsPulse.rawValue,
+        GitHubEventKindKey.prAwaitingReviewCount.rawValue,
+        GitHubEventKindKey.myOpenPRCount.rawValue,
+        GitHubEventKindKey.checkRunsStatus.rawValue,
         "slack_presence_state",
         "slack_dnd_state",
         "linear_assigned_workload_pulse",
-        "linear_cycle_progress"
+        "linear_cycle_progress",
+        // Track-4 S4 — high-cadence substrate metrics, not chronological events.
+        // intensity_snapshot (per-minute aggregate когда intensity ON → 60/hour),
+        // intensity_bucket_dropped (AFK debug marker), clipboard_event_count
+        // (per-tick counter). Surfaced via Derived Insights Engine (Phase 4.9).
+        "intensity_snapshot",
+        "intensity_bucket_dropped",
+        "clipboard_event_count"
     ]
+
+    /// Track-4 S1+S2+S3 Layer A event_kinds with explicit feed rendering.
+    /// Membership = explicit whitelist; adding new kinds requires updating
+    /// `mapLocalOS` switch. Must match `EventKindIcon.symbol` coverage
+    /// (Track-4 S4 T3) — see `EventKindIconTests.testAllTrack4VisibleKindsMapped`.
+    static let trackFourLocalOSKinds: Set<String> = [
+        // S1 (9)
+        "meeting_state_entered", "meeting_state_exited",
+        "focus_mode_enabled", "focus_mode_disabled",
+        "system_locked", "system_unlocked",
+        "system_slept", "system_woke",
+        "space_switched",
+        // S2 (14)
+        "xcode_active_doc_changed", "xcode_build_state_changed",
+        "jetbrains_active_doc_changed",
+        "music_track_changed", "spotify_track_changed",
+        "notes_active_title_changed", "reminder_completed",
+        "calendar_app_view_changed", "mail_active_mailbox_changed",
+        "zoom_meeting_state_changed", "zoom_meeting_name_observed",
+        "safari_tabs_changed", "chrome_tabs_changed", "arc_tabs_changed",
+        // S3 (10 visible — 3 high-cadence kinds live in `skippedKinds`)
+        "audio_route_changed",
+        "mic_in_use_entered", "mic_in_use_exited",
+        "display_connected", "display_disconnected",
+        "vpn_state_changed", "wifi_state_changed",
+        "screenshot_taken", "download_added",
+        "trash_changed"
+    ]
+
+    // MARK: - Track-4 Local OS (S1 + S2 + S3)
+
+    /// Per-event-kind copy mapping for Track-4 Layer A events. ADR-010 redaction
+    /// discipline: reads ONLY payload fields in the explicit allowlist below.
+    /// Bodies / message texts / file previews / note bodies never enter
+    /// primaryText/secondaryText, even if a future collector accidentally
+    /// stores them in the same payload row.
+    private static func mapLocalOS(
+        id: Int64,
+        timestamp: Date,
+        bundleID: String?,
+        kind: String,
+        payload: [String: String]
+    ) -> ActivityFeedEntry? {
+        let primary: String
+        var secondary: String? = nil
+
+        // Payload key names below are the canonical keys that landed collectors
+        // (S1/S2/S3 state-machines + LocalFilesWatcher) actually emit. Cross-
+        // referenced against `*StateMachine.swift` files + LocalFilesWatcher
+        // + `Schema.EventPayloadKeys`. Do NOT rename — any change here must
+        // be paired with collector + boundary-grep test updates.
+        switch kind {
+        // S1 — system state
+        case "meeting_state_entered": primary = "Meeting started"
+        case "meeting_state_exited":  primary = "Meeting ended"
+        case "focus_mode_enabled":    primary = "Focus on"   // collector emits only "state"=focused
+        case "focus_mode_disabled":   primary = "Focus off"
+        case "system_locked":   primary = "Screen locked"
+        case "system_unlocked": primary = "Screen unlocked"
+        case "system_slept":    primary = "System sleep"
+        case "system_woke":     primary = "System wake"
+        case "space_switched":  primary = "Space switched"
+
+        // S2 — IDEs (XcodeStateMachine / JetBrainsStateMachine emit "doc_path")
+        case "xcode_active_doc_changed":
+            let base = sanitize(payload["doc_path"]).map(basename(of:)) ?? "—"
+            primary = "Xcode: \(base)"
+        case "xcode_build_state_changed":
+            let state = sanitize(payload["build_state"]) ?? "?"
+            primary = "Xcode: build \(state)"
+        case "jetbrains_active_doc_changed":
+            let base = sanitize(payload["doc_path"]).map(basename(of:)) ?? "—"
+            primary = "JetBrains: \(base)"
+
+        // S2 — media (Music/SpotifyStateMachine emit "track" + "artist")
+        case "music_track_changed":
+            primary = "Music: \(sanitize(payload["track"]) ?? "—")"
+            secondary = sanitize(payload["artist"])
+        case "spotify_track_changed":
+            primary = "Spotify: \(sanitize(payload["track"]) ?? "—")"
+            secondary = sanitize(payload["artist"])
+
+        // S2 — productivity
+        case "notes_active_title_changed":
+            primary = "Notes: \(sanitize(payload["note_title"]) ?? "—")"
+        case "reminder_completed":
+            // RemindersStateMachine emits "completed_count_delta" (positive int as String).
+            let count = sanitize(payload["completed_count_delta"]) ?? "1"
+            primary = "Reminders completed: \(count)"
+        case "calendar_app_view_changed":
+            // CalendarAppStateMachine emits "view_mode".
+            primary = "Calendar: \(sanitize(payload["view_mode"]) ?? "—") view"
+        case "mail_active_mailbox_changed":
+            // MailStateMachine emits "mailbox_name" (Schema.EventPayloadKeys.mailboxName).
+            primary = "Mail: \(sanitize(payload["mailbox_name"]) ?? "—")"
+
+        // S2 — Zoom
+        case "zoom_meeting_state_changed":
+            let state = sanitize(payload["meeting_state"]) ?? "?"
+            primary = "Zoom: \(state.replacingOccurrences(of: "_", with: " "))"
+        case "zoom_meeting_name_observed":
+            primary = "Zoom: \(sanitize(payload["meeting_topic"]) ?? "—")"
+
+        // S2 — browser tabs (Safari/Chrome/ArcStateMachine emit JSON array under "tabs";
+        // count derived structurally — no URL / title strings enter primaryText).
+        case "safari_tabs_changed":
+            primary = "Safari: \(tabsCount(payload["tabs"]) ?? "?") tabs"
+        case "chrome_tabs_changed":
+            primary = "Chrome: \(tabsCount(payload["tabs"]) ?? "?") tabs"
+        case "arc_tabs_changed":
+            primary = "Arc: \(tabsCount(payload["tabs"]) ?? "?") tabs"
+
+        // S3 — audio / mic (AudioRouteCollector emits "audio_route" enum value)
+        case "audio_route_changed":
+            primary = "Audio route: \(sanitize(payload["audio_route"]) ?? "—")"
+        case "mic_in_use_entered": primary = "Mic on"
+        case "mic_in_use_exited":  primary = "Mic off"
+
+        // S3 — display (DisplayCollector emits only "state" — no count field).
+        case "display_connected":    primary = "Display connected"
+        case "display_disconnected": primary = "Display disconnected"
+
+        // S3 — network (VPN/WiFi collectors emit "state"=connected|disconnected)
+        case "vpn_state_changed":
+            primary = "VPN: \(sanitize(payload["state"]) ?? "—")"
+        case "wifi_state_changed":
+            primary = "Wi-Fi: \(sanitize(payload["state"]) ?? "—")"
+
+        // S3 — files
+        case "screenshot_taken":
+            primary = "Screenshot: \(sanitize(payload["filename"]) ?? "—")"
+        case "download_added":
+            primary = "Download: \(sanitize(payload["filename"]) ?? "—")"
+        case "trash_changed":
+            let action = sanitize(payload["action"]) ?? "?"
+            switch action {
+            case "emptied": primary = "Trash emptied"
+            case "added":   primary = "Trash items added"
+            default:        primary = "Trash: \(action)"
+            }
+
+        default:
+            return nil
+        }
+
+        return ActivityFeedEntry(
+            id: id,
+            timestamp: timestamp,
+            provider: .local,
+            eventKind: kind,
+            primaryText: primary,
+            secondaryText: secondary,
+            bundleID: bundleID
+        )
+    }
 
     /// Trim + drop empties + length-cap. Defends against degenerate or
     /// oversized strings that could leak into `primaryText`.
@@ -419,6 +591,18 @@ public enum ActivityFeedMapper {
             return String(trimmed.prefix(200)) + "…"
         }
         return trimmed
+    }
+
+    /// Derives the tab count from a `"tabs"` JSON array payload field.
+    /// Returns `nil` on missing / unparseable payload — caller renders "?".
+    /// Counts array length only; never reads individual `url` / `title`
+    /// strings, so ADR-010 redaction is preserved (structural cardinality).
+    private static func tabsCount(_ raw: String?) -> String? {
+        guard let raw,
+              let data = raw.data(using: .utf8),
+              let array = try? JSONSerialization.jsonObject(with: data) as? [Any]
+        else { return nil }
+        return String(array.count)
     }
 
     private static func parsePayload(_ json: String) -> [String: String] {

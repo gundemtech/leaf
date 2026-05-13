@@ -97,7 +97,17 @@ public actor MaintenanceScheduler {
                 return
             }
         }
-        logger.info("Retention sweep: deleted \(total, privacy: .public) rows older than \(self.retentionDays, privacy: .public)d")
+        // Phase Track-4 S3 — intensity_aggregates retention. Single DELETE
+        // (no chunking — rows are tiny, ~1440/day worst case = 4.3k rows over
+        // default 3-day retention; bounded scan).
+        // Intentionally runs even if events loop exited via cancellation —
+        // bounded + fast, and ensures retention doesn't drift между restarts.
+        do {
+            try database.purgeIntensityAggregates(before: cutoff)
+        } catch {
+            logger.error("Intensity aggregates purge failed: \(error.localizedDescription, privacy: .public)")
+        }
+        logger.info("Retention sweep: deleted \(total, privacy: .public) event rows older than \(self.retentionDays, privacy: .public)d")
     }
 
     // MARK: - Loops (integration-tested)

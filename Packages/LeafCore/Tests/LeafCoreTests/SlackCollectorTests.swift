@@ -136,6 +136,35 @@ final class SlackCollectorTests: XCTestCase {
             return nextThreadReplyBatch
         }
 
+        // Phase Track-3 D3 — warm/cold protocol stubs. Existing SlackCollector tests
+        // never call these (collector wiring lands in Tasks 12 / 14); returning
+        // `.empty` keeps SlackAPIProvider conformance compiling.
+        func fetchWarmState(
+            accessToken: String,
+            userID: String,
+            scopes: SlackScopesChecking,
+            priorMemberChannels: SlackMemberChannelsTopList?,
+            priorPinsPerChannel: [SlackChannelPinsSnapshot],
+            priorBookmarksPerChannel: [SlackChannelBookmarksSnapshot],
+            priorReminders: SlackRemindersSnapshot,
+            priorScheduledMessages: SlackScheduledMessagesSnapshot,
+            priorStars: SlackStarsSnapshot,
+            since: Int64?,
+            now: Int64
+        ) async throws -> SlackWarmBatch {
+            .empty
+        }
+
+        func fetchColdState(
+            accessToken: String,
+            userID: String,
+            scopes: SlackScopesChecking,
+            topChannels: SlackMemberChannelsTopList,
+            now: Int64
+        ) async throws -> SlackColdBatch {
+            .empty
+        }
+
         func setResult(_ result: SlackTickResult) { nextResult = result }
         func setPresence(_ presence: SlackPresenceState) { nextPresence = presence }
         func setPresenceShouldThrow(_ shouldThrow: Bool) { presenceShouldThrow = shouldThrow }
@@ -209,7 +238,7 @@ final class SlackCollectorTests: XCTestCase {
             bundleID: nil,
             payload: [
                 "source": "slack",
-                "event_kind": "huddle_state_change",
+                "event_kind": "slack_huddle_state_change",
                 "state": state
             ]
         )
@@ -290,7 +319,7 @@ final class SlackCollectorTests: XCTestCase {
         for e in writtenEvents {
             XCTAssertEqual(e.signalType, .action)
             XCTAssertEqual(e.payload["source"], "slack")
-            XCTAssertEqual(e.payload["event_kind"], "message_authored_aggregate")
+            XCTAssertEqual(e.payload["event_kind"], "slack_message_authored_aggregate")
         }
     }
 
@@ -462,7 +491,7 @@ final class SlackCollectorTests: XCTestCase {
         // Sanity: existing fields неизменны.
         XCTAssertEqual(eng?.payload["count"], "3")
         XCTAssertEqual(rand?.payload["count"], "1")
-        XCTAssertEqual(eng?.payload["event_kind"], "message_authored_aggregate")
+        XCTAssertEqual(eng?.payload["event_kind"], "slack_message_authored_aggregate")
     }
 
     // MARK: - Phase 4.7.A — slack_status_change
@@ -574,7 +603,7 @@ final class SlackCollectorTests: XCTestCase {
             start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1_000_000) / 1000),
             end: Date(timeIntervalSince1970: TimeInterval(baseMs + 1_000_000) / 1000)
         ))
-        let regular = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "message_authored_aggregate" })
+        let regular = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "slack_message_authored_aggregate" })
         XCTAssertEqual(regular.payload["count"], "7")
 
         let thread = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "slack_thread_reply_aggregate" })
@@ -1196,7 +1225,7 @@ final class SlackCollectorTests: XCTestCase {
                 start: Date(timeIntervalSince1970: TimeInterval(periodEnd) / 1000.0 - 1),
                 end: Date(timeIntervalSince1970: TimeInterval(periodEnd) / 1000.0 + 1)
             )
-        ).filter { $0.payload["event_kind"] == "message_authored_aggregate" }
+        ).filter { $0.payload["event_kind"] == "slack_message_authored_aggregate" }
 
         XCTAssertEqual(events.count, 1, "должен быть ровно 1 message_authored_aggregate event")
         let event = try XCTUnwrap(events.first)

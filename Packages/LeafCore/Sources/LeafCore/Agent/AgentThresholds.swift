@@ -86,6 +86,26 @@ public struct AgentThresholds: Sendable, Hashable {
     /// что Linear/GitHub — committed в `Production.xcconfig`, hardcoded в moat copy
     /// для Agent target (no INFOPLIST_FILE). Empty string → collector skip.
     public let slackOAuthClientID: String
+    /// Phase Track-3 D1 — interval (seconds) for LinearWarmCollector 15m tier.
+    public let linearWarmPollIntervalSec: TimeInterval
+    /// Phase Track-3 D1 — interval (seconds) for LinearColdCollector. Not used
+    /// directly by the scheduler (4am local anchor instead) — retained for
+    /// symmetry and potential debug overrides.
+    public let linearColdPollIntervalSec: TimeInterval
+    /// Phase Track-3 D2 — interval (seconds) for GitHubWarmCollector 15m tier.
+    /// Mirrors `linearWarmPollIntervalSec` (default 900s).
+    public let githubWarmPollIntervalSec: TimeInterval
+    /// Phase Track-3 D2 — interval (seconds) for GitHubColdCollector. Not used
+    /// directly by the scheduler (4am local anchor instead) — retained for
+    /// symmetry and potential debug overrides. Mirrors Linear D1 precedent.
+    public let githubColdPollIntervalSec: TimeInterval
+    /// Phase Track-3 D3 — interval (seconds) for SlackWarmCollector 15m tier.
+    /// Mirrors `githubWarmPollIntervalSec` (default 900s).
+    public let slackWarmPollIntervalSec: TimeInterval
+    /// Phase Track-3 D3 — interval (seconds) for SlackColdCollector. Not used
+    /// directly by the scheduler (4am local anchor instead) — retained for
+    /// symmetry and potential debug overrides.
+    public let slackColdPollIntervalSec: TimeInterval
     /// Phase 4.10.B: как часто `ActiveAppCollector` poll'ит frontmost app +
     /// window title для in-app window-change detection (отдельно от NSWorkspace
     /// activation observer'а — тот ловит только app switch'и). Diff suppression
@@ -112,6 +132,41 @@ public struct AgentThresholds: Sendable, Hashable {
     /// floor — running more often just produces nil outputs. Default 300s mirrors the
     /// prod `idleThresholdSec` ceiling; production override in moat.
     public let detectorScheduledIntervalSec: TimeInterval
+    /// Phase Track-4 S1: how often `CalendarCollector` polls `EKEventStore` for
+    /// overlap with the current moment. Default 60s.
+    public let calendarPollIntervalSec: TimeInterval
+    /// Phase Track-4 S1: how often `FocusModeCollector` polls
+    /// `INFocusStatusCenter.default.focusStatus`. Default 60s — mirrors
+    /// `calendarPollIntervalSec`.
+    public let focusModePollIntervalSec: TimeInterval
+    /// Phase Track-4 S1: drop space-switched emissions within this many seconds
+    /// of the prior emission (collapses rapid Mission-Control gesture sweeps).
+    /// Default 2s.
+    public let spaceTransitionCoalesceWindowSec: TimeInterval
+    /// Phase Track-4 S2: default per-adapter AppleScript timeout in seconds.
+    /// Adapters can override (Zoom uses 3.0s) via
+    /// `appleScriptPerAppTimeoutOverridesJson`.
+    public let appleScriptDefaultTimeoutSec: Double
+    /// Phase Track-4 S2: JSON dict of bundleID → seconds, parsed in moat.
+    /// Default `{"us.zoom.xos":3.0}`.
+    public let appleScriptPerAppTimeoutOverridesJson: String
+
+    /// Phase Track-4 S3: CGEventTapCollector minute-boundary flush + emit cadence.
+    /// Default 60s — wall-clock minute alignment for `intensity_aggregates` PK.
+    public let cgEventTapMinuteBucketSec: TimeInterval
+    /// Phase Track-4 S3: NSPasteboard.changeCount delta polling cadence.
+    /// Default 60s.
+    public let clipboardPollIntervalSec: TimeInterval
+    /// Phase Track-4 S3: CWInterface state polling cadence.
+    /// Default 60s.
+    public let wifiPollIntervalSec: TimeInterval
+    /// Phase Track-4 S3: FSEvents burst dedup window для LocalFilesWatcher
+    /// (screenshot/downloads/trash). Default 2s — mirrors S1 spaceTransitionCoalesce.
+    public let localFilesCoalesceWindowSec: TimeInterval
+    /// Phase Track-4 S3: testing override для screenshot directory. Empty =
+    /// read from `com.apple.screencapture` defaults / fallback `~/Desktop`.
+    /// Non-empty = absolute path (для test fixtures).
+    public let screenshotDirectoryOverridePath: String
 
     public init(
         idlePollIntervalSec: TimeInterval,
@@ -140,10 +195,26 @@ public struct AgentThresholds: Sendable, Hashable {
         githubOAuthClientID: String = "",
         slackPollIntervalSec: TimeInterval = 300,
         slackOAuthClientID: String = "",
+        linearWarmPollIntervalSec: TimeInterval = 900,
+        linearColdPollIntervalSec: TimeInterval = 86_400,
+        githubWarmPollIntervalSec: TimeInterval = 900,
+        githubColdPollIntervalSec: TimeInterval = 86_400,
+        slackWarmPollIntervalSec: TimeInterval = 900,
+        slackColdPollIntervalSec: TimeInterval = 86_400,
         attentionWindowPollIntervalSec: TimeInterval = 30,
         rotationFetchIntervalSec: TimeInterval = 60,
         detectorIncrementalIntervalSec: TimeInterval = 30,
-        detectorScheduledIntervalSec: TimeInterval = 300
+        detectorScheduledIntervalSec: TimeInterval = 300,
+        calendarPollIntervalSec: TimeInterval = 60,
+        focusModePollIntervalSec: TimeInterval = 60,
+        spaceTransitionCoalesceWindowSec: TimeInterval = 2,
+        appleScriptDefaultTimeoutSec: Double = 1.0,
+        appleScriptPerAppTimeoutOverridesJson: String = "{\"us.zoom.xos\":3.0}",
+        cgEventTapMinuteBucketSec: TimeInterval = 60,
+        clipboardPollIntervalSec: TimeInterval = 60,
+        wifiPollIntervalSec: TimeInterval = 60,
+        localFilesCoalesceWindowSec: TimeInterval = 2,
+        screenshotDirectoryOverridePath: String = ""
     ) {
         self.idlePollIntervalSec = idlePollIntervalSec
         self.idleThresholdSec = idleThresholdSec
@@ -171,10 +242,26 @@ public struct AgentThresholds: Sendable, Hashable {
         self.githubOAuthClientID = githubOAuthClientID
         self.slackPollIntervalSec = slackPollIntervalSec
         self.slackOAuthClientID = slackOAuthClientID
+        self.linearWarmPollIntervalSec = linearWarmPollIntervalSec
+        self.linearColdPollIntervalSec = linearColdPollIntervalSec
+        self.githubWarmPollIntervalSec = githubWarmPollIntervalSec
+        self.githubColdPollIntervalSec = githubColdPollIntervalSec
+        self.slackWarmPollIntervalSec = slackWarmPollIntervalSec
+        self.slackColdPollIntervalSec = slackColdPollIntervalSec
         self.attentionWindowPollIntervalSec = attentionWindowPollIntervalSec
         self.rotationFetchIntervalSec = rotationFetchIntervalSec
         self.detectorIncrementalIntervalSec = detectorIncrementalIntervalSec
         self.detectorScheduledIntervalSec = detectorScheduledIntervalSec
+        self.calendarPollIntervalSec = calendarPollIntervalSec
+        self.focusModePollIntervalSec = focusModePollIntervalSec
+        self.spaceTransitionCoalesceWindowSec = spaceTransitionCoalesceWindowSec
+        self.appleScriptDefaultTimeoutSec = appleScriptDefaultTimeoutSec
+        self.appleScriptPerAppTimeoutOverridesJson = appleScriptPerAppTimeoutOverridesJson
+        self.cgEventTapMinuteBucketSec = cgEventTapMinuteBucketSec
+        self.clipboardPollIntervalSec = clipboardPollIntervalSec
+        self.wifiPollIntervalSec = wifiPollIntervalSec
+        self.localFilesCoalesceWindowSec = localFilesCoalesceWindowSec
+        self.screenshotDirectoryOverridePath = screenshotDirectoryOverridePath
     }
 
     public static let weakDefaults = AgentThresholds(
@@ -204,9 +291,25 @@ public struct AgentThresholds: Sendable, Hashable {
         githubOAuthClientID: "",
         slackPollIntervalSec: 300,
         slackOAuthClientID: "",
+        linearWarmPollIntervalSec: 900,
+        linearColdPollIntervalSec: 86_400,
+        githubWarmPollIntervalSec: 900,
+        githubColdPollIntervalSec: 86_400,
+        slackWarmPollIntervalSec: 900,
+        slackColdPollIntervalSec: 86_400,
         attentionWindowPollIntervalSec: 30,
         rotationFetchIntervalSec: 60,
         detectorIncrementalIntervalSec: 30,
-        detectorScheduledIntervalSec: 300
+        detectorScheduledIntervalSec: 300,
+        calendarPollIntervalSec: 60,
+        focusModePollIntervalSec: 60,
+        spaceTransitionCoalesceWindowSec: 2,
+        appleScriptDefaultTimeoutSec: 1.0,
+        appleScriptPerAppTimeoutOverridesJson: "{\"us.zoom.xos\":3.0}",
+        cgEventTapMinuteBucketSec: 60,
+        clipboardPollIntervalSec: 60,
+        wifiPollIntervalSec: 60,
+        localFilesCoalesceWindowSec: 2,
+        screenshotDirectoryOverridePath: ""
     )
 }

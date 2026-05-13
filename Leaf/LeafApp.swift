@@ -19,7 +19,28 @@ struct LeafApp: App {
     @State private var watchedFolders = WatchedFoldersService()
     @State private var linearOAuth = LinearOAuthService()
     @State private var githubOAuth = GitHubOAuthService()
+    /// Phase Track-3 D2 — Task 21. Single shared `GitHubScopesReader` for Home /
+    /// Connections / Sidebar forward-trust bindings (Tasks 18–20). Backed by an
+    /// app-side `GitHubScopesService` reading the same `integrations.scope` row
+    /// that `GitHubOAuthService` writes; Agent has its own service instance
+    /// (Task 13) — no shared state needed since both read the same DB row.
+    /// DB open mirrors `GitHubOAuthService.ensureDatabase()` shape (defaultURL +
+    /// ProdConfigs + FileKeyStore encryption). On failure (e.g. FileKeyStore
+    /// race at first launch) we pass `nil` — reader degrades to `.notConfigured`.
+    @State private var githubScopes = GitHubScopesReader(
+        service: LeafApp.makeGitHubScopesService()
+    )
     @State private var slackOAuth = SlackOAuthService()
+    /// Phase Track-3 D3 — Task 18. Shared `SlackScopesReader` mirroring the
+    /// GitHub D2 forward-trust pattern (Home re-auth banner, Connections
+    /// "Slack Scopes" section, Sidebar attention dot). Backed by an app-side
+    /// `SlackScopesService` reading the same `integrations.scope` row the
+    /// Agent's collector reads — both observe the same DB row, no shared
+    /// state needed. `nil` on DB open failure → reader degrades to
+    /// `.notConfigured`.
+    @State private var slackScopes = SlackScopesReader(
+        service: LeafApp.makeSlackScopesService()
+    )
     @State private var permissions = PermissionsService()
     @State private var updater: UpdaterController
     @State private var reader = InsightsReader()
@@ -84,7 +105,9 @@ struct LeafApp: App {
                 .environment(watchedFolders)
                 .environment(linearOAuth)
                 .environment(githubOAuth)
+                .environment(githubScopes)  // Phase Track-3 D2 — Task 21
                 .environment(slackOAuth)
+                .environment(slackScopes)  // Phase Track-3 D3 — Task 18
                 .environment(permissions)
                 .environment(updater)
                 .environment(reader)
@@ -145,6 +168,66 @@ struct LeafApp: App {
                 .environment(windowState)
         }
         .menuBarExtraStyle(.window)
+    }
+
+    // MARK: - GitHub scopes reader DB bootstrap (Task 21)
+
+    /// Mirrors `GitHubOAuthService.ensureDatabase()` open-shape (default URL +
+    /// ProdConfigs + FileKeyStore-backed encryption). Called once at @State
+    /// initialization for the shared `GitHubScopesReader`. Returns `nil` on
+    /// failure so the reader stays in `.notConfigured` rather than crashing
+    /// the app cold-start (e.g., FileKeyStore race / disk error).
+    private static func makeGitHubScopesService() -> GitHubScopesService? {
+        let url = DatabasePath.defaultURL()
+        #if LEAF_PROD
+        let config = ProdConfigs.database
+        let encryption: EncryptionOptions? = EncryptionOptions(
+            keyProvider: .callback { @Sendable in
+                try FileKeyStore.fetchOrCreate()
+            },
+            preKeyPragmas: ProdConfigs.sqlcipherPragmasPreKey,
+            postKeyPragmas: ProdConfigs.sqlcipherPragmasPostKey
+        )
+        #else
+        let config = DatabaseConfig.weakDefaults
+        let encryption: EncryptionOptions? = nil
+        #endif
+        do {
+            let db = try LeafCore.Database.openForWrite(at: url, config: config, encryption: encryption)
+            return GitHubScopesService(database: db)
+        } catch {
+            leafAppLogger.error("makeGitHubScopesService failed: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+    }
+
+    // MARK: - Slack scopes reader DB bootstrap (Task 18, mirrors GitHub above)
+
+    /// Same DB-open shape as `makeGitHubScopesService()` — `SlackScopesService`
+    /// reads its `provider = slack` row from the same encrypted SQLCipher file.
+    /// Returns `nil` on failure so the reader stays in `.notConfigured`.
+    private static func makeSlackScopesService() -> SlackScopesService? {
+        let url = DatabasePath.defaultURL()
+        #if LEAF_PROD
+        let config = ProdConfigs.database
+        let encryption: EncryptionOptions? = EncryptionOptions(
+            keyProvider: .callback { @Sendable in
+                try FileKeyStore.fetchOrCreate()
+            },
+            preKeyPragmas: ProdConfigs.sqlcipherPragmasPreKey,
+            postKeyPragmas: ProdConfigs.sqlcipherPragmasPostKey
+        )
+        #else
+        let config = DatabaseConfig.weakDefaults
+        let encryption: EncryptionOptions? = nil
+        #endif
+        do {
+            let db = try LeafCore.Database.openForWrite(at: url, config: config, encryption: encryption)
+            return SlackScopesService(database: db)
+        } catch {
+            leafAppLogger.error("makeSlackScopesService failed: \(String(describing: error), privacy: .public)")
+            return nil
+        }
     }
 }
 

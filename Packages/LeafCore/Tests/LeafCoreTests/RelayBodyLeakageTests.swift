@@ -80,7 +80,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             signalType: .action,
             bundleID: "com.github.github",
             payload: [
-                "event_kind": "pr_opened",
+                "event_kind": "gh_pr_opened",
                 "repo": "o/r",
                 Schema.EventPayloadKeys.body: bodyText,
                 Schema.EventPayloadKeys.additions: "50"
@@ -115,7 +115,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             signalType: .action,
             bundleID: "com.tinyspeck.slackmacgap",
             payload: [
-                "event_kind": "message_authored_aggregate",
+                "event_kind": "slack_message_authored_aggregate",
                 "channel_name": "general",
                 Schema.EventPayloadKeys.messagesJson: messagesJSON
             ]
@@ -157,7 +157,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             signalType: .action,
             bundleID: "linear",
             payload: [
-                "event_kind": "linear_issue_updated",
+                "event_kind": "issue_updated",
                 Schema.EventPayloadKeys.body: "discusses LEAF-127"
             ]
         )
@@ -194,7 +194,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             signalType: .action,
             bundleID: "linear",
             payload: [
-                "event_kind": "linear_issue_updated",
+                "event_kind": "issue_updated",
                 Schema.EventPayloadKeys.body: bodyText
             ]
         )
@@ -355,7 +355,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             signalType: .action,
             bundleID: "com.linear.linear",
             payload: [
-                "event_kind": "linear_issue_updated",
+                "event_kind": "issue_updated",
                 Schema.EventPayloadKeys.body: "We DECIDE: \(sentinel)"
             ]
         )
@@ -397,7 +397,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             signalType: .action,
             bundleID: "com.linear.linear",
             payload: [
-                "event_kind": "linear_issue_updated",
+                "event_kind": "issue_updated",
                 Schema.EventPayloadKeys.body: "Open question: \(sentinel)?",
                 "linked_linear_id": "LEAF-42"
             ]
@@ -438,7 +438,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             signalType: .action,
             bundleID: "com.linear.linear",
             payload: [
-                "event_kind": "linear_issue_updated",
+                "event_kind": "issue_updated",
                 Schema.EventPayloadKeys.body: "We are BLOCKED: \(sentinel)",
                 "linked_linear_id": "LEAF-7"
             ]
@@ -530,7 +530,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             signalType: .action,
             bundleID: "com.linear.linear",
             payload: [
-                "event_kind": "linear_issue_updated",
+                "event_kind": "issue_updated",
                 Schema.EventPayloadKeys.body: body,
                 "linked_linear_id": "LEAF-100"
             ]
@@ -588,5 +588,1242 @@ final class RelayBodyLeakageTests: XCTestCase {
             XCTAssertFalse(stateJSON.contains(whereStoppedSentinel),
                            "WhereStopped sentinel must not appear in presence_state.state_json")
         }
+    }
+
+    // MARK: - Track 3 D1 — Linear deep sweep privacy regression
+    //
+    // D1 adds new Linear event_kinds (notifications, reactions, relations,
+    // triage). None of these reach `presence_state` directly — the existing
+    // hot-tier composite writer carries only structured presence counters.
+    // These walkbacks assert that even when a D1 event lands in the events
+    // table, its body / metadata fields never appear in
+    // `presence_state.state_json` (the relay-broadcast surface). Uses the
+    // inline `writeEventsOffsetAndPresence` seeding pattern matching the
+    // existing tests above — simpler than spinning up LinearCollector and
+    // independent of collector boot semantics.
+
+    func testD1NotificationTitleDoesNotLeakIntoPresenceState() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        // Seed presence_state.linear with structured-only state.
+        try db.writeEventsOffsetAndPresence(
+            [],
+            offset: makeOffset(collectorID: CollectorID.linearPolling, sourceID: "linear:test", nowMs: nowMs),
+            presence: (provider: .linear, state: [:] as [String: Any], derivedMode: nil),
+            nowMs: nowMs
+        )
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .context,
+            bundleID: nil,
+            payload: [
+                "source": "linear",
+                "event_kind": "linear_notification_received",
+                "notification_id": "n1",
+                "notification_kind": "issueAssignedToYou",
+                "notification_title": "Alice mentioned you in LEAF-42 rebuild_oauth",
+                "body": "Alice mentioned you in LEAF-42 rebuild_oauth"
+            ]
+        )
+        try db.write(event)
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
+            XCTAssertFalse(stateJSON.contains("rebuild_oauth"),
+                "D1 notification title MUST NOT leak into presence_state.state_json")
+            XCTAssertFalse(stateJSON.contains("Alice mentioned"),
+                "D1 notification title prefix MUST NOT leak")
+        }
+    }
+
+    func testD1ReactionEmojiDoesNotLeakIntoPresenceState() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        try db.writeEventsOffsetAndPresence(
+            [],
+            offset: makeOffset(collectorID: CollectorID.linearPolling, sourceID: "linear:test", nowMs: nowMs),
+            presence: (provider: .linear, state: [:] as [String: Any], derivedMode: nil),
+            nowMs: nowMs
+        )
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "linear",
+                "event_kind": "linear_comment_reaction_added",
+                "comment_id": "c1",
+                "issue_id": "i1",
+                "issue_identifier": "LEAF-7",
+                "emoji": "rocket-unique-marker",
+                "reacted_at_ms": "100"
+            ]
+        )
+        try db.write(event)
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
+            XCTAssertFalse(stateJSON.contains("rocket-unique-marker"),
+                "Reaction emoji MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    // MARK: - Track 3 D2 — GitHub deep sweep privacy regression
+    //
+    // D2 adds 31 new GitHub event_kinds across hot/warm/cold tiers (gists,
+    // releases, deployments, ProjectV2 fields, codespaces, repo invitations,
+    // security alerts, audit log, issue reactions). None of these reach
+    // `presence_state` directly — the existing composite writer carries only
+    // structured presence counters. These walkbacks assert that even when a
+    // D2 event lands in the events table, its body / metadata fields never
+    // appear in `presence_state.state_json` (the relay-broadcast surface).
+    // Mirrors the D1 inline `writeEventsOffsetAndPresence` seeding pattern.
+    //
+    // These are regression sentinels — they pass immediately because no
+    // D2 code currently writes bodies into `presence_state`. The tests
+    // prevent future leakage during refactors.
+
+    func testRelayDoesNotLeakGistDescription() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        try db.writeEventsOffsetAndPresence(
+            [],
+            offset: makeOffset(collectorID: CollectorID.githubPolling, sourceID: "github:test", nowMs: nowMs),
+            presence: (provider: .github, state: [:] as [String: Any], derivedMode: nil),
+            nowMs: nowMs
+        )
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "github",
+                "event_kind": GitHubEventKindKey.gistCreated.rawValue,
+                Schema.EventPayloadKeys.gistId: "g1",
+                Schema.EventPayloadKeys.gistDescription: "BODY_SENTINEL_GIST",
+                Schema.EventPayloadKeys.body: "BODY_SENTINEL_GIST"
+            ]
+        )
+        try db.write(event)
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
+            XCTAssertFalse(stateJSON.contains("BODY_SENTINEL_GIST"),
+                "Gist description body MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testRelayDoesNotLeakReleaseBody() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        try db.writeEventsOffsetAndPresence(
+            [],
+            offset: makeOffset(collectorID: CollectorID.githubPolling, sourceID: "github:test", nowMs: nowMs),
+            presence: (provider: .github, state: [:] as [String: Any], derivedMode: nil),
+            nowMs: nowMs
+        )
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "github",
+                "event_kind": GitHubEventKindKey.releasePublished.rawValue,
+                "repo": "o/r",
+                "tag_name": "v1.2.3",
+                Schema.EventPayloadKeys.body: "BODY_SENTINEL_RELEASE changelog with details"
+            ]
+        )
+        try db.write(event)
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
+            XCTAssertFalse(stateJSON.contains("BODY_SENTINEL_RELEASE"),
+                "Release body MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testRelayDoesNotLeakDeploymentDescription() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        try db.writeEventsOffsetAndPresence(
+            [],
+            offset: makeOffset(collectorID: CollectorID.githubPolling, sourceID: "github:test", nowMs: nowMs),
+            presence: (provider: .github, state: [:] as [String: Any], derivedMode: nil),
+            nowMs: nowMs
+        )
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "github",
+                "event_kind": GitHubEventKindKey.deploymentCreated.rawValue,
+                "repo": "o/r",
+                "environment": "production",
+                Schema.EventPayloadKeys.body: "BODY_SENTINEL_DEPLOY description text"
+            ]
+        )
+        try db.write(event)
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
+            XCTAssertFalse(stateJSON.contains("BODY_SENTINEL_DEPLOY"),
+                "Deployment description MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testRelayDoesNotLeakProjectV2FieldValues() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        try db.writeEventsOffsetAndPresence(
+            [],
+            offset: makeOffset(collectorID: CollectorID.githubPolling, sourceID: "github:test", nowMs: nowMs),
+            presence: (provider: .github, state: [:] as [String: Any], derivedMode: nil),
+            nowMs: nowMs
+        )
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "github",
+                "event_kind": GitHubEventKindKey.projectFieldUpdated.rawValue,
+                "project_id": "p1",
+                "field_name": "Status",
+                Schema.EventPayloadKeys.projectV2NewValue: "BODY_SENTINEL_PROJECTV2_VALUE"
+            ]
+        )
+        try db.write(event)
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
+            XCTAssertFalse(stateJSON.contains("BODY_SENTINEL_PROJECTV2_VALUE"),
+                "ProjectV2 field value MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testRelayDoesNotLeakCodespaceName() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        try db.writeEventsOffsetAndPresence(
+            [],
+            offset: makeOffset(collectorID: CollectorID.githubPolling, sourceID: "github:test", nowMs: nowMs),
+            presence: (provider: .github, state: [:] as [String: Any], derivedMode: nil),
+            nowMs: nowMs
+        )
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "github",
+                "event_kind": GitHubEventKindKey.codespaceStarted.rawValue,
+                Schema.EventPayloadKeys.codespaceName: "BODY_SENTINEL_CODESPACE_NAME",
+                "repo": "o/r"
+            ]
+        )
+        try db.write(event)
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
+            XCTAssertFalse(stateJSON.contains("BODY_SENTINEL_CODESPACE_NAME"),
+                "Codespace name MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testRelayDoesNotLeakRepoInvitationFromLogin() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        try db.writeEventsOffsetAndPresence(
+            [],
+            offset: makeOffset(collectorID: CollectorID.githubPolling, sourceID: "github:test", nowMs: nowMs),
+            presence: (provider: .github, state: [:] as [String: Any], derivedMode: nil),
+            nowMs: nowMs
+        )
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "github",
+                "event_kind": GitHubEventKindKey.repoInvitationReceived.rawValue,
+                "invitation_id": "inv1",
+                "repo": "o/r",
+                Schema.EventPayloadKeys.repoInvitationFromLogin: "BODY_SENTINEL_INVITER_LOGIN"
+            ]
+        )
+        try db.write(event)
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
+            XCTAssertFalse(stateJSON.contains("BODY_SENTINEL_INVITER_LOGIN"),
+                "Repo invitation from-login MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testRelayDoesNotLeakSecurityAlertRule() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        try db.writeEventsOffsetAndPresence(
+            [],
+            offset: makeOffset(collectorID: CollectorID.githubPolling, sourceID: "github:test", nowMs: nowMs),
+            presence: (provider: .github, state: [:] as [String: Any], derivedMode: nil),
+            nowMs: nowMs
+        )
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "github",
+                "event_kind": GitHubEventKindKey.secretAlertObserved.rawValue,
+                "repo": "o/r",
+                "alert_id": "a1",
+                Schema.EventPayloadKeys.alertRule: "BODY_SENTINEL_ALERT_RULE"
+            ]
+        )
+        try db.write(event)
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
+            XCTAssertFalse(stateJSON.contains("BODY_SENTINEL_ALERT_RULE"),
+                "Security alert rule MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testRelayDoesNotLeakAuditAction() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        try db.writeEventsOffsetAndPresence(
+            [],
+            offset: makeOffset(collectorID: CollectorID.githubPolling, sourceID: "github:test", nowMs: nowMs),
+            presence: (provider: .github, state: [:] as [String: Any], derivedMode: nil),
+            nowMs: nowMs
+        )
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "github",
+                "event_kind": GitHubEventKindKey.auditActionObserved.rawValue,
+                "org": "o",
+                Schema.EventPayloadKeys.auditAction: "BODY_SENTINEL_AUDIT_ACTION"
+            ]
+        )
+        try db.write(event)
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
+            XCTAssertFalse(stateJSON.contains("BODY_SENTINEL_AUDIT_ACTION"),
+                "Audit action string MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testRelayDoesNotLeakIssueReactionEmoji() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        try db.writeEventsOffsetAndPresence(
+            [],
+            offset: makeOffset(collectorID: CollectorID.githubPolling, sourceID: "github:test", nowMs: nowMs),
+            presence: (provider: .github, state: [:] as [String: Any], derivedMode: nil),
+            nowMs: nowMs
+        )
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "github",
+                "event_kind": GitHubEventKindKey.issueReactionReceived.rawValue,
+                "repo": "o/r",
+                "issue_number": "42",
+                Schema.EventPayloadKeys.reactionEmoji: "BODY_SENTINEL_REACTION_EMOJI",
+                Schema.EventPayloadKeys.body: "BODY_SENTINEL_REACTION_EMOJI"
+            ]
+        )
+        try db.write(event)
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
+            XCTAssertFalse(stateJSON.contains("BODY_SENTINEL_REACTION_EMOJI"),
+                "Issue reaction emoji MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testD1RelationAndTriageMetadataDoesNotLeakIntoPresenceState() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        try db.writeEventsOffsetAndPresence(
+            [],
+            offset: makeOffset(collectorID: CollectorID.linearPolling, sourceID: "linear:test", nowMs: nowMs),
+            presence: (provider: .linear, state: [:] as [String: Any], derivedMode: nil),
+            nowMs: nowMs
+        )
+        let rel = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "linear",
+                "event_kind": "linear_relation_added",
+                "relation_id": "rel-1",
+                "from_issue_identifier": "LEAF-1",
+                "to_issue_identifier": "LEAF-99-unique-marker",
+                "relation_kind": "blocks",
+                "started_at_ms": "100"
+            ]
+        )
+        let triage = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "linear",
+                "event_kind": "linear_triage_item_resolved",
+                "issue_id": "i1",
+                "issue_identifier": "LEAF-77",
+                "team_id": "t1",
+                "to_state_name": "Done-canary-marker",
+                "to_state_type": "completed",
+                "resolution_kind": "completed",
+                "completed_at_ms": "100"
+            ]
+        )
+        try db.write(rel)
+        try db.write(triage)
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
+            XCTAssertFalse(stateJSON.contains("LEAF-99-unique-marker"),
+                "D1 relation target_identifier MUST NOT leak")
+            XCTAssertFalse(stateJSON.contains("Done-canary-marker"),
+                "D1 triage to_state_name MUST NOT leak")
+        }
+    }
+
+    // MARK: - Track 3 D3 — Slack deep sweep privacy regression
+    //
+    // D3 adds 21 new Slack event_kinds across hot/warm/cold tiers. Only 4 are
+    // body-bearing per ADR-010 §6 (canvas + bookmark titles — user-named
+    // structured resources). Body-bearing tests assert the sentinel reaches
+    // FTS (sanity — pipeline ran) but does NOT leak into `presence_state`.
+    // Dropped-text tests assert sentinels injected into payload fields that
+    // are NOT body-indexed by design (pin itemRef / reminder id / scheduled
+    // message id / custom emoji name / usergroup membership IDs) reach neither
+    // FTS nor presence_state. The dropped-text sentinels guard against
+    // accidental leakage if a future refactor mirrors a metadata field into
+    // `body` or `state_json`.
+
+    // MARK: Body-bearing positive (canvas + bookmark)
+
+    func testCanvasTitleSentinelReachesFTSButNotPresence() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let sentinel = "ZZZZ-CANVAS-TITLE-SENTINEL-ZZZZ"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "slack",
+                "event_kind": SlackEventKindKey.slackCanvasCreated.rawValue,
+                Schema.EventPayloadKeys.canvasId: "c1",
+                Schema.EventPayloadKeys.bookmarkTitle: sentinel,
+                Schema.EventPayloadKeys.body: sentinel
+            ]
+        )
+        let presenceState: [String: Any] = ["presence": "active"]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: CollectorID.slackPolling, sourceID: "slack:test", nowMs: nowMs),
+            presence: (provider: .slack, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+
+        // Sanity: canvas title indexed in FTS via the slack_canvas_title body_kind.
+        let ftsCount = try db.readSQL { rawDB in
+            try Int.fetchOne(rawDB, sql:
+                "SELECT COUNT(*) FROM events_fts_meta WHERE body_kind = ?",
+                arguments: [Schema.BodyKinds.slackCanvasTitle]) ?? 0
+        }
+        XCTAssertEqual(ftsCount, 1,
+            "Sanity: canvas title should be indexed under slack_canvas_title before asserting it does not leak")
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql:
+                "SELECT state_json FROM presence_state WHERE provider='slack'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
+            XCTAssertFalse(stateJSON.contains(sentinel),
+                "Slack canvas title MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testBookmarkTitleSentinelReachesFTSButNotPresence() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let sentinel = "ZZZZ-BOOKMARK-TITLE-SENTINEL-ZZZZ"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "slack",
+                "event_kind": SlackEventKindKey.slackBookmarkAdded.rawValue,
+                Schema.EventPayloadKeys.channelId: "C1",
+                Schema.EventPayloadKeys.bookmarkId: "b1",
+                Schema.EventPayloadKeys.bookmarkTitle: sentinel,
+                Schema.EventPayloadKeys.bookmarkURL: "https://example.com",
+                Schema.EventPayloadKeys.body: sentinel
+            ]
+        )
+        let presenceState: [String: Any] = ["presence": "active"]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: CollectorID.slackPolling, sourceID: "slack:test", nowMs: nowMs),
+            presence: (provider: .slack, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+
+        let ftsCount = try db.readSQL { rawDB in
+            try Int.fetchOne(rawDB, sql:
+                "SELECT COUNT(*) FROM events_fts_meta WHERE body_kind = ?",
+                arguments: [Schema.BodyKinds.slackBookmarkTitle]) ?? 0
+        }
+        XCTAssertEqual(ftsCount, 1,
+            "Sanity: bookmark title should be indexed under slack_bookmark_title before asserting it does not leak")
+
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql:
+                "SELECT state_json FROM presence_state WHERE provider='slack'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
+            XCTAssertFalse(stateJSON.contains(sentinel),
+                "Slack bookmark title MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    // MARK: Dropped-text negative (pin / reminder / scheduled / emoji / usergroup)
+    //
+    // For each test the sentinel is injected into a payload field on a Slack
+    // event_kind whose body_kind dispatch in `EventsFullTextStore` is
+    // intentionally absent. Assertions:
+    //  (1) sentinel did NOT reach `events_fts_meta` (no body_kind row carries
+    //      the sentinel via its body column);
+    //  (2) sentinel did NOT reach `presence_state.state_json`.
+    // The events_fts_meta count check is sufficient because FTS rows are
+    // written only via `EventsFullTextStore.indexEvent`, and that store skips
+    // events whose event_kind has no `topLevelBodyKind` dispatch entry AND
+    // whose payload lacks the JSON-array fan-out keys (commentBodiesJson /
+    // threadRepliesJson / messagesJson). None of the five negative event_kinds
+    // ship any of those.
+
+    func testPinMessageBodyNeverReachesFTSOrPresence() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let sentinel = "ZZZZ-PIN-MESSAGE-SENTINEL-ZZZZ"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        // Sentinel deliberately placed in itemRef — a captured metadata field
+        // — to prove that even captured-but-non-body-bearing fields cannot
+        // surface into FTS or presence_state.
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "slack",
+                "event_kind": SlackEventKindKey.slackPinAdded.rawValue,
+                Schema.EventPayloadKeys.channelId: "C1",
+                Schema.EventPayloadKeys.itemRef: sentinel,
+                Schema.EventPayloadKeys.pinnedAtMs: "100"
+            ]
+        )
+        let presenceState: [String: Any] = ["presence": "active"]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: CollectorID.slackPolling, sourceID: "slack:test", nowMs: nowMs),
+            presence: (provider: .slack, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+
+        try db.readSQL { rawDB in
+            let ftsHits = try Int.fetchOne(rawDB, sql:
+                "SELECT COUNT(*) FROM events_fts_meta") ?? 0
+            XCTAssertEqual(ftsHits, 0,
+                "Pin events MUST NOT produce FTS rows (no body-kind dispatch entry)")
+            let stateJSON = (try Row.fetchOne(rawDB, sql:
+                "SELECT state_json FROM presence_state WHERE provider='slack'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.contains(sentinel),
+                "Pin itemRef sentinel MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testReminderTextNeverReachesFTSOrPresence() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let sentinel = "ZZZZ-REMINDER-TEXT-SENTINEL-ZZZZ"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "slack",
+                "event_kind": SlackEventKindKey.slackReminderCreated.rawValue,
+                Schema.EventPayloadKeys.reminderId: sentinel,
+                Schema.EventPayloadKeys.dueTs: "200"
+            ]
+        )
+        let presenceState: [String: Any] = ["presence": "active"]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: CollectorID.slackPolling, sourceID: "slack:test", nowMs: nowMs),
+            presence: (provider: .slack, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+
+        try db.readSQL { rawDB in
+            let ftsHits = try Int.fetchOne(rawDB, sql:
+                "SELECT COUNT(*) FROM events_fts_meta") ?? 0
+            XCTAssertEqual(ftsHits, 0,
+                "Reminder events MUST NOT produce FTS rows (reminder.text is dropped at provider boundary)")
+            let stateJSON = (try Row.fetchOne(rawDB, sql:
+                "SELECT state_json FROM presence_state WHERE provider='slack'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.contains(sentinel),
+                "Reminder id sentinel MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testScheduledMessageTextNeverReachesFTSOrPresence() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let sentinel = "ZZZZ-SCHEDULED-MSG-SENTINEL-ZZZZ"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "slack",
+                "event_kind": SlackEventKindKey.slackMessageScheduled.rawValue,
+                Schema.EventPayloadKeys.scheduledMessageId: sentinel,
+                Schema.EventPayloadKeys.scheduledFor: "200",
+                Schema.EventPayloadKeys.channelId: "C1"
+            ]
+        )
+        let presenceState: [String: Any] = ["presence": "active"]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: CollectorID.slackPolling, sourceID: "slack:test", nowMs: nowMs),
+            presence: (provider: .slack, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+
+        try db.readSQL { rawDB in
+            let ftsHits = try Int.fetchOne(rawDB, sql:
+                "SELECT COUNT(*) FROM events_fts_meta") ?? 0
+            XCTAssertEqual(ftsHits, 0,
+                "Scheduled-message events MUST NOT produce FTS rows (scheduled body is dropped at provider boundary)")
+            let stateJSON = (try Row.fetchOne(rawDB, sql:
+                "SELECT state_json FROM presence_state WHERE provider='slack'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.contains(sentinel),
+                "Scheduled message id sentinel MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testCustomEmojiURLNeverReachesFTSOrPresence() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let sentinel = "ZZZZ-EMOJI-URL-SENTINEL-ZZZZ"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        // Cold tier captures emoji_name only — image URL is dropped at the
+        // provider boundary. Inject sentinel via emoji_name to confirm even
+        // captured fields do not surface in FTS or presence_state.
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "slack",
+                "event_kind": SlackEventKindKey.slackCustomEmojiAdded.rawValue,
+                Schema.EventPayloadKeys.emojiName: sentinel,
+                Schema.EventPayloadKeys.workspaceId: "W1"
+            ]
+        )
+        let presenceState: [String: Any] = ["presence": "active"]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: CollectorID.slackPolling, sourceID: "slack:test", nowMs: nowMs),
+            presence: (provider: .slack, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+
+        try db.readSQL { rawDB in
+            let ftsHits = try Int.fetchOne(rawDB, sql:
+                "SELECT COUNT(*) FROM events_fts_meta") ?? 0
+            XCTAssertEqual(ftsHits, 0,
+                "Custom emoji events MUST NOT produce FTS rows (image URL is dropped at provider boundary)")
+            let stateJSON = (try Row.fetchOne(rawDB, sql:
+                "SELECT state_json FROM presence_state WHERE provider='slack'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.contains(sentinel),
+                "Custom emoji name sentinel MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    func testUsergroupProfileDataNeverReachesFTSOrPresence() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let sentinel = "ZZZZ-USERGROUP-PROFILE-SENTINEL-ZZZZ"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        // Cold tier captures only added/removed user IDs — never user profile
+        // (display name / email / avatar). Inject sentinel into the captured
+        // ID array to confirm even captured fields cannot surface.
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: 100),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "slack",
+                "event_kind": SlackEventKindKey.slackUsergroupMembershipChanged.rawValue,
+                Schema.EventPayloadKeys.groupId: "G1",
+                Schema.EventPayloadKeys.addedUserIdsJson: #"[""# + sentinel + #""]"#,
+                Schema.EventPayloadKeys.removedUserIdsJson: "[]",
+                Schema.EventPayloadKeys.workspaceId: "W1"
+            ]
+        )
+        let presenceState: [String: Any] = ["presence": "active"]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: CollectorID.slackPolling, sourceID: "slack:test", nowMs: nowMs),
+            presence: (provider: .slack, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+
+        try db.readSQL { rawDB in
+            let ftsHits = try Int.fetchOne(rawDB, sql:
+                "SELECT COUNT(*) FROM events_fts_meta") ?? 0
+            XCTAssertEqual(ftsHits, 0,
+                "Usergroup membership events MUST NOT produce FTS rows (no body-kind dispatch entry)")
+            let stateJSON = (try Row.fetchOne(rawDB, sql:
+                "SELECT state_json FROM presence_state WHERE provider='slack'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.contains(sentinel),
+                "Usergroup membership user-ID sentinel MUST NOT leak into presence_state.state_json")
+        }
+    }
+
+    // MARK: - Phase Track-4 S1 — Architecture catch-up walkbacks
+
+    /// Adversarial payload with fake meeting title MUST NOT reach
+    /// `presence_state.state_json`. Collectors are designed to never include
+    /// title (compile-time via MeetingObservation), but this defence layer
+    /// catches a future regression where a collector accidentally adds the
+    /// field.
+    func testMeetingStateEventDoesNotLeakIntoPresenceState_S1() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let titleMarker = "SECRET-MEETING-TITLE-MARKER-S1"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let event = RawEvent(
+            timestamp: Date(),
+            signalType: .context,
+            bundleID: nil,
+            payload: [
+                "event_kind": "meeting_state_entered",
+                "state": "in_meeting",
+                "title": titleMarker
+            ]
+        )
+        let presenceState: [String: Any] = ["dummy": true]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: "calendar", sourceID: "calendar:test", nowMs: nowMs),
+            presence: (provider: .linear, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql:
+                "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.contains(titleMarker),
+                "Meeting title MUST NOT appear in presence_state.state_json")
+        }
+    }
+
+    /// Same shape for focus_mode_* events — fake mode name MUST NOT leak.
+    func testFocusModeEventDoesNotLeakIntoPresenceState_S1() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let modeNameMarker = "SECRET-FOCUS-MODE-NAME-MARKER-S1"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let event = RawEvent(
+            timestamp: Date(),
+            signalType: .context,
+            bundleID: nil,
+            payload: [
+                "event_kind": "focus_mode_enabled",
+                "state": "focused",
+                "mode_name": modeNameMarker
+            ]
+        )
+        let presenceState: [String: Any] = ["dummy": true]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: "focus", sourceID: "focus:test", nowMs: nowMs),
+            presence: (provider: .linear, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql:
+                "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.contains(modeNameMarker),
+                "Focus mode name MUST NOT appear in presence_state.state_json")
+        }
+    }
+
+    /// Same shape for system_locked event — adversarial host marker MUST NOT leak.
+    func testSystemStateEventDoesNotLeakIntoPresenceState_S1() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let hostMarker = "SECRET-HOSTNAME-MARKER-S1"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let event = RawEvent(
+            timestamp: Date(),
+            signalType: .context,
+            bundleID: nil,
+            payload: [
+                "event_kind": "system_locked",
+                "host": hostMarker
+            ]
+        )
+        let presenceState: [String: Any] = ["dummy": true]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: "system_state", sourceID: "system_state:test", nowMs: nowMs),
+            presence: (provider: .linear, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql:
+                "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.contains(hostMarker),
+                "System hostname MUST NOT appear in presence_state.state_json")
+        }
+    }
+
+    /// Same shape for space_switched event — fake space identifier MUST NOT leak.
+    func testSpaceSwitchedEventDoesNotLeakIntoPresenceState_S1() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let spaceIDMarker = "SECRET-SPACE-IDENTIFIER-MARKER-S1"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let event = RawEvent(
+            timestamp: Date(),
+            signalType: .context,
+            bundleID: nil,
+            payload: [
+                "event_kind": "space_switched",
+                "space_id": spaceIDMarker
+            ]
+        )
+        let presenceState: [String: Any] = ["dummy": true]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: "spaces", sourceID: "spaces:test", nowMs: nowMs),
+            presence: (provider: .linear, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql:
+                "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.contains(spaceIDMarker),
+                "Space identifier MUST NOT appear in presence_state.state_json")
+        }
+    }
+
+    // MARK: - Phase Track-4 S2 — AppleScript surface walkbacks
+
+    /// Helper: assert that an adversarial payload field never reaches
+    /// `presence_state.state_json` after `writeEventsOffsetAndPresence`.
+    /// Each S2 event_kind below gets a dedicated walkback so a regression
+    /// at the per-adapter layer would surface a clear failure.
+    private func assertS2DoesNotLeak(
+        eventKind: String,
+        extraPayload: [String: String],
+        markers: [String],
+        collectorID: String,
+        file: StaticString = #file,
+        line: UInt = #line
+    ) throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        var payload: [String: String] = ["event_kind": eventKind]
+        for (k, v) in extraPayload { payload[k] = v }
+        let event = RawEvent(
+            timestamp: Date(),
+            signalType: .attention,
+            bundleID: nil,
+            payload: payload
+        )
+        let presenceState: [String: Any] = ["dummy": true]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: collectorID, sourceID: "\(collectorID):test", nowMs: nowMs),
+            presence: (provider: .linear, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql:
+                "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            for m in markers {
+                XCTAssertFalse(stateJSON.contains(m),
+                    "Marker '\(m)' MUST NOT appear in presence_state.state_json for \(eventKind)",
+                    file: file, line: line)
+            }
+        }
+    }
+
+    func testRelayDoesNotLeakXcodeActiveDocBody_S2() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "xcode_active_doc_changed",
+            extraPayload: ["doc_path": "/p", "body": "SECRET-XCODE-DOC-BODY-S2"],
+            markers: ["SECRET-XCODE-DOC-BODY-S2"],
+            collectorID: "applescript_xcode"
+        )
+    }
+
+    func testRelayDoesNotLeakXcodeBuildLogOutput_S2() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "xcode_build_state_changed",
+            extraPayload: ["build_state": "failed", "log_output": "SECRET-XCODE-BUILD-LOG-S2"],
+            markers: ["SECRET-XCODE-BUILD-LOG-S2"],
+            collectorID: "applescript_xcode"
+        )
+    }
+
+    func testRelayDoesNotLeakJetBrainsDocContent_S2() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "jetbrains_active_doc_changed",
+            extraPayload: [
+                "ide_bundle_id": "com.jetbrains.pycharm",
+                "doc_path": "/p.py",
+                "content": "SECRET-JETBRAINS-CONTENT-S2"
+            ],
+            markers: ["SECRET-JETBRAINS-CONTENT-S2"],
+            collectorID: "applescript_jetbrains"
+        )
+    }
+
+    func testRelayDoesNotLeakMusicLyrics_S2() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "music_track_changed",
+            extraPayload: ["track": "T", "artist": "A", "lyrics": "SECRET-MUSIC-LYRICS-S2"],
+            markers: ["SECRET-MUSIC-LYRICS-S2"],
+            collectorID: "applescript_music"
+        )
+    }
+
+    func testRelayDoesNotLeakSpotifyLyrics_S2() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "spotify_track_changed",
+            extraPayload: ["track": "T", "artist": "A", "lyrics": "SECRET-SPOTIFY-LYRICS-S2"],
+            markers: ["SECRET-SPOTIFY-LYRICS-S2"],
+            collectorID: "applescript_spotify"
+        )
+    }
+
+    func testRelayDoesNotLeakNotesBody_S2() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "notes_active_title_changed",
+            extraPayload: [
+                "note_title": "T",
+                "body": "SECRET-NOTE-BODY-MARKER-S2",
+                "plaintext": "SECRET-NOTE-PLAINTEXT-MARKER-S2"
+            ],
+            markers: ["SECRET-NOTE-BODY-MARKER-S2", "SECRET-NOTE-PLAINTEXT-MARKER-S2"],
+            collectorID: "applescript_notes"
+        )
+    }
+
+    func testRelayDoesNotLeakReminderTitle_S2() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "reminder_completed",
+            extraPayload: [
+                "list_name": "Inbox",
+                "completed_count_delta": "3",
+                "reminder_title": "SECRET-REMINDER-TITLE-S2",
+                "notes": "SECRET-REMINDER-NOTES-S2"
+            ],
+            markers: ["SECRET-REMINDER-TITLE-S2", "SECRET-REMINDER-NOTES-S2"],
+            collectorID: "applescript_reminders"
+        )
+    }
+
+    func testRelayDoesNotLeakCalendarEventTitle_S2() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "calendar_app_view_changed",
+            extraPayload: [
+                "view_mode": "week",
+                "visible_date_range_days": "7",
+                "event_title": "SECRET-EVENT-TITLE-S2",
+                "attendees": "SECRET-ATTENDEES-LIST-S2"
+            ],
+            markers: ["SECRET-EVENT-TITLE-S2", "SECRET-ATTENDEES-LIST-S2"],
+            collectorID: "applescript_calendar"
+        )
+    }
+
+    func testRelayDoesNotLeakMailBodyOrSubject_S2() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "mail_active_mailbox_changed",
+            extraPayload: [
+                "mailbox_name": "Inbox",
+                "body": "SECRET-MAIL-BODY-S2",
+                "subject": "SECRET-MAIL-SUBJECT-S2",
+                "from": "SECRET-MAIL-FROM-S2"
+            ],
+            markers: ["SECRET-MAIL-BODY-S2", "SECRET-MAIL-SUBJECT-S2", "SECRET-MAIL-FROM-S2"],
+            collectorID: "applescript_mail"
+        )
+    }
+
+    func testRelayDoesNotLeakZoomAttendees_S2() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "zoom_meeting_state_changed",
+            extraPayload: [
+                "meeting_state": "in_meeting",
+                "attendees": "SECRET-ZOOM-ATTENDEES-LIST-S2",
+                "password": "SECRET-ZOOM-PASSWORD-S2"
+            ],
+            markers: ["SECRET-ZOOM-ATTENDEES-LIST-S2", "SECRET-ZOOM-PASSWORD-S2"],
+            collectorID: "applescript_zoom"
+        )
+    }
+
+    func testRelayDoesNotLeakZoomTopic_S2() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "zoom_meeting_name_observed",
+            extraPayload: [
+                "meeting_topic": "T",
+                "password": "SECRET-ZOOM-NAME-PASSWORD-S2",
+                "chat_history": "SECRET-ZOOM-CHAT-S2"
+            ],
+            markers: ["SECRET-ZOOM-NAME-PASSWORD-S2", "SECRET-ZOOM-CHAT-S2"],
+            collectorID: "applescript_zoom"
+        )
+    }
+
+    func testRelayDoesNotLeakSafariCookiesOrSource_S2() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "safari_tabs_changed",
+            extraPayload: [
+                "tabs": "[]",
+                "cookies": "SECRET-SAFARI-COOKIES-S2",
+                "source": "SECRET-SAFARI-SOURCE-S2",
+                "history": "SECRET-SAFARI-HISTORY-S2"
+            ],
+            markers: ["SECRET-SAFARI-COOKIES-S2", "SECRET-SAFARI-SOURCE-S2", "SECRET-SAFARI-HISTORY-S2"],
+            collectorID: "applescript_safari"
+        )
+    }
+
+    func testRelayDoesNotLeakChromeCookiesOrSource_S2() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "chrome_tabs_changed",
+            extraPayload: [
+                "tabs": "[]",
+                "cookies": "SECRET-CHROME-COOKIES-S2",
+                "source": "SECRET-CHROME-SOURCE-S2"
+            ],
+            markers: ["SECRET-CHROME-COOKIES-S2", "SECRET-CHROME-SOURCE-S2"],
+            collectorID: "applescript_chrome"
+        )
+    }
+
+    func testRelayDoesNotLeakArcCookiesOrSource_S2() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "arc_tabs_changed",
+            extraPayload: [
+                "tabs": "[]",
+                "cookies": "SECRET-ARC-COOKIES-S2",
+                "source": "SECRET-ARC-SOURCE-S2"
+            ],
+            markers: ["SECRET-ARC-COOKIES-S2", "SECRET-ARC-SOURCE-S2"],
+            collectorID: "applescript_arc"
+        )
+    }
+
+    // MARK: - Phase Track-4 S3 — system observers + intensity walkbacks (13)
+
+    /// 13 walkbacks — one per new event_kind. Each smuggles content marker
+    /// фейковым payload key (body / characters / pixels / etc) и assert'ит
+    /// что marker не появляется в presence_state.state_json.
+
+    func testRelayDoesNotLeakIntensitySnapshot_S3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "intensity_snapshot",
+            extraPayload: [
+                "keystroke_count": "50",
+                "mouse_move_count": "100",
+                "app_switch_count": "2",
+                "foreground_app": "com.apple.dt.Xcode",
+                "characters": "SECRET-KEYS-INTENSITY-S3",
+                "body": "SECRET-INTENSITY-BODY-S3"
+            ],
+            markers: ["SECRET-KEYS-INTENSITY-S3", "SECRET-INTENSITY-BODY-S3"],
+            collectorID: "cgevent_tap"
+        )
+    }
+
+    func testRelayDoesNotLeakIntensityBucketDropped_S3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "intensity_bucket_dropped",
+            extraPayload: [
+                "state": "locked",
+                "body": "SECRET-DROPPED-BUCKET-BODY-S3"
+            ],
+            markers: ["SECRET-DROPPED-BUCKET-BODY-S3"],
+            collectorID: "cgevent_tap"
+        )
+    }
+
+    func testRelayDoesNotLeakAudioRouteDeviceName_S3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "audio_route_changed",
+            extraPayload: [
+                "audio_route": "bluetooth",
+                "device_name": "SECRET-AIRPODS-NAME-S3",
+                "manufacturer": "SECRET-MANUFACTURER-S3"
+            ],
+            markers: ["SECRET-AIRPODS-NAME-S3", "SECRET-MANUFACTURER-S3"],
+            collectorID: "audio_route"
+        )
+    }
+
+    func testRelayDoesNotLeakMicInUseEntered_S3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "mic_in_use_entered",
+            extraPayload: [
+                "state": "mic_in_use",
+                "audio_samples": "SECRET-MIC-SAMPLES-S3"
+            ],
+            markers: ["SECRET-MIC-SAMPLES-S3"],
+            collectorID: "mic_in_use"
+        )
+    }
+
+    func testRelayDoesNotLeakMicInUseExited_S3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "mic_in_use_exited",
+            extraPayload: [
+                "state": "mic_idle",
+                "audio_samples": "SECRET-MIC-EXIT-S3"
+            ],
+            markers: ["SECRET-MIC-EXIT-S3"],
+            collectorID: "mic_in_use"
+        )
+    }
+
+    func testRelayDoesNotLeakDisplayConnected_S3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "display_connected",
+            extraPayload: [
+                "state": "display_connected",
+                "screen_image": "SECRET-DISPLAY-PIXELS-S3"
+            ],
+            markers: ["SECRET-DISPLAY-PIXELS-S3"],
+            collectorID: "display"
+        )
+    }
+
+    func testRelayDoesNotLeakDisplayDisconnected_S3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "display_disconnected",
+            extraPayload: [
+                "state": "display_disconnected",
+                "screen_image": "SECRET-DISCONNECT-PIXELS-S3"
+            ],
+            markers: ["SECRET-DISCONNECT-PIXELS-S3"],
+            collectorID: "display"
+        )
+    }
+
+    func testRelayDoesNotLeakVPNCredentials_S3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "vpn_state_changed",
+            extraPayload: [
+                "state": "connected",
+                "server_address": "SECRET-VPN-SERVER-S3",
+                "username": "SECRET-VPN-USER-S3"
+            ],
+            markers: ["SECRET-VPN-SERVER-S3", "SECRET-VPN-USER-S3"],
+            collectorID: "vpn"
+        )
+    }
+
+    func testRelayDoesNotLeakWiFiSSID_S3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "wifi_state_changed",
+            extraPayload: [
+                "state": "connected",
+                "ssid": "SECRET-WIFI-SSID-S3",
+                "bssid": "SECRET-WIFI-BSSID-S3"
+            ],
+            markers: ["SECRET-WIFI-SSID-S3", "SECRET-WIFI-BSSID-S3"],
+            collectorID: "wifi"
+        )
+    }
+
+    func testRelayDoesNotLeakClipboardContent_S3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "clipboard_event_count",
+            extraPayload: [
+                "count": "3",
+                "clipboard_content": "SECRET-CLIPBOARD-TEXT-S3",
+                "body": "SECRET-CLIPBOARD-BODY-S3"
+            ],
+            markers: ["SECRET-CLIPBOARD-TEXT-S3", "SECRET-CLIPBOARD-BODY-S3"],
+            collectorID: "clipboard"
+        )
+    }
+
+    func testRelayDoesNotLeakScreenshotBody_S3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "screenshot_taken",
+            extraPayload: [
+                "filename": "Screenshot 2026-05-13.png",
+                "body": "SECRET-SCREENSHOT-BODY-S3",
+                "image_data": "SECRET-SCREENSHOT-PIXELS-S3"
+            ],
+            markers: ["SECRET-SCREENSHOT-BODY-S3", "SECRET-SCREENSHOT-PIXELS-S3"],
+            collectorID: "local_files"
+        )
+    }
+
+    func testRelayDoesNotLeakDownloadBody_S3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "download_added",
+            extraPayload: [
+                "filename": "report.pdf",
+                "body": "SECRET-DOWNLOAD-BODY-S3",
+                "source_url": "SECRET-DOWNLOAD-URL-S3"
+            ],
+            markers: ["SECRET-DOWNLOAD-BODY-S3", "SECRET-DOWNLOAD-URL-S3"],
+            collectorID: "local_files"
+        )
+    }
+
+    func testRelayDoesNotLeakTrashContent_S3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "trash_changed",
+            extraPayload: [
+                "action": "added",
+                "deleted_filename": "SECRET-TRASH-FILENAME-S3",
+                "body": "SECRET-TRASH-BODY-S3"
+            ],
+            markers: ["SECRET-TRASH-FILENAME-S3", "SECRET-TRASH-BODY-S3"],
+            collectorID: "local_files"
+        )
     }
 }

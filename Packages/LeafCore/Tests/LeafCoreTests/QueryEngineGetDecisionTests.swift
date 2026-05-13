@@ -141,7 +141,7 @@ final class QueryEngineGetDecisionTests: XCTestCase {
         ])
         // Event 2 = subsequent commit also referencing LEAF-100 — should appear in relatedEvents.
         try writeEvent(db, tsMs: 2_000, payload: [
-            "event_kind": "commit_pushed",
+            "event_kind": "gh_commit_pushed",
             Schema.EventPayloadKeys.body: "LEAF-100 wire Postgres adapter"
         ])
         try DetectorPipeline.runIncremental(moat: sentinelMoat(), in: db)

@@ -55,9 +55,9 @@ public struct InsightsSnapshot: Sendable, Hashable {
     public let githubByRepo: [RepoCountEntry]
     /// Phase 4.3 — top-5 event_kinds by count, descending.
     public let githubByEventKind: [EventKindCountEntry]
-    /// Phase 4.6.A.1 — `pr_merged` cycle time distribution. `nil` если samples=0.
+    /// Phase 4.6.A.1 — `gh_pr_merged` cycle time distribution. `nil` если samples=0.
     public let githubPRCycleStats: LatencyStats?
-    /// Phase 4.6.A.1 — `review_submitted` review delay distribution. `nil` если samples=0.
+    /// Phase 4.6.A.1 — `gh_pr_review_submitted` review delay distribution. `nil` если samples=0.
     public let githubReviewDelayStats: LatencyStats?
     /// Phase 4.4 — total Slack messages authored за `period` (sum of per-channel counts).
     public let slackMessagesCount: Int

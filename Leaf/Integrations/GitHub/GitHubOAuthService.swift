@@ -28,6 +28,25 @@ import LeafCorePrivate
 
 private let oauthLogger = Logger(subsystem: "tech.gundem.leaf.app", category: "github-oauth")
 
+/// Parses GitHub's scope string into a set of tokens. GitHub's OAuth
+/// token-exchange JSON response returns scope as **comma-separated**
+/// (e.g. `"repo,read:user,read:org"`); the legacy `X-OAuth-Scopes` HTTP
+/// header form is space-separated. Split on both — mirrors
+/// `GitHubScopesService.parseScopeString` exactly so the app-target
+/// derivation in `reload()` / `finishConnect()` stays observationally
+/// identical to the LeafCore actor for any input.
+///
+/// `nil` (no integrations row column) → empty set, treated downstream as
+/// "no scopes granted" → all required core surfaced as missing.
+private func parseScopeString(_ raw: String?) -> Set<String> {
+    guard let raw else { return [] }
+    let parts = raw
+        .split(whereSeparator: { $0.isWhitespace || $0 == "," })
+        .map { String($0) }
+        .filter { !$0.isEmpty }
+    return Set(parts)
+}
+
 @MainActor
 @Observable
 final class GitHubOAuthService {
@@ -40,6 +59,11 @@ final class GitHubOAuthService {
         case exchangingToken
         case fetchingViewer
         case connected(login: String, connectedAt: Date)
+        /// Phase Track-3 D2 — token still valid but core scopes incomplete after
+        /// scope-bump release. UI shows banner + red dot + re-authorize CTA
+        /// (Tasks 18-21). Connection remains usable for endpoints whose scopes
+        /// already granted; warm/cold gated calls degrade gracefully.
+        case connectedScopeOutdated(login: String, connectedAt: Date, missing: Set<String>)
         /// refresh_token revoked / expired (GitHubTokenRefresher сделал
         /// deleteIntegration + UserDefaults flag + DistributedNotification).
         /// UI показывает orange "Reconnect needed". Cleared на successful
@@ -80,7 +104,17 @@ final class GitHubOAuthService {
             let denied = isRefreshDenialFlagSet()
             if let record = try db.readIntegration(provider: .github) {
                 clearRefreshDenialFlag()
-                state = .connected(login: record.workspaceName, connectedAt: record.connectedAt)
+                let granted = parseScopeString(record.scope)
+                let missing = GitHubScopesService.requiredCore.subtracting(granted)
+                if missing.isEmpty {
+                    state = .connected(login: record.workspaceName, connectedAt: record.connectedAt)
+                } else {
+                    state = .connectedScopeOutdated(
+                        login: record.workspaceName,
+                        connectedAt: record.connectedAt,
+                        missing: missing
+                    )
+                }
             } else if denied {
                 state = .reconnectNeeded
             } else {
@@ -93,7 +127,18 @@ final class GitHubOAuthService {
     }
 
     /// Запускает full Device Flow. Caller — UI button "Connect GitHub".
+    /// Convenience overload preserving the existing call shape; delegates to
+    /// `connect(scopes:)` with the canonical `GitHubScopesService.requested()`
+    /// (D2 scope-bump baseline = required core ∪ optional).
     func connect() async {
+        await connect(scopes: GitHubScopesService.requested())
+    }
+
+    /// Phase Track-3 D2 — explicit form. Tests + future re-auth flow pass
+    /// the exact scope list they want; default convenience overload above
+    /// uses `GitHubScopesService.requested()` so existing UI sites compile
+    /// unchanged.
+    func connect(scopes: [String]) async {
         guard let clientID = readClientID() else {
             state = .error(message: "GITHUB_OAUTH_CLIENT_ID is not configured. See Config/Local.xcconfig.example.")
             return
@@ -105,9 +150,11 @@ final class GitHubOAuthService {
 
         state = .requestingDeviceCode
 
+        let scopeParameter = scopes.joined(separator: " ")
+
         let device: GitHubDeviceCodeResponse
         do {
-            device = try await requestDeviceCode(clientID: clientID)
+            device = try await requestDeviceCode(clientID: clientID, scopeParameter: scopeParameter)
         } catch {
             oauthLogger.error("device code request failed: \(String(describing: error), privacy: .public)")
             state = .error(message: "Couldn't start GitHub authorization: \(error.localizedDescription)")
@@ -165,14 +212,14 @@ final class GitHubOAuthService {
 
     // MARK: - Device Flow internals
 
-    private func requestDeviceCode(clientID: String) async throws -> GitHubDeviceCodeResponse {
+    private func requestDeviceCode(clientID: String, scopeParameter: String) async throws -> GitHubDeviceCodeResponse {
         var request = URLRequest(url: GitHubOAuthEndpoints.deviceAuthorize)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.httpBody = Self.formEncoded([
             "client_id": clientID,
-            "scope": GitHubOAuthEndpoints.scopeParameter
+            "scope": scopeParameter
         ])
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -330,7 +377,17 @@ final class GitHubOAuthService {
         }
         clearRefreshDenialFlag()
         postRestartNotification()
-        state = .connected(login: record.workspaceName, connectedAt: record.connectedAt)
+        let granted = parseScopeString(record.scope)
+        let missing = GitHubScopesService.requiredCore.subtracting(granted)
+        if missing.isEmpty {
+            state = .connected(login: record.workspaceName, connectedAt: record.connectedAt)
+        } else {
+            state = .connectedScopeOutdated(
+                login: record.workspaceName,
+                connectedAt: record.connectedAt,
+                missing: missing
+            )
+        }
     }
 
     private func fetchViewer(accessToken: String) async throws -> GitHubViewerResponse {

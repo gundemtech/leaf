@@ -7,7 +7,7 @@ import Foundation
 /// ProdSlackAPIProvider parser'а (bodies discard'ятся до записи в RawEvent).
 public struct SlackActivityBreakdown: Sendable, Hashable {
     /// Sum всех `count` значений из action events с
-    /// `payload.source='slack' AND event_kind='message_authored_aggregate'`
+    /// `payload.source='slack' AND event_kind='slack_message_authored_aggregate'`
     /// в окне periodа.
     public let messagesCount: Int
     /// Total minutes юзер провёл в huddle'е в окне periodа. Считается walk'ом
@@ -28,7 +28,7 @@ public struct SlackActivityBreakdown: Sendable, Hashable {
     /// Phase 4.6.C.1 — reserved под per-provider WoW в 4.7+. Сейчас всегда nil.
     public let wowDeltaPct: Double?
     /// Phase 4.6.C.3 — consecutive days с ≥1 huddle begin-transition
-    /// (event_kind='huddle_state_change' AND state='in_a_huddle'),
+    /// (event_kind='slack_huddle_state_change' AND state='in_a_huddle'),
     /// ending today/yesterday. 60-day lookback, independent of `period`.
     /// `nil` ↔ streak=0.
     public let huddleParticipationStreak: Int?

@@ -6,7 +6,7 @@ import GRDB
 /// Builds a single-issue cross-provider timeline by UNION'ing events whose
 /// payload either has `source = 'linear'` AND `issue_key = ?`, OR has
 /// `linked_linear_id = ?` (set by Phase 4.7.A `LinearIDExtractor` on GitHub
-/// commit_pushed / pr_*  events). Result — chronologically sorted timeline
+/// gh_commit_pushed / gh_pr_*  events). Result — chronologically sorted timeline
 /// across providers + first/last touch / total duration.
 ///
 /// Slack events deferred to Phase 4.8 (per design — aggregate event semantics
@@ -38,7 +38,7 @@ public enum CrossProviderInsights {
     ///     {
     ///       "ts_ms": Int64,
     ///       "source": String,                     // "linear" | "github"
-    ///       "event_kind": String,                 // "issue_updated" | "commit_pushed" | "pr_opened" | ...
+    ///       "event_kind": String,                 // "issue_updated" | "gh_commit_pushed" | "gh_pr_opened" | ...
     ///       "payload": [String: Any]              // metadata-only projection
     ///     },
     ///     ...

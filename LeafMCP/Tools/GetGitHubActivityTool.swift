@@ -12,8 +12,8 @@ import LeafMCPProtocol
 ///   - `byRepo[]` — `{repo, count}`, top-5 by count DESC
 ///   - `byEventKind[]` — `{eventKind, count}`, top-5 by count DESC
 ///   - `prCycleStats` (Phase 4.6.A.1, additive optional) — `{medianSeconds, avgSeconds,
-///     maxSeconds, sampleCount}` для `pr_merged` events; отсутствует если sampleCount=0
-///   - `reviewDelayStats` (Phase 4.6.A.1, additive optional) — то же для `review_submitted`
+///     maxSeconds, sampleCount}` для `gh_pr_merged` events; отсутствует если sampleCount=0
+///   - `reviewDelayStats` (Phase 4.6.A.1, additive optional) — то же для `gh_pr_review_submitted`
 ///
 /// Metadata only — PR/issue bodies, comments, file diffs никогда не покидают
 /// устройство (ADR-010 won't-list, enforced на parser-level в ProdGitHubAPIProvider).

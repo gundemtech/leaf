@@ -77,7 +77,7 @@ final class WorkloadPulseTests: XCTestCase {
             bundleID: nil,
             payload: [
                 "source": "github",
-                "event_kind": "actions_run_initiated",
+                "event_kind": "gh_actions_run_initiated",
                 "run_id": "1",
                 "repo": "octocat/Hello-World",
                 "workflow_name": "ci.yml",

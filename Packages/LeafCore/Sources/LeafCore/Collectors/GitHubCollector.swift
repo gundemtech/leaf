@@ -234,7 +234,7 @@ public actor GitHubCollector {
 
         // 5d. Phase 4.7.B-4 — check_runs aggregate per HEAD commit, push-triggered.
         // Bounded cost: K HTTP calls = K unique (repo, sha) pairs across все
-        // commit_pushed snapshots в этом tick'е. Empty pushes → 0 calls (skipped
+        // gh_commit_pushed snapshots в этом tick'е. Empty pushes → 0 calls (skipped
         // entirely). Iterate `batch.events` (snapshots) — preserves repo + sha
         // напрямую, не rely на string lookup в payload. Dedup via Set<String>
         // (`repo|sha`) — handles dual shape: stripped feed → 1 sha per push,
@@ -244,7 +244,7 @@ public actor GitHubCollector {
         var seenPairs = Set<String>()
         var pushedPairs: [(repo: String, sha: String)] = []
         for snapshot in batch.events {
-            guard snapshot.eventKind == "commit_pushed" else { continue }
+            guard snapshot.eventKind == GitHubEventKindKey.commitPushed.rawValue else { continue }
             let repo = snapshot.repoFullName
             guard let sha = snapshot.sha, !sha.isEmpty, !repo.isEmpty else { continue }
             let key = "\(repo)|\(sha)"
@@ -363,7 +363,7 @@ public actor GitHubCollector {
         )
     }
 
-    /// Phase 4.7.B-1 — `github_notifications_pulse` state event. Эмитится КАЖДЫЙ tick
+    /// Phase 4.7.B-1 — `gh_notifications_pulse` state event. Эмитится КАЖДЫЙ tick
     /// (даже при empty inbox) — нулевой count всё равно signal: "пользователь дочистил
     /// inbox". `signal_type=.context` (state pulse, не user action).
     /// Reasons распакованы в top-level keys (`reason_review_requested_count`) для
@@ -373,7 +373,7 @@ public actor GitHubCollector {
     ) -> RawEvent {
         var payload: [String: String] = [
             "source": "github",
-            "event_kind": "github_notifications_pulse",
+            "event_kind": GitHubEventKindKey.notificationsPulse.rawValue,
             "total_unread": String(summary.totalUnread),
             "observed_at_ms": String(nowMs)
         ]
@@ -389,7 +389,7 @@ public actor GitHubCollector {
         )
     }
 
-    /// Phase 4.7.B-2 — `pr_awaiting_review_count` state event. Эмитится каждый tick.
+    /// Phase 4.7.B-2 — `gh_pr_awaiting_review_count` state event. Эмитится каждый tick.
     /// `signal_type=.context` (state pulse). `top_repo` поле omitted при `count==0`
     /// или `topRepo==nil` — отличает "нет данных" от "owner/repo:0".
     static func makePRAwaitingReviewCountEvent(
@@ -397,7 +397,7 @@ public actor GitHubCollector {
     ) -> RawEvent {
         var payload: [String: String] = [
             "source": "github",
-            "event_kind": "pr_awaiting_review_count",
+            "event_kind": GitHubEventKindKey.prAwaitingReviewCount.rawValue,
             "count": String(summary.count),
             "observed_at_ms": String(nowMs)
         ]
@@ -412,7 +412,7 @@ public actor GitHubCollector {
         )
     }
 
-    /// Phase 4.7.B-3 — `actions_run_initiated` action event per snapshot.
+    /// Phase 4.7.B-3 — `gh_actions_run_initiated` action event per snapshot.
     /// `signal_type=.action` (discrete action — юзер запустил CI run), не `.context`.
     /// Timestamp = run's `created_at` (когда GitHub registered run start), не nowMs —
     /// синхронизируется с реальным moment of action для downstream timeline accuracy.
@@ -422,7 +422,7 @@ public actor GitHubCollector {
     static func makeActionsRunInitiatedEvent(snapshot: GitHubActionsRunSnapshot) -> RawEvent {
         var payload: [String: String] = [
             "source": "github",
-            "event_kind": "actions_run_initiated",
+            "event_kind": GitHubEventKindKey.actionsRunInitiated.rawValue,
             "run_id": String(snapshot.runID),
             "repo": snapshot.repo,
             "workflow_name": snapshot.workflowName,
@@ -446,7 +446,7 @@ public actor GitHubCollector {
         )
     }
 
-    /// Phase 4.7.B-4 — `check_runs_status` state event per (repo, sha) pair.
+    /// Phase 4.7.B-4 — `gh_check_runs_status` state event per (repo, sha) pair.
     /// `signal_type=.context` (state pulse — current CI status of HEAD commit,
     /// не discrete user action). Timestamp = `nowMs` (when collector observed),
     /// не `created_at` of run (this is aggregate snapshot across N runs).
@@ -458,7 +458,7 @@ public actor GitHubCollector {
     ) -> RawEvent {
         let payload: [String: String] = [
             "source": "github",
-            "event_kind": "check_runs_status",
+            "event_kind": GitHubEventKindKey.checkRunsStatus.rawValue,
             "repo": repo,
             "sha": sha,
             "total": String(summary.total),
@@ -476,14 +476,14 @@ public actor GitHubCollector {
         )
     }
 
-    /// Phase 4.7.B-2 — `my_open_pr_count` state event. Эмитится каждый tick.
+    /// Phase 4.7.B-2 — `gh_my_open_pr_count` state event. Эмитится каждый tick.
     /// `signal_type=.context` (state pulse).
     static func makeMyOpenPRCountEvent(
         summary: GitHubMyOpenPRsSummary, nowMs: Int64
     ) -> RawEvent {
         let payload: [String: String] = [
             "source": "github",
-            "event_kind": "my_open_pr_count",
+            "event_kind": GitHubEventKindKey.myOpenPRCount.rawValue,
             "count": String(summary.count),
             "observed_at_ms": String(nowMs)
         ]
@@ -495,7 +495,7 @@ public actor GitHubCollector {
         )
     }
 
-    private static func makeEvent(snapshot: GitHubEventSnapshot) -> RawEvent {
+    static func makeEvent(snapshot: GitHubEventSnapshot) -> RawEvent {
         var payload: [String: String] = [
             "source": "github",
             "event_kind": snapshot.eventKind,

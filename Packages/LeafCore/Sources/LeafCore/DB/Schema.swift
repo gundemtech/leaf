@@ -175,6 +175,147 @@ public enum Schema {
         public static let requestedReviewersJson = "requested_reviewers_json"
         public static let mentionCount = "mention_count"
         public static let linkCount = "link_count"
+        // Phase Track-3 D1 — Linear deep sweep payload keys.
+        // Snapshot-diff derived events use `observedAtMs` (= nowMs);
+        // Linear-side timestamps use specific field names.
+        public static let notificationId = "notification_id"
+        public static let notificationKind = "notification_kind"
+        public static let notificationTitle = "notification_title"
+        public static let issueId = "issue_id"
+        public static let issueIdentifier = "issue_identifier"
+        public static let commentId = "comment_id"
+        public static let relationId = "relation_id"
+        public static let fromIssueId = "from_issue_id"
+        public static let fromIssueIdentifier = "from_issue_identifier"
+        public static let toIssueId = "to_issue_id"
+        public static let toIssueIdentifier = "to_issue_identifier"
+        public static let relationKind = "relation_kind"
+        public static let emoji = "emoji"
+        public static let teamId = "team_id"
+        public static let toStateName = "to_state_name"
+        public static let toStateType = "to_state_type"
+        public static let resolutionKind = "resolution_kind"
+        public static let cycleId = "cycle_id"
+        public static let cycleNumber = "cycle_number"
+        public static let cycleName = "cycle_name"
+        public static let viewId = "view_id"
+        public static let viewName = "view_name"
+        public static let roadmapId = "roadmap_id"
+        public static let roadmapName = "roadmap_name"
+        public static let projectId = "project_id"
+        public static let projectName = "project_name"
+        public static let stateEnum = "state_enum"
+        public static let issuesCompletedCount = "issues_completed_count"
+        public static let progress = "progress"
+        public static let observedAtMs = "observed_at_ms"
+        public static let receivedAtMs = "received_at_ms"
+        public static let readAtMs = "read_at_ms"
+        public static let archivedAtMs = "archived_at_ms"
+        public static let reactedAtMs = "reacted_at_ms"
+        public static let startedAtMs = "started_at_ms"
+        public static let endsAtMs = "ends_at_ms"
+        public static let completedAtMs = "completed_at_ms"
+        public static let removedAtMs = "removed_at_ms"
+        // Phase Track-3 D2 — GitHub D2 payload keys.
+        public static let prReviewState = "pr_review_state"
+        public static let workflowName = "workflow_name"
+        public static let workflowRef = "workflow_ref"
+        public static let deploymentEnvironment = "deployment_environment"
+        public static let deploymentState = "deployment_state"
+        public static let repositoryVisibility = "repository_visibility"
+        public static let forkeeFullName = "forkee_full_name"
+        public static let gistId = "gist_id"
+        public static let gistDescription = "gist_description"
+        public static let projectV2Id = "projectv2_id"
+        public static let projectV2CardId = "projectv2_card_id"
+        public static let projectV2FieldName = "projectv2_field_name"
+        public static let projectV2OldValue = "projectv2_old_value"
+        public static let projectV2NewValue = "projectv2_new_value"
+        public static let iterationId = "iteration_id"
+        public static let codespaceName = "codespace_name"
+        public static let codespaceState = "codespace_state"
+        public static let repoInvitationId = "repo_invitation_id"
+        public static let repoInvitationFromLogin = "repo_invitation_from_login"
+        public static let repoFullName = "repo_full_name"
+        public static let reactionEmoji = "reaction_emoji"
+        public static let reactionCount = "reaction_count"
+        public static let reactionDelta = "reaction_delta"
+        public static let alertNumber = "alert_number"
+        public static let alertSeverity = "alert_severity"
+        public static let alertRule = "alert_rule"
+        public static let dependabotPackageName = "dependabot_package_name"
+        public static let auditAction = "audit_action"
+        public static let auditActorLogin = "audit_actor_login"
+        // Phase Track-3 D3 — Slack warm/cold payload keys.
+        public static let workspaceId = "workspace_id"
+        public static let userId = "user_id"
+        public static let channelId = "channel_id"
+        public static let channelName = "channel_name"
+        public static let itemRef = "item_ref"
+        public static let emojiBucket = "emoji_bucket"
+        public static let pinnedAtMs = "pinned_at_ms"
+        public static let bookmarkId = "bookmark_id"
+        public static let bookmarkTitle = "title"
+        public static let bookmarkURL = "url"
+        public static let lastEditedMs = "last_edited_ms"
+        public static let reminderId = "reminder_id"
+        public static let dueTs = "due_ts"
+        public static let completedTs = "completed_ts"
+        public static let scheduledMessageId = "scheduled_message_id"
+        public static let scheduledFor = "scheduled_for"
+        public static let savedAtMs = "saved_at_ms"
+        // Slack D3 cold-tier (Task 14).
+        public static let canvasId = "canvas_id"
+        public static let emojiName = "emoji_name"
+        public static let groupId = "group_id"
+        public static let addedUserIdsJson = "added_user_ids_json"
+        public static let removedUserIdsJson = "removed_user_ids_json"
+        public static let oldName = "old_name"
+        public static let newName = "new_name"
+
+        // Phase Track-4 S2 — AppleScript surface payload keys.
+        public static let docPath = "doc_path"
+        public static let project = "project"
+        public static let scheme = "scheme"
+        public static let buildState = "build_state"
+        public static let ideBundleID = "ide_bundle_id"
+        public static let track = "track"
+        public static let artist = "artist"
+        public static let playerState = "player_state"
+        public static let noteTitle = "note_title"
+        public static let listName = "list_name"
+        public static let completedCountDelta = "completed_count_delta"
+        public static let viewMode = "view_mode"
+        public static let visibleDateRangeDays = "visible_date_range_days"
+        public static let mailboxName = "mailbox_name"
+        public static let meetingState = "meeting_state"
+        public static let meetingTopic = "meeting_topic"
+        public static let tabs = "tabs"
+        public static let activeWindowID = "active_window_id"
+        public static let tabTitle = "title"
+        public static let tabURL = "url"
+        public static let browser = "browser"
+
+        // Phase Track-4 S3 — system observers + intensity payload keys.
+        // (`state` / `count` / `filename` / `action` already canonical baseline.)
+        public static let keystrokeCount = "keystroke_count"
+        public static let mouseMoveCount = "mouse_move_count"
+        public static let appSwitchCount = "app_switch_count"
+        public static let foregroundApp = "foreground_app"
+        public static let audioRoute = "audio_route"
+    }
+
+    /// Phase Track-4 S3 — per-minute intensity aggregates (CGEventTap counter-only).
+    /// PK — `minute_bucket_ms` (minute-truncated wall clock). UPSERT replaces existing
+    /// bucket so re-emission на restart safe. Counter fields counter-only —
+    /// NEVER include keycode/characters/modifierFlags per ADR-010 Won't-list.
+    public enum IntensityAggregates {
+        public static let tableName = "intensity_aggregates"
+        public static let minuteBucketMs = "minute_bucket_ms"
+        public static let keystrokes = "keystrokes"
+        public static let mouseMoves = "mouse_moves"
+        public static let appSwitches = "app_switches"
+        public static let foregroundApp = "foreground_app"
     }
 
     /// Phase Track-1 D2 — FTS5 contentless virtual table over event bodies
@@ -212,6 +353,22 @@ public enum Schema {
         public static let ghPR = "gh_pr"
         public static let ghIssueComment = "gh_issue_comment"
         public static let ghPRReviewComment = "gh_pr_review_comment"
+        // Phase Track-3 D1 — Linear notification titles routed through FTS.
+        public static let linearNotificationTitle = "linear_notification_title"
+        // Phase Track-3 D2 — GitHub D2 body provenance.
+        public static let ghGistDescription = "gh_gist_description"
+        public static let ghReleaseBody = "gh_release_body"
+        public static let ghDeploymentDescription = "gh_deployment_description"
+        // Phase Track-3 D3 — Slack body provenance (canvas + bookmark titles per ADR-010 §6).
+        public static let slackCanvasTitle = "slack_canvas_title"
+        public static let slackBookmarkTitle = "slack_bookmark_title"
+        // Phase Track-4 S4 — user-authored title/filename body provenance.
+        // ADR-010 commit-message precedent: user-namespace labels are allowed
+        // through FTS while bodies / previews / message texts remain forbidden.
+        public static let notesTitle = "notes_title"
+        public static let zoomMeetingName = "zoom_meeting_name"
+        public static let screenshotFilename = "screenshot_filename"
+        public static let downloadFilename = "download_filename"
     }
 
     /// Phase Track-1 D2 — cross-source association graph row.
@@ -349,6 +506,68 @@ public enum Schema {
         public static let patternBlockedOn = "pattern_blocked_on"
         public static let linearStuck = "linear_stuck"
     }
+
+    /// Phase Track-3 D1 — generic per-provider state snapshot table.
+    /// Composite PK `(provider, snapshot_kind)`. snapshot_json holds JSON-encoded
+    /// snapshot bodies used for delta-mode collectors (subscribed issues / custom
+    /// views / project memberships / roadmaps). D2+ may add new provider/kind
+    /// combinations without further migration.
+    public enum ProviderSnapshots {
+        public static let tableName = "provider_snapshots"
+        public static let provider = "provider"
+        public static let snapshotKind = "snapshot_kind"
+        public static let snapshotJSON = "snapshot_json"
+        public static let capturedAtMs = "captured_at_ms"
+    }
+
+    /// Phase Track-3 D1 — canonical snapshot_kind values used by Linear warm/cold
+    /// collectors. Centralized to keep collector code + tests in sync without
+    /// repeating raw string literals.
+    public enum ProviderSnapshotKinds {
+        public static let linearSubscribedIssues = "linear_subscribed_issues"
+        public static let linearCustomViews = "linear_custom_views"
+        public static let linearProjectMemberships = "linear_project_memberships"
+        public static let linearRoadmapState = "linear_roadmap_state"
+
+        // GitHub D2 — singleton snapshot kinds (no per-key suffix).
+        public static let githubStarredRepos = "github_starred_repos"
+        public static let githubWatchedRepos = "github_watched_repos"
+        public static let githubGists = "github_gists"
+        public static let githubCodespaces = "github_codespaces"
+        public static let githubRepoInvitations = "github_repo_invitations"
+        public static let githubAuditCursor = "github_audit_cursor" // Cursor (last-processed audit event id), not state snapshot
+
+        // GitHub D2 — parameterized snapshot kind prefixes (composite key embedded in value).
+        // Callers compose: `Schema.ProviderSnapshotKinds.githubProjectV2ItemsPrefix + projectID`.
+        public static let githubProjectV2ItemsPrefix = "github_projectv2_items:"
+        public static let githubIssueReactionsPrefix = "github_issue_reactions:"
+        public static let githubSecretAlertsPrefix = "github_secret_alerts:"
+        public static let githubCodeAlertsPrefix = "github_code_alerts:"
+        public static let githubDependabotAlertsPrefix = "github_dependabot_alerts:"
+
+        // Slack D3 — warm-tier (15m) snapshot kinds. Per-channel fans live under
+        // singleton snapshots as JSON arrays of channel-keyed records.
+        //
+        // `slackMemberChannels` holds the FULL set of member channels (not a
+        // top-10 cap) — diff source for `slack_channel_joined/_left`. Top-10
+        // fan-out cap is applied AT FAN-OUT TIME (pins/bookmarks per-channel,
+        // cold conversations.info) via `rankTop10ByLatestTs`, never to the
+        // persisted snapshot. C3 review fix (D3 follow-up): persisting the
+        // top-10 cap caused false-positive join/left events whenever a member
+        // channel slid out of the top-10 ranking by activity.
+        public static let slackMemberChannels = "slack_member_channels"
+        public static let slackPinsPerChannel = "slack_pins_per_channel"
+        public static let slackBookmarksPerChannel = "slack_bookmarks_per_channel"
+        public static let slackReminders = "slack_reminders"
+        public static let slackScheduledMessages = "slack_scheduled_messages"
+        public static let slackStars = "slack_stars"
+
+        // Slack D3 — cold-tier (4am local daily) snapshot kinds.
+        public static let slackCanvasesPerChannel = "slack_canvases_per_channel"
+        public static let slackEmojiList = "slack_emoji_list"
+        public static let slackUsergroups = "slack_usergroups"
+        public static let slackChannelsInfo = "slack_channels_info"
+    }
 }
 
 /// Канонические `collector_id` значения. Литералы — public, чтобы тесты
@@ -368,6 +587,29 @@ public enum CollectorID {
     /// Phase 4.4 — Slack REST polling collector. `sourceID = "slack:<team_id>:<user_id>"`.
     /// `lastModifiedMs` хранит cursor (epoch ms newest processed message `ts`).
     public static let slackPolling = "slack_polling"
+    /// Phase Track-3 D1 — Linear warm-tier (15m) state sweep:
+    /// notifications + cycles + subscribed_issues. sourceID format:
+    /// `linear:notifications:<workspaceID>`, `linear:cycles:<workspaceID>`.
+    public static let linearWarmPolling = "linear_warm_polling"
+    /// Phase Track-3 D1 — Linear cold-tier (4am local) state sweep:
+    /// roadmaps + customViews + projectMemberships. sourceID:
+    /// `linear:cold:<workspaceID>`. `lastModifiedMs` holds last cold tick ms
+    /// (catch-up gate uses `now - lastModifiedMs > 24h` to trigger immediate tick).
+    public static let linearColdPolling = "linear_cold_polling"
+    /// Phase Track-3 D2 — GitHub warm-tier (15m): projectsV2 + gists + invitations
+    /// + codespaces + issue-reactions. sourceID `github:warm:<login>`.
+    public static let githubWarmPolling = "github_warm_polling"
+    /// Phase Track-3 D2 — GitHub cold-tier (4am local). sourceID `github:cold:<login>`.
+    /// `lastModifiedMs` holds last cold tick ms (catch-up gate uses
+    /// `now - lastModifiedMs > 24h`).
+    public static let githubColdPolling = "github_cold_polling"
+    /// Phase Track-3 D3 — Slack warm-tier (15m): reactions + pins + bookmarks +
+    /// reminders + scheduled + stars + user.conversations. sourceID `slack:warm:<workspaceID>`.
+    public static let slackWarmPolling = "slack_warm_polling"
+    /// Phase Track-3 D3 — Slack cold-tier (4am local). sourceID `slack:cold:<workspaceID>`.
+    /// `lastModifiedMs` holds last cold tick ms (catch-up gate uses
+    /// `now - lastModifiedMs > 24h`).
+    public static let slackColdPolling = "slack_cold_polling"
 }
 
 /// Канонические `provider` значения для `integrations` таблицы. Литералы —

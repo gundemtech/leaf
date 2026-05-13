@@ -1,0 +1,170 @@
+//
+//  SystemObserversSettingsSection.swift
+//  Phase Track-4 S3 — Settings → System Observers. 10 master-toggle rows
+//  (intensity / clipboard / wifi / vpn / audio_route / mic_in_use / display
+//  / screenshot_watcher / downloads_watcher / trash_watcher). Intensity row
+//  has Input Monitoring TCC badge + "Open Settings" CTA. Reads
+//  PermissionsService for SystemObserversStore + InputMonitoringPermissionStore.
+//
+
+import SwiftUI
+import LeafCore
+
+struct SystemObserversSettingsSection: View {
+    @Environment(PermissionsService.self) private var permissions
+
+    var body: some View {
+        LeafSection(
+            title: "System Observers",
+            description: "Background observers capture context shifts — audio routing, displays, voice calls, downloads. Local-only by default; Share Controls (above) gate what reaches your team."
+        ) {
+            VStack(alignment: .leading, spacing: LeafSpace.sm) {
+                ForEach(Self.observers, id: \.key) { observer in
+                    SystemObserverRow(observer: observer, permissions: permissions)
+                }
+            }
+        }
+    }
+
+    static let observers: [SystemObserverDescriptor] = [
+        .init(
+            key: "intensity",
+            displayName: "Intensity",
+            sfSymbol: "speedometer",
+            explainer: "Per-minute keyboard + mouse + app-switch counters. Counter only — never key contents.",
+            requiresInputMonitoring: true
+        ),
+        .init(
+            key: "clipboard",
+            displayName: "Clipboard",
+            sfSymbol: "doc.on.clipboard",
+            explainer: "Count of clipboard changes. Never reads clipboard contents.",
+            requiresInputMonitoring: false
+        ),
+        .init(
+            key: "wifi",
+            displayName: "WiFi",
+            sfSymbol: "wifi",
+            explainer: "Connected / disconnected state only. Never captures SSID or BSSID.",
+            requiresInputMonitoring: false
+        ),
+        .init(
+            key: "vpn",
+            displayName: "VPN",
+            sfSymbol: "network",
+            explainer: "Connected / disconnected state only for system VPN profiles.",
+            requiresInputMonitoring: false
+        ),
+        .init(
+            key: "audio_route",
+            displayName: "Audio Route",
+            sfSymbol: "speaker.wave.2",
+            explainer: "Builtin / headphones / bluetooth / airplay / usb / HDMI category — no device names.",
+            requiresInputMonitoring: false
+        ),
+        .init(
+            key: "mic_in_use",
+            displayName: "Mic In Use",
+            sfSymbol: "mic",
+            explainer: "Detects when any app records from system mic (voice call signal). Never reads audio.",
+            requiresInputMonitoring: false
+        ),
+        .init(
+            key: "display",
+            displayName: "Displays",
+            sfSymbol: "display",
+            explainer: "Display connect / disconnect events. Never captures screen pixels.",
+            requiresInputMonitoring: false
+        ),
+        .init(
+            key: "screenshot_watcher",
+            displayName: "Screenshot Watcher",
+            sfSymbol: "camera.viewfinder",
+            explainer: "Detects new screenshots in your screenshot directory. Filename only.",
+            requiresInputMonitoring: false
+        ),
+        .init(
+            key: "downloads_watcher",
+            displayName: "Downloads Watcher",
+            sfSymbol: "arrow.down.circle",
+            explainer: "Detects new files in ~/Downloads. Filename only; never opens file contents.",
+            requiresInputMonitoring: false
+        ),
+        .init(
+            key: "trash_watcher",
+            displayName: "Trash Watcher",
+            sfSymbol: "trash",
+            explainer: "Detects items added / emptied from Trash. Never reads file contents.",
+            requiresInputMonitoring: false
+        )
+    ]
+}
+
+struct SystemObserverDescriptor: Sendable {
+    let key: String
+    let displayName: String
+    let sfSymbol: String
+    let explainer: String
+    let requiresInputMonitoring: Bool
+}
+
+private struct SystemObserverRow: View {
+    let observer: SystemObserverDescriptor
+    let permissions: PermissionsService
+    @State private var enabled: Bool = false
+
+    var body: some View {
+        LeafCard(variant: .raised, padding: .regular, header: { EmptyView() }) {
+            VStack(alignment: .leading, spacing: LeafSpace.sm) {
+                HStack(alignment: .center, spacing: LeafSpace.md) {
+                    Image(systemName: observer.sfSymbol)
+                        .font(.system(size: 18))
+                        .foregroundStyle(LeafColor.text.secondary)
+                        .frame(width: 28, height: 28)
+                    VStack(alignment: .leading, spacing: LeafSpace.xxs) {
+                        Text(observer.displayName)
+                            .font(LeafType.body.regular)
+                            .foregroundStyle(LeafColor.text.primary)
+                        Text(observer.explainer)
+                            .font(LeafType.body.small)
+                            .foregroundStyle(LeafColor.text.secondary)
+                    }
+                    Spacer(minLength: 0)
+                    if observer.requiresInputMonitoring {
+                        permissionBadge
+                    }
+                    Toggle("", isOn: Binding(
+                        get: { enabled },
+                        set: { newValue in
+                            enabled = newValue
+                            permissions.setSystemObserverEnabled(observer.key, newValue)
+                        }
+                    )).labelsHidden().toggleStyle(.switch).tint(LeafColor.accent.primary)
+                }
+                if observer.requiresInputMonitoring && enabled && !permissions.inputMonitoringGranted {
+                    LeafBanner(
+                        tone: .warning,
+                        title: "Input Monitoring required",
+                        description: "Intensity uses macOS Input Monitoring to count keystrokes (it never reads key content). Grant access to enable.",
+                        ctaTitle: "Open Settings",
+                        onCTA: { permissions.openInputMonitoringSettings() }
+                    )
+                }
+            }
+        } footer: {
+            EmptyView()
+        }
+        .onAppear {
+            enabled = permissions.systemObserversStore.isEnabled(observer.key)
+        }
+    }
+
+    @ViewBuilder
+    private var permissionBadge: some View {
+        if permissions.inputMonitoringGranted {
+            Text("Granted").font(LeafType.body.small).foregroundStyle(LeafColor.text.secondary)
+        } else {
+            Text("Waiting").font(LeafType.body.small).foregroundStyle(LeafColor.text.tertiary)
+        }
+    }
+}

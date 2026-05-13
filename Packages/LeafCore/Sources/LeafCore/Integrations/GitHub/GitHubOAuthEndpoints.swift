@@ -54,10 +54,18 @@ public enum GitHubOAuthEndpoints {
     /// Минимальный scope для work workflow integration.
     /// `repo` — обязателен для private events (без него feed возвращает только public, тихо).
     /// `read:user` — для GET /user identity fetch.
+    @available(*, deprecated, message: "Use GitHubScopesService.requested() — replaced in D2 (scope bump)")
     public static let scopes: [String] = ["repo", "read:user"]
 
     /// Comma-separated form для отправки в `/login/device/code`.
+    @available(*, deprecated, message: "Use GitHubOAuthEndpoints.requestedScopeParameter() — replaced in D2 (scope bump)")
     public static var scopeParameter: String { scopes.joined(separator: " ") }
+
+    /// Canonical scope parameter — union of required core + optional from GitHubScopesService.
+    /// Space-separated form для отправки в `/login/device/code` (D2 scope bump).
+    public static func requestedScopeParameter() -> String {
+        GitHubScopesService.requested().joined(separator: " ")
+    }
 
     /// DistributedNotification name, постится при connect/disconnect/refreshDenied.
     /// Слушают: ConnectionsSettings (UI re-render), GitHubCollector (Phase 4.3 reload).

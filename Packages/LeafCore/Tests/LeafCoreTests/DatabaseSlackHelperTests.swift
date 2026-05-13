@@ -31,7 +31,7 @@ final class DatabaseSlackHelperTests: XCTestCase {
             bundleID: nil,
             payload: [
                 "source": "slack",
-                "event_kind": "huddle_state_change",
+                "event_kind": "slack_huddle_state_change",
                 "state": state
             ]
         )
@@ -70,7 +70,7 @@ final class DatabaseSlackHelperTests: XCTestCase {
                 bundleID: nil,
                 payload: [
                     "source": "slack",
-                    "event_kind": "message_authored_aggregate",
+                    "event_kind": "slack_message_authored_aggregate",
                     "channel_name": "engineering",
                     "count": "3"
                 ]
@@ -96,7 +96,7 @@ final class DatabaseSlackHelperTests: XCTestCase {
                 bundleID: nil,
                 payload: [
                     "source": "linear",
-                    "event_kind": "huddle_state_change",  // даже если другой провайдер случайно использует тот же event_kind
+                    "event_kind": "slack_huddle_state_change",  // даже если другой провайдер случайно использует тот же event_kind
                     "state": "default_unset"
                 ]
             )

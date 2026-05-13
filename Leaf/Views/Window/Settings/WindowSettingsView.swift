@@ -18,6 +18,8 @@ struct WindowSettingsView: View {
             VStack(alignment: .leading, spacing: LeafSpace.xxl) {
                 BackgroundCollectionSection(launchAgent: launchAgent)
                 FoldersSettings(service: watchedFolders)
+                LocalAppsSettingsSection()
+                SystemObserversSettingsSection()
                 UpdatesSection(updater: updater)
                 PrivacySettingsSection()
             }

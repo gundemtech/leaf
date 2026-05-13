@@ -50,6 +50,10 @@ public final class Database: @unchecked Sendable {
         migrator.registerMigration012EventsFTS()
         migrator.registerMigration013EventLinks()
         migrator.registerMigration014DetectionTables()
+        migrator.registerMigration015ProviderSnapshots()
+        migrator.registerMigration016NormalizeGitHubEventKinds()
+        migrator.registerMigration017NormalizeSlackEventKinds()
+        migrator.registerMigration018IntensityAggregates()
         try migrator.migrate(pool)
 
         return Database(pool: pool, config: config, mode: .writer)
@@ -216,6 +220,45 @@ public final class Database: @unchecked Sendable {
         try pool.read(block)
     }
 
+    // MARK: - Phase Track-4 S3 — intensity_aggregates
+
+    /// UPSERT минутного bucket'а counter-only intensity. Идемпотентно по PK
+    /// `minute_bucket_ms` — re-flush на agent restart перезаписывает row.
+    public func upsertIntensityAggregate(
+        minuteBucketMs: Int64,
+        keystrokes: Int,
+        mouseMoves: Int,
+        appSwitches: Int,
+        foregroundApp: String?
+    ) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try IntensityAggregatesStore.upsert(
+                minuteBucketMs: minuteBucketMs,
+                keystrokes: keystrokes,
+                mouseMoves: mouseMoves,
+                appSwitches: appSwitches,
+                foregroundApp: foregroundApp,
+                in: db
+            )
+        }
+    }
+
+    public func readIntensityAggregates(range: Range<Int64>) throws -> [IntensityAggregateRecord] {
+        try pool.read { db in
+            try IntensityAggregatesStore.read(range: range, in: db)
+        }
+    }
+
+    /// Retention sweep — вызывается `MaintenanceScheduler` с тем же cutoff,
+    /// что и `deleteEventsOlderThan`.
+    public func purgeIntensityAggregates(before cutoffMs: Int64) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try IntensityAggregatesStore.purge(before: cutoffMs, in: db)
+        }
+    }
+
     /// Internal-intent bridge на write transaction для unit-тестов
     /// (`PresenceStateWriterTests`). Production callsites используют
     /// высокоуровневые методы (`writeEventsOffsetAndPresence`,
@@ -318,6 +361,39 @@ public final class Database: @unchecked Sendable {
                     nowMs: nowMs,
                     in: db
                 )
+            }
+        }
+    }
+
+    /// Phase Track-3 D1 — atomic `events` + multi-offset + multi-snapshot UPSERT.
+    /// Generalized form of `writeEventsAndOffset` for warm/cold collectors that
+    /// (a) advance several offsets per tick (e.g. notifications + cycles cursors
+    /// independently) and (b) update one or more provider_snapshots rows.
+    ///
+    /// All arrays may be empty (partial updates allowed). Single GRDB transaction:
+    /// on any throw → full rollback (events not written, cursors not advanced,
+    /// snapshots not upserted).
+    public func writeEventsOffsetsAndSnapshots(
+        events: [RawEvent],
+        offsets: [CollectorOffset],
+        snapshots: [ProviderSnapshot],
+        knownLinearPrefixes: Set<String> = [],
+        derivers: LinkDerivers = .publicSubstrate
+    ) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        guard !events.isEmpty || !offsets.isEmpty || !snapshots.isEmpty else { return }
+
+        try pool.write { db in
+            for event in events {
+                _ = try Self.writeEventAndDerived(
+                    event, knownLinearPrefixes: knownLinearPrefixes, derivers: derivers, in: db
+                )
+            }
+            for offset in offsets {
+                try Self.upsertOffset(offset, in: db)
+            }
+            for snapshot in snapshots {
+                try ProviderSnapshotsStore.upsert(snapshot, in: db)
             }
         }
     }
@@ -1073,7 +1149,7 @@ public final class Database: @unchecked Sendable {
     // MARK: - GitHub collector helpers (Phase 4.7.B-3)
 
     /// Phase 4.7.B-3 — derive top-N repos для bounded fan-out actions/runs polling.
-    /// Возвращает "owner/repo" identifier'ы упорядоченные по count `commit_pushed`
+    /// Возвращает "owner/repo" identifier'ы упорядоченные по count `gh_commit_pushed`
     /// events DESC начиная с `sinceMs` (typically `now - 7 days`).
     /// Используется `GitHubCollector.performTick()` перед `fetchActionsRunsForActor` —
     /// ограничивает per-tick HTTP cost N calls (one per repo) и фокусирует на
@@ -1087,7 +1163,7 @@ public final class Database: @unchecked Sendable {
                        COUNT(*) AS c
                 FROM \(Schema.Events.tableName)
                 WHERE json_extract(\(Schema.Events.payloadJSON), '$.source') = 'github'
-                  AND json_extract(\(Schema.Events.payloadJSON), '$.event_kind') = 'commit_pushed'
+                  AND json_extract(\(Schema.Events.payloadJSON), '$.event_kind') = 'gh_commit_pushed'
                   AND \(Schema.Events.ts) >= ?
                   AND json_extract(\(Schema.Events.payloadJSON), '$.repo') IS NOT NULL
                 GROUP BY repo
@@ -1096,6 +1172,43 @@ public final class Database: @unchecked Sendable {
                 """,
                 arguments: [sinceMs, limit]
             ).compactMap { $0["repo"] as String? }
+        }
+    }
+
+    /// Phase Track-3 D2 — viewer-authored issue refs (`owner/repo#NN`) within
+    /// `sinceMs` lookback, deduped by ref, ordered by `events.ts` DESC, limited
+    /// to `limit`. Used by `GitHubWarmCollector` for bounded fan-out
+    /// `fetchIssueReactions` calls (cap = `issueReactionsTopK`). Emission of
+    /// `gh_issue_opened` already implies the viewer authored the issue
+    /// (REST events feed is filtered to viewer's own events). Reader-mode safe.
+    public func queryRecentViewerAuthoredIssues(sinceMs: Int64, limit: Int) throws -> [String] {
+        guard limit > 0 else { return [] }
+        return try pool.read { db in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT json_extract(\(Schema.Events.payloadJSON), '$.repo') AS repo,
+                       json_extract(\(Schema.Events.payloadJSON), '$.number') AS num,
+                       MAX(\(Schema.Events.ts)) AS ts
+                FROM \(Schema.Events.tableName)
+                WHERE json_extract(\(Schema.Events.payloadJSON), '$.source') = 'github'
+                  AND json_extract(\(Schema.Events.payloadJSON), '$.event_kind') = 'gh_issue_opened'
+                  AND \(Schema.Events.ts) >= ?
+                  AND json_extract(\(Schema.Events.payloadJSON), '$.repo') IS NOT NULL
+                  AND json_extract(\(Schema.Events.payloadJSON), '$.number') IS NOT NULL
+                  AND json_extract(\(Schema.Events.payloadJSON), '$.number') != ''
+                GROUP BY repo, num
+                ORDER BY ts DESC
+                LIMIT ?
+                """,
+                arguments: [sinceMs, limit]
+            )
+            return rows.compactMap { row -> String? in
+                guard
+                    let repo = row["repo"] as String?,
+                    let num = row["num"] as String?,
+                    !num.isEmpty
+                else { return nil }
+                return "\(repo)#\(num)"
+            }
         }
     }
 
@@ -1120,7 +1233,7 @@ public final class Database: @unchecked Sendable {
     /// Возвращает (state, ts_ms) последнего slack huddle_state_change context-event,
     /// или nil если ни одного нет в DB. Используется SlackCollector для transition
     /// detection. Фильтр по `signal_type='context'` + JSON1 `payload.source='slack'`
-    /// + `payload.event_kind='huddle_state_change'` исключает action events
+    /// + `payload.event_kind='slack_huddle_state_change'` исключает action events
     /// (message aggregates) и события других providers.
     public func readLatestSlackHuddleEvent() throws -> SlackHuddleEventSummary? {
         try pool.read { db in
@@ -1130,7 +1243,7 @@ public final class Database: @unchecked Sendable {
                 FROM \(Schema.Events.tableName)
                 WHERE \(Schema.Events.signalType) = ?
                   AND json_extract(\(Schema.Events.payloadJSON), '$.source') = 'slack'
-                  AND json_extract(\(Schema.Events.payloadJSON), '$.event_kind') = 'huddle_state_change'
+                  AND json_extract(\(Schema.Events.payloadJSON), '$.event_kind') = 'slack_huddle_state_change'
                   AND json_extract(\(Schema.Events.payloadJSON), '$.state') IS NOT NULL
                 ORDER BY \(Schema.Events.ts) DESC
                 LIMIT 1

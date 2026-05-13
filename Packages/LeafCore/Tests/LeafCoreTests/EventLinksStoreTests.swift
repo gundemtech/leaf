@@ -55,7 +55,7 @@ final class EventLinksStoreTests: XCTestCase {
         let db = try makeDB()
         let eid = try insertRawEventRow(db)
         try derive(db, eventID: eid, ts: 1_000,
-                   payload: ["event_kind": "linear_issue_updated",
+                   payload: ["event_kind": "issue_updated",
                              Schema.EventPayloadKeys.body: "Working on LEAF-127"],
                    prefixes: ["LEAF"])
         let rows = try linksForEvent(db, eventID: eid)
@@ -71,7 +71,7 @@ final class EventLinksStoreTests: XCTestCase {
         let db = try makeDB()
         let eid = try insertRawEventRow(db)
         try derive(db, eventID: eid, ts: 1_000,
-                   payload: ["event_kind": "linear_issue_updated",
+                   payload: ["event_kind": "issue_updated",
                              Schema.EventPayloadKeys.body: "fixes LEAF-127 and LEAF-200"],
                    prefixes: ["LEAF"])
         let rows = try linksForEvent(db, eventID: eid)
@@ -83,7 +83,7 @@ final class EventLinksStoreTests: XCTestCase {
         let db = try makeDB()
         let eid = try insertRawEventRow(db)
         try derive(db, eventID: eid, ts: 1_000,
-                   payload: ["event_kind": "linear_issue_updated",
+                   payload: ["event_kind": "issue_updated",
                              Schema.EventPayloadKeys.body: "BAD-99 should be ignored"],
                    prefixes: ["LEAF"])
         XCTAssertEqual(try linksForEvent(db, eventID: eid).count, 0)
@@ -107,7 +107,7 @@ final class EventLinksStoreTests: XCTestCase {
         let db = try makeDB()
         let eid = try insertRawEventRow(db)
         try derive(db, eventID: eid, ts: 1_000,
-                   payload: ["event_kind": "linear_issue_updated"],
+                   payload: ["event_kind": "issue_updated"],
                    prefixes: ["LEAF"])
         XCTAssertEqual(try linksForEvent(db, eventID: eid).count, 0)
     }
@@ -115,7 +115,7 @@ final class EventLinksStoreTests: XCTestCase {
     func testDeriveLinks_DuplicateInsertIgnored() throws {
         let db = try makeDB()
         let eid = try insertRawEventRow(db)
-        let payload = ["event_kind": "linear_issue_updated",
+        let payload = ["event_kind": "issue_updated",
                        Schema.EventPayloadKeys.body: "LEAF-127 again"]
         try derive(db, eventID: eid, ts: 1_000, payload: payload, prefixes: ["LEAF"])
         try derive(db, eventID: eid, ts: 2_000, payload: payload, prefixes: ["LEAF"])
@@ -129,7 +129,7 @@ final class EventLinksStoreTests: XCTestCase {
 
         let eOld = try insertRawEventRow(db, ts: oldMs)
         let eNew = try insertRawEventRow(db, ts: nowMs)
-        let payload = ["event_kind": "linear_issue_updated",
+        let payload = ["event_kind": "issue_updated",
                        Schema.EventPayloadKeys.body: "fix LEAF-127"]
         try derive(db, eventID: eOld, ts: oldMs, payload: payload, prefixes: ["LEAF"])
         try derive(db, eventID: eNew, ts: nowMs, payload: payload, prefixes: ["LEAF"])
@@ -168,7 +168,7 @@ final class EventLinksStoreTests: XCTestCase {
             let eid = try insertRawEventRow(db, ts: ts)
             insertedEventIDs.append(eid)
             try derive(db, eventID: eid, ts: ts,
-                       payload: ["event_kind": "linear_issue_updated",
+                       payload: ["event_kind": "issue_updated",
                                  Schema.EventPayloadKeys.body: "fix LEAF-127"],
                        prefixes: ["LEAF"])
         }

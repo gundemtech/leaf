@@ -133,9 +133,9 @@ final class DetectorPipelineIncrementalTests: XCTestCase {
     func testCursorAdvancesPastProcessedEvents() throws {
         let db = try openDB()
         // 3 plain events, no body — cursor должен advance до последнего id.
-        try writeEvent(db, tsMs: 1_000, payload: ["event_kind": "linear_issue_updated"])
-        try writeEvent(db, tsMs: 2_000, payload: ["event_kind": "linear_issue_updated"])
-        try writeEvent(db, tsMs: 3_000, payload: ["event_kind": "linear_issue_updated"])
+        try writeEvent(db, tsMs: 1_000, payload: ["event_kind": "issue_updated"])
+        try writeEvent(db, tsMs: 2_000, payload: ["event_kind": "issue_updated"])
+        try writeEvent(db, tsMs: 3_000, payload: ["event_kind": "issue_updated"])
 
         try DetectorPipeline.runIncremental(moat: sentinelMoat(), nowMs: 9_999, in: db)
 
@@ -147,7 +147,7 @@ final class DetectorPipelineIncrementalTests: XCTestCase {
     func testInsertOrIgnoreOnReRun() throws {
         let db = try openDB()
         try writeEvent(db, tsMs: 1_000, payload: [
-            "event_kind": "linear_issue_updated",
+            "event_kind": "issue_updated",
             "body": "DECIDE to ship"
         ])
 
@@ -166,7 +166,7 @@ final class DetectorPipelineIncrementalTests: XCTestCase {
     func testDecisionWriteForLinearDesc() throws {
         let db = try openDB()
         try writeEvent(db, tsMs: 1_500, payload: [
-            "event_kind": "linear_issue_updated",
+            "event_kind": "issue_updated",
             "body": "We DECIDE to use SQLCipher"
         ])
 
@@ -188,7 +188,7 @@ final class DetectorPipelineIncrementalTests: XCTestCase {
     func testDecisionWriteForCommitMsg() throws {
         let db = try openDB()
         try writeEvent(db, tsMs: 2_500, payload: [
-            "event_kind": "commit_pushed",
+            "event_kind": "gh_commit_pushed",
             "body": "feat: DECIDE on EdDSA signing"
         ])
 
@@ -220,7 +220,7 @@ final class DetectorPipelineIncrementalTests: XCTestCase {
         let db = try openDB()
         // linear_issue_updated with linked_linear_id payload key (Phase 4.7.A)
         try writeEvent(db, tsMs: 5_000, payload: [
-            "event_kind": "linear_issue_updated",
+            "event_kind": "issue_updated",
             "body": "Open QUESTION: which encryption?",
             "linked_linear_id": "LEAF-42"
         ])
@@ -235,7 +235,7 @@ final class DetectorPipelineIncrementalTests: XCTestCase {
     func testBlockerPatternWritePopulatesDetectedByEventID() throws {
         let db = try openDB()
         try writeEvent(db, tsMs: 6_000, payload: [
-            "event_kind": "linear_issue_updated",
+            "event_kind": "issue_updated",
             "body": "We are BLOCKED on the migration",
             "linked_linear_id": "LEAF-7"
         ])
@@ -254,11 +254,11 @@ final class DetectorPipelineIncrementalTests: XCTestCase {
     func testBackfillAfterCursorReset() throws {
         let db = try openDB()
         try writeEvent(db, tsMs: 1_000, payload: [
-            "event_kind": "linear_issue_updated",
+            "event_kind": "issue_updated",
             "body": "DECIDE on relay design"
         ])
         try writeEvent(db, tsMs: 2_000, payload: [
-            "event_kind": "commit_pushed",
+            "event_kind": "gh_commit_pushed",
             "body": "no signal here"
         ])
 
@@ -269,7 +269,7 @@ final class DetectorPipelineIncrementalTests: XCTestCase {
         // Add new event after first run, then reset cursor → backfill must re-process
         // both events without duplicating decision row.
         try writeEvent(db, tsMs: 3_000, payload: [
-            "event_kind": "commit_pushed",
+            "event_kind": "gh_commit_pushed",
             "body": "DECIDE: ship alpha.12"
         ])
         try db.writeSQL { rawDB in
@@ -327,7 +327,7 @@ final class DetectorPipelineIncrementalTests: XCTestCase {
         let db = try openDB()
         // Open question on LEAF-127.
         try writeEvent(db, tsMs: 1_000, payload: [
-            "event_kind": "linear_issue_updated",
+            "event_kind": "issue_updated",
             "body": "QUESTION: which encryption?",
             "linked_linear_id": "LEAF-127"
         ])
@@ -382,7 +382,7 @@ final class DetectorPipelineIncrementalTests: XCTestCase {
         let db = try openDB()
         // Open question on LEAF-99 in Slack thread T1.
         try writeEvent(db, tsMs: 1_000, payload: [
-            "event_kind": "linear_issue_updated",
+            "event_kind": "issue_updated",
             "body": "QUESTION about config",
             "linked_linear_id": "LEAF-99"
         ])

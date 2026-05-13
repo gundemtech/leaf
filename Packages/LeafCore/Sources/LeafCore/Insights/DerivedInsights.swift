@@ -44,9 +44,9 @@ public protocol DerivedInsights: Sendable {
     func githubActivity(period: DateInterval) throws -> GitHubActivityBreakdown
 
     /// Phase 4.4 — Slack activity для periodа.
-    /// Action events с `payload_json.source='slack' AND event_kind='message_authored_aggregate'`
+    /// Action events с `payload_json.source='slack' AND event_kind='slack_message_authored_aggregate'`
     /// дают `messagesCount` (sum of `count` field) + `byChannel` (top-5).
-    /// Context events с `event_kind='huddle_state_change'` walk'ом дают `huddleMinutes`.
+    /// Context events с `event_kind='slack_huddle_state_change'` walk'ом дают `huddleMinutes`.
     /// Slack не подключён → .empty (default ext) — opt-in feature, no-data ≠ error.
     func slackActivity(period: DateInterval) throws -> SlackActivityBreakdown
 

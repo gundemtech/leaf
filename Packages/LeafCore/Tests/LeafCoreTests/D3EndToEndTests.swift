@@ -119,7 +119,7 @@ final class D3EndToEndTests: XCTestCase {
     func testCollectorFlushTriggersDetectorPipeline_DecisionEmitted() throws {
         let db = try openDB()
         try writeEvent(db, tsMs: 1_000, payload: [
-            "event_kind": "linear_issue_updated",
+            "event_kind": "issue_updated",
             "body": "We DECIDE-SENTINEL to ship D3"
         ])
 
@@ -176,9 +176,9 @@ final class D3EndToEndTests: XCTestCase {
         let db = try openDB()
 
         // Seed: 1 plain noise + 3 detector hits + 1 more noise.
-        try writeEvent(db, tsMs: 1_000, payload: ["event_kind": "linear_issue_updated"])
+        try writeEvent(db, tsMs: 1_000, payload: ["event_kind": "issue_updated"])
         try writeEvent(db, tsMs: 2_000, payload: [
-            "event_kind": "linear_issue_updated",
+            "event_kind": "issue_updated",
             "body": "We DECIDE-SENTINEL to use SQLCipher"
         ])
         try writeEvent(db, tsMs: 3_000, payload: [
@@ -187,11 +187,11 @@ final class D3EndToEndTests: XCTestCase {
             "thread_ts": "1700000000.001"
         ])
         try writeEvent(db, tsMs: 4_000, payload: [
-            "event_kind": "linear_issue_updated",
+            "event_kind": "issue_updated",
             "body": "BLOCKED-SENTINEL waiting on infra",
             "linked_linear_id": "LEAF-7"
         ])
-        try writeEvent(db, tsMs: 5_000, payload: ["event_kind": "linear_issue_updated"])
+        try writeEvent(db, tsMs: 5_000, payload: ["event_kind": "issue_updated"])
 
         try DetectorPipeline.runIncremental(moat: incrementalMoat(),
                                             nowMs: 9_999,
