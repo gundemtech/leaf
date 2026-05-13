@@ -194,6 +194,21 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     case safariTabsChanged                = "safari_tabs_changed"
     case chromeTabsChanged                = "chrome_tabs_changed"
     case arcTabsChanged                   = "arc_tabs_changed"
+
+    // MARK: - Phase Track-4 S3 — system observers + intensity
+    case intensitySnapshot                = "intensity_snapshot"
+    case intensityBucketDropped           = "intensity_bucket_dropped"
+    case audioRouteChanged                = "audio_route_changed"
+    case micInUseEntered                  = "mic_in_use_entered"
+    case micInUseExited                   = "mic_in_use_exited"
+    case displayConnected                 = "display_connected"
+    case displayDisconnected              = "display_disconnected"
+    case vpnStateChanged                  = "vpn_state_changed"
+    case wifiStateChanged                 = "wifi_state_changed"
+    case clipboardEventCount              = "clipboard_event_count"
+    case screenshotTaken                  = "screenshot_taken"
+    case downloadAdded                    = "download_added"
+    case trashChanged                     = "trash_changed"
 }
 
 /// Phase 4.7.A — onboarding default enabled-state per event_kind.
@@ -394,6 +409,22 @@ public enum ShareEventTypeDefaults {
         .init(key: .zoomMeetingNameObserved, defaultEnabled: false),
         .init(key: .safariTabsChanged, defaultEnabled: false),
         .init(key: .chromeTabsChanged, defaultEnabled: false),
-        .init(key: .arcTabsChanged, defaultEnabled: false)
+        .init(key: .arcTabsChanged, defaultEnabled: false),
+
+        // Phase Track-4 S3 — system observers + intensity. All default OFF per
+        // ADR-020 (capture-everything locally, share-selectively).
+        .init(key: .intensitySnapshot, defaultEnabled: false),
+        .init(key: .intensityBucketDropped, defaultEnabled: false),
+        .init(key: .audioRouteChanged, defaultEnabled: false),
+        .init(key: .micInUseEntered, defaultEnabled: false),
+        .init(key: .micInUseExited, defaultEnabled: false),
+        .init(key: .displayConnected, defaultEnabled: false),
+        .init(key: .displayDisconnected, defaultEnabled: false),
+        .init(key: .vpnStateChanged, defaultEnabled: false),
+        .init(key: .wifiStateChanged, defaultEnabled: false),
+        .init(key: .clipboardEventCount, defaultEnabled: false),
+        .init(key: .screenshotTaken, defaultEnabled: false),
+        .init(key: .downloadAdded, defaultEnabled: false),
+        .init(key: .trashChanged, defaultEnabled: false)
     ]
 }
