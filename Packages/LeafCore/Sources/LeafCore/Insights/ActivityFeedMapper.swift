@@ -471,13 +471,16 @@ public enum ActivityFeedMapper {
         let primary: String
         var secondary: String? = nil
 
+        // Payload key names below are the canonical keys that landed collectors
+        // (S1/S2/S3 state-machines + LocalFilesWatcher) actually emit. Cross-
+        // referenced against `*StateMachine.swift` files + LocalFilesWatcher
+        // + `Schema.EventPayloadKeys`. Do NOT rename — any change here must
+        // be paired with collector + boundary-grep test updates.
         switch kind {
         // S1 — system state
         case "meeting_state_entered": primary = "Meeting started"
         case "meeting_state_exited":  primary = "Meeting ended"
-        case "focus_mode_enabled":
-            primary = "Focus on"
-            secondary = sanitize(payload["mode"])
+        case "focus_mode_enabled":    primary = "Focus on"   // collector emits only "state"=focused
         case "focus_mode_disabled":   primary = "Focus off"
         case "system_locked":   primary = "Screen locked"
         case "system_unlocked": primary = "Screen unlocked"
@@ -485,35 +488,38 @@ public enum ActivityFeedMapper {
         case "system_woke":     primary = "System wake"
         case "space_switched":  primary = "Space switched"
 
-        // S2 — IDEs
+        // S2 — IDEs (XcodeStateMachine / JetBrainsStateMachine emit "doc_path")
         case "xcode_active_doc_changed":
-            let base = sanitize(payload["document_path"]).map(basename(of:)) ?? "—"
+            let base = sanitize(payload["doc_path"]).map(basename(of:)) ?? "—"
             primary = "Xcode: \(base)"
         case "xcode_build_state_changed":
             let state = sanitize(payload["build_state"]) ?? "?"
             primary = "Xcode: build \(state)"
         case "jetbrains_active_doc_changed":
-            let base = sanitize(payload["document_path"]).map(basename(of:)) ?? "—"
+            let base = sanitize(payload["doc_path"]).map(basename(of:)) ?? "—"
             primary = "JetBrains: \(base)"
 
-        // S2 — media
+        // S2 — media (Music/SpotifyStateMachine emit "track" + "artist")
         case "music_track_changed":
-            primary = "Music: \(sanitize(payload["track_name"]) ?? "—")"
+            primary = "Music: \(sanitize(payload["track"]) ?? "—")"
             secondary = sanitize(payload["artist"])
         case "spotify_track_changed":
-            primary = "Spotify: \(sanitize(payload["track_name"]) ?? "—")"
+            primary = "Spotify: \(sanitize(payload["track"]) ?? "—")"
             secondary = sanitize(payload["artist"])
 
         // S2 — productivity
         case "notes_active_title_changed":
             primary = "Notes: \(sanitize(payload["note_title"]) ?? "—")"
         case "reminder_completed":
-            let count = sanitize(payload["count"]) ?? "1"
+            // RemindersStateMachine emits "completed_count_delta" (positive int as String).
+            let count = sanitize(payload["completed_count_delta"]) ?? "1"
             primary = "Reminders completed: \(count)"
         case "calendar_app_view_changed":
-            primary = "Calendar: \(sanitize(payload["view"]) ?? "—") view"
+            // CalendarAppStateMachine emits "view_mode".
+            primary = "Calendar: \(sanitize(payload["view_mode"]) ?? "—") view"
         case "mail_active_mailbox_changed":
-            primary = "Mail: \(sanitize(payload["mailbox"]) ?? "—")"
+            // MailStateMachine emits "mailbox_name" (Schema.EventPayloadKeys.mailboxName).
+            primary = "Mail: \(sanitize(payload["mailbox_name"]) ?? "—")"
 
         // S2 — Zoom
         case "zoom_meeting_state_changed":
@@ -522,33 +528,26 @@ public enum ActivityFeedMapper {
         case "zoom_meeting_name_observed":
             primary = "Zoom: \(sanitize(payload["meeting_topic"]) ?? "—")"
 
-        // S2 — browser tabs
+        // S2 — browser tabs (Safari/Chrome/ArcStateMachine emit JSON array under "tabs";
+        // count derived structurally — no URL / title strings enter primaryText).
         case "safari_tabs_changed":
-            primary = "Safari: \(sanitize(payload["tab_count"]) ?? "0") tabs"
+            primary = "Safari: \(tabsCount(payload["tabs"]) ?? "?") tabs"
         case "chrome_tabs_changed":
-            primary = "Chrome: \(sanitize(payload["tab_count"]) ?? "0") tabs"
+            primary = "Chrome: \(tabsCount(payload["tabs"]) ?? "?") tabs"
         case "arc_tabs_changed":
-            primary = "Arc: \(sanitize(payload["tab_count"]) ?? "0") tabs"
+            primary = "Arc: \(tabsCount(payload["tabs"]) ?? "?") tabs"
 
-        // S3 — audio / mic
+        // S3 — audio / mic (AudioRouteCollector emits "audio_route" enum value)
         case "audio_route_changed":
-            primary = "Audio route: \(sanitize(payload["category"]) ?? "—")"
+            primary = "Audio route: \(sanitize(payload["audio_route"]) ?? "—")"
         case "mic_in_use_entered": primary = "Mic on"
         case "mic_in_use_exited":  primary = "Mic off"
 
-        // S3 — display
-        case "display_connected":
-            primary = "Display connected"
-            if let n = sanitize(payload["display_count"]) {
-                secondary = n == "1" ? "1 display" : "\(n) displays"
-            }
-        case "display_disconnected":
-            primary = "Display disconnected"
-            if let n = sanitize(payload["display_count"]) {
-                secondary = n == "1" ? "1 display" : "\(n) displays"
-            }
+        // S3 — display (DisplayCollector emits only "state" — no count field).
+        case "display_connected":    primary = "Display connected"
+        case "display_disconnected": primary = "Display disconnected"
 
-        // S3 — network
+        // S3 — network (VPN/WiFi collectors emit "state"=connected|disconnected)
         case "vpn_state_changed":
             primary = "VPN: \(sanitize(payload["state"]) ?? "—")"
         case "wifi_state_changed":
@@ -592,6 +591,18 @@ public enum ActivityFeedMapper {
             return String(trimmed.prefix(200)) + "…"
         }
         return trimmed
+    }
+
+    /// Derives the tab count from a `"tabs"` JSON array payload field.
+    /// Returns `nil` on missing / unparseable payload — caller renders "?".
+    /// Counts array length only; never reads individual `url` / `title`
+    /// strings, so ADR-010 redaction is preserved (structural cardinality).
+    private static func tabsCount(_ raw: String?) -> String? {
+        guard let raw,
+              let data = raw.data(using: .utf8),
+              let array = try? JSONSerialization.jsonObject(with: data) as? [Any]
+        else { return nil }
+        return String(array.count)
     }
 
     private static func parsePayload(_ json: String) -> [String: String] {

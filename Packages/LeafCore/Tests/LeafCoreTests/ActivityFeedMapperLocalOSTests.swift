@@ -47,9 +47,12 @@ final class ActivityFeedMapperLocalOSTests: XCTestCase {
     }
 
     func testFocusModeEnabled() {
-        let entry = map(kind: "focus_mode_enabled", extras: ["mode": "Work"])
+        // FocusModeCollector emits only `state` (focused / not_focused) — no
+        // user-facing mode name is exposed by INFocusStatusCenter.isFocused, so
+        // secondary line stays nil.
+        let entry = map(kind: "focus_mode_enabled", extras: ["state": "focused"])
         XCTAssertEqual(entry?.primaryText, "Focus on")
-        XCTAssertEqual(entry?.secondaryText, "Work")
+        XCTAssertNil(entry?.secondaryText)
     }
 
     func testFocusModeDisabled() {
@@ -79,17 +82,18 @@ final class ActivityFeedMapperLocalOSTests: XCTestCase {
     // MARK: - S2 (AppleScript surface — 14 kinds)
 
     func testXcodeActiveDocChanged() {
+        // XcodeStateMachine emits `doc_path` (Schema.EventPayloadKeys.docPath).
         let entry = map(
             kind: "xcode_active_doc_changed", signalType: "attention",
             bundleID: "com.apple.dt.Xcode",
-            extras: ["document_path": "/Users/me/Project/Foo.swift"]
+            extras: ["doc_path": "/Users/me/Project/Foo.swift"]
         )
         XCTAssertEqual(entry?.primaryText, "Xcode: Foo.swift")
     }
 
     func testXcodeBuildStateChanged() {
         let entry = map(
-            kind: "xcode_build_state_changed", signalType: "context",
+            kind: "xcode_build_state_changed", signalType: "attention",
             bundleID: "com.apple.dt.Xcode",
             extras: ["build_state": "succeeded"]
         )
@@ -97,19 +101,21 @@ final class ActivityFeedMapperLocalOSTests: XCTestCase {
     }
 
     func testJetbrainsActiveDocChanged() {
+        // JetBrainsStateMachine emits `doc_path` matching Xcode.
         let entry = map(
             kind: "jetbrains_active_doc_changed", signalType: "attention",
             bundleID: "com.jetbrains.intellij",
-            extras: ["document_path": "src/Main.kt"]
+            extras: ["doc_path": "src/Main.kt"]
         )
         XCTAssertEqual(entry?.primaryText, "JetBrains: Main.kt")
     }
 
     func testMusicTrackChanged() {
+        // MusicStateMachine emits `track` (not `track_name`) + `artist`.
         let entry = map(
             kind: "music_track_changed", signalType: "attention",
             bundleID: "com.apple.Music",
-            extras: ["track_name": "Strawberry Fields", "artist": "Beatles"]
+            extras: ["track": "Strawberry Fields", "artist": "Beatles"]
         )
         XCTAssertEqual(entry?.primaryText, "Music: Strawberry Fields")
         XCTAssertEqual(entry?.secondaryText, "Beatles")
@@ -119,7 +125,7 @@ final class ActivityFeedMapperLocalOSTests: XCTestCase {
         let entry = map(
             kind: "spotify_track_changed", signalType: "attention",
             bundleID: "com.spotify.client",
-            extras: ["track_name": "Yesterday", "artist": "Beatles"]
+            extras: ["track": "Yesterday", "artist": "Beatles"]
         )
         XCTAssertEqual(entry?.primaryText, "Spotify: Yesterday")
         XCTAssertEqual(entry?.secondaryText, "Beatles")
@@ -135,28 +141,31 @@ final class ActivityFeedMapperLocalOSTests: XCTestCase {
     }
 
     func testReminderCompleted() {
+        // RemindersStateMachine emits `completed_count_delta` (positive int).
         let entry = map(
-            kind: "reminder_completed", signalType: "action",
+            kind: "reminder_completed", signalType: "attention",
             bundleID: "com.apple.reminders",
-            extras: ["count": "3"]
+            extras: ["completed_count_delta": "3"]
         )
         XCTAssertEqual(entry?.primaryText, "Reminders completed: 3")
     }
 
     func testCalendarAppViewChanged() {
+        // CalendarAppStateMachine emits `view_mode` (not `view`).
         let entry = map(
             kind: "calendar_app_view_changed", signalType: "attention",
             bundleID: "com.apple.iCal",
-            extras: ["view": "week"]
+            extras: ["view_mode": "week"]
         )
         XCTAssertEqual(entry?.primaryText, "Calendar: week view")
     }
 
     func testMailActiveMailboxChanged() {
+        // MailStateMachine emits `mailbox_name` (Schema.EventPayloadKeys.mailboxName).
         let entry = map(
             kind: "mail_active_mailbox_changed", signalType: "attention",
             bundleID: "com.apple.mail",
-            extras: ["mailbox": "Inbox"]
+            extras: ["mailbox_name": "Inbox"]
         )
         XCTAssertEqual(entry?.primaryText, "Mail: Inbox")
     }
@@ -180,37 +189,56 @@ final class ActivityFeedMapperLocalOSTests: XCTestCase {
     }
 
     func testSafariTabsChanged() {
+        // Safari/Chrome/ArcStateMachine emit `tabs` as JSON array of BrowserTab.
+        // Mapper counts array length structurally — never reads url/title.
+        let tabsJSON = #"[{"url":"https://a","title":"A"},{"url":"https://b","title":"B"},{"url":"https://c","title":"C"}]"#
         let entry = map(
             kind: "safari_tabs_changed", signalType: "attention",
             bundleID: "com.apple.Safari",
-            extras: ["tab_count": "12"]
+            extras: ["tabs": tabsJSON]
         )
-        XCTAssertEqual(entry?.primaryText, "Safari: 12 tabs")
+        XCTAssertEqual(entry?.primaryText, "Safari: 3 tabs")
     }
 
     func testChromeTabsChanged() {
+        let tabsJSON = #"[{"url":"https://a","title":"A"},{"url":"https://b","title":"B"}]"#
         let entry = map(
             kind: "chrome_tabs_changed", signalType: "attention",
             bundleID: "com.google.Chrome",
-            extras: ["tab_count": "8"]
+            extras: ["tabs": tabsJSON]
         )
-        XCTAssertEqual(entry?.primaryText, "Chrome: 8 tabs")
+        XCTAssertEqual(entry?.primaryText, "Chrome: 2 tabs")
     }
 
     func testArcTabsChanged() {
+        let tabsJSON = #"[{"url":"https://a","title":"A"}]"#
         let entry = map(
             kind: "arc_tabs_changed", signalType: "attention",
             bundleID: "company.thebrowser.Browser",
-            extras: ["tab_count": "5"]
+            extras: ["tabs": tabsJSON]
         )
-        XCTAssertEqual(entry?.primaryText, "Arc: 5 tabs")
+        XCTAssertEqual(entry?.primaryText, "Arc: 1 tabs")
+    }
+
+    func testBrowserTabsCountUnparseableFallsBackGracefully() {
+        // If `tabs` is missing / malformed, mapper renders "?" rather than
+        // crashing or showing "0".
+        let entry = map(
+            kind: "safari_tabs_changed", signalType: "attention",
+            bundleID: "com.apple.Safari",
+            extras: ["tabs": "not-json"]
+        )
+        XCTAssertEqual(entry?.primaryText, "Safari: ? tabs")
     }
 
     // MARK: - S3 (System observers — 10 visible of 13)
 
     func testAudioRouteChanged() {
+        // AudioRouteCollector emits `audio_route` (Schema.EventPayloadKeys.audioRoute)
+        // carrying AudioRouteCategory enum rawValue (transport type only,
+        // never device name — ADR-010).
         let entry = map(kind: "audio_route_changed", signalType: "context",
-                        extras: ["category": "headphones"])
+                        extras: ["audio_route": "headphones"])
         XCTAssertEqual(entry?.primaryText, "Audio route: headphones")
     }
 
@@ -223,17 +251,19 @@ final class ActivityFeedMapperLocalOSTests: XCTestCase {
     }
 
     func testDisplayConnected() {
+        // DisplayCollector emits payload {event_kind, state} — no count field
+        // (`display_count` was never wired). Mapper renders primary only.
         let entry = map(kind: "display_connected", signalType: "context",
-                        extras: ["display_count": "2"])
+                        extras: ["state": "display_connected"])
         XCTAssertEqual(entry?.primaryText, "Display connected")
-        XCTAssertEqual(entry?.secondaryText, "2 displays")
+        XCTAssertNil(entry?.secondaryText)
     }
 
     func testDisplayDisconnected() {
         let entry = map(kind: "display_disconnected", signalType: "context",
-                        extras: ["display_count": "1"])
+                        extras: ["state": "display_disconnected"])
         XCTAssertEqual(entry?.primaryText, "Display disconnected")
-        XCTAssertEqual(entry?.secondaryText, "1 display")
+        XCTAssertNil(entry?.secondaryText)
     }
 
     func testVPNStateChanged() {
