@@ -216,4 +216,25 @@ final class DispatchCoverageTests: XCTestCase {
             )
         }
     }
+
+    /// #15 — Track-4 S4 user-authored title/filename event_kinds must round-trip
+    /// through `EventsFullTextStore.topLevelBodyKind` to their respective
+    /// `Schema.BodyKinds` entries. These kinds carry searchable content in
+    /// non-canonical payload keys (`note_title`, `meeting_topic`, `filename`);
+    /// dispatcher is the single point of payload-key resolution.
+    func testTrackFourBodyKindsRoutedViaDispatcher() {
+        let trackFourBodyBearing: [(eventKind: String, expectedBodyKind: String)] = [
+            ("notes_active_title_changed", Schema.BodyKinds.notesTitle),
+            ("zoom_meeting_name_observed", Schema.BodyKinds.zoomMeetingName),
+            ("screenshot_taken", Schema.BodyKinds.screenshotFilename),
+            ("download_added", Schema.BodyKinds.downloadFilename),
+        ]
+        for (eventKind, expected) in trackFourBodyBearing {
+            XCTAssertEqual(
+                EventsFullTextStore.bodyKindForTesting(eventKind: eventKind),
+                expected,
+                "EventsFullTextStore must route \(eventKind) → \(expected)"
+            )
+        }
+    }
 }

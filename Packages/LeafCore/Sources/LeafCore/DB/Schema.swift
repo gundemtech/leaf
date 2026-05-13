@@ -362,6 +362,13 @@ public enum Schema {
         // Phase Track-3 D3 — Slack body provenance (canvas + bookmark titles per ADR-010 §6).
         public static let slackCanvasTitle = "slack_canvas_title"
         public static let slackBookmarkTitle = "slack_bookmark_title"
+        // Phase Track-4 S4 — user-authored title/filename body provenance.
+        // ADR-010 commit-message precedent: user-namespace labels are allowed
+        // through FTS while bodies / previews / message texts remain forbidden.
+        public static let notesTitle = "notes_title"
+        public static let zoomMeetingName = "zoom_meeting_name"
+        public static let screenshotFilename = "screenshot_filename"
+        public static let downloadFilename = "download_filename"
     }
 
     /// Phase Track-1 D2 — cross-source association graph row.
