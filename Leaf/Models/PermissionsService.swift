@@ -15,6 +15,7 @@ import AppKit
 import ApplicationServices
 import EventKit
 import Intents
+import IOKit.hid
 import LeafCore
 import OSLog
 
@@ -27,6 +28,9 @@ final class PermissionsService {
     private(set) var calendarGranted: Bool = false
     /// Phase Track-4 S1 — Focus status TCC grant state.
     private(set) var focusGranted: Bool = false
+    /// Phase Track-4 S3 — Input Monitoring TCC grant state. Drives the
+    /// "Intensity monitoring" row в SystemObserversSettingsSection.
+    private(set) var inputMonitoringGranted: Bool = false
 
     /// Phase Track-4 S2 — shared Local Apps preference store (per-app enabled
     /// flag + per-(app, sub-field) opt-in). Backed by UserDefaults; both the
@@ -36,11 +40,21 @@ final class PermissionsService {
     /// (24h denial backoff). Same UserDefaults backing as the Agent's instance.
     let localAppsPermissionStore: AppleScriptPermissionStore
 
+    /// Phase Track-4 S3 — shared System Observers preference store (master
+    /// toggles для intensity / clipboard / wifi / vpn / audio / mic / display
+    /// / screenshot_watcher / downloads_watcher / trash_watcher). Backed
+    /// UserDefaults; same suite that LocalAppsStore + OAuth services use.
+    let systemObserversStore: SystemObserversStore
+    /// Phase Track-4 S3 — Input Monitoring TCC state cache (24h denial
+    /// backoff). Same UserDefaults backing as the Agent's instance.
+    let inputMonitoringPermissionStore: InputMonitoringPermissionStore
+
     private var pollTimer: Timer?
     private let axCheck: @Sendable () -> Bool
     private let fdaCheck: @Sendable () -> Bool
     private let calendarCheck: @Sendable () -> Bool
     private let focusCheck: @Sendable () -> Bool
+    private let inputMonitoringCheck: @Sendable () -> Bool
     private let logger = Logger(subsystem: "tech.gundem.leaf.app", category: "permissions")
 
     init(
@@ -48,15 +62,21 @@ final class PermissionsService {
         fdaCheck: @escaping @Sendable () -> Bool = { PermissionsService.defaultFDAProbe() },
         calendarCheck: @escaping @Sendable () -> Bool = { PermissionsService.defaultCalendarProbe() },
         focusCheck: @escaping @Sendable () -> Bool = { PermissionsService.defaultFocusProbe() },
+        inputMonitoringCheck: @escaping @Sendable () -> Bool = { PermissionsService.defaultInputMonitoringProbe() },
         localAppsStore: LocalAppsStore = LocalAppsStore(),
-        localAppsPermissionStore: AppleScriptPermissionStore = AppleScriptPermissionStore()
+        localAppsPermissionStore: AppleScriptPermissionStore = AppleScriptPermissionStore(),
+        systemObserversStore: SystemObserversStore = SystemObserversStore(),
+        inputMonitoringPermissionStore: InputMonitoringPermissionStore = InputMonitoringPermissionStore()
     ) {
         self.axCheck = axCheck
         self.fdaCheck = fdaCheck
         self.calendarCheck = calendarCheck
         self.focusCheck = focusCheck
+        self.inputMonitoringCheck = inputMonitoringCheck
         self.localAppsStore = localAppsStore
         self.localAppsPermissionStore = localAppsPermissionStore
+        self.systemObserversStore = systemObserversStore
+        self.inputMonitoringPermissionStore = inputMonitoringPermissionStore
         refresh()
     }
 
@@ -67,6 +87,7 @@ final class PermissionsService {
         fdaGranted = fdaCheck()
         calendarGranted = calendarCheck()
         focusGranted = focusCheck()
+        inputMonitoringGranted = inputMonitoringCheck()
     }
 
     // MARK: - Polling
@@ -157,6 +178,34 @@ final class PermissionsService {
         localAppsStore.setSubFieldOptedIn(bundleID, field: field, optedIn: optedIn)
     }
 
+    // MARK: - Phase Track-4 S3 — Input Monitoring grant flow
+
+    /// Triggers Input Monitoring TCC dialog via `IOHIDRequestAccess`. Surfaces
+    /// the system modal under `tech.gundem.leaf` first time; agent gets its
+    /// own dialog under `tech.gundem.leaf.agent` on its first start tick.
+    /// Synchronous bool return; refresh updates `inputMonitoringGranted`.
+    func triggerInputMonitoringPrompt() {
+        _ = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let granted = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
+        inputMonitoringPermissionStore.record(
+            granted ? .granted : .denied(nowMs),
+            nowMs: nowMs
+        )
+        refresh()
+    }
+
+    /// Deep-link to System Settings → Privacy → Input Monitoring. Re-grant
+    /// path после denial (TCC silent'но прокатывает second prompt).
+    func openInputMonitoringSettings() {
+        openSystemSettings("Privacy_ListenEvent")
+    }
+
+    /// Settings UI calls this when the user flips a system-observer toggle.
+    func setSystemObserverEnabled(_ observer: String, _ enabled: Bool) {
+        systemObserversStore.setEnabled(observer, enabled)
+    }
+
     private func openSystemSettings(_ pane: String) {
         guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)") else {
             logger.error("invalid System Settings URL for pane \(pane, privacy: .public)")
@@ -202,6 +251,13 @@ final class PermissionsService {
     /// Phase Track-4 S1 — Focus probe.
     nonisolated static func defaultFocusProbe() -> Bool {
         INFocusStatusCenter.default.authorizationStatus == .authorized
+    }
+
+    /// Phase Track-4 S3 — Input Monitoring probe. Read-only TCC check
+    /// (doesn't surface dialog). `triggerInputMonitoringPrompt()` is the
+    /// path that does — separates read from request.
+    nonisolated static func defaultInputMonitoringProbe() -> Bool {
+        IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
     }
 }
 
