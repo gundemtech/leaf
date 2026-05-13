@@ -16,7 +16,7 @@ import LeafCore
 
 struct GenerateInviteSheet: View {
     @Environment(InviteOutboxReader.self) private var reader
-    @Environment(OrgReader.self) private var orgReader
+    @Environment(WorkspaceReader.self) private var workspaceReader
     @Environment(InviteURLHandler.self) private var urlHandler
     @Environment(\.dismiss) private var dismiss
     @State private var joinCodeInput: String = ""
@@ -168,7 +168,7 @@ struct GenerateInviteSheet: View {
     }
 
     private var orgName: String {
-        if case .loaded(let org, _) = orgReader.state { return org.name }
+        if case .loaded(_, let active, _) = workspaceReader.state { return active.name }
         return "your team"
     }
 

@@ -11,7 +11,7 @@ import SwiftUI
 import LeafCore
 
 struct OrganizationView: View {
-    @Environment(OrgReader.self) private var reader
+    @Environment(WorkspaceReader.self) private var reader
     @State private var nameInput: String = ""
     @State private var showingAcceptSheet: Bool = false
 
@@ -38,11 +38,11 @@ struct OrganizationView: View {
                 .padding(.top, LeafSpace.xxxl)
         case .empty:
             emptyContent
-        case .loaded(let org, _):
-            loadedContent(org: org)
+        case .loaded(_, let active, _):
+            loadedContent(org: active)
         case .error(let message):
             errorContent(message: message)
-        case .removedFromOrg:
+        case .removedFromActiveWorkspace:
             // RootView preempts this state with RemovedFromTeamBanner.
             EmptyView()
         }
@@ -93,7 +93,7 @@ struct OrganizationView: View {
 
     // MARK: - Loaded: workspace card
 
-    private func loadedContent(org: Org) -> some View {
+    private func loadedContent(org: Workspace) -> some View {
         LeafSection(title: "Organization") {
             LeafCard(variant: .raised, padding: .regular) {
                 VStack(alignment: .leading, spacing: LeafSpace.md) {
@@ -142,6 +142,6 @@ struct OrganizationView: View {
     private func submit() {
         let name = trimmedName
         guard !name.isEmpty else { return }
-        reader.createPersonalOrg(displayName: name)
+        reader.createWorkspace(displayName: name)
     }
 }

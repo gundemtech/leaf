@@ -45,6 +45,12 @@ struct LeafApp: App {
     @State private var updater: UpdaterController
     @State private var reader = InsightsReader()
     @State private var orgReader = OrgReader()
+    // Track 5 S2 Task 10 — parallel multi-workspace substrate. `OrgReader` остаётся
+    // в @State до Task 12 (delete), оба reader'а живут side-by-side. Views мигрируют
+    // на `WorkspaceReader`; `ActiveWorkspaceStore` инжектится для прямого чтения
+    // active-workspace id (Sidebar switcher и т.п.).
+    @State private var activeWorkspaceStore: ActiveWorkspaceStore
+    @State private var workspaceReader: WorkspaceReader
     @State private var inviteOutboxReader = InviteOutboxReader()
     @State private var inviteAcceptReader = InviteAcceptReader()
     @State private var memberRemovalReader = MemberRemovalReader()  // Phase 5.3.E
@@ -85,6 +91,13 @@ struct LeafApp: App {
         _launchAgent = State(initialValue: agent)
         _updater = State(initialValue: UpdaterController())
 
+        // Track 5 S2 Task 10 — explicit init pair: ActiveWorkspaceStore владеет
+        // active-workspace UD ключом, WorkspaceReader подписывается на неё. Оба
+        // @MainActor — App.init implicitly @MainActor, конструкторы OK.
+        let active = ActiveWorkspaceStore()
+        _activeWorkspaceStore = State(initialValue: active)
+        _workspaceReader = State(initialValue: WorkspaceReader(activeStore: active))
+
         // D1 — idempotent register для post-update relaunch restoration.
         // Sparkle relaunch'ает app после bundle replace + cold launch без update flow:
         // если уже enabled (status restored launchd) — register() filter "already
@@ -112,6 +125,8 @@ struct LeafApp: App {
                 .environment(updater)
                 .environment(reader)
                 .environment(orgReader)
+                .environment(workspaceReader)            // Track 5 S2 Task 10
+                .environment(activeWorkspaceStore)       // Track 5 S2 Task 10
                 .environment(inviteOutboxReader)
                 .environment(inviteAcceptReader)
                 .environment(memberRemovalReader)  // Phase 5.3.E
@@ -163,6 +178,8 @@ struct LeafApp: App {
                 .environment(updater)
                 .environment(reader)
                 .environment(orgReader)
+                .environment(workspaceReader)            // Track 5 S2 Task 10
+                .environment(activeWorkspaceStore)       // Track 5 S2 Task 10
                 .environment(inviteAcceptReader)
                 .environment(inviteURLHandler)  // Phase 5.5.B
                 .environment(windowState)

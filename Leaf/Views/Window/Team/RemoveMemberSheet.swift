@@ -13,7 +13,7 @@ import LeafCore
 
 struct RemoveMemberSheet: View {
     @Environment(MemberRemovalReader.self) private var reader
-    @Environment(OrgReader.self) private var orgReader
+    @Environment(WorkspaceReader.self) private var workspaceReader
     @Environment(\.dismiss) private var dismiss
 
     let memberID: String
@@ -106,7 +106,7 @@ struct RemoveMemberSheet: View {
                     variant: .primary,
                     size: .md,
                     action: {
-                        orgReader.refresh()
+                        workspaceReader.refresh()
                         reader.dismiss()
                         dismiss()
                     }

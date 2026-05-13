@@ -18,7 +18,7 @@ import LeafCore
 
 struct AcceptInviteSheet: View {
     @Environment(InviteAcceptReader.self) private var reader
-    @Environment(OrgReader.self) private var orgReader
+    @Environment(WorkspaceReader.self) private var workspaceReader
     @Environment(InviteURLHandler.self) private var urlHandler
     @Environment(\.dismiss) private var dismiss
     @State private var pasteInput: String = ""
@@ -185,7 +185,7 @@ struct AcceptInviteSheet: View {
                     variant: .primary,
                     size: .md,
                     action: {
-                        orgReader.refresh()
+                        workspaceReader.refresh()
                         reader.discardAndReset()
                         dismiss()
                     }

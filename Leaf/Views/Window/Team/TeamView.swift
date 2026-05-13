@@ -16,7 +16,7 @@ import SwiftUI
 import LeafCore
 
 struct TeamView: View {
-    @Environment(OrgReader.self) private var reader
+    @Environment(WorkspaceReader.self) private var reader
     @Environment(PendingInvitesReader.self) private var pendingReader
     @Environment(WindowState.self) private var windowState
 
@@ -61,13 +61,13 @@ struct TeamView: View {
         case .empty:
             emptyContent
 
-        case .loaded(_, let members):
+        case .loaded(_, _, let members):
             loadedContent(members)
 
         case .error(let message):
             errorContent(message)
 
-        case .removedFromOrg:
+        case .removedFromActiveWorkspace:
             // RootView preempts via RemovedFromTeamBanner; defensive EmptyView
             // for switch exhaustiveness.
             EmptyView()

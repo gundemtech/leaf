@@ -2,17 +2,20 @@
 //  RootView.swift
 //  Track 2 / D2 — main-window root. Two top-level branches:
 //    1. RemovedFromTeamBanner full-screen takeover (Phase 5.3.E) when
-//       OrgReader.state == .removedFromOrg. Tombstone is intentionally
-//       OUTSIDE LeafWindowLayout — it's not a section in the nav shell,
-//       it's a hard mode change.
+//       WorkspaceReader.state == .removedFromActiveWorkspace. Tombstone is
+//       intentionally OUTSIDE LeafWindowLayout — it's not a section in the
+//       nav shell, it's a hard mode change.
 //    2. Otherwise: LeafWindowLayout (D1 template T1) — Sidebar + detail
 //       slot resolved by WindowState.section. Toolbar carries
 //       LeafStatusPill (D1 organism O5) reflecting derived state from
 //       InsightsReader.state.
 //
-//  Refresh discipline: reader.refresh() + orgReader.refresh() on appear.
+//  Refresh discipline: reader.refresh() + workspaceReader.refresh() on appear.
 //  .onOpenURL / .scenePhase invite-handling and OpenSettingsCommand stay
 //  in LeafApp.swift (Window scene level) — RootView does not duplicate.
+//
+//  Track 5 S2 Task 10 — migrated OrgReader → WorkspaceReader; banner reads
+//  workspace name from .removedFromActiveWorkspace(workspaceName:).
 //
 
 import SwiftUI
@@ -21,19 +24,19 @@ import LeafCore
 struct RootView: View {
     @Environment(WindowState.self) private var windowState
     @Environment(InsightsReader.self) private var reader
-    @Environment(OrgReader.self) private var orgReader
+    @Environment(WorkspaceReader.self) private var workspaceReader
 
     var body: some View {
         Group {
-            if case .removedFromOrg(let orgName) = orgReader.state {
-                RemovedFromTeamBanner(orgName: orgName)
+            if case .removedFromActiveWorkspace(let workspaceName) = workspaceReader.state {
+                RemovedFromTeamBanner(orgName: workspaceName)
             } else {
                 shell
             }
         }
         .onAppear {
             reader.refresh()
-            orgReader.refresh()
+            workspaceReader.refresh()
         }
     }
 

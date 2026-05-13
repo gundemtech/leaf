@@ -13,7 +13,7 @@ import SwiftUI
 import LeafCore
 
 struct CreateTeamStepView: View {
-    @Environment(OrgReader.self) private var orgReader
+    @Environment(WorkspaceReader.self) private var workspaceReader
     @State private var displayName: String = ""
     @State private var submitted: Bool = false
     let onCancel: () -> Void
@@ -47,7 +47,7 @@ struct CreateTeamStepView: View {
                     action: {
                         let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
                         submitted = true
-                        orgReader.createPersonalOrg(displayName: trimmed)
+                        workspaceReader.createWorkspace(displayName: trimmed)
                     }
                 )
                 .disabled(submitted || displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

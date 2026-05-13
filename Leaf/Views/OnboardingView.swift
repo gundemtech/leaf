@@ -26,7 +26,7 @@ struct OnboardingView: View {
     @AppStorage("onboardingStep") private var step: OnboardingStep = .welcome
     @Environment(PermissionsService.self) private var permissions
     @Environment(InviteAcceptReader.self) private var inviteAcceptReader
-    @Environment(OrgReader.self) private var orgReader
+    @Environment(WorkspaceReader.self) private var workspaceReader
     @State private var showingAcceptSheet: Bool = false
     enum TeamSubStep: Equatable { case choice, create, join, waiting }
     @State private var teamSubStep: TeamSubStep = .choice
@@ -53,7 +53,7 @@ struct OnboardingView: View {
         .onChange(of: permissions.fdaGranted) { _, granted in
             if step == .fda && granted { step = .team }
         }
-        .onChange(of: orgReader.state) { _, newState in
+        .onChange(of: workspaceReader.state) { _, newState in
             if step == .team, teamSubStep == .create, case .loaded = newState {
                 step = .done
             }
