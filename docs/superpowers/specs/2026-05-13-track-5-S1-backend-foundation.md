@@ -143,30 +143,44 @@ No premature indexes for query patterns S1 doesn't yet have.
 
 Single migration `20260513120900_rls_policies.sql` enables RLS + creates policies for all 9 application tables. **Pattern: broad `FOR ALL USING (...)` where same condition applies to all commands; explicit `FOR SELECT` / `FOR INSERT WITH CHECK` only when different conditions diverge between read and write.**
 
+### 6.0 SECURITY DEFINER helpers — recursion-avoidance
+
+Naive workspace-scoped policies that `SELECT FROM workspace_members` inside their own USING clauses cause Postgres infinite-recursion errors (the policy re-evaluates for every row of the inner SELECT). S1 introduces two `SECURITY DEFINER STABLE` helper functions defined alongside the policies, both inside the RLS migration:
+
+```sql
+CREATE FUNCTION public.is_workspace_member(_workspace_id uuid, _pubkey text)
+  RETURNS boolean LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public
+  AS $$ SELECT EXISTS (
+    SELECT 1 FROM workspace_members
+    WHERE workspace_id = _workspace_id AND pubkey = _pubkey AND removed_at IS NULL
+  ) $$;
+
+CREATE FUNCTION public.is_workspace_admin(_workspace_id uuid, _pubkey text)
+  RETURNS boolean LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public
+  AS $$ SELECT EXISTS (
+    SELECT 1 FROM workspaces
+    WHERE id = _workspace_id AND created_by_pubkey = _pubkey
+  ) $$;
+```
+
+Both helpers are granted to `authenticated` and `service_role`, revoked from `public`. Workspace-scoped policies call them instead of using inline subqueries against the same tables.
+
 ### 6.1 Pattern — workspace-scoped table
 
 ```sql
 ALTER TABLE team_events ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY team_events_member_only ON team_events FOR ALL
-  USING (
-    workspace_id IN (
-      SELECT workspace_id FROM workspace_members
-      WHERE pubkey = (auth.jwt() ->> 'pubkey')
-        AND removed_at IS NULL
-    )
-  )
+CREATE POLICY team_events_member_read ON team_events FOR SELECT
+  USING (public.is_workspace_member(workspace_id, auth.jwt() ->> 'pubkey'));
+
+CREATE POLICY team_events_member_write ON team_events FOR INSERT
   WITH CHECK (
     sender_pubkey = (auth.jwt() ->> 'pubkey')
-    AND workspace_id IN (
-      SELECT workspace_id FROM workspace_members
-      WHERE pubkey = (auth.jwt() ->> 'pubkey')
-        AND removed_at IS NULL
-    )
+    AND public.is_workspace_member(workspace_id, auth.jwt() ->> 'pubkey')
   );
 ```
 
-Note the WITH CHECK enforces sender attribution — caller cannot forge `sender_pubkey` of another user.
+Note the WITH CHECK enforces sender attribution — caller cannot forge `sender_pubkey` of another user. The helper call replaces what would otherwise be a self-referencing subquery against `workspace_members`.
 
 ### 6.2 Pattern — sender/recipient scoped table
 
