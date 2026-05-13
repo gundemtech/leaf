@@ -25,6 +25,8 @@ public enum TeamKeystore {
     public static let x25519PrivateFilename = "x25519.priv"
     public static let teamKeysSubdir = "team-keys"
     public static let teamKeyExtension = "key"
+    /// Phase Track-5 S2 — workspace sub-folder root.
+    public static let workspacesSubdir = "workspaces"
 
     public static let x25519PrivateLength = 32
     public static let teamKeyLength = 32
@@ -75,12 +77,114 @@ public enum TeamKeystore {
         }
     }
 
+    // MARK: - TeamKey (workspace-scoped, Phase Track-5 S2)
+
+    /// Write workspace-scoped teamKey to
+    /// `<root>/workspaces/<workspaceID>/team-keys/<keyID>.key`.
+    /// 0o600 permissions + FileVault discipline. Atomic write.
+    public static func writeTeamKey(
+        _ bytes: Data,
+        workspaceID: String,
+        keyID: String,
+        at root: URL = defaultRoot()
+    ) throws {
+        let url = workspaceTeamKeyURL(workspaceID: workspaceID, keyID: keyID, root: root)
+        try writeAtomic(bytes, to: url, expectedLength: teamKeyLength)
+    }
+
+    public static func readTeamKey(
+        workspaceID: String,
+        keyID: String,
+        at root: URL = defaultRoot()
+    ) throws -> Data {
+        let url = workspaceTeamKeyURL(workspaceID: workspaceID, keyID: keyID, root: root)
+        return try readExisting(at: url, expectedLength: teamKeyLength)
+    }
+
+    /// Recursively delete entire workspace directory. Used by hard-wipe (S8)
+    /// + test cleanup. NOT used by markLeft (which preserves data).
+    public static func deleteWorkspace(workspaceID: String, at root: URL = defaultRoot()) throws {
+        let url = workspaceDirectoryURL(workspaceID: workspaceID, root: root)
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        do {
+            try FileManager.default.removeItem(at: url)
+        } catch {
+            throw LeafError.keyFileUnavailable(reason: error.localizedDescription)
+        }
+    }
+
+    /// Migrate legacy single-workspace teamKey files
+    /// (`<root>/team-keys/<id>.key`) → workspace sub-folder
+    /// (`<root>/workspaces/<workspaceID>/team-keys/<id>.key`). Idempotent —
+    /// if files already at new location, no-op. Best-effort — silent on
+    /// missing legacy dir. Called once by M019 application path.
+    public static func relocateLegacyTeamKeys(
+        toWorkspaceID workspaceID: String,
+        at root: URL = defaultRoot()
+    ) throws {
+        let legacyDir = root.appendingPathComponent(teamKeysSubdir, isDirectory: true)
+        guard FileManager.default.fileExists(atPath: legacyDir.path) else {
+            return  // No legacy dir — fresh install OR already relocated.
+        }
+        let contents: [URL]
+        do {
+            contents = try FileManager.default.contentsOfDirectory(
+                at: legacyDir,
+                includingPropertiesForKeys: nil
+            )
+        } catch {
+            return  // Inaccessible — caller treats as no-op.
+        }
+
+        for legacyFile in contents where legacyFile.pathExtension == teamKeyExtension {
+            let keyID = legacyFile.deletingPathExtension().lastPathComponent
+            let newURL = workspaceTeamKeyURL(workspaceID: workspaceID, keyID: keyID, root: root)
+            try ensureParentDirectory(for: newURL)
+            if FileManager.default.fileExists(atPath: newURL.path) {
+                // Idempotent path — new file already exists. Remove legacy.
+                try? FileManager.default.removeItem(at: legacyFile)
+                continue
+            }
+            do {
+                try FileManager.default.moveItem(at: legacyFile, to: newURL)
+            } catch {
+                throw LeafError.keyFileUnavailable(reason: error.localizedDescription)
+            }
+            // Re-apply 0o600 on moved file (mv preserves but be explicit).
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: NSNumber(value: Int16(0o600))],
+                ofItemAtPath: newURL.path
+            )
+        }
+
+        // Cleanup empty legacy dir.
+        let remaining = (try? FileManager.default.contentsOfDirectory(
+            at: legacyDir,
+            includingPropertiesForKeys: nil
+        )) ?? []
+        if remaining.isEmpty {
+            try? FileManager.default.removeItem(at: legacyDir)
+        }
+    }
+
     // MARK: - Internals
 
     private static func teamKeyURL(id: String, root: URL) -> URL {
         return root
             .appendingPathComponent(teamKeysSubdir, isDirectory: true)
             .appendingPathComponent("\(id).\(teamKeyExtension)", isDirectory: false)
+    }
+
+    private static func workspaceDirectoryURL(workspaceID: String, root: URL) -> URL {
+        root
+            .appendingPathComponent(workspacesSubdir, isDirectory: true)
+            .appendingPathComponent(workspaceID, isDirectory: true)
+    }
+
+    private static func workspaceTeamKeyURL(workspaceID: String, keyID: String, root: URL) -> URL {
+        workspaceDirectoryURL(workspaceID: workspaceID, root: root)
+            .appendingPathComponent(teamKeysSubdir, isDirectory: true)
+            .appendingPathComponent("\(keyID).\(teamKeyExtension)", isDirectory: false)
     }
 
     private static func ensureParentDirectory(for url: URL) throws {

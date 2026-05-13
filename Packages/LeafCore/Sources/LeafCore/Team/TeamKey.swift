@@ -2,29 +2,54 @@ import Foundation
 
 /// Phase 5.1.B — team key rotation **metadata** (contract §7). Pure DB row;
 /// raw 32-byte AES-256 material живёт в keystore-файле (5.1.D), НЕ в DB.
-/// Хранится в `team_keys` таблице (Schema.TeamKeys, M008); forever-retained
-/// чтобы decrypt'ить past `presence_history` под предыдущими rotation'ами
-/// (contract §12).
+/// Хранится в `team_keys` таблице (Schema.TeamKeys, M008/M019).
 ///
-/// `id` — rotation UUID v4. Embedded as 16-byte `keyID` в envelope (contract §6);
-/// hex-UUID ↔ 16B encoding — забота `EnvelopeCodec` (5.1.C), не этого type'а.
+/// `id` — rotation UUID v4. Embedded as 16-byte `keyID` в envelope (contract §6).
 ///
-/// `deprecatedAt` IS NULL = current rotation. Set при rotation (Phase 5.3 flow).
+/// `deprecatedAt` IS NULL = current rotation. Set при rotation (Phase 5.3).
+///
+/// Phase Track-5 S2 — `workspaceID` field added (M019 backfilled column).
+/// Forever-retained per `team_keys` design: old rows нужны для decrypt'а
+/// past presence_history (contract §12). Backward-compat init (deprecated)
+/// retained until Task 12 cleanup; sentinel `workspaceID = ""` для legacy
+/// call sites — sentinel rows never match real-workspace queries.
 public struct TeamKey: Sendable, Hashable {
     public let id: String
+    public let workspaceID: String
     public let generatedAt: Date
     public let deprecatedAt: Date?
     public let generatedByMemberID: String
 
     public init(
         id: String,
+        workspaceID: String,
         generatedAt: Date,
         deprecatedAt: Date?,
         generatedByMemberID: String
     ) {
         self.id = id
+        self.workspaceID = workspaceID
         self.generatedAt = generatedAt
         self.deprecatedAt = deprecatedAt
         self.generatedByMemberID = generatedByMemberID
+    }
+
+    /// Backward-compat init — deleted in Task 12. Defaults workspaceID to
+    /// empty-string sentinel. Real workspace-scoped reads will not match
+    /// rows inserted via this path. Use the primary init in new code.
+    @available(*, deprecated, message: "Use `workspaceID:` parameter (Track 5 S2)")
+    public init(
+        id: String,
+        generatedAt: Date,
+        deprecatedAt: Date?,
+        generatedByMemberID: String
+    ) {
+        self.init(
+            id: id,
+            workspaceID: "",
+            generatedAt: generatedAt,
+            deprecatedAt: deprecatedAt,
+            generatedByMemberID: generatedByMemberID
+        )
     }
 }

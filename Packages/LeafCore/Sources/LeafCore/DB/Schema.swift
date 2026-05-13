@@ -69,17 +69,22 @@ public enum Schema {
         public static let updatedAtMs = "updated_at_ms"
     }
 
-    /// Phase 5.1.A — organization metadata (1 row per device, single-org-per-device
-    /// per Phase 5 architecture contract §11). PK — `id` UUID v4.
-    /// `created_by_member_id` — logical FK на `team_members.id`; SQL FOREIGN KEY
-    /// не объявляется (см. spec 5.1.A §4 "FK strategy").
-    public enum Org {
-        public static let tableName = "org"
+    /// Phase Track-5 S2 — multi-workspace metadata table (renamed from `org`
+    /// via M019). One device may host N workspaces. `created_by_member_id` —
+    /// logical FK to `team_members.id` (no SQL FOREIGN KEY).
+    /// `left_at_ms` IS NULL = active membership; non-NULL = soft-mark left
+    /// (OQ-T5-2 resolution; data preserved, UI hides).
+    public enum Workspaces {
+        public static let tableName = "workspaces"
         public static let id = "id"
         public static let name = "name"
         public static let createdAtMs = "created_at_ms"
         public static let createdByMemberID = "created_by_member_id"
+        public static let leftAtMs = "left_at_ms"
     }
+
+    /// Backward-compat alias — deleted in Track 5 S2 Task 12.
+    public typealias Org = Workspaces
 
     /// Phase 5.1.A — long-term member identity + X25519 public key (contract §4, §7).
     /// PK — `id` UUID v4. `org_id` — logical FK на `org.id`.
@@ -89,15 +94,19 @@ public enum Schema {
     public enum TeamMembers {
         public static let tableName = "team_members"
         public static let id = "id"
-        public static let orgID = "org_id"
+        public static let workspaceID = "workspace_id"           // Track-5 S2 rename (M019)
         public static let role = "role"
         public static let pubkeyHex = "pubkey_hex"
         public static let displayName = "display_name"
         public static let addedAtMs = "added_at_ms"
         public static let removedAtMs = "removed_at_ms"
 
-        /// Partial index — фильтрует active members одной org для Team UI list.
-        public static let indexOrgActive = "team_members_org_active"
+        /// Partial index — active members per workspace для Team UI list.
+        public static let indexWorkspaceActive = "team_members_workspace_active"
+
+        // Backward-compat aliases — deleted Task 12 of Track 5 S2 refactor.
+        public static let orgID = workspaceID
+        public static let indexOrgActive = indexWorkspaceActive
     }
 
     /// Phase 5.1.A — team key rotation history (contract §7).
@@ -108,6 +117,7 @@ public enum Schema {
     public enum TeamKeys {
         public static let tableName = "team_keys"
         public static let id = "id"
+        public static let workspaceID = "workspace_id"           // Track-5 S2 (M019)
         public static let generatedAtMs = "generated_at_ms"
         public static let deprecatedAtMs = "deprecated_at_ms"
         public static let generatedByMemberID = "generated_by_member_id"
@@ -125,6 +135,7 @@ public enum Schema {
         public static let tableName = "rotation_outbox"
         public static let peerPubkeyHex = "peer_pubkey_hex"
         public static let newKeyID = "new_key_id"
+        public static let workspaceID = "workspace_id"           // Track-5 S2 (M019)
         public static let priorKeyID = "prior_key_id"
         public static let kind = "kind"
         public static let peerMemberID = "peer_member_id"
@@ -144,6 +155,7 @@ public enum Schema {
     public enum PendingInvites {
         public static let tableName = "pending_invites"
         public static let token = "token"
+        public static let workspaceID = "workspace_id"           // Track-5 S2 (M019)
         public static let otp = "otp"
         public static let inviteePubkeyHex = "invitee_pubkey_hex"
         public static let inviteeDisplayNameHint = "invitee_display_name_hint"
