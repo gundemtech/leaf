@@ -92,6 +92,12 @@ private struct ProviderIcon: View {
     }
 
     private var symbol: String {
+        // Track-4 S4 — short-circuit on the LocalOS whitelist (33 kinds landed
+        // by S1+S2+S3). Single point of mapping lives in `LeafCore.EventKindIcon`
+        // so the dispatch can be unit-tested without dragging in SwiftUI.
+        if let trackFour = EventKindIcon.symbol(for: entry.eventKind) {
+            return trackFour
+        }
         switch entry.eventKind {
         case "status_transition": return "arrow.right.circle"
         case "linear_priority_changed": return "exclamationmark.triangle"
