@@ -1653,4 +1653,177 @@ final class RelayBodyLeakageTests: XCTestCase {
             collectorID: "applescript_arc"
         )
     }
+
+    // MARK: - Phase Track-4 S3 — system observers + intensity walkbacks (13)
+
+    /// 13 walkbacks — one per new event_kind. Each smuggles content marker
+    /// фейковым payload key (body / characters / pixels / etc) и assert'ит
+    /// что marker не появляется в presence_state.state_json.
+
+    func testRelayDoesNotLeakIntensitySnapshot_S3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "intensity_snapshot",
+            extraPayload: [
+                "keystroke_count": "50",
+                "mouse_move_count": "100",
+                "app_switch_count": "2",
+                "foreground_app": "com.apple.dt.Xcode",
+                "characters": "SECRET-KEYS-INTENSITY-S3",
+                "body": "SECRET-INTENSITY-BODY-S3"
+            ],
+            markers: ["SECRET-KEYS-INTENSITY-S3", "SECRET-INTENSITY-BODY-S3"],
+            collectorID: "cgevent_tap"
+        )
+    }
+
+    func testRelayDoesNotLeakIntensityBucketDropped_S3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "intensity_bucket_dropped",
+            extraPayload: [
+                "state": "locked",
+                "body": "SECRET-DROPPED-BUCKET-BODY-S3"
+            ],
+            markers: ["SECRET-DROPPED-BUCKET-BODY-S3"],
+            collectorID: "cgevent_tap"
+        )
+    }
+
+    func testRelayDoesNotLeakAudioRouteDeviceName_S3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "audio_route_changed",
+            extraPayload: [
+                "audio_route": "bluetooth",
+                "device_name": "SECRET-AIRPODS-NAME-S3",
+                "manufacturer": "SECRET-MANUFACTURER-S3"
+            ],
+            markers: ["SECRET-AIRPODS-NAME-S3", "SECRET-MANUFACTURER-S3"],
+            collectorID: "audio_route"
+        )
+    }
+
+    func testRelayDoesNotLeakMicInUseEntered_S3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "mic_in_use_entered",
+            extraPayload: [
+                "state": "mic_in_use",
+                "audio_samples": "SECRET-MIC-SAMPLES-S3"
+            ],
+            markers: ["SECRET-MIC-SAMPLES-S3"],
+            collectorID: "mic_in_use"
+        )
+    }
+
+    func testRelayDoesNotLeakMicInUseExited_S3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "mic_in_use_exited",
+            extraPayload: [
+                "state": "mic_idle",
+                "audio_samples": "SECRET-MIC-EXIT-S3"
+            ],
+            markers: ["SECRET-MIC-EXIT-S3"],
+            collectorID: "mic_in_use"
+        )
+    }
+
+    func testRelayDoesNotLeakDisplayConnected_S3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "display_connected",
+            extraPayload: [
+                "state": "display_connected",
+                "screen_image": "SECRET-DISPLAY-PIXELS-S3"
+            ],
+            markers: ["SECRET-DISPLAY-PIXELS-S3"],
+            collectorID: "display"
+        )
+    }
+
+    func testRelayDoesNotLeakDisplayDisconnected_S3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "display_disconnected",
+            extraPayload: [
+                "state": "display_disconnected",
+                "screen_image": "SECRET-DISCONNECT-PIXELS-S3"
+            ],
+            markers: ["SECRET-DISCONNECT-PIXELS-S3"],
+            collectorID: "display"
+        )
+    }
+
+    func testRelayDoesNotLeakVPNCredentials_S3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "vpn_state_changed",
+            extraPayload: [
+                "state": "connected",
+                "server_address": "SECRET-VPN-SERVER-S3",
+                "username": "SECRET-VPN-USER-S3"
+            ],
+            markers: ["SECRET-VPN-SERVER-S3", "SECRET-VPN-USER-S3"],
+            collectorID: "vpn"
+        )
+    }
+
+    func testRelayDoesNotLeakWiFiSSID_S3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "wifi_state_changed",
+            extraPayload: [
+                "state": "connected",
+                "ssid": "SECRET-WIFI-SSID-S3",
+                "bssid": "SECRET-WIFI-BSSID-S3"
+            ],
+            markers: ["SECRET-WIFI-SSID-S3", "SECRET-WIFI-BSSID-S3"],
+            collectorID: "wifi"
+        )
+    }
+
+    func testRelayDoesNotLeakClipboardContent_S3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "clipboard_event_count",
+            extraPayload: [
+                "count": "3",
+                "clipboard_content": "SECRET-CLIPBOARD-TEXT-S3",
+                "body": "SECRET-CLIPBOARD-BODY-S3"
+            ],
+            markers: ["SECRET-CLIPBOARD-TEXT-S3", "SECRET-CLIPBOARD-BODY-S3"],
+            collectorID: "clipboard"
+        )
+    }
+
+    func testRelayDoesNotLeakScreenshotBody_S3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "screenshot_taken",
+            extraPayload: [
+                "filename": "Screenshot 2026-05-13.png",
+                "body": "SECRET-SCREENSHOT-BODY-S3",
+                "image_data": "SECRET-SCREENSHOT-PIXELS-S3"
+            ],
+            markers: ["SECRET-SCREENSHOT-BODY-S3", "SECRET-SCREENSHOT-PIXELS-S3"],
+            collectorID: "local_files"
+        )
+    }
+
+    func testRelayDoesNotLeakDownloadBody_S3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "download_added",
+            extraPayload: [
+                "filename": "report.pdf",
+                "body": "SECRET-DOWNLOAD-BODY-S3",
+                "source_url": "SECRET-DOWNLOAD-URL-S3"
+            ],
+            markers: ["SECRET-DOWNLOAD-BODY-S3", "SECRET-DOWNLOAD-URL-S3"],
+            collectorID: "local_files"
+        )
+    }
+
+    func testRelayDoesNotLeakTrashContent_S3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "trash_changed",
+            extraPayload: [
+                "action": "added",
+                "deleted_filename": "SECRET-TRASH-FILENAME-S3",
+                "body": "SECRET-TRASH-BODY-S3"
+            ],
+            markers: ["SECRET-TRASH-FILENAME-S3", "SECRET-TRASH-BODY-S3"],
+            collectorID: "local_files"
+        )
+    }
 }
