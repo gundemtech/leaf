@@ -92,13 +92,12 @@ public struct InviteAcceptService: Sendable {
         otp: String,
         displayName: String
     ) async throws -> AcceptedInvite {
-        // 1. Preflight — non-empty displayName + single-org-per-device invariant.
+        // 1. Preflight — non-empty displayName. Track-5 S2: the single-workspace
+        // invariant is gone; rejoin / membership-conflict checks happen in
+        // step 11 once we know the target workspaceID from the decoded blob.
         let trimmedDN = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedDN.isEmpty else {
             throw LeafError.invalidPayload
-        }
-        guard try database.listWorkspaces(includeLeft: true).isEmpty else {
-            throw LeafError.inviteAlreadyAccepted
         }
 
         // 2. Identity (idempotent X25519 priv).
@@ -141,15 +140,18 @@ public struct InviteAcceptService: Sendable {
         let selfPubHex = priv.publicKey.rawRepresentation
             .map { String(format: "%02x", $0) }.joined()
 
-        // 9. Build domain rows.
+        // 9. Build domain rows. `plaintext.orgID` carries the workspace id
+        //    semantically (renamed at DB level by M019; JSON key unchanged for
+        //    back-compat with in-flight v2 blobs).
+        let workspaceID = plaintext.orgID
         let acceptedAt = now()
         let issuedAt = Date(timeIntervalSince1970: TimeInterval(plaintext.issuedAtMs) / 1000)
-        let org = Workspace(id: plaintext.orgID,
+        let org = Workspace(id: workspaceID,
                             name: plaintext.orgName,
                             createdAt: issuedAt,
                             createdByMemberID: plaintext.adminMemberID)
         let adminMember = TeamMember(id: plaintext.adminMemberID,
-                                     workspaceID: plaintext.orgID,
+                                     workspaceID: workspaceID,
                                      role: .admin,
                                      pubkeyHex: adminPubHex,
                                      displayName: plaintext.adminDisplayName,
@@ -157,32 +159,49 @@ public struct InviteAcceptService: Sendable {
                                      removedAt: nil)
         let selfMemberID = generateMemberID()
         let selfMember = TeamMember(id: selfMemberID,
-                                    workspaceID: plaintext.orgID,
+                                    workspaceID: workspaceID,
                                     role: .member,
                                     pubkeyHex: selfPubHex,
                                     displayName: trimmedDN,
                                     addedAt: acceptedAt,
                                     removedAt: nil)
         let teamKey = TeamKey(id: plaintext.teamKeyID,
-                              workspaceID: plaintext.orgID,
+                              workspaceID: workspaceID,
                               generatedAt: issuedAt,
                               deprecatedAt: nil,
                               generatedByMemberID: plaintext.adminMemberID)
 
-        // 10. Keystore-first (orphan file < orphan DB rows). Mirror OrgService
-        //     ordering — corrupted state stays observable, никаких silent
-        //     auto-cleanup'ов.
+        // 10. Keystore-first (orphan file < orphan DB rows). Track-5 S2:
+        //     workspace-scoped path; `writeAtomic` overwrites if a stale file
+        //     remains from a prior accept attempt or rejoin path.
         try TeamKeystore.writeTeamKey(teamKeyBytes,
-                                      id: plaintext.teamKeyID,
+                                      workspaceID: workspaceID,
+                                      keyID: plaintext.teamKeyID,
                                       at: keystoreRoot)
 
-        // 11. DB writes (sequential — mirror OrgService.createPersonalOrg).
-        try database.upsertWorkspace(org)
-        try database.insertTeamMember(adminMember)
-        try database.insertTeamMember(selfMember)
-        try database.insertTeamKey(teamKey)
+        // 11. DB writes. Three paths:
+        //   - rejoin: workspace exists locally with `leftAt != nil` → clear
+        //     `left_at_ms`, insert *new* self member, keep prior admin row +
+        //     team_key via idempotent insertTeamKeyIfAbsent.
+        //   - already-current member: workspace exists with `leftAt == nil` →
+        //     refuse with `inviteAlreadyAccepted` (no double-accept).
+        //   - fresh: workspace not present locally → full insert sequence
+        //     (mirror OrgService.createPersonalOrg ordering).
+        if let existing = try database.readWorkspace(id: workspaceID) {
+            guard existing.leftAt != nil else {
+                throw LeafError.inviteAlreadyAccepted
+            }
+            try database.clearWorkspaceLeftAt(workspaceID: workspaceID)
+            try database.insertTeamMember(selfMember)
+            try database.insertTeamKeyIfAbsent(teamKey)
+        } else {
+            try database.upsertWorkspace(org)
+            try database.insertTeamMember(adminMember)
+            try database.insertTeamMember(selfMember)
+            try database.insertTeamKey(teamKey)
+        }
 
-        return AcceptedInvite(orgID: plaintext.orgID,
+        return AcceptedInvite(orgID: workspaceID,
                               orgName: plaintext.orgName,
                               teamKeyID: plaintext.teamKeyID,
                               selfMemberID: selfMemberID)

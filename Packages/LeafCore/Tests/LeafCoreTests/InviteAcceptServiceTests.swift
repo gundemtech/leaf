@@ -261,8 +261,10 @@ final class InviteAcceptServiceTests: XCTestCase {
         let activeKey = try XCTUnwrap(db.readActiveTeamKey(workspaceID: orgID))
         XCTAssertEqual(activeKey.id, teamKeyID)
 
-        // Keystore file
-        let onDisk = try TeamKeystore.readTeamKey(id: teamKeyID, at: keystoreRoot)
+        // Keystore file — Track-5 S2 workspace-scoped sub-folder layout.
+        let onDisk = try TeamKeystore.readTeamKey(workspaceID: orgID,
+                                                  keyID: teamKeyID,
+                                                  at: keystoreRoot)
         XCTAssertEqual(onDisk, teamKeyBytes)
 
         // Codec wired correctly
@@ -292,18 +294,22 @@ final class InviteAcceptServiceTests: XCTestCase {
                       "keystore root should be empty when decode fails before write")
     }
 
-    func testAcceptInvite_OrgAlreadyExists_RefusedBeforeCrypto() async throws {
-        // Pre-seed an org row.
-        let existingOrgID = UUID().uuidString.lowercased()
+    func testAcceptInvite_WorkspaceAlreadyJoined_Refused() async throws {
+        // Track-5 S2: under multi-workspace, "already accepted" means the
+        // *same* workspace id is already present locally with `leftAt == nil`
+        // (active membership). The codec must run first to surface the
+        // workspace id from the blob, so we can no longer assert
+        // `decodeCalls == 0` (preflight is now post-crypto).
         let existingMemberID = UUID().uuidString.lowercased()
-        try db.upsertWorkspace(Org(id: existingOrgID, name: "Existing",
+        let workspaceID = "x"
+        try db.upsertWorkspace(Org(id: workspaceID, name: "Existing",
                               createdAt: Date(timeIntervalSince1970: 1_699_000_000),
                               createdByMemberID: existingMemberID))
 
         let adminPriv = Curve25519.KeyAgreement.PrivateKey()
         let blob = makeStubBlob(adminPubkey: adminPriv.publicKey.rawRepresentation)
         let codec = RecordingAcceptCodec()
-        codec.stubPlaintext = sampleInvitePlaintext(orgID: "x", teamKeyID: "y", adminID: "z",
+        codec.stubPlaintext = sampleInvitePlaintext(orgID: workspaceID, teamKeyID: "y", adminID: "z",
                                                     teamKeyBase64: Data(repeating: 0, count: 32).base64EncodedString())
 
         let svc = makeAcceptService(codec: codec, identity: { Curve25519.KeyAgreement.PrivateKey() })
@@ -314,11 +320,60 @@ final class InviteAcceptServiceTests: XCTestCase {
             // ok
         }
 
-        // Codec must NOT have been called — preflight rejected.
-        XCTAssertEqual(codec.decodeCalls, 0)
-        // Original org row untouched.
-        let org = try XCTUnwrap(db.listWorkspaces(includeLeft: true).first)
-        XCTAssertEqual(org.id, existingOrgID)
+        // Workspace row still the originally-seeded one (no membership added).
+        let org = try XCTUnwrap(db.readWorkspace(id: workspaceID))
+        XCTAssertEqual(org.id, workspaceID)
+        XCTAssertEqual(try db.readTeamMembers(workspaceID: workspaceID).count, 0,
+                       "No team_members rows should be added on duplicate-accept refusal")
+    }
+
+    func testAcceptInvite_ExistingLeftWorkspace_Rejoins() async throws {
+        // Pre-seed a workspace that the user previously left (left_at_ms set).
+        // The new invite carries the same workspaceID — InviteAcceptService
+        // should clear left_at and insert a new self-member row, but NOT
+        // re-insert the original admin row (PK collision).
+        let workspaceID = "ws-rejoin"
+        let originalAdminID = "admin-rejoin"
+        try db.upsertWorkspace(Workspace(
+            id: workspaceID,
+            name: "RejoinedTeam",
+            createdAt: Date(timeIntervalSince1970: 1_699_000_000),
+            createdByMemberID: originalAdminID
+        ))
+        try db.insertTeamMember(TeamMember(
+            id: originalAdminID,
+            workspaceID: workspaceID,
+            role: .admin,
+            pubkeyHex: String(repeating: "0", count: 64),
+            displayName: "Admin",
+            addedAt: Date(timeIntervalSince1970: 1_699_000_000),
+            removedAt: nil
+        ))
+        try db.markWorkspaceLeft(workspaceID: workspaceID, at: Date(timeIntervalSince1970: 1_700_000_000))
+
+        let adminPriv = Curve25519.KeyAgreement.PrivateKey()
+        let blob = makeStubBlob(adminPubkey: adminPriv.publicKey.rawRepresentation)
+        let teamKeyBytes = Data(repeating: 0x55, count: 32)
+        let codec = RecordingAcceptCodec()
+        codec.stubPlaintext = sampleInvitePlaintext(
+            orgID: workspaceID,
+            teamKeyID: "rejoin-key",
+            adminID: originalAdminID,
+            teamKeyBase64: teamKeyBytes.base64EncodedString()
+        )
+
+        let svc = makeAcceptService(codec: codec, identity: { Curve25519.KeyAgreement.PrivateKey() })
+        let accepted = try await svc.acceptInvite(blob: blob, otp: "123456", displayName: "Me Again")
+        XCTAssertEqual(accepted.orgID, workspaceID)
+
+        // Workspace.leftAt is now nil (rejoined).
+        let after = try XCTUnwrap(db.readWorkspace(id: workspaceID))
+        XCTAssertNil(after.leftAt, "Rejoin should clear left_at_ms")
+
+        // Admin row preserved (no duplicate insert); self member added on top.
+        let members = try db.readTeamMembers(workspaceID: workspaceID, includeRemoved: true)
+        XCTAssertEqual(members.count, 2, "Original admin + new self member")
+        XCTAssertNotNil(members.first(where: { $0.id == originalAdminID && $0.role == .admin }))
     }
 
     func testAcceptInvite_TruncatedBlob_ThrowsInviteBlobMalformed() async throws {
