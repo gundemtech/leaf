@@ -54,6 +54,66 @@ final class MaintenanceSchedulerTests: XCTestCase {
         XCTAssertEqual(remaining, 0)
     }
 
+    // MARK: - Phase Track-4 S3 — intensity_aggregates retention
+
+    func testPerformRetentionSweepPurgesIntensityAggregates() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        // Three rows at distinct minute buckets. Cutoff at retentionDays=0 ⇒
+        // nowMs; expectation: all rows below that timestamp purged.
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        for offset in [Int64(-86_400_000), Int64(-43_200_000), Int64(-3_600_000)] {
+            try db.upsertIntensityAggregate(
+                minuteBucketMs: nowMs + offset,
+                keystrokes: 1, mouseMoves: 1, appSwitches: 0,
+                foregroundApp: "x"
+            )
+        }
+        XCTAssertEqual(try db.readIntensityAggregates(range: 0..<Int64.max).count, 3)
+
+        let scheduler = MaintenanceScheduler(
+            database: db,
+            walCheckpointIntervalSec: 999,
+            retentionSweepIntervalSec: 999,
+            retentionDays: 0,
+            chunkLimit: 5_000,
+            logger: logger
+        )
+        await scheduler.performRetentionSweep(nowMs: nowMs)
+
+        XCTAssertEqual(
+            try db.readIntensityAggregates(range: 0..<Int64.max).count, 0,
+            "retentionDays=0 must purge all aggregates with bucket < nowMs"
+        )
+    }
+
+    func testPerformRetentionSweepRespectsRetentionDays() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let dayMs = Int64(86_400_000)
+
+        // 5 days old → outside 3d retention.
+        try db.upsertIntensityAggregate(minuteBucketMs: nowMs - 5 * dayMs,
+            keystrokes: 1, mouseMoves: 1, appSwitches: 0, foregroundApp: nil)
+        // 1 day old → inside 3d retention.
+        try db.upsertIntensityAggregate(minuteBucketMs: nowMs - 1 * dayMs,
+            keystrokes: 2, mouseMoves: 2, appSwitches: 0, foregroundApp: nil)
+
+        let scheduler = MaintenanceScheduler(
+            database: db,
+            walCheckpointIntervalSec: 999,
+            retentionSweepIntervalSec: 999,
+            retentionDays: 3,
+            chunkLimit: 5_000,
+            logger: logger
+        )
+        await scheduler.performRetentionSweep(nowMs: nowMs)
+
+        let remaining = try db.readIntensityAggregates(range: 0..<Int64.max)
+        XCTAssertEqual(remaining.count, 1)
+        XCTAssertEqual(remaining[0].minuteBucketMs, nowMs - 1 * dayMs)
+    }
+
     // MARK: - performCheckpoint
 
     func testPerformCheckpointDoesNotThrow() async throws {
