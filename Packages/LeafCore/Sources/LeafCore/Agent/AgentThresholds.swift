@@ -151,6 +151,23 @@ public struct AgentThresholds: Sendable, Hashable {
     /// Default `{"us.zoom.xos":3.0}`.
     public let appleScriptPerAppTimeoutOverridesJson: String
 
+    /// Phase Track-4 S3: CGEventTapCollector minute-boundary flush + emit cadence.
+    /// Default 60s — wall-clock minute alignment for `intensity_aggregates` PK.
+    public let cgEventTapMinuteBucketSec: TimeInterval
+    /// Phase Track-4 S3: NSPasteboard.changeCount delta polling cadence.
+    /// Default 60s.
+    public let clipboardPollIntervalSec: TimeInterval
+    /// Phase Track-4 S3: CWInterface state polling cadence.
+    /// Default 60s.
+    public let wifiPollIntervalSec: TimeInterval
+    /// Phase Track-4 S3: FSEvents burst dedup window для LocalFilesWatcher
+    /// (screenshot/downloads/trash). Default 2s — mirrors S1 spaceTransitionCoalesce.
+    public let localFilesCoalesceWindowSec: TimeInterval
+    /// Phase Track-4 S3: testing override для screenshot directory. Empty =
+    /// read from `com.apple.screencapture` defaults / fallback `~/Desktop`.
+    /// Non-empty = absolute path (для test fixtures).
+    public let screenshotDirectoryOverrideKey: String
+
     public init(
         idlePollIntervalSec: TimeInterval,
         idleThresholdSec: TimeInterval,
@@ -192,7 +209,12 @@ public struct AgentThresholds: Sendable, Hashable {
         focusModePollIntervalSec: TimeInterval = 60,
         spaceTransitionCoalesceWindowSec: TimeInterval = 2,
         appleScriptDefaultTimeoutSec: Double = 1.0,
-        appleScriptPerAppTimeoutOverridesJson: String = "{\"us.zoom.xos\":3.0}"
+        appleScriptPerAppTimeoutOverridesJson: String = "{\"us.zoom.xos\":3.0}",
+        cgEventTapMinuteBucketSec: TimeInterval = 60,
+        clipboardPollIntervalSec: TimeInterval = 60,
+        wifiPollIntervalSec: TimeInterval = 60,
+        localFilesCoalesceWindowSec: TimeInterval = 2,
+        screenshotDirectoryOverrideKey: String = ""
     ) {
         self.idlePollIntervalSec = idlePollIntervalSec
         self.idleThresholdSec = idleThresholdSec
@@ -235,6 +257,11 @@ public struct AgentThresholds: Sendable, Hashable {
         self.spaceTransitionCoalesceWindowSec = spaceTransitionCoalesceWindowSec
         self.appleScriptDefaultTimeoutSec = appleScriptDefaultTimeoutSec
         self.appleScriptPerAppTimeoutOverridesJson = appleScriptPerAppTimeoutOverridesJson
+        self.cgEventTapMinuteBucketSec = cgEventTapMinuteBucketSec
+        self.clipboardPollIntervalSec = clipboardPollIntervalSec
+        self.wifiPollIntervalSec = wifiPollIntervalSec
+        self.localFilesCoalesceWindowSec = localFilesCoalesceWindowSec
+        self.screenshotDirectoryOverrideKey = screenshotDirectoryOverrideKey
     }
 
     public static let weakDefaults = AgentThresholds(
@@ -278,6 +305,11 @@ public struct AgentThresholds: Sendable, Hashable {
         focusModePollIntervalSec: 60,
         spaceTransitionCoalesceWindowSec: 2,
         appleScriptDefaultTimeoutSec: 1.0,
-        appleScriptPerAppTimeoutOverridesJson: "{\"us.zoom.xos\":3.0}"
+        appleScriptPerAppTimeoutOverridesJson: "{\"us.zoom.xos\":3.0}",
+        cgEventTapMinuteBucketSec: 60,
+        clipboardPollIntervalSec: 60,
+        wifiPollIntervalSec: 60,
+        localFilesCoalesceWindowSec: 2,
+        screenshotDirectoryOverrideKey: ""
     )
 }
