@@ -416,7 +416,14 @@ public enum ActivityFeedMapper {
         "slack_presence_state",
         "slack_dnd_state",
         "linear_assigned_workload_pulse",
-        "linear_cycle_progress"
+        "linear_cycle_progress",
+        // Track-4 S4 — high-cadence substrate metrics, not chronological events.
+        // intensity_snapshot (per-minute aggregate когда intensity ON → 60/hour),
+        // intensity_bucket_dropped (AFK debug marker), clipboard_event_count
+        // (per-tick counter). Surfaced via Derived Insights Engine (Phase 4.9).
+        "intensity_snapshot",
+        "intensity_bucket_dropped",
+        "clipboard_event_count"
     ]
 
     /// Track-4 S1+S2+S3 Layer A event_kinds with explicit feed rendering.

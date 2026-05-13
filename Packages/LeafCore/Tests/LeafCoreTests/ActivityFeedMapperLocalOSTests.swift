@@ -300,4 +300,38 @@ final class ActivityFeedMapperLocalOSTests: XCTestCase {
         // event_kind not in whitelist → nil (no signalType-routed fallback).
         XCTAssertNil(map(kind: "totally_unknown_kind"))
     }
+
+    // MARK: - Skip-list noise filter (high-cadence S3 substrate metrics)
+
+    // Skip-list tests pass a populated bundleID so the skip is exercised via
+    // `skippedKinds` membership rather than `mapAttention`'s bundleID guard.
+    // Without this, removing the kind from `skippedKinds` would still produce
+    // nil (incidental pass through guard) and silently lose the filter.
+
+    func testIntensitySnapshotSkipped() {
+        let entry = map(
+            kind: "intensity_snapshot", signalType: "attention",
+            bundleID: "com.apple.dt.Xcode",
+            extras: ["keystroke_count": "30", "mouse_move_count": "60", "foreground_app": "com.apple.dt.Xcode"]
+        )
+        XCTAssertNil(entry, "intensity_snapshot must be filtered from feed (per-minute cadence)")
+    }
+
+    func testIntensityBucketDroppedSkipped() {
+        let entry = map(
+            kind: "intensity_bucket_dropped", signalType: "attention",
+            bundleID: "com.apple.Finder",
+            extras: ["state": "locked"]
+        )
+        XCTAssertNil(entry, "intensity_bucket_dropped must be filtered (AFK debug marker)")
+    }
+
+    func testClipboardEventCountSkipped() {
+        let entry = map(
+            kind: "clipboard_event_count", signalType: "context",
+            bundleID: "com.apple.Safari",
+            extras: ["count": "5"]
+        )
+        XCTAssertNil(entry, "clipboard_event_count must be filtered (per-tick counter)")
+    }
 }
