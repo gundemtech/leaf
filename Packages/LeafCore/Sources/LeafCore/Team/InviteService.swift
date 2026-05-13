@@ -45,8 +45,14 @@ public struct InviteService: Sendable {
         self.identity = identity ?? { try IdentityService.ensureLocalIdentity(at: keystoreRoot) }
     }
 
-    /// Admin-side: build invite blob, POST to relay, return token+OTP for OOB transmission.
-    public func generateInvite(inviteePubkeyHex: String) async throws -> InviteOutbound {
+    /// Admin-side: build invite blob, POST to relay, return token+OTP for OOB
+    /// transmission. Track-5 S2: scoped to a specific `workspaceID`; resolves
+    /// the active teamKey, admin member, and keystore bytes within that
+    /// workspace's substrate. The blob carries the workspaceID in its plaintext
+    /// (legacy JSON key `org_id`, semantically the workspace id post-M019) so
+    /// the invitee knows which workspace they are joining.
+    public func generateInvite(workspaceID: String,
+                               inviteePubkeyHex: String) async throws -> InviteOutbound {
         // 1. Validate hex (64 chars, [0-9a-fA-F]).
         guard inviteePubkeyHex.count == 64,
               inviteePubkeyHex.allSatisfy({ $0.isHexDigit }) else {
@@ -54,9 +60,8 @@ public struct InviteService: Sendable {
         }
         let lowercased = inviteePubkeyHex.lowercased()
 
-        // 2-4. Read DB rows. Track-5 S2: single-workspace assumption preserved
-        // (multi-workspace plumbing lands in Tasks 3+).
-        guard let org = try database.listWorkspaces(includeLeft: true).first else {
+        // 2-4. Read DB rows scoped to workspaceID.
+        guard let org = try database.readWorkspace(id: workspaceID) else {
             throw LeafError.databaseUnavailable
         }
         let members = try database.readTeamMembers(workspaceID: org.id, includeRemoved: false)
@@ -66,7 +71,11 @@ public struct InviteService: Sendable {
         guard let activeKey = try database.readActiveTeamKey(workspaceID: org.id) else {
             throw LeafError.databaseUnavailable
         }
-        let teamKeyBytes = try TeamKeystore.readTeamKey(id: activeKey.id, at: keystoreRoot)
+        let teamKeyBytes = try TeamKeystore.readTeamKey(
+            workspaceID: org.id,
+            keyID: activeKey.id,
+            at: keystoreRoot
+        )
 
         // 5. Identity (X25519 priv).
         let priv = try identity()
@@ -114,10 +123,13 @@ public struct InviteService: Sendable {
                               inviteePubkeyHex: lowercased)
     }
 
-    /// Phase 5.5.B — admin pastes invitee Join code (formatted base32-Crockford OR legacy hex).
-    /// Decodes to 32-byte pubkey via `JoinCode.decode`, then delegates to `generateInvite(inviteePubkeyHex:)`.
-    /// Wraps `JoinCodeError` cases в LeafError для UI consumer'ов (mirror existing error model).
-    public func generateInvite(inviteeJoinCode: String) async throws -> InviteOutbound {
+    /// Phase 5.5.B — admin pastes invitee Join code (formatted base32-Crockford
+    /// OR legacy hex). Decodes to 32-byte pubkey via `JoinCode.decode`, then
+    /// delegates to `generateInvite(workspaceID:inviteePubkeyHex:)`. Wraps
+    /// `JoinCodeError` cases в `LeafError` для UI consumer'ов (mirror existing
+    /// error model). Track-5 S2: now scoped to a specific workspace.
+    public func generateInvite(workspaceID: String,
+                               inviteeJoinCode: String) async throws -> InviteOutbound {
         let pubkey: Data
         switch JoinCode.decode(inviteeJoinCode) {
         case .success(let bytes):
@@ -128,7 +140,7 @@ public struct InviteService: Sendable {
             throw LeafError.joinCodeChecksumMismatch
         }
         let hex = pubkey.map { String(format: "%02x", $0) }.joined()
-        return try await generateInvite(inviteePubkeyHex: hex)
+        return try await generateInvite(workspaceID: workspaceID, inviteePubkeyHex: hex)
     }
 
     /// Admin-side revoke: best-effort DELETE on relay (idempotent — relay returns 204).

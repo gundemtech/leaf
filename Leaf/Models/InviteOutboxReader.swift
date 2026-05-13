@@ -61,7 +61,14 @@ final class InviteOutboxReader {
             guard let self else { return }
             do {
                 let svc = try self.ensureService()
-                let outbound = try await svc.generateInvite(inviteePubkeyHex: trimmed)
+                // Track-5 S2: resolve workspace from DB. Single-workspace
+                // assumption holds until Task 10 wires ActiveWorkspaceStore
+                // through this reader.
+                let workspaceID = try self.resolveWorkspaceID()
+                let outbound = try await svc.generateInvite(
+                    workspaceID: workspaceID,
+                    inviteePubkeyHex: trimmed
+                )
                 self.persistPendingInvite(outbound)
                 self.state = .ready(outbound)
             } catch {
@@ -79,7 +86,11 @@ final class InviteOutboxReader {
             guard let self else { return }
             do {
                 let svc = try self.ensureService()
-                let outbound = try await svc.generateInvite(inviteeJoinCode: trimmed)
+                let workspaceID = try self.resolveWorkspaceID()
+                let outbound = try await svc.generateInvite(
+                    workspaceID: workspaceID,
+                    inviteeJoinCode: trimmed
+                )
                 self.persistPendingInvite(outbound)
                 self.state = .ready(outbound)
             } catch {
@@ -87,6 +98,16 @@ final class InviteOutboxReader {
                 self.state = .error(message: self.userFacingMessage(for: error))
             }
         }
+    }
+
+    /// Transitional workspace resolver — picks the first workspace until
+    /// Task 10 wires `ActiveWorkspaceStore` into this reader.
+    private func resolveWorkspaceID() throws -> String {
+        guard let db = self.database,
+              let workspace = try db.listWorkspaces(includeLeft: true).first else {
+            throw LeafError.databaseUnavailable
+        }
+        return workspace.id
     }
 
     func revokeAndDismiss() {

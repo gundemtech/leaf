@@ -121,7 +121,7 @@ final class InviteServiceTests: XCTestCase {
         try db.upsertWorkspace(org)
         try db.insertTeamMember(member)
         try db.insertTeamKey(teamKey)
-        try TeamKeystore.writeTeamKey(teamKeyBytes, id: teamKeyID, at: keystoreRoot)
+        try TeamKeystore.writeTeamKey(teamKeyBytes, workspaceID: orgID, keyID: teamKeyID, at: keystoreRoot)
         try TeamKeystore.writeX25519Private(adminPriv.rawRepresentation, at: keystoreRoot)
 
         InviteServiceMockURLProtocol.handler = nil
@@ -181,7 +181,7 @@ final class InviteServiceTests: XCTestCase {
         let svc = makeService()
         let invitee = String(repeating: "a", count: 64)
 
-        let outbound = try await svc.generateInvite(inviteePubkeyHex: invitee)
+        let outbound = try await svc.generateInvite(workspaceID: orgID, inviteePubkeyHex: invitee)
 
         XCTAssertEqual(outbound.token, "tok_happy")
         XCTAssertEqual(outbound.otp, "654321")
@@ -195,7 +195,7 @@ final class InviteServiceTests: XCTestCase {
         stub201(token: "t", expiresAtMs: 1)
         let codec = RecordingInviteBlobCodec()
         let svc = makeService(codec: codec)
-        _ = try await svc.generateInvite(inviteePubkeyHex: String(repeating: "b", count: 64))
+        _ = try await svc.generateInvite(workspaceID: orgID, inviteePubkeyHex: String(repeating: "b", count: 64))
 
         XCTAssertEqual(codec.encodeCalls.count, 1)
         let plaintext = codec.encodeCalls[0].0
@@ -210,7 +210,7 @@ final class InviteServiceTests: XCTestCase {
         stub201(token: "t", expiresAtMs: 1)
         let codec = RecordingInviteBlobCodec()
         let svc = makeService(codec: codec)
-        _ = try await svc.generateInvite(inviteePubkeyHex: String(repeating: "c", count: 64))
+        _ = try await svc.generateInvite(workspaceID: orgID, inviteePubkeyHex: String(repeating: "c", count: 64))
 
         XCTAssertEqual(codec.encodeCalls.count, 1)
         XCTAssertEqual(codec.encodeCalls[0].1, adminPriv.publicKey.rawRepresentation)
@@ -222,7 +222,7 @@ final class InviteServiceTests: XCTestCase {
         stub201(token: "t", expiresAtMs: 1)
         let svc = makeService()
         let uppercased = "AABBCCDD" + String(repeating: "E", count: 56)
-        _ = try await svc.generateInvite(inviteePubkeyHex: uppercased)
+        _ = try await svc.generateInvite(workspaceID: orgID, inviteePubkeyHex: uppercased)
 
         let body = try XCTUnwrap(InviteServiceMockURLProtocol.lastBody)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
@@ -237,7 +237,7 @@ final class InviteServiceTests: XCTestCase {
         // request value — verified at body-shape level).
         stub201(token: "t", expiresAtMs: 1_700_086_400_000)
         let svc = makeService()
-        _ = try await svc.generateInvite(inviteePubkeyHex: String(repeating: "d", count: 64))
+        _ = try await svc.generateInvite(workspaceID: orgID, inviteePubkeyHex: String(repeating: "d", count: 64))
 
         let body = try XCTUnwrap(InviteServiceMockURLProtocol.lastBody)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
@@ -251,7 +251,7 @@ final class InviteServiceTests: XCTestCase {
     func testGenerateInvite_BadHex_ThrowsInvalidPayload() async {
         let svc = makeService()
         do {
-            _ = try await svc.generateInvite(inviteePubkeyHex: "not-hex")
+            _ = try await svc.generateInvite(workspaceID: orgID, inviteePubkeyHex: "not-hex")
             XCTFail("expected throw")
         } catch LeafError.invalidPayload {
             // ok
@@ -260,7 +260,7 @@ final class InviteServiceTests: XCTestCase {
         }
 
         do {
-            _ = try await svc.generateInvite(inviteePubkeyHex: String(repeating: "z", count: 64))
+            _ = try await svc.generateInvite(workspaceID: orgID, inviteePubkeyHex: String(repeating: "z", count: 64))
             XCTFail("expected throw")
         } catch LeafError.invalidPayload {
             // ok
@@ -291,7 +291,7 @@ final class InviteServiceTests: XCTestCase {
         )
 
         do {
-            _ = try await svc.generateInvite(inviteePubkeyHex: String(repeating: "a", count: 64))
+            _ = try await svc.generateInvite(workspaceID: "missing-ws", inviteePubkeyHex: String(repeating: "a", count: 64))
             XCTFail("expected throw")
         } catch LeafError.databaseUnavailable {
             // ok
@@ -327,7 +327,7 @@ final class InviteServiceTests: XCTestCase {
         )
 
         do {
-            _ = try await svc.generateInvite(inviteePubkeyHex: String(repeating: "a", count: 64))
+            _ = try await svc.generateInvite(workspaceID: orgID, inviteePubkeyHex: String(repeating: "a", count: 64))
             XCTFail("expected throw")
         } catch LeafError.databaseUnavailable {
             // ok
@@ -343,7 +343,7 @@ final class InviteServiceTests: XCTestCase {
         kdf.error = LeafError.invalidPayload
         let svc = makeService(kdf: kdf)
         do {
-            _ = try await svc.generateInvite(inviteePubkeyHex: String(repeating: "a", count: 64))
+            _ = try await svc.generateInvite(workspaceID: orgID, inviteePubkeyHex: String(repeating: "a", count: 64))
             XCTFail("expected throw")
         } catch LeafError.invalidPayload {
             // ok
@@ -362,7 +362,7 @@ final class InviteServiceTests: XCTestCase {
         }
         let svc = makeService()
         do {
-            _ = try await svc.generateInvite(inviteePubkeyHex: String(repeating: "a", count: 64))
+            _ = try await svc.generateInvite(workspaceID: orgID, inviteePubkeyHex: String(repeating: "a", count: 64))
             XCTFail("expected throw")
         } catch let LeafError.relayUnreachable(reason) {
             XCTAssertEqual(reason, "server-error")
@@ -395,7 +395,7 @@ final class InviteServiceTests: XCTestCase {
         let pubkey = Data(repeating: 0x42, count: 32)
         let joinCode = try JoinCode.encode(pubkey: pubkey)
 
-        let outbound = try await svc.generateInvite(inviteeJoinCode: joinCode)
+        let outbound = try await svc.generateInvite(workspaceID: orgID, inviteeJoinCode: joinCode)
 
         let expectedHex = pubkey.map { String(format: "%02x", $0) }.joined()
         XCTAssertEqual(outbound.inviteePubkeyHex, expectedHex)
@@ -408,7 +408,7 @@ final class InviteServiceTests: XCTestCase {
         let pubkey = Data(repeating: 0x99, count: 32)
         let hex = pubkey.map { String(format: "%02x", $0) }.joined()
 
-        let outbound = try await svc.generateInvite(inviteeJoinCode: hex)
+        let outbound = try await svc.generateInvite(workspaceID: orgID, inviteeJoinCode: hex)
 
         XCTAssertEqual(outbound.inviteePubkeyHex, hex)
     }
@@ -417,7 +417,7 @@ final class InviteServiceTests: XCTestCase {
         stub201(token: "irrelevant", expiresAtMs: 1)
         let svc = makeService()
         do {
-            _ = try await svc.generateInvite(inviteeJoinCode: "garbage-input-not-a-code")
+            _ = try await svc.generateInvite(workspaceID: orgID, inviteeJoinCode: "garbage-input-not-a-code")
             XCTFail("expected throw")
         } catch LeafError.joinCodeMalformed {
             // expected
