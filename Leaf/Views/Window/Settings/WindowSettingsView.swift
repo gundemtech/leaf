@@ -19,6 +19,7 @@ struct WindowSettingsView: View {
                 BackgroundCollectionSection(launchAgent: launchAgent)
                 FoldersSettings(service: watchedFolders)
                 LocalAppsSettingsSection()
+                SystemObserversSettingsSection()
                 UpdatesSection(updater: updater)
                 PrivacySettingsSection()
             }
