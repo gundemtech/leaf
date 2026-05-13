@@ -490,9 +490,11 @@ Retention cleanup: Supabase cron job `retention_purge` runs daily, deletes rows 
 ### 14.1 Data model
 
 - One Mac device = N workspaces simultaneously (no limit in MVP).
-- Each workspace = independent teamKey in Keychain (`leaf_team_key_<workspace_uuid>`).
+- Each workspace = independent teamKey stored as **file under `~/Library/Application Support/Leaf/keystore/workspaces/<workspace_uuid>/team-keys/<key_id>.key`** (0o600 perms). Per-workspace isolation enforced via filesystem path scoping; cross-workspace read fails by path. M019 includes a one-time relocation from legacy `~/Library/Application Support/Leaf/keystore/team-keys/` layout for alpha.x upgrade compatibility.
 - All on-device tables (`team_events_mirror`, `direct_messages_mirror`, `share_rules`, `team_members`) have `workspace_id` FK.
 - "Active" workspace = persistent UI state, stored in `UserDefaults.active_workspace_id`.
+
+> **Amendment 2026-05-14 (S2 spec):** §14.1 teamKey storage moved from Keychain to file-based per-workspace layout. Reason: Keychain `kSecAttrAccount=leaf_team_key_<uuid>` scope is global per-bundle-id, making per-workspace isolation depend on naming discipline rather than OS-enforced boundaries; file-based path scoping is OS-enforced and trivially auditable (`find ~/Library/Application\ Support/Leaf/keystore/workspaces -type d`). Detailed rationale: `2026-05-14-track-5-S2-multiworkspace-substrate.md` §8.3. Living-doc process per §18.
 
 ### 14.2 Switcher UI
 

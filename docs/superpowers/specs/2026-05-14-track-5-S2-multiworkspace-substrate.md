@@ -33,8 +33,8 @@ S2 is **done** when locally (on author's Mac) all of the following hold:
 | **G5** | team_members correctly scoped per workspace_id | Test `DatabaseTeamMembersScopingTests` passes |
 | **G6** | TeamKeystore per-workspace isolation | Test `TeamKeystorePerWorkspaceTests` — cross-workspace read fails, isolated wipe works |
 | **G7** | ActiveWorkspaceStore default-zero backfill | Test `ActiveWorkspaceStoreTests.testDefaultBackfillsToOldestWorkspace` passes |
-| **G8** | All existing SPM tests retrofitted + green | `swift test --package-path Packages/LeafCore` exits 0 with no regressions (baseline 2012 tests; expect 2012 + ~30 new) |
-| **G9** | xcodebuild 5/5 schemes green | `xcodebuild -list` + `xcodebuild -scheme {Leaf,LeafAgent,LeafMCP,LeafCorePackageTests,LeafCorePrivatePackageTests}` all exit 0 |
+| **G8** | All existing SPM tests retrofitted + green | `swift test --package-path Packages/LeafCore` exits 0 with no regressions. Baseline 2012; Task 12 deletes 18 OrgService/OrgPersistenceIntegration tests, Tasks 1-11 add ~31 new — actual final count: **2025 pass + 1 skip**. |
+| **G9** | xcodebuild 5/5 schemes green | `xcodebuild -list` + `xcodebuild -scheme {Leaf,LeafAgent,LeafMCP,LeafCore,LeafCorePrivate}` all exit 0 |
 | **G10** | Independent code review APPROVED | superpowers:code-reviewer subagent emits APPROVED verdict (0 Critical / 0 Important) |
 | **G11** | Manual smoke — 2 workspaces created via dev harness | Dev build: create workspace "W1" via onboarding → debug menu / test seed creates workspace "W2" → `WorkspaceReader.state` reports both → `find ~/Library/Application\ Support/Leaf/keystore/workspaces -type d -maxdepth 1` shows 2 sub-directories |
 | **G12** | Contract §14.1 amendment landed | `docs/superpowers/specs/2026-05-13-track-5-collaboration-contract.md` §14.1 updated inline with file-based amendment annotation per §18 (living document) |
@@ -245,7 +245,7 @@ try db.create(
 )
 ```
 
-Note `SQLValue(_:)` is a placeholder for proper parameter binding — actual code uses `db.execute(sql: ..., arguments: [backfillValue])` to prevent SQL injection of the workspace UUID.
+Note: SQLite does **not** support parameter binding in `ALTER TABLE ADD COLUMN DEFAULT ?` clauses (DDL statements require literal defaults). M019 therefore interpolates the workspace UUID literal — safe because the UUID is generated server-side via `UUID().uuidString` (no user-controlled input crosses this boundary). For per-row backfill outside DDL, parameter binding via `db.execute(sql:..., arguments:[...])` is used as usual.
 
 ### 5.3 Schema.swift constant changes
 
