@@ -159,14 +159,14 @@ final class MigrationTests: XCTestCase {
         XCTAssertEqual(Schema.Workspaces.id, "id")
         XCTAssertEqual(Schema.Workspaces.createdByMemberID, "created_by_member_id")
         // Org typealias still resolves to Workspaces — back-compat shim.
-        XCTAssertEqual(Schema.Org.tableName, "workspaces")
+        XCTAssertEqual(Schema.Workspaces.tableName, "workspaces")
 
         XCTAssertEqual(Schema.TeamMembers.tableName, "team_members")
         XCTAssertEqual(Schema.TeamMembers.pubkeyHex, "pubkey_hex")
         XCTAssertEqual(Schema.TeamMembers.removedAtMs, "removed_at_ms")
         XCTAssertEqual(Schema.TeamMembers.indexWorkspaceActive, "team_members_workspace_active")
         // Back-compat alias for indexOrgActive still resolves to the new index name.
-        XCTAssertEqual(Schema.TeamMembers.indexOrgActive, "team_members_workspace_active")
+        XCTAssertEqual(Schema.TeamMembers.indexWorkspaceActive, "team_members_workspace_active")
 
         XCTAssertEqual(Schema.TeamKeys.tableName, "team_keys")
         XCTAssertEqual(Schema.TeamKeys.deprecatedAtMs, "deprecated_at_ms")
@@ -224,19 +224,19 @@ final class MigrationTests: XCTestCase {
         try db.readSQL { rawDB in
             let columns = try Row.fetchAll(
                 rawDB,
-                sql: "PRAGMA table_info(\(Schema.Org.tableName))"
+                sql: "PRAGMA table_info(\(Schema.Workspaces.tableName))"
             )
             let byName = Dictionary(uniqueKeysWithValues: columns.compactMap { row -> (String, Row)? in
                 guard let name = row["name"] as String? else { return nil }
                 return (name, row)
             })
 
-            let id = try XCTUnwrap(byName[Schema.Org.id])
+            let id = try XCTUnwrap(byName[Schema.Workspaces.id])
             XCTAssertEqual(id["pk"] as Int?, 1)
             XCTAssertEqual(id["notnull"] as Int?, 1)
 
             // Остальные — NOT NULL без PK.
-            for col in [Schema.Org.name, Schema.Org.createdAtMs, Schema.Org.createdByMemberID] {
+            for col in [Schema.Workspaces.name, Schema.Workspaces.createdAtMs, Schema.Workspaces.createdByMemberID] {
                 let row = try XCTUnwrap(byName[col])
                 XCTAssertEqual(row["pk"] as Int?, 0, "column \(col) не должен быть PK")
                 XCTAssertEqual(row["notnull"] as Int?, 1, "column \(col) должен быть NOT NULL")
@@ -273,7 +273,7 @@ final class MigrationTests: XCTestCase {
                 Set(byName.keys),
                 Set([
                     Schema.TeamMembers.id,
-                    Schema.TeamMembers.orgID,
+                    Schema.TeamMembers.workspaceID,
                     Schema.TeamMembers.role,
                     Schema.TeamMembers.pubkeyHex,
                     Schema.TeamMembers.displayName,
@@ -289,7 +289,7 @@ final class MigrationTests: XCTestCase {
 
             // Всё кроме removed_at_ms — NOT NULL.
             for col in [
-                Schema.TeamMembers.orgID,
+                Schema.TeamMembers.workspaceID,
                 Schema.TeamMembers.role,
                 Schema.TeamMembers.pubkeyHex,
                 Schema.TeamMembers.displayName,
@@ -318,15 +318,15 @@ final class MigrationTests: XCTestCase {
                 arguments: [Schema.TeamMembers.tableName]
             )
             XCTAssertTrue(
-                indexes.contains(Schema.TeamMembers.indexOrgActive),
-                "expected index \(Schema.TeamMembers.indexOrgActive); found \(indexes)"
+                indexes.contains(Schema.TeamMembers.indexWorkspaceActive),
+                "expected index \(Schema.TeamMembers.indexWorkspaceActive); found \(indexes)"
             )
 
             // Verify partial — sqlite_master.sql содержит WHERE clause.
             let sql = try String.fetchOne(
                 rawDB,
                 sql: "SELECT sql FROM sqlite_master WHERE type='index' AND name=?",
-                arguments: [Schema.TeamMembers.indexOrgActive]
+                arguments: [Schema.TeamMembers.indexWorkspaceActive]
             )
             let unwrapped = try XCTUnwrap(sql)
             let upper = unwrapped.uppercased()
@@ -467,7 +467,7 @@ final class MigrationTests: XCTestCase {
                 Schema.WatchedFolders.tableName,
                 Schema.Integrations.tableName,
                 Schema.PresenceState.tableName,
-                Schema.Org.tableName,
+                Schema.Workspaces.tableName,
                 Schema.TeamMembers.tableName,
                 Schema.TeamKeys.tableName,
                 Schema.RotationOutbox.tableName,
@@ -494,7 +494,7 @@ final class MigrationTests: XCTestCase {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
         try db.readSQL { rawDB in
-            for table in [Schema.Org.tableName, Schema.TeamMembers.tableName, Schema.TeamKeys.tableName] {
+            for table in [Schema.Workspaces.tableName, Schema.TeamMembers.tableName, Schema.TeamKeys.tableName] {
                 let count = try Int.fetchOne(rawDB, sql: "SELECT count(*) FROM \(table)")
                 XCTAssertEqual(count, 0, "expected \(table) пустой после fresh migration")
             }

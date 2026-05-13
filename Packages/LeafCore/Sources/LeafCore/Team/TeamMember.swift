@@ -37,29 +37,4 @@ public struct TeamMember: Sendable, Hashable {
         self.removedAt = removedAt
     }
 
-    /// Backward-compat init shim — deleted in Task 12. Forwards to primary.
-    @available(*, deprecated, message: "Use `workspaceID:` parameter (Track 5 S2)")
-    public init(
-        id: String,
-        orgID: String,
-        role: TeamMemberRole,
-        pubkeyHex: String,
-        displayName: String,
-        addedAt: Date,
-        removedAt: Date?
-    ) {
-        self.init(
-            id: id,
-            workspaceID: orgID,
-            role: role,
-            pubkeyHex: pubkeyHex,
-            displayName: displayName,
-            addedAt: addedAt,
-            removedAt: removedAt
-        )
-    }
-
-    /// Backward-compat read accessor — deleted in Task 12.
-    @available(*, deprecated, message: "Use `workspaceID` property (Track 5 S2)")
-    public var orgID: String { workspaceID }
 }

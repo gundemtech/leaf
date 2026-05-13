@@ -35,7 +35,7 @@ final class DatabaseRotationOutboxTests: XCTestCase {
         selfMemberID: String = "self-mem",
         priorKeyID: String = "key0"
     ) throws {
-        try db.upsertWorkspace(Org(
+        try db.upsertWorkspace(Workspace(
             id: orgID,
             name: "Test Org",
             createdAt: makeDate(1_700_000_000_000),

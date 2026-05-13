@@ -215,6 +215,7 @@ final class DatabaseTeamRemovalTests: XCTestCase {
         let generatedAt = Date(timeIntervalSince1970: 1_700_000_000)
         try db.insertTeamKey(TeamKey(
             id: "key-rotation-1",
+            workspaceID: "org-aaaa",
             generatedAt: generatedAt,
             deprecatedAt: nil,
             generatedByMemberID: "member-self"

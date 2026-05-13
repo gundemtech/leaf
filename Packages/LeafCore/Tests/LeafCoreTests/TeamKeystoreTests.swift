@@ -55,52 +55,30 @@ final class TeamKeystoreTests: XCTestCase {
         XCTAssertEqual(perm & 0o777, 0o600)
     }
 
-    // MARK: - TeamKey — round-trip + permissions + subdir creation
+    // MARK: - TeamKey (workspace-scoped) — round-trip + permissions
 
-    func testWriteAndReadTeamKey_RoundTrip() throws {
-        let id = UUID().uuidString.lowercased()
+    func testWriteAndReadTeamKey_Workspace_RoundTrip() throws {
+        let workspaceID = UUID().uuidString.lowercased()
+        let keyID = UUID().uuidString.lowercased()
         let bytes = Data((0..<32).map { UInt8($0 ^ 0x55) })
 
-        try TeamKeystore.writeTeamKey(bytes, id: id, at: tempRoot)
-        let readBack = try TeamKeystore.readTeamKey(id: id, at: tempRoot)
+        try TeamKeystore.writeTeamKey(bytes, workspaceID: workspaceID, keyID: keyID, at: tempRoot)
+        let readBack = try TeamKeystore.readTeamKey(workspaceID: workspaceID, keyID: keyID, at: tempRoot)
 
         XCTAssertEqual(readBack, bytes)
     }
 
-    func testWriteTeamKey_AppliesPosix0600() throws {
-        let id = UUID().uuidString.lowercased()
-        let bytes = Data(repeating: 0xBB, count: 32)
-        try TeamKeystore.writeTeamKey(bytes, id: id, at: tempRoot)
-
-        let path = tempRoot
-            .appendingPathComponent(TeamKeystore.teamKeysSubdir, isDirectory: true)
-            .appendingPathComponent("\(id).\(TeamKeystore.teamKeyExtension)")
-            .path
-        let attrs = try FileManager.default.attributesOfItem(atPath: path)
-        let perm = (attrs[.posixPermissions] as? NSNumber)?.intValue ?? -1
-
-        XCTAssertEqual(perm & 0o777, 0o600)
-    }
-
-    func testWriteTeamKey_CreatesTeamKeysSubdir() throws {
-        let id = UUID().uuidString.lowercased()
-        try TeamKeystore.writeTeamKey(Data(repeating: 0xCC, count: 32), id: id, at: tempRoot)
-
-        let subdir = tempRoot.appendingPathComponent(TeamKeystore.teamKeysSubdir, isDirectory: true)
-        var isDir: ObjCBool = false
-        let exists = FileManager.default.fileExists(atPath: subdir.path, isDirectory: &isDir)
-        XCTAssertTrue(exists)
-        XCTAssertTrue(isDir.boolValue)
-    }
-
-    // MARK: - Error paths
-
-    func testReadTeamKey_UnknownID_Throws() {
-        let id = UUID().uuidString.lowercased()
-        XCTAssertThrowsError(try TeamKeystore.readTeamKey(id: id, at: tempRoot)) { error in
+    func testReadTeamKey_Workspace_UnknownID_Throws() {
+        let workspaceID = UUID().uuidString.lowercased()
+        let keyID = UUID().uuidString.lowercased()
+        XCTAssertThrowsError(
+            try TeamKeystore.readTeamKey(workspaceID: workspaceID, keyID: keyID, at: tempRoot)
+        ) { error in
             XCTAssertTrue(isKeyFileUnavailable(error), "got: \(error)")
         }
     }
+
+    // MARK: - Error paths
 
     func testReadX25519Private_Corrupted_Throws() throws {
         // Write 31 bytes raw via Data.write (bypass keystore length validation).

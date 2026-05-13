@@ -115,7 +115,7 @@ final class InviteServiceTests: XCTestCase {
         let member = TeamMember(id: memberID, workspaceID: orgID, role: .admin,
                                 pubkeyHex: pubkeyHex, displayName: "Admin User",
                                 addedAt: fixedNow, removedAt: nil)
-        let org = Org(id: orgID, name: "Test Org", createdAt: fixedNow, createdByMemberID: memberID)
+        let org = Workspace(id: orgID, name: "Test Org", createdAt: fixedNow, createdByMemberID: memberID)
         let teamKey = TeamKey(id: teamKeyID, workspaceID: orgID, generatedAt: fixedNow, deprecatedAt: nil,
                               generatedByMemberID: memberID)
         try db.upsertWorkspace(org)
@@ -309,7 +309,7 @@ final class InviteServiceTests: XCTestCase {
         let db2 = try Database.openForWrite(at: dir.appendingPathComponent("events.sqlite"),
                                             config: .weakDefaults, encryption: .deterministicTest)
         let pub = adminPriv.publicKey.rawRepresentation.map { String(format: "%02x", $0) }.joined()
-        try db2.upsertWorkspace(Org(id: orgID, name: "X", createdAt: fixedNow, createdByMemberID: memberID))
+        try db2.upsertWorkspace(Workspace(id: orgID, name: "X", createdAt: fixedNow, createdByMemberID: memberID))
         try db2.insertTeamMember(TeamMember(id: memberID, workspaceID: orgID, role: .admin,
                                             pubkeyHex: pub, displayName: "U",
                                             addedAt: fixedNow, removedAt: nil))

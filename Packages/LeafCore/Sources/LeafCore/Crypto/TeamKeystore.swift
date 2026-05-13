@@ -56,20 +56,6 @@ public enum TeamKeystore {
         return try readExisting(at: url, expectedLength: x25519PrivateLength)
     }
 
-    // MARK: - TeamKey (32B per rotation, named by UUID)
-
-    /// `id` — `team_keys.id` (UUID lowercase canonical). Written to
-    /// `<root>/team-keys/<id>.key`.
-    public static func writeTeamKey(_ bytes: Data, id: String, at root: URL = defaultRoot()) throws {
-        let url = teamKeyURL(id: id, root: root)
-        try writeAtomic(bytes, to: url, expectedLength: teamKeyLength)
-    }
-
-    public static func readTeamKey(id: String, at root: URL = defaultRoot()) throws -> Data {
-        let url = teamKeyURL(id: id, root: root)
-        return try readExisting(at: url, expectedLength: teamKeyLength)
-    }
-
     /// Test/dev only — recursive removeItem на `<root>/`.
     public static func deleteAll(at root: URL = defaultRoot()) throws {
         if FileManager.default.fileExists(atPath: root.path) {
@@ -168,12 +154,6 @@ public enum TeamKeystore {
     }
 
     // MARK: - Internals
-
-    private static func teamKeyURL(id: String, root: URL) -> URL {
-        return root
-            .appendingPathComponent(teamKeysSubdir, isDirectory: true)
-            .appendingPathComponent("\(id).\(teamKeyExtension)", isDirectory: false)
-    }
 
     private static func workspaceDirectoryURL(workspaceID: String, root: URL) -> URL {
         root

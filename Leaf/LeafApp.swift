@@ -44,11 +44,8 @@ struct LeafApp: App {
     @State private var permissions = PermissionsService()
     @State private var updater: UpdaterController
     @State private var reader = InsightsReader()
-    @State private var orgReader = OrgReader()
-    // Track 5 S2 Task 10 — parallel multi-workspace substrate. `OrgReader` остаётся
-    // в @State до Task 12 (delete), оба reader'а живут side-by-side. Views мигрируют
-    // на `WorkspaceReader`; `ActiveWorkspaceStore` инжектится для прямого чтения
-    // active-workspace id (Sidebar switcher и т.п.).
+    // Track 5 S2 Task 12 — `OrgReader` deleted. `WorkspaceReader` +
+    // `ActiveWorkspaceStore` — sole substrate for workspace surface.
     @State private var activeWorkspaceStore: ActiveWorkspaceStore
     @State private var workspaceReader: WorkspaceReader
     @State private var inviteOutboxReader = InviteOutboxReader()
@@ -124,7 +121,6 @@ struct LeafApp: App {
                 .environment(permissions)
                 .environment(updater)
                 .environment(reader)
-                .environment(orgReader)
                 .environment(workspaceReader)            // Track 5 S2 Task 10
                 .environment(activeWorkspaceStore)       // Track 5 S2 Task 10
                 .environment(inviteOutboxReader)
@@ -177,7 +173,6 @@ struct LeafApp: App {
                 .environment(permissions)
                 .environment(updater)
                 .environment(reader)
-                .environment(orgReader)
                 .environment(workspaceReader)            // Track 5 S2 Task 10
                 .environment(activeWorkspaceStore)       // Track 5 S2 Task 10
                 .environment(inviteAcceptReader)

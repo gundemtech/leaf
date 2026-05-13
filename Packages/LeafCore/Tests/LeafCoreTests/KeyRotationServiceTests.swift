@@ -68,7 +68,7 @@ final class KeyRotationServiceTests: XCTestCase {
         let peerAPubHex = hexEncode(peerAPriv.publicKey.rawRepresentation)
         let peerBPubHex = hexEncode(peerBPriv.publicKey.rawRepresentation)
 
-        try db.upsertWorkspace(Org(id: orgID, name: "Test Org", createdAt: makeDate(1_700_000_000_000), createdByMemberID: selfMemberID))
+        try db.upsertWorkspace(Workspace(id: orgID, name: "Test Org", createdAt: makeDate(1_700_000_000_000), createdByMemberID: selfMemberID))
         try db.insertTeamMember(TeamMember(
             id: selfMemberID, workspaceID: orgID, role: .admin,
             pubkeyHex: selfPubHex, displayName: "Self",
@@ -375,7 +375,7 @@ final class KeyRotationServiceTests: XCTestCase {
         let peerPriv = Curve25519.KeyAgreement.PrivateKey()
         let peerPubHex = hexEncode(peerPriv.publicKey.rawRepresentation)
 
-        try db.upsertWorkspace(Org(id: "org1", name: "Test Org", createdAt: makeDate(1_700_000_000_000), createdByMemberID: "self-mem"))
+        try db.upsertWorkspace(Workspace(id: "org1", name: "Test Org", createdAt: makeDate(1_700_000_000_000), createdByMemberID: "self-mem"))
         try db.insertTeamMember(TeamMember(
             id: "self-mem", workspaceID: "org1", role: .admin,
             pubkeyHex: selfPubHex, displayName: "Self",

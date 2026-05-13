@@ -107,7 +107,7 @@ final class RotationFetchServiceTests: XCTestCase {
         let adminPubHex = hexEncode(adminPriv.publicKey.rawRepresentation)
         let peerPubHex = hexEncode(peerPriv.publicKey.rawRepresentation)
 
-        try db.upsertWorkspace(Org(id: orgID, name: "Test Org",
+        try db.upsertWorkspace(Workspace(id: orgID, name: "Test Org",
                              createdAt: makeDate(1_700_000_000_000),
                              createdByMemberID: "admin-mem"))
         try db.insertTeamMember(TeamMember(

@@ -30,7 +30,7 @@ final class DatabaseTeamTests: XCTestCase {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
         let createdAt = Date(timeIntervalSince1970: 1_700_000_000)
-        let org = Org(
+        let org = Workspace(
             id: "org-aaaa",
             name: "Personal",
             createdAt: createdAt,
@@ -50,7 +50,7 @@ final class DatabaseTeamTests: XCTestCase {
     func testUpsertOrgUpdatesFieldsForSameID() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
-        let initial = Org(
+        let initial = Workspace(
             id: "org-aaaa",
             name: "Personal",
             createdAt: Date(timeIntervalSince1970: 1_700_000_000),
@@ -58,7 +58,7 @@ final class DatabaseTeamTests: XCTestCase {
         )
         try db.upsertWorkspace(initial)
 
-        let renamed = Org(
+        let renamed = Workspace(
             id: "org-aaaa",
             name: "Acme Inc",
             createdAt: Date(timeIntervalSince1970: 1_700_000_000),
@@ -265,7 +265,7 @@ final class DatabaseTeamTests: XCTestCase {
     func testReaderModeWriteHelpersThrowDatabaseUnavailable() throws {
         // Сначала writer создаёт schema + один row для contention test'а:
         let writer = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
-        try writer.upsertWorkspace(Org(
+        try writer.upsertWorkspace(Workspace(
             id: "org-aaaa",
             name: "Personal",
             createdAt: Date(timeIntervalSince1970: 1_700_000_000),
@@ -274,7 +274,7 @@ final class DatabaseTeamTests: XCTestCase {
 
         let reader = try Database.openForRead(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
-        XCTAssertThrowsError(try reader.upsertWorkspace(Org(
+        XCTAssertThrowsError(try reader.upsertWorkspace(Workspace(
             id: "org-bbbb", name: "Other",
             createdAt: Date(timeIntervalSince1970: 1_700_001_000),
             createdByMemberID: "member-self"

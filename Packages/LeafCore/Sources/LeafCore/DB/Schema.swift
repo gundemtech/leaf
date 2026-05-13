@@ -83,9 +83,6 @@ public enum Schema {
         public static let leftAtMs = "left_at_ms"
     }
 
-    /// Backward-compat alias — deleted in Track 5 S2 Task 12.
-    public typealias Org = Workspaces
-
     /// Phase 5.1.A — long-term member identity + X25519 public key (contract §4, §7).
     /// PK — `id` UUID v4. `org_id` — logical FK на `org.id`.
     /// `removed_at_ms` IS NULL = active member; устанавливается в Phase 5.3
@@ -103,10 +100,6 @@ public enum Schema {
 
         /// Partial index — active members per workspace для Team UI list.
         public static let indexWorkspaceActive = "team_members_workspace_active"
-
-        // Backward-compat aliases — deleted Task 12 of Track 5 S2 refactor.
-        public static let orgID = workspaceID
-        public static let indexOrgActive = indexWorkspaceActive
     }
 
     /// Phase 5.1.A — team key rotation history (contract §7).

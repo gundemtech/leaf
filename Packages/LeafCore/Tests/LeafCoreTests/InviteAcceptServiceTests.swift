@@ -302,7 +302,7 @@ final class InviteAcceptServiceTests: XCTestCase {
         // `decodeCalls == 0` (preflight is now post-crypto).
         let existingMemberID = UUID().uuidString.lowercased()
         let workspaceID = "x"
-        try db.upsertWorkspace(Org(id: workspaceID, name: "Existing",
+        try db.upsertWorkspace(Workspace(id: workspaceID, name: "Existing",
                               createdAt: Date(timeIntervalSince1970: 1_699_000_000),
                               createdByMemberID: existingMemberID))
 

@@ -34,22 +34,4 @@ public struct TeamKey: Sendable, Hashable {
         self.generatedByMemberID = generatedByMemberID
     }
 
-    /// Backward-compat init — deleted in Task 12. Defaults workspaceID to
-    /// empty-string sentinel. Real workspace-scoped reads will not match
-    /// rows inserted via this path. Use the primary init in new code.
-    @available(*, deprecated, message: "Use `workspaceID:` parameter (Track 5 S2)")
-    public init(
-        id: String,
-        generatedAt: Date,
-        deprecatedAt: Date?,
-        generatedByMemberID: String
-    ) {
-        self.init(
-            id: id,
-            workspaceID: "",
-            generatedAt: generatedAt,
-            deprecatedAt: deprecatedAt,
-            generatedByMemberID: generatedByMemberID
-        )
-    }
 }
