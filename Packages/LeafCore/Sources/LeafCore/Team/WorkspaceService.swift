@@ -113,7 +113,26 @@ public struct WorkspaceService: Sendable {
         try database.listWorkspaces(includeLeft: includeLeft)
     }
 
-    // markLeft + rejoin land in Task 11 (OQ-T5-2 resolution).
+    // MARK: - markLeft / rejoin (OQ-T5-2 resolution)
+
+    /// Soft-marks a workspace as left. Sets `workspaces.left_at_ms = at`.
+    /// Idempotent re-call on already-left rows preserves the original
+    /// timestamp (silent no-op). Throws `LeafError.invalidPayload` if the
+    /// workspace doesn't exist. Data is preserved per OQ-T5-2 resolution;
+    /// the team_keys rows stay forever-retained for history decryption.
+    /// Hard-wipe ("Wipe workspace data") is an opt-in Settings action
+    /// deferred to S8 — separate from this soft-mark.
+    public func markLeft(workspaceID: String, at: Date) throws {
+        try database.markWorkspaceLeft(workspaceID: workspaceID, at: at)
+    }
+
+    /// Clears `workspaces.left_at_ms`. Used by `InviteAcceptService`'s
+    /// rejoin path (existing left workspace receives a fresh invite —
+    /// re-activate instead of creating a duplicate row). No-op if the
+    /// workspace is already active или missing.
+    public func rejoin(workspaceID: String) throws {
+        try database.clearWorkspaceLeftAt(workspaceID: workspaceID)
+    }
 
     /// Default `randomBytes` factory: `SecRandomCopyBytes` под the hood.
     /// Mirrors `OrgService.secureRandom`.
