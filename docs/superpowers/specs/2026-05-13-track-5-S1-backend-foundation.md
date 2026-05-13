@@ -69,7 +69,7 @@ Explicitly **not** in this sub-phase:
 │   ├── config.toml                     supabase project config (checked in)
 │   ├── migrations/                     12 SQL files (timestamp-prefixed)
 │   ├── functions/
-│   │   ├── _shared/                    helper modules (cors, jwt verify)
+│   │   ├── _shared/                    helper module (cors header constant)
 │   │   ├── apns_push/index.ts          stub Edge Function
 │   │   ├── invite_resolve/index.ts     stub
 │   │   ├── slack_post/index.ts         stub
@@ -242,13 +242,14 @@ Soon after — pubkey registration (S3 challenge-response):
 ### 7.2 S1 deliverables for auth
 
 1. **`pubkey_registry` migration** (S1 §5.1 #2) — schema
-2. **Auth Hook function in `20260513120900_rls_policies.sql`** — Postgres function `custom_access_token_hook(event jsonb) RETURNS jsonb` that reads `pubkey_registry` and emits modified JWT claims (Supabase Auth Hook signature):
+2. **Auth Hook function in `20260513120900_rls_policies.sql`** — Postgres function `custom_access_token_hook(event jsonb) RETURNS jsonb` that reads `pubkey_registry` and emits modified JWT claims. Follows the canonical Supabase Custom Access Token Hook template — `SECURITY DEFINER` (function must bypass RLS to read bridge table), pinned `search_path`, and explicit grant/revoke so only the Auth subsystem can invoke it:
 
 ```sql
-CREATE OR REPLACE FUNCTION custom_access_token_hook(event jsonb)
+CREATE OR REPLACE FUNCTION public.custom_access_token_hook(event jsonb)
 RETURNS jsonb
 LANGUAGE plpgsql
-STABLE
+SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   claims jsonb;
@@ -264,10 +265,11 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION custom_access_token_hook TO supabase_auth_admin;
+GRANT EXECUTE ON FUNCTION public.custom_access_token_hook TO supabase_auth_admin;
+REVOKE EXECUTE ON FUNCTION public.custom_access_token_hook FROM authenticated, anon, public;
 ```
 
-Hook activation (binding `custom_access_token_hook` to Supabase Auth) is a **dashboard / config setting**, not migration SQL — VPS Claude responsibility at deploy time. Documented in handoff (S1 §11).
+Hook activation (binding `custom_access_token_hook` to Supabase Auth) is a **dashboard / config setting**, not migration SQL — VPS Claude responsibility at deploy time. Documented in handoff (S1 §13).
 
 3. **NOT in S1:** `register_pubkey` Edge Function challenge-response logic — that's S3. S1 doesn't ship this stub at all (Track 5 contract §17 lists 4 Edge Functions for S1: apns_push / invite_resolve / slack_post / linear_create_issue; `register_pubkey` belongs to S3 per contract §12).
 
@@ -277,35 +279,46 @@ Hook activation (binding `custom_access_token_hook` to Supabase Auth) is a **das
 
 ### 8.1 Shared utilities — `supabase/functions/_shared/`
 
-**`cors.ts`** — standard CORS header constant for browser callers (future-proof; Mac client doesn't strictly need CORS but Edge Functions get HTTP testing easier with it):
+Only one shared module — `cors.ts` — standard CORS header constant. Auth verification is done per-function via `@supabase/supabase-js` client (canonical Supabase Edge Function pattern; no custom JWT verifier needed):
 
 ```typescript
+// supabase/functions/_shared/cors.ts
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 ```
 
-**`jwt.ts`** — helper to verify Supabase JWT in `Authorization: Bearer <token>` header. Returns `{ ok: true, claims }` or `{ ok: false, error }`. Used by all 4 functions to reject unauthenticated calls early. For S1 stubs, we verify presence + signature only; real authorization logic lands per function in S3/S4/S6.
-
 ### 8.2 Function skeletons
 
-All 4 functions share the same shape:
+All 4 functions share the same shape — canonical Supabase Edge Function template (`Deno.serve` built-in, `jsr:` imports, supabase-js for auth):
 
 ```typescript
 // supabase/functions/apns_push/index.ts
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { createClient } from "jsr:@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
-import { verifyJwt } from "../_shared/jwt.ts";
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  const auth = await verifyJwt(req);
-  if (!auth.ok) {
-    return new Response(JSON.stringify({ error: auth.error }), {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) {
+    return new Response(JSON.stringify({ error: "Missing Authorization header" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { global: { headers: { Authorization: authHeader } } }
+  );
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -319,7 +332,7 @@ serve(async (req) => {
 });
 ```
 
-Per-function `TODO` comment refers to the sub-phase that lands its real body:
+Per-function `TODO` comment points at the sub-phase landing its real body:
 
 | Function | Real-body sub-phase | TODO label |
 |---|---|---|
@@ -328,9 +341,9 @@ Per-function `TODO` comment refers to the sub-phase that lands its real body:
 | `slack_post` | S6 | `TODO(S6): POST to api.slack.com/api/chat.postMessage with sender's OAuth token` |
 | `linear_create_issue` | S6 | `TODO(S6): POST GraphQL issueCreate to api.linear.app` |
 
-### 8.3 Pinned Deno std version
+### 8.3 Dependency policy
 
-`std@0.224.0` chosen as stable LTS-equivalent at 2026-05-13. Pinning avoids future stdlib churn during early-stage development.
+No pinned Deno std import — modern Supabase Edge Functions use `Deno.serve` built-in (no http/server import needed). `jsr:@supabase/supabase-js@2` pinned to major version `2.x` (default Supabase recommendation). No other runtime deps in S1 — real bodies (APNs, Slack, Linear clients) get pulled in by their respective sub-phases.
 
 ---
 
@@ -508,7 +521,7 @@ After S1 merges into `gundemtech/leaf-relay` main, hand off to VPS session with 
 > Deploy Track 5 S1 backend. Code on `gundemtech/leaf-relay` main, subfolder `supabase/`. Spec: `~/Desktop/Leaf/leaf/docs/superpowers/specs/2026-05-13-track-5-S1-backend-foundation.md`.
 >
 > Tasks:
-> 1. Create new Supabase project (region: closest to author's location; tier: **Pro or higher required** — `pg_cron` extension not available on free tier; if budget constraint forces free tier, drop migrations 11/12 and re-implement retention/reminders as Edge Function scheduled invocations via [Supabase cron via Edge Functions](https://supabase.com/docs/guides/functions/schedule-functions))
+> 1. Create new Supabase project (region: closest to author's location). Verify `pg_cron` extension is available — enabled on all current tiers but worth confirming via Supabase Dashboard → Database → Extensions. If unavailable for the project's Postgres version, fallback: drop migrations 11/12 and re-implement schedules via [Supabase Edge Function cron](https://supabase.com/docs/guides/functions/schedule-functions).
 > 2. `cd ~/leaf-relay && supabase login && supabase link --project-ref <new-ref>`
 > 3. `supabase db push` — apply all 12 migrations to remote
 > 4. `supabase functions deploy apns_push invite_resolve slack_post linear_create_issue`
