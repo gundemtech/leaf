@@ -410,6 +410,41 @@ enum AgentMain {
             writer: writer
         )
 
+        // Phase Track-4 S3 — System observers + intensity. SystemObserversStore
+        // shares cross-process suite "tech.gundem.leaf" (LocalAppsStore pattern).
+        // InputMonitoringPermissionStore caches 24h denial backoff. CGEventTap
+        // gates on systemStateCollector.isLocked/.isSleeping.
+        let systemObserversStore = SystemObserversStore()
+        let inputMonitoringPermissionStore = InputMonitoringPermissionStore()
+        let cgEventTapCollector = CGEventTapCollector(
+            writer: writer,
+            systemStateCollector: systemStateCollector,
+            observersStore: systemObserversStore,
+            permissionStore: inputMonitoringPermissionStore,
+            database: database,
+            minuteBucketSec: agentThresholds.cgEventTapMinuteBucketSec
+        )
+        let audioRouteCollector = AudioRouteCollector(writer: writer, observersStore: systemObserversStore)
+        let micInUseCollector = MicInUseCollector(writer: writer, observersStore: systemObserversStore)
+        let displayCollector = DisplayCollector(writer: writer, observersStore: systemObserversStore)
+        let vpnCollector = VPNCollector(writer: writer, observersStore: systemObserversStore)
+        let wifiCollector = WiFiCollector(
+            writer: writer,
+            observersStore: systemObserversStore,
+            pollIntervalSec: agentThresholds.wifiPollIntervalSec
+        )
+        let clipboardCollector = ClipboardCollector(
+            writer: writer,
+            observersStore: systemObserversStore,
+            pollIntervalSec: agentThresholds.clipboardPollIntervalSec
+        )
+        let localFilesWatcher = LocalFilesWatcher(
+            writer: writer,
+            observersStore: systemObserversStore,
+            coalesceWindowSec: agentThresholds.localFilesCoalesceWindowSec,
+            screenshotDirectoryOverride: agentThresholds.screenshotDirectoryOverrideKey
+        )
+
         AgentLifetime.writer = writer
         AgentLifetime.activeAppCollector = activeAppCollector
         AgentLifetime.idleCollector = idleCollector
@@ -443,6 +478,15 @@ enum AgentMain {
         AgentLifetime.spacesCollector = spacesCollector
         // Phase Track-4 S2 — AppleScript surface.
         AgentLifetime.appleScriptCollector = appleScriptCollector
+        // Phase Track-4 S3 — System observers + intensity.
+        AgentLifetime.cgEventTapCollector = cgEventTapCollector
+        AgentLifetime.audioRouteCollector = audioRouteCollector
+        AgentLifetime.micInUseCollector = micInUseCollector
+        AgentLifetime.displayCollector = displayCollector
+        AgentLifetime.vpnCollector = vpnCollector
+        AgentLifetime.wifiCollector = wifiCollector
+        AgentLifetime.clipboardCollector = clipboardCollector
+        AgentLifetime.localFilesWatcher = localFilesWatcher
 
         // Phase 5.3.D — Key rotation orchestrator + RotationOutbox resume.
         // Drains unposted rotation_outbox rows from prior sessions on startup
@@ -567,6 +611,17 @@ enum AgentMain {
         // registry is empty (start() is a no-op); Prod registry spawns one
         // polling Task per adapter.
         Task { await appleScriptCollector.start() }
+        // Phase Track-4 S3 — start system observers + intensity. Each gates
+        // на SystemObserversStore.isEnabled(<key>); intensity additionally
+        // probes Input Monitoring TCC and silently no-ops if denied.
+        Task { await cgEventTapCollector.start() }
+        Task { await audioRouteCollector.start() }
+        Task { await micInUseCollector.start() }
+        Task { await displayCollector.start() }
+        Task { await vpnCollector.start() }
+        Task { await wifiCollector.start() }
+        Task { await clipboardCollector.start() }
+        DispatchQueue.main.async { localFilesWatcher.start() }
         Task { await rotationFetchScheduler.start() }
         Task { await detectorScheduler.start() }
 
@@ -606,6 +661,18 @@ enum AgentMain {
             // ScopesService is read-only — no stop() needed.
             if let cs = AgentLifetime.slackColdScheduler { await cs.stop() }
             if let ws = AgentLifetime.slackWarmScheduler { await ws.stop() }
+            // Phase Track-4 S3 — stop system observers + intensity before
+            // S2 AppleScript. Order: CGEventTap (heaviest, holds tap) → CoreAudio
+            // listeners → display → VPN → WiFi → clipboard polling → FSEvents
+            // wrapper. Reverse of start order.
+            if let c = AgentLifetime.cgEventTapCollector { await c.stop() }
+            if let c = AgentLifetime.audioRouteCollector { await c.stop() }
+            if let c = AgentLifetime.micInUseCollector { await c.stop() }
+            if let c = AgentLifetime.displayCollector { await c.stop() }
+            if let c = AgentLifetime.vpnCollector { await c.stop() }
+            if let c = AgentLifetime.wifiCollector { await c.stop() }
+            if let c = AgentLifetime.clipboardCollector { await c.stop() }
+            await MainActor.run { AgentLifetime.localFilesWatcher?.stop() }
             // Phase Track-4 S2 — stop AppleScript collector before S1
             // collectors. Polling tasks cancel cooperatively.
             if let a = AgentLifetime.appleScriptCollector { await a.stop() }
@@ -681,4 +748,13 @@ enum AgentLifetime {
     nonisolated(unsafe) static var spacesCollector: SpacesCollector?
     // Phase Track-4 S2 — AppleScript surface orchestrator.
     nonisolated(unsafe) static var appleScriptCollector: AppleScriptCollector?
+    // Phase Track-4 S3 — System observers + intensity.
+    nonisolated(unsafe) static var cgEventTapCollector: CGEventTapCollector?
+    nonisolated(unsafe) static var audioRouteCollector: AudioRouteCollector?
+    nonisolated(unsafe) static var micInUseCollector: MicInUseCollector?
+    nonisolated(unsafe) static var displayCollector: DisplayCollector?
+    nonisolated(unsafe) static var vpnCollector: VPNCollector?
+    nonisolated(unsafe) static var wifiCollector: WiFiCollector?
+    nonisolated(unsafe) static var clipboardCollector: ClipboardCollector?
+    nonisolated(unsafe) static var localFilesWatcher: LocalFilesWatcher?
 }
