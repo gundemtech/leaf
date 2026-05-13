@@ -123,12 +123,13 @@ final class IntensityBucketAccumulatorTests: XCTestCase {
             foregroundApp: "com.apple.dt.Xcode", droppedReason: nil
         )
         let payload = snap.toRawEventPayload()
-        // Whitelist enforcement: 5 keys exactly.
-        XCTAssertEqual(payload["event_kind"] as? String, "intensity_snapshot")
-        XCTAssertEqual(payload[Schema.EventPayloadKeys.keystrokeCount] as? Int, 5)
-        XCTAssertEqual(payload[Schema.EventPayloadKeys.mouseMoveCount] as? Int, 10)
-        XCTAssertEqual(payload[Schema.EventPayloadKeys.appSwitchCount] as? Int, 1)
-        XCTAssertEqual(payload[Schema.EventPayloadKeys.foregroundApp] as? String, "com.apple.dt.Xcode")
+        // Whitelist enforcement: 5 keys exactly. Counts stringified
+        // matching RawEvent.payload [String: String] type.
+        XCTAssertEqual(payload["event_kind"], "intensity_snapshot")
+        XCTAssertEqual(payload[Schema.EventPayloadKeys.keystrokeCount], "5")
+        XCTAssertEqual(payload[Schema.EventPayloadKeys.mouseMoveCount], "10")
+        XCTAssertEqual(payload[Schema.EventPayloadKeys.appSwitchCount], "1")
+        XCTAssertEqual(payload[Schema.EventPayloadKeys.foregroundApp], "com.apple.dt.Xcode")
         XCTAssertEqual(payload.count, 5, "active payload must be exactly 5 keys (won't-list fence)")
     }
 
@@ -138,8 +139,8 @@ final class IntensityBucketAccumulatorTests: XCTestCase {
             foregroundApp: nil, droppedReason: .locked
         )
         let payload = snap.toRawEventPayload()
-        XCTAssertEqual(payload["event_kind"] as? String, "intensity_bucket_dropped")
-        XCTAssertEqual(payload["state"] as? String, "locked")
+        XCTAssertEqual(payload["event_kind"], "intensity_bucket_dropped")
+        XCTAssertEqual(payload["state"], "locked")
         XCTAssertEqual(payload.count, 2, "dropped payload must be exactly 2 keys")
     }
 }

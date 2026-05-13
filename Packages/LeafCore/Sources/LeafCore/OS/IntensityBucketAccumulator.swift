@@ -40,8 +40,10 @@ public struct IntensityBucketSnapshot: Sendable, Equatable {
     /// RawEvent payload representation. Active bucket → 5 keys
     /// (event_kind / keystroke_count / mouse_move_count / app_switch_count /
     /// foreground_app). Dropped bucket → 2 keys (event_kind / state).
-    /// Whitelist enforced by `CGEventTapNoContentLeakageTests`.
-    public func toRawEventPayload() -> [String: Any] {
+    /// `[String: String]` matches `RawEvent.payload` type — counts are
+    /// stringified at boundary. Whitelist enforced by
+    /// `CGEventTapNoContentLeakageTests`.
+    public func toRawEventPayload() -> [String: String] {
         if let dropped = droppedReason {
             return [
                 "event_kind": "intensity_bucket_dropped",
@@ -50,9 +52,9 @@ public struct IntensityBucketSnapshot: Sendable, Equatable {
         }
         return [
             "event_kind": "intensity_snapshot",
-            Schema.EventPayloadKeys.keystrokeCount: Int(keystrokes),
-            Schema.EventPayloadKeys.mouseMoveCount: Int(mouseMoves),
-            Schema.EventPayloadKeys.appSwitchCount: Int(appSwitches),
+            Schema.EventPayloadKeys.keystrokeCount: String(keystrokes),
+            Schema.EventPayloadKeys.mouseMoveCount: String(mouseMoves),
+            Schema.EventPayloadKeys.appSwitchCount: String(appSwitches),
             Schema.EventPayloadKeys.foregroundApp: foregroundApp ?? ""
         ]
     }
