@@ -217,7 +217,7 @@ ALTER TABLE invites ENABLE ROW LEVEL SECURITY;
 | `direct_messages` | sender/recipient scoped (§6.2) |
 | `invites` | service_role only (§6.4) |
 | `apns_tokens` | self-scoped (`pubkey = auth.jwt() ->> 'pubkey'`) |
-| `cross_post_log` | workspace member scoped via `message_id → direct_messages` join |
+| `cross_post_log` | sender/recipient-scoped via `message_id → direct_messages` join (same visibility as the underlying DM) |
 | `pubkey_registry` | self-scoped (§6.3) |
 
 ---
@@ -547,7 +547,7 @@ S1 **does not gate** subsequent sub-phases — once VPS deploy is live, S2 / S3 
 
 ## 15. Implementation plan
 
-Detailed atomic-per-commit step-by-step plan lives in `.claude/plans/track-5-S1-backend-foundation.md`, written next via `superpowers:writing-plans`. Plan covers:
+Detailed atomic-per-commit step-by-step plan lives in [`docs/superpowers/plans/2026-05-13-track-5-S1-backend-foundation.md`](../plans/2026-05-13-track-5-S1-backend-foundation.md), written next via `superpowers:writing-plans`. Plan covers:
 
 - Sequential ordering of migrations / RLS / Edge Functions / tests
 - Per-step acceptance check (per `superpowers:test-driven-development` discipline)
