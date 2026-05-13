@@ -121,10 +121,14 @@ public struct RotationFetchService: Sendable {
         guard let priorKeyUUID = uuidFromBytes(header.priorKeyID) else { return false }
         let priorKeyID = priorKeyUUID.uuidString.lowercased()
 
-        // 2. Read prior teamKey from keystore.
+        // 2. Read prior teamKey from keystore (workspace-scoped path, Track-5 S2).
         let priorTeamKeyBytes: Data
         do {
-            priorTeamKeyBytes = try TeamKeystore.readTeamKey(id: priorKeyID, at: keystoreRoot)
+            priorTeamKeyBytes = try TeamKeystore.readTeamKey(
+                workspaceID: orgID,
+                keyID: priorKeyID,
+                at: keystoreRoot
+            )
         } catch {
             return false
         }
@@ -209,9 +213,15 @@ public struct RotationFetchService: Sendable {
         guard let newTeamKeyBytes = Data(base64Encoded: plaintext.newTeamKeyBase64),
               newTeamKeyBytes.count == 32 else { return false }
 
-        // 5. Keystore-first: write newTeamKey bytes to disk (orphan file < orphan rows).
+        // 5. Keystore-first: write newTeamKey bytes to disk (orphan file <
+        //    orphan rows). Track-5 S2: workspace-scoped sub-folder path.
         do {
-            try TeamKeystore.writeTeamKey(newTeamKeyBytes, id: newKeyID, at: keystoreRoot)
+            try TeamKeystore.writeTeamKey(
+                newTeamKeyBytes,
+                workspaceID: orgID,
+                keyID: newKeyID,
+                at: keystoreRoot
+            )
         } catch {
             return false
         }

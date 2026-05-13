@@ -62,6 +62,7 @@ final class DatabaseRotationOutboxTests: XCTestCase {
     private func sampleOutboxRow(
         peer: String = String(repeating: "bb", count: 32),
         newKeyID: String = "key1",
+        workspaceID: String = "org1",
         priorKeyID: String = "key0",
         kind: RotationKind = .rotation,
         peerMemberID: String = "peer-mem",
@@ -71,6 +72,7 @@ final class DatabaseRotationOutboxTests: XCTestCase {
         RotationOutboxRow(
             peerPubkeyHex: peer,
             newKeyID: newKeyID,
+            workspaceID: workspaceID,
             priorKeyID: priorKeyID,
             kind: kind,
             peerMemberID: peerMemberID,

@@ -62,12 +62,13 @@ public struct KeyRotationService: Sendable {
 
     // MARK: - Public API
 
-    /// Removes a team member + rotates teamKey. Returns outcome with posted/pending
-    /// counts. Pending POSTs (network/relay errors) drain on next
-    /// `resumePendingPosts()`. Continue-on-error per peer — single peer failure
-    /// does not block others.
-    public func removeMember(memberID: String) async throws -> RotationOutcome {
-        let prepared = try performRotation(removingMember: memberID)
+    /// Removes a team member + rotates teamKey for a specific workspace.
+    /// Returns outcome with posted/pending counts. Pending POSTs (network /
+    /// relay errors) drain on next `resumePendingPosts()`. Continue-on-error
+    /// per peer — single peer failure does not block others.
+    /// Track-5 S2: `workspaceID:` is now an explicit parameter (M019).
+    public func removeMember(workspaceID: String, memberID: String) async throws -> RotationOutcome {
+        let prepared = try performRotation(workspaceID: workspaceID, removingMember: memberID)
         return await iterateOutboxRows(
             prepared.outboxRows,
             newKeyID: prepared.newKeyID,
@@ -136,10 +137,10 @@ public struct KeyRotationService: Sendable {
     /// Phase 1-6 of `removeMember`: preflight + compose blobs + keystore-first
     /// + atomic DB commit. Throws on any precondition violation; rollback
     /// automatic. Caller does POST iteration on returned `outboxRows`.
-    func performRotation(removingMember: String?) throws -> PreparedRotation {
-        // 1. Preflight — read-only checks. Track-5 S2: single-workspace
-        // assumption preserved (Tasks 3+ thread WorkspaceService).
-        guard let org = try database.listWorkspaces(includeLeft: true).first else {
+    func performRotation(workspaceID: String, removingMember: String?) throws -> PreparedRotation {
+        // 1. Preflight — read-only checks. Track-5 S2: workspaceID is an
+        // explicit parameter; rotation is scoped to that workspace.
+        guard let org = try database.readWorkspace(id: workspaceID) else {
             throw LeafError.invalidPayload
         }
         let selfMemberID = org.createdByMemberID
@@ -163,8 +164,13 @@ public struct KeyRotationService: Sendable {
             removedMember = m
         }
 
-        // 2. Read prior teamKey from keystore (for tombstone wrap)
-        let priorTeamKeyBytes = try TeamKeystore.readTeamKey(id: priorKeyID, at: keystoreRoot)
+        // 2. Read prior teamKey from keystore (for tombstone wrap).
+        // Track-5 S2: workspace-scoped path.
+        let priorTeamKeyBytes = try TeamKeystore.readTeamKey(
+            workspaceID: org.id,
+            keyID: priorKeyID,
+            at: keystoreRoot
+        )
 
         // 3. Generate new teamKey + IDs
         let newKeyID = randomUUID()
@@ -207,6 +213,7 @@ public struct KeyRotationService: Sendable {
                 outboxRows.append(RotationOutboxRow(
                     peerPubkeyHex: member.pubkeyHex,
                     newKeyID: priorKeyID,
+                    workspaceID: org.id,
                     priorKeyID: priorKeyID,
                     kind: .tombstone,
                     peerMemberID: member.id,
@@ -243,6 +250,7 @@ public struct KeyRotationService: Sendable {
                 outboxRows.append(RotationOutboxRow(
                     peerPubkeyHex: member.pubkeyHex,
                     newKeyID: newKeyID,
+                    workspaceID: org.id,
                     priorKeyID: priorKeyID,
                     kind: .rotation,
                     peerMemberID: member.id,
@@ -255,7 +263,13 @@ public struct KeyRotationService: Sendable {
         }
 
         // 5. Keystore-first (orphan file < orphan rows per 5.1.D contract).
-        try TeamKeystore.writeTeamKey(newTeamKeyBytes, id: newKeyID, at: keystoreRoot)
+        //    Track-5 S2: workspace-scoped path.
+        try TeamKeystore.writeTeamKey(
+            newTeamKeyBytes,
+            workspaceID: org.id,
+            keyID: newKeyID,
+            at: keystoreRoot
+        )
 
         // 6. Atomic DB tx
         let newTeamKey = TeamKey(

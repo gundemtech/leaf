@@ -134,12 +134,8 @@ final class RotationFetchServiceTests: XCTestCase {
         ))
 
         let priorTeamKey = Data(repeating: 0xFF, count: 32)
-        try FileManager.default.createDirectory(
-            at: keystoreRoot.appendingPathComponent(TeamKeystore.teamKeysSubdir, isDirectory: true),
-            withIntermediateDirectories: true
-        )
         try TeamKeystore.writeX25519Private(selfPriv.rawRepresentation, at: keystoreRoot)
-        try TeamKeystore.writeTeamKey(priorTeamKey, id: priorKeyID, at: keystoreRoot)
+        try TeamKeystore.writeTeamKey(priorTeamKey, workspaceID: orgID, keyID: priorKeyID, at: keystoreRoot)
 
         return (selfPriv, adminPriv, peerPriv, priorTeamKey)
     }
@@ -315,7 +311,10 @@ final class RotationFetchServiceTests: XCTestCase {
         )
         // Delete keystore prior teamKey file (simulate missing/corrupted).
         try FileManager.default.removeItem(
-            at: keystoreRoot.appendingPathComponent(TeamKeystore.teamKeysSubdir, isDirectory: true)
+            at: keystoreRoot
+                .appendingPathComponent("workspaces", isDirectory: true)
+                .appendingPathComponent("org1", isDirectory: true)
+                .appendingPathComponent(TeamKeystore.teamKeysSubdir, isDirectory: true)
                 .appendingPathComponent("\(priorKeyID).key", isDirectory: false)
         )
 
@@ -416,7 +415,7 @@ final class RotationFetchServiceTests: XCTestCase {
         let prior = try db.readTeamKey(byID: priorKeyID)
         XCTAssertNotNil(prior?.deprecatedAt)
 
-        let storedNew = try TeamKeystore.readTeamKey(id: newKeyID, at: keystoreRoot)
+        let storedNew = try TeamKeystore.readTeamKey(workspaceID: "org1", keyID: newKeyID, at: keystoreRoot)
         XCTAssertEqual(storedNew, newTeamKey)
     }
 

@@ -1099,11 +1099,13 @@ public final class Database: @unchecked Sendable {
             }
 
             // Step 4: INSERT N rotation_outbox rows. Duplicate composite PK throws.
+            // Track-5 S2: persists workspace_id from the row (M019 column).
             for row in outboxRows {
                 try db.execute(sql: """
                     INSERT INTO \(Schema.RotationOutbox.tableName) (
                         \(Schema.RotationOutbox.peerPubkeyHex),
                         \(Schema.RotationOutbox.newKeyID),
+                        \(Schema.RotationOutbox.workspaceID),
                         \(Schema.RotationOutbox.priorKeyID),
                         \(Schema.RotationOutbox.kind),
                         \(Schema.RotationOutbox.peerMemberID),
@@ -1111,11 +1113,12 @@ public final class Database: @unchecked Sendable {
                         \(Schema.RotationOutbox.expiresAtMs),
                         \(Schema.RotationOutbox.createdAtMs),
                         \(Schema.RotationOutbox.postedAtMs)
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     arguments: [
                         row.peerPubkeyHex,
                         row.newKeyID,
+                        row.workspaceID,
                         row.priorKeyID,
                         row.kind.rawValue,
                         row.peerMemberID,
@@ -1165,6 +1168,7 @@ public final class Database: @unchecked Sendable {
                 SELECT
                     \(Schema.RotationOutbox.peerPubkeyHex),
                     \(Schema.RotationOutbox.newKeyID),
+                    \(Schema.RotationOutbox.workspaceID),
                     \(Schema.RotationOutbox.priorKeyID),
                     \(Schema.RotationOutbox.kind),
                     \(Schema.RotationOutbox.peerMemberID),
@@ -1184,6 +1188,7 @@ public final class Database: @unchecked Sendable {
     private static func mapRotationOutboxRow(_ row: Row) -> RotationOutboxRow? {
         guard let peer: String = row[Schema.RotationOutbox.peerPubkeyHex],
               let newID: String = row[Schema.RotationOutbox.newKeyID],
+              let workspaceID: String = row[Schema.RotationOutbox.workspaceID],
               let priorID: String = row[Schema.RotationOutbox.priorKeyID],
               let kindRaw: String = row[Schema.RotationOutbox.kind],
               let kind = RotationKind(rawValue: kindRaw),
@@ -1197,6 +1202,7 @@ public final class Database: @unchecked Sendable {
         return RotationOutboxRow(
             peerPubkeyHex: peer,
             newKeyID: newID,
+            workspaceID: workspaceID,
             priorKeyID: priorID,
             kind: kind,
             peerMemberID: memberID,

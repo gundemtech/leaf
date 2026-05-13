@@ -93,11 +93,12 @@ final class KeyRotationServiceTests: XCTestCase {
         ))
 
         let priorTeamKey = Data(repeating: 0xFF, count: 32)
-        try FileManager.default.createDirectory(
-            at: keystoreRoot.appendingPathComponent(TeamKeystore.teamKeysSubdir, isDirectory: true),
-            withIntermediateDirectories: true
+        try TeamKeystore.writeTeamKey(
+            priorTeamKey,
+            workspaceID: orgID,
+            keyID: priorKeyID,
+            at: keystoreRoot
         )
-        try TeamKeystore.writeTeamKey(priorTeamKey, id: priorKeyID, at: keystoreRoot)
 
         return (adminPriv, peerAPriv, peerBPriv, priorTeamKey)
     }
@@ -157,7 +158,7 @@ final class KeyRotationServiceTests: XCTestCase {
         let codec = RecordingRotationBlobCodec()
         let svc = makeService(adminPriv: pubs.adminPriv, kdf: kdf, codec: codec)
 
-        let outcome = try await svc.removeMember(memberID: "peer-b")
+        let outcome = try await svc.removeMember(workspaceID: "org1", memberID: "peer-b")
 
         XCTAssertEqual(outcome.totalCount, 2)
         XCTAssertEqual(outcome.postedCount, 2)
@@ -191,7 +192,7 @@ final class KeyRotationServiceTests: XCTestCase {
         }
         let svc = makeService(adminPriv: pubs.adminPriv)
 
-        let outcome = try await svc.removeMember(memberID: "peer-b")
+        let outcome = try await svc.removeMember(workspaceID: "org1", memberID: "peer-b")
 
         XCTAssertEqual(outcome.totalCount, 2)
         XCTAssertEqual(outcome.postedCount, 1)
@@ -221,7 +222,7 @@ final class KeyRotationServiceTests: XCTestCase {
             return (resp, Data())
         }
         let svc = makeService(adminPriv: pubs.adminPriv)
-        _ = try await svc.removeMember(memberID: "peer-b")
+        _ = try await svc.removeMember(workspaceID: "org1", memberID: "peer-b")
         XCTAssertEqual(try db.readUnpostedRotationOutboxRows().count, 2)
 
         // Phase 2: resume with success relay
@@ -243,7 +244,7 @@ final class KeyRotationServiceTests: XCTestCase {
             return (resp, Data())
         }
         let svc = makeService(adminPriv: pubs.adminPriv)
-        _ = try await svc.removeMember(memberID: "peer-b")
+        _ = try await svc.removeMember(workspaceID: "org1", memberID: "peer-b")
 
         // Phase 2: resume with one success / one fail
         let counter = AtomicCounter()
@@ -273,7 +274,7 @@ final class KeyRotationServiceTests: XCTestCase {
         }
         let svc = makeService(adminPriv: pubs.adminPriv)
 
-        let outcome = try await svc.removeMember(memberID: "peer-b")
+        let outcome = try await svc.removeMember(workspaceID: "org1", memberID: "peer-b")
 
         XCTAssertEqual(outcome.totalCount, 2)
         XCTAssertEqual(outcome.postedCount, 0)
@@ -293,7 +294,7 @@ final class KeyRotationServiceTests: XCTestCase {
         let codec = RecordingRotationBlobCodec()
         let svc = makeService(adminPriv: pubs.adminPriv, codec: codec)
 
-        _ = try await svc.removeMember(memberID: "peer-b")
+        _ = try await svc.removeMember(workspaceID: "org1", memberID: "peer-b")
 
         XCTAssertEqual(codec.encodedPlaintexts.count, 2)
 
@@ -314,7 +315,7 @@ final class KeyRotationServiceTests: XCTestCase {
         let svc = makeService(adminPriv: pubs.adminPriv)
 
         do {
-            _ = try await svc.removeMember(memberID: "self-mem")
+            _ = try await svc.removeMember(workspaceID: "org1", memberID: "self-mem")
             XCTFail("Expected throw")
         } catch let err as LeafError {
             if case .cannotRemoveSelfFromTeam = err {} else {
@@ -328,7 +329,7 @@ final class KeyRotationServiceTests: XCTestCase {
         let svc = makeService(adminPriv: pubs.adminPriv)
 
         do {
-            _ = try await svc.removeMember(memberID: "ghost-mem")
+            _ = try await svc.removeMember(workspaceID: "org1", memberID: "ghost-mem")
             XCTFail("Expected throw")
         } catch let err as LeafError {
             if case .invalidPayload = err {} else {
@@ -343,7 +344,7 @@ final class KeyRotationServiceTests: XCTestCase {
         let svc = makeService(adminPriv: pubs.adminPriv)
 
         do {
-            _ = try await svc.removeMember(memberID: "peer-b")
+            _ = try await svc.removeMember(workspaceID: "org1", memberID: "peer-b")
             XCTFail("Expected throw")
         } catch let err as LeafError {
             if case .invalidPayload = err {} else {
@@ -358,7 +359,7 @@ final class KeyRotationServiceTests: XCTestCase {
         let svc = makeService(adminPriv: adminPriv)
 
         do {
-            _ = try await svc.removeMember(memberID: "any-id")
+            _ = try await svc.removeMember(workspaceID: "org1", memberID: "any-id")
             XCTFail("Expected throw")
         } catch let err as LeafError {
             if case .invalidPayload = err {} else {
@@ -388,7 +389,7 @@ final class KeyRotationServiceTests: XCTestCase {
         let svc = makeService(adminPriv: adminPriv)
 
         do {
-            _ = try await svc.removeMember(memberID: "peer-b")
+            _ = try await svc.removeMember(workspaceID: "org1", memberID: "peer-b")
             XCTFail("Expected throw")
         } catch let err as LeafError {
             if case .invalidPayload = err {} else {

@@ -61,13 +61,27 @@ final class MemberRemovalReader {
             guard let self else { return }
             do {
                 let svc = try self.ensureService()
-                let outcome = try await svc.removeMember(memberID: memberID)
+                // Track-5 S2: resolve workspace from DB. Single-workspace
+                // assumption holds until Task 10 wires ActiveWorkspaceStore
+                // through this reader.
+                let workspaceID = try self.resolveWorkspaceID()
+                let outcome = try await svc.removeMember(workspaceID: workspaceID, memberID: memberID)
                 self.state = .success(outcome: outcome, displayName: displayName)
             } catch {
                 self.logger.error("removeMember failed: \(String(describing: error), privacy: .public)")
                 self.state = .error(message: self.userFacingMessage(for: error))
             }
         }
+    }
+
+    /// Transitional workspace resolver — picks the first workspace until
+    /// Task 10 wires `ActiveWorkspaceStore` into this reader.
+    private func resolveWorkspaceID() throws -> String {
+        guard let db = self.database,
+              let workspace = try db.listWorkspaces(includeLeft: true).first else {
+            throw LeafError.databaseUnavailable
+        }
+        return workspace.id
     }
 
     func dismiss() {

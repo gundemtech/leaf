@@ -7,6 +7,8 @@ import Foundation
 public struct RotationOutboxRow: Sendable, Hashable {
     public let peerPubkeyHex: String
     public let newKeyID: String
+    /// Track-5 S2 — workspace this rotation belongs to (M019 column).
+    public let workspaceID: String
     public let priorKeyID: String
     public let kind: RotationKind
     public let peerMemberID: String
@@ -18,6 +20,7 @@ public struct RotationOutboxRow: Sendable, Hashable {
     public init(
         peerPubkeyHex: String,
         newKeyID: String,
+        workspaceID: String,
         priorKeyID: String,
         kind: RotationKind,
         peerMemberID: String,
@@ -28,6 +31,7 @@ public struct RotationOutboxRow: Sendable, Hashable {
     ) {
         self.peerPubkeyHex = peerPubkeyHex
         self.newKeyID = newKeyID
+        self.workspaceID = workspaceID
         self.priorKeyID = priorKeyID
         self.kind = kind
         self.peerMemberID = peerMemberID

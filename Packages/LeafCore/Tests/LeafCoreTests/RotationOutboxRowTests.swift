@@ -8,6 +8,7 @@ final class RotationOutboxRowTests: XCTestCase {
         let row1 = RotationOutboxRow(
             peerPubkeyHex: String(repeating: "aa", count: 32),
             newKeyID: "00000000-0000-0000-0000-000000000001",
+            workspaceID: "ws-1",
             priorKeyID: "00000000-0000-0000-0000-000000000000",
             kind: .rotation,
             peerMemberID: "11111111-1111-1111-1111-111111111111",
@@ -23,12 +24,12 @@ final class RotationOutboxRowTests: XCTestCase {
 
     func testPostedNilVsNonNilDistinguish() {
         let unposted = RotationOutboxRow(
-            peerPubkeyHex: String(repeating: "aa", count: 32), newKeyID: "k1", priorKeyID: "k0",
+            peerPubkeyHex: String(repeating: "aa", count: 32), newKeyID: "k1", workspaceID: "ws-1", priorKeyID: "k0",
             kind: .rotation, peerMemberID: "m1", blob: Data(),
             expiresAtMs: 0, createdAtMs: 0, postedAtMs: nil
         )
         let posted = RotationOutboxRow(
-            peerPubkeyHex: String(repeating: "aa", count: 32), newKeyID: "k1", priorKeyID: "k0",
+            peerPubkeyHex: String(repeating: "aa", count: 32), newKeyID: "k1", workspaceID: "ws-1", priorKeyID: "k0",
             kind: .rotation, peerMemberID: "m1", blob: Data(),
             expiresAtMs: 0, createdAtMs: 0, postedAtMs: 1
         )
@@ -37,7 +38,7 @@ final class RotationOutboxRowTests: XCTestCase {
 
     func testTombstoneKindPreserved() {
         let row = RotationOutboxRow(
-            peerPubkeyHex: String(repeating: "aa", count: 32), newKeyID: "k0", priorKeyID: "k0",
+            peerPubkeyHex: String(repeating: "aa", count: 32), newKeyID: "k0", workspaceID: "ws-1", priorKeyID: "k0",
             kind: .tombstone, peerMemberID: "m1", blob: Data(),
             expiresAtMs: 0, createdAtMs: 0, postedAtMs: nil
         )
