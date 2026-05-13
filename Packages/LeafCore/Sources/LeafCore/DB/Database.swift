@@ -53,6 +53,7 @@ public final class Database: @unchecked Sendable {
         migrator.registerMigration015ProviderSnapshots()
         migrator.registerMigration016NormalizeGitHubEventKinds()
         migrator.registerMigration017NormalizeSlackEventKinds()
+        migrator.registerMigration018IntensityAggregates()
         try migrator.migrate(pool)
 
         return Database(pool: pool, config: config, mode: .writer)
@@ -217,6 +218,45 @@ public final class Database: @unchecked Sendable {
     /// Схема таблиц в whitepaper, конкретные query — в moat.
     public func readSQL<T>(_ block: (GRDB.Database) throws -> T) throws -> T {
         try pool.read(block)
+    }
+
+    // MARK: - Phase Track-4 S3 — intensity_aggregates
+
+    /// UPSERT минутного bucket'а counter-only intensity. Идемпотентно по PK
+    /// `minute_bucket_ms` — re-flush на agent restart перезаписывает row.
+    public func upsertIntensityAggregate(
+        minuteBucketMs: Int64,
+        keystrokes: Int,
+        mouseMoves: Int,
+        appSwitches: Int,
+        foregroundApp: String?
+    ) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try IntensityAggregatesStore.upsert(
+                minuteBucketMs: minuteBucketMs,
+                keystrokes: keystrokes,
+                mouseMoves: mouseMoves,
+                appSwitches: appSwitches,
+                foregroundApp: foregroundApp,
+                in: db
+            )
+        }
+    }
+
+    public func readIntensityAggregates(range: Range<Int64>) throws -> [IntensityAggregateRecord] {
+        try pool.read { db in
+            try IntensityAggregatesStore.read(range: range, in: db)
+        }
+    }
+
+    /// Retention sweep — вызывается `MaintenanceScheduler` с тем же cutoff,
+    /// что и `deleteEventsOlderThan`.
+    public func purgeIntensityAggregates(before cutoffMs: Int64) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try IntensityAggregatesStore.purge(before: cutoffMs, in: db)
+        }
     }
 
     /// Internal-intent bridge на write transaction для unit-тестов

@@ -297,6 +297,21 @@ public enum Schema {
         public static let browser = "browser"
     }
 
+    /// Phase Track-4 S3 — per-minute intensity aggregates (CGEventTap counter-only).
+    /// PK — `minute_bucket_ms` (minute-truncated wall clock). UPSERT replaces existing
+    /// bucket so re-emission на restart safe. Counter fields counter-only —
+    /// NEVER include keycode/characters/modifierFlags per ADR-010 Won't-list.
+    public enum IntensityAggregates {
+        public static let tableName = "intensity_aggregates"
+        public static let minuteBucketMs = "minute_bucket_ms"
+        public static let keystrokes = "keystrokes"
+        public static let mouseMoves = "mouse_moves"
+        public static let appSwitches = "app_switches"
+        public static let foregroundApp = "foreground_app"
+
+        public static let indexBucket = "idx_intensity_aggregates_bucket"
+    }
+
     /// Phase Track-1 D2 — FTS5 contentless virtual table over event bodies
     /// (commit_msg / linear_desc / linear_comment / slack_msg / slack_thread_*
     /// / gh_pr / gh_issue_comment / gh_pr_review_comment).
