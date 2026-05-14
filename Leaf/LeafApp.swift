@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import UserNotifications
 import os
 import LeafCore
 #if LEAF_PROD
@@ -117,13 +118,19 @@ struct LeafApp: App {
         _inviteAcceptReader = State(initialValue: InviteAcceptReader(supabase: supabase))
 
         // Track 5 / S4 — direct-messages substrate readers.
-        _directMessageSendReader = State(initialValue: DirectMessageSendReader(
-            supabase: supabase, activeWorkspaceStore: active
-        ))
-        _directMessageInboxReader = State(initialValue: DirectMessageInboxReader(
-            supabase: supabase, activeWorkspaceStore: active
-        ))
-        _apnsRegistrationReader = State(initialValue: APNsRegistrationReader(supabase: supabase))
+        let sendReader = DirectMessageSendReader(supabase: supabase, activeWorkspaceStore: active)
+        let inboxReader = DirectMessageInboxReader(supabase: supabase, activeWorkspaceStore: active)
+        let apnsReader = APNsRegistrationReader(supabase: supabase)
+        _directMessageSendReader = State(initialValue: sendReader)
+        _directMessageInboxReader = State(initialValue: inboxReader)
+        _apnsRegistrationReader = State(initialValue: apnsReader)
+
+        // C1 fix — Track 5 / S4 Stage 6 review:
+        // AppDelegate handles APNs callbacks and needs reader references. SwiftUI
+        // doesn't propagate @Environment into AppDelegate callbacks; static weak
+        // refs bridge that gap. Populated here before any APNs registration fires.
+        LeafAppDelegate.directMessageInboxReader = inboxReader
+        LeafAppDelegate.apnsRegistrationReader = apnsReader
 
         // D1 — idempotent register для post-update relaunch restoration.
         // Sparkle relaunch'ает app после bundle replace + cold launch без update flow:
@@ -281,7 +288,17 @@ struct LeafApp: App {
 /// `applicationShouldHandleReopen` нужен чтобы клик по Dock-иконке (после
 /// того как юзер закрыл окно) снова открывал главное окно. Без этого SwiftUI
 /// `Window` не реагирует на reopen — менюбар-присутствие "съедает" событие.
-final class LeafAppDelegate: NSObject, NSApplicationDelegate {
+///
+/// Track 5 / S4 — Stage 6 review C1 fix: APNs callbacks added.
+/// AppDelegate keeps weak refs to readers via MainActor-isolated static
+/// accessors that LeafApp.init populates. SwiftUI doesn't propagate
+/// `@Environment` into AppDelegate callbacks, so static handoff is the
+/// pragmatic bridge.
+final class LeafAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+
+    @MainActor static weak var apnsRegistrationReader: APNsRegistrationReader?
+    @MainActor static weak var directMessageInboxReader: DirectMessageInboxReader?
+
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag {
             // Найти существующее SwiftUI Window (id="main") по identifier и поднять.
@@ -292,6 +309,76 @@ final class LeafAppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         return true
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // Track 5 / S4 — APNs registration. Requires aps-environment entitlement
+        // (added separately for signed builds). In dev / unsigned builds, the
+        // registration request silently no-ops on macOS.
+        UNUserNotificationCenter.current().delegate = self
+        UNUserNotificationCenter.current().requestAuthorization(
+            options: [.alert, .sound, .badge]
+        ) { granted, _ in
+            guard granted else { return }
+            DispatchQueue.main.async {
+                NSApplication.shared.registerForRemoteNotifications()
+            }
+        }
+    }
+
+    func application(_ application: NSApplication,
+                     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        let tokenHex = deviceToken.map { String(format: "%02x", $0) }.joined()
+        let env: String
+        #if DEBUG
+        env = "development"
+        #else
+        env = "production"
+        #endif
+        Task { @MainActor in
+            await Self.apnsRegistrationReader?.recordToken(tokenHex, environment: env)
+        }
+    }
+
+    func application(_ application: NSApplication,
+                     didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        leafAppLogger.error("APNs register failed: \(String(describing: error), privacy: .public)")
+    }
+
+    func application(_ application: NSApplication,
+                     didReceiveRemoteNotification userInfo: [String: Any]) {
+        // Spec §10.3 payload: leaf_message_id + leaf_workspace_id.
+        guard let messageID = userInfo["leaf_message_id"] as? String,
+              let workspaceID = userInfo["leaf_workspace_id"] as? String else {
+            return
+        }
+        Task { @MainActor in
+            await Self.directMessageInboxReader?.tickOnce(
+                workspaceID: workspaceID, forMessageID: messageID
+            )
+        }
+    }
+
+    // MARK: UNUserNotificationCenterDelegate
+
+    /// Show banner / sound when notification arrives while app is foregrounded.
+    /// Without this delegate method, macOS silently drops foreground notifications.
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
+        return [.banner, .sound, .badge]
+    }
+
+    /// User clicked notification → eager-fetch the referenced message.
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                didReceive response: UNNotificationResponse) async {
+        let userInfo = response.notification.request.content.userInfo
+        guard let messageID = userInfo["leaf_message_id"] as? String,
+              let workspaceID = userInfo["leaf_workspace_id"] as? String else {
+            return
+        }
+        await Self.directMessageInboxReader?.tickOnce(
+            workspaceID: workspaceID, forMessageID: messageID
+        )
     }
 }
 
