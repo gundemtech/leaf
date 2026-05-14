@@ -97,12 +97,9 @@ public struct InviteService: Sendable {
             plaintext, adminPubkey: priv.publicKey.rawRepresentation, wrapKey: wrapKey
         )
 
-        // 10. OTP hash (only when requireOTP) — HMAC-SHA256(otp, salt="leaf-invite-otp-v1")
+        // 10. OTP hash (only when requireOTP) — delegated to InviteKDF (moat: salt label lives in ProdInviteKDF / LeafCorePrivate).
         let otpHashBase64: String? = otp.map { otpVal in
-            let salt = Data("leaf-invite-otp-v1".utf8)
-            let key = SymmetricKey(data: salt)
-            let mac = HMAC<SHA256>.authenticationCode(for: Data(otpVal.utf8), using: key)
-            return Data(mac).base64EncodedString()
+            inviteKDF.hashOTPForServerStorage(otp: otpVal).base64EncodedString()
         }
 
         // 11. POST to Supabase

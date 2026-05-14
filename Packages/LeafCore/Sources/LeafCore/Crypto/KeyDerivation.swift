@@ -10,6 +10,12 @@ import Foundation
 /// otherwise.
 public protocol InviteKDF: Sendable {
     func deriveWrapKey(sharedSecret: SharedSecret, otp: String) throws -> SymmetricKey
+
+    /// Track 5 / S3 — HMACs the OTP for server-side storage (`invites.otp_hash bytea`).
+    /// Currently the Edge Function does NOT verify this hash (AES-GCM tag mismatch is
+    /// the security path); populated for future server-side OTP rate-limit hardening.
+    /// Salt label + HMAC construction live in `ProdInviteKDF` (LeafCorePrivate moat).
+    func hashOTPForServerStorage(otp: String) -> Data
 }
 
 /// Phase-0 / CI заглушка. Реальный KDF — `ProdInviteKDF` в
@@ -18,5 +24,8 @@ public struct UnimplementedInviteKDF: InviteKDF {
     public init() {}
     public func deriveWrapKey(sharedSecret: SharedSecret, otp: String) throws -> SymmetricKey {
         throw LeafError.notImplemented
+    }
+    public func hashOTPForServerStorage(otp: String) -> Data {
+        Data()
     }
 }

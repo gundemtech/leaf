@@ -955,12 +955,10 @@ public func generateInvite(workspaceID: String,
         plaintext, adminPubkey: priv.publicKey.rawRepresentation, wrapKey: wrapKey
     )
 
-    // 10. OTP hash for server-side check (only when requireOTP)
-    let otpHashBase64: String? = otp.map { otp in
-        let salt = "leaf-invite-otp-v1".data(using: .utf8)!
-        let key = SymmetricKey(data: salt)
-        let mac = HMAC<SHA256>.authenticationCode(for: Data(otp.utf8), using: key)
-        return Data(mac).base64EncodedString()
+    // 10. OTP hash for server-side check (only when requireOTP). Salt label + HMAC construction
+    // live in ProdInviteKDF (LeafCorePrivate moat); public InviteService just delegates.
+    let otpHashBase64: String? = otp.map { otpVal in
+        inviteKDF.hashOTPForServerStorage(otp: otpVal).base64EncodedString()
     }
 
     // 11. POST to Supabase invites table (via SupabaseClient)
@@ -995,7 +993,7 @@ public func generateInvite(workspaceID: String,
 
 ### 9.3 OTP hash format
 
-Server stores `otp_hash bytea` (S1 `invites` schema). S3 uses HMAC-SHA256(otp, salt="leaf-invite-otp-v1") → 32 bytes → base64 over the wire → bytea in DB. Client never sends raw OTP to server; only invitee receives raw OTP via separate channel. Server verifies on resolve (when require_otp=true, Edge Function HMAC's the invitee-submitted OTP and compares).
+Server stores `otp_hash bytea` (S1 `invites` schema). S3 client-side HMAC computation (salt label + HMAC construction) lives in `ProdInviteKDF.hashOTPForServerStorage(otp:)` — LeafCorePrivate moat per architecture contract §6. Public `InviteService` calls the protocol method, never touches the salt directly. Output: 32 bytes → base64 over the wire → bytea in DB. Client never sends raw OTP to server; only invitee receives raw OTP via separate channel.
 
 > **Note on OTP server-side verification:** S3 Edge Function does NOT verify the OTP server-side. The OTP is only used in HKDF for wrap key derivation. If invitee submits wrong OTP, the AES-GCM decryption fails (tag mismatch) → `LeafError.otpInvalid`. The `otp_hash` column is reserved for future server-side rate-limit (lock out after N failed attempts) — but S3 ships only the hash without checks. **Implementation note:** keep `otp_hash` column populated but unused server-side; document carry-over.
 

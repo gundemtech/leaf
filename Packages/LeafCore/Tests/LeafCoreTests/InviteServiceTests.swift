@@ -64,6 +64,9 @@ private final class RecordingInviteKDF: InviteKDF, @unchecked Sendable {
         if let e = error { throw e }
         return stubKey
     }
+    func hashOTPForServerStorage(otp: String) -> Data {
+        Data(repeating: 0xEF, count: 32)
+    }
 }
 
 private final class RecordingInviteBlobCodec: InviteBlobCodec, @unchecked Sendable {

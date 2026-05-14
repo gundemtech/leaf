@@ -199,6 +199,9 @@ private struct TestInviteKDF: InviteKDF {
     func deriveWrapKey(sharedSecret: SharedSecret, otp: String) throws -> SymmetricKey {
         SymmetricKey(data: Data(repeating: 0xCC, count: 32))
     }
+    func hashOTPForServerStorage(otp: String) -> Data {
+        Data(repeating: 0xDD, count: 32)
+    }
 }
 
 private struct TestInviteBlobCodec: InviteBlobCodec {
