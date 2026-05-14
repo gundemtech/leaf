@@ -44,6 +44,34 @@ public actor SupabaseClient {
         state = .notAuthenticated
     }
 
+    // MARK: - Public — ensureAuthenticated
+
+    /// Idempotent. Returns cached session if still valid; otherwise performs
+    /// 3-step bootstrap: signInAnonymously → registerPubkey → token refresh.
+    /// Concurrent callers share the in-flight bootstrap via .bootstrapping(task).
+    public func ensureAuthenticated() async throws -> SupabaseAuthSession {
+        if case .authenticated(let s) = state, s.expiresAt > now() { return s }
+        if case .bootstrapping(let task) = state { return try await task.value }
+
+        let task = Task { try await self.performBootstrap() }
+        state = .bootstrapping(task)
+        do {
+            let session = try await task.value
+            state = .authenticated(session)
+            return session
+        } catch {
+            state = .notAuthenticated
+            throw error
+        }
+    }
+
+    private func performBootstrap() async throws -> SupabaseAuthSession {
+        let initial = try await performSignInAnonymously()
+        try await performRegisterPubkey(accessToken: initial.accessToken)
+        let refreshed = try await performTokenRefresh(refreshToken: initial.refreshToken)
+        return refreshed
+    }
+
     // MARK: - Internal HTTP — signInAnonymously
 
     /// Internal: signs in anonymously via Supabase Auth. Idempotent failure mode —
@@ -100,7 +128,52 @@ public actor SupabaseClient {
         )
     }
 
-    // MARK: - Test-only DEBUG surface (Task 2 transient — Task 3 replaces with ensureAuthenticated)
+    // MARK: - Internal HTTP — tokenRefresh
+
+    private func performTokenRefresh(refreshToken: String) async throws -> SupabaseAuthSession {
+        let url = SupabaseEndpoint.tokenRefresh(baseURL: baseURL)
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        for (k, v) in SupabaseEndpoint.anonHeaders(anonKey: anonKey) {
+            request.setValue(v, forHTTPHeaderField: k)
+        }
+        let body: [String: String] = ["refresh_token": refreshToken]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let session = try await decodeAuthResponse(request: request, label: "tokenRefresh")
+        // Populate pubkeyClaim from the new JWT's claims (best-effort decode).
+        return session.populatingPubkeyClaim()
+    }
+
+    // MARK: - Internal HTTP — registerPubkey
+
+    private func performRegisterPubkey(accessToken: String) async throws {
+        let priv = try identity()
+        let pubkeyHex = priv.publicKey.rawRepresentation
+            .map { String(format: "%02x", $0) }.joined()
+
+        let url = SupabaseEndpoint.registerPubkey(baseURL: baseURL)
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        for (k, v) in SupabaseEndpoint.authenticatedHeaders(anonKey: anonKey, accessToken: accessToken) {
+            request.setValue(v, forHTTPHeaderField: k)
+        }
+        let body: [String: String] = ["pubkey": pubkeyHex]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await urlSession.data(for: request)
+        } catch {
+            throw SupabaseError.transport(reason: "registerPubkey: \(error)")
+        }
+        guard let http = response as? HTTPURLResponse else {
+            throw SupabaseError.transport(reason: "registerPubkey: non-http")
+        }
+        if http.statusCode == 200 { return }
+        throw SupabaseError.fromRegisterPubkey(status: http.statusCode, body: data)
+    }
+
+    // MARK: - Test-only DEBUG surface (Task 2 transient — Task 3 superseded by ensureAuthenticated)
 
     #if DEBUG
     public func performSignInAnonymouslyForTesting() async throws -> SupabaseAuthSession {
@@ -112,5 +185,37 @@ public actor SupabaseClient {
         case notAuthenticated
         case bootstrapping(Task<SupabaseAuthSession, Error>)
         case authenticated(SupabaseAuthSession)
+    }
+}
+
+// MARK: - SupabaseAuthSession JWT claim extraction
+
+extension SupabaseAuthSession {
+    /// Returns a copy with pubkeyClaim populated from the access_token JWT (if present).
+    /// Failure (malformed JWT, no pubkey claim) returns self unchanged — caller can detect via nil.
+    func populatingPubkeyClaim() -> SupabaseAuthSession {
+        guard let claim = Self.extractPubkeyClaim(fromJWT: self.accessToken) else { return self }
+        return SupabaseAuthSession(
+            accessToken: self.accessToken,
+            refreshToken: self.refreshToken,
+            userID: self.userID,
+            expiresAt: self.expiresAt,
+            pubkeyClaim: claim
+        )
+    }
+
+    static func extractPubkeyClaim(fromJWT jwt: String) -> String? {
+        let parts = jwt.split(separator: ".")
+        guard parts.count == 3 else { return nil }
+        var middle = String(parts[1])
+        middle = middle.replacingOccurrences(of: "-", with: "+")
+                       .replacingOccurrences(of: "_", with: "/")
+        let pad = (4 - middle.count % 4) % 4
+        middle += String(repeating: "=", count: pad)
+        guard let data = Data(base64Encoded: middle),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+        return json["pubkey"] as? String
     }
 }
