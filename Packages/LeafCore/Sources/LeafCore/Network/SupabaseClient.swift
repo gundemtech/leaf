@@ -306,6 +306,150 @@ extension SupabaseClient {
     }
 }
 
+// MARK: - ResolvedInvite + InviteProbeStatus value types (Track 5 / S3)
+
+public struct ResolvedInvite: Sendable, Equatable {
+    public let encryptedTeamkey: Data        // decoded from base64url
+    public let adminPubkey: String           // 64-hex
+    public let workspaceID: String           // uuid
+    public let workspaceName: String
+    public let requireOTP: Bool
+    public let expiresAtISO8601: String
+}
+
+public enum InviteProbeStatus: Sendable, Equatable {
+    case pending
+    case claimed(by: String, at: String)
+    case expired
+    case notFound
+}
+
+// MARK: - resolveInvite + probeInvite (invitee path; no JWT)
+
+extension SupabaseClient {
+    public func resolveInvite(token: String, inviteePubkeyHex: String) async throws -> ResolvedInvite {
+        let url = SupabaseEndpoint.inviteResolve(baseURL: baseURL)
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        // Anon: no Authorization header. apikey not strictly required by Edge Function but harmless.
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = [
+            "token": token,
+            "invitee_pubkey": inviteePubkeyHex,
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response): (Data, URLResponse)
+        do { (data, response) = try await urlSession.data(for: request) }
+        catch { throw SupabaseError.transport(reason: "resolveInvite: \(error)") }
+        guard let http = response as? HTTPURLResponse else {
+            throw SupabaseError.transport(reason: "resolveInvite: non-http")
+        }
+        guard http.statusCode == 200 else {
+            throw SupabaseError.fromInviteResolve(status: http.statusCode, body: data)
+        }
+        struct Body: Decodable {
+            let encrypted_teamkey: String
+            let admin_pubkey: String
+            let workspace_id: String
+            let workspace_name: String
+            let require_otp: Bool
+            let expires_at: String
+        }
+        let parsed: Body
+        do { parsed = try JSONDecoder().decode(Body.self, from: data) }
+        catch { throw SupabaseError.decoding(reason: "resolveInvite: \(error)") }
+        guard let blobBytes = Self.base64URLDecode(parsed.encrypted_teamkey) else {
+            throw SupabaseError.decoding(reason: "resolveInvite: bad encrypted_teamkey")
+        }
+        return ResolvedInvite(
+            encryptedTeamkey: blobBytes,
+            adminPubkey: parsed.admin_pubkey,
+            workspaceID: parsed.workspace_id,
+            workspaceName: parsed.workspace_name,
+            requireOTP: parsed.require_otp,
+            expiresAtISO8601: parsed.expires_at
+        )
+    }
+
+    public func probeInvite(token: String) async throws -> InviteProbeStatus {
+        let url = SupabaseEndpoint.inviteResolve(baseURL: baseURL)
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["token": token, "probe": true])
+
+        let (data, response): (Data, URLResponse)
+        do { (data, response) = try await urlSession.data(for: request) }
+        catch { throw SupabaseError.transport(reason: "probeInvite: \(error)") }
+        guard let http = response as? HTTPURLResponse else {
+            throw SupabaseError.transport(reason: "probeInvite: non-http")
+        }
+        guard http.statusCode == 200 else {
+            throw SupabaseError.fromStatus(http.statusCode, body: data)
+        }
+        struct Body: Decodable {
+            let status: String
+            let claimed_at: String?
+            let claimed_by_pubkey: String?
+            let expires_at: String?
+        }
+        let body: Body
+        do { body = try JSONDecoder().decode(Body.self, from: data) }
+        catch { throw SupabaseError.decoding(reason: "probeInvite: \(error)") }
+        switch body.status {
+        case "pending": return .pending
+        case "claimed":
+            return .claimed(by: body.claimed_by_pubkey ?? "", at: body.claimed_at ?? "")
+        case "expired": return .expired
+        case "not_found": return .notFound
+        default: throw SupabaseError.decoding(reason: "probeInvite: unknown status \(body.status)")
+        }
+    }
+
+    static func base64URLDecode(_ s: String) -> Data? {
+        var t = s.replacingOccurrences(of: "-", with: "+")
+                 .replacingOccurrences(of: "_", with: "/")
+        let pad = (4 - t.count % 4) % 4
+        t += String(repeating: "=", count: pad)
+        return Data(base64Encoded: t)
+    }
+}
+
+// MARK: - insertWorkspaceMember (PostgREST INSERT via JWT)
+
+extension SupabaseClient {
+    public func insertWorkspaceMember(workspaceID: String,
+                                      pubkeyHex: String,
+                                      displayName: String) async throws {
+        let session = try await ensureAuthenticated()
+        let url = SupabaseEndpoint.insertWorkspaceMember(baseURL: baseURL)
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        for (k, v) in SupabaseEndpoint.postgrestInsertHeaders(
+            anonKey: anonKey, accessToken: session.accessToken
+        ) {
+            request.setValue(v, forHTTPHeaderField: k)
+        }
+        let body: [String: Any] = [
+            "workspace_id": workspaceID,
+            "pubkey": pubkeyHex,
+            "display_name": displayName,
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response): (Data, URLResponse)
+        do { (data, response) = try await urlSession.data(for: request) }
+        catch { throw SupabaseError.transport(reason: "insertWorkspaceMember: \(error)") }
+        guard let http = response as? HTTPURLResponse else {
+            throw SupabaseError.transport(reason: "insertWorkspaceMember: non-http")
+        }
+        guard http.statusCode == 201 else {
+            throw SupabaseError.fromStatus(http.statusCode, body: data)
+        }
+    }
+}
+
 // MARK: - SupabaseAuthSession JWT claim extraction
 
 extension SupabaseAuthSession {

@@ -2,20 +2,10 @@
 //  InviteAcceptService.swift
 //  LeafCore
 //
-//  Phase 5.2.E — invitee-side orchestrator. Two-step flow:
-//
-//   1. fetchInvite(token:) → one-shot relay GET (KV consumes), returns blob bytes
-//      caller'у (Reader держит в RAM пока юзер вводит OTP).
-//   2. acceptInvite(blob:, otp:, displayName:) → ECDH(invitee_priv, admin_pub) +
-//      KDF(otp) + AES-GCM decode → materializes 1 row org + 2 rows team_members
-//      (admin from blob + self with new UUID + invitee displayName + invitee
-//      pubkey hex) + 1 row team_keys + writes teamKey file via TeamKeystore.
-//
-//  Atomicity: keystore-first (orphan file < orphan DB rows), затем DB writes
-//  в одной транзакции. Mirror OrgService.createPersonalOrg ordering (5.1.D).
-//
-//  Inject'абельные factories `now` / `identity` / `generateMemberID` —
-//  deterministic test E2E round-trip mirror InviteService (5.2.D).
+//  Track 5 / S3 — invitee-side orchestrator. Single-call acceptInvite(url:displayName:otp:)
+//  wrapping Supabase resolve + ECDH+HKDF+AES-GCM decrypt + local workspace
+//  materialization (S2 rejoin path) + best-effort workspace_members remote sync
+//  with bounded retry.
 //
 
 import CryptoKit
@@ -23,7 +13,7 @@ import Foundation
 
 public struct InviteAcceptService: Sendable {
     private let database: Database
-    private let relayClient: RelayClient
+    private let supabase: SupabaseClient
     private let inviteKDF: any InviteKDF
     private let inviteBlobCodec: any InviteBlobCodec
     private let keystoreRoot: URL
@@ -33,7 +23,7 @@ public struct InviteAcceptService: Sendable {
 
     public init(
         database: Database,
-        relayClient: RelayClient,
+        supabase: SupabaseClient,
         inviteKDF: any InviteKDF,
         inviteBlobCodec: any InviteBlobCodec,
         keystoreRoot: URL = TeamKeystore.defaultRoot(),
@@ -42,7 +32,7 @@ public struct InviteAcceptService: Sendable {
         generateMemberID: @escaping @Sendable () -> String = { UUID().uuidString.lowercased() }
     ) {
         self.database = database
-        self.relayClient = relayClient
+        self.supabase = supabase
         self.inviteKDF = inviteKDF
         self.inviteBlobCodec = inviteBlobCodec
         self.keystoreRoot = keystoreRoot
@@ -51,81 +41,80 @@ public struct InviteAcceptService: Sendable {
         self.generateMemberID = generateMemberID
     }
 
-    /// One-shot relay fetch — KV consumes invite at this call.
-    /// Caller (Reader) holds returned blob in RAM across OTP retries.
-    public func fetchInvite(token: String) async throws -> InviteBlob {
-        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            throw LeafError.invalidPayload
+    // MARK: - Preview (no network)
+
+    public static func preview(url: URL) -> Result<URLPreview, InviteURLError> {
+        switch InviteURL.parse(url) {
+        case .success(let p):
+            return .success(URLPreview(
+                workspaceName: p.workspaceName,
+                adminPubkeyHex: p.adminPubkeyHex,
+                token: p.token,
+                hasFragmentOTP: p.otp != nil
+            ))
+        case .failure(let err):
+            return .failure(err)
         }
-        let fetched = try await relayClient.getInvite(token: trimmed)
-        return InviteBlob(bytes: fetched.blob)
     }
 
-    /// Phase 5.5.B — invitee receives single deep-link `leaf://invite/<token>#<otp>`. Parse +
-    /// fetch + return blob alongside OTP так, чтобы caller (Reader) auto-prefilled OTP в UI.
-    /// `inviteNotFound` от relay re-maps в `.inviteAlreadyConsumed` (per 5.5.B UX — explicit "уже консумлено / истекло"
-    /// message vs old "not found" generic).
-    @available(*, deprecated, message: "Track 5 / S3 — Phase 5.5 two-step fetch+accept replaced by single-call acceptInvite(url:displayName:otp:). Will be removed in Task 8 (InviteAcceptService Track 5 rewrite).")
-    public func fetchInvite(inviteURL url: URL) async throws -> (blob: InviteBlob, otp: String) {
-        // Transitional shim — keeps Phase 5.5 callers compiling between Task 6 (URL rewrite)
-        // and Task 8 (full service rewrite). New InviteURL shape's otp is optional; when
-        // require_otp=false the fragment is absent. Old callers don't read otp before
-        // passing to acceptInvite, so empty-string fallback is safe.
-        let token: String
-        let otp: String
+    // MARK: - Accept (single-call)
+
+    /// Parse URL → resolve via Supabase Edge Function (atomic claim) → derive wrap key →
+    /// decrypt blob → materialize local workspace + members + teamKey → best-effort
+    /// remote workspace_members INSERT with bounded retry.
+    public func acceptInvite(url: URL,
+                             displayName: String,
+                             otp: String?) async throws -> AcceptedInvite {
+        // 1. Validate displayName
+        let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { throw LeafError.invalidPayload }
+
+        // 2. Parse URL
+        let parsed: InviteURL.Parsed
         switch InviteURL.parse(url) {
-        case .success(let parsed):
-            token = parsed.token
-            otp = parsed.otp ?? ""
-        case .failure:
+        case .success(let p): parsed = p
+        case .failure: throw LeafError.inviteURLMalformed
+        }
+
+        // 3. Decode token base64url → UUID → string
+        guard let tokenUUID = UUID(base64URLString: parsed.token) else {
             throw LeafError.inviteURLMalformed
         }
+        let tokenString = tokenUUID.uuidString.lowercased()
+
+        // 4. Identity
+        let priv = try identity()
+        let inviteePubkeyHex = priv.publicKey.rawRepresentation
+            .map { String(format: "%02x", $0) }.joined()
+
+        // 5. Bootstrap Supabase auth (lazy)
+        _ = try await supabase.ensureAuthenticated()
+
+        // 6. Atomic claim via Edge Function
+        let resolved: ResolvedInvite
         do {
-            let blob = try await fetchInvite(token: token)
-            return (blob: blob, otp: otp)
-        } catch LeafError.inviteNotFound {
+            resolved = try await supabase.resolveInvite(token: tokenString,
+                                                        inviteePubkeyHex: inviteePubkeyHex)
+        } catch SupabaseError.inviteNotResolvable {
             throw LeafError.inviteAlreadyConsumed
         }
-    }
 
-    /// Decrypts blob with derived wrapKey (ECDH(invitee_priv, admin_pub_from_header) +
-    /// KDF(otp)) → materializes org/team_members/team_keys + writes teamKey file.
-    /// Throws inviteAlreadyAccepted / inviteOTPInvalid / inviteBlobMalformed.
-    public func acceptInvite(
-        blob: InviteBlob,
-        otp: String,
-        displayName: String
-    ) async throws -> AcceptedInvite {
-        // 1. Preflight — non-empty displayName. Track-5 S2: the single-workspace
-        // invariant is gone; rejoin / membership-conflict checks happen in
-        // step 11 once we know the target workspaceID from the decoded blob.
-        let trimmedDN = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedDN.isEmpty else {
-            throw LeafError.invalidPayload
+        // 7. OTP gating
+        let effectiveOTP: String
+        if resolved.requireOTP {
+            guard let candidate = otp ?? parsed.otp, !candidate.isEmpty else {
+                throw LeafError.inviteOTPRequired
+            }
+            effectiveOTP = candidate
+        } else {
+            effectiveOTP = ""
         }
 
-        // 2. Identity (idempotent X25519 priv).
-        let priv = try identity()
-
-        // 3. Peek admin pubkey from blob header.
-        let header = try InviteBlobHeader.peek(from: blob)
-        let adminPubHex = header.adminPubkey.map { String(format: "%02x", $0) }.joined()
-
-        // 4. ECDH (symmetric — same shared secret as admin computed).
+        // 8. ECDH + HKDF + decrypt
         let shared = try KeyAgreement.sharedSecret(privateKey: priv,
-                                                   peerPublicKeyHex: adminPubHex)
-
-        // 5. Derive wrap key with OTP salt.
-        let wrapKey = try inviteKDF.deriveWrapKey(sharedSecret: shared, otp: otp)
-
-        // 6. Decode blob. Прод-кодек conflates AES-GCM tag fail / JSON parse /
-        //    short-cipher с одним `.inviteBlobMalformed` (moat — generic error,
-        //    no info-string leak per decomposition §8). Здесь мы wrap'ом
-        //    re-classify пост-peek decode failure как `.inviteOTPInvalid` —
-        //    invitee видит retry-able "OTP doesn't match" UX. Header peek (выше)
-        //    сохраняет .inviteBlobMalformed для structural failures (truncated
-        //    bytes / wrong version) — non-recoverable.
+                                                   peerPublicKeyHex: resolved.adminPubkey)
+        let wrapKey = try inviteKDF.deriveWrapKey(sharedSecret: shared, otp: effectiveOTP)
+        let blob = InviteBlob(bytes: resolved.encryptedTeamkey)
         let plaintext: InvitePlaintext
         do {
             plaintext = try inviteBlobCodec.decode(blob, wrapKey: wrapKey)
@@ -135,30 +124,31 @@ public struct InviteAcceptService: Sendable {
             throw LeafError.inviteOTPInvalid
         }
 
-        // 7. Decode teamKey base64 (32B AES-256 key bytes).
+        // 9. Defense-in-depth: blob's workspace id must match resolve response
+        guard plaintext.orgID == resolved.workspaceID else {
+            throw LeafError.inviteBlobMalformed
+        }
+
+        // 10. teamKey bytes
         guard let teamKeyBytes = Data(base64Encoded: plaintext.teamKeyBase64),
               teamKeyBytes.count == 32 else {
             throw LeafError.inviteBlobMalformed
         }
 
-        // 8. Self pubkey hex (lowercase).
-        let selfPubHex = priv.publicKey.rawRepresentation
-            .map { String(format: "%02x", $0) }.joined()
-
-        // 9. Build domain rows. `plaintext.orgID` carries the workspace id
-        //    semantically (renamed at DB level by M019; JSON key unchanged for
-        //    back-compat with in-flight v2 blobs).
-        let workspaceID = plaintext.orgID
+        // 11. Build value types
         let acceptedAt = now()
         let issuedAt = Date(timeIntervalSince1970: TimeInterval(plaintext.issuedAtMs) / 1000)
-        let org = Workspace(id: workspaceID,
-                            name: plaintext.orgName,
-                            createdAt: issuedAt,
-                            createdByMemberID: plaintext.adminMemberID)
+        let workspaceID = resolved.workspaceID
+        let workspaceName = resolved.workspaceName
+
+        let workspaceRow = Workspace(id: workspaceID,
+                                     name: workspaceName,
+                                     createdAt: issuedAt,
+                                     createdByMemberID: plaintext.adminMemberID)
         let adminMember = TeamMember(id: plaintext.adminMemberID,
                                      workspaceID: workspaceID,
                                      role: .admin,
-                                     pubkeyHex: adminPubHex,
+                                     pubkeyHex: resolved.adminPubkey,
                                      displayName: plaintext.adminDisplayName,
                                      addedAt: issuedAt,
                                      removedAt: nil)
@@ -166,8 +156,8 @@ public struct InviteAcceptService: Sendable {
         let selfMember = TeamMember(id: selfMemberID,
                                     workspaceID: workspaceID,
                                     role: .member,
-                                    pubkeyHex: selfPubHex,
-                                    displayName: trimmedDN,
+                                    pubkeyHex: inviteePubkeyHex,
+                                    displayName: trimmedName,
                                     addedAt: acceptedAt,
                                     removedAt: nil)
         let teamKey = TeamKey(id: plaintext.teamKeyID,
@@ -176,22 +166,13 @@ public struct InviteAcceptService: Sendable {
                               deprecatedAt: nil,
                               generatedByMemberID: plaintext.adminMemberID)
 
-        // 10. Keystore-first (orphan file < orphan DB rows). Track-5 S2:
-        //     workspace-scoped path; `writeAtomic` overwrites if a stale file
-        //     remains from a prior accept attempt or rejoin path.
+        // 12. Keystore-first (S2 substrate — orphan file better than orphan DB rows)
         try TeamKeystore.writeTeamKey(teamKeyBytes,
                                       workspaceID: workspaceID,
                                       keyID: plaintext.teamKeyID,
                                       at: keystoreRoot)
 
-        // 11. DB writes. Three paths:
-        //   - rejoin: workspace exists locally with `leftAt != nil` → clear
-        //     `left_at_ms`, insert *new* self member, keep prior admin row +
-        //     team_key via idempotent insertTeamKeyIfAbsent.
-        //   - already-current member: workspace exists with `leftAt == nil` →
-        //     refuse with `inviteAlreadyAccepted` (no double-accept).
-        //   - fresh: workspace not present locally → full insert sequence
-        //     (mirror OrgService.createPersonalOrg ordering).
+        // 13. DB writes (three-path: fresh / rejoin / already-current)
         if let existing = try database.readWorkspace(id: workspaceID) {
             guard existing.leftAt != nil else {
                 throw LeafError.inviteAlreadyAccepted
@@ -200,29 +181,86 @@ public struct InviteAcceptService: Sendable {
             try database.insertTeamMember(selfMember)
             try database.insertTeamKeyIfAbsent(teamKey)
         } else {
-            try database.upsertWorkspace(org)
+            try database.upsertWorkspace(workspaceRow)
             try database.insertTeamMember(adminMember)
             try database.insertTeamMember(selfMember)
             try database.insertTeamKey(teamKey)
         }
 
-        return AcceptedInvite(orgID: workspaceID,
-                              orgName: plaintext.orgName,
-                              teamKeyID: plaintext.teamKeyID,
-                              selfMemberID: selfMemberID)
+        // 14. Best-effort workspace_members remote sync with bounded retry (in-process).
+        // Failures do NOT roll back local state (invitee can use Team locally; admin's
+        // pill-row catches up when sync succeeds or on next retry).
+        let syncStatus = await retryInsertWorkspaceMember(
+            workspaceID: workspaceID,
+            pubkeyHex: inviteePubkeyHex,
+            displayName: trimmedName
+        )
+
+        return AcceptedInvite(
+            orgID: workspaceID,
+            orgName: workspaceName,
+            teamKeyID: plaintext.teamKeyID,
+            selfMemberID: selfMemberID,
+            membershipSyncStatus: syncStatus
+        )
+    }
+
+    /// Retries supabase.insertWorkspaceMember up to 3 times with exponential backoff.
+    /// On `.conflict` (idempotent), returns `.ok`. On final failure, returns `.pending(LeafError.unknown)`.
+    private func retryInsertWorkspaceMember(workspaceID: String,
+                                            pubkeyHex: String,
+                                            displayName: String) async -> MembershipSyncStatus {
+        let delays: [Duration] = [.zero, .milliseconds(200), .milliseconds(500), .seconds(2)]
+        var lastReason = "no_attempts"
+        for (idx, delay) in delays.enumerated() {
+            if idx > 0 { try? await Task.sleep(for: delay) }
+            do {
+                try await supabase.insertWorkspaceMember(
+                    workspaceID: workspaceID, pubkeyHex: pubkeyHex, displayName: displayName
+                )
+                return .ok
+            } catch let err as SupabaseError {
+                if case .conflict = err { return .ok }  // already inserted; idempotent OK
+                lastReason = String(describing: err)
+            } catch {
+                lastReason = String(describing: error)
+            }
+        }
+        return .pending(reason: lastReason)
     }
 }
+
+// MARK: - URLPreview (no-network preview from URL params)
+
+public struct URLPreview: Sendable, Equatable {
+    public let workspaceName: String
+    public let adminPubkeyHex: String
+    public let token: String
+    public let hasFragmentOTP: Bool
+}
+
+// MARK: - AcceptedInvite (extended with membership sync status)
 
 public struct AcceptedInvite: Sendable, Hashable {
     public let orgID: String
     public let orgName: String
     public let teamKeyID: String
     public let selfMemberID: String
+    public let membershipSyncStatus: MembershipSyncStatus
 
-    public init(orgID: String, orgName: String, teamKeyID: String, selfMemberID: String) {
+    public init(orgID: String, orgName: String, teamKeyID: String,
+                selfMemberID: String, membershipSyncStatus: MembershipSyncStatus) {
         self.orgID = orgID
         self.orgName = orgName
         self.teamKeyID = teamKeyID
         self.selfMemberID = selfMemberID
+        self.membershipSyncStatus = membershipSyncStatus
     }
+}
+
+public enum MembershipSyncStatus: Sendable, Hashable {
+    case ok
+    /// Reason string carried for diagnostic logging (e.g., "transport: timeout").
+    /// UI doesn't surface this; just shows a generic "Sync pending — retry?" affordance.
+    case pending(reason: String)
 }

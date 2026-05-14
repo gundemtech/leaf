@@ -36,4 +36,9 @@ public enum LeafError: Error, Sendable {
     case inviteURLMalformed
     // Phase 5.5.B (consumers: InviteAcceptService remap of inviteNotFound; InviteAcceptReader UX message).
     case inviteAlreadyConsumed
+    // Track 5 / S3 (consumer: InviteAcceptService) — resolve.require_otp=true and caller did not provide OTP.
+    // UI response: expand OTP input field on AcceptInviteSheet.
+    case inviteOTPRequired
+    // Track 5 / S3 (consumer: any caller falling back from unknown SupabaseError / other unmapped error).
+    case unknown
 }
