@@ -11,11 +11,13 @@ import Foundation
 public enum SupabaseError: Error, Sendable, Equatable {
     case badRequest
     case unauthorized
+    case forbidden                          // I3 — 403 from PostgREST RLS denial
     case notFound
     case conflict
     case rateLimited
     case serverError
     case authBootstrapFailed(reason: String)
+    case identityClaimMissing               // I1 — session has no pubkey claim (Auth Hook race / JWT decode glitch)
     case inviteNotResolvable               // 404 from invite_resolve — token claimed/expired/missing
     case pubkeyAlreadyRegistered           // 409 from register_pubkey — TOFU collision
     case decoding(reason: String)
@@ -26,6 +28,7 @@ public enum SupabaseError: Error, Sendable, Equatable {
         switch status {
         case 400: return .badRequest
         case 401: return .unauthorized
+        case 403: return .forbidden        // I3
         case 404: return .notFound
         case 409: return .conflict
         case 429: return .rateLimited

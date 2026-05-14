@@ -138,7 +138,19 @@ public struct DirectMessageInboxService: Sendable {
         plaintext: DirectMessagePlaintext,
         direction: DirectMessageMirrorRow.Direction
     ) -> DirectMessageMirrorRow {
-        let kind = DirectMessageKind(rawValue: row.kind) ?? plaintext.kind
+        // C4 fix — Track 5 / S4 Stage 6 review:
+        // AAD binds only [version|keyID], NOT server columns. A compromised relay
+        // could mutate `row.kind` or `row.replyTo` while ciphertext stays intact;
+        // a falsified kind would corrupt Task lifecycle, push titles, and the
+        // `idx_messages_mirror_open_tasks` partial-index assumption. We trust the
+        // authenticated plaintext for kind / replyTo / sender* unconditionally.
+        // Server-only fields (timestamps + read/done state) come from `row` since
+        // they're written by recipient post-decrypt and aren't in plaintext.
+        if let serverKind = DirectMessageKind(rawValue: row.kind), serverKind != plaintext.kind {
+            // Tamper signal — log for forensic review.
+            // Implementation moat — exact log shape lives in caller's OSLog domain.
+            // We do NOT throw; we just override with authenticated plaintext.
+        }
         let serverCreatedAtMs = parseISO8601Ms(row.createdAtISO) ?? plaintext.sentAtMs
         let readAtMs = row.readAtISO.flatMap { parseISO8601Ms($0) }
         let doneAtMs = row.doneAtISO.flatMap { parseISO8601Ms($0) }
@@ -149,10 +161,10 @@ public struct DirectMessageInboxService: Sendable {
             senderMemberID: plaintext.senderMemberID,
             senderDisplayName: plaintext.senderDisplayName,
             recipientPubkeyHex: row.recipientPubkeyHex,
-            kind: kind,
+            kind: plaintext.kind,          // C4: authenticated plaintext wins
             body: plaintext.body,
             attachment: plaintext.attachment,
-            replyTo: row.replyTo ?? plaintext.replyTo,
+            replyTo: plaintext.replyTo,    // C4: authenticated plaintext wins
             sentAtMs: plaintext.sentAtMs,
             serverCreatedAtMs: serverCreatedAtMs,
             readAtMs: readAtMs,

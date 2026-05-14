@@ -109,10 +109,15 @@ extension SupabaseClient {
             request.setValue(v, forHTTPHeaderField: k)
         }
         let payloadHex = "\\x" + encryptedPayload.map { String(format: "%02x", $0) }.joined()
-        // sender_pubkey is RLS-derived from JWT — we don't send it (server enforces
-        // sender_pubkey = auth.jwt() ->> 'pubkey'). We DO send it to make the row
-        // construction explicit and avoid relying on RLS default columns.
-        let senderPubkeyHex = session.pubkeyClaim ?? ""
+        // I1+I2 — Track 5 / S4 Stage 6 review fix:
+        // We send sender_pubkey explicitly to satisfy the NOT NULL column.
+        // Server-side RLS WITH CHECK verifies the body's sender_pubkey matches
+        // the JWT pubkey claim (auth.jwt() ->> 'pubkey'). If pubkeyClaim is nil
+        // — Auth Hook race, JWT decode glitch — fail fast with a clear error
+        // rather than POST an empty string (which would surface as opaque 403).
+        guard let senderPubkeyHex = session.pubkeyClaim, !senderPubkeyHex.isEmpty else {
+            throw SupabaseError.identityClaimMissing
+        }
         var body: [String: Any] = [
             "workspace_id": workspaceID,
             "sender_pubkey": senderPubkeyHex,
@@ -294,7 +299,10 @@ extension SupabaseClient {
         ) {
             request.setValue(v, forHTTPHeaderField: k)
         }
-        let pubkeyClaim = session.pubkeyClaim ?? ""
+        // I1 fix — fail fast if JWT lacks pubkey claim.
+        guard let pubkeyClaim = session.pubkeyClaim, !pubkeyClaim.isEmpty else {
+            throw SupabaseError.identityClaimMissing
+        }
         let body: [String: String] = [
             "pubkey": pubkeyClaim,
             "device_id": deviceID,

@@ -97,9 +97,42 @@ final class DirectMessageSendReader {
             )
             state = .sent(messageID: result.messageID, status: result.pushDispatchStatus)
         } catch let err as LeafError {
-            state = .error(message: String(describing: err))
+            state = .error(message: Self.humanMessage(for: err))
+        } catch let err as SupabaseError {
+            state = .error(message: Self.humanMessage(for: err))
         } catch {
-            state = .error(message: String(describing: error))
+            state = .error(message: "Couldn't send. Please try again.")
+        }
+    }
+
+    /// I9 fix — Track 5 / S4 Stage 6 review:
+    /// Map raw errors to user-readable strings. Dev / log paths still see the
+    /// underlying enum via separate logging; UI surfaces just the user copy.
+    private static func humanMessage(for err: LeafError) -> String {
+        switch err {
+        case .invalidPayload:                return "Message is empty."
+        case .directMessageBodyTooLarge:     return "Message is too long (max 64KB)."
+        case .databaseUnavailable:           return "Workspace not loaded. Try reopening the app."
+        case .apnsPushDispatchFailed:        return "Message sent. Push notification deferred — recipient will see it on next sync."
+        case .apnsRegistrationFailed:        return "Couldn't register for push. Message persists."
+        default:                             return "Couldn't send. Please try again."
+        }
+    }
+
+    private static func humanMessage(for err: SupabaseError) -> String {
+        switch err {
+        case .unauthorized, .identityClaimMissing:
+            return "Not signed in. Restart the app."
+        case .forbidden:
+            return "Server rejected this message (permission)."
+        case .rateLimited:
+            return "Sending too fast. Try again in a moment."
+        case .transport:
+            return "Network error. Check your connection."
+        case .serverError:
+            return "Server error. Try again later."
+        default:
+            return "Couldn't send. Please try again."
         }
     }
 

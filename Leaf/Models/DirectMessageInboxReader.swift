@@ -26,6 +26,10 @@ final class DirectMessageInboxReader {
     private(set) var unreadCount: Int = 0
     private(set) var lastTickError: String?
 
+    /// I10 fix — cache pubkey hex once instead of re-reading IdentityService
+    /// on every refreshLocalState (filesystem I/O on every UI poll).
+    private var cachedPubkeyHex: String?
+
     private var service: DirectMessageInboxService?
     private var database: LeafCore.Database?
     private let supabase: SupabaseClient
@@ -90,14 +94,12 @@ final class DirectMessageInboxReader {
     /// Refresh published surfaces from local mirror — called after every successful tick.
     func refreshLocalState(workspaceID: String) {
         guard let db = database else { return }
-        let pubkey = (try? IdentityService.ensureLocalIdentity(at: keystoreRoot))?
-            .publicKey.rawRepresentation.map { String(format: "%02x", $0) }.joined()
         do {
             let recent = try db.readSQL {
                 try MessagesMirrorStore.readRecent(workspaceID: workspaceID, limit: 50, in: $0)
             }
             recentMessages = recent
-            if let pubkey {
+            if let pubkey = cachedPubkey() {
                 let unread = try db.readSQL {
                     try MessagesMirrorStore.readUnreadInbound(
                         workspaceID: workspaceID, recipientPubkeyHex: pubkey, in: $0
@@ -108,6 +110,18 @@ final class DirectMessageInboxReader {
         } catch {
             logger.error("refreshLocalState failed: \(String(describing: error), privacy: .public)")
         }
+    }
+
+    /// I10 fix — Track 5 / S4 Stage 6 review.
+    /// IdentityService.ensureLocalIdentity does filesystem I/O on every call. Cache
+    /// the derived pubkey hex once per reader lifetime; identity is set-once at
+    /// onboarding and never rotates within a session.
+    private func cachedPubkey() -> String? {
+        if let cached = cachedPubkeyHex { return cached }
+        guard let priv = try? IdentityService.ensureLocalIdentity(at: keystoreRoot) else { return nil }
+        let hex = priv.publicKey.rawRepresentation.map { String(format: "%02x", $0) }.joined()
+        cachedPubkeyHex = hex
+        return hex
     }
 
     // MARK: - Internal
