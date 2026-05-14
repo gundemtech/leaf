@@ -532,6 +532,8 @@ RLS policy on `invites` (from S1 §6.4) blocks public reads. INSERT is gated thr
 
 > **Amendment 2026-05-15 (S3 spec):** Track 5 contract §5.2 + S1 §6.4 — `invites` table RLS extended with admin INSERT policy: `CREATE POLICY invites_admin_insert ON invites FOR INSERT WITH CHECK (admin_pubkey = (auth.jwt() ->> 'pubkey') AND public.is_workspace_admin(workspace_id, auth.jwt() ->> 'pubkey'))`. SELECT/UPDATE/DELETE stay service_role-only (resolve mutation goes through invite_resolve Edge Function; admin doesn't read invites table directly — it polls invite_resolve?probe=1). Reason: avoid an extra `insert_invite` Edge Function for a write that's safely RLS-gated.
 
+> **Amendment 2026-05-15 (S3 code review fix C1):** S1 §6.5 `workspace_members` RLS shipped only `workspace_members_admin_write` (FOR ALL — admin only). This blocked invitee post-resolve self-INSERT (the `acceptInvite` step 14 path → `SupabaseClient.insertWorkspaceMember`). M013 extended with: `CREATE POLICY workspace_members_self_insert ON workspace_members FOR INSERT WITH CHECK (pubkey = (auth.jwt() ->> 'pubkey'))`. Self-INSERT requires JWT pubkey claim to match inserted row's pubkey (no impersonation). workspace_id gated by FK (no policy needed there). pgTAP `070_rls_workspace_members.test.sql` extended with allow + deny coverage (plan 2 → 4).
+
 ### 6.6 Wire body — POST /functions/v1/invite_resolve (invitee resolve)
 
 Request:
@@ -1635,6 +1637,16 @@ Per Track 5 contract §18, amendments expected during S3 implementation. Inline-
 Already accepted amendments before implementation start:
 - Contract §5.2 — `invites` RLS extended with admin INSERT policy (this spec §6.5)
 - Contract §12.3 — server-side OTP verification clarified as crypto-only (this spec §9.3)
+
+Post-implementation amendments (Stage 6 independent review fixes):
+- Contract §5.2 — `workspace_members` RLS extended with self-INSERT policy (this spec §6.5 second amendment — fix C1).
+- Edge Function `invite_resolve` returns 500 when workspaces row missing post-claim (fix I1) instead of emitting `workspace_name: ""` which would render `Join "" team?` on invitee UI.
+
+### Stage 6 review carry-overs (intentional deferrals)
+
+- **I2** (review finding) — `InviteAcceptService.acceptInvite` remaps `LeafError.inviteBlobMalformed` from `ProdInviteBlobCodec.decode` to `LeafError.inviteOTPInvalid`. `ProdInviteBlobCodec.decode` swallows AEAD tag fail AND JSON deserialization fail in a single catch → both surface as `inviteBlobMalformed`. The remap is correct for the dominant case (wrong OTP → AEAD tag fail) but mis-attributes corrupted-blob failures as "OTP doesn't match". Clean separation requires a moat refactor (codec exposes finer error model). **Carry-over to S4 / Track 6.**
+- **I3** (review finding) — `SupabaseClient` does not persist `refresh_token` to disk in S3 (spec §6.2: "fresh signInAnonymously per cold launch"). On second cold launch with same X25519 priv, `register_pubkey` returns 409 because the pubkey is registered to a stale auth_id. **Scope of impact:** only invitees who re-install Leaf OR sign-out then re-sign-in on the SAME device — fresh-device second-Mac scenarios regenerate X25519 priv so pubkey differs (no conflict). Two-Mac G15/G16 manual smoke (fresh devices) unaffected. **Real fix:** persist refresh_token in Keychain (S4 carry-over, spec §6.2 explicit) OR add Ed25519 challenge-response (S8 carry-over). **Documented as known limitation.**
+- **N1-N5** (review nits) — `expires_at` decoder fallback, admin pubkey preview disclosure, dead-code guard in InviteURL parser, debug-only comment cleanup. All non-correctness; Track 6 polish.
 
 ---
 
