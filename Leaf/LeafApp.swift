@@ -53,6 +53,10 @@ struct LeafApp: App {
     @State private var supabaseClient: SupabaseClient
     @State private var inviteOutboxReader: InviteOutboxReader
     @State private var inviteAcceptReader: InviteAcceptReader
+    /// Track 5 / S4 — DM send + inbox + APNs registration readers.
+    @State private var directMessageSendReader: DirectMessageSendReader
+    @State private var directMessageInboxReader: DirectMessageInboxReader
+    @State private var apnsRegistrationReader: APNsRegistrationReader
     @State private var memberRemovalReader = MemberRemovalReader()  // Phase 5.3.E
     @State private var pendingInvitesReader = PendingInvitesReader()  // Phase 5.5.C
     @State private var inviteURLHandler = InviteURLHandler()  // Phase 5.5.B
@@ -100,14 +104,26 @@ struct LeafApp: App {
 
         // Track 5 / S3 — SupabaseClient is the first Mac client primitive talking to Supabase.
         // baseURL + anonKey read from Info.plist (xcconfig substitution).
+        // Track 5 / S4 — adds SupabaseSessionStore for refresh_token persistence (closes I3).
+        let supabaseSessionStore = SupabaseSessionStore(at: TeamKeystore.defaultRoot())
         let supabase = SupabaseClient(
             baseURL: SupabaseConfig.baseURL(from: Bundle.main),
             anonKey: SupabaseConfig.anonKey(from: Bundle.main),
-            identity: { try IdentityService.ensureLocalIdentity(at: TeamKeystore.defaultRoot()) }
+            identity: { try IdentityService.ensureLocalIdentity(at: TeamKeystore.defaultRoot()) },
+            sessionStore: supabaseSessionStore
         )
         _supabaseClient = State(initialValue: supabase)
         _inviteOutboxReader = State(initialValue: InviteOutboxReader(supabase: supabase))
         _inviteAcceptReader = State(initialValue: InviteAcceptReader(supabase: supabase))
+
+        // Track 5 / S4 — direct-messages substrate readers.
+        _directMessageSendReader = State(initialValue: DirectMessageSendReader(
+            supabase: supabase, activeWorkspaceStore: active
+        ))
+        _directMessageInboxReader = State(initialValue: DirectMessageInboxReader(
+            supabase: supabase, activeWorkspaceStore: active
+        ))
+        _apnsRegistrationReader = State(initialValue: APNsRegistrationReader(supabase: supabase))
 
         // D1 — idempotent register для post-update relaunch restoration.
         // Sparkle relaunch'ает app после bundle replace + cold launch без update flow:
@@ -141,6 +157,9 @@ struct LeafApp: App {
                 // into readers via constructor. UI surfaces consume readers, not the client directly.
                 .environment(inviteOutboxReader)
                 .environment(inviteAcceptReader)
+                .environment(directMessageSendReader)   // Track 5 / S4
+                .environment(directMessageInboxReader)  // Track 5 / S4
+                .environment(apnsRegistrationReader)    // Track 5 / S4
                 .environment(memberRemovalReader)  // Phase 5.3.E
                 .environment(pendingInvitesReader)  // Phase 5.5.C
                 .environment(inviteURLHandler)  // Phase 5.5.B
