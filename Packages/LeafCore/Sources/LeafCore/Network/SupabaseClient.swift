@@ -20,6 +20,7 @@ public actor SupabaseClient {
     private let urlSession: URLSession
     private let identity: @Sendable () throws -> Curve25519.KeyAgreement.PrivateKey
     private let now: @Sendable () -> Date
+    private let sessionStore: SupabaseSessionStore?
 
     private var state: BootstrapState = .notAuthenticated
 
@@ -27,12 +28,14 @@ public actor SupabaseClient {
                 anonKey: String,
                 urlSession: URLSession = .shared,
                 identity: @escaping @Sendable () throws -> Curve25519.KeyAgreement.PrivateKey,
-                now: @escaping @Sendable () -> Date = { Date() }) {
+                now: @escaping @Sendable () -> Date = { Date() },
+                sessionStore: SupabaseSessionStore? = nil) {
         self.baseURL = baseURL
         self.anonKey = anonKey
         self.urlSession = urlSession
         self.identity = identity
         self.now = now
+        self.sessionStore = sessionStore
     }
 
     public func currentSession() -> SupabaseAuthSession? {
@@ -66,10 +69,45 @@ public actor SupabaseClient {
     }
 
     private func performBootstrap() async throws -> SupabaseAuthSession {
+        // Track 5 / S4 — try persisted refresh_token first (closes S3 carry-over I3).
+        // If sessionStore present + has persisted session + refresh succeeds → reuse.
+        // Failure (no store / no persisted / 4xx on refresh) → fall through to fresh signup.
+        if let store = sessionStore, let persisted = readPersistedBestEffort(store: store) {
+            do {
+                let refreshed = try await performTokenRefresh(refreshToken: persisted.refreshToken)
+                persistSessionBestEffort(store: store, session: refreshed)
+                return refreshed
+            } catch {
+                // Persisted refresh failed; fall through to fresh signup below.
+                // (Don't clear yet — next successful auth will overwrite.)
+            }
+        }
+
         let initial = try await performSignInAnonymously()
         try await performRegisterPubkey(accessToken: initial.accessToken)
         let refreshed = try await performTokenRefresh(refreshToken: initial.refreshToken)
+        if let store = sessionStore {
+            persistSessionBestEffort(store: store, session: refreshed)
+        }
         return refreshed
+    }
+
+    private func readPersistedBestEffort(store: SupabaseSessionStore) -> PersistedSession? {
+        do {
+            return try store.read()
+        } catch {
+            // Log + proceed as if no persisted session.
+            return nil
+        }
+    }
+
+    private func persistSessionBestEffort(store: SupabaseSessionStore, session: SupabaseAuthSession) {
+        let persisted = PersistedSession(
+            refreshToken: session.refreshToken,
+            userID: session.userID.uuidString.lowercased(),
+            savedAtMs: Int64(now().timeIntervalSince1970 * 1000)
+        )
+        try? store.write(persisted)
     }
 
     // MARK: - Internal HTTP — signInAnonymously
