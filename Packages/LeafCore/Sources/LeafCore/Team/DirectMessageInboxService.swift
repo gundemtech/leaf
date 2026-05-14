@@ -81,18 +81,15 @@ public struct DirectMessageInboxService: Sendable {
 
     /// Fetch + decrypt + upsert a single message by id (used by APNs wake path).
     /// Returns false if message not found / not for this recipient / decode failed.
+    ///
+    /// I5 fix — Track 5 / S4 Stage 6 review: prefer targeted fetchMessageByID
+    /// over bounded fetchInbound window. fetchInbound caps at 100 rows; if 100+
+    /// newer rows exist between cold-launch and the target message, the previous
+    /// implementation would silently skip the wake-target. fetchMessageByID
+    /// queries `?message_id=eq.<id>` directly.
     @discardableResult
     public func tickOnce(workspaceID: String, forMessageID messageID: String) async throws -> Bool {
-        let pubkey = try recipientPubkeyHex()
-        // Fetch a bounded window — we don't have a direct fetch-by-id helper yet;
-        // fetch recent inbound and look for the target id (covers the warm-wake case).
-        let rows = try await supabase.fetchInboundMessages(
-            workspaceID: workspaceID,
-            recipientPubkeyHex: pubkey,
-            sinceCreatedAtISO: nil,  // window not pre-narrowed
-            limit: 100
-        )
-        guard let target = rows.first(where: { $0.messageID == messageID }) else {
+        guard let target = try await supabase.fetchMessageByID(messageID: messageID) else {
             return false
         }
         guard let decoded = decryptRow(target, workspaceID: workspaceID) else {

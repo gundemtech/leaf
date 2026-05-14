@@ -167,6 +167,42 @@ public struct DirectMessageService: Sendable {
         )
     }
 
+    /// I4 fix — Track 5 / S4 Stage 6 review:
+    /// Server PATCH + local mirror UPDATE in one call. Without this wrapper,
+    /// UI invoking just supabase.markRead leaves mirror stale until next tick
+    /// (which never fired pre-Stage-6 due to missing scheduler).
+    public func markRead(messageID: String) async throws {
+        let nowDate = now()
+        let iso = Self.iso8601(from: nowDate)
+        try await supabase.markRead(messageID: messageID, readAtISO: iso)
+        let nowMs = Int64(nowDate.timeIntervalSince1970 * 1000)
+        try database.writeSQL { db in
+            try MessagesMirrorStore.markRead(messageID: messageID, atMs: nowMs, in: db)
+        }
+    }
+
+    /// I4 fix — server PATCH + local mirror UPDATE for Task done lifecycle.
+    public func markDone(messageID: String, doneByPubkeyHex: String) async throws {
+        let nowDate = now()
+        let iso = Self.iso8601(from: nowDate)
+        try await supabase.markDone(
+            messageID: messageID, doneAtISO: iso, doneByPubkeyHex: doneByPubkeyHex
+        )
+        let nowMs = Int64(nowDate.timeIntervalSince1970 * 1000)
+        try database.writeSQL { db in
+            try MessagesMirrorStore.markDone(
+                messageID: messageID, atMs: nowMs,
+                doneByPubkeyHex: doneByPubkeyHex, in: db
+            )
+        }
+    }
+
+    private static func iso8601(from date: Date) -> String {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f.string(from: date)
+    }
+
     // MARK: - Helpers
 
     private func pushTitle(sender: String, kind: DirectMessageKind) -> String {

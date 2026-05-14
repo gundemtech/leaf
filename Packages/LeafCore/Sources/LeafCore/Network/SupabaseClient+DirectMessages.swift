@@ -188,6 +188,17 @@ extension SupabaseClient {
         )
     }
 
+    /// I5 fix — Track 5 / S4 Stage 6 review: targeted single-row fetch for
+    /// APNs-wake path. fetchInboundMessages with a 100-row cap could miss the
+    /// target message if many newer rows exist; this direct query never misses.
+    public func fetchMessageByID(messageID: String) async throws -> SupabaseDirectMessageRow? {
+        let rows = try await fetchMessages(
+            url: SupabaseEndpoint.directMessagesFetchByID(baseURL: baseURL, messageID: messageID),
+            label: "fetchMessageByID"
+        )
+        return rows.first
+    }
+
     private func fetchMessages(url: URL, label: String) async throws -> [SupabaseDirectMessageRow] {
         let session = try await ensureAuthenticated()
         var request = URLRequest(url: url)

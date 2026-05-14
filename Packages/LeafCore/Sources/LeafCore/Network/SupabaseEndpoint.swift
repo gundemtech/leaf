@@ -99,6 +99,20 @@ public enum SupabaseEndpoint {
         return components.url!
     }
 
+    /// I5 fix — Track 5 / S4 Stage 6 review: targeted fetch by message_id for
+    /// APNs-wake tickOnce path. Avoids 100-row-window race with bounded fetchInbound.
+    public static func directMessagesFetchByID(baseURL: URL, messageID: String) -> URL {
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("rest/v1/direct_messages"),
+            resolvingAgainstBaseURL: false
+        )!
+        components.queryItems = [
+            URLQueryItem(name: "message_id", value: "eq.\(messageID)"),
+            URLQueryItem(name: "limit", value: "1"),
+        ]
+        return components.url!
+    }
+
     public static func directMessagesPatch(baseURL: URL, messageID: String) -> URL {
         var components = URLComponents(
             url: baseURL.appendingPathComponent("rest/v1/direct_messages"),
