@@ -15,10 +15,10 @@ final class ShareTemplateTests: XCTestCase {
     }
 
     func testAdminShare_BodyContainsURLAndDisplayName() {
-        let url = URL(string: "leaf://invite/ABC#123456")!
+        let url = URL(string: "leaf://invite/AAECAwQFBgcICQoLDA0ODw?w=Acme&a=abababababababababababababababababababababababababababababababab")!
         let body = ShareTemplate.compose(.adminShare(displayName: "Anton", inviteURL: url))
         XCTAssertTrue(body.contains("Anton"))
-        XCTAssertTrue(body.contains("leaf://invite/ABC#123456"))
+        XCTAssertTrue(body.contains("leaf://invite/AAECAwQFBgcICQoLDA0ODw?w=Acme&a=abababababababababababababababababababababababababababababababab"))
         XCTAssertTrue(body.contains("24"), "must mention 24h expiry")
     }
 

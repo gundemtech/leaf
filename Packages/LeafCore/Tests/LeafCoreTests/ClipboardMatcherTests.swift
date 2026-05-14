@@ -4,13 +4,16 @@ import Foundation
 
 final class ClipboardMatcherTests: XCTestCase {
     func testMatch_PrefersInviteURLOverJoinCode() {
-        // Pasteboard содержит и URL и hex — InviteURL приоритетнее.
-        let s = "Hey, here's your invite: leaf://invite/KTcZTzV06yiIXDS1t3nq-lhXjwhKvKqP#123456 — paste this!"
+        // Track 5 §12 native format: leaf://invite/<22-char-token>?w=<name>&a=<64-hex>[#otp]
+        let validToken = "AAECAwQFBgcICQoLDA0ODw"
+        let validHex = String(repeating: "ab", count: 32)
+        let inviteURL = "leaf://invite/\(validToken)?w=Acme&a=\(validHex)"
+        let s = "Hey, here's your invite: \(inviteURL) — paste this!"
         let result = ClipboardMatcher.match(s)
         guard case .inviteURL(let url) = result else {
             return XCTFail("expected .inviteURL, got \(result)")
         }
-        XCTAssertEqual(url.absoluteString, "leaf://invite/KTcZTzV06yiIXDS1t3nq-lhXjwhKvKqP#123456")
+        XCTAssertEqual(url.absoluteString, inviteURL)
     }
 
     func testMatch_FallsBackToJoinCode() {

@@ -438,7 +438,7 @@ final class InviteAcceptServiceTests: XCTestCase {
         let b64url = blobBytes.base64URLNoPad
         AcceptServiceMockURLProtocol.handler = { req in
             XCTAssertEqual(req.httpMethod, "GET")
-            XCTAssertTrue(req.url!.path.hasSuffix("/v1/invite/aBc012XyZ_KJI98hgFEdcBA5678901ab"))
+            XCTAssertTrue(req.url!.path.hasSuffix("/v1/invite/AAECAwQFBgcICQoLDA0ODw"))
             let body = """
             {"blob":"\(b64url)","expires_at_ms":1700086400000}
             """.data(using: .utf8)!
@@ -447,7 +447,7 @@ final class InviteAcceptServiceTests: XCTestCase {
             return (resp, body)
         }
         let svc = makeService()
-        let url = URL(string: "leaf://invite/aBc012XyZ_KJI98hgFEdcBA5678901ab#654321")!
+        let url = URL(string: "leaf://invite/AAECAwQFBgcICQoLDA0ODw?w=Acme&a=abababababababababababababababababababababababababababababababab#654321")!
         let result = try await svc.fetchInvite(inviteURL: url)
         XCTAssertEqual(result.blob.bytes, blobBytes)
         XCTAssertEqual(result.otp, "654321")
@@ -470,7 +470,7 @@ final class InviteAcceptServiceTests: XCTestCase {
             return (resp, nil)
         }
         let svc = makeService()
-        let url = URL(string: "leaf://invite/aBc012XyZ_KJI98hgFEdcBA5678901ab#000000")!
+        let url = URL(string: "leaf://invite/AAECAwQFBgcICQoLDA0ODw?w=Acme&a=abababababababababababababababababababababababababababababababab#000000")!
         do {
             _ = try await svc.fetchInvite(inviteURL: url)
             XCTFail("expected throw")

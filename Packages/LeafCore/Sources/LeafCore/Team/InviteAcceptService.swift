@@ -66,13 +66,18 @@ public struct InviteAcceptService: Sendable {
     /// fetch + return blob alongside OTP так, чтобы caller (Reader) auto-prefilled OTP в UI.
     /// `inviteNotFound` от relay re-maps в `.inviteAlreadyConsumed` (per 5.5.B UX — explicit "уже консумлено / истекло"
     /// message vs old "not found" generic).
+    @available(*, deprecated, message: "Track 5 / S3 — Phase 5.5 two-step fetch+accept replaced by single-call acceptInvite(url:displayName:otp:). Will be removed in Task 8 (InviteAcceptService Track 5 rewrite).")
     public func fetchInvite(inviteURL url: URL) async throws -> (blob: InviteBlob, otp: String) {
+        // Transitional shim — keeps Phase 5.5 callers compiling between Task 6 (URL rewrite)
+        // and Task 8 (full service rewrite). New InviteURL shape's otp is optional; when
+        // require_otp=false the fragment is absent. Old callers don't read otp before
+        // passing to acceptInvite, so empty-string fallback is safe.
         let token: String
         let otp: String
         switch InviteURL.parse(url) {
         case .success(let parsed):
             token = parsed.token
-            otp = parsed.otp
+            otp = parsed.otp ?? ""
         case .failure:
             throw LeafError.inviteURLMalformed
         }
