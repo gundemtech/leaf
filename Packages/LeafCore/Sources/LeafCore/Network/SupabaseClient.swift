@@ -17,9 +17,9 @@ import Foundation
 public actor SupabaseClient {
     public let baseURL: URL
     public let anonKey: String
-    private let urlSession: URLSession
+    internal let urlSession: URLSession
     private let identity: @Sendable () throws -> Curve25519.KeyAgreement.PrivateKey
-    private let now: @Sendable () -> Date
+    internal let now: @Sendable () -> Date
     private let sessionStore: SupabaseSessionStore?
 
     private var state: BootstrapState = .notAuthenticated

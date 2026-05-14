@@ -45,6 +45,77 @@ public enum SupabaseEndpoint {
         baseURL.appendingPathComponent("rest/v1/workspace_members")
     }
 
+    // MARK: - PostgREST tables — Track 5 / S4 (direct_messages + apns_tokens)
+
+    public static func directMessagesInsert(baseURL: URL) -> URL {
+        baseURL.appendingPathComponent("rest/v1/direct_messages")
+    }
+
+    public static func directMessagesFetchInbound(
+        baseURL: URL,
+        workspaceID: String,
+        recipientPubkeyHex: String,
+        sinceCreatedAtISO: String?,
+        limit: Int
+    ) -> URL {
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("rest/v1/direct_messages"),
+            resolvingAgainstBaseURL: false
+        )!
+        var items: [URLQueryItem] = [
+            URLQueryItem(name: "workspace_id", value: "eq.\(workspaceID)"),
+            URLQueryItem(name: "recipient_pubkey", value: "eq.\(recipientPubkeyHex)"),
+            URLQueryItem(name: "order", value: "created_at.asc"),
+            URLQueryItem(name: "limit", value: String(limit)),
+        ]
+        if let since = sinceCreatedAtISO {
+            items.append(URLQueryItem(name: "created_at", value: "gt.\(since)"))
+        }
+        components.queryItems = items
+        return components.url!
+    }
+
+    public static func directMessagesFetchOutbound(
+        baseURL: URL,
+        workspaceID: String,
+        senderPubkeyHex: String,
+        sinceCreatedAtISO: String?,
+        limit: Int
+    ) -> URL {
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("rest/v1/direct_messages"),
+            resolvingAgainstBaseURL: false
+        )!
+        var items: [URLQueryItem] = [
+            URLQueryItem(name: "workspace_id", value: "eq.\(workspaceID)"),
+            URLQueryItem(name: "sender_pubkey", value: "eq.\(senderPubkeyHex)"),
+            URLQueryItem(name: "order", value: "created_at.asc"),
+            URLQueryItem(name: "limit", value: String(limit)),
+        ]
+        if let since = sinceCreatedAtISO {
+            items.append(URLQueryItem(name: "created_at", value: "gt.\(since)"))
+        }
+        components.queryItems = items
+        return components.url!
+    }
+
+    public static func directMessagesPatch(baseURL: URL, messageID: String) -> URL {
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("rest/v1/direct_messages"),
+            resolvingAgainstBaseURL: false
+        )!
+        components.queryItems = [URLQueryItem(name: "message_id", value: "eq.\(messageID)")]
+        return components.url!
+    }
+
+    public static func apnsTokensUpsert(baseURL: URL) -> URL {
+        baseURL.appendingPathComponent("rest/v1/apns_tokens")
+    }
+
+    public static func apnsPush(baseURL: URL) -> URL {
+        baseURL.appendingPathComponent("functions/v1/apns_push")
+    }
+
     // MARK: - Header builders
 
     public static func anonHeaders(anonKey: String) -> [String: String] {
@@ -68,6 +139,28 @@ public enum SupabaseEndpoint {
             "Authorization": "Bearer \(accessToken)",
             "Content-Type": "application/json",
             "Prefer": "return=representation",
+        ]
+    }
+
+    /// Track 5 / S4 — PostgREST UPSERT via `Prefer: resolution=merge-duplicates`.
+    /// Used by `apns_tokens` UPSERT path (token rotation reuses PK).
+    public static func postgrestUpsertHeaders(anonKey: String, accessToken: String) -> [String: String] {
+        [
+            "apikey": anonKey,
+            "Authorization": "Bearer \(accessToken)",
+            "Content-Type": "application/json",
+            "Prefer": "resolution=merge-duplicates, return=minimal",
+        ]
+    }
+
+    /// Track 5 / S4 — PATCH via PostgREST. Caller URL composer carries the
+    /// `?message_id=eq.<uuid>` query filter; this just adds the standard headers.
+    public static func postgrestPatchHeaders(anonKey: String, accessToken: String) -> [String: String] {
+        [
+            "apikey": anonKey,
+            "Authorization": "Bearer \(accessToken)",
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal",
         ]
     }
 }
