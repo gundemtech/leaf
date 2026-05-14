@@ -21,6 +21,8 @@ final class SupabaseClientProbeTests: XCTestCase {
     func testProbe_pending() async throws {
         MockURLProtocol.handler = { request, body in
             XCTAssertEqual(request.url?.path, "/functions/v1/invite_resolve")
+            // apikey required by Supabase production gateway, even on anon endpoints.
+            XCTAssertEqual(request.value(forHTTPHeaderField: "apikey"), "k")
             let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any]
             XCTAssertEqual(json?["probe"] as? Bool, true)
             let resp = """

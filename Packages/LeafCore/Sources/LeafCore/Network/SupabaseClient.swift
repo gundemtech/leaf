@@ -331,8 +331,12 @@ extension SupabaseClient {
         let url = SupabaseEndpoint.inviteResolve(baseURL: baseURL)
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        // Anon: no Authorization header. apikey not strictly required by Edge Function but harmless.
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        // Anon: no Authorization header (token is the auth at Edge Function layer), but
+        // Supabase production gateway (Kong) requires `apikey` header on every request.
+        // Local `supabase functions serve --no-verify-jwt` was permissive; production is not.
+        for (k, v) in SupabaseEndpoint.anonHeaders(anonKey: anonKey) {
+            request.setValue(v, forHTTPHeaderField: k)
+        }
         let body: [String: Any] = [
             "token": token,
             "invitee_pubkey": inviteePubkeyHex,
@@ -376,7 +380,10 @@ extension SupabaseClient {
         let url = SupabaseEndpoint.inviteResolve(baseURL: baseURL)
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        // Anon: apikey required by Supabase production gateway (same shape as resolveInvite above).
+        for (k, v) in SupabaseEndpoint.anonHeaders(anonKey: anonKey) {
+            request.setValue(v, forHTTPHeaderField: k)
+        }
         request.httpBody = try JSONSerialization.data(withJSONObject: ["token": token, "probe": true])
 
         let (data, response): (Data, URLResponse)

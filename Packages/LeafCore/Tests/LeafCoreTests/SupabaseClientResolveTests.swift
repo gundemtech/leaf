@@ -35,6 +35,8 @@ final class SupabaseClientResolveTests: XCTestCase {
             XCTAssertEqual(request.httpMethod, "POST")
             // No Authorization header — token is the auth
             XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+            // apikey IS required by Supabase production gateway, even on anon endpoints.
+            XCTAssertEqual(request.value(forHTTPHeaderField: "apikey"), "anon")
             let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any]
             XCTAssertEqual(json?["token"] as? String, tokenUUID)
             XCTAssertEqual(json?["invitee_pubkey"] as? String, inviteePub)
