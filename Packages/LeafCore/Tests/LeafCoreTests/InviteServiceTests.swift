@@ -95,6 +95,11 @@ final class InviteServiceTests: XCTestCase {
     private var adminPriv: Curve25519.KeyAgreement.PrivateKey!
 
     override func setUp() async throws {
+        // Track 5 / S3 — Phase 5.5 RelayClient-shape tests retired. SupabaseClient + Track 5 §12 URL coverage
+        // lives in InviteServiceTrackFiveTests (Task 7 of Track 5 / S3 plan). Retain skeleton + setUp for
+        // future re-anchoring of crypto-round-trip coverage via SupabaseClient mock if needed.
+        try XCTSkipIf(true, "Track 5 / S3 — Phase 5.5 RelayClient path retired; coverage in SupabaseClientPostInviteTests + (future) InviteServiceTrackFiveTests")
+
         tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("invite-svc-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
@@ -133,7 +138,9 @@ final class InviteServiceTests: XCTestCase {
         InviteServiceMockURLProtocol.handler = nil
         InviteServiceMockURLProtocol.lastBody = nil
         InviteServiceMockURLProtocol.lastRequest = nil
-        try? FileManager.default.removeItem(at: tempDir)
+        if let dir = tempDir {
+            try? FileManager.default.removeItem(at: dir)
+        }
     }
 
     private func makeRelayClient() -> RelayClient {
@@ -141,6 +148,18 @@ final class InviteServiceTests: XCTestCase {
         config.protocolClasses = [InviteServiceMockURLProtocol.self]
         return RelayClient(baseURL: URL(string: "https://stub.example")!,
                            urlSession: URLSession(configuration: config))
+    }
+
+    /// Track 5 / S3 — stub SupabaseClient (never actually invoked; setUp skips all tests).
+    private func makeStubSupabase() -> SupabaseClient {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [InviteServiceMockURLProtocol.self]
+        return SupabaseClient(
+            baseURL: URL(string: "https://stub.supabase")!,
+            anonKey: "stub",
+            urlSession: URLSession(configuration: config),
+            identity: { try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: Data(repeating: 0, count: 32)) }
+        )
     }
 
     private func stub201(token: String, expiresAtMs: Int64) {
@@ -164,7 +183,7 @@ final class InviteServiceTests: XCTestCase {
         let priv = identity ?? adminPriv
         return InviteService(
             database: db,
-            relayClient: makeRelayClient(),
+            supabase: makeStubSupabase(),
             inviteKDF: kdf,
             inviteBlobCodec: codec,
             keystoreRoot: keystoreRoot,
@@ -281,7 +300,7 @@ final class InviteServiceTests: XCTestCase {
         let privLocal = adminPriv!
         let svc = InviteService(
             database: emptyDB,
-            relayClient: makeRelayClient(),
+            supabase: makeStubSupabase(),
             inviteKDF: RecordingInviteKDF(),
             inviteBlobCodec: RecordingInviteBlobCodec(),
             keystoreRoot: keystoreRoot,
@@ -317,7 +336,7 @@ final class InviteServiceTests: XCTestCase {
         let privLocal = adminPriv!
         let svc = InviteService(
             database: db2,
-            relayClient: makeRelayClient(),
+            supabase: makeStubSupabase(),
             inviteKDF: RecordingInviteKDF(),
             inviteBlobCodec: RecordingInviteBlobCodec(),
             keystoreRoot: keystoreRoot,

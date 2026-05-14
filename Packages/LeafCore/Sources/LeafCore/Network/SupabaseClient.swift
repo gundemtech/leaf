@@ -188,6 +188,124 @@ public actor SupabaseClient {
     }
 }
 
+// MARK: - IssuedInvite (Track 5 / S3 — postInvite response shape)
+
+public struct IssuedInvite: Sendable, Equatable {
+    public let tokenUUID: UUID
+    public let tokenBase64URL: String
+    public let workspaceID: String
+    public let expiresAtISO8601: String
+
+    public init(tokenUUID: UUID, tokenBase64URL: String, workspaceID: String, expiresAtISO8601: String) {
+        self.tokenUUID = tokenUUID
+        self.tokenBase64URL = tokenBase64URL
+        self.workspaceID = workspaceID
+        self.expiresAtISO8601 = expiresAtISO8601
+    }
+}
+
+// MARK: - UUID ↔ base64url helpers
+
+public extension UUID {
+    /// 22-char base64url-no-padding encoding of the 16-byte raw UUID.
+    var base64URLString: String {
+        let bytes = withUnsafeBytes(of: self.uuid) { Data($0) }
+        return bytes.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+    }
+
+    init?(base64URLString: String) {
+        var s = base64URLString
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        let pad = (4 - s.count % 4) % 4
+        s += String(repeating: "=", count: pad)
+        guard let data = Data(base64Encoded: s), data.count == 16 else { return nil }
+        let uuid: uuid_t = data.withUnsafeBytes { rawPtr in
+            rawPtr.load(as: uuid_t.self)
+        }
+        self.init(uuid: uuid)
+    }
+}
+
+// MARK: - SupabaseClient.postInvite (admin path — Track 5 / S3)
+
+extension SupabaseClient {
+    /// Admin path — POST invite row to Supabase `invites` table via PostgREST.
+    /// Caller (InviteService) provides crypto blob bytes; we hex-encode for bytea wire.
+    /// Returns: IssuedInvite with both UUID and base64url representations of the server-issued token.
+    public func postInvite(workspaceID: String,
+                           adminPubkeyHex: String,
+                           encryptedTeamkey: Data,
+                           expiresAt: Date,
+                           requireOTP: Bool,
+                           otpHashBase64: String?) async throws -> IssuedInvite {
+        let session = try await ensureAuthenticated()
+
+        let url = SupabaseEndpoint.postInvite(baseURL: baseURL)
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        for (k, v) in SupabaseEndpoint.postgrestInsertHeaders(
+            anonKey: anonKey, accessToken: session.accessToken
+        ) {
+            request.setValue(v, forHTTPHeaderField: k)
+        }
+        let teamkeyHex = "\\x" + encryptedTeamkey.map { String(format: "%02x", $0) }.joined()
+        let iso = Self.iso8601(from: expiresAt)
+        var body: [String: Any] = [
+            "workspace_id": workspaceID,
+            "admin_pubkey": adminPubkeyHex,
+            "encrypted_teamkey": teamkeyHex,
+            "expires_at": iso,
+            "require_otp": requireOTP,
+        ]
+        if let otpHashBase64, let bytes = Data(base64Encoded: otpHashBase64) {
+            // PostgREST bytea: decode base64 → hex with \x prefix
+            body["otp_hash"] = "\\x" + bytes.map { String(format: "%02x", $0) }.joined()
+        }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await urlSession.data(for: request)
+        } catch {
+            throw SupabaseError.transport(reason: "postInvite: \(error)")
+        }
+        guard let http = response as? HTTPURLResponse else {
+            throw SupabaseError.transport(reason: "postInvite: non-http")
+        }
+        guard http.statusCode == 201 else {
+            throw SupabaseError.fromStatus(http.statusCode, body: data)
+        }
+
+        struct Row: Decodable { let token: String; let workspace_id: String; let expires_at: String }
+        let rows: [Row]
+        do {
+            rows = try JSONDecoder().decode([Row].self, from: data)
+        } catch {
+            throw SupabaseError.decoding(reason: "postInvite: \(error)")
+        }
+        guard let first = rows.first,
+              let uuid = UUID(uuidString: first.token) else {
+            throw SupabaseError.decoding(reason: "postInvite: empty rows or bad uuid")
+        }
+        return IssuedInvite(
+            tokenUUID: uuid,
+            tokenBase64URL: uuid.base64URLString,
+            workspaceID: first.workspace_id,
+            expiresAtISO8601: first.expires_at
+        )
+    }
+
+    private static func iso8601(from date: Date) -> String {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f.string(from: date)
+    }
+}
+
 // MARK: - SupabaseAuthSession JWT claim extraction
 
 extension SupabaseAuthSession {

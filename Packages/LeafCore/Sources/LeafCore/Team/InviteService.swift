@@ -2,13 +2,11 @@
 //  InviteService.swift
 //  LeafCore
 //
-//  Phase 5.2.D — admin-side orchestrator. Reads org/admin-member/active-teamKey
-//  + X25519 priv from keystore → builds InvitePlaintext → ECDH + KDF + AES-GCM
-//  via injected InviteKDF + InviteBlobCodec → POST to RelayClient → returns
-//  InviteOutbound (token+OTP for OOB to invitee).
-//
-//  Inject'абельные factories `now` / `randomOTP` / `identity` — deterministic
-//  test round-trip. Default identity = IdentityService.ensureLocalIdentity (idempotent).
+//  Track 5 / S3 — admin-side orchestrator. Reads workspace + admin member +
+//  active teamKey + teamKey bytes scoped to workspaceID. Computes ECDH + HKDF
+//  + AES-GCM via injected codec; POSTs encrypted_teamkey to Supabase invites
+//  table via SupabaseClient (replaces Phase 5.5 Cloudflare RelayClient.postInvite).
+//  Returns InviteOutbound with composed Track 5 §12 URL + optional OTP.
 //
 
 import CryptoKit
@@ -17,7 +15,7 @@ import Security
 
 public struct InviteService: Sendable {
     private let database: Database
-    private let relayClient: RelayClient
+    private let supabase: SupabaseClient
     private let inviteKDF: any InviteKDF
     private let inviteBlobCodec: any InviteBlobCodec
     private let keystoreRoot: URL
@@ -27,7 +25,7 @@ public struct InviteService: Sendable {
 
     public init(
         database: Database,
-        relayClient: RelayClient,
+        supabase: SupabaseClient,
         inviteKDF: any InviteKDF,
         inviteBlobCodec: any InviteBlobCodec,
         keystoreRoot: URL = TeamKeystore.defaultRoot(),
@@ -36,7 +34,7 @@ public struct InviteService: Sendable {
         identity: (@Sendable () throws -> Curve25519.KeyAgreement.PrivateKey)? = nil
     ) {
         self.database = database
-        self.relayClient = relayClient
+        self.supabase = supabase
         self.inviteKDF = inviteKDF
         self.inviteBlobCodec = inviteBlobCodec
         self.keystoreRoot = keystoreRoot
@@ -45,111 +43,120 @@ public struct InviteService: Sendable {
         self.identity = identity ?? { try IdentityService.ensureLocalIdentity(at: keystoreRoot) }
     }
 
-    /// Admin-side: build invite blob, POST to relay, return token+OTP for OOB
-    /// transmission. Track-5 S2: scoped to a specific `workspaceID`; resolves
-    /// the active teamKey, admin member, and keystore bytes within that
-    /// workspace's substrate. The blob carries the workspaceID in its plaintext
-    /// (legacy JSON key `org_id`, semantically the workspace id post-M019) so
-    /// the invitee knows which workspace they are joining.
+    /// Admin-side: build invite blob, POST to Supabase invites table, return URL + optional OTP.
+    /// OTP only generated and emitted when `requireOTP=true`. Default OFF — magic link itself
+    /// carries 122-bit token entropy; OTP is opt-in second factor.
     public func generateInvite(workspaceID: String,
-                               inviteePubkeyHex: String) async throws -> InviteOutbound {
-        // 1. Validate hex (64 chars, [0-9a-fA-F]).
+                               inviteePubkeyHex: String,
+                               requireOTP: Bool = false) async throws -> InviteOutbound {
+        // 1. Validate hex
         guard inviteePubkeyHex.count == 64,
               inviteePubkeyHex.allSatisfy({ $0.isHexDigit }) else {
             throw LeafError.invalidPayload
         }
-        let lowercased = inviteePubkeyHex.lowercased()
+        let inviteeHex = inviteePubkeyHex.lowercased()
 
-        // 2-4. Read DB rows scoped to workspaceID.
-        guard let org = try database.readWorkspace(id: workspaceID) else {
+        // 2-4. Read workspace state scoped to workspaceID
+        guard let workspace = try database.readWorkspace(id: workspaceID) else {
             throw LeafError.databaseUnavailable
         }
-        let members = try database.readTeamMembers(workspaceID: org.id, includeRemoved: false)
-        guard let selfMember = members.first else {
-            throw LeafError.databaseUnavailable
-        }
-        guard let activeKey = try database.readActiveTeamKey(workspaceID: org.id) else {
+        let members = try database.readTeamMembers(workspaceID: workspace.id, includeRemoved: false)
+        guard let selfMember = members.first else { throw LeafError.databaseUnavailable }
+        guard let activeKey = try database.readActiveTeamKey(workspaceID: workspace.id) else {
             throw LeafError.databaseUnavailable
         }
         let teamKeyBytes = try TeamKeystore.readTeamKey(
-            workspaceID: org.id,
-            keyID: activeKey.id,
-            at: keystoreRoot
+            workspaceID: workspace.id, keyID: activeKey.id, at: keystoreRoot
         )
 
-        // 5. Identity (X25519 priv).
+        // 5. Identity
         let priv = try identity()
 
-        // 6. OTP.
-        let otp = try randomOTP()
+        // 6. OTP — only when requireOTP=true; KDF salt="" otherwise (per D6: ECDH provides primary 256-bit security)
+        let otp: String? = requireOTP ? try randomOTP() : nil
+        let kdfOTP: String = otp ?? ""
 
-        // 7. ECDH.
-        let shared = try KeyAgreement.sharedSecret(privateKey: priv,
-                                                   peerPublicKeyHex: lowercased)
+        // 7. ECDH
+        let shared = try KeyAgreement.sharedSecret(privateKey: priv, peerPublicKeyHex: inviteeHex)
 
-        // 8. Wrap key.
-        let wrapKey = try inviteKDF.deriveWrapKey(sharedSecret: shared, otp: otp)
+        // 8. Wrap key
+        let wrapKey = try inviteKDF.deriveWrapKey(sharedSecret: shared, otp: kdfOTP)
 
-        // 9. Plaintext.
+        // 9. Plaintext + blob
         let nowMs = Int64(now().timeIntervalSince1970 * 1000)
         let plaintext = InvitePlaintext(
             teamKeyBase64: teamKeyBytes.base64EncodedString(),
             teamKeyID: activeKey.id,
-            orgID: org.id,
-            orgName: org.name,
+            orgID: workspace.id,
+            orgName: workspace.name,
             adminMemberID: selfMember.id,
             adminDisplayName: selfMember.displayName,
             issuedAtMs: nowMs
         )
-
-        // 10. Encode blob.
-        let blob = try inviteBlobCodec.encode(plaintext,
-                                               adminPubkey: priv.publicKey.rawRepresentation,
-                                               wrapKey: wrapKey)
-
-        // 11. Expiry = now + 24h.
-        let expiresAtMs = nowMs + 24 * 60 * 60 * 1000
-
-        // 12. POST to relay.
-        let token = try await relayClient.postInvite(
-            memberPubkeyHex: lowercased,
-            blob: blob.bytes,
-            expiresAtMs: expiresAtMs
+        let blob = try inviteBlobCodec.encode(
+            plaintext, adminPubkey: priv.publicKey.rawRepresentation, wrapKey: wrapKey
         )
 
-        return InviteOutbound(token: token.value,
-                              otp: otp,
-                              expiresAtMs: token.expiresAtMs,
-                              inviteePubkeyHex: lowercased)
+        // 10. OTP hash (only when requireOTP) — HMAC-SHA256(otp, salt="leaf-invite-otp-v1")
+        let otpHashBase64: String? = otp.map { otpVal in
+            let salt = Data("leaf-invite-otp-v1".utf8)
+            let key = SymmetricKey(data: salt)
+            let mac = HMAC<SHA256>.authenticationCode(for: Data(otpVal.utf8), using: key)
+            return Data(mac).base64EncodedString()
+        }
+
+        // 11. POST to Supabase
+        let expiresAtMs = nowMs + 24 * 60 * 60 * 1000
+        let adminHex = priv.publicKey.rawRepresentation
+            .map { String(format: "%02x", $0) }.joined()
+        let issued = try await supabase.postInvite(
+            workspaceID: workspace.id,
+            adminPubkeyHex: adminHex,
+            encryptedTeamkey: blob.bytes,
+            expiresAt: Date(timeIntervalSince1970: TimeInterval(expiresAtMs) / 1000),
+            requireOTP: requireOTP,
+            otpHashBase64: otpHashBase64
+        )
+
+        // 12. Compose Track 5 §12 URL
+        let composed = InviteURL.compose(
+            token: issued.tokenBase64URL,
+            workspaceName: workspace.name,
+            adminPubkeyHex: adminHex,
+            otp: otp
+        )
+
+        return InviteOutbound(
+            token: issued.tokenBase64URL,
+            url: composed.url,
+            otp: otp,
+            expiresAtMs: expiresAtMs,
+            inviteePubkeyHex: inviteeHex
+        )
     }
 
-    /// Phase 5.5.B — admin pastes invitee Join code (formatted base32-Crockford
-    /// OR legacy hex). Decodes to 32-byte pubkey via `JoinCode.decode`, then
-    /// delegates to `generateInvite(workspaceID:inviteePubkeyHex:)`. Wraps
-    /// `JoinCodeError` cases в `LeafError` для UI consumer'ов (mirror existing
-    /// error model). Track-5 S2: now scoped to a specific workspace.
+    /// Admin pastes invitee Join code; decode → hex → delegate.
     public func generateInvite(workspaceID: String,
-                               inviteeJoinCode: String) async throws -> InviteOutbound {
+                               inviteeJoinCode: String,
+                               requireOTP: Bool = false) async throws -> InviteOutbound {
         let pubkey: Data
         switch JoinCode.decode(inviteeJoinCode) {
-        case .success(let bytes):
-            pubkey = bytes
-        case .failure(.malformed):
-            throw LeafError.joinCodeMalformed
-        case .failure(.checksumMismatch):
-            throw LeafError.joinCodeChecksumMismatch
+        case .success(let bytes): pubkey = bytes
+        case .failure(.malformed): throw LeafError.joinCodeMalformed
+        case .failure(.checksumMismatch): throw LeafError.joinCodeChecksumMismatch
         }
         let hex = pubkey.map { String(format: "%02x", $0) }.joined()
-        return try await generateInvite(workspaceID: workspaceID, inviteePubkeyHex: hex)
+        return try await generateInvite(
+            workspaceID: workspaceID, inviteePubkeyHex: hex, requireOTP: requireOTP
+        )
     }
 
-    /// Admin-side revoke: best-effort DELETE on relay (idempotent — relay returns 204).
+    /// Admin-side revoke — best-effort stub. S3 ships no-op (invite auto-expires in 24h).
+    /// S4 carry-over: PATCH /rest/v1/invites?token=eq.<uuid> SET expires_at=now().
     public func revokeInvite(token: String) async throws {
-        try await relayClient.deleteInvite(token: token)
+        // TODO(S4): PATCH invites SET expires_at = now() via SupabaseClient
     }
 
-    /// Default OTP factory: 6 ASCII digits via SecRandomCopyBytes.
-    /// Modulo bias < 0.0001% (2³² mod 10⁶) — irrelevant для invite OTP threat model.
     public static func secureRandomOTP() throws -> String {
         var bytes = [UInt8](repeating: 0, count: 4)
         let status = SecRandomCopyBytes(kSecRandomDefault, 4, &bytes)
@@ -161,3 +168,5 @@ public struct InviteService: Sendable {
         return String(format: "%06d", n % 1_000_000)
     }
 }
+
+// InviteOutbound value type defined in InviteOutbound.swift
