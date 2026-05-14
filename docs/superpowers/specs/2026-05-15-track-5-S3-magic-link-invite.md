@@ -1598,7 +1598,7 @@ Total: **13 commits** across 7 phases. Detailed per-step decomposition in plan d
 
 ## 15. Implementation plan
 
-Detailed atomic-per-commit plan in `.claude/plans/track-5-S3-magic-link-invite.md` (gitignored — moat), written next via `superpowers:writing-plans`.
+Detailed atomic-per-commit plan in `docs/superpowers/plans/2026-05-15-track-5-S3-magic-link-invite.md` (gitignored — moat), written next via `superpowers:writing-plans`.
 
 ---
 
