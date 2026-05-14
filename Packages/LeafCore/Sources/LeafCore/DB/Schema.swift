@@ -160,6 +160,56 @@ public enum Schema {
         public static let indexStatus = "idx_pending_invites_status"
     }
 
+    /// Phase Track-5 S4 — direct messages local mirror (recipient + sender's
+    /// own timeline). One row per message_id. `direction` discriminates
+    /// outbound (sender's row) vs inbound (recipient's row). Forever retention.
+    /// Encrypted payload not stored here — only decrypted plaintext columns.
+    public enum MessagesMirror {
+        public static let tableName = "messages_mirror"
+        public static let messageID = "message_id"
+        public static let workspaceID = "workspace_id"
+        public static let senderPubkeyHex = "sender_pubkey_hex"
+        public static let senderMemberID = "sender_member_id"
+        public static let senderDisplayName = "sender_display_name"
+        public static let recipientPubkeyHex = "recipient_pubkey_hex"
+        public static let kind = "kind"
+        public static let body = "body"
+        public static let attachmentKind = "attachment_kind"
+        public static let attachmentExternalRef = "attachment_external_ref"
+        public static let replyTo = "reply_to"
+        public static let sentAtMs = "sent_at_ms"
+        public static let serverCreatedAtMs = "server_created_at_ms"
+        public static let readAtMs = "read_at_ms"
+        public static let doneAtMs = "done_at_ms"
+        public static let doneByPubkeyHex = "done_by_pubkey_hex"
+        public static let direction = "direction"
+        public static let lastSyncedAtMs = "last_synced_at_ms"
+
+        public static let indexWorkspaceRecent = "idx_messages_mirror_workspace_recent"
+        public static let indexUnread = "idx_messages_mirror_unread"
+        public static let indexOpenTasks = "idx_messages_mirror_open_tasks"
+
+        public static let directionOutbound = "outbound"
+        public static let directionInbound = "inbound"
+    }
+
+    /// Phase Track-5 S4 — singleton-per-device APNs token row, mirroring the
+    /// Supabase `apns_tokens` row owned by this Mac. `server_synced_at_ms`
+    /// IS NULL = locally captured but not yet pushed to Supabase; retried on
+    /// next launch / scenePhase=active.
+    public enum APNsTokenLocal {
+        public static let tableName = "apns_token_local"
+        public static let deviceID = "device_id"
+        public static let apnsToken = "apns_token"
+        public static let environment = "environment"
+        public static let registeredAtMs = "registered_at_ms"
+        public static let lastPushedAtMs = "last_pushed_at_ms"
+        public static let serverSyncedAtMs = "server_synced_at_ms"
+
+        public static let environmentDevelopment = "development"
+        public static let environmentProduction = "production"
+    }
+
     /// Phase Track-1 D1 — canonical names for new payload keys carrying bodies +
     /// attachment metadata + Phase 4.8 PR metrics. Single source of truth for
     /// collectors + D2 FTS5 + D3 detector query paths.

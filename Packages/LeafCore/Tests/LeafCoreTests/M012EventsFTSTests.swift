@@ -58,8 +58,8 @@ final class M012EventsFTSTests: XCTestCase {
         try db.readSQL { rawDB in
             let applied = try String.fetchAll(rawDB, sql: "SELECT identifier FROM grdb_migrations ORDER BY identifier")
             XCTAssertTrue(applied.contains("012_events_fts"))
-            // Track-5 S2: chain extended by M019 (workspaces).
-            XCTAssertEqual(applied.count, 19)
+            // Track-5 S4: chain extended by M020 (messages_mirror) + M021 (apns_token_local).
+            XCTAssertEqual(applied.count, 21)
         }
     }
 

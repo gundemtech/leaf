@@ -55,6 +55,8 @@ public final class Database: @unchecked Sendable {
         migrator.registerMigration017NormalizeSlackEventKinds()
         migrator.registerMigration018IntensityAggregates()
         migrator.registerMigration019Workspaces()
+        migrator.registerMigration020MessagesMirror()
+        migrator.registerMigration021APNsTokenLocal()
         try migrator.migrate(pool)
 
         return Database(pool: pool, config: config, mode: .writer)

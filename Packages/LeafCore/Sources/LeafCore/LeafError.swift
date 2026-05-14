@@ -41,4 +41,20 @@ public enum LeafError: Error, Sendable {
     case inviteOTPRequired
     // Track 5 / S3 (consumer: any caller falling back from unknown SupabaseError / other unmapped error).
     case unknown
+    // Track 5 / S4 (consumer: DirectMessageBlobCodec + DirectMessageInboxService.tick row decoder).
+    // Surfaced on short bytes / unknown version / AES-GCM tag fail / JSON decode failure.
+    case directMessageBlobMalformed
+    // Track 5 / S4 (consumer: DirectMessageService.send pre-encrypt validation) — body exceeded
+    // safety cap (>64KB). Caller surfaces inline UI error before re-enabling Send button.
+    case directMessageBodyTooLarge
+    // Track 5 / S4 (consumer: APNsRegistrationService) — Supabase apns_tokens UPSERT failed
+    // (network / 4xx / 5xx). Local row exists; retry on next launch / scenePhase=active.
+    case apnsRegistrationFailed(reason: String)
+    // Track 5 / S4 (consumer: SupabaseSessionStore) — disk read/write/parse failure when
+    // persisting refresh_token to keystore. Non-fatal — session works in-memory.
+    case supabaseSessionStoreFailure(reason: String)
+    // Track 5 / S4 (consumer: DirectMessageService.send fire-and-forget APNs trigger) —
+    // apns_push Edge Function returned non-200. Message persists regardless;
+    // SentDirectMessage.pushDispatchStatus carries the reason.
+    case apnsPushDispatchFailed(reason: String)
 }
