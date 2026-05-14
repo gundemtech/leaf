@@ -48,8 +48,11 @@ struct LeafApp: App {
     // `ActiveWorkspaceStore` — sole substrate for workspace surface.
     @State private var activeWorkspaceStore: ActiveWorkspaceStore
     @State private var workspaceReader: WorkspaceReader
-    @State private var inviteOutboxReader = InviteOutboxReader()
-    @State private var inviteAcceptReader = InviteAcceptReader()
+    /// Track 5 / S3 — Leaf's first network primitive. Constructed once at LeafApp.init
+    /// time and injected into all invite readers + future S4+ readers.
+    @State private var supabaseClient: SupabaseClient
+    @State private var inviteOutboxReader: InviteOutboxReader
+    @State private var inviteAcceptReader: InviteAcceptReader
     @State private var memberRemovalReader = MemberRemovalReader()  // Phase 5.3.E
     @State private var pendingInvitesReader = PendingInvitesReader()  // Phase 5.5.C
     @State private var inviteURLHandler = InviteURLHandler()  // Phase 5.5.B
@@ -95,6 +98,17 @@ struct LeafApp: App {
         _activeWorkspaceStore = State(initialValue: active)
         _workspaceReader = State(initialValue: WorkspaceReader(activeStore: active))
 
+        // Track 5 / S3 — SupabaseClient is the first Mac client primitive talking to Supabase.
+        // baseURL + anonKey read from Info.plist (xcconfig substitution).
+        let supabase = SupabaseClient(
+            baseURL: SupabaseConfig.baseURL(from: Bundle.main),
+            anonKey: SupabaseConfig.anonKey(from: Bundle.main),
+            identity: { try IdentityService.ensureLocalIdentity(at: TeamKeystore.defaultRoot()) }
+        )
+        _supabaseClient = State(initialValue: supabase)
+        _inviteOutboxReader = State(initialValue: InviteOutboxReader(supabase: supabase))
+        _inviteAcceptReader = State(initialValue: InviteAcceptReader(supabase: supabase))
+
         // D1 — idempotent register для post-update relaunch restoration.
         // Sparkle relaunch'ает app после bundle replace + cold launch без update flow:
         // если уже enabled (status restored launchd) — register() filter "already
@@ -123,6 +137,8 @@ struct LeafApp: App {
                 .environment(reader)
                 .environment(workspaceReader)            // Track 5 S2 Task 10
                 .environment(activeWorkspaceStore)       // Track 5 S2 Task 10
+                // Track 5 / S3 — SupabaseClient is an actor (not @Observable), injected directly
+                // into readers via constructor. UI surfaces consume readers, not the client directly.
                 .environment(inviteOutboxReader)
                 .environment(inviteAcceptReader)
                 .environment(memberRemovalReader)  // Phase 5.3.E

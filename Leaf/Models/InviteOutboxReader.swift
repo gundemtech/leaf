@@ -30,6 +30,10 @@ final class InviteOutboxReader {
     private var service: InviteService?
     private var database: LeafCore.Database?
 
+    /// Track 5 / S3 — requireOTP toggle on GenerateInviteSheet; reader passes through to service.
+    var requireOTP: Bool = false
+
+    private let supabase: SupabaseClient
     private let databaseURL: URL
     private let databaseConfig: DatabaseConfig
     private let databaseEncryption: EncryptionOptions?
@@ -39,6 +43,7 @@ final class InviteOutboxReader {
     private let logger = Logger(subsystem: "tech.gundem.leaf.app", category: "invite-outbox")
 
     init(
+        supabase: SupabaseClient,
         databaseURL: URL = DatabasePath.defaultURL(),
         databaseConfig: DatabaseConfig = InviteOutboxReader.defaultConfig(),
         databaseEncryption: EncryptionOptions? = InviteOutboxReader.defaultEncryption(),
@@ -46,6 +51,7 @@ final class InviteOutboxReader {
         inviteKDF: any InviteKDF = InviteOutboxReader.defaultInviteKDF(),
         inviteBlobCodec: any InviteBlobCodec = InviteOutboxReader.defaultInviteBlobCodec()
     ) {
+        self.supabase = supabase
         self.databaseURL = databaseURL
         self.databaseConfig = databaseConfig
         self.databaseEncryption = databaseEncryption
@@ -67,7 +73,8 @@ final class InviteOutboxReader {
                 let workspaceID = try self.resolveWorkspaceID()
                 let outbound = try await svc.generateInvite(
                     workspaceID: workspaceID,
-                    inviteePubkeyHex: trimmed
+                    inviteePubkeyHex: trimmed,
+                    requireOTP: self.requireOTP
                 )
                 self.persistPendingInvite(outbound)
                 self.state = .ready(outbound)
@@ -140,7 +147,7 @@ final class InviteOutboxReader {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         let row = PendingInvite(
             token: outbound.token,
-            otp: outbound.otp,
+            otp: outbound.otp ?? "",
             inviteePubkeyHex: outbound.inviteePubkeyHex,
             inviteeDisplayNameHint: nil,
             createdAtMs: nowMs,
@@ -173,10 +180,9 @@ final class InviteOutboxReader {
             config: databaseConfig,
             encryption: databaseEncryption
         )
-        let relay = RelayClient()
         let svc = InviteService(
             database: db,
-            relayClient: relay,
+            supabase: supabase,
             inviteKDF: inviteKDF,
             inviteBlobCodec: inviteBlobCodec,
             keystoreRoot: keystoreRoot

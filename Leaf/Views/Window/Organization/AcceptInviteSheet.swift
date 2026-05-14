@@ -2,14 +2,13 @@
 //  AcceptInviteSheet.swift
 //  Leaf
 //
-//  Phase 5.5.B — invitee accept-invite sheet. Three input paths converge на InviteAcceptReader:
-//   1. Deep-link `leaf://invite/...` clicked while sheet is open → urlHandler.handle dispatches fetch.
-//   2. Sheet auto-detect on appear: probeClipboard → inviteURL → fetch(inviteURL:).
-//   3. Manual paste fallback (юзер вставляет deep-link / token text).
-//  OTP auto-prefills из URL fragment если deep-link path; иначе требует input.
+//  Track 5 / S3 — invitee accept-invite sheet driven by InviteAcceptReader state machine:
+//   .idle → paste-card OR clipboard auto-detect → .previewing → .joining →
+//   (.joined / .otpPrompt / .error). Single-call acceptInvite under the hood.
 //
-//  Track 2 / D4 — migrated to LeafSheetLayout + LeafCard.raised + LeafBanner. State machine
-//  + 3 input paths preserved 1:1.
+//  Two input paths:
+//   1. Deep-link `leaf://invite/...` → InviteURLHandler.handle dispatches reader.fetch.
+//   2. Manual paste fallback (also handles clipboard auto-detect on sheet appear).
 //
 
 import SwiftUI
@@ -39,11 +38,6 @@ struct AcceptInviteSheet: View {
             displayNameInput = reader.savedDisplayName.isEmpty ? NSFullUserName() : reader.savedDisplayName
             autoDetectFromClipboard()
         }
-        .onChange(of: reader.state) { _, newState in
-            if case .otpEntry(_, _, let prefill?) = newState, otpInput.isEmpty {
-                otpInput = prefill
-            }
-        }
     }
 
     @ViewBuilder
@@ -51,26 +45,23 @@ struct AcceptInviteSheet: View {
         switch reader.state {
         case .idle:
             pasteCard(disabled: false)
-        case .fetching:
-            pasteCard(disabled: true)
-            HStack { Spacer(); ProgressView(); Spacer() }
-        case .otpEntry(_, let attempts, _):
-            otpCard(attempts: attempts, disabled: false)
-        case .accepting:
-            otpCard(attempts: 0, disabled: true)
-            HStack { Spacer(); ProgressView(); Spacer() }
-        case .success(let orgName, let memberCount):
-            successCard(orgName: orgName, memberCount: memberCount)
-        case .error(let message, let recoverable):
+        case .previewing(let preview, _):
+            previewCard(preview: preview, disabled: false)
+        case .joining:
+            HStack { Spacer(); ProgressView("Joining…"); Spacer() }
+        case .otpPrompt(let preview, _, let lastError):
+            otpCard(preview: preview, lastError: lastError, disabled: false)
+        case .joined(let orgName, let memberCount, let syncPending):
+            successCard(orgName: orgName, memberCount: memberCount, syncPending: syncPending)
+        case .error(let message, let recoverable, let retryURL):
             LeafBanner(
                 tone: .danger,
                 title: "Couldn't accept invite",
                 description: message,
                 ctaTitle: recoverable ? "Try again" : nil,
                 onCTA: recoverable ? {
-                    reader.discardAndReset()
-                    pasteInput = ""
-                    otpInput = ""
+                    reader.reset()
+                    if let url = retryURL { reader.fetch(inviteURL: url) }
                 } : nil
             )
         }
@@ -97,9 +88,6 @@ struct AcceptInviteSheet: View {
                         action: {
                             if let url = parseInviteURL(from: pasteInput) {
                                 reader.fetch(inviteURL: url)
-                            } else {
-                                let trimmed = pasteInput.trimmingCharacters(in: .whitespacesAndNewlines)
-                                if !trimmed.isEmpty { reader.fetch(token: trimmed) }
                             }
                         }
                     )
@@ -109,13 +97,55 @@ struct AcceptInviteSheet: View {
         }
     }
 
-    private func otpCard(attempts: Int, disabled: Bool) -> some View {
+    private func previewCard(preview: URLPreview, disabled: Bool) -> some View {
         LeafCard(variant: .raised, padding: .regular) {
             VStack(alignment: .leading, spacing: LeafSpace.lg) {
-                Text("VERIFY + JOIN").leafSectionLabel().foregroundStyle(LeafColor.text.tertiary)
-                Text("Enter the 6-digit verification code from admin (or auto-filled from invite link).")
-                    .font(LeafType.body.small)
-                    .foregroundStyle(LeafColor.text.secondary)
+                VStack(alignment: .leading, spacing: LeafSpace.xs) {
+                    Text("JOIN TEAM").leafSectionLabel().foregroundStyle(LeafColor.text.tertiary)
+                    Text("Join \"\(preview.workspaceName)\" team?")
+                        .font(LeafType.title.small)
+                        .foregroundStyle(LeafColor.text.primary)
+                    Text("Inviter: \(preview.adminPubkeyHex.prefix(8))… (admin)")
+                        .font(LeafType.body.small)
+                        .foregroundStyle(LeafColor.text.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: LeafSpace.xs) {
+                    Text("YOUR DISPLAY NAME").leafSectionLabel().foregroundStyle(LeafColor.text.tertiary)
+                    TextField("e.g. Sasha", text: $displayNameInput)
+                        .textFieldStyle(.roundedBorder)
+                        .font(LeafType.body.regular)
+                        .disabled(disabled)
+                }
+
+                HStack {
+                    Spacer()
+                    LeafButton(
+                        "Join team",
+                        variant: .primary,
+                        size: .md,
+                        action: {
+                            let dn = displayNameInput.trimmingCharacters(in: .whitespacesAndNewlines)
+                            reader.join(displayName: dn, otp: nil)
+                        }
+                    )
+                    .disabled(disabled || displayNameInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+
+    private func otpCard(preview: URLPreview, lastError: String?, disabled: Bool) -> some View {
+        LeafCard(variant: .raised, padding: .regular) {
+            VStack(alignment: .leading, spacing: LeafSpace.lg) {
+                VStack(alignment: .leading, spacing: LeafSpace.xs) {
+                    Text("VERIFY + JOIN").leafSectionLabel().foregroundStyle(LeafColor.text.tertiary)
+                    Text("Join \"\(preview.workspaceName)\" team?")
+                        .font(LeafType.body.regular)
+                    Text("Enter the 6-digit code from the inviter (sent through a separate channel).")
+                        .font(LeafType.body.small)
+                        .foregroundStyle(LeafColor.text.secondary)
+                }
 
                 VStack(alignment: .leading, spacing: LeafSpace.xs) {
                     Text("VERIFICATION CODE").leafSectionLabel().foregroundStyle(LeafColor.text.tertiary)
@@ -133,10 +163,8 @@ struct AcceptInviteSheet: View {
                         .disabled(disabled)
                 }
 
-                if attempts > 0 {
-                    Text(attempts >= 5
-                         ? "Too many wrong codes. Discard and ask admin to send a new link."
-                         : "Code didn't match — try again (\(attempts)/5).")
+                if let msg = lastError {
+                    Text(msg)
                         .font(LeafType.body.small)
                         .foregroundStyle(LeafColor.status.danger)
                 }
@@ -150,16 +178,16 @@ struct AcceptInviteSheet: View {
                         action: {
                             let otp = otpInput.trimmingCharacters(in: .whitespacesAndNewlines)
                             let dn = displayNameInput.trimmingCharacters(in: .whitespacesAndNewlines)
-                            reader.submitOTP(otp: otp, displayName: dn)
+                            reader.join(displayName: dn, otp: otp)
                         }
                     )
-                    .disabled(disabled || !isValidOTP || displayNameInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || attempts >= 5)
+                    .disabled(disabled || !isValidOTP || displayNameInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
     }
 
-    private func successCard(orgName: String, memberCount: Int) -> some View {
+    private func successCard(orgName: String, memberCount: Int, syncPending: Bool) -> some View {
         LeafCard(variant: .raised, padding: .generous) {
             VStack(alignment: .leading, spacing: LeafSpace.md) {
                 LeafIconLabel(
@@ -171,6 +199,11 @@ struct AcceptInviteSheet: View {
                 Text("You're now part of a team with \(memberCount) member\(memberCount == 1 ? "" : "s").")
                     .font(LeafType.body.regular)
                     .foregroundStyle(LeafColor.text.primary)
+                if syncPending {
+                    Text("Membership sync pending — admin will see you shortly.")
+                        .font(LeafType.body.small)
+                        .foregroundStyle(LeafColor.text.secondary)
+                }
             }
         }
     }
@@ -179,21 +212,19 @@ struct AcceptInviteSheet: View {
         HStack {
             LeafButton("Discard", variant: .secondary, size: .md, action: discardAndDismiss)
             Spacer()
-            if case .success = reader.state {
+            if case .joined = reader.state {
                 LeafButton(
                     "Done",
                     variant: .primary,
                     size: .md,
                     action: {
                         workspaceReader.refresh()
-                        reader.discardAndReset()
+                        reader.reset()
                         dismiss()
                     }
                 )
-            } else if case .error(_, let recoverable) = reader.state, !recoverable {
+            } else if case .error(_, let recoverable, _) = reader.state, !recoverable {
                 LeafButton("Close", variant: .primary, size: .md, action: discardAndDismiss)
-            } else if case .otpEntry(_, let attempts, _) = reader.state, attempts >= 5 {
-                LeafButton("Discard + ask admin", variant: .primary, size: .md, action: discardAndDismiss)
             }
         }
     }
@@ -201,7 +232,7 @@ struct AcceptInviteSheet: View {
     // MARK: - Helpers
 
     private func discardAndDismiss() {
-        reader.discardAndReset()
+        reader.reset()
         dismiss()
     }
 

@@ -43,6 +43,10 @@
 	<string>$(LINEAR_OAUTH_CLIENT_ID)</string>
 	<key>LeafSlackOAuthClientID</key>
 	<string>$(SLACK_OAUTH_CLIENT_ID)</string>
+	<key>LeafSupabaseURL</key>
+	<string>$(LEAF_SUPABASE_URL)</string>
+	<key>LeafSupabaseAnonKey</key>
+	<string>$(LEAF_SUPABASE_ANON_KEY)</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Leaf reads only whether you're currently in a meeting — never event titles, attendees, or location.</string>
 	<key>NSFocusStatusUsageDescription</key>

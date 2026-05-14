@@ -59,15 +59,15 @@ struct OnboardingView: View {
             }
         }
         .onChange(of: inviteAcceptReader.state) { _, newState in
-            if step == .team, case .success = newState {
+            if step == .team, case .joined = newState {
                 step = .done
             }
         }
         .sheet(isPresented: $showingAcceptSheet) {
             AcceptInviteSheet()
                 .onDisappear {
-                    if case .success = inviteAcceptReader.state {
-                        inviteAcceptReader.discardAndReset()
+                    if case .joined = inviteAcceptReader.state {
+                        inviteAcceptReader.reset()
                         step = .done
                     }
                 }

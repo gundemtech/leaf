@@ -107,10 +107,19 @@ struct PendingInviteRow: View {
                 .frame(maxWidth: 280, alignment: .leading)
                 .lineSpacing(2)
 
+            // Track 5 / S3 — pending_invites schema doesn't store workspaceName + adminPubkeyHex
+            // required for the Track 5 §12 URL format. ShareTemplateButton synthesizes a
+            // placeholder URL using token; admin should copy URL from initial generation
+            // flow (GenerateInviteSheet) — re-issuing from pending row is a Phase 5.6 carry-over.
             ShareTemplateButton(
                 templateBody: ShareTemplate.compose(.adminShare(
                     displayName: invite.inviteeDisplayNameHint ?? "",
-                    inviteURL: InviteURL.compose(token: invite.token, otp: invite.otp)
+                    inviteURL: InviteURL.compose(
+                        token: invite.token,
+                        workspaceName: "(workspace)",
+                        adminPubkeyHex: String(repeating: "0", count: 64),
+                        otp: invite.otp.isEmpty ? nil : invite.otp
+                    ).url
                 )),
                 mailSubject: "Your Leaf invite link"
             )

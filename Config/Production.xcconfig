@@ -31,3 +31,10 @@ GITHUB_OAUTH_CLIENT_ID = Ov23liIkwUV0UbBNivve
 // SlackOAuthService показывает "not configured" error в Settings (collector
 // в Agent process пропускает startup).
 SLACK_OAUTH_CLIENT_ID = 10976749635137.11005549911623
+
+// Track 5 / S3 — Supabase project config. Anon key is a public JWT-like signed token
+// (RLS is the security boundary, not the key). Both values committed safely here.
+// Production project ref: jwxnhwyqjzjmjnmwpwyq (Frankfurt eu-central-1, free tier).
+// Local.xcconfig (gitignored) overrides for local-Supabase dev (`supabase start`).
+LEAF_SUPABASE_URL = https:/$()/jwxnhwyqjzjmjnmwpwyq.supabase.co
+LEAF_SUPABASE_ANON_KEY =

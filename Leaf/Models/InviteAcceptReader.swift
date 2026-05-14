@@ -2,14 +2,11 @@
 //  InviteAcceptReader.swift
 //  Leaf
 //
-//  Phase 5.2.E — @Observable wrapper для InviteAcceptService. Lazy-init
-//  Database + RelayClient + service. State machine drives AcceptInviteSheet
-//  + Onboarding `.team` step + OrganizationView empty-state second CTA.
+//  Track 5 / S3 — @Observable wrapper for InviteAcceptService single-call acceptInvite(url:displayName:otp:).
+//  State machine drives AcceptInviteSheet: .idle → .previewing → (.joining → .joined / .otpPrompt / .error).
 //
-//  Two-step flow per decomposition §2 D4: relay GET one-shot consume
-//  (fetch), затем blob держится в RAM пока юзер вводит OTP — каждая
-//  попытка decode локальная (AES-GCM tag fail на wrong OTP). После 5
-//  failed attempts UI surfaces "Discard + ask admin" CTA.
+//  Lazy-init: Database + SupabaseClient + InviteAcceptService spin up on first use; same
+//  instance reused per app session.
 //
 
 import CryptoKit
@@ -27,21 +24,19 @@ import LeafCorePrivate
 final class InviteAcceptReader {
     enum State: Equatable {
         case idle
-        case fetching
-        case otpEntry(blob: InviteBlob, attempts: Int, prefillOTP: String?)
-        case accepting
-        case success(orgName: String, memberCount: Int)
-        case error(message: String, recoverable: Bool)
+        case previewing(preview: URLPreview, url: URL)
+        case joining(url: URL)
+        case otpPrompt(preview: URLPreview, url: URL, lastError: String?)
+        case joined(orgName: String, memberCount: Int, syncPending: Bool)
+        case error(message: String, recoverable: Bool, retryURL: URL?)
     }
 
     private(set) var state: State = .idle
 
-    /// Phase 5.5.B — invitee onboarding записывает displayName на JoinTeamStepView; AcceptInviteSheet
-    /// auto-uses на submit. Если пусто — fall back to NSFullUserName (set'ится один раз on first read).
+    /// Invitee onboarding writes displayName once; AcceptInviteSheet auto-uses on submit.
     @ObservationIgnored
     @AppStorage("inviteeDisplayName") private(set) var savedDisplayName: String = ""
 
-    /// Public setter для CreateTeam / JoinTeam onboarding views. Read-only вне этого Reader'а.
     func saveInviteeDisplayName(_ name: String) {
         savedDisplayName = name.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -55,9 +50,11 @@ final class InviteAcceptReader {
     private let keystoreRoot: URL
     private let inviteKDF: any InviteKDF
     private let inviteBlobCodec: any InviteBlobCodec
+    private let supabase: SupabaseClient
     private let logger = Logger(subsystem: "tech.gundem.leaf.app", category: "invite-accept")
 
     init(
+        supabase: SupabaseClient,
         databaseURL: URL = DatabasePath.defaultURL(),
         databaseConfig: DatabaseConfig = InviteAcceptReader.defaultConfig(),
         databaseEncryption: EncryptionOptions? = InviteAcceptReader.defaultEncryption(),
@@ -65,6 +62,7 @@ final class InviteAcceptReader {
         inviteKDF: any InviteKDF = InviteAcceptReader.defaultInviteKDF(),
         inviteBlobCodec: any InviteBlobCodec = InviteAcceptReader.defaultInviteBlobCodec()
     ) {
+        self.supabase = supabase
         self.databaseURL = databaseURL
         self.databaseConfig = databaseConfig
         self.databaseEncryption = databaseEncryption
@@ -73,50 +71,37 @@ final class InviteAcceptReader {
         self.inviteBlobCodec = inviteBlobCodec
     }
 
-    /// Returns invitee's own X25519 pubkey hex (lowercase) — рендерим в Step 1
-    /// AcceptInviteSheet чтобы юзер мог скопировать и отправить admin'у.
-    /// Idempotent — генерирует только если файла ещё нет.
+    /// Invitee's own X25519 pubkey hex (lowercase) — onboarding shows to copy + send to admin.
+    /// Idempotent — generates only if file doesn't yet exist.
     func myPubkeyHex() throws -> String {
         let priv = try IdentityService.ensureLocalIdentity(at: keystoreRoot)
         return priv.publicKey.rawRepresentation
             .map { String(format: "%02x", $0) }.joined()
     }
 
-    func fetch(token: String) {
-        state = .fetching
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            do {
-                let svc = try self.ensureService()
-                let blob = try await svc.fetchInvite(token: token)
-                self.state = .otpEntry(blob: blob, attempts: 0, prefillOTP: nil)
-            } catch {
-                self.logger.error("fetchInvite failed: \(String(describing: error), privacy: .public)")
-                self.state = .error(message: self.userFacingMessage(for: error),
-                                    recoverable: self.isRecoverable(error))
-            }
+    /// Track 5 / S3 — deep-link entry. Synchronous URL parse, transitions to .previewing.
+    func fetch(inviteURL url: URL) {
+        switch InviteAcceptService.preview(url: url) {
+        case .success(let preview):
+            state = .previewing(preview: preview, url: url)
+        case .failure:
+            state = .error(message: "Invite link is broken. Ask admin to copy and resend it.",
+                           recoverable: false, retryURL: nil)
         }
     }
 
-    /// Phase 5.5.B — single deep-link path: parse + fetch + auto-prefill OTP.
-    func fetch(inviteURL: URL) {
-        state = .fetching
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            do {
-                let svc = try self.ensureService()
-                let result = try await svc.fetchInvite(inviteURL: inviteURL)
-                self.state = .otpEntry(blob: result.blob, attempts: 0, prefillOTP: result.otp)
-            } catch {
-                self.logger.error("fetchInvite(URL) failed: \(String(describing: error), privacy: .public)")
-                self.state = .error(message: self.userFacingMessage(for: error),
-                                    recoverable: self.isRecoverable(error))
-            }
+    /// Track 5 / S3 — user clicked [Join] (or re-submitted with OTP). Single-call accept.
+    func join(displayName: String?, otp: String?) {
+        let url: URL
+        let previewSnapshot: URLPreview
+        switch state {
+        case .previewing(let preview, let u):
+            url = u; previewSnapshot = preview
+        case .otpPrompt(let preview, let u, _):
+            url = u; previewSnapshot = preview
+        default:
+            return  // not in a joinable state
         }
-    }
-
-    func submitOTP(otp: String, displayName: String? = nil) {
-        guard case .otpEntry(let blob, let attempts, _) = state else { return }
         let resolvedName: String = {
             let trimmed = (displayName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty { return trimmed }
@@ -124,14 +109,12 @@ final class InviteAcceptReader {
             if !stored.isEmpty { return stored }
             return NSFullUserName()
         }()
-        state = .accepting
+        state = .joining(url: url)
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
                 let svc = try self.ensureService()
-                let accepted = try await svc.acceptInvite(blob: blob,
-                                                          otp: otp,
-                                                          displayName: resolvedName)
+                let accepted = try await svc.acceptInvite(url: url, displayName: resolvedName, otp: otp)
                 let count: Int
                 if let db = self.database,
                    let members = try? db.readTeamMembers(workspaceID: accepted.orgID) {
@@ -139,19 +122,24 @@ final class InviteAcceptReader {
                 } else {
                     count = 0
                 }
-                self.state = .success(orgName: accepted.orgName, memberCount: count)
+                let syncPending: Bool
+                if case .pending = accepted.membershipSyncStatus { syncPending = true } else { syncPending = false }
+                self.state = .joined(orgName: accepted.orgName, memberCount: count, syncPending: syncPending)
+            } catch LeafError.inviteOTPRequired {
+                self.state = .otpPrompt(preview: previewSnapshot, url: url, lastError: nil)
             } catch LeafError.inviteOTPInvalid {
-                // Stay in OTP entry — invitee retries locally без re-fetch.
-                self.state = .otpEntry(blob: blob, attempts: attempts + 1, prefillOTP: nil)
+                self.state = .otpPrompt(preview: previewSnapshot, url: url,
+                                        lastError: "OTP doesn't match. Try again.")
             } catch {
                 self.logger.error("acceptInvite failed: \(String(describing: error), privacy: .public)")
                 self.state = .error(message: self.userFacingMessage(for: error),
-                                    recoverable: self.isRecoverable(error))
+                                    recoverable: self.isRecoverable(error),
+                                    retryURL: self.isRecoverable(error) ? url : nil)
             }
         }
     }
 
-    func discardAndReset() {
+    func reset() {
         state = .idle
     }
 
@@ -164,10 +152,9 @@ final class InviteAcceptReader {
             config: databaseConfig,
             encryption: databaseEncryption
         )
-        let relay = RelayClient()
         let svc = InviteAcceptService(
             database: db,
-            relayClient: relay,
+            supabase: supabase,
             inviteKDF: inviteKDF,
             inviteBlobCodec: inviteBlobCodec,
             keystoreRoot: keystoreRoot
@@ -181,44 +168,33 @@ final class InviteAcceptReader {
         if let leafErr = error as? LeafError {
             switch leafErr {
             case .invalidPayload:
-                return "Token and display name can’t be empty."
-            case .inviteNotFound:
-                return "Invite not found, expired, or already used. Ask admin to send a new one."
+                return "Display name can't be empty."
             case .inviteAlreadyAccepted:
-                return "An organization already exists on this device."
+                return "You're already in this team."
             case .inviteBlobMalformed:
-                return "Invite is corrupted. Ask admin to send a new one."
+                return "Invite link is corrupted. Ask admin to send a new one."
             case .relayUnreachable(let reason):
-                return "Couldn’t reach the relay (\(reason)). Check your network and try again."
+                return "Couldn't reach the server (\(reason)). Check your network and try again."
             case .keyFileUnavailable, .keyFileCorrupted:
-                return "Couldn’t access local keystore. Try restarting the app."
+                return "Couldn't access local keystore. Try restarting the app."
             case .databaseUnavailable:
-                return "Couldn’t open local database. Try restarting the app."
-            case .notImplemented:
-                return "Invite acceptance isn’t available in this build."
+                return "Couldn't open local database. Try restarting the app."
             case .inviteAlreadyConsumed:
-                return "Invite was already opened or expired. Ask admin to send a new one."
+                return "This invite has expired or already been used."
             case .inviteURLMalformed:
                 return "Invite link is broken. Ask admin to copy and resend it."
             default:
-                return "Couldn’t accept the invite. See Console for details."
+                return "Couldn't accept the invite. See Console for details."
             }
         }
-        return "Couldn’t accept the invite. See Console for details."
+        return "Couldn't accept the invite. See Console for details."
     }
 
-    /// Recoverable = invitee can correct + retry within current sheet session.
-    /// Non-recoverable = sheet should surface "Done"/"Close" only — re-entry
-    /// requires admin to send a new invite or wipe local state.
     private func isRecoverable(_ error: Error) -> Bool {
         guard let leafErr = error as? LeafError else { return false }
         switch leafErr {
         case .relayUnreachable, .invalidPayload:
             return true
-        case .inviteAlreadyAccepted, .inviteNotFound, .inviteBlobMalformed,
-             .keyFileUnavailable, .keyFileCorrupted, .databaseUnavailable, .notImplemented,
-             .inviteAlreadyConsumed, .inviteURLMalformed:
-            return false
         default:
             return false
         }
