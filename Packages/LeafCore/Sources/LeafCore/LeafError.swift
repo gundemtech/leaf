@@ -57,4 +57,15 @@ public enum LeafError: Error, Sendable {
     // apns_push Edge Function returned non-200. Message persists regardless;
     // SentDirectMessage.pushDispatchStatus carries the reason.
     case apnsPushDispatchFailed(reason: String)
+    // Track 5 / S5 (consumer: TeamEventBlobCodec + TeamEventMirrorService row decoder).
+    // Surfaced on short bytes / unknown version / AES-GCM tag fail / JSON decode failure
+    // for the auto-shared event envelope (version byte 0x04).
+    case teamEventBlobMalformed
+    // Track 5 / S5 (consumer: TeamEventBroadcastService.tick) — event_kind has no
+    // ShareSource mapping. Logged + skipped (not a user-facing error).
+    case teamEventClassificationFailed
+    // Track 5 / S5 (consumer: TeamEventBroadcastService.tick) — event matched
+    // DefaultDenyList (file path / size / event_kind). Dropped before encryption per
+    // contract §11.2 "no partial events". Logged + skipped.
+    case teamEventDenylistMatched
 }
