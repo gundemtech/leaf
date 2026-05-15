@@ -6,6 +6,9 @@ import Foundation
 /// visible LocalOS kinds landed by S1+S2+S3. Pairs (entered/exited,
 /// connected/disconnected, locked/unlocked) intentionally share a symbol;
 /// copy strings in `ActivityFeedMapper.mapLocalOS` disambiguate.
+/// Track-6 P1 — added 14 visible Claude Code kinds (`tool_use`, `user_prompt`,
+/// `claude_*`). The 2 retroactive kinds share "sparkles"; the 14 new claude_*
+/// each get a distinct semantic symbol.
 public enum EventKindIcon {
     /// Returns SF Symbol name for the given event_kind. `nil` means the
     /// caller should fall through to its provider-level default.
@@ -43,6 +46,21 @@ public enum EventKindIcon {
         case "screenshot_taken":                          return "camera.viewfinder"
         case "download_added":                            return "arrow.down.circle"
         case "trash_changed":                             return "trash"
+
+        // Track-6 P1 — Claude Code (14 visible kinds; tokens_used + turn_ended skipped per skippedKinds)
+        case "tool_use", "user_prompt":       return "sparkles"
+        case "claude_session_started":        return "play.circle"
+        case "claude_session_ended":          return "stop.circle"
+        case "claude_session_compacted":      return "rectangle.compress.vertical"
+        case "claude_prompt_submitted":       return "text.bubble"
+        case "claude_bash_executed":          return "terminal"
+        case "claude_file_edited":            return "pencil.line"
+        case "claude_file_written":           return "doc.badge.plus"
+        case "claude_file_read":              return "doc.text.magnifyingglass"
+        case "claude_web_fetched":            return "globe"
+        case "claude_subagent_dispatched":    return "person.2.circle"
+        case "claude_mcp_tool_invoked":       return "plug.circle"
+        case "claude_slash_command_invoked":  return "slash.circle"
 
         default: return nil
         }
