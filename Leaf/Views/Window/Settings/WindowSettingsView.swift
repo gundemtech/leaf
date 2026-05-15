@@ -20,6 +20,7 @@ struct WindowSettingsView: View {
                 FoldersSettings(service: watchedFolders)
                 LocalAppsSettingsSection()
                 SystemObserversSettingsSection()
+                ShareControlsSettingsSection()
                 UpdatesSection(updater: updater)
                 PrivacySettingsSection()
             }

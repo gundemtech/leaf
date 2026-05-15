@@ -58,6 +58,8 @@ struct LeafApp: App {
     @State private var directMessageSendReader: DirectMessageSendReader
     @State private var directMessageInboxReader: DirectMessageInboxReader
     @State private var apnsRegistrationReader: APNsRegistrationReader
+    /// Track 5 / S5 — Share Controls per-source toggle reader.
+    @State private var shareRulesReader: ShareRulesReader
     @State private var memberRemovalReader = MemberRemovalReader()  // Phase 5.3.E
     @State private var pendingInvitesReader = PendingInvitesReader()  // Phase 5.5.C
     @State private var inviteURLHandler = InviteURLHandler()  // Phase 5.5.B
@@ -125,6 +127,10 @@ struct LeafApp: App {
         _directMessageInboxReader = State(initialValue: inboxReader)
         _apnsRegistrationReader = State(initialValue: apnsReader)
 
+        // Track 5 / S5 — Share Controls reader. Reads + writes share_rules
+        // table (defaults via ShareRuleDefaults when row absent).
+        _shareRulesReader = State(initialValue: ShareRulesReader(activeStore: active))
+
         // C1 fix — Track 5 / S4 Stage 6 review:
         // AppDelegate handles APNs callbacks and needs reader references. SwiftUI
         // doesn't propagate @Environment into AppDelegate callbacks; static weak
@@ -167,6 +173,7 @@ struct LeafApp: App {
                 .environment(directMessageSendReader)   // Track 5 / S4
                 .environment(directMessageInboxReader)  // Track 5 / S4
                 .environment(apnsRegistrationReader)    // Track 5 / S4
+                .environment(shareRulesReader)          // Track 5 / S5
                 .environment(memberRemovalReader)  // Phase 5.3.E
                 .environment(pendingInvitesReader)  // Phase 5.5.C
                 .environment(inviteURLHandler)  // Phase 5.5.B

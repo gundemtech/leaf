@@ -189,9 +189,7 @@ public actor TeamEventMirrorRetentionPruner {
     public func prune() throws -> Int {
         let nowMs = Int64(now().timeIntervalSince1970 * 1000)
         let cutoffMs = nowMs - Int64(retentionDays) * 86_400_000
-        let removed = try database.writeSQL { rawDB in
-            try TeamEventMirrorStore.deleteOlderThan(cutoffMs: cutoffMs, in: rawDB)
-        }
+        let removed = try database.deleteTeamEventMirrorOlderThan(cutoffMs: cutoffMs)
         if removed > 0 {
             logger.info("mirror retention prune removed=\(removed, privacy: .public)")
         }

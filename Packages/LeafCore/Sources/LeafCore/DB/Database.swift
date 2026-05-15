@@ -275,6 +275,47 @@ public final class Database: @unchecked Sendable {
         return try pool.write(block)
     }
 
+    // MARK: - Share rules (Track 5 / S5)
+
+    public func readShareRules(workspaceID: String) throws -> [ShareSource: Bool] {
+        try pool.read { rawDB in
+            try ShareRulesStore.readEffective(workspaceID: workspaceID, in: rawDB)
+        }
+    }
+
+    public func isShareRuleEnabled(workspaceID: String, source: ShareSource) throws -> Bool {
+        try pool.read { rawDB in
+            try ShareRulesStore.isEnabled(workspaceID: workspaceID, source: source, in: rawDB)
+        }
+    }
+
+    public func upsertShareRule(
+        workspaceID: String,
+        source: ShareSource,
+        enabled: Bool,
+        updatedAtMs: Int64
+    ) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { rawDB in
+            try ShareRulesStore.upsert(
+                workspaceID: workspaceID,
+                source: source,
+                enabled: enabled,
+                updatedAtMs: updatedAtMs,
+                in: rawDB
+            )
+        }
+    }
+
+    // MARK: - Team event mirror retention (Track 5 / S5)
+
+    public func deleteTeamEventMirrorOlderThan(cutoffMs: Int64) throws -> Int {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        return try pool.write { rawDB in
+            try TeamEventMirrorStore.deleteOlderThan(cutoffMs: cutoffMs, in: rawDB)
+        }
+    }
+
     // MARK: - Collector offsets (Phase 2.3)
 
     /// Reads single offset by composite PK. Returns `nil` если записи нет —
