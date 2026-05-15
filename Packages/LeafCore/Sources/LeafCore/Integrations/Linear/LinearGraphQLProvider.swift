@@ -824,7 +824,7 @@ public struct LinearColdBatch: Sendable, Hashable {
 
 /// Stub для CI / dev-без-moat сборок. Никогда не делает HTTP call,
 /// возвращает `.empty` — LinearCollector tick проходит no-op.
-public struct StubLinearGraphQLProvider: LinearGraphQLProvider {
+public struct StubLinearGraphQLProvider: LinearGraphQLProvider, LinearGraphQLProviding {
     public init() {}
     public func fetchIssues(accessToken: String, since: Int64?) async throws -> LinearIssueBatch {
         .empty
@@ -835,4 +835,31 @@ public struct StubLinearGraphQLProvider: LinearGraphQLProvider {
     public func fetchColdState(accessToken: String) async throws -> LinearColdBatch {
         .empty
     }
+    /// Track 5 / S6 T9 — empty user list keeps `LinearUsersResolver.resolve`
+    /// returning nil for stub builds (no moat / CI environments).
+    public func fetchAccessibleUsers() async throws -> [LinearUsersResolver.ResolvedUser] {
+        []
+    }
+}
+
+// MARK: - Track 5 / S6 T9 — LinearGraphQLProviding (assignee resolution surface)
+
+/// Phase Track-5 S6 T9 — narrow Sendable surface used by `LinearUsersResolver`
+/// для resolution Leaf member → Linear user UUID.
+///
+/// Separate protocol from `LinearGraphQLProvider` because:
+///  - resolver doesn't need access tokens passed in — caller (composition root)
+///    wires a concrete provider that already knows how to get its token
+///    (via `LinearTokenRefresher` + `IntegrationRecord`);
+///  - keeps test mocks tiny — only one method to stub;
+///  - decouples resolver from collector-tier provider evolution.
+///
+/// Production impl lives in LeafCorePrivate (`ProdLinearGraphQLProvider`
+/// extension); it executes:
+///   `query LeafAccessibleUsers { users(first: 250) { nodes { id name displayName } } }`
+/// and maps nodes к `LinearUsersResolver.ResolvedUser`.
+public protocol LinearGraphQLProviding: Sendable {
+    /// Returns viewer's accessible Linear users (~50 typically; Linear API
+    /// pages at 250). One HTTP call; caller (resolver) caches with 5min TTL.
+    func fetchAccessibleUsers() async throws -> [LinearUsersResolver.ResolvedUser]
 }
