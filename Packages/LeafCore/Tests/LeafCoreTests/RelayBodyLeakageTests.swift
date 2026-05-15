@@ -1826,4 +1826,107 @@ final class RelayBodyLeakageTests: XCTestCase {
             collectorID: "local_files"
         )
     }
+
+    // MARK: - Track-6 P1 — Claude Code
+
+    /// Track-6 P1 Phase D — claude_* event payloads (constructed with realistic
+    /// allowlisted fields per Tasks 8-11) must not bleed into presence_state
+    /// when written in the SAME atomic TX. The parser allowlist is the actual
+    /// privacy fence — exercised directly by the moat-side sentinel walkback
+    /// in `LeafCorePrivateTests/ClaudeCodeCollectorCrossHookTests`. This
+    /// public-side counterpart verifies the OTHER half of the contract: even
+    /// with AI-collab events written, `presence_state.state_json` cannot pull
+    /// from event payload keys.
+    ///
+    /// Provider note: `PresenceStateWriter.Provider` has no `.anthropicClaude`
+    /// case in Phase 4.7 — `.derived` is the reserved AI/Phase-4.9 row. Using
+    /// `.derived` here doubles as a cross-isolation check (events sharing the
+    /// TX with the "derived" presence row don't leak into it).
+    func testEventBodyDoesNotLeakIntoPresenceState_ClaudeCode() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+
+        // Realistic AI events with allowlisted-only payload (mirrors what the
+        // moat parser actually emits per Tasks 8-11). NO forbidden fields here —
+        // the parser-side allowlist is enforced by the sentinel walkback test
+        // under LeafCorePrivateTests (moat). This public-side test checks the
+        // OTHER half: writer + presence_state composition isolation.
+        let toolUseEvent = RawEvent(
+            timestamp: Date(),
+            signalType: .aiCollaboration,
+            bundleID: "com.anthropic.claude-code",
+            payload: [
+                "event_kind": "claude_bash_executed",
+                "session_id": "S-LEAK",
+                "command_length_chars": "23",
+                "tool_use_id": "toolu_x",
+                "source": "jsonl",
+                "cwd": "/Users/x/proj"
+            ]
+        )
+        let promptEvent = RawEvent(
+            timestamp: Date(),
+            signalType: .aiCollaboration,
+            bundleID: "com.anthropic.claude-code",
+            payload: [
+                "event_kind": "claude_prompt_submitted",
+                "session_id": "S-LEAK",
+                "prompt_length_chars": "180",
+                "source": "jsonl"
+            ]
+        )
+        let tokensEvent = RawEvent(
+            timestamp: Date(),
+            signalType: .aiCollaboration,
+            bundleID: "com.anthropic.claude-code",
+            payload: [
+                "event_kind": "claude_tokens_used",
+                "session_id": "S-LEAK",
+                "model": "claude-opus-4-7",
+                "input_tokens": "5",
+                "output_tokens": "732",
+                "cache_creation_input_tokens": "100645",
+                "cache_read_input_tokens": "0",
+                "service_tier": "standard",
+                "source": "jsonl"
+            ]
+        )
+
+        // Realistic AI presence state (composed independently from events).
+        // Uses `.derived` provider — the reserved Phase-4.9 mode-classifier row.
+        let presenceState: [String: Any] = [
+            "active_session_id": "S-LEAK",
+            "current_model": "claude-opus-4-7",
+            "tokens_in_last_minute": 737
+        ]
+        try db.writeEventsOffsetAndPresence(
+            [toolUseEvent, promptEvent, tokensEvent],
+            offset: makeOffset(collectorID: CollectorID.claudeCodeJSONL, sourceID: "claude:test", nowMs: nowMs),
+            presence: (provider: .derived, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+
+        try db.readSQL { rawDB in
+            let row = try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='derived'")
+            let stateJSON = (row?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after upsert")
+
+            // Event-payload keys MUST NOT appear in presence_state.state_json —
+            // even though events + presence were written in the same TX, the
+            // writer composes presence from `state` only.
+            XCTAssertFalse(stateJSON.contains("event_kind"))
+            XCTAssertFalse(stateJSON.contains("tool_use_id"))
+            XCTAssertFalse(stateJSON.contains("command_length_chars"))
+            XCTAssertFalse(stateJSON.contains("prompt_length_chars"))
+            XCTAssertFalse(stateJSON.contains("cache_creation"))
+            XCTAssertFalse(stateJSON.contains("cache_read"))
+            XCTAssertFalse(stateJSON.contains("input_tokens"))
+            XCTAssertFalse(stateJSON.contains("output_tokens"))
+
+            // It SHOULD contain the realistic presence keys we composed.
+            XCTAssertTrue(stateJSON.contains("active_session_id"))
+            XCTAssertTrue(stateJSON.contains("current_model"))
+            XCTAssertTrue(stateJSON.contains("tokens_in_last_minute"))
+        }
+    }
 }
