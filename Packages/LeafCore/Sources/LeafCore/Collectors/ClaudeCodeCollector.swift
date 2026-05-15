@@ -166,6 +166,9 @@ public actor ClaudeCodeCollector {
                         includingPropertiesForKeys: nil,
                         options: [.skipsHiddenFiles]
                     ) else { continue }
+                    // `.jsonl` extension alone excludes the sibling `.meta.json` files;
+                    // `agent-` prefix is defense-in-depth against future filenames Claude
+                    // might add to the subagents dir (e.g. `summary.jsonl`, `index.jsonl`).
                     for file in agentFiles where file.pathExtension == "jsonl"
                         && file.lastPathComponent.hasPrefix("agent-") {
                         results.append(file)
