@@ -210,6 +210,68 @@ public enum Schema {
         public static let environmentProduction = "production"
     }
 
+    /// Phase Track-5 S5 — per-source share toggle persistence. Row absent →
+    /// `ShareRuleDefaults` semantics apply. PK (workspace_id, source_kind).
+    /// `source_kind` value space lives in `ShareSource.rawValue`; CHECK constraint
+    /// intentionally omitted (registry source of truth is Swift enum, mirroring
+    /// `share_event_types` design comment in ShareEventTypeRegistry.swift).
+    public enum ShareRules {
+        public static let tableName = "share_rules"
+        public static let workspaceID = "workspace_id"
+        public static let sourceKind = "source_kind"
+        public static let enabled = "enabled"
+        public static let updatedAtMs = "updated_at_ms"
+
+        public static let indexWorkspace = "idx_share_rules_workspace"
+    }
+
+    /// Phase Track-5 S5 — auto-shared events local mirror (incoming from
+    /// teammates). Composite PK (workspace_id, event_id). Forever retention here
+    /// is bounded by `TeamEventMirrorRetentionPruner` (90d default).
+    public enum TeamEventsMirror {
+        public static let tableName = "team_events_mirror"
+        public static let eventID = "event_id"
+        public static let workspaceID = "workspace_id"
+        public static let senderPubkeyHex = "sender_pubkey_hex"
+        public static let sourceKind = "source_kind"
+        public static let kind = "kind"
+        public static let plaintextPayloadJSON = "plaintext_payload_json"
+        public static let serverCreatedAtMs = "server_created_at_ms"
+        public static let eventTsMs = "event_ts_ms"
+        public static let receivedAtMs = "received_at_ms"
+
+        public static let indexWorkspaceCreated = "idx_team_events_mirror_workspace_created"
+        public static let indexSender = "idx_team_events_mirror_sender"
+    }
+
+    /// Phase Track-5 S5 — per-workspace cursor for `TeamEventBroadcastService`.
+    /// One row per workspace. `cursor_event_id` advances monotonically over
+    /// `events.id` integers.
+    public enum TeamEventBroadcastOffsets {
+        public static let tableName = "team_event_broadcast_offsets"
+        public static let workspaceID = "workspace_id"
+        public static let cursorEventID = "cursor_event_id"
+        public static let lastAttemptAtMs = "last_attempt_at_ms"
+        public static let lastSuccessAtMs = "last_success_at_ms"
+        public static let consecutiveFailures = "consecutive_failures"
+    }
+
+    /// Phase Track-5 S5 — `ShareSource.rawValue` mirror, in Schema namespace for
+    /// non-Swift consumers (SQL queries, debug dumps). Kept lockstep with the
+    /// `ShareSource` enum cases in `LeafCore/Team/ShareSource.swift` (only single
+    /// source of truth).
+    public enum ShareSources {
+        public static let gitCommits = "git_commits"
+        public static let linearIssues = "linear_issues"
+        public static let slackMentions = "slack_mentions"
+        public static let githubPRs = "github_prs"
+        public static let detectedDecisions = "detected_decisions"
+        public static let detectedBlockers = "detected_blockers"
+        public static let detectedOpenQuestions = "detected_open_questions"
+        public static let detectedWhereStopped = "detected_where_stopped"
+        public static let rawGitHubActivity = "raw_github_activity"
+    }
+
     /// Phase Track-1 D1 — canonical names for new payload keys carrying bodies +
     /// attachment metadata + Phase 4.8 PR metrics. Single source of truth for
     /// collectors + D2 FTS5 + D3 detector query paths.
