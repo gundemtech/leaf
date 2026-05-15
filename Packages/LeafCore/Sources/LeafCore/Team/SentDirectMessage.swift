@@ -9,15 +9,27 @@ import Foundation
 ///
 /// `pushDispatchStatus` reports the best-effort APNs trigger outcome — the
 /// message itself persists regardless, so `failed(_)` does NOT throw.
+///
+/// Phase Track-5 S6 — `crossPostStatuses` carries Slack + Linear cross-post
+/// outcomes for sends that requested those legs. Each slot is nil when not
+/// requested. Same non-fatal contract as `pushDispatchStatus`: errors are
+/// captured (not thrown) — the underlying direct_messages row persists.
 public struct SentDirectMessage: Sendable, Equatable {
     public let messageID: String
     public let createdAtISO: String
     public let pushDispatchStatus: PushDispatchStatus
+    public let crossPostStatuses: CrossPostStatuses
 
-    public init(messageID: String, createdAtISO: String, pushDispatchStatus: PushDispatchStatus) {
+    public init(
+        messageID: String,
+        createdAtISO: String,
+        pushDispatchStatus: PushDispatchStatus,
+        crossPostStatuses: CrossPostStatuses = CrossPostStatuses()
+    ) {
         self.messageID = messageID
         self.createdAtISO = createdAtISO
         self.pushDispatchStatus = pushDispatchStatus
+        self.crossPostStatuses = crossPostStatuses
     }
 
     public enum PushDispatchStatus: Sendable, Equatable {

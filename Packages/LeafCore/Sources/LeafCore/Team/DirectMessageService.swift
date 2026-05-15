@@ -43,8 +43,9 @@ public struct DirectMessageService: Sendable {
     }
 
     /// Sender path — full pipeline: validate → encode → POST → mirror INSERT →
-    /// (optional) APNs push trigger. APNs failures are non-fatal — message
-    /// persists; pushDispatchStatus carries the reason.
+    /// (optional) APNs push trigger → (optional) cross-post triggers (S6).
+    /// APNs + cross-post failures are non-fatal — message persists;
+    /// pushDispatchStatus / crossPostStatuses carry the reasons.
     public func send(
         workspaceID: String,
         recipientPubkeyHex: String,
@@ -52,7 +53,9 @@ public struct DirectMessageService: Sendable {
         kind: DirectMessageKind,
         body: String,
         notify: Bool = true,
-        replyTo: String? = nil
+        replyTo: String? = nil,
+        crossPostSlack: SlackCrossPostRequest? = nil,
+        crossPostLinear: LinearCrossPostRequest? = nil
     ) async throws -> SentDirectMessage {
         // 1. Validate
         let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -160,11 +163,173 @@ public struct DirectMessageService: Sendable {
             pushStatus = .skipped
         }
 
+        // 8. (Optional) Cross-post triggers — S6.
+        //
+        // Run after the DM has been persisted (direct_messages row exists +
+        // mirror row written) so that cross_post_log.message_id FK is valid
+        // and a retry yields a consistent external_ref. Slack and Linear legs
+        // execute in parallel via `async let` — they have no inter-dependency
+        // and we want UI to render both statuses ≤ a single network RTT.
+        //
+        // Failure semantics (§9.3): each leg captures its error into the
+        // result struct. Throws are NEVER propagated; the DM row remains
+        // valid regardless of cross-post outcome.
+        let crossPostStatuses = await runCrossPosts(
+            workspaceID: workspace.id,
+            messageID: supabaseRow.messageID,
+            body: body,
+            crossPostSlack: crossPostSlack,
+            crossPostLinear: crossPostLinear
+        )
+
         return SentDirectMessage(
             messageID: supabaseRow.messageID,
             createdAtISO: supabaseRow.createdAtISO,
-            pushDispatchStatus: pushStatus
+            pushDispatchStatus: pushStatus,
+            crossPostStatuses: crossPostStatuses
         )
+    }
+
+    /// S6 — Cross-post fan-out. Slack + Linear legs execute in parallel via
+    /// `async let`. Each leg:
+    ///   1. Returns nil immediately when the corresponding param is nil.
+    ///   2. Reads the sender's integration record from local SQLCipher; when
+    ///      absent returns `.error="not_connected"` WITHOUT calling the Edge
+    ///      Function (avoids leaking sender presence on the wire when there's
+    ///      no chance of success).
+    ///   3. Builds the payload via `CrossPostPayloadBuilder` and forwards to
+    ///      the appropriate Edge Function.
+    ///   4. Catches any throw + maps to `.error=<descrip>` result — NEVER
+    ///      propagates upstream (DM row already persisted).
+    private func runCrossPosts(
+        workspaceID: String,
+        messageID: String,
+        body: String,
+        crossPostSlack: SlackCrossPostRequest?,
+        crossPostLinear: LinearCrossPostRequest?
+    ) async -> CrossPostStatuses {
+        async let slackResult: SlackCrossPostResult? = runSlackCrossPost(
+            workspaceID: workspaceID,
+            messageID: messageID,
+            body: body,
+            request: crossPostSlack
+        )
+        async let linearResult: LinearCrossPostResult? = runLinearCrossPost(
+            workspaceID: workspaceID,
+            messageID: messageID,
+            body: body,
+            request: crossPostLinear
+        )
+        let slack = await slackResult
+        let linear = await linearResult
+        return CrossPostStatuses(slack: slack, linear: linear)
+    }
+
+    private func runSlackCrossPost(
+        workspaceID: String,
+        messageID: String,
+        body: String,
+        request: SlackCrossPostRequest?
+    ) async -> SlackCrossPostResult? {
+        guard let req = request else { return nil }
+        // Integration lookup — local DB read on a non-throwing branch. Map
+        // any DB error AND missing-row both to "not_connected" so UI flow is
+        // identical (user reauths via Connections regardless of cause).
+        let token: String
+        do {
+            guard let integration = try database.readIntegration(provider: .slack) else {
+                return SlackCrossPostResult(
+                    ok: false, ts: nil, channelID: req.channelID,
+                    error: "not_connected", retryAfterSeconds: nil
+                )
+            }
+            token = integration.accessToken
+        } catch {
+            return SlackCrossPostResult(
+                ok: false, ts: nil, channelID: req.channelID,
+                error: "not_connected", retryAfterSeconds: nil
+            )
+        }
+        guard let workspaceUUID = UUID(uuidString: workspaceID),
+              let messageUUID = UUID(uuidString: messageID) else {
+            return SlackCrossPostResult(
+                ok: false, ts: nil, channelID: req.channelID,
+                error: "invalid_uuid", retryAfterSeconds: nil
+            )
+        }
+        let payload = CrossPostPayloadBuilder.slackPayload(
+            channelID: req.channelID,
+            messageText: body,
+            attachedEventRef: req.attachedEventRef
+        )
+        do {
+            return try await supabase.triggerSlackPost(
+                workspaceID: workspaceUUID,
+                messageID: messageUUID,
+                channelID: req.channelID,
+                slackPayload: payload,
+                slackUserToken: token
+            )
+        } catch {
+            return SlackCrossPostResult(
+                ok: false, ts: nil, channelID: req.channelID,
+                error: String(describing: error), retryAfterSeconds: nil
+            )
+        }
+    }
+
+    private func runLinearCrossPost(
+        workspaceID: String,
+        messageID: String,
+        body: String,
+        request: LinearCrossPostRequest?
+    ) async -> LinearCrossPostResult? {
+        guard let req = request else { return nil }
+        let token: String
+        do {
+            guard let integration = try database.readIntegration(provider: .linear) else {
+                return LinearCrossPostResult(
+                    ok: false, issueID: nil, identifier: nil, url: nil,
+                    error: "not_connected"
+                )
+            }
+            token = integration.accessToken
+        } catch {
+            return LinearCrossPostResult(
+                ok: false, issueID: nil, identifier: nil, url: nil,
+                error: "not_connected"
+            )
+        }
+        guard let workspaceUUID = UUID(uuidString: workspaceID),
+              let messageUUID = UUID(uuidString: messageID) else {
+            return LinearCrossPostResult(
+                ok: false, issueID: nil, identifier: nil, url: nil,
+                error: "invalid_uuid"
+            )
+        }
+        let title = CrossPostPayloadBuilder.linearTitle(messageText: body)
+        let description = CrossPostPayloadBuilder.linearDescription(
+            messageText: body,
+            messageID: messageUUID,
+            attachedEventRef: req.attachedEventRef
+        )
+        do {
+            return try await supabase.triggerLinearCreate(
+                workspaceID: workspaceUUID,
+                messageID: messageUUID,
+                teamID: req.teamID,
+                idempotencyKey: req.idempotencyKey,
+                title: title,
+                description: description,
+                assigneeID: req.assigneeID,
+                linearUserToken: token
+            )
+        } catch {
+            return LinearCrossPostResult(
+                ok: false, issueID: nil, identifier: nil, url: nil,
+                error: String(describing: error)
+            )
+        }
     }
 
     /// I4 fix — Track 5 / S4 Stage 6 review:
