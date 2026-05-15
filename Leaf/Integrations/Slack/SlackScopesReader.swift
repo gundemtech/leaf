@@ -35,6 +35,15 @@ final class SlackScopesReader {
 
     private(set) var state: ShipState = .unknown
 
+    /// Track 5 / S6 T11 — synchronous cross-post readiness flag for the
+    /// Send sheet's ChannelsPickerSection. Mirrors
+    /// `await service.has("chat:write")` after the next `refresh()` lands.
+    /// `false` until first refresh OR if service is nil (not configured).
+    /// `chat:write` is part of `SlackScopesService.requiredOptional` — when
+    /// missing, the picker shows an inline re-auth banner; cross-post
+    /// otherwise stays gated off.
+    private(set) var crossPostReady: Bool = false
+
     private let service: SlackScopesService?
     /// `nonisolated(unsafe)` так как `deinit` non-isolated в Swift 6, а
     /// `DistributedNotificationCenter.removeObserver` thread-safe. Запись
@@ -50,11 +59,13 @@ final class SlackScopesReader {
     func refresh() async {
         guard let service else {
             state = .notConfigured
+            crossPostReady = false
             return
         }
         await service.refresh()
         let missing = await service.missing()
         state = missing.isEmpty ? .connected : .connectedScopeOutdated(missing: missing)
+        crossPostReady = await service.has("chat:write")
     }
 
     private func subscribeIntegrationChanged() {
