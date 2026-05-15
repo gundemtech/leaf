@@ -323,9 +323,11 @@ Don't block Stage 0 → Stage 1, but resolve before plan-write:
 
 ---
 
-## 10. Estimated registry delta (post-decisions)
+## 10. Estimated registry delta (pre-answer)
 
-Per Track-6 contract §6.2, refined by §9 decisions.
+*Superseded by §11 after user answered Q1-Q4 (2026-05-16). Final delta = 8 event_kinds, 152 → 160.*
+
+Pre-answer table kept for lineage:
 
 | Event kind | Source | Default |
 |---|---|---|
@@ -336,15 +338,47 @@ Per Track-6 contract §6.2, refined by §9 decisions.
 | `chrome_bookmark_changed` (if accepted) | §5.3 | OFF |
 | (`arc_tab_navigated` / `arc_tab_activated` if Q5 says yes) | D4 / §5.2 | OFF |
 
-**Registry baseline 152 → P3 target ≈157–159** (5–7 net-new).
+---
 
-Contract §6.2 estimate was ~8; refined to 5–7 with sqlite/history/downloads/reading-list/Safari-bookmarks dropped.
+## 11. Surfaced product questions — ANSWERED 2026-05-16
+
+User answers (locked-in, brainstorm anchor):
+
+| Q | Answer | Consequence |
+|---|---|---|
+| **Q1 Mechanism** | AS-only, drop sqlite watch | No FDA cliff for History; D1 confirmed |
+| **Q2 Allow-list** | Dedicated `browser_domain_allow` table (M026) | D2 confirmed; M026 thin single-table migration |
+| **Q3 Default granularity** | `domain_only` | D3 confirmed; payload pipeline strips path/query for non-allow-listed |
+| **Q4 add-ons** | **Ship all three:** Chrome bookmarks + **Safari bookmarks (FDA accepted)** + **Arc per-tab nav** | +2 bookmark event_kinds, +2 Arc event_kinds; Safari requires FDA onboarding plumbing |
+
+### Implications of Q4 fan-out
+
+- **Safari Bookmarks.plist watch requires Full Disk Access TCC.** P3 must add a per-feature FDA permission state (similar shape to `AppleScriptPermissionStore` — bundle-scoped UserDefaults cache + 24 h re-probe). FDA can't be requested in-place; user must visit System Settings → Privacy & Security → Full Disk Access pane. UX:
+  - Settings → System Observers → "Safari bookmark changes" toggle. Toggling ON probes FDA → on first denial shows "Open Settings" button.
+  - First emit-attempt with FDA denied gracefully degrades (no event, "Needs FDA" badge in Settings).
+  - FDA is binary per-app: enabling Leaf's FDA grants `~/Library/Safari/*` and `~/Library/Application Support/<Apple>/*` collectively. Document for user.
+- **Arc per-tab nav** runs same pipeline as Safari/Chrome but Arc's AS reliability varies — graceful degrade: empty/null AS response keeps `arc_tabs_changed` cardinality emission, suppresses `arc_tab_navigated` / `arc_tab_activated` for that tick.
+
+### Updated registry delta — 8 event_kinds
+
+| Event kind | Source | Browser | Default |
+|---|---|---|---|
+| `safari_tab_navigated` | D4 | Safari | OFF |
+| `chrome_tab_navigated` | D4 | Chrome | OFF |
+| `arc_tab_navigated` | D4 + Q4 | Arc | OFF |
+| `safari_tab_activated` | §5.2 | Safari | OFF |
+| `chrome_tab_activated` | §5.2 | Chrome | OFF |
+| `arc_tab_activated` | §5.2 + Q4 | Arc | OFF |
+| `chrome_bookmark_changed` | §5.3 + Q4 | Chrome | OFF |
+| `safari_bookmark_changed` | §5.3 + Q4 (FDA) | Safari | OFF |
+
+**Registry baseline 152 → P3 target 160** (exactly 8 net-new, matching contract §6.2 ~8). All default OFF.
 
 ---
 
-## 11. Surfaced product questions
+## 11a. Original surfaced product questions (history)
 
-To answer **before** Stage 1 Discovery (per contract §3.1 item 7). All five are short.
+These were sent to user 2026-05-16 in AskUserQuestion form. Kept here for spec lineage.
 
 ### Q1 — Mechanism scope: AS-only vs include history sqlite watcher
 
