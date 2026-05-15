@@ -207,47 +207,19 @@ Edge case: if user wants separate Slack workspace per Leaf workspace (e.g., pers
 
 ### §5.1 Supabase migration M025 (new)
 
-`leaf-relay/supabase/migrations/20260516120000_cross_post_s6.sql` — содержит:
+`leaf-relay/supabase/migrations/20260516120100_cross_post_s6.sql` — содержит ONLY the 30-day retention addition (TDD-discovered: pgTAP test revealed S1 already shipped RLS):
 
-1. **`cross_post_log` SELECT RLS expansion.** S1 baseline `cross_post_log` table создан без RLS policies (deployed but not exercised). M025 adds:
-   ```sql
-   ALTER TABLE cross_post_log ENABLE ROW LEVEL SECURITY;
-
-   -- sender (via direct_messages join) reads own cross-post entries
-   CREATE POLICY cross_post_log_sender_read ON cross_post_log
-     FOR SELECT
-     USING (
-       message_id IN (
-         SELECT message_id FROM direct_messages
-         WHERE sender_pubkey = (auth.jwt() ->> 'pubkey')
-       )
-     );
-
-   -- recipient (via direct_messages join) reads own cross-post entries
-   CREATE POLICY cross_post_log_recipient_read ON cross_post_log
-     FOR SELECT
-     USING (
-       message_id IN (
-         SELECT message_id FROM direct_messages
-         WHERE recipient_pubkey = (auth.jwt() ->> 'pubkey')
-       )
-     );
-
-   -- INSERT only via Edge Functions (service_role)
-   -- No CREATE POLICY for INSERT — service_role bypasses RLS
-
-   -- No UPDATE / DELETE policies — cross_post_log is append-only
-   ```
+1. **`cross_post_log` RLS — already deployed in S1, M025 does NOT touch.** S1 migration `20260513120900_rls_policies.sql` already enabled RLS on cross_post_log + created the unified `cross_post_log_party_read` SELECT policy (sender OR recipient via direct_messages join). The pgTAP test 090 from S1 already exercises this path. M025 explicitly leaves S1's RLS pattern intact; 190 pgTAP regression test asserts S1 baseline still works.
 
 2. **`direct_messages.cross_post` JSONB stays unused в S6.** S4 widened `direct_messages` UPDATE RLS to sender OR recipient (per S4 §9.1 amendment for read_at/done_at). Theoretically recipient could PATCH `cross_post` JSONB field too — but S6 treats `cross_post_log` as authoritative cross-post audit source; `cross_post` JSONB stays default `{}::jsonb`. No M025 RLS change for this column. Future track may denormalize cross_post_log → cross_post JSONB for query optimization; out of S6 scope.
 
-3. **`expires_at` retention on `cross_post_log`.** Per contract §13: 30-day retention. Add:
+3. **`expires_at` retention on `cross_post_log`.** Per contract §13: 30-day retention. M025 adds:
    ```sql
-   ALTER TABLE cross_post_log ADD COLUMN expires_at timestamptz
-     GENERATED ALWAYS AS (posted_at + interval '30 days') STORED;
+   ALTER TABLE cross_post_log ADD COLUMN expires_at timestamptz NOT NULL
+     DEFAULT (now() + INTERVAL '30 days');
    CREATE INDEX idx_cross_post_log_expires ON cross_post_log(expires_at);
    ```
-   Existing `retention_purge` cron (S1) covers this автоматически via standard `expires_at < now()` filter.
+   **NOT `GENERATED ALWAYS AS`** — Postgres rejects `timestamptz + interval` GENERATED expressions as non-immutable. Plain `DEFAULT` fires at INSERT time, captured per-row. Within a transaction, `now()` returns transaction-start so `posted_at` DEFAULT and `expires_at` DEFAULT evaluate identically; retention semantics identical to generated column. Existing `retention_purge` cron (S1) covers this автоматически via standard `expires_at < now()` filter.
 
 ### §5.2 No new SQLCipher tables
 
