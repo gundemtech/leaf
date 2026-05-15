@@ -130,6 +130,36 @@ public enum SupabaseEndpoint {
         baseURL.appendingPathComponent("functions/v1/apns_push")
     }
 
+    // MARK: - PostgREST tables — Track 5 / S5 (team_events)
+
+    public static func teamEventsInsert(baseURL: URL) -> URL {
+        baseURL.appendingPathComponent("rest/v1/team_events")
+    }
+
+    /// Fetch inbound team events — workspace-scoped, since-watermark filter
+    /// (ms epoch encoded as ISO8601 for PostgREST `gt.<iso>` operator).
+    public static func teamEventsFetchInbound(
+        baseURL: URL,
+        workspaceID: String,
+        sinceCreatedAtISO: String?,
+        limit: Int
+    ) -> URL {
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("rest/v1/team_events"),
+            resolvingAgainstBaseURL: false
+        )!
+        var items: [URLQueryItem] = [
+            URLQueryItem(name: "workspace_id", value: "eq.\(workspaceID)"),
+            URLQueryItem(name: "order", value: "created_at.asc"),
+            URLQueryItem(name: "limit", value: String(limit)),
+        ]
+        if let since = sinceCreatedAtISO {
+            items.append(URLQueryItem(name: "created_at", value: "gt.\(since)"))
+        }
+        components.queryItems = items
+        return components.url!
+    }
+
     // MARK: - Header builders
 
     public static func anonHeaders(anonKey: String) -> [String: String] {
