@@ -26,8 +26,11 @@ public enum LinearOAuthEndpoints {
     public static let redirectPath = "/callback"
     public static var redirectURI: String { "http://\(redirectHost):\(redirectPort)\(redirectPath)" }
 
-    /// Минимальный read-only scope. Определён в Linear docs как always-present.
-    public static let scope = "read"
+    /// Track 5 / S6 T6 — scope bump per A3 brainstorm.
+    /// `read` baseline + `issues:create` для cross-post (narrower than full `write`).
+    /// Existing connected users on `read` only must re-authorize via Connections
+    /// settings; UI banner surfaces missing `issues:create` через LinearScopesService.
+    public static let scope = "read,issues:create"
 
     /// `actor=user` — default; ресурсы (если пишутся) принадлежат authorizing user.
     /// Read-only scope делает actor выбор почти косметическим, но фиксируем для
