@@ -454,6 +454,16 @@ public enum ActivityFeedMapper {
         "trash_changed"
     ]
 
+    /// Track-6 P1 — Claude Code AI event_kinds with explicit feed rendering.
+    /// Membership = explicit whitelist; adding new kinds requires updating
+    /// `mapAI` switch + `EventKindIcon.symbol`. DispatchCoverageTests fence
+    /// (`testEveryClaudeCodeEventKindKeyMappedOrSkipped`) enforces parity:
+    /// every `ClaudeCodeEventKindKey` case ∈ this set ∪ `skippedKinds`.
+    /// **Task 3 populates this set;** at Task 2 commit time it's empty
+    /// (red-gate fixture — DispatchCoverageTests/testEveryClaudeCodeEventKindKeyMappedOrSkipped
+    /// fails until Task 3 populates this + `skippedKinds` += 2).
+    static let claudeCodeAIKinds: Set<String> = []
+
     // MARK: - Track-4 Local OS (S1 + S2 + S3)
 
     /// Per-event-kind copy mapping for Track-4 Layer A events. ADR-010 redaction
