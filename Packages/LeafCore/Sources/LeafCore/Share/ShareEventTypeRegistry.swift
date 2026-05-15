@@ -209,6 +209,28 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     case screenshotTaken                  = "screenshot_taken"
     case downloadAdded                    = "download_added"
     case trashChanged                     = "trash_changed"
+
+    // MARK: - Phase Track-6 P1 — Claude Code Deep (16 new kinds, all default OFF per ADR-020)
+    // Retroactive (existed pre-P1; share-key control surface lands now)
+    case claudeCodeToolUse                = "tool_use"
+    case claudeCodeUserPrompt             = "user_prompt"
+    // Session lifecycle
+    case claudeSessionStarted             = "claude_session_started"
+    case claudeSessionEnded               = "claude_session_ended"
+    case claudeSessionCompacted           = "claude_session_compacted"
+    case claudePromptSubmitted            = "claude_prompt_submitted"
+    case claudeTurnEnded                  = "claude_turn_ended"
+    // Token
+    case claudeTokensUsed                 = "claude_tokens_used"
+    // Per-tool
+    case claudeBashExecuted               = "claude_bash_executed"
+    case claudeFileEdited                 = "claude_file_edited"
+    case claudeFileWritten                = "claude_file_written"
+    case claudeFileRead                   = "claude_file_read"
+    case claudeWebFetched                 = "claude_web_fetched"
+    case claudeSubagentDispatched         = "claude_subagent_dispatched"
+    case claudeMcpToolInvoked             = "claude_mcp_tool_invoked"
+    case claudeSlashCommandInvoked        = "claude_slash_command_invoked"
 }
 
 /// Phase 4.7.A — onboarding default enabled-state per event_kind.
@@ -425,6 +447,25 @@ public enum ShareEventTypeDefaults {
         .init(key: .clipboardEventCount, defaultEnabled: false),
         .init(key: .screenshotTaken, defaultEnabled: false),
         .init(key: .downloadAdded, defaultEnabled: false),
-        .init(key: .trashChanged, defaultEnabled: false)
+        .init(key: .trashChanged, defaultEnabled: false),
+
+        // Phase Track-6 P1 — Claude Code Deep. All default OFF per ADR-020 /
+        // Track-6 contract §2.5 (capture-everything locally, share-selectively).
+        .init(key: .claudeCodeToolUse, defaultEnabled: false),
+        .init(key: .claudeCodeUserPrompt, defaultEnabled: false),
+        .init(key: .claudeSessionStarted, defaultEnabled: false),
+        .init(key: .claudeSessionEnded, defaultEnabled: false),
+        .init(key: .claudeSessionCompacted, defaultEnabled: false),
+        .init(key: .claudePromptSubmitted, defaultEnabled: false),
+        .init(key: .claudeTurnEnded, defaultEnabled: false),
+        .init(key: .claudeTokensUsed, defaultEnabled: false),
+        .init(key: .claudeBashExecuted, defaultEnabled: false),
+        .init(key: .claudeFileEdited, defaultEnabled: false),
+        .init(key: .claudeFileWritten, defaultEnabled: false),
+        .init(key: .claudeFileRead, defaultEnabled: false),
+        .init(key: .claudeWebFetched, defaultEnabled: false),
+        .init(key: .claudeSubagentDispatched, defaultEnabled: false),
+        .init(key: .claudeMcpToolInvoked, defaultEnabled: false),
+        .init(key: .claudeSlashCommandInvoked, defaultEnabled: false)
     ]
 }
