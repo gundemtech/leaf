@@ -130,6 +130,16 @@ public enum SupabaseEndpoint {
         baseURL.appendingPathComponent("functions/v1/apns_push")
     }
 
+    // MARK: - Edge Functions — Track 5 / S6 (cross-post)
+
+    public static func slackPost(baseURL: URL) -> URL {
+        baseURL.appendingPathComponent("functions/v1/slack_post")
+    }
+
+    public static func linearCreateIssue(baseURL: URL) -> URL {
+        baseURL.appendingPathComponent("functions/v1/linear_create_issue")
+    }
+
     // MARK: - PostgREST tables — Track 5 / S5 (team_events)
 
     public static func teamEventsInsert(baseURL: URL) -> URL {
