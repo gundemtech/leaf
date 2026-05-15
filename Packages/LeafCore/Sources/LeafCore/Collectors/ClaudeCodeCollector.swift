@@ -127,8 +127,13 @@ public actor ClaudeCodeCollector {
 
     // MARK: - File discovery
 
-    /// 1-level recursive: `<projectsRoot>/<projectSlug>/<sessionId>.jsonl`.
-    /// Не используем deep `enumerator` чтобы не глядеть в случайные subdirs.
+    /// Track-6 P1 — 2-level discovery:
+    ///   `<projectsRoot>/<projectSlug>/<sessionId>.jsonl`                          ← top-level (existing)
+    ///   `<projectsRoot>/<projectSlug>/<parentSessionId>/subagents/agent-*.jsonl`  ← NEW (subagents)
+    /// Pre-P1 the collector skipped the subagent subdir entirely ("Не используем deep enumerator
+    /// чтобы не глядеть в случайные subdirs"). P1 enables it via narrow walk — exact known shape,
+    /// no wildcard recursion. Random subdirs at the project level / nested under sessionId still
+    /// ignored — see `testDoesNotRecurseIntoArbitrarySubdirs`.
     private func listJSONLFiles() -> [URL] {
         let fm = FileManager.default
         guard let projectDirs = try? fm.contentsOfDirectory(
@@ -142,13 +147,30 @@ public actor ClaudeCodeCollector {
         for projectDir in projectDirs {
             let isDir = (try? projectDir.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
             guard isDir else { continue }
-            guard let files = try? fm.contentsOfDirectory(
+            guard let entries = try? fm.contentsOfDirectory(
                 at: projectDir,
-                includingPropertiesForKeys: nil,
+                includingPropertiesForKeys: [.isDirectoryKey],
                 options: [.skipsHiddenFiles]
             ) else { continue }
-            for f in files where f.pathExtension == "jsonl" {
-                results.append(f)
+            for entry in entries {
+                let entryIsDir = (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+                if !entryIsDir, entry.pathExtension == "jsonl" {
+                    results.append(entry)
+                    continue
+                }
+                // Possible session-uuid dir — look for sibling `subagents/agent-*.jsonl`.
+                if entryIsDir {
+                    let subagentsDir = entry.appendingPathComponent("subagents")
+                    guard let agentFiles = try? fm.contentsOfDirectory(
+                        at: subagentsDir,
+                        includingPropertiesForKeys: nil,
+                        options: [.skipsHiddenFiles]
+                    ) else { continue }
+                    for file in agentFiles where file.pathExtension == "jsonl"
+                        && file.lastPathComponent.hasPrefix("agent-") {
+                        results.append(file)
+                    }
+                }
             }
         }
         return results
