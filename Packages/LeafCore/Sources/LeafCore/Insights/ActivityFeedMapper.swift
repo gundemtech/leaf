@@ -85,27 +85,97 @@ public enum ActivityFeedMapper {
         let primary: String
         var secondary: String? = nil
 
-        // ClaudeCodeJSONLParser writes:
-        //   tool_use   → tool_name + optional file_path + cwd
-        //   user_prompt → cwd (no body — ADR-010)
+        // ADR-010 redaction discipline. Only the allowlisted payload fields
+        // below may flow into primaryText / secondaryText. Forbidden fields
+        // — `command`, `tool_input.*`, `tool_response.*`, `content`,
+        // `thinking`, `signature`, `prompt`, `url`, `arguments`,
+        // `old_string`, `new_string` — must never be read here. Parsers
+        // (Tasks 8-11) enforce the same walkback before writing rows.
         switch kind {
+        // Retroactive (pre-P1 kinds — survive for back-compat with rows
+        // already in the local SQLCipher store before Track-6 P1 lands).
         case "tool_use":
-            primary = sanitize(payload["tool_name"]) ?? "Tool use"
-            // Prefer file basename for file-ops tools; fall back to cwd basename.
+            primary = sanitize(payload["tool_name"]).map { "Claude: \($0)" } ?? "Claude: tool"
             if let path = sanitize(payload["file_path"]) {
                 secondary = basename(of: path)
             } else if let cwd = sanitize(payload["cwd"]) {
                 secondary = basename(of: cwd)
             }
+
         case "user_prompt":
-            primary = "Prompt"
+            primary = "Claude: prompt"
             if let cwd = sanitize(payload["cwd"]) {
                 secondary = basename(of: cwd)
             }
+
+        // Session lifecycle (4 of 5 — `claude_turn_ended` is in skippedKinds)
+        case "claude_session_started":
+            let source = sanitize(payload["source_enum"]) ?? sanitize(payload["source"]) ?? "started"
+            primary = "Claude session: \(source)"
+            secondary = sanitize(payload["model"]).map { "model: \($0)" }
+
+        case "claude_session_ended":
+            let reason = sanitize(payload["reason"]) ?? "ended"
+            primary = "Claude session ended: \(reason)"
+            secondary = sanitize(payload["duration_seconds"]).map { "\($0)s" }
+
+        case "claude_session_compacted":
+            let trigger = sanitize(payload["trigger"]) ?? "compact"
+            primary = "Claude session compacted (\(trigger))"
+
+        case "claude_prompt_submitted":
+            primary = "Claude: prompt submitted"
+            secondary = sanitize(payload["prompt_length_chars"]).map { "\($0) chars" }
+
+        // Per-tool (8)
+        case "claude_bash_executed":
+            primary = "Claude: Bash"
+            let chars = sanitize(payload["command_length_chars"]).map { "\($0) chars" }
+            let dur = sanitize(payload["duration_ms"]).map { "\($0)ms" }
+            let joined = [chars, dur].compactMap { $0 }.joined(separator: " · ")
+            secondary = joined.isEmpty ? nil : joined
+
+        case "claude_file_edited":
+            let file = sanitize(payload["file_path"]).map(basename(of:)) ?? "file"
+            primary = "Claude: edited \(file)"
+            let added = sanitize(payload["bytes_added"]) ?? "0"
+            let removed = sanitize(payload["bytes_removed"]) ?? "0"
+            secondary = "+\(added) / -\(removed) bytes"
+
+        case "claude_file_written":
+            let file = sanitize(payload["file_path"]).map(basename(of:)) ?? "file"
+            primary = "Claude: wrote \(file)"
+            secondary = sanitize(payload["byte_count"]).map { "\($0) bytes" }
+
+        case "claude_file_read":
+            let file = sanitize(payload["file_path"]).map(basename(of:)) ?? "file"
+            primary = "Claude: read \(file)"
+            secondary = sanitize(payload["line_range_count"]).map { "\($0) lines" }
+
+        case "claude_web_fetched":
+            let tool = sanitize(payload["tool_name"]) ?? "WebFetch"
+            primary = "Claude: \(tool)"
+            secondary = sanitize(payload["domain"])
+
+        case "claude_subagent_dispatched":
+            let agentType = sanitize(payload["subagent_type"]) ?? "subagent"
+            primary = "Claude: dispatched \(agentType)"
+            secondary = sanitize(payload["description"])
+
+        case "claude_mcp_tool_invoked":
+            let server = sanitize(payload["mcp_server"]) ?? "mcp"
+            let tool = sanitize(payload["mcp_tool"]) ?? "tool"
+            primary = "Claude MCP: \(server) · \(tool)"
+
+        case "claude_slash_command_invoked":
+            let cmd = sanitize(payload["command_name"]) ?? "/?"
+            primary = "Claude: \(cmd)"
+
         default:
-            // Future AI collectors (Cursor / Windsurf / Continue.dev) may
-            // emit other kinds. Show the tool name if present, otherwise
-            // a friendly fallback.
+            // Forward-compat: unknown AI kind (future Cursor / Windsurf /
+            // Continue.dev) renders generically. DispatchCoverageTests fence
+            // (`testEveryClaudeCodeEventKindKeyMappedOrSkipped`) ensures we
+            // never silently land a Claude kind here.
             primary = sanitize(payload["tool_name"]) ?? sanitize(payload["agent"]) ?? "AI activity"
             secondary = sanitize(payload["file_path"]).map(basename(of:))
                 ?? sanitize(payload["cwd"]).map(basename(of:))
@@ -423,7 +493,12 @@ public enum ActivityFeedMapper {
         // (per-tick counter). Surfaced via Derived Insights Engine (Phase 4.9).
         "intensity_snapshot",
         "intensity_bucket_dropped",
-        "clipboard_event_count"
+        "clipboard_event_count",
+        // Track-6 P1 — high-cadence AI kinds (per-turn flood when active session).
+        // Both populate `events` rows for Phase 4.9 Derived Insights (token rollup,
+        // turn-duration histogram); chronological feed suppresses them.
+        "claude_tokens_used",
+        "claude_turn_ended"
     ]
 
     /// Track-4 S1+S2+S3 Layer A event_kinds with explicit feed rendering.
@@ -459,10 +534,20 @@ public enum ActivityFeedMapper {
     /// `mapAI` switch + `EventKindIcon.symbol`. DispatchCoverageTests fence
     /// (`testEveryClaudeCodeEventKindKeyMappedOrSkipped`) enforces parity:
     /// every `ClaudeCodeEventKindKey` case ∈ this set ∪ `skippedKinds`.
-    /// **Task 3 populates this set;** at Task 2 commit time it's empty
-    /// (red-gate fixture — DispatchCoverageTests/testEveryClaudeCodeEventKindKeyMappedOrSkipped
-    /// fails until Task 3 populates this + `skippedKinds` += 2).
-    static let claudeCodeAIKinds: Set<String> = []
+    /// Two cases (`claude_tokens_used`, `claude_turn_ended`) live in
+    /// `skippedKinds` — per-turn flood; consumed by Live Presence + Phase 4.9.
+    static let claudeCodeAIKinds: Set<String> = [
+        // Retroactive (2)
+        "tool_use", "user_prompt",
+        // Session lifecycle (4 of 5 visible — turn_ended skipped)
+        "claude_session_started", "claude_session_ended",
+        "claude_session_compacted", "claude_prompt_submitted",
+        // Per-tool (8)
+        "claude_bash_executed", "claude_file_edited",
+        "claude_file_written", "claude_file_read",
+        "claude_web_fetched", "claude_subagent_dispatched",
+        "claude_mcp_tool_invoked", "claude_slash_command_invoked"
+    ]
 
     // MARK: - Track-4 Local OS (S1 + S2 + S3)
 
