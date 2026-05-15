@@ -212,6 +212,10 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
 
     // MARK: - Phase Track-6 P1 — Claude Code Deep (16 new kinds, all default OFF per ADR-020)
     // Retroactive (existed pre-P1; share-key control surface lands now)
+    // Swift identifier uses `claudeCode*` prefix because rawValues (`tool_use`,
+    // `user_prompt`) lack the `claude_` provider prefix the rest of the block
+    // has — guards against future collisions if other AI providers (Cursor /
+    // Continue.dev) land their own generic kinds.
     case claudeCodeToolUse                = "tool_use"
     case claudeCodeUserPrompt             = "user_prompt"
     // Session lifecycle
@@ -220,7 +224,7 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     case claudeSessionCompacted           = "claude_session_compacted"
     case claudePromptSubmitted            = "claude_prompt_submitted"
     case claudeTurnEnded                  = "claude_turn_ended"
-    // Token
+    // Token attribution
     case claudeTokensUsed                 = "claude_tokens_used"
     // Per-tool
     case claudeBashExecuted               = "claude_bash_executed"
