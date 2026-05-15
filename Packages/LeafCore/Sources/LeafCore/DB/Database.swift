@@ -54,6 +54,9 @@ public final class Database: @unchecked Sendable {
         migrator.registerMigration016NormalizeGitHubEventKinds()
         migrator.registerMigration017NormalizeSlackEventKinds()
         migrator.registerMigration018IntensityAggregates()
+        // M019-M023 reserved for Track-5 collaboration-redesign stack
+        // (in flight on a separate branch). Track-6 P1 lands at M024.
+        migrator.registerMigration024ClaudeCodeAISubagentIndex()
         try migrator.migrate(pool)
 
         return Database(pool: pool, config: config, mode: .writer)
