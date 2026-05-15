@@ -87,6 +87,7 @@ public actor TeamEventMirrorService {
 
         var decoded = 0
         var upserted = 0
+        var batchedRows: [TeamEventMirrorRow] = []
         let receivedAtMs = Int64(now().timeIntervalSince1970 * 1000)
         for row in rows {
             do {
@@ -112,13 +113,37 @@ public actor TeamEventMirrorService {
                 let plaintext = try codec.decode(bytes, teamKey: teamKey)
                 decoded += 1
 
+                // C2 Stage 6 review fix — sender impersonation guard.
+                // AAD only binds version + keyID; encrypted plaintext is
+                // sender-controlled. Server-side RLS attests that
+                // row.senderPubkeyHex matches the JWT pubkey of whoever
+                // INSERTed, so server-attested field is authoritative.
+                // If plaintext claim disagrees, treat as impersonation
+                // attempt and drop. Compare lowercased to dodge case drift.
+                guard plaintext.senderPubkeyHex.lowercased()
+                        == row.senderPubkeyHex.lowercased() else {
+                    logger.warning("mirror skip — sender impersonation suspect for event=\(row.eventID, privacy: .public)")
+                    continue
+                }
+
+                // C3 Stage 6 review fix — cross-workspace leak guard.
+                // The fetch was scoped to the polling workspaceID (RLS
+                // enforces workspace membership). If plaintext claims a
+                // different workspaceID, attacker is trying to leak rows
+                // from workspace X into workspace Y. Drop.
+                guard plaintext.workspaceID == workspaceID else {
+                    logger.warning("mirror skip — workspace mismatch for event=\(row.eventID, privacy: .public)")
+                    continue
+                }
+
                 // Trust plaintext source/kind over server-controlled columns
                 // (precedent: S4 DM C4 fix). AAD only binds version + keyID,
                 // so server could mutate sourceKind/kind columns — discard.
+                // Sender pubkey + workspace ID — server-attested (above).
                 let mirrorRow = TeamEventMirrorRow(
                     eventID: plaintext.eventID,
-                    workspaceID: plaintext.workspaceID,
-                    senderPubkeyHex: plaintext.senderPubkeyHex,
+                    workspaceID: workspaceID,
+                    senderPubkeyHex: row.senderPubkeyHex,
                     source: plaintext.source,
                     kind: plaintext.kind,
                     plaintextPayloadJSON: try Self.payloadJSONString(plaintext.payload),
@@ -127,13 +152,21 @@ public actor TeamEventMirrorService {
                     receivedAtMs: receivedAtMs
                 )
 
-                try database.writeSQL { rawDB in
-                    try TeamEventMirrorStore.upsert(mirrorRow, in: rawDB)
-                }
-                upserted += 1
+                // I4 Stage 6 review fix — batch UPSERTs into a single
+                // write transaction (was per-row).
+                batchedRows.append(mirrorRow)
             } catch {
                 logger.error("mirror decode failed event=\(row.eventID, privacy: .public): \(String(describing: error), privacy: .public)")
             }
+        }
+
+        if !batchedRows.isEmpty {
+            try database.writeSQL { rawDB in
+                for r in batchedRows {
+                    try TeamEventMirrorStore.upsert(r, in: rawDB)
+                }
+            }
+            upserted = batchedRows.count
         }
         return MirrorTickResult(
             fetchedCount: rows.count, decodedCount: decoded, upsertedCount: upserted

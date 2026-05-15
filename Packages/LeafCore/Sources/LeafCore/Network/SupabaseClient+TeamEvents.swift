@@ -76,7 +76,11 @@ extension SupabaseClient {
         let url = SupabaseEndpoint.teamEventsInsert(baseURL: baseURL)
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        for (k, v) in SupabaseEndpoint.postgrestInsertHeaders(
+        // C4 Stage 6 review fix — merge-duplicates header so transient
+        // network failures that cause client retry with the same
+        // deterministic event_id don't double-insert (PostgREST returns
+        // 200/201 echoing the existing row instead of 409).
+        for (k, v) in SupabaseEndpoint.postgrestInsertHeadersIgnoreDuplicates(
             anonKey: anonKey, accessToken: session.accessToken
         ) {
             request.setValue(v, forHTTPHeaderField: k)
@@ -98,7 +102,10 @@ extension SupabaseClient {
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, response) = try await teamEventsTransport(request, label: "sendTeamEvent")
-        guard response.statusCode == 201 else {
+        // C4: with resolution=merge-duplicates, PostgREST returns 200 (not
+        // 201) when the row already exists. Both are success in our retry
+        // path — server has the row, client moves on.
+        guard response.statusCode == 200 || response.statusCode == 201 else {
             throw SupabaseError.fromStatus(response.statusCode, body: data)
         }
         struct Row: Decodable { let event_id: String; let created_at: String }

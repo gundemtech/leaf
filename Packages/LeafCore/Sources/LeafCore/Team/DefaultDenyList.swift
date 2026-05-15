@@ -22,11 +22,20 @@ public struct DefaultDenyList: Sendable {
     public init() {}
 
     /// Returns true if event should be dropped before encryption.
+    ///
+    /// I3 Stage 6 review fix — fragment matching restricted to "pathy" keys
+    /// (file_path, file_paths_json, branch, target_ref, ref_name, repo_full_name).
+    /// Previously scanned every payload value, which false-matched legitimate
+    /// commit messages like `"chore: improve .env handling"`. The pathy-key
+    /// allowlist is the only way collectors emit actual filesystem paths in
+    /// Layer A/B today; if a future collector emits paths under a different
+    /// key, add it here AND add a regression test.
     public func matches(eventKind: String, payload: [String: String]) -> Bool {
         if Self.isAIContentKind(eventKind) {
             return true
         }
-        for (_, value) in payload {
+        for key in Self.pathyKeys {
+            guard let value = payload[key] else { continue }
             for fragment in Self.bannedPathFragments where value.contains(fragment) {
                 return true
             }
@@ -42,6 +51,18 @@ public struct DefaultDenyList: Sendable {
     // MARK: - Internals
 
     private static let fileSizeKey = "file_size"
+
+    /// Whitelisted "pathy" payload keys — only these are scanned for banned
+    /// path fragments. Adding a new collector that emits paths under a
+    /// different key requires a deliberate update here AND a regression test.
+    static let pathyKeys: Set<String> = [
+        "file_path",
+        "file_paths_json",
+        "branch",
+        "target_ref",
+        "ref_name",
+        "repo_full_name",
+    ]
 
     /// Banned path fragments — match anywhere in a payload string value.
     /// Order: dot-prefixed first (faster reject for hot path).

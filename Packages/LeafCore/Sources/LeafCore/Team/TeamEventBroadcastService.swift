@@ -19,6 +19,7 @@
 //  encryption errors skip the offending event so the loop doesn't deadlock.
 //
 
+import CryptoKit
 import Foundation
 import GRDB
 import OSLog
@@ -68,7 +69,6 @@ public actor TeamEventBroadcastService {
     private let classifier: ShareSourceClassifier
     private let denyList: DefaultDenyList
     private let now: @Sendable () -> Date
-    private let generateEventID: @Sendable () -> String
     private let batchLimit: Int
     private let logger: Logger
 
@@ -80,7 +80,6 @@ public actor TeamEventBroadcastService {
         classifier: ShareSourceClassifier = ShareSourceClassifier(),
         denyList: DefaultDenyList = DefaultDenyList(),
         now: @escaping @Sendable () -> Date = { Date() },
-        generateEventID: @escaping @Sendable () -> String = { UUID().uuidString.lowercased() },
         batchLimit: Int = defaultBatchLimit,
         logger: Logger = Logger(subsystem: "tech.gundem.leaf.core", category: "team-event-broadcast")
     ) {
@@ -91,7 +90,6 @@ public actor TeamEventBroadcastService {
         self.classifier = classifier
         self.denyList = denyList
         self.now = now
-        self.generateEventID = generateEventID
         self.batchLimit = batchLimit
         self.logger = logger
     }
@@ -118,23 +116,36 @@ public actor TeamEventBroadcastService {
             workspaceID: workspace.id, keyID: activeKey.id, at: keystoreRoot
         )
 
-        // Read cursor + batch.
-        let cursor = try database.writeSQL { rawDB -> TeamEventBroadcastOffset in
+        // I2 Stage 6 review fix — cursor + isEnabled read via pool.read (not
+        // writer pool). Reduces lock contention with Agent writer thread.
+        let cursor = try database.readSQL { rawDB -> TeamEventBroadcastOffset in
             try TeamEventBroadcastOffsetsStore.readOrDefault(workspaceID: workspace.id, in: rawDB)
         }
         let candidates = try database.readSQL { rawDB -> [BroadcastEventCandidate] in
             try Self.fetchCandidates(afterEventID: cursor.cursorEventID, limit: self.batchLimit, in: rawDB)
         }
         guard !candidates.isEmpty else {
+            // I6 Stage 6 review fix — even empty ticks record success so
+            // last_success_at_ms tracks "last poll attempt that worked".
+            try database.writeSQL { rawDB in
+                try TeamEventBroadcastOffsetsStore.recordSuccess(
+                    workspaceID: workspace.id, nowMs: nowMs, in: rawDB
+                )
+            }
             return BroadcastTickResult(processedCount: 0, sentCount: 0, skippedCount: 0)
         }
+
+        // I2 — cache effective rules per tick (avoids per-event SQL roundtrip).
+        let effectiveRules = try database.readShareRules(workspaceID: workspace.id)
 
         var sent = 0
         var skipped = 0
         var processed = 0
         for candidate in candidates {
             processed += 1
-            let dispatch = try classifyAndFilter(candidate: candidate, workspaceID: workspace.id)
+            let dispatch = classifyAndFilter(
+                candidate: candidate, effectiveRules: effectiveRules
+            )
             switch dispatch {
             case .skip(let reason):
                 skipped += 1
@@ -146,8 +157,15 @@ public actor TeamEventBroadcastService {
                 }
             case .send(let source):
                 do {
+                    // C4 Stage 6 review fix — deterministic eventID per local
+                    // events.id + workspaceID. Retry after transient network
+                    // failure regenerates the same UUID so server-side
+                    // merge-duplicates can detect + dedupe.
+                    let determinedEventID = Self.deterministicEventID(
+                        workspaceID: workspace.id, localEventID: candidate.id
+                    )
                     let plaintext = TeamEventPlaintext(
-                        eventID: generateEventID(),
+                        eventID: determinedEventID,
                         workspaceID: workspace.id,
                         senderMemberID: selfMember.id,
                         senderPubkeyHex: selfMember.pubkeyHex,
@@ -215,14 +233,12 @@ public actor TeamEventBroadcastService {
 
     private func classifyAndFilter(
         candidate: BroadcastEventCandidate,
-        workspaceID: String
-    ) throws -> Dispatch {
+        effectiveRules: [ShareSource: Bool]
+    ) -> Dispatch {
         guard let source = classifier.classify(eventKind: candidate.eventKind) else {
             return .skip(reason: "unmapped")
         }
-        let enabled = try database.writeSQL { rawDB in
-            try ShareRulesStore.isEnabled(workspaceID: workspaceID, source: source, in: rawDB)
-        }
+        let enabled = effectiveRules[source] ?? ShareRuleDefaults.isEnabledByDefault(source)
         guard enabled else {
             return .skip(reason: "rule_off")
         }
@@ -230,6 +246,33 @@ public actor TeamEventBroadcastService {
             return .skip(reason: "denylist")
         }
         return .send(source: source)
+    }
+
+    /// C4 Stage 6 review fix — deterministic UUID derived from
+    /// (workspaceID, local events.id). Repeated calls with the same args
+    /// return the exact same UUID, so retry after transient network failure
+    /// hits the server's merge-duplicates path instead of double-inserting.
+    /// Uses SHA-256 → first 16 bytes formatted as UUID (RFC 4122 §4.4
+    /// version 4 layout with the version + variant bits set per spec).
+    /// Not collision-attack-grade — but workspaceID is a UUID itself, so
+    /// the namespace is 128-bit-distinguishable; collisions across
+    /// workspaces require deliberate effort that buys the attacker
+    /// nothing (target workspace would have to fetch a rebroadcast of
+    /// its own row).
+    static func deterministicEventID(workspaceID: String, localEventID: Int64) -> String {
+        let input = "\(workspaceID):\(localEventID)"
+        let digest = SHA256.hash(data: Data(input.utf8))
+        var bytes = Array(digest.prefix(16))
+        // RFC 4122 §4.4 — set version (4) and variant (RFC 4122) bits.
+        bytes[6] = (bytes[6] & 0x0F) | 0x40
+        bytes[8] = (bytes[8] & 0x3F) | 0x80
+        let uuid = UUID(uuid: (
+            bytes[0], bytes[1], bytes[2], bytes[3],
+            bytes[4], bytes[5], bytes[6], bytes[7],
+            bytes[8], bytes[9], bytes[10], bytes[11],
+            bytes[12], bytes[13], bytes[14], bytes[15]
+        ))
+        return uuid.uuidString.lowercased()
     }
 
     static func uuidStringToRawBytes(_ s: String) -> Data {

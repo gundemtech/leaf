@@ -6,6 +6,13 @@
 // in a separate timer-driven invocation (see Commit 9), not embedded in the
 // write helper, so the tests below call `runIncremental` / `runScheduled`
 // explicitly after the write.
+//
+// Phase Track-5 S5 — auto-share path coverage lives in sibling file
+// `TeamEventPayloadLeakageTests`. Same ADR-010 walkback intent — banned
+// keys (body / file_contents / note_body / email_subject / preview /
+// prompt / response / slack_message_text / linear_comment_body /
+// github_comment_body / slack_canvas_content) never reach any outbound
+// surface.
 
 import XCTest
 import GRDB

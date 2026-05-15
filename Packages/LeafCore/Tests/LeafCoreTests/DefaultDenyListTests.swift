@@ -42,13 +42,25 @@ final class DefaultDenyListTests: XCTestCase {
         ))
     }
 
-    func testFragmentInArbitraryField_Match() {
-        // Any string field containing a banned fragment must match — not just
-        // file_path. Defends against future collectors emitting under different
-        // payload keys.
+    func testFragmentInNonPathyField_NoMatch() {
+        // I3 Stage 6 review fix — non-pathy fields are no longer scanned.
+        // A commit message mentioning `.env` is legitimate (e.g.
+        // "chore: improve .env.example") and must NOT be dropped.
+        XCTAssertFalse(denyList.matches(
+            eventKind: "gh_commit_pushed",
+            payload: ["commit_message_subject": "chore: improve .env handling"]
+        ))
+    }
+
+    func testFragmentInPathyField_Match() {
+        // Scanned: file_paths_json, branch, target_ref, ref_name, repo_full_name.
         XCTAssertTrue(denyList.matches(
             eventKind: "gh_commit_pushed",
-            payload: ["random_field": "trace: opening .env to load secret"]
+            payload: ["file_paths_json": "[\"src/Foo.swift\",\"home/.env\"]"]
+        ))
+        XCTAssertTrue(denyList.matches(
+            eventKind: "gh_branch_created",
+            payload: ["ref_name": "feature/.aws/credentials-rotation"]
         ))
     }
 

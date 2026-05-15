@@ -14,6 +14,8 @@ struct OrganizationView: View {
     @Environment(WorkspaceReader.self) private var reader
     @Environment(DirectMessageInboxReader.self) private var inboxReader
     @Environment(ActiveWorkspaceStore.self) private var activeStore
+    @Environment(TeamEventBroadcastReader.self) private var broadcastReader
+    @Environment(TeamEventMirrorReader.self) private var mirrorReader
     @State private var nameInput: String = ""
     @State private var showingAcceptSheet: Bool = false
     @State private var sendSheetRecipient: SendRecipient?
@@ -39,12 +41,21 @@ struct OrganizationView: View {
             // Foreground polling loop. SwiftUI `.task` cancels on view disappear or
             // ID change. We poll inbox every 30s while OrganizationView is on screen.
             // Background tick (5min) is a future scheduler refinement.
-            guard activeStore.activeWorkspaceID != nil else { return }
+            guard let wid = activeStore.activeWorkspaceID else { return }
             await inboxReader.tick()
+            // C1 fix — Track 5 / S5 Stage 6 review: broadcast + mirror +
+            // daily retention prune scheduled in the same .task body so a
+            // single workspace switch reinitializes all loops.
+            await broadcastReader.tick(workspaceID: wid)
+            await mirrorReader.tick(workspaceID: wid)
+            await mirrorReader.pruneIfDueDaily()
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(30))
                 if Task.isCancelled { break }
                 await inboxReader.tick()
+                await broadcastReader.tick(workspaceID: wid)
+                await mirrorReader.tick(workspaceID: wid)
+                await mirrorReader.pruneIfDueDaily()
             }
         }
         .sheet(isPresented: $showingAcceptSheet) {

@@ -60,6 +60,10 @@ struct LeafApp: App {
     @State private var apnsRegistrationReader: APNsRegistrationReader
     /// Track 5 / S5 — Share Controls per-source toggle reader.
     @State private var shareRulesReader: ShareRulesReader
+    /// Track 5 / S5 — sender-side broadcast loop reader.
+    @State private var teamEventBroadcastReader: TeamEventBroadcastReader
+    /// Track 5 / S5 — recipient-side mirror loop + retention pruner reader.
+    @State private var teamEventMirrorReader: TeamEventMirrorReader
     @State private var memberRemovalReader = MemberRemovalReader()  // Phase 5.3.E
     @State private var pendingInvitesReader = PendingInvitesReader()  // Phase 5.5.C
     @State private var inviteURLHandler = InviteURLHandler()  // Phase 5.5.B
@@ -131,6 +135,11 @@ struct LeafApp: App {
         // table (defaults via ShareRuleDefaults when row absent).
         _shareRulesReader = State(initialValue: ShareRulesReader(activeStore: active))
 
+        // Track 5 / S5 — broadcast + mirror readers + 30s tick scheduling
+        // (driven by OrganizationView .task per S4 DM inbox precedent).
+        _teamEventBroadcastReader = State(initialValue: TeamEventBroadcastReader(supabase: supabase))
+        _teamEventMirrorReader = State(initialValue: TeamEventMirrorReader(supabase: supabase))
+
         // C1 fix — Track 5 / S4 Stage 6 review:
         // AppDelegate handles APNs callbacks and needs reader references. SwiftUI
         // doesn't propagate @Environment into AppDelegate callbacks; static weak
@@ -174,6 +183,8 @@ struct LeafApp: App {
                 .environment(directMessageInboxReader)  // Track 5 / S4
                 .environment(apnsRegistrationReader)    // Track 5 / S4
                 .environment(shareRulesReader)          // Track 5 / S5
+                .environment(teamEventBroadcastReader)  // Track 5 / S5
+                .environment(teamEventMirrorReader)     // Track 5 / S5
                 .environment(memberRemovalReader)  // Phase 5.3.E
                 .environment(pendingInvitesReader)  // Phase 5.5.C
                 .environment(inviteURLHandler)  // Phase 5.5.B

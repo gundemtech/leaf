@@ -53,8 +53,9 @@ final class M011EventKindIndexTests: XCTestCase {
         try db.readSQL { rawDB in
             let applied = try String.fetchAll(rawDB, sql: "SELECT identifier FROM grdb_migrations ORDER BY identifier")
             XCTAssertTrue(applied.contains("011_event_kind_index"))
-            // Track-5 S4: chain extended by M020 (messages_mirror) + M021 (apns_token_local).
-            XCTAssertEqual(applied.count, 21)
+            // Track-5 S5: chain extended by M020 (messages_mirror) + M021 (apns_token_local) +
+            // M022 (share_rules) + M023 (team_events_mirror) + M024 (team_event_broadcast_offsets).
+            XCTAssertEqual(applied.count, 24)
         }
     }
 }

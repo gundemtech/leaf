@@ -67,8 +67,8 @@ final class M013EventLinksTests: XCTestCase {
         try db.readSQL { rawDB in
             let applied = try String.fetchAll(rawDB, sql: "SELECT identifier FROM grdb_migrations ORDER BY identifier")
             XCTAssertTrue(applied.contains("013_event_links"))
-            // Track-5 S4: chain extended by M020 (messages_mirror) + M021 (apns_token_local).
-            XCTAssertEqual(applied.count, 21)
+            // Track-5 S5: chain = 19 (S2) + M020+M021 (S4) + M022+M023+M024 (S5).
+            XCTAssertEqual(applied.count, 24)
         }
     }
 }

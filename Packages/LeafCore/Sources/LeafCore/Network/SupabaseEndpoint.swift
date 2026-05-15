@@ -186,6 +186,21 @@ public enum SupabaseEndpoint {
         ]
     }
 
+    /// Track 5 / S5 — PostgREST INSERT with merge-duplicates resolution.
+    /// 409 conflicts are silently transformed by PostgREST into 200/201
+    /// echoing the existing row, so retry storms after transient network
+    /// failures don't create duplicate rows. Used by sendTeamEvent where
+    /// the broadcast service may re-attempt the same deterministic
+    /// (workspace_id, event_id) tuple after a network blip.
+    public static func postgrestInsertHeadersIgnoreDuplicates(anonKey: String, accessToken: String) -> [String: String] {
+        [
+            "apikey": anonKey,
+            "Authorization": "Bearer \(accessToken)",
+            "Content-Type": "application/json",
+            "Prefer": "return=representation,resolution=merge-duplicates",
+        ]
+    }
+
     /// Track 5 / S4 — PostgREST UPSERT via `Prefer: resolution=merge-duplicates`.
     /// Used by `apns_tokens` UPSERT path (token rotation reuses PK).
     public static func postgrestUpsertHeaders(anonKey: String, accessToken: String) -> [String: String] {

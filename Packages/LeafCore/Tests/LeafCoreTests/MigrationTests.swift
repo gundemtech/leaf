@@ -479,7 +479,10 @@ final class MigrationTests: XCTestCase {
                 Schema.ProviderSnapshots.tableName,
                 Schema.IntensityAggregates.tableName,
                 Schema.MessagesMirror.tableName,
-                Schema.APNsTokenLocal.tableName
+                Schema.APNsTokenLocal.tableName,
+                Schema.ShareRules.tableName,
+                Schema.TeamEventsMirror.tableName,
+                Schema.TeamEventBroadcastOffsets.tableName
             ]
             XCTAssertEqual(tables, expected)
         }

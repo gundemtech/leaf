@@ -86,6 +86,23 @@ final class TeamEventBroadcastOffsetsStoreTests: XCTestCase {
         XCTAssertEqual(row.lastAttemptAtMs, 200)
     }
 
+    func testRecordFailure_MonotonicallyGrowsAcrossNTicks() throws {
+        // I10 Stage 6 review fix — multi-tick failure counter regression.
+        try db.writeSQL { rawDB in
+            for i in 1...5 {
+                try TeamEventBroadcastOffsetsStore.recordFailure(
+                    workspaceID: "wid", nowMs: Int64(i) * 100, in: rawDB
+                )
+            }
+        }
+        let row = try db.readSQL { rawDB in
+            try TeamEventBroadcastOffsetsStore.readOrDefault(workspaceID: "wid", in: rawDB)
+        }
+        XCTAssertEqual(row.consecutiveFailures, 5)
+        XCTAssertEqual(row.lastAttemptAtMs, 500)
+        XCTAssertNil(row.lastSuccessAtMs)
+    }
+
     func testWorkspaceIsolation_PerWorkspaceCursor() throws {
         try db.writeSQL { rawDB in
             try TeamEventBroadcastOffsetsStore.advanceCursor(workspaceID: "wid-a", toEventID: 10, in: rawDB)
