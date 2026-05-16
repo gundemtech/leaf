@@ -311,6 +311,9 @@ final class AttentionEmissionPlannerTests: XCTestCase {
         XCTAssertEqual(event?.payload["event_kind"], "vscode_active_doc_changed")
         XCTAssertEqual(event?.payload["workspace_name"], "leaf")
         XCTAssertEqual(event?.payload["file_basename"], "Foo.swift")
+        XCTAssertNil(event?.payload["window_title"], "Raw window_title must be removed from payload after parse-success — privacy walkback")
+        XCTAssertNil(event?.payload["raw_title"], "Success path must not emit raw_title — that's fallback-only")
+        XCTAssertEqual(event?.payload["ide_bundle_id"], "com.microsoft.VSCode")
     }
 
     func test_p6_vscodeFamily_unparsedTitleEmitsFallback() {
@@ -325,6 +328,8 @@ final class AttentionEmissionPlannerTests: XCTestCase {
         XCTAssertNotNil(event?.payload["raw_title"])
         // Sanitizer left non-path tokens intact.
         XCTAssertTrue(event?.payload["raw_title"]?.contains("Custom") ?? false)
+        XCTAssertNil(event?.payload["window_title"], "Raw window_title must be removed from payload after fallback emit — privacy walkback")
+        XCTAssertEqual(event?.payload["ide_bundle_id"], "com.microsoft.VSCode")
     }
 
     func test_p6_nonVSCodeBundle_unchanged() {
