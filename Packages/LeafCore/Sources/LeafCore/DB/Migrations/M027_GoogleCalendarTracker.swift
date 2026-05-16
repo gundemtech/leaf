@@ -24,6 +24,13 @@ public extension DatabaseMigrator {
                 // Stores the bucket string ("homeOffice" | "officeLocation" | "customLocation")
                 // so presence-state reads can resolve current location without joining `events`.
                 t.column(Schema.GoogleCalendarTracker.workingLocationType, .text)
+                // Active-phase metadata for focusTime/outOfOffice rows — sourced from
+                // the API Event's focusTimeProperties/outOfOfficeProperties so the
+                // Task 14 transition scan can rebuild `_started` payloads without
+                // re-fetching the Event. ADR-010: both columns hold public Google
+                // API enum buckets (not freeform user text).
+                t.column(Schema.GoogleCalendarTracker.autoDeclineMode, .text)
+                t.column(Schema.GoogleCalendarTracker.chatStatus, .text)
                 t.column(Schema.GoogleCalendarTracker.upsertedAtMs, .integer).notNull()
             }
             try db.execute(sql: """

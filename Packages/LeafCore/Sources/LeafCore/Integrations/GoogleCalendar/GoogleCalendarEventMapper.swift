@@ -291,4 +291,66 @@ extension GoogleCalendarEventMapper {
 
         return payload
     }
+
+    /// Track-6 P4 Task 14 — build a transition payload directly from a tracker
+    /// row. Used by `GoogleCalendarCollector` at the end of each tick when
+    /// scanning M027 for time-crossings — the full `Event` is no longer in
+    /// memory at that point, but the tracker row carries every field we need
+    /// to rebuild the same payload shape that
+    /// `makeTransitionPayload(event:phase:calendarId:)` would emit at observe
+    /// time.
+    ///
+    /// **Shape parity:** payloads produced by this method must match the
+    /// Event-based variant key-for-key for the same logical inputs — Task
+    /// 6/7 sentinel-walkback tests cover both paths. ADR-010 holds by
+    /// construction: tracker row only carries structural enum buckets
+    /// (`autoDeclineMode` / `chatStatus` / `workingLocationType`) — no
+    /// description / location / declineMessage / attendee data ever reach
+    /// the tracker, so they cannot leak through this codepath.
+    public static func makeTransitionPayload(
+        fromTrackerRow row: GoogleCalendarTrackerStore.Row,
+        phase: TransitionPhase
+    ) -> [String: Any]? {
+        let kind: GoogleCalendarEventKind
+        switch (row.eventType, phase) {
+        case ("focusTime", .started):       kind = .focusBlockStarted
+        case ("focusTime", .ended):         kind = .focusBlockEnded
+        case ("outOfOffice", .started):     kind = .oooStarted
+        case ("outOfOffice", .ended):       kind = .oooEnded
+        case ("workingLocation", .changed): kind = .workingLocationChanged
+        default: return nil
+        }
+
+        var payload: [String: Any] = [
+            "source": "google_calendar",
+            "event_kind": kind.rawValue,
+            "event_id": row.eventID,
+            "calendar_id": row.calendarID,
+            "start_ms": row.startMs,
+            "end_ms": row.endMs,
+        ]
+        if let iCalUID = row.iCalUID { payload["i_cal_uid"] = iCalUID }
+
+        // Active-phase-only fields. Mirrors the Event-based variant — on
+        // `_ended` we surface only the boundary itself; operational state
+        // (`auto_decline_mode` / `chat_status`) is no longer meaningful.
+        if phase == .started {
+            switch row.eventType {
+            case "focusTime":
+                if let mode = row.autoDeclineMode { payload["auto_decline_mode"] = mode }
+                if let chat = row.chatStatus { payload["chat_status"] = chat }
+            case "outOfOffice":
+                if let mode = row.autoDeclineMode { payload["auto_decline_mode"] = mode }
+            default:
+                break
+            }
+        }
+
+        if phase == .changed, row.eventType == "workingLocation",
+           let wl = row.workingLocationType {
+            payload["working_location_type"] = wl
+        }
+
+        return payload
+    }
 }

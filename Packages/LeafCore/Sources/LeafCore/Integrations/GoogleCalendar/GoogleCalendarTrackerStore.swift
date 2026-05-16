@@ -25,6 +25,8 @@ public struct GoogleCalendarTrackerStore: Sendable {
     /// Row materialized from the tracker table. `workingLocationType` is non-nil
     /// only for `eventType == "workingLocation"` rows; the bucket string is
     /// one of `"homeOffice" | "officeLocation" | "customLocation"`.
+    /// `autoDeclineMode` populated for `focusTime` + `outOfOffice` rows (Google
+    /// API enum bucket); `chatStatus` only for `focusTime`.
     public struct Row: Sendable, Equatable {
         public let eventID: String
         public let calendarID: String
@@ -35,6 +37,8 @@ public struct GoogleCalendarTrackerStore: Sendable {
         public let startedEmittedAtMs: Int64?
         public let endedEmittedAtMs: Int64?
         public let workingLocationType: String?
+        public let autoDeclineMode: String?
+        public let chatStatus: String?
         public let upsertedAtMs: Int64
 
         public init(
@@ -47,6 +51,8 @@ public struct GoogleCalendarTrackerStore: Sendable {
             startedEmittedAtMs: Int64?,
             endedEmittedAtMs: Int64?,
             workingLocationType: String?,
+            autoDeclineMode: String?,
+            chatStatus: String?,
             upsertedAtMs: Int64
         ) {
             self.eventID = eventID
@@ -58,6 +64,8 @@ public struct GoogleCalendarTrackerStore: Sendable {
             self.startedEmittedAtMs = startedEmittedAtMs
             self.endedEmittedAtMs = endedEmittedAtMs
             self.workingLocationType = workingLocationType
+            self.autoDeclineMode = autoDeclineMode
+            self.chatStatus = chatStatus
             self.upsertedAtMs = upsertedAtMs
         }
     }
@@ -76,6 +84,8 @@ public struct GoogleCalendarTrackerStore: Sendable {
         startMs: Int64,
         endMs: Int64,
         workingLocationType: String?,
+        autoDeclineMode: String?,
+        chatStatus: String?,
         upsertedAtMs: Int64,
         in db: GRDB.Database
     ) throws {
@@ -89,8 +99,10 @@ public struct GoogleCalendarTrackerStore: Sendable {
                     \(Schema.GoogleCalendarTracker.startMs),
                     \(Schema.GoogleCalendarTracker.endMs),
                     \(Schema.GoogleCalendarTracker.workingLocationType),
+                    \(Schema.GoogleCalendarTracker.autoDeclineMode),
+                    \(Schema.GoogleCalendarTracker.chatStatus),
                     \(Schema.GoogleCalendarTracker.upsertedAtMs)
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(\(Schema.GoogleCalendarTracker.eventID)) DO UPDATE SET
                     \(Schema.GoogleCalendarTracker.calendarID)          = excluded.\(Schema.GoogleCalendarTracker.calendarID),
                     \(Schema.GoogleCalendarTracker.iCalUID)             = excluded.\(Schema.GoogleCalendarTracker.iCalUID),
@@ -98,11 +110,14 @@ public struct GoogleCalendarTrackerStore: Sendable {
                     \(Schema.GoogleCalendarTracker.startMs)             = excluded.\(Schema.GoogleCalendarTracker.startMs),
                     \(Schema.GoogleCalendarTracker.endMs)               = excluded.\(Schema.GoogleCalendarTracker.endMs),
                     \(Schema.GoogleCalendarTracker.workingLocationType) = excluded.\(Schema.GoogleCalendarTracker.workingLocationType),
+                    \(Schema.GoogleCalendarTracker.autoDeclineMode)     = excluded.\(Schema.GoogleCalendarTracker.autoDeclineMode),
+                    \(Schema.GoogleCalendarTracker.chatStatus)          = excluded.\(Schema.GoogleCalendarTracker.chatStatus),
                     \(Schema.GoogleCalendarTracker.upsertedAtMs)        = excluded.\(Schema.GoogleCalendarTracker.upsertedAtMs)
                 """,
             arguments: [
                 eventID, calendarID, iCalUID, eventType,
-                startMs, endMs, workingLocationType, upsertedAtMs,
+                startMs, endMs, workingLocationType,
+                autoDeclineMode, chatStatus, upsertedAtMs,
             ]
         )
     }
@@ -263,6 +278,8 @@ public struct GoogleCalendarTrackerStore: Sendable {
             startedEmittedAtMs: row[Schema.GoogleCalendarTracker.startedEmittedAtMs],
             endedEmittedAtMs: row[Schema.GoogleCalendarTracker.endedEmittedAtMs],
             workingLocationType: row[Schema.GoogleCalendarTracker.workingLocationType],
+            autoDeclineMode: row[Schema.GoogleCalendarTracker.autoDeclineMode],
+            chatStatus: row[Schema.GoogleCalendarTracker.chatStatus],
             upsertedAtMs: row[Schema.GoogleCalendarTracker.upsertedAtMs]
         )
     }

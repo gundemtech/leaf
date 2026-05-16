@@ -175,7 +175,78 @@ public actor GoogleCalendarCollector {
             try GoogleCalendarTrackerStore.cleanup(beforeMs: cutoff, in: db)
         }
 
+        // 7. Transition scan — emit `_started` / `_ended` / `_changed` event
+        //    rows for tracker rows whose start_ms / end_ms boundary has been
+        //    crossed since the last tick. workingLocation rows are surfaced
+        //    via `rowsNeedingStartedEmit` but emitted as `.changed` (single-
+        //    shot semantics — no paired `_ended`; `rowsNeedingEndedEmit`'s
+        //    SQL excludes them). `markStartedEmitted` / `markEndedEmitted`
+        //    flip the per-row idempotency gate so a re-tick won't duplicate.
+        try? emitTransitions(nowMs: nowMs)
+
         return true
+    }
+
+    /// Walk the tracker for time-crossings and emit the matching RawEvents.
+    /// Tracker mutations (mark_emitted) run in a separate `writeSQL`
+    /// transaction from the `database.write(rawEvents)` call — the same
+    /// crash-safety posture as `processEventsPage`: a crash between the two
+    /// leaves at worst an emitted event whose tracker flag is stale; the
+    /// next tick's idempotency check would re-emit, but in practice
+    /// `markStartedEmitted` is called inside the same loop iteration as
+    /// the write so the window is ~one event's duration.
+    private func emitTransitions(nowMs: Int64) throws {
+        // Started / changed scan. `rowsNeedingStartedEmit` surfaces every row
+        // whose `start_ms <= now` AND `started_emitted_at_ms IS NULL`,
+        // including workingLocation rows (which we re-route to `.changed`).
+        let startedRows: [GoogleCalendarTrackerStore.Row] = (try? database.readSQL { db in
+            try GoogleCalendarTrackerStore.rowsNeedingStartedEmit(now: nowMs, in: db)
+        }) ?? []
+
+        for row in startedRows {
+            let phase: GoogleCalendarEventMapper.TransitionPhase =
+                (row.eventType == "workingLocation") ? .changed : .started
+            guard let payload = GoogleCalendarEventMapper.makeTransitionPayload(
+                fromTrackerRow: row, phase: phase
+            ) else { continue }
+            try emitTransitionEvent(payload: payload, nowMs: nowMs)
+            try database.writeSQL { db in
+                try GoogleCalendarTrackerStore.markStartedEmitted(
+                    eventID: row.eventID, atMs: nowMs, in: db
+                )
+            }
+        }
+
+        // Ended scan. Excludes workingLocation by SQL contract (single-shot).
+        let endedRows: [GoogleCalendarTrackerStore.Row] = (try? database.readSQL { db in
+            try GoogleCalendarTrackerStore.rowsNeedingEndedEmit(now: nowMs, in: db)
+        }) ?? []
+
+        for row in endedRows {
+            guard let payload = GoogleCalendarEventMapper.makeTransitionPayload(
+                fromTrackerRow: row, phase: .ended
+            ) else { continue }
+            try emitTransitionEvent(payload: payload, nowMs: nowMs)
+            try database.writeSQL { db in
+                try GoogleCalendarTrackerStore.markEndedEmitted(
+                    eventID: row.eventID, atMs: nowMs, in: db
+                )
+            }
+        }
+    }
+
+    /// Flatten the mapper's `[String: Any]` payload, wrap in a `RawEvent`,
+    /// and write through `database.write` so FTS5 + link-derivation see the
+    /// same boundary as the omnibus path.
+    private func emitTransitionEvent(payload: [String: Any], nowMs: Int64) throws {
+        let flat = Self.flatten(payload)
+        let rawEvent = RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0),
+            signalType: .context,
+            bundleID: nil,
+            payload: flat
+        )
+        try database.write([rawEvent])
     }
 
     /// Long-running loop. Cancel via the returned Task or by calling `stop()`.
@@ -507,6 +578,8 @@ public actor GoogleCalendarCollector {
             let startMs: Int64
             let endMs: Int64
             let workingLocationType: String?
+            let autoDeclineMode: String?
+            let chatStatus: String?
         }
         var upserts: [TrackerUpsert] = []
         var deletions: [String] = []
@@ -560,6 +633,20 @@ public actor GoogleCalendarCollector {
                let eventId = event.id,
                let startMs = GoogleCalendarEventMapper.parseTimePointMs(event.start),
                let endMs = GoogleCalendarEventMapper.parseTimePointMs(event.end) {
+                // Source autoDeclineMode / chatStatus from the API Event's
+                // typed-properties blocks. Per Google contract: chatStatus
+                // exists only on focusTimeProperties (OOO has none); both
+                // hold enum buckets, never freeform user text. Persisting on
+                // the tracker lets the Task 14 transition scan rebuild
+                // `_started` payloads without re-fetching the Event.
+                let autoDecline = (rawType == "focusTime")
+                    ? event.focusTimeProperties?.autoDeclineMode
+                    : ((rawType == "outOfOffice")
+                       ? event.outOfOfficeProperties?.autoDeclineMode
+                       : nil)
+                let chatStatus = (rawType == "focusTime")
+                    ? event.focusTimeProperties?.chatStatus
+                    : nil
                 upserts.append(TrackerUpsert(
                     eventID: eventId,
                     calendarID: calendar.id,
@@ -567,7 +654,9 @@ public actor GoogleCalendarCollector {
                     eventType: rawType,
                     startMs: startMs,
                     endMs: endMs,
-                    workingLocationType: event.workingLocationProperties?.type
+                    workingLocationType: event.workingLocationProperties?.type,
+                    autoDeclineMode: autoDecline,
+                    chatStatus: chatStatus
                 ))
             }
         }
@@ -589,6 +678,8 @@ public actor GoogleCalendarCollector {
                     startMs: u.startMs,
                     endMs: u.endMs,
                     workingLocationType: u.workingLocationType,
+                    autoDeclineMode: u.autoDeclineMode,
+                    chatStatus: u.chatStatus,
                     upsertedAtMs: nowMs,
                     in: db
                 )

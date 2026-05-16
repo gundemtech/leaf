@@ -334,6 +334,15 @@ public enum Schema {
         public static let startedEmittedAtMs = "started_emitted_at_ms"
         public static let endedEmittedAtMs   = "ended_emitted_at_ms"
         public static let workingLocationType = "working_location_type"
+        // Active-phase metadata sourced from the original Google API Event's
+        // focusTimeProperties / outOfOfficeProperties (autoDeclineMode applies
+        // to both; chatStatus only to focusTime). Persisted on the tracker so
+        // the Task 14 transition scan can rebuild `_started` payloads without
+        // re-fetching the Event. ADR-010: both are public Google enum buckets
+        // (none / declineOnlyNewConflictingInvitations / declineAllConflictingInvitations
+        // for autoDeclineMode; doNotDisturb for chatStatus), not freeform text.
+        public static let autoDeclineMode    = "auto_decline_mode"
+        public static let chatStatus         = "chat_status"
         public static let upsertedAtMs       = "upserted_at_ms"
     }
 

@@ -46,6 +46,7 @@ final class M027GoogleCalendarTrackerTests: XCTestCase {
                 "start_ms", "end_ms",
                 "started_emitted_at_ms", "ended_emitted_at_ms",
                 "working_location_type",
+                "auto_decline_mode", "chat_status",
                 "upserted_at_ms",
             ])
             let pkRow = rows.first { ($0["pk"] as Int?) == 1 }
