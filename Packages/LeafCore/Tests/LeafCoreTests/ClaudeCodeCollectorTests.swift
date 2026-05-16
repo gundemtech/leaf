@@ -285,3 +285,102 @@ private struct MockOneEventParser: ClaudeCodeJSONLParsing {
         return .events([event])
     }
 }
+
+// MARK: - Track-6 P1 (Task 17) — hook + jsonl dedup
+
+/// Mock parser that extracts `tool_use_id` from each jsonl line and emits one
+/// RawEvent carrying it under the `source = "jsonl"` tag. Used by
+/// `testIngestHookEventsAndJSONLDedup` — jsonl line whose tool_use_id already
+/// sits in the collector's hook LRU must be filtered out before write.
+private struct ToolUseIDInjectingParser: ClaudeCodeJSONLParsing {
+    func parse(line: String, source: String, now: Date) -> ClaudeCodeParseResult {
+        guard let data = line.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let toolUseID = json["tool_use_id"] as? String else {
+            return .irrelevant
+        }
+        let event = RawEvent(
+            timestamp: now,
+            signalType: .aiCollaboration,
+            bundleID: "com.anthropic.claude-code",
+            payload: [
+                "event_kind": "claude_bash_executed",
+                "tool_use_id": toolUseID,
+                "source": "jsonl"
+            ]
+        )
+        return .events([event])
+    }
+}
+
+extension ClaudeCodeCollectorTests {
+    /// Track-6 P1 (Task 17) — hook event ingested via `ingestHookEvents`
+    /// populates LRU; the subsequent jsonl tick parses an event with the
+    /// SAME tool_use_id but it's filtered out before write. Final state:
+    /// exactly ONE event persisted (the hook one with `source = "hook"`).
+    func testIngestHookEventsAndJSONLDedup() async throws {
+        let projectDir = projectsRoot.appendingPathComponent("-Users-x-task17", isDirectory: true)
+        try FileManager.default.createDirectory(at: projectDir, withIntermediateDirectories: true)
+        let sessionFile = projectDir.appendingPathComponent("session.jsonl")
+        let jsonlLine = #"{"type":"tool_use","tool_use_id":"DUP_TOOL_ID"}"#
+        try Data("\(jsonlLine)\n".utf8).write(to: sessionFile)
+
+        let writer = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let collector = ClaudeCodeCollector(
+            database: writer,
+            parser: ToolUseIDInjectingParser(),
+            projectsRoot: projectsRoot,
+            intervalSec: 999,
+            backfillWindowDays: 7,
+            logger: logger
+        )
+
+        // 1. Hook arrives FIRST with tool_use_id = DUP_TOOL_ID, source = "hook",
+        //    carrying richer fields (duration_ms + permission_mode).
+        let hookEvent = RawEvent(
+            timestamp: Date(),
+            signalType: .aiCollaboration,
+            bundleID: "com.anthropic.claude-code",
+            payload: [
+                "event_kind": "claude_bash_executed",
+                "tool_use_id": "DUP_TOOL_ID",
+                "source": "hook",
+                "duration_ms": "50",
+                "permission_mode": "default"
+            ]
+        )
+        await collector.ingestHookEvents([hookEvent])
+
+        // LRU should now contain the seen tool_use_id.
+        let lruCount = await collector.hookSeenToolUseIDsCount_forTesting()
+        XCTAssertEqual(lruCount, 1, "LRU populated by ingestHookEvents")
+
+        // 2. JSONL tick runs — parser emits one event for the line, but the
+        //    tool_use_id matches the LRU so the collector drops it before
+        //    `writeEventsAndOffset`.
+        let result = await collector.performTick(now: Date())
+        XCTAssertEqual(result.filesScanned, 1)
+        XCTAssertEqual(
+            result.eventsWritten, 0,
+            "jsonl event with hook-seen tool_use_id deduped to zero"
+        )
+
+        // 3. Final DB state — exactly one event (the hook one) persisted.
+        let allRange = DateInterval(start: .distantPast, end: .distantFuture)
+        let events = try writer.events(in: allRange)
+        XCTAssertEqual(events.count, 1, "only hook event persists; jsonl twin dropped")
+        XCTAssertEqual(events.first?.payload["source"], "hook")
+        XCTAssertEqual(events.first?.payload["duration_ms"], "50")
+        XCTAssertEqual(events.first?.payload["permission_mode"], "default")
+
+        // 4. Offset should still advance — jsonl tail-read consumed the line.
+        let offset = try writer.readOffset(
+            collectorID: CollectorID.claudeCodeJSONL,
+            sourceID: sessionFile.resolvingSymlinksInPath().path
+        )
+        XCTAssertNotNil(offset, "offset row written even when all events deduped")
+        let fileSize = (try FileManager.default
+            .attributesOfItem(atPath: sessionFile.path)[.size] as? NSNumber)?.int64Value ?? 0
+        XCTAssertEqual(offset?.byteOffset, fileSize, "tail-read consumed full line despite filter")
+    }
+}
