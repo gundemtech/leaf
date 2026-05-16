@@ -524,6 +524,10 @@ public enum ActivityFeedMapper {
         "calendar_app_view_changed", "mail_active_mailbox_changed",
         "zoom_meeting_state_changed", "zoom_meeting_name_observed",
         "safari_tabs_changed", "chrome_tabs_changed", "arc_tabs_changed",
+        // P3 browser deep (8)
+        "safari_tab_navigated", "chrome_tab_navigated", "arc_tab_navigated",
+        "safari_tab_activated", "chrome_tab_activated", "arc_tab_activated",
+        "chrome_bookmark_changed", "safari_bookmark_changed",
         // S3 (10 visible — 3 high-cadence kinds live in `skippedKinds`)
         "audio_route_changed",
         "mic_in_use_entered", "mic_in_use_exited",
@@ -671,6 +675,38 @@ public enum ActivityFeedMapper {
         case "arc_tabs_changed":
             primary = "Arc: \(tabsCount(payload["tabs"]) ?? "?") tabs"
 
+        // P3 — browser deep (navigated + activated + bookmarks)
+        // BrowserStateMachine emits "current_url" (sanitized — protocol+host+path only,
+        // no query/fragment — per Track-6 P3 collector contract).
+        case "safari_tab_navigated":
+            primary = "Safari: \(sanitize(payload["current_url"]) ?? "?")"
+            secondary = "navigated"
+        case "chrome_tab_navigated":
+            primary = "Chrome: \(sanitize(payload["current_url"]) ?? "?")"
+            secondary = "navigated"
+        case "arc_tab_navigated":
+            primary = "Arc: \(sanitize(payload["current_url"]) ?? "?")"
+            secondary = "navigated"
+        case "safari_tab_activated":
+            primary = "Safari: \(sanitize(payload["current_url"]) ?? "?")"
+            secondary = "tab activated"
+        case "chrome_tab_activated":
+            primary = "Chrome: \(sanitize(payload["current_url"]) ?? "?")"
+            secondary = "tab activated"
+        case "arc_tab_activated":
+            primary = "Arc: \(sanitize(payload["current_url"]) ?? "?")"
+            secondary = "tab activated"
+        // Bookmark collectors emit "delta" (signed int) + "total_count" (int).
+        // URL / title strings are never emitted — structural count only (ADR-010).
+        case "chrome_bookmark_changed":
+            let delta = Int(payload["delta"] ?? "0") ?? 0
+            let total = sanitize(payload["total_count"]) ?? "?"
+            primary = "Chrome bookmarks: \(Self.deltaText(delta)) (\(total) total)"
+        case "safari_bookmark_changed":
+            let delta = Int(payload["delta"] ?? "0") ?? 0
+            let total = sanitize(payload["total_count"]) ?? "?"
+            primary = "Safari bookmarks: \(Self.deltaText(delta)) (\(total) total)"
+
         // S3 — audio / mic (AudioRouteCollector emits "audio_route" enum value)
         case "audio_route_changed":
             primary = "Audio route: \(sanitize(payload["audio_route"]) ?? "—")"
@@ -737,6 +773,13 @@ public enum ActivityFeedMapper {
               let array = try? JSONSerialization.jsonObject(with: data) as? [Any]
         else { return nil }
         return String(array.count)
+    }
+
+    /// Formats a signed integer bookmark delta as "+N", "−N", or "updated" (zero).
+    private static func deltaText(_ delta: Int) -> String {
+        if delta > 0 { return "+\(delta)" }
+        if delta < 0 { return "\(delta)" }
+        return "updated"
     }
 
     private static func parsePayload(_ json: String) -> [String: String] {

@@ -478,4 +478,88 @@ final class ActivityFeedMapperLocalOSTests: XCTestCase {
             }
         }
     }
+
+    // MARK: - Phase Track-6 P3 (Browsers Deep — 8 new kinds)
+
+    func testSafariTabNavigated() {
+        let entry = map(
+            kind: "safari_tab_navigated", signalType: "attention",
+            bundleID: "com.apple.Safari",
+            extras: ["current_url": "github.com/foo"]
+        )
+        XCTAssertEqual(entry?.primaryText, "Safari: github.com/foo")
+        XCTAssertEqual(entry?.secondaryText, "navigated")
+    }
+
+    func testChromeTabNavigated() {
+        let entry = map(
+            kind: "chrome_tab_navigated", signalType: "attention",
+            bundleID: "com.google.Chrome",
+            extras: ["current_url": "linear.app"]
+        )
+        XCTAssertEqual(entry?.primaryText, "Chrome: linear.app")
+        XCTAssertEqual(entry?.secondaryText, "navigated")
+    }
+
+    func testArcTabNavigated() {
+        let entry = map(
+            kind: "arc_tab_navigated", signalType: "attention",
+            bundleID: "company.thebrowser.Browser",
+            extras: ["current_url": "arc.net/explore"]
+        )
+        XCTAssertEqual(entry?.primaryText, "Arc: arc.net/explore")
+        XCTAssertEqual(entry?.secondaryText, "navigated")
+    }
+
+    func testSafariTabActivated() {
+        let entry = map(
+            kind: "safari_tab_activated", signalType: "attention",
+            bundleID: "com.apple.Safari",
+            extras: ["current_url": "apple.com/developer"]
+        )
+        XCTAssertEqual(entry?.primaryText, "Safari: apple.com/developer")
+        XCTAssertEqual(entry?.secondaryText, "tab activated")
+    }
+
+    func testChromeTabActivated() {
+        let entry = map(
+            kind: "chrome_tab_activated", signalType: "attention",
+            bundleID: "com.google.Chrome",
+            extras: ["current_url": "github.com/gundemtech"]
+        )
+        XCTAssertEqual(entry?.primaryText, "Chrome: github.com/gundemtech")
+        XCTAssertEqual(entry?.secondaryText, "tab activated")
+    }
+
+    func testArcTabActivated() {
+        let entry = map(
+            kind: "arc_tab_activated", signalType: "attention",
+            bundleID: "company.thebrowser.Browser",
+            extras: ["current_url": "notion.so"]
+        )
+        XCTAssertEqual(entry?.primaryText, "Arc: notion.so")
+        XCTAssertEqual(entry?.secondaryText, "tab activated")
+    }
+
+    func testChromeBookmarkChangedPositiveDelta() {
+        // BookmarkCollector emits "delta" (signed int) + "total_count" (int) only —
+        // no URL/title strings (ADR-010 structural count only).
+        let entry = map(
+            kind: "chrome_bookmark_changed", signalType: "action",
+            bundleID: "com.google.Chrome",
+            extras: ["delta": "1", "total_count": "143"]
+        )
+        XCTAssertEqual(entry?.primaryText, "Chrome bookmarks: +1 (143 total)")
+        XCTAssertNil(entry?.secondaryText)
+    }
+
+    func testSafariBookmarkChangedNegativeDelta() {
+        let entry = map(
+            kind: "safari_bookmark_changed", signalType: "action",
+            bundleID: "com.apple.Safari",
+            extras: ["delta": "-1", "total_count": "11"]
+        )
+        XCTAssertEqual(entry?.primaryText, "Safari bookmarks: -1 (11 total)")
+        XCTAssertNil(entry?.secondaryText)
+    }
 }

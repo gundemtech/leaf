@@ -51,8 +51,9 @@ final class EventKindIconTests: XCTestCase {
     func testTrack4LocalOSKindsSetSizeUnchanged() {
         // Guards against silent additions / removals from the whitelist.
         // Track-4: S1 (9) + S2 (14) + S3 (10 visible — 3 in skippedKinds) = 33.
-        // Track-6 P2 added 6 xcode_* lifecycle kinds. Total = 39.
-        XCTAssertEqual(ActivityFeedMapper.trackFourLocalOSKinds.count, 39)
+        // Track-6 P2 added 6 xcode_* lifecycle kinds → 39.
+        // Track-6 P3 added 8 browser kinds (Safari/Chrome/Arc tab nav + active + bookmark) → 47.
+        XCTAssertEqual(ActivityFeedMapper.trackFourLocalOSKinds.count, 47)
     }
 
     // MARK: - Phase Track-6 P2 (Xcode Deep — 6 new icon mappings)
