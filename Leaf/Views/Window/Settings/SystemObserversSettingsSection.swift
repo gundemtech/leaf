@@ -6,6 +6,9 @@
 //  has Input Monitoring TCC badge + "Open Settings" CTA. Reads
 //  PermissionsService for SystemObserversStore + InputMonitoringPermissionStore.
 //
+//  Track-6 P6 — IDEs sub-section appended: VSCode + JetBrains workspace/project
+//  storage FSEvents watchers (both OFF by default, ADR-020 opt-in posture).
+//
 
 import SwiftUI
 import LeafCore
@@ -23,6 +26,8 @@ struct SystemObserversSettingsSection: View {
                     SystemObserverRow(observer: observer, permissions: permissions)
                 }
             }
+
+            IDEStorageSettingsSection(store: permissions.localAppsStore)
         }
     }
 
@@ -107,6 +112,78 @@ struct SystemObserverDescriptor: Sendable {
     let explainer: String
     let requiresInputMonitoring: Bool
 }
+
+// MARK: - Track-6 P6 IDEs sub-section
+
+/// Two-row sub-section for VSCode-family + JetBrains IDE storage watchers.
+/// Reads/writes `LocalAppsStore` UserDefaults keys; both default OFF (ADR-020).
+private struct IDEStorageSettingsSection: View {
+    @ObservedObject var store: LocalAppsStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: LeafSpace.xs) {
+            Text("IDEs")
+                .font(LeafType.body.small)
+                .foregroundStyle(LeafColor.text.tertiary)
+                .padding(.top, LeafSpace.sm)
+
+            IDEStorageToggleRow(
+                sfSymbol: "chevron.left.forwardslash.chevron.right",
+                displayName: "VSCode workspace tracking",
+                explainer: "Detects workspace opens across VSCode, Cursor, Insiders, and VSCodium. Workspace name only — never file contents.",
+                isOn: Binding(
+                    get: { store.vscodeStorageEnabled },
+                    set: { store.vscodeStorageEnabled = $0 }
+                )
+            )
+
+            IDEStorageToggleRow(
+                sfSymbol: "cube",
+                displayName: "JetBrains recent projects",
+                explainer: "Detects recent project activations across IntelliJ, PyCharm, GoLand, etc. Project display name only — never file contents.",
+                isOn: Binding(
+                    get: { store.jetbrainsStorageEnabled },
+                    set: { store.jetbrainsStorageEnabled = $0 }
+                )
+            )
+        }
+    }
+}
+
+private struct IDEStorageToggleRow: View {
+    let sfSymbol: String
+    let displayName: String
+    let explainer: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        LeafCard(variant: .raised, padding: .regular, header: { EmptyView() }) {
+            HStack(alignment: .center, spacing: LeafSpace.md) {
+                Image(systemName: sfSymbol)
+                    .font(.system(size: 18))
+                    .foregroundStyle(LeafColor.text.secondary)
+                    .frame(width: 28, height: 28)
+                VStack(alignment: .leading, spacing: LeafSpace.xxs) {
+                    Text(displayName)
+                        .font(LeafType.body.regular)
+                        .foregroundStyle(LeafColor.text.primary)
+                    Text(explainer)
+                        .font(LeafType.body.small)
+                        .foregroundStyle(LeafColor.text.secondary)
+                }
+                Spacer(minLength: 0)
+                Toggle("", isOn: $isOn)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .tint(LeafColor.accent.primary)
+            }
+        } footer: {
+            EmptyView()
+        }
+    }
+}
+
+// MARK: - System observer rows
 
 private struct SystemObserverRow: View {
     let observer: SystemObserverDescriptor
