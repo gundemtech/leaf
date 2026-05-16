@@ -112,3 +112,13 @@ public final class LocalAppsStore: ObservableObject, @unchecked Sendable {
         "localApps.subField.\(bundleID).\(field)"
     }
 }
+
+// MARK: - Phase Track-6 P3 — BrowserBookmarksFeatureGate conformance
+
+/// `LocalAppsStore` is already `Sendable` and `@unchecked Sendable`-guarded by
+/// NSLock internally. The `BrowserBookmarksFeatureGate` protocol reads the same
+/// sub-field toggles as the Settings UI, so no extra bridging is needed.
+extension LocalAppsStore: BrowserBookmarksFeatureGate {
+    public var chromeEnabled: Bool { browserBookmarksChromeEnabled }
+    public var safariEnabled: Bool { browserBookmarksSafariEnabled }
+}

@@ -2,7 +2,7 @@
 import XCTest
 @testable import LeafCore
 
-// MARK: - Mock
+// MARK: - Mocks / helpers
 
 final class MockBookmarkWriter: BookmarkEventBatchWriter, @unchecked Sendable {
     private(set) var events: [RawEvent] = []
@@ -10,6 +10,19 @@ final class MockBookmarkWriter: BookmarkEventBatchWriter, @unchecked Sendable {
     func write(_ events: [RawEvent]) throws {
         self.events.append(contentsOf: events)
     }
+}
+
+/// Feature gate that enables both Chrome and Safari — used by all existing tests
+/// that don't specifically test toggle gating.
+struct AlwaysOnFeatureGate: BrowserBookmarksFeatureGate {
+    var chromeEnabled: Bool { true }
+    var safariEnabled: Bool { true }
+}
+
+/// Feature gate with configurable per-browser flags — used by toggle-gating tests.
+struct ConfigurableFeatureGate: BrowserBookmarksFeatureGate {
+    var chromeEnabled: Bool
+    var safariEnabled: Bool
 }
 
 // MARK: - Tests
@@ -22,7 +35,8 @@ final class BrowserBookmarksWatcherTests: XCTestCase {
             writer: writer,
             chromeCountProbe: { _ in 42 },
             safariCountProbe: { _ in 12 },
-            fdaGranted: true
+            fdaGranted: true,
+            featureGate: AlwaysOnFeatureGate()
         )
         // simulate first FSEvent on Chrome path — seeds the counter, no emit
         await watcher.handleChromeEvent(profileLabel: "Default", nowMs: 1000)
@@ -36,7 +50,8 @@ final class BrowserBookmarksWatcherTests: XCTestCase {
             writer: writer,
             chromeCountProbe: { _ in chromeCount },
             safariCountProbe: { _ in 12 },
-            fdaGranted: true
+            fdaGranted: true,
+            featureGate: AlwaysOnFeatureGate()
         )
         await watcher.handleChromeEvent(profileLabel: "Default", nowMs: 1000)
         chromeCount = 43
@@ -55,7 +70,8 @@ final class BrowserBookmarksWatcherTests: XCTestCase {
             writer: writer,
             chromeCountProbe: { p in counts[p] ?? 0 },
             safariCountProbe: { _ in 0 },
-            fdaGranted: true
+            fdaGranted: true,
+            featureGate: AlwaysOnFeatureGate()
         )
         await watcher.handleChromeEvent(profileLabel: "Default", nowMs: 1000)
         await watcher.handleChromeEvent(profileLabel: "Profile 1", nowMs: 1000)
@@ -72,7 +88,8 @@ final class BrowserBookmarksWatcherTests: XCTestCase {
             writer: writer,
             chromeCountProbe: { _ in 0 },
             safariCountProbe: { _ in 12 },
-            fdaGranted: false
+            fdaGranted: false,
+            featureGate: AlwaysOnFeatureGate()
         )
         await watcher.handleSafariEvent(nowMs: 1000)
         await watcher.handleSafariEvent(nowMs: 2000)
@@ -86,7 +103,8 @@ final class BrowserBookmarksWatcherTests: XCTestCase {
             writer: writer,
             chromeCountProbe: { _ in 0 },
             safariCountProbe: { _ in safari },
-            fdaGranted: true
+            fdaGranted: true,
+            featureGate: AlwaysOnFeatureGate()
         )
         await watcher.handleSafariEvent(nowMs: 1000)
         safari = 11
@@ -104,11 +122,72 @@ final class BrowserBookmarksWatcherTests: XCTestCase {
             writer: writer,
             chromeCountProbe: { _ in 42 },
             safariCountProbe: { _ in 0 },
-            fdaGranted: true
+            fdaGranted: true,
+            featureGate: AlwaysOnFeatureGate()
         )
         await watcher.handleChromeEvent(profileLabel: "Default", nowMs: 1000)
         await watcher.handleChromeEvent(profileLabel: "Default", nowMs: 2000)
         XCTAssertEqual(writer.events.count, 1)
         XCTAssertEqual(writer.events[0].payload["delta"], "0")
+    }
+
+    // MARK: - MAJOR-2 toggle-gating tests
+
+    func testChromeDisabledDoesNotEmit() async throws {
+        // Gate with chromeEnabled=false — even a warm tick must not emit.
+        let writer = MockBookmarkWriter()
+        nonisolated(unsafe) var count = 42
+        let watcher = BrowserBookmarksWatcher(
+            writer: writer,
+            chromeCountProbe: { _ in count },
+            safariCountProbe: { _ in 0 },
+            fdaGranted: true,
+            featureGate: ConfigurableFeatureGate(chromeEnabled: false, safariEnabled: false)
+        )
+        await watcher.handleChromeEvent(profileLabel: "Default", nowMs: 1000)
+        count = 43
+        await watcher.handleChromeEvent(profileLabel: "Default", nowMs: 2000)
+        XCTAssertEqual(writer.events.count, 0, "Chrome toggle OFF — no events emitted")
+    }
+
+    func testSafariDisabledDoesNotEmit() async throws {
+        // Gate with safariEnabled=false — even a warm tick must not emit.
+        let writer = MockBookmarkWriter()
+        nonisolated(unsafe) var count = 12
+        let watcher = BrowserBookmarksWatcher(
+            writer: writer,
+            chromeCountProbe: { _ in 0 },
+            safariCountProbe: { _ in count },
+            fdaGranted: true,
+            featureGate: ConfigurableFeatureGate(chromeEnabled: false, safariEnabled: false)
+        )
+        await watcher.handleSafariEvent(nowMs: 1000)
+        count = 11
+        await watcher.handleSafariEvent(nowMs: 2000)
+        XCTAssertEqual(writer.events.count, 0, "Safari toggle OFF — no events emitted")
+    }
+
+    // MARK: - MINOR-3 backup-file sanity test
+
+    func testChromeRealBookmarksFileEmitsDelta() async throws {
+        // Sanity marker: the FSEventStream callback only fires for paths ending
+        // in "/Bookmarks" (not "/Bookmarks.bak" or "/Bookmarks.tmp"). This test
+        // exercises the handleChromeEvent path directly to confirm the watcher
+        // correctly emits exactly one delta event on count change.
+        // The suffix filter lives in the FSEventStream closure (`.hasSuffix("/Bookmarks")`),
+        // which already rejects ".bak" / ".tmp" — this test locks the handler contract.
+        let writer = MockBookmarkWriter()
+        nonisolated(unsafe) var count = 42
+        let watcher = BrowserBookmarksWatcher(
+            writer: writer,
+            chromeCountProbe: { _ in count },
+            safariCountProbe: { _ in 0 },
+            fdaGranted: true,
+            featureGate: AlwaysOnFeatureGate()
+        )
+        await watcher.handleChromeEvent(profileLabel: "Default", nowMs: 1000)
+        count = 43
+        await watcher.handleChromeEvent(profileLabel: "Default", nowMs: 2000)
+        XCTAssertEqual(writer.events.count, 1, "real Bookmarks event emits exactly one delta")
     }
 }
