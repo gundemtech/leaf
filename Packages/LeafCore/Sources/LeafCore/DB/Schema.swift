@@ -74,6 +74,9 @@ public enum Schema {
     /// logical FK to `team_members.id` (no SQL FOREIGN KEY).
     /// `left_at_ms` IS NULL = active membership; non-NULL = soft-mark left
     /// (OQ-T5-2 resolution; data preserved, UI hides).
+    /// `deleted_at_ms` IS NULL = not deleted; non-NULL = admin soft-deleted
+    /// (Track 5 / S7 M025). Partial index `idx_workspaces_active` accelerates
+    /// hot-path "list active workspaces" query.
     public enum Workspaces {
         public static let tableName = "workspaces"
         public static let id = "id"
@@ -81,6 +84,8 @@ public enum Schema {
         public static let createdAtMs = "created_at_ms"
         public static let createdByMemberID = "created_by_member_id"
         public static let leftAtMs = "left_at_ms"
+        public static let deletedAtMs = "deleted_at_ms"         // Track-5 S7 M025
+        public static let indexActive = "idx_workspaces_active" // Track-5 S7 M025
     }
 
     /// Phase 5.1.A — long-term member identity + X25519 public key (contract §4, §7).

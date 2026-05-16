@@ -206,7 +206,8 @@ final class MigrationTests: XCTestCase {
                     Schema.Workspaces.name,
                     Schema.Workspaces.createdAtMs,
                     Schema.Workspaces.createdByMemberID,
-                    Schema.Workspaces.leftAtMs
+                    Schema.Workspaces.leftAtMs,
+                    Schema.Workspaces.deletedAtMs   // Track-5 S7 M025
                 ])
             )
         }
