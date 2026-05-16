@@ -197,3 +197,94 @@ public struct GoogleCalendarEventMapper: Sendable {
         return f
     }()
 }
+
+// MARK: - Task 7: Transition payloads
+//
+// 5 clock-driven transition kinds — emitted by the collector's transition
+// ticker when a tracked focusTime / outOfOffice block crosses its start or
+// end boundary, and when a workingLocation event is first observed (single-
+// shot — no paired `_ended`).
+//
+// Spec §6.3 (transition shapes) + §6.4 (forbidden output keys).
+// ADR-010 posture: same as `makeObservedPayload` — the mapper NEVER reads
+// `declineMessage` or any workingLocation building/floor/desk/label field;
+// Task 3 Codable doesn't even decode the latter set. The privacy walkbacks
+// live in the tests (sentinel-string grep on serialised JSON).
+
+extension GoogleCalendarEventMapper {
+
+    /// Direction of a tracked-event boundary crossing. `started` / `ended`
+    /// apply to focusTime + outOfOffice (paired). `changed` is the single-
+    /// shot phase for workingLocation events.
+    public enum TransitionPhase: Sendable {
+        case started
+        case ended
+        case changed
+    }
+
+    /// Build a transition payload for a focusTime / outOfOffice / workingLocation
+    /// event. Returns `nil` if the `(event.eventType, phase)` combination is
+    /// not a valid transition (defensive — unknown / nil eventType, or paired
+    /// phase requested for a single-shot event type, etc.).
+    public static func makeTransitionPayload(
+        event: GoogleCalendarAPI.Event,
+        phase: TransitionPhase,
+        calendarId: String
+    ) -> [String: Any]? {
+        guard let eventId = event.id, let eventType = event.eventType else { return nil }
+
+        // (eventType, phase) → kind. Exhaustive switch; anything else returns nil.
+        let kind: GoogleCalendarEventKind
+        switch (eventType, phase) {
+        case ("focusTime", .started):       kind = .focusBlockStarted
+        case ("focusTime", .ended):         kind = .focusBlockEnded
+        case ("outOfOffice", .started):     kind = .oooStarted
+        case ("outOfOffice", .ended):       kind = .oooEnded
+        case ("workingLocation", .changed): kind = .workingLocationChanged
+        default: return nil
+        }
+
+        var payload: [String: Any] = [
+            "source": "google_calendar",
+            "event_kind": kind.rawValue,
+            "event_id": eventId,
+            "calendar_id": calendarId,
+        ]
+        if let iCalUID = event.iCalUID { payload["i_cal_uid"] = iCalUID }
+        if let startMs = parseTimePointMs(event.start) { payload["start_ms"] = startMs }
+        if let endMs = parseTimePointMs(event.end) { payload["end_ms"] = endMs }
+
+        // Active-phase-only fields. autoDeclineMode / chatStatus describe how
+        // the block is configured during its life; on `_ended` we surface only
+        // the boundary itself (operational state has ceased to be meaningful).
+        if phase == .started {
+            switch eventType {
+            case "focusTime":
+                if let mode = event.focusTimeProperties?.autoDeclineMode {
+                    payload["auto_decline_mode"] = mode
+                }
+                if let chat = event.focusTimeProperties?.chatStatus {
+                    payload["chat_status"] = chat
+                }
+            case "outOfOffice":
+                // OOO has only autoDeclineMode (no chatStatus per Google API).
+                if let mode = event.outOfOfficeProperties?.autoDeclineMode {
+                    payload["auto_decline_mode"] = mode
+                }
+            default:
+                break
+            }
+        }
+
+        // workingLocation: single-shot `.changed`. Surface only the type
+        // bucket (homeOffice / officeLocation / customLocation). NEVER
+        // building / floor / desk / label — those aren't even decoded.
+        if phase == .changed, eventType == "workingLocation" {
+            if let wlType = event.workingLocationProperties?.type {
+                payload["working_location_type"] = wlType
+            }
+        }
+
+        return payload
+    }
+}
