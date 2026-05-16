@@ -209,6 +209,12 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     case screenshotTaken                  = "screenshot_taken"
     case downloadAdded                    = "download_added"
     case trashChanged                     = "trash_changed"
+
+    // MARK: - Phase Track-6 P6 — IDEs surface cap
+    case vscodeActiveDocChanged           = "vscode_active_doc_changed"
+    case vscodeWorkspaceOpened            = "vscode_workspace_opened"
+    case jetbrainsRecentProjectObserved   = "jetbrains_recent_project_observed"
+    case ideWindowTitleObserved           = "ide_window_title_observed"
 }
 
 /// Phase 4.7.A — onboarding default enabled-state per event_kind.
@@ -425,6 +431,13 @@ public enum ShareEventTypeDefaults {
         .init(key: .clipboardEventCount, defaultEnabled: false),
         .init(key: .screenshotTaken, defaultEnabled: false),
         .init(key: .downloadAdded, defaultEnabled: false),
-        .init(key: .trashChanged, defaultEnabled: false)
+        .init(key: .trashChanged, defaultEnabled: false),
+
+        // Phase Track-6 P6 — IDEs surface cap. All default OFF per ADR-020
+        // (capture-everything locally, share-selectively).
+        .init(key: .vscodeActiveDocChanged, defaultEnabled: false),
+        .init(key: .vscodeWorkspaceOpened, defaultEnabled: false),
+        .init(key: .jetbrainsRecentProjectObserved, defaultEnabled: false),
+        .init(key: .ideWindowTitleObserved, defaultEnabled: false)
     ]
 }
