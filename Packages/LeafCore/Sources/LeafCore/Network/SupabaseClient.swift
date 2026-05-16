@@ -511,6 +511,13 @@ extension SupabaseAuthSession {
         )
     }
 
+    /// Decode the JWT payload without verifying the signature. The JWT
+    /// itself was issued by Supabase (HS256 signed with Supabase's secret)
+    /// and is validated server-side by PostgREST / Edge Functions on every
+    /// request — that is where signature verification happens. The local
+    /// extraction here is a convenience to read the `pubkey` claim out of
+    /// the token we already trust (we received it as the auth response).
+    /// Tampering would invalidate the JWT on the next server call.
     static func extractPubkeyClaim(fromJWT jwt: String) -> String? {
         let parts = jwt.split(separator: ".")
         guard parts.count == 3 else { return nil }
