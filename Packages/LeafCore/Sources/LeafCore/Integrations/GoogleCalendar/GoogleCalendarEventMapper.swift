@@ -79,7 +79,11 @@ public struct GoogleCalendarEventMapper: Sendable {
 
     /// Convert a `TimePoint` to epoch-ms. Handles both `dateTime` (RFC3339 with
     /// TZ) and `date` (ISO date for all-day events — midnight UTC).
-    fileprivate static func parseTimePointMs(_ tp: GoogleCalendarAPI.TimePoint?) -> Int64? {
+    ///
+    /// `internal`, not `fileprivate`, so `GoogleCalendarCollector` (sibling
+    /// module file) can drive tracker UPSERT off the same parser the mapper
+    /// uses for payload fields — single source of truth for time semantics.
+    internal static func parseTimePointMs(_ tp: GoogleCalendarAPI.TimePoint?) -> Int64? {
         guard let tp else { return nil }
         if let dt = tp.dateTime, let ms = parseRFC3339Ms(dt) { return ms }
         if let d = tp.date, let ms = parseAllDayDateMs(d) { return ms }
