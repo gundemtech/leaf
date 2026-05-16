@@ -329,6 +329,34 @@ public enum Schema {
         public static let foregroundApp = "foreground_app"
     }
 
+    /// Phase Track-6 P4 — `google_calendar_typed_event_tracker` per-event state
+    /// row for Google Calendar `focusTime` / `outOfOffice` / `workingLocation`
+    /// instances. Scanned each polling tick to detect clock-driven boundary
+    /// crossings (start_ms, end_ms) and emit `_started` / `_ended` / `_changed`
+    /// transition events; per-row `_emitted_at_ms` columns gate idempotency.
+    public enum GoogleCalendarTracker {
+        public static let tableName = "google_calendar_typed_event_tracker"
+        public static let eventID            = "event_id"
+        public static let calendarID         = "calendar_id"
+        public static let iCalUID            = "i_cal_uid"
+        public static let eventType          = "event_type"
+        public static let startMs            = "start_ms"
+        public static let endMs              = "end_ms"
+        public static let startedEmittedAtMs = "started_emitted_at_ms"
+        public static let endedEmittedAtMs   = "ended_emitted_at_ms"
+        public static let workingLocationType = "working_location_type"
+        // Active-phase metadata sourced from the original Google API Event's
+        // focusTimeProperties / outOfOfficeProperties (autoDeclineMode applies
+        // to both; chatStatus only to focusTime). Persisted on the tracker so
+        // the Task 14 transition scan can rebuild `_started` payloads without
+        // re-fetching the Event. ADR-010: both are public Google enum buckets
+        // (none / declineOnlyNewConflictingInvitations / declineAllConflictingInvitations
+        // for autoDeclineMode; doNotDisturb for chatStatus), not freeform text.
+        public static let autoDeclineMode    = "auto_decline_mode"
+        public static let chatStatus         = "chat_status"
+        public static let upsertedAtMs       = "upserted_at_ms"
+    }
+
     /// Phase Track-1 D2 — FTS5 contentless virtual table over event bodies
     /// (commit_msg / linear_desc / linear_comment / slack_msg / slack_thread_*
     /// / gh_pr / gh_issue_comment / gh_pr_review_comment).
@@ -621,6 +649,10 @@ public enum CollectorID {
     /// `lastModifiedMs` holds last cold tick ms (catch-up gate uses
     /// `now - lastModifiedMs > 24h`).
     public static let slackColdPolling = "slack_cold_polling"
+    /// Track-6 P4 — Google Calendar API polling collector. sourceID
+    /// `google_calendar:<accountID>`. `lastModifiedMs` хранит cursor
+    /// (epoch ms newest processed event update).
+    public static let googleCalendarPolling = "google_calendar_polling"
 }
 
 /// Канонические `provider` значения для `integrations` таблицы. Литералы —
@@ -629,4 +661,6 @@ public enum IntegrationProvider: String, Sendable, Hashable, CaseIterable {
     case linear
     case github
     case slack
+    /// Track-6 P4 — Google Calendar Deep (OAuth 2.0 PKCE loopback).
+    case googleCalendar = "google_calendar"
 }

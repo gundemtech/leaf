@@ -282,9 +282,7 @@ final class DispatchCoverageTests: XCTestCase {
 
     // MARK: - Track-6 P1 — Claude Code coverage
 
-    /// #16 — every `ClaudeCodeEventKindKey` case has a `ShareEventTypeKey` entry
-    /// by rawValue. Track-6 P1 contract §2.5 fence: single-string identity
-    /// across registry, runtime emission, downstream SQL.
+    /// #16 — every `ClaudeCodeEventKindKey` case has a `ShareEventTypeKey` entry.
     func testEveryClaudeCodeEventKindKeyAppearsInShareEventTypeRegistry() {
         let registry = Set(ShareEventTypeKey.allCases.map { $0.rawValue })
         for kind in ClaudeCodeEventKindKey.allCases {
@@ -295,10 +293,7 @@ final class DispatchCoverageTests: XCTestCase {
         }
     }
 
-    /// #17 — every `ClaudeCodeEventKindKey` case is either in
-    /// `ActivityFeedMapper.claudeCodeAIKinds` (visible) or `.skippedKinds`
-    /// (explicitly hidden). No silent default fallback — every new kind
-    /// requires explicit routing decision. Track-6 P1 §3.5 fence.
+    /// #17 — every `ClaudeCodeEventKindKey` case is either visible or skipped.
     func testEveryClaudeCodeEventKindKeyMappedOrSkipped() {
         let visible = ActivityFeedMapper.claudeCodeAIKinds
         let skipped = ActivityFeedMapper.skippedKinds
@@ -311,9 +306,7 @@ final class DispatchCoverageTests: XCTestCase {
         }
     }
 
-    /// #18 — every `ClaudeCodeEventKindKey` case has a `ShareEventTypeDefaults.all`
-    /// entry, and that entry's `defaultEnabled == false`. Track-6 P1 contract
-    /// §2.5 fitness gate — AI tools are sensitive surface, default OFF.
+    /// #18 — every `ClaudeCodeEventKindKey` has a default-OFF entry.
     func testEveryClaudeCodeEventKindKeyHasDefaultEntryOff() {
         let defaults = Dictionary(
             uniqueKeysWithValues: ShareEventTypeDefaults.all.map { ($0.key.rawValue, $0.defaultEnabled) }
@@ -326,6 +319,41 @@ final class DispatchCoverageTests: XCTestCase {
             XCTAssertEqual(
                 defaults[kind.rawValue], false,
                 "\(kind.rawValue) must default OFF per Track-6 P1 contract §2.5"
+            )
+        }
+    }
+
+    // MARK: - Track-6 P4 — Google Calendar coverage
+
+    /// #19 — Track-6 P4 Google Calendar parity fence. Every
+    /// `GoogleCalendarEventKind.allCases.rawValue` is either handled by
+    /// `ActivityFeedMapper.mapGoogleCalendar` or explicitly skipped.
+    func testEveryGoogleCalendarEventKindKeyMappedOrSkipped() {
+        for kind in GoogleCalendarEventKind.allCases {
+            if ActivityFeedMapper.skippedKinds.contains(kind.rawValue) {
+                continue
+            }
+            let payload = #"{"source":"google_calendar","event_kind":"\#(kind.rawValue)"}"#
+            let entry = ActivityFeedMapper.map(
+                id: 1,
+                timestampMs: 1_700_000_000_000,
+                signalType: "context",
+                bundleID: nil,
+                payloadJSON: payload
+            )
+            XCTAssertNotNil(
+                entry,
+                "ActivityFeedMapper.mapGoogleCalendar must handle \(kind.rawValue) or skippedKinds must include it"
+            )
+            XCTAssertEqual(
+                entry?.provider,
+                .googleCalendar,
+                "ActivityFeedMapper.mapGoogleCalendar must return provider=.googleCalendar for \(kind.rawValue)"
+            )
+            XCTAssertEqual(
+                entry?.eventKind,
+                kind.rawValue,
+                "ActivityFeedEntry.eventKind must round-trip for \(kind.rawValue)"
             )
         }
     }

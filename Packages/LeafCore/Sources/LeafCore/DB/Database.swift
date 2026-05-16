@@ -60,6 +60,7 @@ public final class Database: @unchecked Sendable {
         // M019-M023 reserved for Track-5 collaboration-redesign stack.
         migrator.registerMigration024ClaudeCodeAISubagentIndex()
         migrator.registerMigration026BrowserDomainAllow()
+        migrator.registerMigration027GoogleCalendarTracker()
         try migrator.migrate(pool)
 
         return Database(pool: pool, config: config, mode: .writer)
@@ -700,6 +701,20 @@ public final class Database: @unchecked Sendable {
             try db.execute(
                 sql: "DELETE FROM \(Schema.Integrations.tableName) WHERE \(Schema.Integrations.provider) = ?",
                 arguments: [provider.rawValue]
+            )
+        }
+    }
+
+    /// Track-6 P4 — wipe every `provider_snapshots` row for the given provider
+    /// raw key (e.g. `"google_calendar"`). Used by OAuthService.disconnect() so
+    /// a subsequent reconnect starts from clean bootstrap (no stale syncToken,
+    /// no stale `known_calendars`). Idempotent.
+    public func deleteProviderSnapshots(provider: String) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try db.execute(
+                sql: "DELETE FROM provider_snapshots WHERE provider = ?",
+                arguments: [provider]
             )
         }
     }

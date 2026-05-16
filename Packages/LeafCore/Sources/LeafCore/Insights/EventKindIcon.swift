@@ -74,6 +74,14 @@ public enum EventKindIcon {
         case "claude_mcp_tool_invoked":       return "plug.circle"
         case "claude_slash_command_invoked":  return "slash.circle"
 
+        // Track-6 P4 — Google Calendar Deep
+        case "google_calendar_event_observed":            return "calendar"
+        case "google_calendar_focus_block_started",
+             "google_calendar_focus_block_ended":         return "moon.fill"
+        case "google_calendar_ooo_started",
+             "google_calendar_ooo_ended":                 return "airplane"
+        case "google_calendar_working_location_changed":  return "building.2"
+
         default: return nil
         }
     }

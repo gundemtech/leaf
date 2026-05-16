@@ -471,7 +471,8 @@ final class MigrationTests: XCTestCase {
                 Schema.DetectorOffsets.tableName,
                 Schema.ProviderSnapshots.tableName,
                 Schema.IntensityAggregates.tableName,
-                Schema.BrowserDomainAllow.tableName
+                Schema.BrowserDomainAllow.tableName,
+                Schema.GoogleCalendarTracker.tableName,
             ]
             XCTAssertEqual(tables, expected)
         }

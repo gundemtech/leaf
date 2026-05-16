@@ -39,6 +39,10 @@
 	<false/>
 	<key>LeafGitHubOAuthClientID</key>
 	<string>$(GITHUB_OAUTH_CLIENT_ID)</string>
+	<key>LeafGoogleCalendarOAuthClientID</key>
+	<string>$(GOOGLE_CALENDAR_OAUTH_CLIENT_ID)</string>
+	<key>LeafGoogleCalendarOAuthClientSecret</key>
+	<string>$(GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET)</string>
 	<key>LeafLinearOAuthClientID</key>
 	<string>$(LINEAR_OAUTH_CLIENT_ID)</string>
 	<key>LeafSlackOAuthClientID</key>

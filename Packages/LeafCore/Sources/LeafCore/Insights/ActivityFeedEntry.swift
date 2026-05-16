@@ -6,7 +6,7 @@ import Foundation
 /// `unknown` is a defensive bucket for events that pass through the mapper without a
 /// recognized shape — UI can hide them or render generically.
 public enum ActivityProvider: String, Sendable, Hashable, CaseIterable, Codable {
-    case local, linear, github, slack, ai, unknown
+    case local, linear, github, slack, ai, googleCalendar = "google_calendar", unknown
 }
 
 /// One row in the chronological activity feed surfaced by the Activity tab.

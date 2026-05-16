@@ -19,6 +19,7 @@ public struct PresenceStateWriter: Sendable {
         case linear
         case slack
         case derived
+        case googleCalendar = "google_calendar"   // Track-6 P4
     }
 
     /// UPSERT current-state snapshot. `state` сериализуется в JSON через
