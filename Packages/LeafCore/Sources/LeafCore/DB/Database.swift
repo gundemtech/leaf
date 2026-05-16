@@ -566,6 +566,62 @@ public final class Database: @unchecked Sendable {
         }
     }
 
+    // MARK: - Browser Domain Allow-list (Phase Track-6 P3)
+
+    /// Returns all rows ordered by `added_at_ms` ASC (stable UI order).
+    public func listBrowserDomainAllow() throws -> [(domain: String, granularity: URLGranularity, addedAtMs: Int64, notes: String?)] {
+        try pool.read { db in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT \(Schema.BrowserDomainAllow.domain),
+                       \(Schema.BrowserDomainAllow.granularity),
+                       \(Schema.BrowserDomainAllow.addedAtMs),
+                       \(Schema.BrowserDomainAllow.notes)
+                FROM \(Schema.BrowserDomainAllow.tableName)
+                ORDER BY \(Schema.BrowserDomainAllow.addedAtMs) ASC
+            """)
+            return rows.compactMap { row -> (domain: String, granularity: URLGranularity, addedAtMs: Int64, notes: String?)? in
+                guard let domain = row[Schema.BrowserDomainAllow.domain] as String?,
+                      let granStr = row[Schema.BrowserDomainAllow.granularity] as String?,
+                      let gran = URLGranularity(rawValue: granStr) else { return nil }
+                let addedAtMs = (row[Schema.BrowserDomainAllow.addedAtMs] as Int64?) ?? 0
+                let notes = row[Schema.BrowserDomainAllow.notes] as String?
+                return (domain: domain, granularity: gran, addedAtMs: addedAtMs, notes: notes)
+            }
+        }
+    }
+
+    /// UPSERT — adds or replaces an entry for `domain`. Writer-only.
+    public func upsertBrowserDomainAllow(domain: String, granularity: URLGranularity, notes: String?) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        try pool.write { db in
+            try db.execute(sql: """
+                INSERT INTO \(Schema.BrowserDomainAllow.tableName) (
+                    \(Schema.BrowserDomainAllow.domain),
+                    \(Schema.BrowserDomainAllow.granularity),
+                    \(Schema.BrowserDomainAllow.addedAtMs),
+                    \(Schema.BrowserDomainAllow.notes)
+                ) VALUES (?, ?, ?, ?)
+                ON CONFLICT(\(Schema.BrowserDomainAllow.domain)) DO UPDATE SET
+                    \(Schema.BrowserDomainAllow.granularity) = excluded.\(Schema.BrowserDomainAllow.granularity),
+                    \(Schema.BrowserDomainAllow.notes) = excluded.\(Schema.BrowserDomainAllow.notes)
+                """,
+                arguments: [domain, granularity.rawValue, nowMs, notes]
+            )
+        }
+    }
+
+    /// DELETE by `domain`. Idempotent — no-op if missing.
+    public func removeBrowserDomainAllow(domain: String) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try db.execute(
+                sql: "DELETE FROM \(Schema.BrowserDomainAllow.tableName) WHERE \(Schema.BrowserDomainAllow.domain) = ?",
+                arguments: [domain]
+            )
+        }
+    }
+
     // MARK: - Integrations (Phase 4.1)
 
     /// UPSERT one integration row keyed by `provider`. Writer-only.

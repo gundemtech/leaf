@@ -13,6 +13,8 @@ struct WindowSettingsView: View {
     @Environment(WatchedFoldersService.self) private var watchedFolders
     @Environment(UpdaterController.self) private var updater
 
+    @State private var browserAllowListStore = BrowserAllowListStore()
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: LeafSpace.xxl) {
@@ -20,6 +22,7 @@ struct WindowSettingsView: View {
                 FoldersSettings(service: watchedFolders)
                 LocalAppsSettingsSection()
                 SystemObserversSettingsSection()
+                BrowserAllowListSection(store: browserAllowListStore)
                 UpdatesSection(updater: updater)
                 PrivacySettingsSection()
             }
