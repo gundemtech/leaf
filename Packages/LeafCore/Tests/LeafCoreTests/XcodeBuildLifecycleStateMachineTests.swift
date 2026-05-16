@@ -156,6 +156,28 @@ struct XcodeBuildLifecycleStateMachineTests {
         #expect(finished?.payload["scheme"] == "LeafAgent")
     }
 
+    /// Cancel path: user hits Cmd+. mid-build, AppleScript reports state
+    /// returning to `.idle` (S2 maps cancelled→idle since `XcodeBuildState`
+    /// has no `.cancelled` case). The lifecycle machine clears
+    /// `buildStartedMs` so the NEXT build's duration is measured from its
+    /// own start, not from the canceled build's start.
+    @Test func cancelMidBuild_clearsBuildStartedMs() {
+        var m = XcodeBuildLifecycleStateMachine()
+        _ = m.observe(obs(state: .idle), nowMs: 100)
+        _ = m.observe(obs(state: .running), nowMs: 200)
+        let cancel = m.observe(obs(state: .idle), nowMs: 1_200)
+        // No build_finished on cancel — duration_ms would be meaningless and
+        // S2's build_state_changed already records the visible transition.
+        #expect(!cancel.contains { $0.payload["event_kind"] == "xcode_build_finished" })
+
+        // Next build starts cleanly — its duration is from its own start.
+        _ = m.observe(obs(state: .running), nowMs: 10_000)
+        let finish = m.observe(obs(state: .succeeded), nowMs: 12_000)
+        let finished = finish.first { $0.payload["event_kind"] == "xcode_build_finished" }
+        #expect(finished?.payload["duration_ms"] == "2000",
+                "duration_ms must come from second build start (10000), not stale buildStartedMs from canceled first build (200)")
+    }
+
     /// Once a build finishes, the next `running` observation must start a fresh
     /// duration measurement — `buildStartedMs` is reset to nil between builds.
     @Test func buildStartedMs_clearedBetweenBuilds() {

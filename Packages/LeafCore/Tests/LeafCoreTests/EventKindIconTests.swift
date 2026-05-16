@@ -57,16 +57,6 @@ final class EventKindIconTests: XCTestCase {
 
     // MARK: - Phase Track-6 P2 (Xcode Deep — 6 new icon mappings)
 
-    func testXcodeP2IconsAllMapped() {
-        let kinds = ["xcode_build_started", "xcode_build_finished",
-                     "xcode_test_run_started", "xcode_test_run_finished",
-                     "xcode_scheme_changed", "xcode_run_destination_changed"]
-        for kind in kinds {
-            XCTAssertNotNil(EventKindIcon.symbol(for: kind),
-                            "missing icon for \(kind)")
-        }
-    }
-
     func testXcodeP2_specificSymbols() {
         XCTAssertEqual(EventKindIcon.symbol(for: "xcode_build_started"), "hammer.circle")
         XCTAssertEqual(EventKindIcon.symbol(for: "xcode_build_finished"), "hammer.circle.fill")

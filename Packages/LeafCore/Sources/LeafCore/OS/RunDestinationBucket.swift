@@ -36,7 +36,12 @@ public enum RunDestinationBucket: String, Sendable, Hashable {
 
         let isSim = raw.contains("(Simulator)") || raw.hasSuffix("Simulator")
 
-        if raw.contains("My Mac") || raw == "Any Mac" { return .macos }
+        // Exact-match Mac destinations. Substring `contains("My Mac")` would
+        // capture "My Macbook Pro" or similar third-party renamings — defend
+        // against custom Xcode destination names by requiring exact tokens.
+        if raw == "My Mac" || raw == "Any Mac" || raw == "My Mac (Designed for iPad)" {
+            return .macos
+        }
         if raw.contains("Vision") { return isSim ? .visionSimulator : .visionDevice }
         if raw.contains("Apple Watch") { return isSim ? .watchSimulator : .watchDevice }
         if raw.contains("Apple TV") { return isSim ? .tvSimulator : .tvDevice }

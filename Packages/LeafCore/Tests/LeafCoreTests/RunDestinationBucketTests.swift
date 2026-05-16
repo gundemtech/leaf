@@ -10,6 +10,15 @@ struct RunDestinationBucketTests {
     @Test func anyMac_macos() {
         #expect(RunDestinationBucket.bucket(rawName: "Any Mac") == .macos)
     }
+    @Test func myMacDesignedForIPad_macos() {
+        #expect(RunDestinationBucket.bucket(rawName: "My Mac (Designed for iPad)") == .macos)
+    }
+    @Test func myMacbookPro_unknown_notMacos() {
+        // Defense against substring `contains("My Mac")` over-matching custom
+        // Xcode destination names. "My Macbook Pro" is NOT Xcode's canonical
+        // Mac destination — bucket exact-match guards against false positives.
+        #expect(RunDestinationBucket.bucket(rawName: "My Macbook Pro") == .unknown)
+    }
     @Test func iPhoneSimulator_iosSimulator() {
         #expect(RunDestinationBucket.bucket(rawName: "iPhone 16 Pro (Simulator)") == .iosSimulator)
     }

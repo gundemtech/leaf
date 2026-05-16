@@ -30,14 +30,10 @@ public actor ProviderSnapshotsDerivedDataCursor: DerivedDataCursor {
         self.database = database
     }
 
-    private func loadMap() async -> [String: Int64] {
-        let snapshot: ProviderSnapshot? = (try? database.readSQL { raw in
-            try ProviderSnapshotsStore.read(
-                provider: Self.provider,
-                snapshotKind: Self.snapshotKind,
-                in: raw
-            )
-        }) ?? nil
+    /// Decode `{"hashes": {hash: mtimeMs, ...}}` from the snapshot JSON. The
+    /// envelope decoder is tolerant of Int64 / Int / Double representations
+    /// (GRDB → JSONSerialization may pick any depending on the round-trip).
+    private static func decode(_ snapshot: ProviderSnapshot?) -> [String: Int64] {
         guard let snapshot,
               let data = snapshot.snapshotJSON.data(using: .utf8),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -52,37 +48,66 @@ public actor ProviderSnapshotsDerivedDataCursor: DerivedDataCursor {
         }
     }
 
-    private func persist(_ map: [String: Int64]) async {
+    private static func encode(_ map: [String: Int64], nowMs: Int64) -> ProviderSnapshot? {
         let envelope: [String: Any] = [
             "hashes": map.mapValues { Int($0) }
         ]
         guard let data = try? JSONSerialization.data(
                 withJSONObject: envelope,
                 options: [.sortedKeys]),
-              let json = String(data: data, encoding: .utf8) else { return }
-        let snapshot = ProviderSnapshot(
-            provider: Self.provider,
-            snapshotKind: Self.snapshotKind,
+              let json = String(data: data, encoding: .utf8) else { return nil }
+        return ProviderSnapshot(
+            provider: provider,
+            snapshotKind: snapshotKind,
             snapshotJSON: json,
-            capturedAtMs: Int64(Date().timeIntervalSince1970 * 1000)
+            capturedAtMs: nowMs
         )
+    }
+
+    public func lastSeenMtimeMs(forHash hash: String) async -> Int64? {
+        let snapshot = (try? database.readSQL { raw in
+            try ProviderSnapshotsStore.read(
+                provider: Self.provider,
+                snapshotKind: Self.snapshotKind,
+                in: raw
+            )
+        }) ?? nil
+        return Self.decode(snapshot)[hash]
+    }
+
+    /// Atomic read-modify-write inside a single `writeSQL { }` transaction.
+    /// If a concurrent writer (e.g. another component) upserted between our
+    /// load and write, this would clobber theirs — but the transaction here
+    /// merges OUR new value into THEIR latest state read inside the same
+    /// transaction, so the only loss is if their write races us within the
+    /// same transaction (impossible under GRDB's write-serialized pool).
+    public func setLastSeenMtimeMs(_ ms: Int64, forHash hash: String) async {
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         try? database.writeSQL { raw in
+            // Re-read the current envelope INSIDE the write transaction so
+            // we merge against the latest persisted state — not a stale
+            // cached load that may have raced with another writer.
+            let current = try ProviderSnapshotsStore.read(
+                provider: Self.provider,
+                snapshotKind: Self.snapshotKind,
+                in: raw
+            )
+            var map = Self.decode(current)
+            map[hash] = ms
+            guard let snapshot = Self.encode(map, nowMs: nowMs) else { return }
             try ProviderSnapshotsStore.upsert(snapshot, in: raw)
         }
     }
 
-    public func lastSeenMtimeMs(forHash hash: String) async -> Int64? {
-        await loadMap()[hash]
-    }
-
-    public func setLastSeenMtimeMs(_ ms: Int64, forHash hash: String) async {
-        var map = await loadMap()
-        map[hash] = ms
-        await persist(map)
-    }
-
     public func allKnownHashes() async -> [String] {
-        Array(await loadMap().keys)
+        let snapshot = (try? database.readSQL { raw in
+            try ProviderSnapshotsStore.read(
+                provider: Self.provider,
+                snapshotKind: Self.snapshotKind,
+                in: raw
+            )
+        }) ?? nil
+        return Array(Self.decode(snapshot).keys)
     }
 }
 

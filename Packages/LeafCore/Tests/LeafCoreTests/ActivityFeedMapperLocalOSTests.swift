@@ -444,28 +444,37 @@ final class ActivityFeedMapperLocalOSTests: XCTestCase {
 
     // ADR-010 walkback fence: synthetic sentinel injected into forbidden
     // payload positions must NOT appear in entry text (mapper reads only
-    // allowlisted fields).
+    // allowlisted fields). Sentinel keys cover the full forbidden-field
+    // surface from spec §8.1 — adding a key here forces a future maintainer
+    // who accidentally reads `payload["device_name"]` etc. to confront the
+    // walkback fence at test time, not at smoke-gate time.
     func testXcodeP2_WalkbackSentinel() {
         let sentinel = "LEAKED_SENTINEL_XCODE_P2"
         let kinds = ["xcode_build_started", "xcode_build_finished",
                      "xcode_test_run_started", "xcode_test_run_finished",
                      "xcode_scheme_changed", "xcode_run_destination_changed"]
+        let forbiddenKeys: [String] = [
+            "raw_device_name", "device_name", "deviceName",
+            "error_message", "errors", "compiler_error",
+            "source_url", "sourceURL", "file_url",
+            "test_identifier", "test_name", "test_method_name",
+            "failure_message", "failureMessage",
+            "model_name", "modelName", "os_build_number",
+            "build_log", "activity_log", "stderr", "stdout"
+        ]
+        var sentinelPayload: [String: String] = [:]
+        for k in forbiddenKeys { sentinelPayload[k] = sentinel }
         for kind in kinds {
             let entry = map(
                 kind: kind, signalType: "attention",
                 bundleID: "com.apple.dt.Xcode",
-                extras: [
-                    "raw_device_name": sentinel,
-                    "error_message": sentinel,
-                    "test_identifier": sentinel,
-                    "build_log": sentinel
-                ]
+                extras: sentinelPayload
             )
             if let e = entry {
                 XCTAssertFalse(e.primaryText.contains(sentinel),
-                               "\(kind) leaked sentinel in primaryText")
+                               "\(kind) leaked sentinel in primaryText: \(e.primaryText)")
                 XCTAssertFalse(e.secondaryText?.contains(sentinel) == true,
-                               "\(kind) leaked sentinel in secondaryText")
+                               "\(kind) leaked sentinel in secondaryText: \(e.secondaryText ?? "")")
             }
         }
     }

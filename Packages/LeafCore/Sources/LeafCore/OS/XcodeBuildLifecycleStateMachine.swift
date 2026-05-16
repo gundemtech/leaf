@@ -82,6 +82,18 @@ public struct XcodeBuildLifecycleStateMachine: Sendable, Hashable {
             buildStartedMs = nil
         }
 
+        // 5. Cancel path — running → idle without going through a terminal
+        //    state. Xcode emits this when the user hits Cmd+. mid-build.
+        //    `XcodeBuildState` doesn't have a `.cancelled` case (AppleScript
+        //    maps it to `.idle` in S2), so we treat running→idle as cancel
+        //    and clear `buildStartedMs` to keep the next build's duration
+        //    correct. No `build_finished` is emitted — duration_ms would be
+        //    meaningless for a canceled build, and the activity feed already
+        //    has `build_state_changed` (S2) for the visible side effect.
+        if p.buildState == .running, obs.buildState == .idle {
+            buildStartedMs = nil
+        }
+
         prev = obs
         return events
     }
