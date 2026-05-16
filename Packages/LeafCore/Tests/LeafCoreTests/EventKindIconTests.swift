@@ -50,8 +50,8 @@ final class EventKindIconTests: XCTestCase {
 
     func testTrack4LocalOSKindsSetSizeUnchanged() {
         // Guards against silent additions / removals from the whitelist.
-        // S1 (9) + S2 (14) + S3 (10 visible — 3 in skippedKinds) = 33.
-        XCTAssertEqual(ActivityFeedMapper.trackFourLocalOSKinds.count, 33)
+        // S1 (9) + S2 (14) + S3 (10 visible — 3 in skippedKinds) + P3 (8) = 41.
+        XCTAssertEqual(ActivityFeedMapper.trackFourLocalOSKinds.count, 41)
     }
 
     // MARK: - Track-6 P1 — Claude Code

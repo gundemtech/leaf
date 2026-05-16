@@ -42,6 +42,17 @@ public enum Schema {
         public static let indexEnabled = "watched_folders_enabled"
     }
 
+    /// Phase Track-6 P3 — per-domain granularity allow-list for browser URL capture.
+    /// PK — `domain` (eTLD+1, e.g. "github.com"). `granularity` — L3/L4 string value.
+    /// `added_at_ms` — epoch ms when rule was added. `notes` — optional human label.
+    public enum BrowserDomainAllow {
+        public static let tableName = "browser_domain_allow"
+        public static let domain = "domain"
+        public static let granularity = "granularity"
+        public static let addedAtMs = "added_at_ms"
+        public static let notes = "notes"
+    }
+
     /// Phase 4.1 — OAuth credentials для third-party providers (Layer B).
     /// PK — `provider` (single-row-per-provider в MVP); multi-workspace
     /// потребует lift PK → composite (provider, workspace_id).

@@ -58,9 +58,9 @@ final class M012EventsFTSTests: XCTestCase {
         try db.readSQL { rawDB in
             let applied = try String.fetchAll(rawDB, sql: "SELECT identifier FROM grdb_migrations ORDER BY identifier")
             XCTAssertTrue(applied.contains("012_events_fts"))
-            // M001-M018 baseline + M024 (Track-6 P1 AI subagent index;
-            // M019-M023 reserved for Track-5 stack on separate branch).
-            XCTAssertEqual(applied.count, 19)
+            // M001-M018 baseline + M024 (P1 AI subagent index) + M026 (P3 browser allow-list);
+            // M019-M023 reserved for Track-5 stack on separate branch.
+            XCTAssertEqual(applied.count, 20)
         }
     }
 

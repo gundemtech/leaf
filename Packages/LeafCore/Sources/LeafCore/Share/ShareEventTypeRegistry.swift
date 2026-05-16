@@ -195,6 +195,16 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     case chromeTabsChanged                = "chrome_tabs_changed"
     case arcTabsChanged                   = "arc_tabs_changed"
 
+    // MARK: - Phase Track-6 P3 (Browsers Deep)
+    case safariTabNavigated               = "safari_tab_navigated"
+    case chromeTabNavigated               = "chrome_tab_navigated"
+    case arcTabNavigated                  = "arc_tab_navigated"
+    case safariTabActivated               = "safari_tab_activated"
+    case chromeTabActivated               = "chrome_tab_activated"
+    case arcTabActivated                  = "arc_tab_activated"
+    case chromeBookmarkChanged            = "chrome_bookmark_changed"
+    case safariBookmarkChanged            = "safari_bookmark_changed"
+
     // MARK: - Phase Track-4 S3 — system observers + intensity
     case intensitySnapshot                = "intensity_snapshot"
     case intensityBucketDropped           = "intensity_bucket_dropped"
@@ -435,7 +445,15 @@ public enum ShareEventTypeDefaults {
         .init(key: .zoomMeetingNameObserved, defaultEnabled: false),
         .init(key: .safariTabsChanged, defaultEnabled: false),
         .init(key: .chromeTabsChanged, defaultEnabled: false),
-        .init(key: .arcTabsChanged, defaultEnabled: false),
+        .init(key: .arcTabsChanged,            defaultEnabled: false),
+        .init(key: .safariTabNavigated,        defaultEnabled: false),
+        .init(key: .chromeTabNavigated,        defaultEnabled: false),
+        .init(key: .arcTabNavigated,           defaultEnabled: false),
+        .init(key: .safariTabActivated,        defaultEnabled: false),
+        .init(key: .chromeTabActivated,        defaultEnabled: false),
+        .init(key: .arcTabActivated,           defaultEnabled: false),
+        .init(key: .chromeBookmarkChanged,     defaultEnabled: false),
+        .init(key: .safariBookmarkChanged,     defaultEnabled: false),
 
         // Phase Track-4 S3 — system observers + intensity. All default OFF per
         // ADR-020 (capture-everything locally, share-selectively).

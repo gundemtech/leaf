@@ -1654,6 +1654,238 @@ final class RelayBodyLeakageTests: XCTestCase {
         )
     }
 
+    // MARK: - Phase Track-6 P3 — browsers deep walkbacks (8 sentinel + 2 bypass)
+    //
+    // These tests verify that adversarial payload fields injected into a P3
+    // event_kind do NOT leak into `presence_state.state_json` via the
+    // `writeEventsOffsetAndPresence` write path. This is a structural sanity
+    // check, not an end-to-end privacy assertion — the genuine guard against
+    // URL/title bypass lives in the adapter filter (URLs are domain-collapsed
+    // before they ever reach a state machine). See spec §14.1.
+
+    func testRelayDoesNotLeakSafariTabNavigated_P3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "safari_tab_navigated",
+            extraPayload: [
+                "tab_key": "i3",
+                "previous_url": "github.com",
+                "current_url": "github.com/foo",
+                "cookies": "SECRET-SAFARI-NAV-COOKIES-P3",
+                "source": "SECRET-SAFARI-NAV-SOURCE-P3",
+                "history": "SECRET-SAFARI-NAV-HISTORY-P3",
+                "form_data": "SECRET-SAFARI-NAV-FORM-P3",
+                "autofill": "SECRET-SAFARI-NAV-AUTOFILL-P3"
+            ],
+            markers: [
+                "SECRET-SAFARI-NAV-COOKIES-P3",
+                "SECRET-SAFARI-NAV-SOURCE-P3",
+                "SECRET-SAFARI-NAV-HISTORY-P3",
+                "SECRET-SAFARI-NAV-FORM-P3",
+                "SECRET-SAFARI-NAV-AUTOFILL-P3"
+            ],
+            collectorID: "applescript_safari"
+        )
+    }
+
+    func testRelayDoesNotLeakChromeTabNavigated_P3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "chrome_tab_navigated",
+            extraPayload: [
+                "tab_key": "1",
+                "previous_url": "github.com",
+                "current_url": "linear.app",
+                "cookies": "SECRET-CHROME-NAV-COOKIES-P3",
+                "source": "SECRET-CHROME-NAV-SOURCE-P3",
+                "history": "SECRET-CHROME-NAV-HISTORY-P3",
+                "form_data": "SECRET-CHROME-NAV-FORM-P3",
+                "autofill": "SECRET-CHROME-NAV-AUTOFILL-P3"
+            ],
+            markers: [
+                "SECRET-CHROME-NAV-COOKIES-P3",
+                "SECRET-CHROME-NAV-SOURCE-P3",
+                "SECRET-CHROME-NAV-HISTORY-P3",
+                "SECRET-CHROME-NAV-FORM-P3",
+                "SECRET-CHROME-NAV-AUTOFILL-P3"
+            ],
+            collectorID: "applescript_chrome"
+        )
+    }
+
+    func testRelayDoesNotLeakArcTabNavigated_P3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "arc_tab_navigated",
+            extraPayload: [
+                "tab_key": "arc-1",
+                "previous_url": "github.com",
+                "current_url": "notion.so",
+                "cookies": "SECRET-ARC-NAV-COOKIES-P3",
+                "source": "SECRET-ARC-NAV-SOURCE-P3",
+                "history": "SECRET-ARC-NAV-HISTORY-P3",
+                "form_data": "SECRET-ARC-NAV-FORM-P3",
+                "autofill": "SECRET-ARC-NAV-AUTOFILL-P3"
+            ],
+            markers: [
+                "SECRET-ARC-NAV-COOKIES-P3",
+                "SECRET-ARC-NAV-SOURCE-P3",
+                "SECRET-ARC-NAV-HISTORY-P3",
+                "SECRET-ARC-NAV-FORM-P3",
+                "SECRET-ARC-NAV-AUTOFILL-P3"
+            ],
+            collectorID: "applescript_arc"
+        )
+    }
+
+    func testRelayDoesNotLeakSafariTabActivated_P3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "safari_tab_activated",
+            extraPayload: [
+                "current_tab_key": "i2",
+                "previous_tab_key": "i1",
+                "current_url": "github.com",
+                "cookies": "SECRET-SAFARI-ACT-COOKIES-P3",
+                "source": "SECRET-SAFARI-ACT-SOURCE-P3",
+                "history": "SECRET-SAFARI-ACT-HISTORY-P3",
+                "form_data": "SECRET-SAFARI-ACT-FORM-P3",
+                "autofill": "SECRET-SAFARI-ACT-AUTOFILL-P3"
+            ],
+            markers: [
+                "SECRET-SAFARI-ACT-COOKIES-P3",
+                "SECRET-SAFARI-ACT-SOURCE-P3",
+                "SECRET-SAFARI-ACT-HISTORY-P3",
+                "SECRET-SAFARI-ACT-FORM-P3",
+                "SECRET-SAFARI-ACT-AUTOFILL-P3"
+            ],
+            collectorID: "applescript_safari"
+        )
+    }
+
+    func testRelayDoesNotLeakChromeTabActivated_P3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "chrome_tab_activated",
+            extraPayload: [
+                "current_tab_key": "2",
+                "previous_tab_key": "1",
+                "current_url": "linear.app",
+                "cookies": "SECRET-CHROME-ACT-COOKIES-P3",
+                "source": "SECRET-CHROME-ACT-SOURCE-P3",
+                "history": "SECRET-CHROME-ACT-HISTORY-P3",
+                "form_data": "SECRET-CHROME-ACT-FORM-P3",
+                "autofill": "SECRET-CHROME-ACT-AUTOFILL-P3"
+            ],
+            markers: [
+                "SECRET-CHROME-ACT-COOKIES-P3",
+                "SECRET-CHROME-ACT-SOURCE-P3",
+                "SECRET-CHROME-ACT-HISTORY-P3",
+                "SECRET-CHROME-ACT-FORM-P3",
+                "SECRET-CHROME-ACT-AUTOFILL-P3"
+            ],
+            collectorID: "applescript_chrome"
+        )
+    }
+
+    func testRelayDoesNotLeakArcTabActivated_P3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "arc_tab_activated",
+            extraPayload: [
+                "current_tab_key": "arc-2",
+                "previous_tab_key": "arc-1",
+                "current_url": "notion.so",
+                "cookies": "SECRET-ARC-ACT-COOKIES-P3",
+                "source": "SECRET-ARC-ACT-SOURCE-P3",
+                "history": "SECRET-ARC-ACT-HISTORY-P3",
+                "form_data": "SECRET-ARC-ACT-FORM-P3",
+                "autofill": "SECRET-ARC-ACT-AUTOFILL-P3"
+            ],
+            markers: [
+                "SECRET-ARC-ACT-COOKIES-P3",
+                "SECRET-ARC-ACT-SOURCE-P3",
+                "SECRET-ARC-ACT-HISTORY-P3",
+                "SECRET-ARC-ACT-FORM-P3",
+                "SECRET-ARC-ACT-AUTOFILL-P3"
+            ],
+            collectorID: "applescript_arc"
+        )
+    }
+
+    func testRelayDoesNotLeakChromeBookmarkChanged_P3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "chrome_bookmark_changed",
+            extraPayload: [
+                "total_count": "143",
+                "delta": "1",
+                "profile_label": "Default",
+                "cookies": "SECRET-CHROME-BM-COOKIES-P3",
+                "source": "SECRET-CHROME-BM-SOURCE-P3",
+                "history": "SECRET-CHROME-BM-HISTORY-P3",
+                "form_data": "SECRET-CHROME-BM-FORM-P3",
+                "autofill": "SECRET-CHROME-BM-AUTOFILL-P3"
+            ],
+            markers: [
+                "SECRET-CHROME-BM-COOKIES-P3",
+                "SECRET-CHROME-BM-SOURCE-P3",
+                "SECRET-CHROME-BM-HISTORY-P3",
+                "SECRET-CHROME-BM-FORM-P3",
+                "SECRET-CHROME-BM-AUTOFILL-P3"
+            ],
+            collectorID: "fsevents_browser_bookmarks"
+        )
+    }
+
+    func testRelayDoesNotLeakSafariBookmarkChanged_P3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "safari_bookmark_changed",
+            extraPayload: [
+                "total_count": "11",
+                "delta": "-1",
+                "profile_label": "",
+                "cookies": "SECRET-SAFARI-BM-COOKIES-P3",
+                "source": "SECRET-SAFARI-BM-SOURCE-P3",
+                "history": "SECRET-SAFARI-BM-HISTORY-P3",
+                "form_data": "SECRET-SAFARI-BM-FORM-P3",
+                "autofill": "SECRET-SAFARI-BM-AUTOFILL-P3"
+            ],
+            markers: [
+                "SECRET-SAFARI-BM-COOKIES-P3",
+                "SECRET-SAFARI-BM-SOURCE-P3",
+                "SECRET-SAFARI-BM-HISTORY-P3",
+                "SECRET-SAFARI-BM-FORM-P3",
+                "SECRET-SAFARI-BM-AUTOFILL-P3"
+            ],
+            collectorID: "fsevents_browser_bookmarks"
+        )
+    }
+
+    func testAllowListFilterNotBypassedViaCraftedPayload_P3() throws {
+        // Sanity: inject a domain string into title (filter-irrelevant field) —
+        // existing assertS2DoesNotLeak walks all payload values for markers,
+        // so any leak would surface even via crafted fields.
+        try assertS2DoesNotLeak(
+            eventKind: "safari_tab_navigated",
+            extraPayload: [
+                "tab_key": "i1",
+                "previous_url": "github.com",
+                "current_url": "linear.app",
+                "title": "SECRET-DOMAIN-IN-TITLE-P3"
+            ],
+            markers: ["SECRET-DOMAIN-IN-TITLE-P3"],
+            collectorID: "applescript_safari"
+        )
+    }
+
+    func testRelayDoesNotLeakUnfilteredURLViaTitlePassthrough_P3() throws {
+        try assertS2DoesNotLeak(
+            eventKind: "chrome_tab_activated",
+            extraPayload: [
+                "current_tab_key": "1",
+                "previous_tab_key": "2",
+                "current_url": "linear.app/i/LEAF-SECRET-P3",
+                "title": "Secret · LEAF-SECRET-P3"
+            ],
+            markers: ["LEAF-SECRET-P3"],
+            collectorID: "applescript_chrome"
+        )
+    }
+
     // MARK: - Phase Track-4 S3 — system observers + intensity walkbacks (13)
 
     /// 13 walkbacks — one per new event_kind. Each smuggles content marker

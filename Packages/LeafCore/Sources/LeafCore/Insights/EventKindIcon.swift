@@ -39,6 +39,16 @@ public enum EventKindIcon {
         case "chrome_tabs_changed":           return "globe"
         case "arc_tabs_changed":              return "globe.americas"
 
+        // Track-6 P3 — browser deep (navigated + activated + bookmarks)
+        case "safari_tab_navigated",
+             "safari_tab_activated":          return "safari"
+        case "chrome_tab_navigated",
+             "chrome_tab_activated":          return "globe"
+        case "arc_tab_navigated",
+             "arc_tab_activated":             return "globe.americas"
+        case "chrome_bookmark_changed":       return "bookmark"
+        case "safari_bookmark_changed":       return "bookmark.fill"
+
         // Track-4 S3 — audio / display / network / files
         case "audio_route_changed":                       return "speaker.wave.2"
         case "mic_in_use_entered", "mic_in_use_exited":   return "mic.fill"

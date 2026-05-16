@@ -57,3 +57,5 @@ build/releases/
 *.eddsa
 .envrc
 .env
+
+.build-xcode/

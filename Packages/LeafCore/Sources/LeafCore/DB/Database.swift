@@ -8,7 +8,10 @@ import os
 public final class Database: @unchecked Sendable {
     public enum Mode: Sendable { case writer, reader }
 
-    private let pool: DatabasePool
+    /// Exposed for LeafCorePrivate (moat): `DBDomainAllowListReader` needs the
+    /// underlying `DatabasePool` to issue read-only queries. Must not be used
+    /// for writes outside of `Database` itself.
+    public let pool: DatabasePool
     private let config: DatabaseConfig
     public let mode: Mode
 
@@ -54,9 +57,9 @@ public final class Database: @unchecked Sendable {
         migrator.registerMigration016NormalizeGitHubEventKinds()
         migrator.registerMigration017NormalizeSlackEventKinds()
         migrator.registerMigration018IntensityAggregates()
-        // M019-M023 reserved for Track-5 collaboration-redesign stack
-        // (in flight on a separate branch). Track-6 P1 lands at M024.
+        // M019-M023 reserved for Track-5 collaboration-redesign stack.
         migrator.registerMigration024ClaudeCodeAISubagentIndex()
+        migrator.registerMigration026BrowserDomainAllow()
         try migrator.migrate(pool)
 
         return Database(pool: pool, config: config, mode: .writer)
@@ -564,6 +567,62 @@ public final class Database: @unchecked Sendable {
             try db.execute(
                 sql: "UPDATE \(Schema.WatchedFolders.tableName) SET \(sets.joined(separator: ", ")) WHERE \(Schema.WatchedFolders.id) = ?",
                 arguments: StatementArguments(args)
+            )
+        }
+    }
+
+    // MARK: - Browser Domain Allow-list (Phase Track-6 P3)
+
+    /// Returns all rows ordered by `added_at_ms` ASC (stable UI order).
+    public func listBrowserDomainAllow() throws -> [(domain: String, granularity: URLGranularity, addedAtMs: Int64, notes: String?)] {
+        try pool.read { db in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT \(Schema.BrowserDomainAllow.domain),
+                       \(Schema.BrowserDomainAllow.granularity),
+                       \(Schema.BrowserDomainAllow.addedAtMs),
+                       \(Schema.BrowserDomainAllow.notes)
+                FROM \(Schema.BrowserDomainAllow.tableName)
+                ORDER BY \(Schema.BrowserDomainAllow.addedAtMs) ASC
+            """)
+            return rows.compactMap { row -> (domain: String, granularity: URLGranularity, addedAtMs: Int64, notes: String?)? in
+                guard let domain = row[Schema.BrowserDomainAllow.domain] as String?,
+                      let granStr = row[Schema.BrowserDomainAllow.granularity] as String?,
+                      let gran = URLGranularity(rawValue: granStr) else { return nil }
+                let addedAtMs = (row[Schema.BrowserDomainAllow.addedAtMs] as Int64?) ?? 0
+                let notes = row[Schema.BrowserDomainAllow.notes] as String?
+                return (domain: domain, granularity: gran, addedAtMs: addedAtMs, notes: notes)
+            }
+        }
+    }
+
+    /// UPSERT — adds or replaces an entry for `domain`. Writer-only.
+    public func upsertBrowserDomainAllow(domain: String, granularity: URLGranularity, notes: String?) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        try pool.write { db in
+            try db.execute(sql: """
+                INSERT INTO \(Schema.BrowserDomainAllow.tableName) (
+                    \(Schema.BrowserDomainAllow.domain),
+                    \(Schema.BrowserDomainAllow.granularity),
+                    \(Schema.BrowserDomainAllow.addedAtMs),
+                    \(Schema.BrowserDomainAllow.notes)
+                ) VALUES (?, ?, ?, ?)
+                ON CONFLICT(\(Schema.BrowserDomainAllow.domain)) DO UPDATE SET
+                    \(Schema.BrowserDomainAllow.granularity) = excluded.\(Schema.BrowserDomainAllow.granularity),
+                    \(Schema.BrowserDomainAllow.notes) = excluded.\(Schema.BrowserDomainAllow.notes)
+                """,
+                arguments: [domain, granularity.rawValue, nowMs, notes]
+            )
+        }
+    }
+
+    /// DELETE by `domain`. Idempotent — no-op if missing.
+    public func removeBrowserDomainAllow(domain: String) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try db.execute(
+                sql: "DELETE FROM \(Schema.BrowserDomainAllow.tableName) WHERE \(Schema.BrowserDomainAllow.domain) = ?",
+                arguments: [domain]
             )
         }
     }

@@ -3,13 +3,13 @@ import XCTest
 
 final class ShareEventTypeRegistryS2Tests: XCTestCase {
     // Track 4 S2 grew it 125 → 139. Track 4 S3 grew it 139 → 152.
-    // Track-6 P1 grew it 152 → 168.
+    // Track-6 P1 grew it 152 → 168. Track-6 P3 grew it 168 → 176.
     func testRegistrySizeIs139() {
-        XCTAssertEqual(ShareEventTypeKey.allCases.count, 168)
+        XCTAssertEqual(ShareEventTypeKey.allCases.count, 176)
     }
 
     func testDefaultsCountMatches() {
-        XCTAssertEqual(ShareEventTypeDefaults.all.count, 168)
+        XCTAssertEqual(ShareEventTypeDefaults.all.count, 176)
     }
 
     func testAllNewS2KeysDefaultOff() {

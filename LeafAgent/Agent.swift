@@ -418,13 +418,30 @@ enum AgentMain {
 
         // Phase Track-4 S2 — AppleScript surface. Public substrate ships an
         // empty adapter registry; the moat-side ProdAppleScriptAdapterRegistry
-        // (LeafCorePrivate) wires the 12 per-app adapters under LEAF_PROD.
+        // (LeafCorePrivate) wires the per-app adapters under LEAF_PROD.
+        // Track-6 P3 — browser adapters require a DomainAllowListReader so the
+        // registry now accepts one and forwards it to ProdSafari/Chrome/ArcAdapter.
         let appleScriptBridge = AppleScriptBridge.production()
         let appleScriptPermissionStore = AppleScriptPermissionStore()
         let localAppsStore = LocalAppsStore()
+        #if LEAF_PROD
+        let allowListReader = DBDomainAllowListReader(pool: database.pool)
+        // Track-6 P3 — observe cross-process notification posted by BrowserAllowListStore
+        // (MenuBarApp) after every add/remove. Invalidates the cache so the next
+        // adapter call reads fresh rows. Pattern mirrors FSEventsCollector darwin observer.
+        let allowListObserverToken: NSObjectProtocol = DistributedNotificationCenter.default()
+            .addObserver(
+                forName: Notification.Name(browserDomainAllowChangedNotification),
+                object: nil,
+                queue: nil
+            ) { _ in
+                allowListReader.invalidate()
+            }
+        AgentLifetime.allowListObserverToken = allowListObserverToken
+        #endif
         let appleScriptRegistry: any AppleScriptAdapterRegistry = {
             #if LEAF_PROD
-            return ProdAppleScriptAdapterRegistry()
+            return ProdAppleScriptAdapterRegistry(allowListReader: allowListReader)
             #else
             return EmptyAppleScriptAdapterRegistry()
             #endif
@@ -517,6 +534,41 @@ enum AgentMain {
         AgentLifetime.wifiCollector = wifiCollector
         AgentLifetime.clipboardCollector = clipboardCollector
         AgentLifetime.localFilesWatcher = localFilesWatcher
+
+        // Phase Track-6 P3 — BrowserBookmarksWatcher.
+        // FSEvents-backed bookmark count watcher for Chrome (multi-profile) and
+        // Safari (gated on Full Disk Access). Count probes read raw Bookmarks
+        // files via BrowserBookmarkCountDeriver (LeafCorePrivate). Safari FDA
+        // check is a best-effort read probe: if the plist is readable the process
+        // has Full Disk Access. Emits chrome_bookmark_changed /
+        // safari_bookmark_changed (delta + total_count, never URL or title strings).
+        let safariBookmarksPath = NSHomeDirectory() + "/Library/Safari/Bookmarks.plist"
+        let fdaGranted = FileManager.default.isReadableFile(atPath: safariBookmarksPath)
+        let browserBookmarksWatcher = BrowserBookmarksWatcher(
+            writer: database,
+            chromeCountProbe: { profileLabel in
+                let path = NSHomeDirectory()
+                    + "/Library/Application Support/Google/Chrome/"
+                    + profileLabel + "/Bookmarks"
+                guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else { return nil }
+                #if LEAF_PROD
+                return try? BrowserBookmarkCountDeriver.countChromeBookmarks(from: data)
+                #else
+                return nil
+                #endif
+            },
+            safariCountProbe: { path in
+                guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else { return nil }
+                #if LEAF_PROD
+                return try? BrowserBookmarkCountDeriver.countSafariBookmarks(from: data)
+                #else
+                return nil
+                #endif
+            },
+            fdaGranted: fdaGranted,
+            featureGate: localAppsStore
+        )
+        AgentLifetime.browserBookmarksWatcher = browserBookmarksWatcher
 
         // Phase 5.3.D — Key rotation orchestrator + RotationOutbox resume.
         // Drains unposted rotation_outbox rows from prior sessions on startup
@@ -652,6 +704,9 @@ enum AgentMain {
         Task { await wifiCollector.start() }
         Task { await clipboardCollector.start() }
         DispatchQueue.main.async { localFilesWatcher.start() }
+        // Phase Track-6 P3 — BrowserBookmarksWatcher. Sets up FSEventStreams for
+        // Chrome (multi-profile) and Safari (FDA-gated) bookmark file monitoring.
+        Task { await browserBookmarksWatcher.start() }
         Task { await rotationFetchScheduler.start() }
         Task { await detectorScheduler.start() }
 
@@ -703,6 +758,13 @@ enum AgentMain {
             if let c = AgentLifetime.wifiCollector { await c.stop() }
             if let c = AgentLifetime.clipboardCollector { await c.stop() }
             await MainActor.run { AgentLifetime.localFilesWatcher?.stop() }
+            // Phase Track-6 P3 — stop browser bookmark watcher after localFiles.
+            if let b = AgentLifetime.browserBookmarksWatcher { await b.stop() }
+            // Phase Track-6 P3 — remove allow-list darwin observer.
+            if let t = AgentLifetime.allowListObserverToken {
+                DistributedNotificationCenter.default().removeObserver(t)
+                AgentLifetime.allowListObserverToken = nil
+            }
             // Phase Track-4 S2 — stop AppleScript collector before S1
             // collectors. Polling tasks cancel cooperatively.
             if let a = AgentLifetime.appleScriptCollector { await a.stop() }
@@ -797,4 +859,9 @@ enum AgentLifetime {
     nonisolated(unsafe) static var wifiCollector: WiFiCollector?
     nonisolated(unsafe) static var clipboardCollector: ClipboardCollector?
     nonisolated(unsafe) static var localFilesWatcher: LocalFilesWatcher?
+    // Phase Track-6 P3 — browser bookmark FSEvents watcher.
+    nonisolated(unsafe) static var browserBookmarksWatcher: BrowserBookmarksWatcher?
+    // Phase Track-6 P3 — darwin notification observer token for browser allow-list
+    // cross-process invalidation. Retained here so it lives for the Agent's lifetime.
+    nonisolated(unsafe) static var allowListObserverToken: NSObjectProtocol?
 }

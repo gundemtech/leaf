@@ -3,9 +3,10 @@ import XCTest
 
 final class ShareEventTypeRegistryD3SlackTests: XCTestCase {
     // Track-6 P1 grew it 152 → 168 (+16 Claude Code deep).
+    // Track-6 P3 grew it 168 → 176 (+8 Browsers deep).
     func testRegistrySize116AfterD3Slack() {
-        XCTAssertEqual(ShareEventTypeKey.allCases.count, 168,
-                       "97 (post-D2) + 19 (D3 Slack) + 9 (S1) + 14 (S2) + 13 (S3) + 16 (Track-6 P1) = 168")
+        XCTAssertEqual(ShareEventTypeKey.allCases.count, 176,
+                       "97 (post-D2) + 19 (D3 Slack) + 9 (S1) + 14 (S2) + 13 (S3) + 16 (Track-6 P1) + 8 (Track-6 P3) = 176")
     }
 
     func testTwoLegacySlackKindsHaveCanonicalRawValues() {
