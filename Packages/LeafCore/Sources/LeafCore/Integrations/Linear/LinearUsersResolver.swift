@@ -49,6 +49,11 @@ public actor LinearUsersResolver {
     private let ttl: TimeInterval
     private let clock: @Sendable () -> Date
 
+    /// Inflight Task tracked so concurrent `resolve()` callers AWAIT the
+    /// same fetch rather than enter the actor's reentry slot and duplicate
+    /// the GraphQL request. See `refreshIfStale()` for full rationale.
+    private var inflight: Task<[ResolvedUser], Error>?
+
     public init(
         provider: LinearGraphQLProviding,
         ttl: TimeInterval = 300,
@@ -91,14 +96,27 @@ public actor LinearUsersResolver {
     // MARK: - Private
 
     /// Returns cached users if fresh, otherwise fetches + caches.
-    /// Actor isolation guarantees only one fetch in flight at a time —
-    /// concurrent `resolve()` calls are serialized by the actor, so the
-    /// second caller sees the cache populated by the first.
+    ///
+    /// Inflight coalescing — concurrent callers await the same Task rather
+    /// than entering the actor reentry slot and duplicating fetches.
+    /// Critical for production HTTP impl where `fetchAccessibleUsers` has
+    /// 200-500ms latency and N concurrent `resolve()` calls would otherwise
+    /// queue N GraphQL requests (the prior "actor serializes" comment was
+    /// wrong: Swift actor reentrancy at `await` lets the second caller
+    /// enter while the first is suspended on `provider.fetch…`, both then
+    /// see stale cache and both fire fetches).
     private func refreshIfStale() async throws -> [ResolvedUser] {
         if let cache, let cachedAt, clock().timeIntervalSince(cachedAt) < ttl {
             return cache
         }
-        let fetched = try await provider.fetchAccessibleUsers()
+        // Inflight Task: second/Nth caller awaits the same fetch.
+        if let inflight {
+            return try await inflight.value
+        }
+        let task = Task { try await provider.fetchAccessibleUsers() }
+        inflight = task
+        defer { inflight = nil }
+        let fetched = try await task.value
         cache = fetched
         cachedAt = clock()
         return fetched

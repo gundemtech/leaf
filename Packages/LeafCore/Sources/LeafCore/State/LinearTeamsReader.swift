@@ -33,8 +33,17 @@ public final class LinearTeamsReader {
 
     public private(set) var teams: [LinearTeam] = []
     public private(set) var lastFetchedAt: Date?
-    public private(set) var isLoading: Bool = false
     public private(set) var error: String?
+
+    /// True iff a `refresh()` is currently in flight. Computed from the
+    /// inflight Task — see SlackChannelsReader header for rationale on why
+    /// the property remains public for SwiftUI bindings while being
+    /// derived rather than set.
+    public var isLoading: Bool { inflight != nil }
+
+    /// Inflight Task — concurrent refresh callers AWAIT the shared fetch
+    /// rather than no-op out via an `isLoading` guard.
+    private var inflight: Task<[LinearTeam], Error>?
 
     private let provider: LinearTeamsProviding
     private let ttl: TimeInterval
@@ -66,11 +75,18 @@ public final class LinearTeamsReader {
     }
 
     private func refresh() async {
-        guard !isLoading else { return }
-        isLoading = true
-        defer { isLoading = false }
+        // Inflight Task coalescing — see SlackChannelsReader for rationale.
+        if let inflight {
+            _ = try? await inflight.value
+            return
+        }
+        let task = Task<[LinearTeam], Error> {
+            try await provider.fetchAccessibleTeams()
+        }
+        inflight = task
+        defer { inflight = nil }
         do {
-            let fetched = try await provider.fetchAccessibleTeams()
+            let fetched = try await task.value
             teams = fetched
             lastFetchedAt = clock()
             error = nil

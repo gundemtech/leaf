@@ -56,8 +56,21 @@ public final class SlackChannelsReader {
 
     public private(set) var channels: [SlackChannel] = []
     public private(set) var lastFetchedAt: Date?
-    public private(set) var isLoading: Bool = false
     public private(set) var error: String?
+
+    /// True iff a `refresh()` is currently in flight. Computed from the
+    /// inflight Task so SwiftUI bindings keep observing the same property.
+    /// The setter is intentionally absent — the inflight Task is the
+    /// single source of truth.
+    public var isLoading: Bool { inflight != nil }
+
+    /// Inflight Task tracked so concurrent refresh callers AWAIT the
+    /// shared fetch rather than no-op out via an `isLoading` guard. The
+    /// prior guard pattern made the second caller exit early — they then
+    /// saw an empty state because the first call hadn't completed yet.
+    /// Per actor reentrancy semantics, the second concurrent caller
+    /// must coalesce by awaiting the existing Task's value.
+    private var inflight: Task<[SlackChannel], Error>?
 
     private let provider: SlackChannelsProviding
     private let ttl: TimeInterval
@@ -89,14 +102,21 @@ public final class SlackChannelsReader {
     }
 
     private func refresh() async {
-        // isLoading guard — second concurrent refresh call exits early.
-        // Coalescing semantics: caller "waits" by virtue of the inflight
-        // fetch eventually completing, but doesn't trigger a second HTTP.
-        guard !isLoading else { return }
-        isLoading = true
-        defer { isLoading = false }
+        // Inflight Task coalescing — second concurrent caller awaits the
+        // same Task value rather than no-op'ing out, which under the prior
+        // `isLoading` guard caused the second caller to return with stale
+        // / empty state while the first was still mid-fetch.
+        if let inflight {
+            _ = try? await inflight.value
+            return
+        }
+        let task = Task<[SlackChannel], Error> {
+            try await provider.fetchAccessibleChannels()
+        }
+        inflight = task
+        defer { inflight = nil }
         do {
-            let fetched = try await provider.fetchAccessibleChannels()
+            let fetched = try await task.value
             channels = fetched
             lastFetchedAt = clock()
             error = nil
