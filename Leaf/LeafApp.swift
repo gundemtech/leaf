@@ -31,6 +31,10 @@ struct LeafApp: App {
         service: LeafApp.makeGitHubScopesService()
     )
     @State private var slackOAuth = SlackOAuthService()
+    /// Track-6 P4 — Google Calendar OAuth service for Connections row binding.
+    /// Mirrors Linear/Slack zero-arg init pattern: dependencies (HTTP client,
+    /// API client, DB URL, encryption) all defaulted inside the service init.
+    @State private var googleCalendarOAuth = GoogleCalendarOAuthService()
     /// Phase Track-3 D3 — Task 18. Shared `SlackScopesReader` mirroring the
     /// GitHub D2 forward-trust pattern (Home re-auth banner, Connections
     /// "Slack Scopes" section, Sidebar attention dot). Backed by an app-side
@@ -108,6 +112,7 @@ struct LeafApp: App {
                 .environment(githubScopes)  // Phase Track-3 D2 — Task 21
                 .environment(slackOAuth)
                 .environment(slackScopes)  // Phase Track-3 D3 — Task 18
+                .environment(googleCalendarOAuth)  // Track-6 P4 — Task 18
                 .environment(permissions)
                 .environment(updater)
                 .environment(reader)

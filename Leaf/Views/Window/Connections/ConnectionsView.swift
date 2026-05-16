@@ -46,6 +46,10 @@ struct ConnectionsView: View {
     @Environment(GitHubScopesReader.self) private var scopesReader
     // MARK: requires SlackScopesReader env injection (Phase Track-3 D3 / Task 18)
     @Environment(SlackScopesReader.self) private var slackScopes
+    // Track-6 P4 — Google Calendar OAuth row (Task 18). No companion ScopesReader:
+    // Google scope is a single fixed value (`calendar.readonly`) negotiated at
+    // OAuth time; there's no incremental-scope drift to surface like GitHub/Slack.
+    @Environment(GoogleCalendarOAuthService.self) private var googleCalendarOAuth
 
     @State private var nowTick: Date = Date()
     private let countdownTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -103,6 +107,7 @@ struct ConnectionsView: View {
             linearOAuth.reload()
             githubOAuth.reload()
             slackOAuth.reload()
+            googleCalendarOAuth.reload()
             refreshGrantedGitHubScopes()
             refreshGrantedSlackScopes()
         }
@@ -131,7 +136,7 @@ struct ConnectionsView: View {
             Text("Connections")
                 .font(LeafType.title.large)
                 .foregroundStyle(LeafColor.text.primary)
-            Text("Linear, GitHub, Slack — sources of truth Leaf observes on your behalf. Data stays on your device.")
+            Text("Linear, GitHub, Slack, Google Calendar — sources of truth Leaf observes on your behalf. Data stays on your device.")
                 .font(LeafType.body.regular)
                 .foregroundStyle(LeafColor.text.secondary)
         }
@@ -181,6 +186,22 @@ struct ConnectionsView: View {
                     if shouldShowSlackScopesSection {
                         slackScopesSection
                     }
+                }
+            }
+
+            // Track-6 P4 — Google Calendar row. SF Symbol fallback (no
+            // Asset-Catalog brand glyph shipped yet) on a white tile to match
+            // GitHub/Slack contrast; Google's brand mark requires distribution
+            // sign-off so we surface a neutral system symbol for MVP.
+            providerSectionSymbol(
+                systemSymbol: "calendar.circle.fill",
+                logoTileColor: .white,
+                symbolTint: Color(red: 0.18, green: 0.41, blue: 0.92),
+                title: "Google Calendar",
+                description: "Read-only access — meeting metadata (titles, times, attendee counts) into your local timeline. Attendee identities and event bodies stay on Google."
+            ) {
+                LeafCard(variant: .raised, padding: .regular) {
+                    googleCalendarContent
                 }
             }
         }
@@ -245,6 +266,111 @@ struct ConnectionsView: View {
                 .interpolation(.high)
                 .aspectRatio(contentMode: .fit)
                 .frame(width: outer, height: outer)
+        }
+    }
+
+    // MARK: - Provider section (SF Symbol variant — Track-6 P4)
+
+    /// Mirror of `providerSection` but with an SF Symbol glyph instead of an
+    /// Asset-Catalog image. Used for Google Calendar where we don't yet ship
+    /// a brand-cleared image asset. `symbolTint` colors the glyph itself
+    /// (foregroundStyle on the SF Symbol); the tile background uses
+    /// `logoTileColor` like the asset variant.
+    private func providerSectionSymbol<Content: View>(
+        systemSymbol: String,
+        logoTileColor: Color?,
+        symbolTint: Color,
+        title: String,
+        description: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: LeafSpace.md) {
+            HStack(alignment: .providerLogoAnchor, spacing: LeafSpace.sm) {
+                providerSymbol(systemSymbol: systemSymbol, tileColor: logoTileColor, tint: symbolTint)
+                    .alignmentGuide(.providerLogoAnchor) { $0[.top] }
+                VStack(alignment: .leading, spacing: LeafSpace.xxs) {
+                    Text(title)
+                        .font(LeafSectionTokens.titleFont)
+                        .foregroundStyle(LeafColor.text.primary)
+                        .alignmentGuide(.providerLogoAnchor) { d in
+                            d[.firstTextBaseline] - providerTitleFontSize * providerTitleCapHeightRatio
+                        }
+                    Text(description)
+                        .font(LeafSectionTokens.descriptionFont)
+                        .foregroundStyle(LeafColor.text.secondary)
+                }
+            }
+            content()
+        }
+    }
+
+    /// Same 28pt-outer / 20pt-inner sizing as `providerLogo` so the new row
+    /// aligns vertically with the asset-backed rows (Linear/GitHub/Slack).
+    @ViewBuilder
+    private func providerSymbol(systemSymbol: String, tileColor: Color?, tint: Color) -> some View {
+        let outer: CGFloat = 28
+        let inner: CGFloat = 20
+        if let tileColor {
+            ZStack {
+                RoundedRectangle(cornerRadius: LeafRadius.sm, style: .continuous)
+                    .fill(tileColor)
+                Image(systemName: systemSymbol)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .foregroundStyle(tint)
+                    .frame(width: inner, height: inner)
+            }
+            .frame(width: outer, height: outer)
+        } else {
+            Image(systemName: systemSymbol)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .foregroundStyle(tint)
+                .frame(width: outer, height: outer)
+        }
+    }
+
+    // MARK: - Google Calendar (Track-6 P4)
+
+    @ViewBuilder
+    private var googleCalendarContent: some View {
+        switch googleCalendarOAuth.state {
+        case .notConnected:
+            disconnectedBlock(
+                title: "Not connected",
+                description: "Sign in with Google to share meeting metadata (titles, times, attendee counts) into your local timeline.",
+                ctaTitle: "Connect Google Calendar",
+                action: { Task { await googleCalendarOAuth.connect() } }
+            )
+        case .authorizing, .waitingForCallback, .exchangingToken, .fetchingWorkspace:
+            progressBlock(label: googleCalendarProgressLabel)
+        case .connected(let workspaceName, let connectedAt):
+            connectedBlock(
+                title: workspaceName,
+                connectedAt: connectedAt,
+                action: { googleCalendarOAuth.disconnect() }
+            )
+        case .reconnectNeeded:
+            reconnectBlock(
+                description: "Your Google session expired and Leaf can't refresh it automatically. Sign in again to resume polling.",
+                ctaTitle: "Reconnect Google Calendar",
+                action: { Task { await googleCalendarOAuth.connect() } }
+            )
+        case .error(let message):
+            errorBlock(
+                description: message,
+                action: { Task { await googleCalendarOAuth.connect() } }
+            )
+        }
+    }
+
+    private var googleCalendarProgressLabel: String {
+        switch googleCalendarOAuth.state {
+        case .authorizing: "Preparing authorization…"
+        case .waitingForCallback: "Waiting for Google approval in browser…"
+        case .exchangingToken: "Exchanging token…"
+        case .fetchingWorkspace: "Loading primary calendar…"
+        default: ""
         }
     }
 
