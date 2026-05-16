@@ -1655,6 +1655,13 @@ final class RelayBodyLeakageTests: XCTestCase {
     }
 
     // MARK: - Phase Track-6 P3 — browsers deep walkbacks (8 sentinel + 2 bypass)
+    //
+    // These tests verify that adversarial payload fields injected into a P3
+    // event_kind do NOT leak into `presence_state.state_json` via the
+    // `writeEventsOffsetAndPresence` write path. This is a structural sanity
+    // check, not an end-to-end privacy assertion — the genuine guard against
+    // URL/title bypass lives in the adapter filter (URLs are domain-collapsed
+    // before they ever reach a state machine). See spec §14.1.
 
     func testRelayDoesNotLeakSafariTabNavigated_P3() throws {
         try assertS2DoesNotLeak(
