@@ -21,6 +21,9 @@ struct OrganismsSection: View {
             LeafTabPreview()
             LeafProgressPreview()
             LeafWorkspaceSwitcherPreview()
+            LeafLinkedEventCardPreview()
+            LeafMessageCardPreview()
+            LeafFeedRowPreview()
         }
     }
 }

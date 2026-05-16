@@ -20,6 +20,7 @@ struct MoleculesSection: View {
             LeafAvatarPreview()
             LeafIconLabelPreview()
             LeafKeyboardShortcutPreview()
+            LeafFilterChipsPreview()
         }
     }
 }
