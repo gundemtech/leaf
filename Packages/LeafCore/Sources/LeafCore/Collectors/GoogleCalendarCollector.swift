@@ -28,6 +28,7 @@
 //
 
 import Foundation
+import GRDB
 import os
 
 /// Track-6 P4 Task 13 — Google Calendar polling collector.
@@ -184,6 +185,12 @@ public actor GoogleCalendarCollector {
         //    flip the per-row idempotency gate so a re-tick won't duplicate.
         try? emitTransitions(nowMs: nowMs)
 
+        // 8. Composite presence_state snapshot. Wrapped in `try?` so a
+        //    transient DB error (locked WAL etc.) doesn't fail the whole
+        //    tick — the next tick rebuilds the snapshot from scratch.
+        //    See spec §3.3 for the field contract.
+        try? writePresenceState(nowMs: nowMs)
+
         return true
     }
 
@@ -247,6 +254,92 @@ public actor GoogleCalendarCollector {
             payload: flat
         )
         try database.write([rawEvent])
+    }
+
+    // MARK: - presence_state composite write
+
+    /// Build the per-tick `presence_state.google_calendar` snapshot and UPSERT
+    /// it through `PresenceStateWriter`. Caller wraps in `try?` — transient
+    /// DB errors should not fail the whole tick (the next tick rebuilds from
+    /// scratch).
+    ///
+    /// Fields (spec §3.3):
+    ///   - `known_calendar_count`  Int    — calendars currently in sync rotation
+    ///   - `focus_block_active`    Bool   — any tracker row eventType=focusTime,
+    ///                                     start ≤ now < end
+    ///   - `ooo_active`            Bool   — same shape for eventType=outOfOffice
+    ///   - `working_location`      String? — bucket from active workingLocation
+    ///                                     row (homeOffice / officeLocation /
+    ///                                     customLocation) or NSNull
+    ///   - `next_meeting_start_ms` Int64? — earliest non-all-day observed event
+    ///                                     with start_ms > now, or NSNull
+    ///   - `last_synced_at_ms`     Int64  — tick timestamp, always present
+    ///
+    /// `next_meeting_summary` is intentionally NOT emitted — surfacing the
+    /// meeting title here requires a ShareEventTypeKey gate path that we
+    /// defer until the UI consumer lands. The presence timing scalar is
+    /// enough for "you have a meeting in N minutes" UI cues.
+    private func writePresenceState(nowMs: Int64) throws {
+        let snapshot: (calendarCount: Int,
+                       focusActive: Bool,
+                       oooActive: Bool,
+                       workingLocation: String?,
+                       nextMeetingStartMs: Int64?) = try database.readSQL { db in
+            let count = try GoogleCalendarSyncTokenStore.knownCalendars(in: db).count
+            let focus = try GoogleCalendarTrackerStore.hasActiveFocusBlock(now: nowMs, in: db)
+            let ooo = try GoogleCalendarTrackerStore.hasActiveOOO(now: nowMs, in: db)
+            let loc = try GoogleCalendarTrackerStore.currentWorkingLocation(now: nowMs, in: db)
+            let next = try Self.fetchNextMeetingStartMs(now: nowMs, in: db)
+            return (count, focus, ooo, loc, next)
+        }
+
+        var state: [String: Any] = [
+            "known_calendar_count": snapshot.calendarCount,
+            "focus_block_active": snapshot.focusActive,
+            "ooo_active": snapshot.oooActive,
+            "working_location": snapshot.workingLocation as Any? ?? NSNull(),
+            "next_meeting_start_ms": snapshot.nextMeetingStartMs as Any? ?? NSNull(),
+            "last_synced_at_ms": nowMs,
+        ]
+        // Defensive: Optional<String>.none wrapped as Any survives the
+        // ternary above; explicit NSNull substitution keeps JSONSerialization
+        // happy regardless of Swift's Optional-to-Any bridging quirks.
+        if snapshot.workingLocation == nil { state["working_location"] = NSNull() }
+        if snapshot.nextMeetingStartMs == nil { state["next_meeting_start_ms"] = NSNull() }
+
+        try database.writeSQL { db in
+            try PresenceStateWriter.upsert(
+                provider: .googleCalendar,
+                state: state,
+                derivedMode: nil,
+                nowMs: nowMs,
+                in: db
+            )
+        }
+    }
+
+    /// Earliest non-all-day `google_calendar_event_observed` whose `start_ms`
+    /// is strictly in the future. Returns nil if no such event exists.
+    /// RawEvent.payload values are all strings (see `flatten` above) — that's
+    /// why we CAST `start_ms` to integer and compare `is_all_day` to the
+    /// string `'false'`, not to `0`. The `event_kind` discriminator filter
+    /// keeps this query confined to the omnibus observed-row stream
+    /// (transition events live under separate `*_started` / `*_ended` kinds
+    /// and carry their own `start_ms` semantics that we don't want to mix in).
+    static func fetchNextMeetingStartMs(now: Int64, in db: GRDB.Database) throws -> Int64? {
+        try Int64.fetchOne(
+            db,
+            sql: """
+                SELECT CAST(json_extract(payload_json, '$.start_ms') AS INTEGER) AS start_ms
+                  FROM events
+                 WHERE json_extract(payload_json, '$.event_kind') = 'google_calendar_event_observed'
+                   AND json_extract(payload_json, '$.is_all_day') = 'false'
+                   AND CAST(json_extract(payload_json, '$.start_ms') AS INTEGER) > ?
+                 ORDER BY start_ms ASC
+                 LIMIT 1
+                """,
+            arguments: [now]
+        )
     }
 
     /// Long-running loop. Cancel via the returned Task or by calling `stop()`.
