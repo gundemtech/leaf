@@ -87,4 +87,28 @@ public final class LocalAppsStore: ObservableObject, @unchecked Sendable {
     private static func subFieldKey(_ bundleID: String, _ field: String) -> String {
         "localApps.subField.\(bundleID).\(field)"
     }
+
+    // MARK: - Phase Track-6 P2 — System Observers
+    //
+    // The DerivedData watcher is a separate user-visible toggle from the
+    // per-app Xcode master gate. Both must be ON for the watcher to start;
+    // either being OFF makes the watcher a no-op (mirror Track-4 S3 pattern
+    // for IntensityCollector / FSEvents routers).
+
+    public static let kDerivedDataWatcherEnabled =
+        "localApps.systemObservers.derivedDataWatcherEnabled"
+
+    public func derivedDataWatcherEnabled() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return defaults.bool(forKey: Self.kDerivedDataWatcherEnabled)
+    }
+
+    public func setDerivedDataWatcherEnabled(_ on: Bool) {
+        lock.lock()
+        defaults.set(on, forKey: Self.kDerivedDataWatcherEnabled)
+        lock.unlock()
+        DispatchQueue.main.async { [self] in
+            self.objectWillChange.send()
+        }
+    }
 }
