@@ -4,7 +4,7 @@ import Foundation
 /// by `GoogleCalendarCollector`: 1 omnibus snapshot (`_event_observed`) +
 /// 5 clock-driven transitions (focus_block / ooo paired; workingLocation
 /// single-shot). Rationale: spec §6, brainstorm BR-1.
-public enum GoogleCalendarEventKind: String, CaseIterable, Sendable {
+public enum GoogleCalendarEventKind: String, CaseIterable, Sendable, Hashable {
     case eventObserved              = "google_calendar_event_observed"
     case focusBlockStarted          = "google_calendar_focus_block_started"
     case focusBlockEnded            = "google_calendar_focus_block_ended"
