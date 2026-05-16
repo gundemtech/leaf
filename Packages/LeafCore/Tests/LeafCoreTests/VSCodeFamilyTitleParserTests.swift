@@ -102,4 +102,20 @@ final class VSCodeFamilyTitleParserTests: XCTestCase {
         let obs = VSCodeInsidersParser.parse("Foo.swift — leaf — Visual Studio Code")
         XCTAssertNil(obs)
     }
+
+    // MARK: - VSCodium
+
+    func test_vscodium_defaultFormat() {
+        let obs = VSCodiumParser.parse("Baz.swift — leaf — VSCodium")
+        XCTAssertEqual(obs?.ideBundleID, "com.visualstudio.code.oss")
+        XCTAssertEqual(obs?.workspaceName, "leaf")
+        XCTAssertEqual(obs?.fileBasename, "Baz.swift")
+    }
+
+    func test_vscodium_codiumAppName() {
+        // Some VSCodium builds render appName as "Codium" not "VSCodium".
+        let obs = VSCodiumParser.parse("Baz.swift — leaf — Codium")
+        XCTAssertEqual(obs?.fileBasename, "Baz.swift")
+        XCTAssertEqual(obs?.workspaceName, "leaf")
+    }
 }
