@@ -34,6 +34,12 @@ public struct GoogleCalendarOAuthEndpoints {
     public static let infoPlistClientIDKey     = "LeafGoogleCalendarOAuthClientID"
     public static let infoPlistClientSecretKey = "LeafGoogleCalendarOAuthClientSecret"
 
+    /// `DistributedNotificationCenter` channel name posted by the OAuthService
+    /// (main app) after connect / disconnect so the Agent's collector tick can
+    /// pick up the new credential row without restart. Mirrors
+    /// `LinearOAuthEndpoints.integrationChangedNotificationName`.
+    public static let integrationChangedNotificationName = "tech.gundem.leaf.google-calendar-integration-changed"
+
     /// Build the authorization URL with PKCE + state + ephemeral redirect port.
     /// Per spec §7.1: `access_type=offline` + `prompt=consent` to receive `refresh_token`
     /// on first launch; `include_granted_scopes=true` to allow incremental authorization

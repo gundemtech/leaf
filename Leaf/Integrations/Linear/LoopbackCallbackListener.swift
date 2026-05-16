@@ -26,12 +26,25 @@ nonisolated enum LoopbackCallbackListener {
     /// послать минимальную HTML-страницу, вернуть `URLComponents` query.
     /// Cancel listener по timeout либо Task cancellation. Caller достаёт
     /// `code`/`state`/`error` параметры из вернувшегося `URLComponents`.
+    ///
+    /// `port == 0` requests a kernel-assigned ephemeral port (Track-6 P4 Google
+    /// Calendar — Google has no fixed-port relay constraint, ephemeral is more
+    /// robust under concurrent flows). When provided, `onPortAssigned` is
+    /// invoked exactly once with the actually-bound port — caller plumbs that
+    /// number into the OAuth `redirect_uri` query param before opening the
+    /// browser. Linear/Slack pass fixed ports and ignore this callback.
     static func awaitCallback(
         port: UInt16,
         timeout: Duration = .seconds(60),
-        providerLabel: String = "Linear"
+        providerLabel: String = "Linear",
+        onPortAssigned: (@Sendable (UInt16) -> Void)? = nil
     ) async throws -> URLComponents {
-        let nwPort = NWEndpoint.Port(rawValue: port) ?? NWEndpoint.Port.any
+        // port == 0 → ask the kernel for an ephemeral port (NWEndpoint.Port.any).
+        // Non-zero non-bindable values fall back to `.any` as well to mirror
+        // prior behaviour.
+        let nwPort: NWEndpoint.Port = port == 0
+            ? .any
+            : (NWEndpoint.Port(rawValue: port) ?? .any)
         let parameters = NWParameters.tcp
         parameters.requiredLocalEndpoint = NWEndpoint.hostPort(
             host: NWEndpoint.Host(LinearOAuthEndpoints.redirectHost),
@@ -58,8 +71,18 @@ nonisolated enum LoopbackCallbackListener {
                     }
                 }
 
+                // Capture the kernel-assigned port exactly once when listener
+                // transitions to `.ready`. We re-read `listener.port` (not the
+                // requested one) so ephemeral-port callers (Track-6 P4) get
+                // the real number to put into the OAuth redirect_uri.
+                let portFiredOnce = ResumeOnce()
                 listener.stateUpdateHandler = { state in
                     switch state {
+                    case .ready:
+                        if portFiredOnce.tryResume(), let onPortAssigned,
+                           let assigned = listener.port?.rawValue {
+                            onPortAssigned(assigned)
+                        }
                     case .failed(let error):
                         listenerLogger.error("listener failed: \(String(describing: error), privacy: .public)")
                         finish(.failure(LoopbackCallbackError.listenerFailed(String(describing: error))))

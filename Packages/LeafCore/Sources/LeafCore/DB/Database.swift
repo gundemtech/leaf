@@ -643,6 +643,20 @@ public final class Database: @unchecked Sendable {
         }
     }
 
+    /// Track-6 P4 — wipe every `provider_snapshots` row for the given provider
+    /// raw key (e.g. `"google_calendar"`). Used by OAuthService.disconnect() so
+    /// a subsequent reconnect starts from clean bootstrap (no stale syncToken,
+    /// no stale `known_calendars`). Idempotent.
+    public func deleteProviderSnapshots(provider: String) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try db.execute(
+                sql: "DELETE FROM provider_snapshots WHERE provider = ?",
+                arguments: [provider]
+            )
+        }
+    }
+
     // MARK: - Team (Phase 5.1.B)
 
     /// UPSERT по `id`. Single-row-per-device convention (contract §4) — на DB
