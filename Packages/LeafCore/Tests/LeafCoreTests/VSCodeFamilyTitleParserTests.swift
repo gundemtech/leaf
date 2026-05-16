@@ -57,4 +57,29 @@ final class VSCodeFamilyTitleParserTests: XCTestCase {
         let obs = VSCodeStableParser.parse("Foo.swift — [SSH: remote-box] leaf — Visual Studio Code")
         XCTAssertEqual(obs?.workspaceName, "leaf")  // SSH prefix stripped
     }
+
+    // MARK: - Cursor
+
+    func test_cursor_defaultFormat() {
+        let obs = CursorParser.parse("Bar.swift — leaf — Cursor")
+        XCTAssertEqual(obs?.ideBundleID, "com.todesktop.230313mzl4w4u92")
+        XCTAssertEqual(obs?.workspaceName, "leaf")
+        XCTAssertEqual(obs?.fileBasename, "Bar.swift")
+    }
+
+    func test_cursor_dirtyMarker() {
+        let obs = CursorParser.parse("● Bar.swift — leaf — Cursor")
+        XCTAssertEqual(obs?.fileBasename, "Bar.swift")
+    }
+
+    func test_cursor_singleFileMode() {
+        let obs = CursorParser.parse("Bar.swift — Cursor")
+        XCTAssertNil(obs?.workspaceName)
+        XCTAssertEqual(obs?.fileBasename, "Bar.swift")
+    }
+
+    func test_cursor_wrongAppNameReturnsNil() {
+        let obs = CursorParser.parse("Foo.swift — leaf — Visual Studio Code")
+        XCTAssertNil(obs)
+    }
 }
