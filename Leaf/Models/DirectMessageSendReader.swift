@@ -24,7 +24,15 @@ final class DirectMessageSendReader {
     enum State: Equatable {
         case idle
         case sending
-        case sent(messageID: String, status: SentDirectMessage.PushDispatchStatus)
+        /// Track 5 / S6 T12 — extended with `crossPost` so the Send sheet can
+        /// render per-channel status rows (Leaf locked + Slack + Linear).
+        /// Empty `CrossPostStatuses` (both slots nil) means caller didn't
+        /// request any cross-post; UI degrades to S4-style single success row.
+        case sent(
+            messageID: String,
+            status: SentDirectMessage.PushDispatchStatus,
+            crossPost: CrossPostStatuses
+        )
         case error(message: String)
     }
 
@@ -64,12 +72,20 @@ final class DirectMessageSendReader {
         state = .idle
     }
 
+    /// Track 5 / S6 T12 — extended with `crossPostSlack` / `crossPostLinear`.
+    /// Both default to nil (S4 single-channel parity). When the Send sheet
+    /// passes one or both, DirectMessageService runs Slack + Linear legs in
+    /// parallel (§9.3 — failure NEVER throws; the DM row persists regardless).
+    /// On success, `.sent` carries the merged `CrossPostStatuses` for the
+    /// status-row renderer.
     func send(
         recipientPubkeyHex: String,
         recipientMemberID: String?,
         kind: DirectMessageKind,
         body: String,
-        notify: Bool
+        notify: Bool,
+        crossPostSlack: SlackCrossPostRequest? = nil,
+        crossPostLinear: LinearCrossPostRequest? = nil
     ) async {
         guard let workspaceID = activeWorkspaceStore.activeWorkspaceID else {
             state = .error(message: "No active workspace")
@@ -93,9 +109,15 @@ final class DirectMessageSendReader {
                 recipientMemberID: recipientMemberID,
                 kind: kind,
                 body: body,
-                notify: notify
+                notify: notify,
+                crossPostSlack: crossPostSlack,
+                crossPostLinear: crossPostLinear
             )
-            state = .sent(messageID: result.messageID, status: result.pushDispatchStatus)
+            state = .sent(
+                messageID: result.messageID,
+                status: result.pushDispatchStatus,
+                crossPost: result.crossPostStatuses
+            )
         } catch let err as LeafError {
             state = .error(message: Self.humanMessage(for: err))
         } catch let err as SupabaseError {
