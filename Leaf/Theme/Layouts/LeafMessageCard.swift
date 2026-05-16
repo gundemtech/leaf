@@ -163,7 +163,7 @@ public struct LeafMessageCard: View {
             Text(row.senderDisplayName)
                 .font(LeafType.title.small)
                 .foregroundStyle(LeafColor.text.primary)
-                .lineLimit(1)
+                .lineLimit(LeafMessageCardTokens.senderNameLineLimit)
 
             // Kind icon
             Image(systemName: kindSymbol(row.kind))
@@ -251,8 +251,8 @@ public struct LeafMessageCard: View {
         .background(
             RoundedRectangle(cornerRadius: LeafRadius.md, style: .continuous)
                 .fill(LeafColor.surface.raised)
-                .shadow(radius: 4)
         )
+        .leafElevation(LeafElevation.floating)
     }
 
     // MARK: Context menu

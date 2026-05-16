@@ -33,4 +33,7 @@ enum LeafMessageCardTokens {
     /// Leading (inbound) or trailing (outbound) inset applied on the opposite
     /// side of the card to visually indent the message.
     static let outboundAlignmentPad: CGFloat = LeafSpace.xl
+
+    /// Max lines for the sender display name before truncation.
+    static let senderNameLineLimit: Int = 1
 }
