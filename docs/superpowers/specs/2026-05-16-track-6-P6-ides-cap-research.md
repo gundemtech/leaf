@@ -543,3 +543,94 @@ Estimated commit count for plan stage: **6-10 atomic commits** (small phase by c
 ---
 
 **End of Stage 0.** Stage 1 (Discovery) gated on Q8a/Q8b/Q8c answers.
+
+---
+
+## 11. Q8 answers + Stage 1 verification (2026-05-16)
+
+### 11.1 User answers
+
+- **Q8a**: Subset MVP — 13 JetBrains IDEs (S2's 11 minus AppCode, plus DataGrip + RustRover + DataSpell). Fleet deferred to acceptance-gate AS-probe.
+- **Q8b**: **Track BOTH** FSEvents — `vscode_workspace_opened` (workspaceStorage CREATE) **and** `jetbrains_recent_project_observed` (per-IDE-per-version multipath `recentProjects[Directories].xml`).
+- **Q8c**: **Per-product parser files** — separate parsers per vscode fork (vscode / Cursor / Insiders / VSCodium minimum).
+
+### 11.2 Stage 1 verified substrate facts
+
+**Fact #1 — AttentionGranularityPolicy already L3 for target bundle IDs.**
+
+`Packages/LeafCore/Sources/LeafCore/Insights/AttentionGranularityPolicy.swift:32-47`:
+
+```swift
+public func maxGranularity(for bundleID: String) -> AttentionGranularityLevel {
+    switch classifier.category(for: bundleID) {
+    case .dev, .browse, .communication, .design:
+        return .l3
+    case .other:
+        return .l1
+    }
+}
+```
+
+`Packages/LeafCorePrivate/Prod/Insights/ProdAppCategoryClassifier.swift:32-47` — `dev:` Set includes `com.apple.dt.Xcode`, `com.todesktop.230313mzl4w4u92` (Cursor), `com.microsoft.VSCode`, `com.visualstudio.code.oss` (Code OSS), `com.jetbrains.intellij`, `com.jetbrains.pycharm`, `com.jetbrains.WebStorm`, `com.jetbrains.AppCode` (stale; remove with P6 cleanup), plus terminals + Zed + Warp.
+
+**Stage 2 decision point**: VSCodium bundle ID is `com.visualstudio.code.oss` (already in classifier). VSCode Insiders likely `com.microsoft.VSCodeInsiders` — NOT in classifier today. P6 brainstorm decides whether to add Insiders bundle ID to classifier or document as known-degraded-to-L1.
+
+**Fact #2 — Today's attention emit is generic.**
+
+`Packages/LeafCore/Sources/LeafCore/Insights/AttentionEmissionPlanner.swift:108-113`:
+
+```swift
+return RawEvent(
+    timestamp: now,
+    signalType: .attention,
+    bundleID: bundleID,
+    payload: payload
+)
+```
+
+Payload (lines 76-94 same file): `{window_title?, browser_url?}` only. **No `event_kind` key.** Generic attention event. Mapper dispatches off `signalType` + `bundleID`, not event_kind.
+
+**Stage 2 decision point**: Two design options for P6 emit:
+- **Option A (planner-level discrimination)**: extend `AttentionEmissionPlanner.plan()` with per-bundle-family parser invocation. Add `event_kind` to payload when bundle matches vscode-family + title regex hits. Otherwise leave generic. Same RawEvent path.
+- **Option B (separate adapter)**: vscode-family adapter that suppresses generic attention for matching bundle IDs and emits its own `vscode_active_doc_changed` shape, parallel to S2 `ProdJetBrainsAdapter` but reading AX title instead of AppleScript. New AgentLifetime slot.
+
+Lean toward **Option A** for first-emit (smaller surface, reuses existing windowPoll cadence) **+ FSEvents-based watcher for workspace-opened** as separate AgentLifetime slot (forks `BrowserBookmarksWatcher` pattern). Stage 2 brainstorm ratifies.
+
+**Fact #3 — `BrowserBookmarksWatcher` lives only on P3 worktree, not main.**
+
+P6 builds on `main` (commit `9b2a53b`). `BrowserBookmarksWatcher` is in `.claude/worktrees/track-6-P3-browsers-deep/Packages/LeafCore/Sources/LeafCore/Collectors/BrowserBookmarksWatcher.swift:55-199` — P6 cannot import it.
+
+**Stage 2 decision point**: P6 either (a) re-implements analogous pattern from scratch for vscode + JetBrains FSEvents (will coexist with P3's once P3 collective-merges), or (b) declares "P6 starts after P3 lands on main." Per contract §5 the two are **independent** — option (a) is the right answer. P6 ships its own `IDEStorageWatcher` (or `VSCodeWorkspaceWatcher` + `JetBrainsRecentProjectsWatcher`) actor on `feature/track-6-P6-ides-cap` independently. Future cleanup phase consolidates if pattern bloats.
+
+**Bonus facts**:
+
+- `JetBrainsObservation` (3 fields): `ideBundleID`, `projectName?`, `activeDocPath?`. Reusable as-is.
+- `JetBrainsStateMachineTests` is 37 LOC, 4 functions. Adding a new bundle ID = inline `JetBrainsObservation(ideBundleID: "com.jetbrains.datagrip", ...)` + assert `payload["ide_bundle_id"]`.
+- `Schema.BodyKinds` (27 constants) — vscode/JB events do not need FTS body dispatch. **No BodyKind addition.**
+- `BrowserBookmarksWatcher` Chrome multi-profile pattern (suffix-filter on `/Bookmarks`, key by parent-dir profile label) — directly forkable for JetBrains per-IDE-per-version multipath (suffix-filter on `/recentProjects.xml` or `/recentProjectDirectories.xml`, key by parent-dir IDE-version label).
+- `BrowserBookmarksFeatureGate` protocol pattern → `IDEStorageFeatureGate` analog: `vscodeStorageEnabled: Bool`, `jetbrainsStorageEnabled: Bool`. New `LocalAppsStore` properties.
+
+### 11.3 Stage 2 brainstorm questions (preview — to be raised in skill flow)
+
+1. **Discrimination layer**: planner-level (Option A above) vs separate-adapter (Option B). Tradeoff = code locality vs S2 architectural symmetry.
+2. **Per-fork parser files boundary** (per Q8c): all 4 (vscode/Cursor/Insiders/VSCodium) at MVP or 2 (vscode + Cursor) with Insiders/VSCodium as v1.1 expansion?
+3. **VSCode Insiders bundle**: add `com.microsoft.VSCodeInsiders` to `ProdAppCategoryClassifier.dev` Set in P6 scope or out-of-scope (P6 cleanup-line vs separate change)?
+4. **Workspace-opened payload shape**: `{event_kind: "vscode_workspace_opened", bundle_id, workspace_name, watched_folder_match: bool}` — extras like `last_seen_count` from `state.vscdb` enrichment?
+5. **JetBrains multipath discovery cadence**: glob `~/Library/Application Support/JetBrains/*/options/recentProjects*.xml` once at Agent start, OR re-glob periodically (user installs new IDE / new version mid-session)?
+6. **Carry-over: AppCode removal lands in P6 OR separate cleanup commit?** Author leans P6 since context is JetBrains bundle list anyway.
+7. **Architecture-doc Layer A bullet update** — drop "(line 56)" reference confusion? Move to P6 spec or just whitepaper changelog?
+8. **VSCode title parser fallback event_kind**: emit `ide_window_title_observed` with raw title (privacy-checked) when default regex fails, OR drop event silently? Lean: emit (default OFF in registry, value to debugging + future fork support).
+
+### 11.4 Stage breakdown estimate (post-Q8)
+
+- **Stage 2** brainstorm full-flow: 8 design sections × ~1-3 turns each = ~15-25 turns.
+- **Stage 3** spec write: ~600-line spec doc.
+- **Stage 4** plan: ~12-18 atomic steps (3 event_kinds + 4 parsers + 2 FSEvents watchers + 2 state machines + tests + integration).
+- **Stage 5** TDD: ~12-18 commits sequential.
+- **Stage 6** code review subagent + receiving review.
+- **Stage 7** verification (build green × 3-5 schemes + smoke caveat — author has no vscode/JB installed → smoke deferred).
+- **Stage 8** ship + whitepaper sync (§7.1-7.4 above).
+
+Conventions §"Одна phase = одна сессия" — Stage 2+ ideally restart in fresh Claude session with this research doc as primary anchor. Brainstorm full-flow per `superpowers:brainstorming` skill should run with clean context.
+
+**End of Stage 0 + Stage 1.** Ready for Stage 2 in same session (if user wants brainstorm to start now) or fresh session (preferred per conventions).
