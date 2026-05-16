@@ -82,4 +82,24 @@ final class VSCodeFamilyTitleParserTests: XCTestCase {
         let obs = CursorParser.parse("Foo.swift — leaf — Visual Studio Code")
         XCTAssertNil(obs)
     }
+
+    // MARK: - VSCode Insiders
+
+    func test_insiders_defaultFormat() {
+        let obs = VSCodeInsidersParser.parse("Foo.swift — leaf — Visual Studio Code - Insiders")
+        XCTAssertEqual(obs?.ideBundleID, "com.microsoft.VSCodeInsiders")
+        XCTAssertEqual(obs?.workspaceName, "leaf")
+        XCTAssertEqual(obs?.fileBasename, "Foo.swift")
+    }
+
+    func test_insiders_singleFileMode() {
+        let obs = VSCodeInsidersParser.parse("Foo.swift — Visual Studio Code - Insiders")
+        XCTAssertNil(obs?.workspaceName)
+        XCTAssertEqual(obs?.fileBasename, "Foo.swift")
+    }
+
+    func test_insiders_wrongAppNameReturnsNil() {
+        let obs = VSCodeInsidersParser.parse("Foo.swift — leaf — Visual Studio Code")
+        XCTAssertNil(obs)
+    }
 }
