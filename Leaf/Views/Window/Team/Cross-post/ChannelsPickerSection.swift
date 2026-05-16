@@ -27,6 +27,8 @@ import LeafCore
 struct ChannelsPickerSection: View {
     @Environment(SlackChannelsReader.self) private var slackChannels
     @Environment(LinearTeamsReader.self) private var linearTeams
+    @Environment(SlackScopesReader.self) private var slackScopes
+    @Environment(LinearScopesReader.self) private var linearScopes
 
     @Binding var slackEnabled: Bool
     @Binding var slackChannelID: String?
@@ -72,8 +74,16 @@ struct ChannelsPickerSection: View {
             }
         }
         .task {
-            await slackChannels.refreshIfStale()
-            await linearTeams.refreshIfStale()
+            // Refresh scopes + cached lists when the sheet first appears.
+            // Without scope refresh here, `crossPostReady` defaults to
+            // false → re-auth banner renders flicker-style on first open
+            // before the readers' init-time refresh resolves. Order is
+            // independent — kick all four concurrently via async let.
+            async let slackScopesRefresh: Void = slackScopes.refresh()
+            async let linearScopesRefresh: Void = linearScopes.refresh()
+            async let slackChannelsRefresh: Void = slackChannels.refreshIfStale()
+            async let linearTeamsRefresh: Void = linearTeams.refreshIfStale()
+            _ = await (slackScopesRefresh, linearScopesRefresh, slackChannelsRefresh, linearTeamsRefresh)
         }
     }
 
