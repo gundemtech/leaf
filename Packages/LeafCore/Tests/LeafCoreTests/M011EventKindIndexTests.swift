@@ -55,7 +55,8 @@ final class M011EventKindIndexTests: XCTestCase {
             XCTAssertTrue(applied.contains("011_event_kind_index"))
             // Track-5 S5: chain extended by M020 (messages_mirror) + M021 (apns_token_local) +
             // M022 (share_rules) + M023 (team_events_mirror) + M024 (team_event_broadcast_offsets).
-            XCTAssertEqual(applied.count, 24)
+            // Track-5 S7: M025 (workspaces.deleted_at_ms + idx_workspaces_active).
+            XCTAssertEqual(applied.count, 25)
         }
     }
 }
