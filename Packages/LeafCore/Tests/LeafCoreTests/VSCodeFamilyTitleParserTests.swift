@@ -118,4 +118,40 @@ final class VSCodeFamilyTitleParserTests: XCTestCase {
         XCTAssertEqual(obs?.fileBasename, "Baz.swift")
         XCTAssertEqual(obs?.workspaceName, "leaf")
     }
+
+    // MARK: - Dispatcher
+
+    func test_dispatcher_routesByBundleID() {
+        XCTAssertNotNil(VSCodeFamilyDispatcher.parse(
+            bundleID: "com.microsoft.VSCode",
+            title: "Foo.swift — leaf — Visual Studio Code"
+        ))
+        XCTAssertNotNil(VSCodeFamilyDispatcher.parse(
+            bundleID: "com.todesktop.230313mzl4w4u92",
+            title: "Foo.swift — leaf — Cursor"
+        ))
+        XCTAssertNotNil(VSCodeFamilyDispatcher.parse(
+            bundleID: "com.microsoft.VSCodeInsiders",
+            title: "Foo.swift — leaf — Visual Studio Code - Insiders"
+        ))
+        XCTAssertNotNil(VSCodeFamilyDispatcher.parse(
+            bundleID: "com.visualstudio.code.oss",
+            title: "Foo.swift — leaf — VSCodium"
+        ))
+    }
+
+    func test_dispatcher_unknownBundleIDReturnsNil() {
+        XCTAssertNil(VSCodeFamilyDispatcher.parse(
+            bundleID: "com.example.UnknownEditor",
+            title: "Foo.swift — leaf — Whatever"
+        ))
+    }
+
+    func test_dispatcher_isVSCodeFamilyMembership() {
+        XCTAssertTrue(VSCodeFamilyDispatcher.isVSCodeFamily(bundleID: "com.microsoft.VSCode"))
+        XCTAssertTrue(VSCodeFamilyDispatcher.isVSCodeFamily(bundleID: "com.todesktop.230313mzl4w4u92"))
+        XCTAssertTrue(VSCodeFamilyDispatcher.isVSCodeFamily(bundleID: "com.microsoft.VSCodeInsiders"))
+        XCTAssertTrue(VSCodeFamilyDispatcher.isVSCodeFamily(bundleID: "com.visualstudio.code.oss"))
+        XCTAssertFalse(VSCodeFamilyDispatcher.isVSCodeFamily(bundleID: "com.apple.dt.Xcode"))
+    }
 }
