@@ -209,6 +209,14 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     case screenshotTaken                  = "screenshot_taken"
     case downloadAdded                    = "download_added"
     case trashChanged                     = "trash_changed"
+
+    // MARK: - Phase Track-6 P5 — Zoom Deep
+    // Duration-tracking pair + EventKit-driven calendar cross-link.
+    // PMI redaction applied at parser boundary (LeafCorePrivate ProdZoomMeetingTopicRedactor).
+    // No new TCC prompt — coalesces over existing 30s polling of zoom.us.app.
+    case zoomMeetingStarted               = "zoom_meeting_started"
+    case zoomMeetingEnded                 = "zoom_meeting_ended"
+    case zoomMeetingCalendarLinked        = "zoom_meeting_calendar_linked"
 }
 
 /// Phase 4.7.A — onboarding default enabled-state per event_kind.
@@ -425,6 +433,13 @@ public enum ShareEventTypeDefaults {
         .init(key: .clipboardEventCount, defaultEnabled: false),
         .init(key: .screenshotTaken, defaultEnabled: false),
         .init(key: .downloadAdded, defaultEnabled: false),
-        .init(key: .trashChanged, defaultEnabled: false)
+        .init(key: .trashChanged, defaultEnabled: false),
+
+        // Phase Track-6 P5 — Zoom Deep. All default OFF per ADR-020.
+        // Duration tracker layers on existing zoom_meeting_state_changed (S2) without
+        // disturbing it; new kinds add session timestamps + calendar cross-link.
+        .init(key: .zoomMeetingStarted, defaultEnabled: false),
+        .init(key: .zoomMeetingEnded, defaultEnabled: false),
+        .init(key: .zoomMeetingCalendarLinked, defaultEnabled: false)
     ]
 }

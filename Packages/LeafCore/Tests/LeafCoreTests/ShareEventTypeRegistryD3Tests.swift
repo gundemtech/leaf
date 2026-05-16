@@ -14,7 +14,7 @@ final class ShareEventTypeRegistryD3Tests: XCTestCase {
         // Track-3 D3 grew registry 97 → 116 (19 Slack deep-sweep kinds).
         // Track-4 S1 grew 116 → 125 (9 architecture catch-up kinds).
         // D3 keys' presence above is the core invariant; size is sanity-only.
-        XCTAssertEqual(ShareEventTypeKey.allCases.count, 152)
+        XCTAssertEqual(ShareEventTypeKey.allCases.count, 155)
     }
 
     func testAllD3KeysDefaultOff() {
