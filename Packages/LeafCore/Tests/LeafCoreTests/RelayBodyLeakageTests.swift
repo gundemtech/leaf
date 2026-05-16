@@ -1826,4 +1826,202 @@ final class RelayBodyLeakageTests: XCTestCase {
             collectorID: "local_files"
         )
     }
+
+    // MARK: - Phase Track-6 P4 — Google Calendar mapper walkbacks (42 = 7×6)
+    //
+    // Mapper-level sweep — for each of 6 google_calendar_* event_kinds and
+    // each of 7 forbidden-field families, inject a unique sentinel through
+    // the Codable boundary (raw JSON → JSONDecoder → GoogleCalendarAPI.Event)
+    // and assert the sentinel does NOT appear in the mapper's output payload
+    // when serialised to JSON. Spec §6.4 forbidden-fields, §11.2 walkback
+    // strategy.
+    //
+    // Defense-in-depth: some sentinels (conferenceData.entryPoints[].uri,
+    // workingLocationProperties.officeLocation.buildingId / customLocation.label)
+    // are filtered at the Codable boundary by `GoogleCalendarAPI` —
+    // intentionally not decoded. The test still passes (sentinel absent
+    // from output) and locks-in that property too.
+    //
+    // Presence-state walkback is NOT duplicated here: the
+    // `GoogleCalendarCollector` composite write feeds
+    // `presence_state.google_calendar.state_json` only with counts / bools /
+    // bucket enums (last_synced_at_ms, in_focus_block, working_location_type,
+    // etc.) — no user-authored fields ever flow that path. The
+    // mapper-output sweep below is the relevant ADR-010 enforcement.
+
+    /// One sentinel per forbidden-field family (spec §6.4).
+    private static let googleCalendarSentinels: [(field: String, sentinel: String)] = [
+        ("description",                                       "SECRET-GCAL-DESC-WALKBACK"),
+        ("location",                                          "SECRET-GCAL-LOC-WALKBACK"),
+        ("attendees[].email",                                 "SECRET-GCAL-ATTENDEE-WALKBACK@evil.example.com"),
+        ("focusTimeProperties|outOfOfficeProperties.declineMessage",
+                                                              "SECRET-GCAL-DECLINE-WALKBACK"),
+        ("conferenceData.entryPoints[].uri",                  "SECRET-GCAL-CONF-URI-WALKBACK"),
+        ("workingLocationProperties.officeLocation.buildingId",
+                                                              "SECRET-GCAL-BUILDING-WALKBACK"),
+        ("workingLocationProperties.customLocation.label",    "SECRET-GCAL-CUSTOM-LOC-WALKBACK"),
+    ]
+
+    /// Mapping from event_kind to the Google API `eventType` string we need
+    /// in synthetic JSON so the mapper's `(eventType, phase)` switch resolves.
+    /// `_event_observed` is omnibus and accepts any eventType — we use
+    /// "default" so external_attendee_count etc. all compute normally.
+    private static func googleCalendarEventTypeForKind(_ kind: GoogleCalendarEventKind) -> String {
+        switch kind {
+        case .eventObserved:           return "default"
+        case .focusBlockStarted:       return "focusTime"
+        case .focusBlockEnded:         return "focusTime"
+        case .oooStarted:              return "outOfOffice"
+        case .oooEnded:                return "outOfOffice"
+        case .workingLocationChanged:  return "workingLocation"
+        }
+    }
+
+    /// Build an adversarial Google Calendar JSON event with the sentinel
+    /// planted at every forbidden path we care about — then we override one
+    /// specific path for the test focus. Building once with all sentinels
+    /// would conflate failures across fields; instead we build per-pair.
+    ///
+    /// Strategy: ALL non-targeted forbidden paths get neutral non-sentinel
+    /// values (`""` or omission). ONLY the targeted field carries the
+    /// sentinel for this assertion. That way a regression at any single
+    /// field surfaces a clear failure attribution `(kind, field)`.
+    private static func makeGoogleCalendarJSON(
+        kind: GoogleCalendarEventKind,
+        field: String,
+        sentinel: String
+    ) -> String {
+        let eventType = googleCalendarEventTypeForKind(kind)
+
+        // Per-field injection — leave non-targeted forbidden paths empty.
+        let description     = field == "description"                                              ? sentinel : ""
+        let location        = field == "location"                                                 ? sentinel : ""
+        let attendeeEmail   = field == "attendees[].email"                                        ? sentinel : "noreply@example.com"
+        let declineMessage  = field == "focusTimeProperties|outOfOfficeProperties.declineMessage" ? sentinel : ""
+        let confURI         = field == "conferenceData.entryPoints[].uri"                         ? sentinel : "https://meet.example.com/abc"
+        let buildingId      = field == "workingLocationProperties.officeLocation.buildingId"      ? sentinel : ""
+        let customLabel     = field == "workingLocationProperties.customLocation.label"           ? sentinel : ""
+
+        // JSON-escape every interpolated string (sentinels contain no `"` or
+        // backslash, but `attendeeEmail` is an arbitrary email — be safe).
+        func esc(_ s: String) -> String {
+            s.replacingOccurrences(of: "\\", with: "\\\\")
+             .replacingOccurrences(of: "\"", with: "\\\"")
+        }
+
+        return """
+        {
+          "id": "gcal-evt-walkback",
+          "iCalUID": "gcal-evt-walkback@google.com",
+          "status": "confirmed",
+          "summary": "Walkback synthetic",
+          "description": "\(esc(description))",
+          "location": "\(esc(location))",
+          "start": {"dateTime": "2026-05-16T14:00:00+02:00", "timeZone": "Europe/Berlin"},
+          "end":   {"dateTime": "2026-05-16T16:00:00+02:00", "timeZone": "Europe/Berlin"},
+          "eventType": "\(eventType)",
+          "htmlLink": "https://calendar.google.com/event?eid=gcal-evt-walkback",
+          "organizer": {"email": "organizer@example.com", "self": true},
+          "creator":   {"email": "creator@example.com",   "self": true},
+          "attendees": [
+            {"email": "\(esc(attendeeEmail))", "responseStatus": "accepted", "self": true}
+          ],
+          "conferenceData": {
+            "entryPoints": [
+              {"entryPointType": "video", "uri": "\(esc(confURI))", "pin": "1234", "accessCode": "ZZ", "password": "p", "passcode": "pc", "meetingCode": "mc"}
+            ],
+            "conferenceSolution": {"key": {"type": "hangoutsMeet"}}
+          },
+          "focusTimeProperties": {
+            "autoDeclineMode": "declineAllConflictingInvitations",
+            "declineMessage": "\(esc(declineMessage))",
+            "chatStatus": "doNotDisturb"
+          },
+          "outOfOfficeProperties": {
+            "autoDeclineMode": "declineAllConflictingInvitations",
+            "declineMessage": "\(esc(declineMessage))"
+          },
+          "workingLocationProperties": {
+            "type": "officeLocation",
+            "officeLocation": {
+              "buildingId": "\(esc(buildingId))",
+              "floorId": "F2",
+              "deskId": "D17",
+              "label": "Headquarters"
+            },
+            "customLocation": {"label": "\(esc(customLabel))"}
+          }
+        }
+        """
+    }
+
+    /// Invoke the right mapper entry point for `kind` and return the
+    /// resulting payload dict (or `[:]` if mapper returned nil — a regression
+    /// would have to first restore payload emission to leak anything).
+    private func mapGoogleCalendarEvent(
+        _ event: GoogleCalendarAPI.Event,
+        kind: GoogleCalendarEventKind
+    ) -> [String: Any] {
+        let calendar = GoogleCalendarSyncTokenStore.KnownCalendar(
+            id: "me@example.com",
+            summary: "primary",
+            summaryOverride: nil,
+            accessRole: "owner",
+            primary: true,
+            colorId: nil,
+            timeZone: "Europe/Berlin"
+        )
+        switch kind {
+        case .eventObserved:
+            return GoogleCalendarEventMapper.makeObservedPayload(
+                event, calendar: calendar, userDomain: "example.com"
+            ) ?? [:]
+        case .focusBlockStarted:
+            return GoogleCalendarEventMapper.makeTransitionPayload(
+                event: event, phase: .started, calendarId: calendar.id
+            ) ?? [:]
+        case .focusBlockEnded:
+            return GoogleCalendarEventMapper.makeTransitionPayload(
+                event: event, phase: .ended, calendarId: calendar.id
+            ) ?? [:]
+        case .oooStarted:
+            return GoogleCalendarEventMapper.makeTransitionPayload(
+                event: event, phase: .started, calendarId: calendar.id
+            ) ?? [:]
+        case .oooEnded:
+            return GoogleCalendarEventMapper.makeTransitionPayload(
+                event: event, phase: .ended, calendarId: calendar.id
+            ) ?? [:]
+        case .workingLocationChanged:
+            return GoogleCalendarEventMapper.makeTransitionPayload(
+                event: event, phase: .changed, calendarId: calendar.id
+            ) ?? [:]
+        }
+    }
+
+    /// 42-assertion sweep: 6 event_kinds × 7 forbidden fields.
+    /// Each (kind, field) pair injects a unique sentinel through the Codable
+    /// boundary, runs the mapper, serialises the output payload to JSON, and
+    /// asserts the sentinel substring is absent.
+    func testEveryForbiddenSentinelIsStrippedFromGoogleCalendarPayloads() throws {
+        for kind in GoogleCalendarEventKind.allCases {
+            for (field, sentinel) in Self.googleCalendarSentinels {
+                let json = Self.makeGoogleCalendarJSON(
+                    kind: kind, field: field, sentinel: sentinel
+                )
+                let data = try XCTUnwrap(json.data(using: .utf8))
+                let event = try JSONDecoder().decode(GoogleCalendarAPI.Event.self, from: data)
+                let payload = mapGoogleCalendarEvent(event, kind: kind)
+                let serialised = try JSONSerialization.data(
+                    withJSONObject: payload, options: [.sortedKeys]
+                )
+                let payloadJSON = String(data: serialised, encoding: .utf8) ?? ""
+                XCTAssertFalse(
+                    payloadJSON.contains(sentinel),
+                    "Sentinel '\(sentinel)' for forbidden field '\(field)' leaked into "
+                    + "\(kind.rawValue) mapper output: \(payloadJSON)"
+                )
+            }
+        }
+    }
 }
