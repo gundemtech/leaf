@@ -237,4 +237,29 @@ final class DispatchCoverageTests: XCTestCase {
             )
         }
     }
+
+    // MARK: - Track-6 P6 Activity-tab visibility fence
+    //
+    // `ActivityFeedMapper.trackFourLocalOSKinds` is the canonical whitelist of
+    // local-OS event_kinds that render rows in the Activity tab. Every kind in
+    // that set must have a matching `ShareEventTypeKey` entry so Share Controls
+    // can gate its emission.
+    //
+    // `ide_window_title_observed` is registered in ShareEventTypeKey (Task 8)
+    // but is intentionally excluded from `trackFourLocalOSKinds` — it is a
+    // debug-only signal that never renders in the Activity tab.
+
+    /// #16 — every kind in `ActivityFeedMapper.trackFourLocalOSKinds` must have
+    /// a matching `ShareEventTypeKey` entry. Auto-derived from the whitelist, so
+    /// additions to `trackFourLocalOSKinds` (e.g. Track-6 P6 vscode/jetbrains
+    /// kinds) are automatically covered without updating this test.
+    func testTrackFourLocalOSKindsAllRegisteredInShareEventTypeKey() {
+        let registry = Set(ShareEventTypeKey.allCases.map { $0.rawValue })
+        for kind in ActivityFeedMapper.trackFourLocalOSKinds {
+            XCTAssertTrue(
+                registry.contains(kind),
+                "ShareEventTypeKey missing entry for Activity-tab-visible kind \(kind)"
+            )
+        }
+    }
 }
