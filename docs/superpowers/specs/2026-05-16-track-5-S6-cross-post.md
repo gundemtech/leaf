@@ -765,6 +765,10 @@ Items NOT in S6 implementation, documented для future tracks:
 - **M17** S7 surfaces recipient-side "Also posted to X" indicator in Team feed. RLS already permits recipient read of `cross_post_log` (M025); just UI surface needed.
 - **M18** Slack `@user` mention resolution: `users.lookupByEmail` / `users.list` fuzzy match to convert literal `@Dmitrii` text to `<@U012AB3CD>` Slack-mention form. A15 — needs new Slack API call; defer to v1.1 per user feedback.
 - **M19** On `invalid_auth` from Slack/Linear, auto-trigger `*OAuthService.disconnect()` to clear stale row. Mac side cleanup. Defer — current state.
+- **M20** LeafCorePrivate moat impls — `ProdSlackChannelsProvider` / `ProdLinearTeamsProvider` / extend `ProdLinearGraphQLProvider.fetchAccessibleUsers`. T13 ships Stubs (empty arrays) → cross-post UI pickers show no channels/teams → user can't actually cross-post until LeafCorePrivate impls land. **Blocks G18 smoke**. Production wiring incremental post-merge.
+- **M21** Track-wide Scopes/Reader DB-fail fallback robustness — `LinearScopesService(grantedOverride: [])` fallback (LeafApp.swift:163-168) silently disables cross-post UI permanently if DB open fails. Same risk applies to `SlackScopesService` (Track 3 D3 pattern) and `GitHubScopesService`. Either propagate DB-open failure to UI error banner OR retry DB-open lazy on each refresh. Defer to Track 6 cleanup.
+- **M22** Linear `X-RateLimit-Complexity-Reset` header capture — symmetric to Slack `Retry-After` (I1). Currently `linear_create_issue/index.ts` only maps status code to `ratelimited` without surfacing reset time. Defer to polish post-MVP.
+- **M23** SwiftUI sheet `.sent` state — `Task.checkCancellation()` inside the 1.5s auto-dismiss sleep would exit cleaner on view dismissal mid-sleep. Defer.
 
 ---
 
@@ -843,9 +847,12 @@ New file `leaf-relay/supabase/tests/190_cross_post_rls.test.sql`:
 - cross_post_log SELECT allowed для recipient
 - cross_post_log INSERT denied для anon
 - cross_post_log INSERT allowed для service_role (Edge Function path)
-- direct_messages cross_post UPDATE denied для non-sender
-- direct_messages cross_post UPDATE allowed для sender
 - (3 more for expires_at + retention_purge expectations)
+
+NOTE: `direct_messages.cross_post` JSONB UPDATE RLS assertions are
+intentionally NOT in §14.2 — per §5.2 the `cross_post` JSONB stays
+unused in S6 (cross_post_log is authoritative). Future denormalization
+track will own those assertions.
 
 ≥ 8 new assertions; 18 baseline files + 1 = 19 files.
 
