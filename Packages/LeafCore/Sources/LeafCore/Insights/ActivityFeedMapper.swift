@@ -147,6 +147,8 @@ public enum ActivityFeedMapper {
             return mapGitHub(id: id, timestamp: timestamp, kind: kind, payload: payload)
         case "slack":
             return mapSlack(id: id, timestamp: timestamp, kind: kind, payload: payload)
+        case "google_calendar":
+            return mapGoogleCalendar(id: id, timestamp: timestamp, kind: kind, payload: payload)
         default:
             return nil
         }
@@ -397,6 +399,90 @@ public enum ActivityFeedMapper {
             timestamp: timestamp,
             provider: .slack,
             eventKind: kind.isEmpty ? "slack_event" : kind,
+            primaryText: primary,
+            secondaryText: secondary,
+            bundleID: nil
+        )
+    }
+
+    // MARK: - Google Calendar (Track-6 P4)
+
+    /// Per-event-kind copy mapping for Track-6 P4 Google Calendar events.
+    /// ADR-010 redaction discipline: reads ONLY allowlisted payload fields
+    /// (`summary` — Calendar event title is self-authored, mirrors Linear
+    /// issue title allowance; structural enum buckets like
+    /// `working_location_type` / `chat_status` / `conference_entry_point_type`;
+    /// scalar `attendees_count`). NEVER reads `description` / `location` /
+    /// attendee emails / `decline_message` / conference URI / building/floor/
+    /// desk/label — those fields are forbidden in the payload per spec §6.4
+    /// and never enter primaryText/secondaryText, even if a future collector
+    /// regression were to accidentally store them.
+    private static func mapGoogleCalendar(
+        id: Int64,
+        timestamp: Date,
+        kind: String,
+        payload: [String: String]
+    ) -> ActivityFeedEntry? {
+        let primary: String
+        var secondary: String? = nil
+
+        switch kind {
+        case GoogleCalendarEventKind.eventObserved.rawValue:
+            // `summary` is L4-gated by ShareEventTypeKey.googleCalendarEventObserved
+            // (default OFF) — if user opted in, the title is a self-authored
+            // label, mirroring Linear issue title / GitHub commit message.
+            primary = sanitize(payload["summary"]) ?? "Calendar event"
+            // Tasteful secondary: attendee count (scalar) + video-call hint
+            // (structural bucket). NEVER attendee names / emails / URIs.
+            var parts: [String] = []
+            if let countStr = sanitize(payload["attendees_count"]),
+               let count = Int(countStr), count > 0 {
+                parts.append(count == 1 ? "1 attendee" : "\(count) attendees")
+            }
+            if sanitize(payload["conference_entry_point_type"]) == "video" {
+                parts.append("video call")
+            }
+            if !parts.isEmpty { secondary = parts.joined(separator: " · ") }
+
+        case GoogleCalendarEventKind.focusBlockStarted.rawValue:
+            primary = "Focus block started"
+            // `chat_status` is a structural enum (doNotDisturb / available).
+            if sanitize(payload["chat_status"]) == "doNotDisturb" {
+                secondary = "Do not disturb"
+            }
+
+        case GoogleCalendarEventKind.focusBlockEnded.rawValue:
+            primary = "Focus block ended"
+
+        case GoogleCalendarEventKind.oooStarted.rawValue:
+            primary = "Out of office started"
+
+        case GoogleCalendarEventKind.oooEnded.rawValue:
+            primary = "Out of office ended"
+
+        case GoogleCalendarEventKind.workingLocationChanged.rawValue:
+            // `working_location_type` is a structural enum from Google Calendar
+            // API. NEVER raw building/floor/desk/label fields.
+            let raw = sanitize(payload["working_location_type"]) ?? "homeOffice"
+            let pretty: String = {
+                switch raw {
+                case "homeOffice":     return "home"
+                case "officeLocation": return "office"
+                case "customLocation": return "custom location"
+                default:               return raw
+                }
+            }()
+            primary = "Working from \(pretty)"
+
+        default:
+            return nil
+        }
+
+        return ActivityFeedEntry(
+            id: id,
+            timestamp: timestamp,
+            provider: .googleCalendar,
+            eventKind: kind.isEmpty ? "google_calendar_event" : kind,
             primaryText: primary,
             secondaryText: secondary,
             bundleID: nil

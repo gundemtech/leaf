@@ -111,6 +111,147 @@ final class ActivityFeedMapperTests: XCTestCase {
         XCTAssertEqual(entry?.primaryText, "Huddle: in_a_huddle")
     }
 
+    // MARK: - Google Calendar (Track-6 P4)
+
+    func testMapGoogleCalendarEventObservedReturnsEntryWithSummaryAsPrimary() {
+        let payload = #"{"source":"google_calendar","event_kind":"google_calendar_event_observed","summary":"Sprint planning"}"#
+        let entry = ActivityFeedMapper.map(
+            id: 50, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
+        )
+        XCTAssertEqual(entry?.provider, .googleCalendar)
+        XCTAssertEqual(entry?.eventKind, "google_calendar_event_observed")
+        XCTAssertEqual(entry?.primaryText, "Sprint planning")
+        XCTAssertNil(entry?.secondaryText)
+    }
+
+    func testMapGoogleCalendarEventObservedFallsBackToGenericTitleWhenSummaryMissing() {
+        let payload = #"{"source":"google_calendar","event_kind":"google_calendar_event_observed"}"#
+        let entry = ActivityFeedMapper.map(
+            id: 51, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
+        )
+        XCTAssertEqual(entry?.primaryText, "Calendar event")
+    }
+
+    func testMapGoogleCalendarEventObservedShowsAttendeesCountInSecondary() {
+        let payload = #"{"source":"google_calendar","event_kind":"google_calendar_event_observed","summary":"Team sync","attendees_count":"5"}"#
+        let entry = ActivityFeedMapper.map(
+            id: 52, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
+        )
+        XCTAssertEqual(entry?.primaryText, "Team sync")
+        XCTAssertEqual(entry?.secondaryText, "5 attendees")
+    }
+
+    func testMapGoogleCalendarEventObservedSingleAttendeeUsesSingularLabel() {
+        let payload = #"{"source":"google_calendar","event_kind":"google_calendar_event_observed","summary":"1:1","attendees_count":"1"}"#
+        let entry = ActivityFeedMapper.map(
+            id: 53, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
+        )
+        XCTAssertEqual(entry?.secondaryText, "1 attendee")
+    }
+
+    func testMapGoogleCalendarEventObservedAppendsVideoCallHint() {
+        let payload = #"{"source":"google_calendar","event_kind":"google_calendar_event_observed","summary":"Standup","attendees_count":"3","conference_entry_point_type":"video"}"#
+        let entry = ActivityFeedMapper.map(
+            id: 54, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
+        )
+        XCTAssertEqual(entry?.secondaryText, "3 attendees · video call")
+    }
+
+    func testMapGoogleCalendarFocusBlockStartedReturnsEntry() {
+        let payload = #"{"source":"google_calendar","event_kind":"google_calendar_focus_block_started","chat_status":"doNotDisturb"}"#
+        let entry = ActivityFeedMapper.map(
+            id: 55, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
+        )
+        XCTAssertEqual(entry?.provider, .googleCalendar)
+        XCTAssertEqual(entry?.primaryText, "Focus block started")
+        XCTAssertEqual(entry?.secondaryText, "Do not disturb")
+    }
+
+    func testMapGoogleCalendarFocusBlockEndedReturnsEntry() {
+        let payload = #"{"source":"google_calendar","event_kind":"google_calendar_focus_block_ended"}"#
+        let entry = ActivityFeedMapper.map(
+            id: 56, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
+        )
+        XCTAssertEqual(entry?.primaryText, "Focus block ended")
+        XCTAssertNil(entry?.secondaryText)
+    }
+
+    func testMapGoogleCalendarOOOStartedReturnsEntry() {
+        let payload = #"{"source":"google_calendar","event_kind":"google_calendar_ooo_started"}"#
+        let entry = ActivityFeedMapper.map(
+            id: 57, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
+        )
+        XCTAssertEqual(entry?.primaryText, "Out of office started")
+    }
+
+    func testMapGoogleCalendarOOOEndedReturnsEntry() {
+        let payload = #"{"source":"google_calendar","event_kind":"google_calendar_ooo_ended"}"#
+        let entry = ActivityFeedMapper.map(
+            id: 58, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
+        )
+        XCTAssertEqual(entry?.primaryText, "Out of office ended")
+    }
+
+    func testMapGoogleCalendarWorkingLocationChangedHomeOfficeBucket() {
+        let payload = #"{"source":"google_calendar","event_kind":"google_calendar_working_location_changed","working_location_type":"homeOffice"}"#
+        let entry = ActivityFeedMapper.map(
+            id: 59, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
+        )
+        XCTAssertEqual(entry?.primaryText, "Working from home")
+    }
+
+    func testMapGoogleCalendarWorkingLocationChangedOfficeLocationBucket() {
+        let payload = #"{"source":"google_calendar","event_kind":"google_calendar_working_location_changed","working_location_type":"officeLocation"}"#
+        let entry = ActivityFeedMapper.map(
+            id: 60, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
+        )
+        XCTAssertEqual(entry?.primaryText, "Working from office")
+    }
+
+    func testMapGoogleCalendarWorkingLocationChangedCustomLocationBucket() {
+        let payload = #"{"source":"google_calendar","event_kind":"google_calendar_working_location_changed","working_location_type":"customLocation"}"#
+        let entry = ActivityFeedMapper.map(
+            id: 61, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
+        )
+        XCTAssertEqual(entry?.primaryText, "Working from custom location")
+    }
+
+    func testMapGoogleCalendarRejectsUnknownEventKind() {
+        let payload = #"{"source":"google_calendar","event_kind":"google_calendar_made_up"}"#
+        XCTAssertNil(ActivityFeedMapper.map(
+            id: 62, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
+        ))
+    }
+
+    /// ADR-010 sentinel — mapper MUST NOT surface `description` / `location` /
+    /// attendee `email` / `decline_message` / `conference_uri` / building
+    /// labels even if a future regression stored them in the payload. The
+    /// collector is the first line of defence (these keys aren't emitted);
+    /// this test is the second line of defence at the mapper boundary.
+    func testGoogleCalendarMapperDropsForbiddenPayloadFields() {
+        let payload = """
+        {"source":"google_calendar",
+         "event_kind":"google_calendar_event_observed",
+         "summary":"Real title",
+         "description":"SECRET-DESC-XYZ",
+         "location":"SECRET-LOC-XYZ",
+         "attendee_email":"SECRET-EMAIL-XYZ",
+         "decline_message":"SECRET-DECLINE-XYZ",
+         "conference_uri":"https://meet.google.com/SECRET-URI-XYZ",
+         "building_id":"SECRET-BLDG-XYZ"}
+        """
+        let entry = ActivityFeedMapper.map(
+            id: 63, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
+        )
+        let combined = (entry?.primaryText ?? "") + " " + (entry?.secondaryText ?? "")
+        for sentinel in ["SECRET-DESC-XYZ", "SECRET-LOC-XYZ", "SECRET-EMAIL-XYZ",
+                         "SECRET-DECLINE-XYZ", "SECRET-URI-XYZ", "SECRET-BLDG-XYZ"] {
+            XCTAssertFalse(combined.contains(sentinel),
+                           "Mapper leaked forbidden payload sentinel \(sentinel) into row text")
+        }
+        XCTAssertEqual(entry?.primaryText, "Real title")
+    }
+
     // MARK: - Pulse / state filtering
 
     func testSkipsLinearWorkloadPulse() {

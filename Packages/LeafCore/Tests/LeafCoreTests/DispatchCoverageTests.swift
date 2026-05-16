@@ -237,4 +237,41 @@ final class DispatchCoverageTests: XCTestCase {
             )
         }
     }
+
+    /// #16 — Track-6 P4 Google Calendar parity fence. Every
+    /// `GoogleCalendarEventKind.allCases.rawValue` must be either handled by
+    /// `ActivityFeedMapper.mapGoogleCalendar` (returning non-nil for a
+    /// minimal synthetic payload) OR explicitly in
+    /// `ActivityFeedMapper.skippedKinds`. Locks future drift — if a 7th
+    /// Google Calendar kind is added to the enum without wiring into the
+    /// mapper switch this test breaks loudly.
+    func testEveryGoogleCalendarEventKindKeyMappedOrSkipped() {
+        for kind in GoogleCalendarEventKind.allCases {
+            if ActivityFeedMapper.skippedKinds.contains(kind.rawValue) {
+                continue
+            }
+            let payload = #"{"source":"google_calendar","event_kind":"\#(kind.rawValue)"}"#
+            let entry = ActivityFeedMapper.map(
+                id: 1,
+                timestampMs: 1_700_000_000_000,
+                signalType: "context",
+                bundleID: nil,
+                payloadJSON: payload
+            )
+            XCTAssertNotNil(
+                entry,
+                "ActivityFeedMapper.mapGoogleCalendar must handle \(kind.rawValue) or skippedKinds must include it"
+            )
+            XCTAssertEqual(
+                entry?.provider,
+                .googleCalendar,
+                "ActivityFeedMapper.mapGoogleCalendar must return provider=.googleCalendar for \(kind.rawValue)"
+            )
+            XCTAssertEqual(
+                entry?.eventKind,
+                kind.rawValue,
+                "ActivityFeedEntry.eventKind must round-trip for \(kind.rawValue)"
+            )
+        }
+    }
 }

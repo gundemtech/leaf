@@ -53,4 +53,40 @@ final class EventKindIconTests: XCTestCase {
         // S1 (9) + S2 (14) + S3 (10 visible — 3 in skippedKinds) = 33.
         XCTAssertEqual(ActivityFeedMapper.trackFourLocalOSKinds.count, 33)
     }
+
+    // MARK: - Track-6 P4 — Google Calendar Deep
+
+    func testGoogleCalendarEventObservedSymbol() {
+        XCTAssertEqual(EventKindIcon.symbol(for: "google_calendar_event_observed"), "calendar")
+    }
+
+    func testGoogleCalendarFocusBlockPairSharesSymbol() {
+        let started = EventKindIcon.symbol(for: "google_calendar_focus_block_started")
+        let ended   = EventKindIcon.symbol(for: "google_calendar_focus_block_ended")
+        XCTAssertEqual(started, "moon.fill")
+        XCTAssertEqual(started, ended)
+    }
+
+    func testGoogleCalendarOOOPairSharesSymbol() {
+        let started = EventKindIcon.symbol(for: "google_calendar_ooo_started")
+        let ended   = EventKindIcon.symbol(for: "google_calendar_ooo_ended")
+        XCTAssertEqual(started, "airplane")
+        XCTAssertEqual(started, ended)
+    }
+
+    func testGoogleCalendarWorkingLocationChangedSymbol() {
+        XCTAssertEqual(
+            EventKindIcon.symbol(for: "google_calendar_working_location_changed"),
+            "building.2"
+        )
+    }
+
+    func testEveryGoogleCalendarEventKindHasIconMapping() {
+        for kind in GoogleCalendarEventKind.allCases {
+            XCTAssertNotNil(
+                EventKindIcon.symbol(for: kind.rawValue),
+                "Missing SF Symbol mapping for \(kind.rawValue)"
+            )
+        }
+    }
 }
