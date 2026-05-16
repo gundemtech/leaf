@@ -86,13 +86,14 @@ extension SupabaseClient {
         slackUserToken: String
     ) async throws -> SlackCrossPostResult {
         let session = try await ensureAuthenticated()
-        guard let pubkey = session.pubkeyClaim, !pubkey.isEmpty else {
+        // Pubkey claim presence is a fail-fast precondition; the Edge
+        // Function re-verifies it server-side against
+        // direct_messages.sender_pubkey. We don't send pubkey in the body —
+        // the function extracts it from the JWT itself — so this is purely
+        // a defensive check on the local session shape.
+        guard (session.pubkeyClaim?.isEmpty == false) else {
             throw SupabaseError.identityClaimMissing
         }
-        // Pubkey claim presence verified above; the Edge Function re-verifies
-        // it server-side against direct_messages.sender_pubkey. We don't send
-        // pubkey in the body — function extracts it from the JWT itself.
-        _ = pubkey
 
         let url = SupabaseEndpoint.slackPost(baseURL: baseURL)
         var request = URLRequest(url: url)
@@ -165,10 +166,11 @@ extension SupabaseClient {
         linearUserToken: String
     ) async throws -> LinearCrossPostResult {
         let session = try await ensureAuthenticated()
-        guard let pubkey = session.pubkeyClaim, !pubkey.isEmpty else {
+        // See triggerSlackPost for the rationale — fail-fast on missing
+        // pubkey claim; Edge Function re-verifies server-side from JWT.
+        guard (session.pubkeyClaim?.isEmpty == false) else {
             throw SupabaseError.identityClaimMissing
         }
-        _ = pubkey
 
         let url = SupabaseEndpoint.linearCreateIssue(baseURL: baseURL)
         var request = URLRequest(url: url)
