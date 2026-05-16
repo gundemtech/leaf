@@ -30,9 +30,9 @@ final class ShareEventTypeRegistryTests: XCTestCase {
     /// Track 3 D3 — registry total 116 keys (97 post-D2 + 19 new Slack deep sweep).
     /// Track 4 S1 grew it 116 → 125 (+9 architecture catch-up).
     /// Track-6 P1 grew it 152 → 168 (+16 Claude Code deep — 2 retroactive + 14 new).
-    /// Track-6 P2 grew it 168 → 174 (+6 Xcode Deep lifecycle).
+    /// Track-6 P2 grew it 168 → 174 (+6 Xcode Deep lifecycle). Track-6 P3 grew it 174 → 182 (+8 Browsers Deep).
     func testCount116() {
-        XCTAssertEqual(ShareEventTypeKey.allCases.count, 174)
+        XCTAssertEqual(ShareEventTypeKey.allCases.count, 182)
     }
 
     /// Track 3 D2 — все GitHub keys must use the canonical `gh_*` rawValue
