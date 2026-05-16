@@ -21,6 +21,15 @@ public enum EventKindIcon {
         // Track-4 S2 — IDE / media / productivity / Zoom / browsers
         case "xcode_active_doc_changed":      return "hammer.fill"
         case "xcode_build_state_changed":     return "hammer"
+
+        // Track-6 P2 — Xcode Deep
+        case "xcode_build_started":           return "hammer.circle"
+        case "xcode_build_finished":          return "hammer.circle.fill"
+        case "xcode_test_run_started":        return "checkmark.diamond"
+        case "xcode_test_run_finished":       return "checkmark.diamond.fill"
+        case "xcode_scheme_changed":          return "square.stack.3d.up"
+        case "xcode_run_destination_changed": return "display"
+
         case "jetbrains_active_doc_changed":  return "chevron.left.forwardslash.chevron.right"
         case "music_track_changed":           return "music.note"
         case "spotify_track_changed":         return "music.note.list"
