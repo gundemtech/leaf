@@ -266,10 +266,10 @@ public protocol DerivedDataCursor: Sendable {
     func allKnownHashes() async -> [String]
 }
 
-public struct CollectorOffsetsDerivedDataCursor: DerivedDataCursor { ... }
+public struct ProviderSnapshotsDerivedDataCursor: DerivedDataCursor { ... }
 ```
 
-- **Persistence:** existing `collector_offsets` table (M013), key namespace `xcode.derived_data.<hash>.last_xcresult_mtime_ms`. No new table.
+- **Persistence:** existing `provider_snapshots` table (M015), single row with `provider="xcode_derived_data"` + `snapshot_kind="cursor"`. JSON shape: `{"hashes": {"Leaf-dqqvphprbvvfkxabaugkymigacwk": 1778932868319, ...}}`. Atomic single-row update on every cursor advance. No new table; no new migration.
 - **Hash extraction:** `<hash>` is the 28-char Xcode-mint hash in the DerivedData path (`Leaf-dqqvphprbvvfkxabaugkymigacwk` → `dqqvphprbvvfkxabaugkymigacwk`). The full directory name (including `<ProjectName>-` prefix) is recorded as the key suffix to preserve human readability in introspection.
 
 ### 4.6 `ProdXcodeAdapter` extension (existing, moat)
@@ -542,11 +542,11 @@ Adds 6 rows to the "What you're sharing" list when the corresponding ShareEventT
 - `OS/XcresultTestSummary.swift` (struct definitions, ~40 LOC)
 - `OS/XcresultParser.swift` (protocol declaration, ~20 LOC)
 - `OS/DerivedDataWatcher.swift` (protocol declaration, ~20 LOC)
-- `Storage/DerivedDataCursor.swift` (protocol + GRDB impl, ~80 LOC)
+- `DB/DerivedDataCursor.swift` (protocol + `ProviderSnapshotsDerivedDataCursor` impl using existing `ProviderSnapshotsStore`, ~80 LOC)
 - `Insights/EventKindIcon+XcodeP2.swift` (icon mapping extension, ~30 LOC)
 - Extended: `Insights/ActivityFeedMapper.swift` (6 new switch cases)
 - Extended: `Share/ShareEventTypeRegistry.swift` (6 new cases)
-- Extended: `Share/ShareEventTypeDefaults.swift` (6 entries)
+- Extended: `Share/ShareEventTypeRegistry.swift` (the same file holds both enum cases AND the defaults array in this codebase — append 6 cases + 6 default entries in one PR)
 
 ### 12.2 New files (moat, `Packages/LeafCorePrivate/Sources/LeafCorePrivate/Prod/Collectors/Apple/`)
 
@@ -582,7 +582,7 @@ Adds 6 rows to the "What you're sharing" list when the corresponding ShareEventT
 - `M025` reservation **released**. Comment in `LeafCore/DB/Migrations.swift`:
   > `// M025 — reserved for Track 6 P2 (Xcode Deep). Released 2026-05-16 — P2 ships without new tables. Available for next phase.`
 
-- `collector_offsets` table (M013) reused for cursor — key namespace `xcode.derived_data.<hash>.last_xcresult_mtime_ms`. No schema change.
+- `provider_snapshots` table (M015) reused for cursor — single row `provider="xcode_derived_data"`, `snapshot_kind="cursor"`, JSON value `{"hashes": {hash: mtimeMs, ...}}`. No schema change. No new migration.
 
 ---
 
