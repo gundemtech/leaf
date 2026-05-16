@@ -8,7 +8,10 @@ import os
 public final class Database: @unchecked Sendable {
     public enum Mode: Sendable { case writer, reader }
 
-    private let pool: DatabasePool
+    /// Exposed for LeafCorePrivate (moat): `DBDomainAllowListReader` needs the
+    /// underlying `DatabasePool` to issue read-only queries. Must not be used
+    /// for writes outside of `Database` itself.
+    public let pool: DatabasePool
     private let config: DatabaseConfig
     public let mode: Mode
 
