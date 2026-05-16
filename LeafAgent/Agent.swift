@@ -565,7 +565,8 @@ enum AgentMain {
                 return nil
                 #endif
             },
-            fdaGranted: fdaGranted
+            fdaGranted: fdaGranted,
+            featureGate: localAppsStore
         )
         AgentLifetime.browserBookmarksWatcher = browserBookmarksWatcher
 

@@ -2,13 +2,26 @@ import Foundation
 import CoreServices
 import OSLog
 
-// MARK: - Protocol
+// MARK: - Protocols
 
 /// Phase Track-6 P3 — narrow batch write interface for the bookmarks watcher.
 /// `Database` already conforms via its existing `func write(_ events: [RawEvent]) throws`.
 /// Tests provide an in-memory stub (`MockBookmarkWriter`).
 public protocol BookmarkEventBatchWriter: Sendable {
     func write(_ events: [RawEvent]) throws
+}
+
+/// Phase Track-6 P3 — feature gate that controls whether Chrome / Safari bookmark
+/// FSEvent streams run. Backed by `LocalAppsStore` sub-field toggles in production;
+/// a simple struct in tests. Both streams are OFF by default (opt-in discipline).
+///
+/// `LocalAppsStore` lives in LeafCore and is `Sendable`, so production conformance
+/// requires no extra bridging — the Agent creates a `LocalAppsStore` and passes it
+/// directly (via the `BrowserBookmarksFeatureGate` protocol) to avoid leaking the
+/// full `LocalAppsStore` API into this actor's signature.
+public protocol BrowserBookmarksFeatureGate: Sendable {
+    var chromeEnabled: Bool { get }
+    var safariEnabled: Bool { get }
 }
 
 extension Database: BookmarkEventBatchWriter {
@@ -34,6 +47,11 @@ extension Database: BookmarkEventBatchWriter {
 /// Semantics (cold/warm tick):
 ///   - First FSEvent for a given profile seeds the counter; no emit.
 ///   - Subsequent events compute delta (may be 0 for renames); always emit.
+///
+/// Feature gate: both Chrome and Safari streams only start when the corresponding
+/// `featureGate.chromeEnabled` / `featureGate.safariEnabled` flag is true.
+/// Toggles in Settings have no runtime effect until Agent restart (v1 constraint).
+/// TODO(v1.1): observe a darwin notification on toggle-flip and call `refresh()`.
 public actor BrowserBookmarksWatcher {
     public typealias ChromeCountProbe = @Sendable (_ profileLabel: String) -> Int?
     public typealias SafariCountProbe = @Sendable (_ path: String) -> Int?
@@ -42,6 +60,7 @@ public actor BrowserBookmarksWatcher {
     private let chromeCountProbe: ChromeCountProbe
     private let safariCountProbe: SafariCountProbe
     private let fdaGranted: Bool
+    private let featureGate: any BrowserBookmarksFeatureGate
 
     private var chromeCounts: [String: Int] = [:]
     private var safariCount: Int? = nil
@@ -53,19 +72,21 @@ public actor BrowserBookmarksWatcher {
         writer: any BookmarkEventBatchWriter,
         chromeCountProbe: @escaping ChromeCountProbe,
         safariCountProbe: @escaping SafariCountProbe,
-        fdaGranted: Bool
+        fdaGranted: Bool,
+        featureGate: any BrowserBookmarksFeatureGate
     ) {
         self.writer = writer
         self.chromeCountProbe = chromeCountProbe
         self.safariCountProbe = safariCountProbe
         self.fdaGranted = fdaGranted
+        self.featureGate = featureGate
     }
 
     // MARK: - Lifecycle
 
     public func start() async {
         let chromeRoot = NSHomeDirectory() + "/Library/Application Support/Google/Chrome"
-        if FileManager.default.fileExists(atPath: chromeRoot) {
+        if featureGate.chromeEnabled && FileManager.default.fileExists(atPath: chromeRoot) {
             chromeStream = try? FSEventStream(
                 paths: [chromeRoot],
                 latency: 1.5,
@@ -80,7 +101,7 @@ public actor BrowserBookmarksWatcher {
             }
             chromeStream?.start()
         }
-        if fdaGranted {
+        if featureGate.safariEnabled && fdaGranted {
             let safariDir = NSHomeDirectory() + "/Library/Safari"
             safariStream = try? FSEventStream(
                 paths: [safariDir],
@@ -105,10 +126,18 @@ public actor BrowserBookmarksWatcher {
     // MARK: - Event handlers (visible for tests)
 
     public func handleChromeEvent(profileLabel: String, nowMs: Int64) {
+        // Defense-in-depth: drop events that arrive when toggle is off (e.g.
+        // if toggle flipped after `start()` and before `stop()` tears the stream).
+        guard featureGate.chromeEnabled else { return }
         guard let newCount = chromeCountProbe(profileLabel) else { return }
         let prev = chromeCounts[profileLabel]
+        // MINOR-1: write counter AFTER guard so cold-tick seed reads clearly.
+        // (Spec §8.3: seed → no emit; subsequent → emit delta.)
+        guard let prev else {
+            chromeCounts[profileLabel] = newCount   // cold tick — seed only, no emit
+            return
+        }
         chromeCounts[profileLabel] = newCount
-        guard let prev else { return }   // cold tick — seed only
         try? writer.write([makeEvent(
             bundleID: "com.google.Chrome",
             eventKind: "chrome_bookmark_changed",
@@ -120,12 +149,18 @@ public actor BrowserBookmarksWatcher {
     }
 
     public func handleSafariEvent(nowMs: Int64) {
+        // Defense-in-depth: drop events when toggle is off.
+        guard featureGate.safariEnabled else { return }
         guard fdaGranted else { return }
         let safariPath = NSHomeDirectory() + "/Library/Safari/Bookmarks.plist"
         guard let newCount = safariCountProbe(safariPath) else { return }
         let prev = safariCount
+        // MINOR-1: write counter AFTER guard (mirror Chrome handler).
+        guard let prev else {
+            safariCount = newCount   // cold tick — seed only, no emit
+            return
+        }
         safariCount = newCount
-        guard let prev else { return }   // cold tick — seed only
         try? writer.write([makeEvent(
             bundleID: "com.apple.Safari",
             eventKind: "safari_bookmark_changed",
