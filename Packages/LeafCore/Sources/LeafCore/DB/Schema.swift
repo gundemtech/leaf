@@ -318,6 +318,24 @@ public enum Schema {
         public static let foregroundApp = "foreground_app"
     }
 
+    /// Phase Track-6 P4 — `google_calendar_typed_event_tracker` per-event state
+    /// row for Google Calendar `focusTime` / `outOfOffice` / `workingLocation`
+    /// instances. Scanned each polling tick to detect clock-driven boundary
+    /// crossings (start_ms, end_ms) and emit `_started` / `_ended` / `_changed`
+    /// transition events; per-row `_emitted_at_ms` columns gate idempotency.
+    public enum GoogleCalendarTracker {
+        public static let tableName = "google_calendar_typed_event_tracker"
+        public static let eventID            = "event_id"
+        public static let calendarID         = "calendar_id"
+        public static let iCalUID            = "i_cal_uid"
+        public static let eventType          = "event_type"
+        public static let startMs            = "start_ms"
+        public static let endMs              = "end_ms"
+        public static let startedEmittedAtMs = "started_emitted_at_ms"
+        public static let endedEmittedAtMs   = "ended_emitted_at_ms"
+        public static let upsertedAtMs       = "upserted_at_ms"
+    }
+
     /// Phase Track-1 D2 — FTS5 contentless virtual table over event bodies
     /// (commit_msg / linear_desc / linear_comment / slack_msg / slack_thread_*
     /// / gh_pr / gh_issue_comment / gh_pr_review_comment).

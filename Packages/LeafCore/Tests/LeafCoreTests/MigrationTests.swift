@@ -470,7 +470,8 @@ final class MigrationTests: XCTestCase {
                 Schema.WhereStoppedLog.tableName,
                 Schema.DetectorOffsets.tableName,
                 Schema.ProviderSnapshots.tableName,
-                Schema.IntensityAggregates.tableName
+                Schema.IntensityAggregates.tableName,
+                Schema.GoogleCalendarTracker.tableName,
             ]
             XCTAssertEqual(tables, expected)
         }
