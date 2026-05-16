@@ -132,4 +132,41 @@ struct XcodeBuildLifecycleStateMachineTests {
         #expect(kinds.contains("xcode_run_destination_changed"))
         #expect(kinds.contains("xcode_build_started"))
     }
+
+    /// Edge case: user switches scheme while a build is running. The machine
+    /// emits `xcode_scheme_changed` mid-build but does NOT reset
+    /// `buildStartedMs` — when the build later finishes, `duration_ms` spans
+    /// the scheme switch. Documented (spec §15 known caveat); not a regression.
+    @Test func schemeChangedMidBuild_preservesBuildStartedMs() {
+        var m = XcodeBuildLifecycleStateMachine()
+        _ = m.observe(obs(scheme: "Leaf", state: .idle), nowMs: 100)
+        _ = m.observe(obs(scheme: "Leaf", state: .running), nowMs: 200)
+        let midBuild = m.observe(obs(scheme: "LeafAgent", state: .running), nowMs: 1_200)
+        #expect(midBuild.contains { $0.payload["event_kind"] == "xcode_scheme_changed" })
+        // No build_finished yet — still running.
+        #expect(!midBuild.contains { $0.payload["event_kind"] == "xcode_build_finished" })
+        // No spurious build_started on running→running.
+        #expect(!midBuild.contains { $0.payload["event_kind"] == "xcode_build_started" })
+
+        let finish = m.observe(obs(scheme: "LeafAgent", state: .succeeded), nowMs: 5_200)
+        let finished = finish.first { $0.payload["event_kind"] == "xcode_build_finished" }
+        #expect(finished != nil)
+        // duration_ms = 5200 - 200 (original build start), spans scheme switch.
+        #expect(finished?.payload["duration_ms"] == "5000")
+        #expect(finished?.payload["scheme"] == "LeafAgent")
+    }
+
+    /// Once a build finishes, the next `running` observation must start a fresh
+    /// duration measurement — `buildStartedMs` is reset to nil between builds.
+    @Test func buildStartedMs_clearedBetweenBuilds() {
+        var m = XcodeBuildLifecycleStateMachine()
+        _ = m.observe(obs(state: .idle), nowMs: 100)
+        _ = m.observe(obs(state: .running), nowMs: 200)
+        _ = m.observe(obs(state: .succeeded), nowMs: 1_200)  // first build done
+        _ = m.observe(obs(state: .running), nowMs: 10_000)   // second build starts
+        let finish = m.observe(obs(state: .succeeded), nowMs: 12_000)
+        let finished = finish.first { $0.payload["event_kind"] == "xcode_build_finished" }
+        #expect(finished?.payload["duration_ms"] == "2000",
+                "duration must come from second build's start (10000), not first (200)")
+    }
 }
