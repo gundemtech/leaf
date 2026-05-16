@@ -209,6 +209,14 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     case screenshotTaken                  = "screenshot_taken"
     case downloadAdded                    = "download_added"
     case trashChanged                     = "trash_changed"
+
+    // MARK: - Phase Track-6 P2 — Xcode Deep (6 new kinds, all default OFF per ADR-020)
+    case xcodeBuildStarted                = "xcode_build_started"
+    case xcodeBuildFinished               = "xcode_build_finished"
+    case xcodeTestRunStarted              = "xcode_test_run_started"
+    case xcodeTestRunFinished             = "xcode_test_run_finished"
+    case xcodeSchemeChanged               = "xcode_scheme_changed"
+    case xcodeRunDestinationChanged       = "xcode_run_destination_changed"
 }
 
 /// Phase 4.7.A — onboarding default enabled-state per event_kind.
@@ -425,6 +433,14 @@ public enum ShareEventTypeDefaults {
         .init(key: .clipboardEventCount, defaultEnabled: false),
         .init(key: .screenshotTaken, defaultEnabled: false),
         .init(key: .downloadAdded, defaultEnabled: false),
-        .init(key: .trashChanged, defaultEnabled: false)
+        .init(key: .trashChanged, defaultEnabled: false),
+
+        // Phase Track-6 P2 — Xcode Deep. All default OFF per ADR-020.
+        .init(key: .xcodeBuildStarted, defaultEnabled: false),
+        .init(key: .xcodeBuildFinished, defaultEnabled: false),
+        .init(key: .xcodeTestRunStarted, defaultEnabled: false),
+        .init(key: .xcodeTestRunFinished, defaultEnabled: false),
+        .init(key: .xcodeSchemeChanged, defaultEnabled: false),
+        .init(key: .xcodeRunDestinationChanged, defaultEnabled: false)
     ]
 }
