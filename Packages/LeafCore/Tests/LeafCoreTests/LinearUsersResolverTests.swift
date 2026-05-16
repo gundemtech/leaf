@@ -35,6 +35,30 @@ private actor MockLinearGraphQLProvider: LinearGraphQLProviding {
     func currentCallCount() -> Int { fetchCallCount }
 }
 
+/// Real-latency mock — suspends for `delayMs` before returning so the
+/// I2 inflight-coalescing test exercises the actor reentrancy path that
+/// the prior `isLoading`-style guards failed to handle. Without the
+/// suspension, mocks return synchronously and all callers serialize
+/// before the cache check fires.
+private actor SlowMockLinearGraphQLProvider: LinearGraphQLProviding {
+    private(set) var fetchCallCount = 0
+    private let canned: [LinearUsersResolver.ResolvedUser]
+    private let delayMs: UInt64
+
+    init(canned: [LinearUsersResolver.ResolvedUser], delayMs: UInt64) {
+        self.canned = canned
+        self.delayMs = delayMs
+    }
+
+    func fetchAccessibleUsers() async throws -> [LinearUsersResolver.ResolvedUser] {
+        fetchCallCount += 1
+        try? await Task.sleep(nanoseconds: delayMs * 1_000_000)
+        return canned
+    }
+
+    func currentCallCount() -> Int { fetchCallCount }
+}
+
 /// Helper — build ResolvedUser without verbose init in every test.
 private func user(_ id: String, displayName: String, name: String? = nil) -> LinearUsersResolver.ResolvedUser {
     LinearUsersResolver.ResolvedUser(id: id, displayName: displayName, name: name ?? displayName)
@@ -170,6 +194,39 @@ struct LinearUsersResolverTests {
         }
         let count = await mock.currentCallCount()
         #expect(count == 1)
+    }
+
+    @Test("concurrent calls AWAIT inflight Task under real-latency provider")
+    func concurrentInflightCoalesce() async throws {
+        // Mock with explicit suspension simulates production HTTP latency.
+        // Under the prior actor-reentrancy pattern, all 20 concurrent
+        // resolve() callers entered the actor, saw stale cache (nil), and
+        // each fired their own fetchAccessibleUsers() call. With the
+        // inflight Task pattern, only one fetch happens; the rest await
+        // the same Task.value.
+        let mock = SlowMockLinearGraphQLProvider(
+            canned: [user("u1", displayName: "Test")],
+            delayMs: 50
+        )
+        let resolver = LinearUsersResolver(provider: mock)
+
+        let results = await withTaskGroup(of: String?.self) { group in
+            for _ in 0..<20 {
+                group.addTask {
+                    try? await resolver.resolve(displayName: "Test")
+                }
+            }
+            var ids: [String?] = []
+            for await r in group { ids.append(r) }
+            return ids
+        }
+
+        // All 20 resolve correctly to the same id…
+        #expect(results.count == 20)
+        #expect(results.allSatisfy { $0 == "u1" })
+        // …provider fetched exactly once.
+        let count = await mock.currentCallCount()
+        #expect(count == 1, "expected single fetch under real latency, got \(count)")
     }
 
     // MARK: - Error propagation

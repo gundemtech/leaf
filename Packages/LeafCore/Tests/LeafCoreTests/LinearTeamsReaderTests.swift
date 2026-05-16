@@ -108,6 +108,30 @@ struct LinearTeamsReaderTests {
         let count = await mock.currentCallCount()
         #expect(count == 1)
     }
+
+    @Test("inflight Task coalescing — N concurrent calls all observe populated state, fetch once")
+    func concurrentInflightCoalesce() async {
+        // Regression — see SlackChannelsReaderTests for the rationale. The
+        // prior `guard !isLoading` pattern caused callers 2..N to no-op
+        // out with empty state; inflight Task pattern resolves that.
+        let canned = [LinearTeamsReader.LinearTeam(id: "t1", name: "Engineering", key: "ENG")]
+        let mock = SlowMockLinearTeamsProvider(canned: canned, delayMs: 50)
+        let reader = LinearTeamsReader(provider: mock, ttl: 300, clock: { Date() })
+
+        await withTaskGroup(of: Void.self) { group in
+            for _ in 0..<20 {
+                group.addTask { @Sendable @MainActor in
+                    await reader.refreshOnConnect()
+                }
+            }
+        }
+
+        let count = await mock.currentCallCount()
+        #expect(count == 1, "expected single fetch under inflight coalescing, got \(count)")
+        #expect(reader.teams == canned)
+        #expect(reader.lastFetchedAt != nil)
+        #expect(reader.isLoading == false)
+    }
 }
 
 // MARK: - Test helpers

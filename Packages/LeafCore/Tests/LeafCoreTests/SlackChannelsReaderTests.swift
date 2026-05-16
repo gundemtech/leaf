@@ -146,6 +146,34 @@ struct SlackChannelsReaderTests {
         let count = await mock.currentCallCount()
         #expect(count == 1, "second concurrent refresh must coalesce into the inflight call")
     }
+
+    @Test("inflight Task coalescing — N concurrent calls all observe populated state, fetch once")
+    func concurrentInflightCoalesce() async {
+        // Regression — under the prior `guard !isLoading` pattern, callers
+        // 2..N exited early via the guard branch and observed `channels`
+        // still empty for the duration of the inflight fetch. With the
+        // inflight Task pattern, they await the same Task and end up with
+        // populated state too.
+        let canned = [SlackChannelsReader.SlackChannel(id: "C1", name: "general", isPrivate: false)]
+        let mock = SlowMockSlackChannelsProvider(canned: canned, delayMs: 50)
+        let reader = SlackChannelsReader(provider: mock, ttl: 300, clock: { Date() })
+
+        await withTaskGroup(of: Void.self) { group in
+            for _ in 0..<20 {
+                group.addTask { @Sendable @MainActor in
+                    await reader.refreshOnConnect()
+                }
+            }
+        }
+
+        // Exactly one HTTP fetch.
+        let count = await mock.currentCallCount()
+        #expect(count == 1, "expected single fetch under inflight coalescing, got \(count)")
+        // All callers observe populated state after coalesce.
+        #expect(reader.channels == canned)
+        #expect(reader.lastFetchedAt != nil)
+        #expect(reader.isLoading == false, "isLoading must clear after Task completes")
+    }
 }
 
 // MARK: - Test helpers
