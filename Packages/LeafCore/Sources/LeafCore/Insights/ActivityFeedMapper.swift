@@ -584,7 +584,11 @@ public enum ActivityFeedMapper {
         // Both populate `events` rows for Phase 4.9 Derived Insights (token rollup,
         // turn-duration histogram); chronological feed suppresses them.
         "claude_tokens_used",
-        "claude_turn_ended"
+        "claude_turn_ended",
+        // Track-6 P6 — debug-only signal. Surfaces only when user customizes
+        // `window.title` in a vscode-family IDE such that the parser falls
+        // through to fallback. Never renders in chronological feed.
+        "ide_window_title_observed"
     ]
 
     /// Track-4 S1+S2+S3 Layer A event_kinds with explicit feed rendering.
