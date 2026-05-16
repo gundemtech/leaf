@@ -364,4 +364,109 @@ final class ActivityFeedMapperLocalOSTests: XCTestCase {
         )
         XCTAssertNil(entry, "clipboard_event_count must be filtered (per-tick counter)")
     }
+
+    // MARK: - Phase Track-6 P2 (Xcode Deep — 6 kinds)
+
+    func testXcodeBuildStarted() {
+        let entry = map(
+            kind: "xcode_build_started", signalType: "attention",
+            bundleID: "com.apple.dt.Xcode",
+            extras: ["scheme": "Leaf", "run_destination_bucket": "macos"]
+        )
+        XCTAssertEqual(entry?.primaryText, "Xcode: build started")
+        XCTAssertNotNil(entry?.secondaryText)
+        XCTAssertTrue(entry?.secondaryText?.contains("Leaf") == true)
+    }
+
+    func testXcodeBuildFinishedSucceeded() {
+        let entry = map(
+            kind: "xcode_build_finished", signalType: "attention",
+            bundleID: "com.apple.dt.Xcode",
+            extras: ["status": "succeeded", "scheme": "Leaf",
+                     "run_destination_bucket": "macos"]
+        )
+        XCTAssertEqual(entry?.primaryText, "Xcode: build succeeded")
+    }
+
+    func testXcodeBuildFinishedWithErrors() {
+        let entry = map(
+            kind: "xcode_build_finished", signalType: "attention",
+            bundleID: "com.apple.dt.Xcode",
+            extras: ["status": "failed", "scheme": "Leaf",
+                     "error_count": "4", "run_destination_bucket": "macos"]
+        )
+        XCTAssertEqual(entry?.primaryText, "Xcode: build failed")
+        XCTAssertTrue(entry?.secondaryText?.contains("4 errors") == true)
+    }
+
+    func testXcodeTestRunStarted() {
+        let entry = map(
+            kind: "xcode_test_run_started", signalType: "attention",
+            bundleID: "com.apple.dt.Xcode",
+            extras: ["scheme": "Leaf", "run_destination_bucket": "macos"]
+        )
+        XCTAssertEqual(entry?.primaryText, "Xcode: tests started")
+        XCTAssertEqual(entry?.secondaryText, "Leaf")
+    }
+
+    func testXcodeTestRunFinished() {
+        let entry = map(
+            kind: "xcode_test_run_finished", signalType: "attention",
+            bundleID: "com.apple.dt.Xcode",
+            extras: ["status": "failed", "passed_count": "1500",
+                     "failed_count": "2", "total_count": "1502",
+                     "run_destination_bucket": "ios_simulator"]
+        )
+        XCTAssertEqual(entry?.primaryText, "Xcode: tests failed")
+        XCTAssertEqual(entry?.secondaryText, "1500 passed, 2 failed")
+    }
+
+    func testXcodeSchemeChanged() {
+        let entry = map(
+            kind: "xcode_scheme_changed", signalType: "attention",
+            bundleID: "com.apple.dt.Xcode",
+            extras: ["scheme": "LeafAgent", "scheme_prev": "Leaf",
+                     "project": "Leaf"]
+        )
+        XCTAssertEqual(entry?.primaryText, "Xcode: scheme LeafAgent")
+        XCTAssertEqual(entry?.secondaryText, "Leaf")
+    }
+
+    func testXcodeRunDestinationChanged() {
+        let entry = map(
+            kind: "xcode_run_destination_changed", signalType: "attention",
+            bundleID: "com.apple.dt.Xcode",
+            extras: ["run_destination_bucket": "ios_simulator",
+                     "run_destination_bucket_prev": "macos"]
+        )
+        XCTAssertEqual(entry?.primaryText, "Xcode: target ios_simulator")
+    }
+
+    // ADR-010 walkback fence: synthetic sentinel injected into forbidden
+    // payload positions must NOT appear in entry text (mapper reads only
+    // allowlisted fields).
+    func testXcodeP2_WalkbackSentinel() {
+        let sentinel = "LEAKED_SENTINEL_XCODE_P2"
+        let kinds = ["xcode_build_started", "xcode_build_finished",
+                     "xcode_test_run_started", "xcode_test_run_finished",
+                     "xcode_scheme_changed", "xcode_run_destination_changed"]
+        for kind in kinds {
+            let entry = map(
+                kind: kind, signalType: "attention",
+                bundleID: "com.apple.dt.Xcode",
+                extras: [
+                    "raw_device_name": sentinel,
+                    "error_message": sentinel,
+                    "test_identifier": sentinel,
+                    "build_log": sentinel
+                ]
+            )
+            if let e = entry {
+                XCTAssertFalse(e.primaryText.contains(sentinel),
+                               "\(kind) leaked sentinel in primaryText")
+                XCTAssertFalse(e.secondaryText?.contains(sentinel) == true,
+                               "\(kind) leaked sentinel in secondaryText")
+            }
+        }
+    }
 }
