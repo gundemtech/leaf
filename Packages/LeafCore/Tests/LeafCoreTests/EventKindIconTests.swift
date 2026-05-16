@@ -53,4 +53,19 @@ final class EventKindIconTests: XCTestCase {
         // S1 (9) + S2 (14) + S3 (10 visible — 3 in skippedKinds) = 33.
         XCTAssertEqual(ActivityFeedMapper.trackFourLocalOSKinds.count, 33)
     }
+
+    // Track-6 P6 — IDE surface cap
+    func test_p6_vscodeKindsHaveIcons() {
+        XCTAssertEqual(EventKindIcon.symbol(for: "vscode_active_doc_changed"),
+                       "chevron.left.forwardslash.chevron.right")
+        XCTAssertEqual(EventKindIcon.symbol(for: "vscode_workspace_opened"),
+                       "folder.fill.badge.plus")
+        XCTAssertEqual(EventKindIcon.symbol(for: "jetbrains_recent_project_observed"),
+                       "chevron.left.forwardslash.chevron.right")
+    }
+
+    func test_p6_ideWindowTitleObservedHasNoIcon() {
+        // Debug-only signal, skipped by ActivityFeedMapper — no icon.
+        XCTAssertNil(EventKindIcon.symbol(for: "ide_window_title_observed"))
+    }
 }

@@ -44,6 +44,13 @@ public enum EventKindIcon {
         case "download_added":                            return "arrow.down.circle"
         case "trash_changed":                             return "trash"
 
+        // Track-6 P6 — IDE surface cap
+        case "vscode_active_doc_changed":          return "chevron.left.forwardslash.chevron.right"
+        case "vscode_workspace_opened":            return "folder.fill.badge.plus"
+        case "jetbrains_recent_project_observed":  return "chevron.left.forwardslash.chevron.right"
+        // ide_window_title_observed intentionally absent — debug-only signal,
+        // skipped by ActivityFeedMapper.mapLocalOS, no icon rendered.
+
         default: return nil
         }
     }
