@@ -49,6 +49,11 @@ final class PermissionsService {
     /// backoff). Same UserDefaults backing as the Agent's instance.
     let inputMonitoringPermissionStore: InputMonitoringPermissionStore
 
+    /// Track-6 P1 — shared AI Tools preference store (master Claude Code toggle
+    /// + per-feature sub-toggles like `claude_code.tokens`). Backed by the same
+    /// UserDefaults suite as LocalAppsStore + SystemObserversStore.
+    let aiToolsStore: AIToolsStore
+
     private var pollTimer: Timer?
     private let axCheck: @Sendable () -> Bool
     private let fdaCheck: @Sendable () -> Bool
@@ -66,7 +71,8 @@ final class PermissionsService {
         localAppsStore: LocalAppsStore = LocalAppsStore(),
         localAppsPermissionStore: AppleScriptPermissionStore = AppleScriptPermissionStore(),
         systemObserversStore: SystemObserversStore = SystemObserversStore(),
-        inputMonitoringPermissionStore: InputMonitoringPermissionStore = InputMonitoringPermissionStore()
+        inputMonitoringPermissionStore: InputMonitoringPermissionStore = InputMonitoringPermissionStore(),
+        aiToolsStore: AIToolsStore = AIToolsStore()
     ) {
         self.axCheck = axCheck
         self.fdaCheck = fdaCheck
@@ -77,6 +83,7 @@ final class PermissionsService {
         self.localAppsPermissionStore = localAppsPermissionStore
         self.systemObserversStore = systemObserversStore
         self.inputMonitoringPermissionStore = inputMonitoringPermissionStore
+        self.aiToolsStore = aiToolsStore
         refresh()
     }
 

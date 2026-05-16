@@ -237,4 +237,54 @@ final class DispatchCoverageTests: XCTestCase {
             )
         }
     }
+
+    // MARK: - Track-6 P1 — Claude Code coverage
+
+    /// #16 — every `ClaudeCodeEventKindKey` case has a `ShareEventTypeKey` entry
+    /// by rawValue. Track-6 P1 contract §2.5 fence: single-string identity
+    /// across registry, runtime emission, downstream SQL.
+    func testEveryClaudeCodeEventKindKeyAppearsInShareEventTypeRegistry() {
+        let registry = Set(ShareEventTypeKey.allCases.map { $0.rawValue })
+        for kind in ClaudeCodeEventKindKey.allCases {
+            XCTAssertTrue(
+                registry.contains(kind.rawValue),
+                "ShareEventTypeKey missing entry for \(kind.rawValue)"
+            )
+        }
+    }
+
+    /// #17 — every `ClaudeCodeEventKindKey` case is either in
+    /// `ActivityFeedMapper.claudeCodeAIKinds` (visible) or `.skippedKinds`
+    /// (explicitly hidden). No silent default fallback — every new kind
+    /// requires explicit routing decision. Track-6 P1 §3.5 fence.
+    func testEveryClaudeCodeEventKindKeyMappedOrSkipped() {
+        let visible = ActivityFeedMapper.claudeCodeAIKinds
+        let skipped = ActivityFeedMapper.skippedKinds
+        for kind in ClaudeCodeEventKindKey.allCases {
+            let rv = kind.rawValue
+            XCTAssertTrue(
+                visible.contains(rv) || skipped.contains(rv),
+                "ClaudeCodeEventKindKey.\(kind) — neither in claudeCodeAIKinds nor skippedKinds"
+            )
+        }
+    }
+
+    /// #18 — every `ClaudeCodeEventKindKey` case has a `ShareEventTypeDefaults.all`
+    /// entry, and that entry's `defaultEnabled == false`. Track-6 P1 contract
+    /// §2.5 fitness gate — AI tools are sensitive surface, default OFF.
+    func testEveryClaudeCodeEventKindKeyHasDefaultEntryOff() {
+        let defaults = Dictionary(
+            uniqueKeysWithValues: ShareEventTypeDefaults.all.map { ($0.key.rawValue, $0.defaultEnabled) }
+        )
+        for kind in ClaudeCodeEventKindKey.allCases {
+            XCTAssertNotNil(
+                defaults[kind.rawValue],
+                "ShareEventTypeDefaults missing entry for \(kind.rawValue)"
+            )
+            XCTAssertEqual(
+                defaults[kind.rawValue], false,
+                "\(kind.rawValue) must default OFF per Track-6 P1 contract §2.5"
+            )
+        }
+    }
 }

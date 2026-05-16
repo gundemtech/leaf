@@ -2,9 +2,10 @@ import XCTest
 @testable import LeafCore
 
 final class ShareEventTypeRegistryD3SlackTests: XCTestCase {
+    // Track-6 P1 grew it 152 → 168 (+16 Claude Code deep).
     func testRegistrySize116AfterD3Slack() {
-        XCTAssertEqual(ShareEventTypeKey.allCases.count, 152,
-                       "97 (post-D2) + 19 (D3 Slack) + 9 (S1) + 14 (S2) + 13 (S3) = 152")
+        XCTAssertEqual(ShareEventTypeKey.allCases.count, 168,
+                       "97 (post-D2) + 19 (D3 Slack) + 9 (S1) + 14 (S2) + 13 (S3) + 16 (Track-6 P1) = 168")
     }
 
     func testTwoLegacySlackKindsHaveCanonicalRawValues() {
