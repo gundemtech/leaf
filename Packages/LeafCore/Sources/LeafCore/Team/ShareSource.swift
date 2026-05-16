@@ -20,3 +20,20 @@ public enum ShareSource: String, Sendable, Codable, CaseIterable, Hashable {
     case detectedWhereStopped  = "detected_where_stopped"
     case rawGitHubActivity     = "raw_github_activity"
 }
+
+public extension ShareSource {
+    /// Human-readable display name for UI chips and toggles.
+    var displayName: String {
+        switch self {
+        case .gitCommits:            return "Git Commits"
+        case .linearIssues:          return "Linear Issues"
+        case .slackMentions:         return "Slack Mentions"
+        case .githubPRs:             return "GitHub PRs"
+        case .detectedDecisions:     return "Decisions"
+        case .detectedBlockers:      return "Blockers"
+        case .detectedOpenQuestions: return "Open Questions"
+        case .detectedWhereStopped:  return "Where Stopped"
+        case .rawGitHubActivity:     return "GitHub Activity"
+        }
+    }
+}
