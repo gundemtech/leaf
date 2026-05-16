@@ -217,6 +217,48 @@ final class DispatchCoverageTests: XCTestCase {
         }
     }
 
+    /// #16 — Track-6 P3 browser deep event_kinds (8) must all appear in
+    /// `ActivityFeedMapper.trackFourLocalOSKinds` and produce a non-nil feed
+    /// entry when routed through `ActivityFeedMapper.map`. Guards against
+    /// accidentally dropping a kind from the whitelist set or the switch arms.
+    func testTrackSixP3BrowserKindsHandledByActivityFeedMapper() {
+        let p3EventKinds: [(kind: String, payload: [String: String])] = [
+            ("safari_tab_navigated",  ["event_kind": "safari_tab_navigated",  "current_url": "https://example.com"]),
+            ("chrome_tab_navigated",  ["event_kind": "chrome_tab_navigated",  "current_url": "https://example.com"]),
+            ("arc_tab_navigated",     ["event_kind": "arc_tab_navigated",     "current_url": "https://example.com"]),
+            ("safari_tab_activated",  ["event_kind": "safari_tab_activated",  "current_url": "https://example.com"]),
+            ("chrome_tab_activated",  ["event_kind": "chrome_tab_activated",  "current_url": "https://example.com"]),
+            ("arc_tab_activated",     ["event_kind": "arc_tab_activated",     "current_url": "https://example.com"]),
+            ("chrome_bookmark_changed", ["event_kind": "chrome_bookmark_changed", "delta": "1", "total_count": "42"]),
+            ("safari_bookmark_changed", ["event_kind": "safari_bookmark_changed", "delta": "-1", "total_count": "10"]),
+        ]
+        for (kind, payload) in p3EventKinds {
+            // a) Membership in whitelist set.
+            XCTAssertTrue(
+                ActivityFeedMapper.trackFourLocalOSKinds.contains(kind),
+                "trackFourLocalOSKinds must contain \(kind)"
+            )
+            // b) map() produces non-nil (switch arm exercised).
+            let payloadJSON = encodePayload(payload)
+            let entry = ActivityFeedMapper.map(
+                id: 1,
+                timestampMs: 1_000_000,
+                signalType: "attention",
+                bundleID: nil,
+                payloadJSON: payloadJSON
+            )
+            XCTAssertNotNil(entry, "ActivityFeedMapper.map must return non-nil for \(kind)")
+        }
+    }
+
+    /// Helper — encode a flat [String:String] dict as a compact JSON string
+    /// suitable for `ActivityFeedMapper.map(payloadJSON:)`.
+    private func encodePayload(_ dict: [String: String]) -> String {
+        guard let data = try? JSONSerialization.data(withJSONObject: dict),
+              let s = String(data: data, encoding: .utf8) else { return "{}" }
+        return s
+    }
+
     /// #15 — Track-4 S4 user-authored title/filename event_kinds must round-trip
     /// through `EventsFullTextStore.topLevelBodyKind` to their respective
     /// `Schema.BodyKinds` entries. These kinds carry searchable content in
