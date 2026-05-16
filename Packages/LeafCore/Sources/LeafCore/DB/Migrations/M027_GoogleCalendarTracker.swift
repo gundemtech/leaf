@@ -20,6 +20,10 @@ public extension DatabaseMigrator {
                 t.column(Schema.GoogleCalendarTracker.endMs, .integer).notNull()
                 t.column(Schema.GoogleCalendarTracker.startedEmittedAtMs, .integer)
                 t.column(Schema.GoogleCalendarTracker.endedEmittedAtMs, .integer)
+                // workingLocationType: only populated for event_type='workingLocation' rows.
+                // Stores the bucket string ("homeOffice" | "officeLocation" | "customLocation")
+                // so presence-state reads can resolve current location without joining `events`.
+                t.column(Schema.GoogleCalendarTracker.workingLocationType, .text)
                 t.column(Schema.GoogleCalendarTracker.upsertedAtMs, .integer).notNull()
             }
             try db.execute(sql: """

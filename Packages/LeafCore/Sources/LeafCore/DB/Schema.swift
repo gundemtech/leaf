@@ -333,6 +333,7 @@ public enum Schema {
         public static let endMs              = "end_ms"
         public static let startedEmittedAtMs = "started_emitted_at_ms"
         public static let endedEmittedAtMs   = "ended_emitted_at_ms"
+        public static let workingLocationType = "working_location_type"
         public static let upsertedAtMs       = "upserted_at_ms"
     }
 
