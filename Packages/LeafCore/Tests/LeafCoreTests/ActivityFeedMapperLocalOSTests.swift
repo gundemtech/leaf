@@ -364,4 +364,73 @@ final class ActivityFeedMapperLocalOSTests: XCTestCase {
         )
         XCTAssertNil(entry, "clipboard_event_count must be filtered (per-tick counter)")
     }
+
+    // MARK: - Track-6 P6 — IDE surface cap
+
+    func test_p6_vscodeActiveDocChanged() {
+        // VSCode bundle — "VSCode: <workspace> — <file>"
+        let entry = map(
+            kind: "vscode_active_doc_changed", signalType: "attention",
+            bundleID: "com.microsoft.VSCode",
+            extras: [
+                "workspace_name": "leaf",
+                "file_basename": "Foo.swift",
+                "ide_bundle_id": "com.microsoft.VSCode"
+            ]
+        )
+        XCTAssertEqual(entry?.primaryText, "VSCode: leaf — Foo.swift")
+        XCTAssertEqual(entry?.provider, .local)
+    }
+
+    func test_p6_cursorActiveDocChanged() {
+        // Cursor bundle — app name derived via vscodeAppName(forBundleID:)
+        let entry = map(
+            kind: "vscode_active_doc_changed", signalType: "attention",
+            bundleID: "com.todesktop.230313mzl4w4u92",
+            extras: [
+                "workspace_name": "leaf",
+                "file_basename": "Foo.swift",
+                "ide_bundle_id": "com.todesktop.230313mzl4w4u92"
+            ]
+        )
+        XCTAssertEqual(entry?.primaryText, "Cursor: leaf — Foo.swift")
+    }
+
+    func test_p6_vscodeWorkspaceOpened() {
+        let entry = map(
+            kind: "vscode_workspace_opened", signalType: "attention",
+            bundleID: "com.microsoft.VSCode",
+            extras: [
+                "workspace_name": "leaf-docs",
+                "ide_bundle_id": "com.microsoft.VSCode"
+            ]
+        )
+        XCTAssertEqual(entry?.primaryText, "Opened workspace: leaf-docs")
+    }
+
+    func test_p6_jetbrainsRecentProjectObserved() {
+        // JetBrains recent project — primary "JetBrains: <project>", secondary version dir
+        let entry = map(
+            kind: "jetbrains_recent_project_observed", signalType: "attention",
+            bundleID: "com.jetbrains.pycharm",
+            extras: [
+                "project_name": "ml-research",
+                "ide_version_dir": "PyCharm2025.1",
+                "ide_bundle_id": "com.jetbrains.pycharm"
+            ]
+        )
+        XCTAssertEqual(entry?.primaryText, "JetBrains: ml-research")
+        XCTAssertEqual(entry?.secondaryText, "PyCharm2025.1")
+    }
+
+    func test_p6_ideWindowTitleObservedReturnsNil() {
+        // ide_window_title_observed is debug-only — intentionally NOT in the
+        // whitelist and NOT in the mapLocalOS switch. Must return nil.
+        let entry = map(
+            kind: "ide_window_title_observed", signalType: "attention",
+            bundleID: "com.microsoft.VSCode",
+            extras: ["raw_title": "leaf — ActivityFeedMapper.swift — VSCode"]
+        )
+        XCTAssertNil(entry, "ide_window_title_observed is debug-only and must not render")
+    }
 }
