@@ -100,7 +100,7 @@ Leaf — ambient memory layer для macOS (далее iOS) + Native UI + MCP-с
 SQLCipher таблицы:
 - `events` — raw event stream (5 signal types).
 - `sessions` — aggregated work sessions (boundary = idle или app switch).
-- `ai_events` — отдельно: tool/file attribution из Claude Code / Cursor / Windsurf / Continue hooks. Prompt/response content — нет (ADR-010).
+- AI collaboration events живут в unified `events` table с `signal_type='aiCollaboration'`; per-kind discriminators в `payload_json.event_kind` (Track-6 P1: 16 visible claude_* kinds + retroactive `tool_use`/`user_prompt`). Tool/file attribution из Claude Code / Cursor / Windsurf / Continue hooks landed via ADR-010 allowlist (parser strips `command`/`tool_input`/`tool_response`/`content`/`thinking`/`signature` before emit). Subagent rows distinguishable via non-null `payload_json.agent_id` (M024 partial expression index `idx_events_ai_subagent` covers Phase 4.9 rollup queries). Prompt/response content — никогда (ADR-010).
 - `correlations` — связи между events (populated post-MVP, схема готова).
 - `integrations` — OAuth state (Linear MVP).
 - `blocklist` — user exclusions (apps / URLs / folders).
