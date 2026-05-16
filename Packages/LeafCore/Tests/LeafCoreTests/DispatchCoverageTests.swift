@@ -357,4 +357,38 @@ final class DispatchCoverageTests: XCTestCase {
             )
         }
     }
+
+    // MARK: - Track-6 P2 — Xcode Deep coverage
+
+    /// #20 — Track-6 P2 dispatch parity. All 8 `xcode_*` event_kinds (2
+    /// Track-4 S2 baseline + 6 P2 lifecycle) must appear in:
+    ///   (a) ShareEventTypeKey enum + raw value matches expected
+    ///   (b) ShareEventTypeDefaults.all with `defaultEnabled = false`
+    ///   (c) EventKindIcon.symbol(for:) resolves to non-nil
+    ///   (d) ActivityFeedMapper.trackFourLocalOSKinds whitelist
+    func testDispatchParity_XcodeP2_AllKinds() {
+        let allXcodeKinds: [String] = [
+            "xcode_active_doc_changed", "xcode_build_state_changed",
+            "xcode_build_started", "xcode_build_finished",
+            "xcode_test_run_started", "xcode_test_run_finished",
+            "xcode_scheme_changed", "xcode_run_destination_changed"
+        ]
+        let registry = Set(ShareEventTypeKey.allCases.map { $0.rawValue })
+        let whitelist = ActivityFeedMapper.trackFourLocalOSKinds
+        let defaultsByKey = Dictionary(
+            uniqueKeysWithValues: ShareEventTypeDefaults.all.map {
+                ($0.key.rawValue, $0.defaultEnabled)
+            }
+        )
+        for kind in allXcodeKinds {
+            XCTAssertTrue(registry.contains(kind),
+                          "ShareEventTypeKey missing entry for \(kind)")
+            XCTAssertTrue(whitelist.contains(kind),
+                          "trackFourLocalOSKinds whitelist missing \(kind)")
+            XCTAssertNotNil(EventKindIcon.symbol(for: kind),
+                            "EventKindIcon missing SF Symbol for \(kind)")
+            XCTAssertEqual(defaultsByKey[kind], false,
+                           "\(kind) must default OFF per ADR-020")
+        }
+    }
 }

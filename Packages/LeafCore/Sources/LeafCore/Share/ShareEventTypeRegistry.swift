@@ -253,6 +253,14 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     case googleCalendarOOOStarted             = "google_calendar_ooo_started"
     case googleCalendarOOOEnded               = "google_calendar_ooo_ended"
     case googleCalendarWorkingLocationChanged = "google_calendar_working_location_changed"
+
+    // MARK: - Phase Track-6 P2 — Xcode Deep (6 new kinds, all default OFF per ADR-020)
+    case xcodeBuildStarted                = "xcode_build_started"
+    case xcodeBuildFinished               = "xcode_build_finished"
+    case xcodeTestRunStarted              = "xcode_test_run_started"
+    case xcodeTestRunFinished             = "xcode_test_run_finished"
+    case xcodeSchemeChanged               = "xcode_scheme_changed"
+    case xcodeRunDestinationChanged       = "xcode_run_destination_changed"
 }
 
 /// Phase 4.7.A — onboarding default enabled-state per event_kind.
@@ -504,6 +512,14 @@ public enum ShareEventTypeDefaults {
         .init(key: .googleCalendarFocusBlockEnded, defaultEnabled: false),
         .init(key: .googleCalendarOOOStarted, defaultEnabled: false),
         .init(key: .googleCalendarOOOEnded, defaultEnabled: false),
-        .init(key: .googleCalendarWorkingLocationChanged, defaultEnabled: false)
+        .init(key: .googleCalendarWorkingLocationChanged, defaultEnabled: false),
+
+        // Phase Track-6 P2 — Xcode Deep. All default OFF per ADR-020.
+        .init(key: .xcodeBuildStarted, defaultEnabled: false),
+        .init(key: .xcodeBuildFinished, defaultEnabled: false),
+        .init(key: .xcodeTestRunStarted, defaultEnabled: false),
+        .init(key: .xcodeTestRunFinished, defaultEnabled: false),
+        .init(key: .xcodeSchemeChanged, defaultEnabled: false),
+        .init(key: .xcodeRunDestinationChanged, defaultEnabled: false)
     ]
 }
