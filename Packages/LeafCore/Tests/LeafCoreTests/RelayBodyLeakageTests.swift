@@ -1826,4 +1826,246 @@ final class RelayBodyLeakageTests: XCTestCase {
             collectorID: "local_files"
         )
     }
+
+    // MARK: - Phase Track-6 P5 — Zoom Deep walkbacks
+
+    /// Helper specialized for P5: presence_state row is `.zoom` (mirrors the
+    /// actual collector write path) and we assert sentinels never reach the
+    /// composite presence row's state_json. 8 sentinel families × 3 P5 kinds
+    /// = 24 walkbacks. PMI raw name handled by a separate end-to-end test.
+    private func assertP5DoesNotLeakIntoZoomPresence(
+        eventKind: String,
+        extraPayload: [String: String],
+        markers: [String],
+        file: StaticString = #file,
+        line: UInt = #line
+    ) throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        var payload: [String: String] = ["event_kind": eventKind, "source": "zoom"]
+        for (k, v) in extraPayload { payload[k] = v }
+        let event = RawEvent(
+            timestamp: Date(),
+            signalType: .context,
+            bundleID: "us.zoom.xos",
+            payload: payload
+        )
+        // Realistic P5 presence_state.zoom write — composite row, no PII fields.
+        let zoomPresence = PresenceStateWriter.buildZoomState(
+            meetingActive: true,
+            meetingStartedAtMs: nowMs - 60_000,
+            coldStart: false,
+            linkedCalendarEventID: "safehash00000000",
+            lastObservedAtMs: nowMs
+        )
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: "applescript_zoom", sourceID: "applescript_zoom:test", nowMs: nowMs),
+            presence: (provider: .zoom, state: zoomPresence, derivedMode: nil),
+            nowMs: nowMs
+        )
+        try db.readSQL { rawDB in
+            let stateJSON = (try Row.fetchOne(rawDB, sql:
+                "SELECT state_json FROM presence_state WHERE provider='zoom'")?["state_json"] as String?) ?? ""
+            for m in markers {
+                XCTAssertFalse(stateJSON.contains(m),
+                    "Marker '\(m)' MUST NOT appear in presence_state.zoom.state_json for \(eventKind)",
+                    file: file, line: line)
+            }
+        }
+    }
+
+    // 8 sentinel families × 3 P5 kinds = 24 walkbacks.
+    // Families: attendees, password, chat_history, recording_state,
+    //           participant_names, screen_share_content, meeting_join_url, conference_uri.
+
+    // -- zoom_meeting_started (8) --
+
+    func testRelayDoesNotLeakZoomAttendees_P5_Started() throws {
+        try assertP5DoesNotLeakIntoZoomPresence(
+            eventKind: "zoom_meeting_started",
+            extraPayload: ["attendees": "SECRET-ZOOM-ATTENDEES-P5"],
+            markers: ["SECRET-ZOOM-ATTENDEES-P5"]
+        )
+    }
+    func testRelayDoesNotLeakZoomPassword_P5_Started() throws {
+        try assertP5DoesNotLeakIntoZoomPresence(
+            eventKind: "zoom_meeting_started",
+            extraPayload: ["password": "SECRET-ZOOM-PASSWORD-P5"],
+            markers: ["SECRET-ZOOM-PASSWORD-P5"]
+        )
+    }
+    func testRelayDoesNotLeakZoomChatHistory_P5_Started() throws {
+        try assertP5DoesNotLeakIntoZoomPresence(
+            eventKind: "zoom_meeting_started",
+            extraPayload: ["chat_history": "SECRET-ZOOM-CHAT-P5"],
+            markers: ["SECRET-ZOOM-CHAT-P5"]
+        )
+    }
+    func testRelayDoesNotLeakZoomRecordingState_P5_Started() throws {
+        try assertP5DoesNotLeakIntoZoomPresence(
+            eventKind: "zoom_meeting_started",
+            extraPayload: ["recording_state": "SECRET-ZOOM-RECORDING-P5"],
+            markers: ["SECRET-ZOOM-RECORDING-P5"]
+        )
+    }
+    func testRelayDoesNotLeakZoomParticipantNames_P5_Started() throws {
+        try assertP5DoesNotLeakIntoZoomPresence(
+            eventKind: "zoom_meeting_started",
+            extraPayload: ["participant_names": "SECRET-ZOOM-PARTICIPANTS-P5"],
+            markers: ["SECRET-ZOOM-PARTICIPANTS-P5"]
+        )
+    }
+    func testRelayDoesNotLeakZoomShareContent_P5_Started() throws {
+        try assertP5DoesNotLeakIntoZoomPresence(
+            eventKind: "zoom_meeting_started",
+            extraPayload: ["screen_share_content": "SECRET-ZOOM-SHARE-CONTENT-P5"],
+            markers: ["SECRET-ZOOM-SHARE-CONTENT-P5"]
+        )
+    }
+    func testRelayDoesNotLeakZoomJoinURL_P5_Started() throws {
+        try assertP5DoesNotLeakIntoZoomPresence(
+            eventKind: "zoom_meeting_started",
+            extraPayload: ["meeting_join_url": "SECRET-ZOOM-JOIN-URL-P5"],
+            markers: ["SECRET-ZOOM-JOIN-URL-P5"]
+        )
+    }
+    func testRelayDoesNotLeakZoomConferenceURI_P5_Started() throws {
+        try assertP5DoesNotLeakIntoZoomPresence(
+            eventKind: "zoom_meeting_started",
+            extraPayload: ["conference_uri": "SECRET-ZOOM-CONFERENCE-URI-P5"],
+            markers: ["SECRET-ZOOM-CONFERENCE-URI-P5"]
+        )
+    }
+
+    // -- zoom_meeting_ended (8) --
+
+    func testRelayDoesNotLeakZoomAttendees_P5_Ended() throws {
+        try assertP5DoesNotLeakIntoZoomPresence(
+            eventKind: "zoom_meeting_ended",
+            extraPayload: ["attendees": "SECRET-ZOOM-ATTENDEES-P5"],
+            markers: ["SECRET-ZOOM-ATTENDEES-P5"]
+        )
+    }
+    func testRelayDoesNotLeakZoomPassword_P5_Ended() throws {
+        try assertP5DoesNotLeakIntoZoomPresence(
+            eventKind: "zoom_meeting_ended",
+            extraPayload: ["password": "SECRET-ZOOM-PASSWORD-P5"],
+            markers: ["SECRET-ZOOM-PASSWORD-P5"]
+        )
+    }
+    func testRelayDoesNotLeakZoomChatHistory_P5_Ended() throws {
+        try assertP5DoesNotLeakIntoZoomPresence(
+            eventKind: "zoom_meeting_ended",
+            extraPayload: ["chat_history": "SECRET-ZOOM-CHAT-P5"],
+            markers: ["SECRET-ZOOM-CHAT-P5"]
+        )
+    }
+    func testRelayDoesNotLeakZoomRecordingState_P5_Ended() throws {
+        try assertP5DoesNotLeakIntoZoomPresence(
+            eventKind: "zoom_meeting_ended",
+            extraPayload: ["recording_state": "SECRET-ZOOM-RECORDING-P5"],
+            markers: ["SECRET-ZOOM-RECORDING-P5"]
+        )
+    }
+    func testRelayDoesNotLeakZoomParticipantNames_P5_Ended() throws {
+        try assertP5DoesNotLeakIntoZoomPresence(
+            eventKind: "zoom_meeting_ended",
+            extraPayload: ["participant_names": "SECRET-ZOOM-PARTICIPANTS-P5"],
+            markers: ["SECRET-ZOOM-PARTICIPANTS-P5"]
+        )
+    }
+    func testRelayDoesNotLeakZoomShareContent_P5_Ended() throws {
+        try assertP5DoesNotLeakIntoZoomPresence(
+            eventKind: "zoom_meeting_ended",
+            extraPayload: ["screen_share_content": "SECRET-ZOOM-SHARE-CONTENT-P5"],
+            markers: ["SECRET-ZOOM-SHARE-CONTENT-P5"]
+        )
+    }
+    func testRelayDoesNotLeakZoomJoinURL_P5_Ended() throws {
+        try assertP5DoesNotLeakIntoZoomPresence(
+            eventKind: "zoom_meeting_ended",
+            extraPayload: ["meeting_join_url": "SECRET-ZOOM-JOIN-URL-P5"],
+            markers: ["SECRET-ZOOM-JOIN-URL-P5"]
+        )
+    }
+    func testRelayDoesNotLeakZoomConferenceURI_P5_Ended() throws {
+        try assertP5DoesNotLeakIntoZoomPresence(
+            eventKind: "zoom_meeting_ended",
+            extraPayload: ["conference_uri": "SECRET-ZOOM-CONFERENCE-URI-P5"],
+            markers: ["SECRET-ZOOM-CONFERENCE-URI-P5"]
+        )
+    }
+
+    // -- zoom_meeting_calendar_linked (8) --
+
+    func testRelayDoesNotLeakZoomAttendees_P5_CalendarLinked() throws {
+        try assertP5DoesNotLeakIntoZoomPresence(
+            eventKind: "zoom_meeting_calendar_linked",
+            extraPayload: ["attendees": "SECRET-ZOOM-ATTENDEES-P5"],
+            markers: ["SECRET-ZOOM-ATTENDEES-P5"]
+        )
+    }
+    func testRelayDoesNotLeakZoomPassword_P5_CalendarLinked() throws {
+        try assertP5DoesNotLeakIntoZoomPresence(
+            eventKind: "zoom_meeting_calendar_linked",
+            extraPayload: ["password": "SECRET-ZOOM-PASSWORD-P5"],
+            markers: ["SECRET-ZOOM-PASSWORD-P5"]
+        )
+    }
+    func testRelayDoesNotLeakZoomChatHistory_P5_CalendarLinked() throws {
+        try assertP5DoesNotLeakIntoZoomPresence(
+            eventKind: "zoom_meeting_calendar_linked",
+            extraPayload: ["chat_history": "SECRET-ZOOM-CHAT-P5"],
+            markers: ["SECRET-ZOOM-CHAT-P5"]
+        )
+    }
+    func testRelayDoesNotLeakZoomRecordingState_P5_CalendarLinked() throws {
+        try assertP5DoesNotLeakIntoZoomPresence(
+            eventKind: "zoom_meeting_calendar_linked",
+            extraPayload: ["recording_state": "SECRET-ZOOM-RECORDING-P5"],
+            markers: ["SECRET-ZOOM-RECORDING-P5"]
+        )
+    }
+    func testRelayDoesNotLeakZoomParticipantNames_P5_CalendarLinked() throws {
+        try assertP5DoesNotLeakIntoZoomPresence(
+            eventKind: "zoom_meeting_calendar_linked",
+            extraPayload: ["participant_names": "SECRET-ZOOM-PARTICIPANTS-P5"],
+            markers: ["SECRET-ZOOM-PARTICIPANTS-P5"]
+        )
+    }
+    func testRelayDoesNotLeakZoomShareContent_P5_CalendarLinked() throws {
+        try assertP5DoesNotLeakIntoZoomPresence(
+            eventKind: "zoom_meeting_calendar_linked",
+            extraPayload: ["screen_share_content": "SECRET-ZOOM-SHARE-CONTENT-P5"],
+            markers: ["SECRET-ZOOM-SHARE-CONTENT-P5"]
+        )
+    }
+    func testRelayDoesNotLeakZoomJoinURL_P5_CalendarLinked() throws {
+        try assertP5DoesNotLeakIntoZoomPresence(
+            eventKind: "zoom_meeting_calendar_linked",
+            extraPayload: ["meeting_join_url": "SECRET-ZOOM-JOIN-URL-P5"],
+            markers: ["SECRET-ZOOM-JOIN-URL-P5"]
+        )
+    }
+    func testRelayDoesNotLeakZoomConferenceURI_P5_CalendarLinked() throws {
+        try assertP5DoesNotLeakIntoZoomPresence(
+            eventKind: "zoom_meeting_calendar_linked",
+            extraPayload: ["conference_uri": "SECRET-ZOOM-CONFERENCE-URI-P5"],
+            markers: ["SECRET-ZOOM-CONFERENCE-URI-P5"]
+        )
+    }
+
+    /// PMI sentinel — verifies that the raw "<First> <Last>'s Personal Meeting Room"
+    /// string never lands in presence_state.zoom (the redactor at parser boundary
+    /// converts to "<pmi_meeting>" bucket before the observation reaches state machines).
+    /// This test runs at the relay-write layer; redaction unit tests in
+    /// ProdZoomMeetingTopicRedactorTests cover the regex itself.
+    func testRelayDoesNotLeakRawPMIName_P5() throws {
+        try assertP5DoesNotLeakIntoZoomPresence(
+            eventKind: "zoom_meeting_started",
+            extraPayload: ["meeting_topic": "Dmitrii Demidov's Personal Meeting Room"],
+            markers: ["Dmitrii Demidov's Personal Meeting Room"]
+        )
+    }
 }
