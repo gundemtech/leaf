@@ -391,4 +391,32 @@ final class DispatchCoverageTests: XCTestCase {
                            "\(kind) must default OFF per ADR-020")
         }
     }
+
+    // MARK: - Track-6 P5 — Zoom Deep coverage
+
+    /// #21 — Track-6 P5 parity: every new Zoom-deep kind must be covered by
+    /// (a) `trackFourLocalOSKinds` whitelist, (b) EventKindIcon with non-generic
+    /// SF Symbol, and (c) NOT route through FTS (no searchable body — ADR-010).
+    func testTrack6P5ZoomKindsCoverageParity() {
+        let p5Kinds = [
+            "zoom_meeting_started",
+            "zoom_meeting_ended",
+            "zoom_meeting_calendar_linked"
+        ]
+        for kind in p5Kinds {
+            XCTAssertTrue(
+                ActivityFeedMapper.trackFourLocalOSKinds.contains(kind),
+                "Track-6 P5 kind '\(kind)' missing from trackFourLocalOSKinds whitelist"
+            )
+            let icon = EventKindIcon.symbol(for: kind)
+            XCTAssertNotEqual(icon, "app.dashed",
+                              "Track-6 P5 kind '\(kind)' falls back to generic icon")
+            XCTAssertNotEqual(icon, "questionmark.circle",
+                              "Track-6 P5 kind '\(kind)' has no icon mapping")
+            XCTAssertNil(
+                EventsFullTextStore.bodyKindForTesting(eventKind: kind),
+                "Track-6 P5 kind '\(kind)' must NOT route to FTS — carries no body text"
+            )
+        }
+    }
 }

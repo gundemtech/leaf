@@ -44,6 +44,10 @@ public enum EventKindIcon {
         case "mail_active_mailbox_changed":   return "envelope"
         case "zoom_meeting_state_changed",
              "zoom_meeting_name_observed":    return "video.circle"
+        // Track-6 P5 — Zoom Deep (duration + calendar cross-link).
+        case "zoom_meeting_started":          return "video.fill"
+        case "zoom_meeting_ended":            return "video.slash"
+        case "zoom_meeting_calendar_linked":  return "link.circle"
         case "safari_tabs_changed":           return "safari"
         case "chrome_tabs_changed":           return "globe"
         case "arc_tabs_changed":              return "globe.americas"

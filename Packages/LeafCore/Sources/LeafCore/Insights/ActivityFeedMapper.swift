@@ -609,6 +609,8 @@ public enum ActivityFeedMapper {
         "notes_active_title_changed", "reminder_completed",
         "calendar_app_view_changed", "mail_active_mailbox_changed",
         "zoom_meeting_state_changed", "zoom_meeting_name_observed",
+        // Track-6 P5 — Zoom Deep (duration + calendar cross-link)
+        "zoom_meeting_started", "zoom_meeting_ended", "zoom_meeting_calendar_linked",
         "safari_tabs_changed", "chrome_tabs_changed", "arc_tabs_changed",
         // P3 browser deep (8)
         "safari_tab_navigated", "chrome_tab_navigated", "arc_tab_navigated",
@@ -752,6 +754,19 @@ public enum ActivityFeedMapper {
         case "zoom_meeting_name_observed":
             primary = "Zoom: \(sanitize(payload["meeting_topic"]) ?? "—")"
 
+        // Track-6 P5 — Zoom Deep (duration + calendar cross-link).
+        // ADR-010 redaction: NO meeting_topic / participant_count / share_content /
+        // chat / recording / raw_url read here — only opaque counter + cold-start flag.
+        case "zoom_meeting_started":
+            let coldStart = (payload["cold_start"] ?? "false") == "true"
+            primary = coldStart ? "Zoom meeting (already in progress)" : "Zoom meeting started"
+        case "zoom_meeting_ended":
+            let duration = Int(payload["duration_seconds"] ?? "0") ?? 0
+            primary = "Zoom meeting ended"
+            secondary = "Duration: \(Self.formatDurationCompact(duration))"
+        case "zoom_meeting_calendar_linked":
+            primary = "Zoom meeting linked to calendar"
+
         // S2 — browser tabs (Safari/Chrome/ArcStateMachine emit JSON array under "tabs";
         // count derived structurally — no URL / title strings enter primaryText).
         case "safari_tabs_changed":
@@ -847,6 +862,22 @@ public enum ActivityFeedMapper {
             return String(trimmed.prefix(200)) + "…"
         }
         return trimmed
+    }
+
+    /// Track-6 P5 — compact duration formatter for `zoom_meeting_ended` rows.
+    /// Pure structural derivation from a non-negative integer second count;
+    /// reads no payload strings (ADR-010-safe by construction).
+    ///   < 60s    → "<N>s"
+    ///   < 60min  → "<N>m"
+    ///   ≥ 60min  → "<H>h <M>m"  (M omitted when 0; e.g. "2h" not "2h 0m")
+    static func formatDurationCompact(_ seconds: Int) -> String {
+        let s = max(0, seconds)
+        if s < 60 { return "\(s)s" }
+        let minutes = s / 60
+        if minutes < 60 { return "\(minutes)m" }
+        let hours = minutes / 60
+        let remMin = minutes % 60
+        return remMin == 0 ? "\(hours)h" : "\(hours)h \(remMin)m"
     }
 
     /// Derives the tab count from a `"tabs"` JSON array payload field.

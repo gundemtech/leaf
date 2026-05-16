@@ -545,8 +545,7 @@ Adds 6 rows to the "What you're sharing" list when the corresponding ShareEventT
 - `DB/DerivedDataCursor.swift` (protocol + `ProviderSnapshotsDerivedDataCursor` impl using existing `ProviderSnapshotsStore`, ~80 LOC)
 - `Insights/EventKindIcon+XcodeP2.swift` (icon mapping extension, ~30 LOC)
 - Extended: `Insights/ActivityFeedMapper.swift` (6 new switch cases)
-- Extended: `Share/ShareEventTypeRegistry.swift` (6 new cases)
-- Extended: `Share/ShareEventTypeRegistry.swift` (the same file holds both enum cases AND the defaults array in this codebase — append 6 cases + 6 default entries in one PR)
+- Extended: `Share/ShareEventTypeRegistry.swift` (the same file holds both enum cases AND the defaults array — append 6 cases + 6 default entries in one PR)
 
 ### 12.2 New files (moat, `Packages/LeafCorePrivate/Sources/LeafCorePrivate/Prod/Collectors/Apple/`)
 

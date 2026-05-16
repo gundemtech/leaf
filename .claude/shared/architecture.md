@@ -59,7 +59,11 @@ Leaf — ambient memory layer для macOS (далее iOS) + Native UI + MCP-с
 - AI collaboration hooks — metadata only, prompt/response content отбрасываем на уровне хука (ADR-010 Won't-list):
   - **MVP:** Claude Code hooks (PostToolUse, SessionStart, SessionEnd, UserPromptSubmit) + fallback jsonl-парсинг `~/.claude/projects/*.jsonl`
   - **v1.1:** Cursor Hooks v1.7+ (beforeSubmitPrompt / afterFileEdit / postToolUse / stop), Windsurf Cascade Hooks (`.windsurf/hooks.json`), Continue.dev (`.continue/dev_data/*.jsonl` через FSEvents)
-  - **Surface навсегда (нет per-event API):** GitHub Copilot (org-aggregate через REST `/copilot/usage`, не per-event), ChatGPT Desktop ("Work with Apps" односторонний). Degrade: AX window title + file inference.
+  - **Vendor-blocked surfaces (нет per-event API наружу — won't-list, Track-6 P7):**
+    - **ChatGPT Desktop** (`com.openai.chat`) — capture сегодня только L1 attention (NSWorkspace foreground) + L2 intensity. Outbound surface отсутствует: no REST API на собственные sessions, no AppleScript dictionary, no App Intents introspection, no MCP server served by ChatGPT, no hook SDK. "Work with Apps" — inbound (ChatGPT читает другие apps через AX). Account-level export — email ZIP, не local stream. Re-evaluation trigger list — whitepaper `privacy-security/what-we-dont-capture.md`.
+    - **GitHub Copilot** — org-aggregate через REST `/copilot/usage`, не per-event. Indistinguishable from L1 attention при работе в IDE.
+    - **Apple Intelligence routing** — inbound в ChatGPT через Apple privacy framework; third-party readback Apple не exposes.
+    - Generic AX window-title collector (line 56 выше) — currently planned, не shipped. Когда ship'нется — `com.openai.chat` default-OFF в per-app redaction list (chat title leak'ит intent).
 - Spotlight `NSMetadataQuery` (`kMDItemFSName == ".git"`) — только onboarding wow-момент
 
 **Отложено в v1.1:** AppleScript / Automation (Slack huddle, Xcode active doc) — отдельный TCC-промпт per target app.
