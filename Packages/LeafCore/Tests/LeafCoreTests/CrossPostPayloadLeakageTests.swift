@@ -297,6 +297,57 @@ final class CrossPostPayloadLeakageTests: XCTestCase {
         )
     }
 
+    // MARK: - Sentinel-substring false-positive regression (M18)
+
+    /// Documents a gotcha in `countSentinelOccurrences`: substring matching
+    /// over-counts when a sentinel like "preview" naturally appears inside
+    /// an unrelated, legitimate event_kind such as "linear_preview_changed".
+    /// The walker would tag the occurrence as a leak even though the
+    /// kind is on Layer A/B's allowlist (the kind name is itself public
+    /// metadata that Leaf has chosen to emit).
+    ///
+    /// The right invariant for the leakage suite is: "every sentinel
+    /// occurrence is on the footer attestation surface". This test
+    /// pumps a hypothetical future kind `linear_preview_changed` and
+    /// confirms the substring "preview" appears exactly once + in the
+    /// footer line (not section block / channel / text). The test guards
+    /// against future regressions where the walker would erroneously
+    /// flag legitimate-attestation surfaces as leaks.
+    func testSlackPayload_SentinelSubstringInLegitimateEventKind_IsNotOverCounted() {
+        let ref = AttachedEventRef(
+            eventKind: "linear_preview_changed",   // legitimate kind whose name contains "preview" sentinel
+            externalRef: "LEA-1"
+        )
+        let payload = CrossPostPayloadBuilder.slackPayload(
+            channelID: "C1",
+            messageText: "innocent body",
+            attachedEventRef: ref
+        )
+
+        // The substring "preview" appears exactly once — within the
+        // legitimate footer attestation, not as a banned-key leak.
+        let occurrences = countSentinelOccurrences("preview", in: payload)
+        XCTAssertEqual(
+            occurrences, 1,
+            "sentinel substring in legitimate kind expected once in footer, found \(occurrences)"
+        )
+
+        // Confirm the occurrence is on the footer line specifically.
+        let blocks = payload["blocks"] as? [[String: Any]]
+        let footerElements = blocks?[1]["elements"] as? [[String: Any]]
+        let footerText = (footerElements?.first?["text"] as? String) ?? ""
+        XCTAssertTrue(
+            footerText.contains("linear_preview_changed"),
+            "legitimate eventKind appears in footer (attestation), not a leak"
+        )
+
+        // And NOT on the section block / channel / top-level text.
+        XCTAssertFalse(((payload["text"] as? String) ?? "").contains("preview"))
+        XCTAssertFalse(((payload["channel"] as? String) ?? "").contains("preview"))
+        let sectionText = ((blocks?[0]["text"] as? [String: Any])?["text"] as? String) ?? ""
+        XCTAssertFalse(sectionText.contains("preview"))
+    }
+
     // MARK: - Structural invariants — top-level shape and key set are constants
 
     func testSlackPayload_TopLevelKeysAreConstants() {
