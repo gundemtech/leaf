@@ -142,16 +142,13 @@ public struct ZoomMeetingDurationTracker: Sendable {
     // MARK: - RawEvent builders
 
     private func makeStartedEvent(startedAtMs: Int64, coldStart: Bool, linkedCalEventID: String?) -> RawEvent {
-        var payload: [String: String] = [
+        let payload: [String: String] = [
             "source": "zoom",
             "event_kind": "zoom_meeting_started",
             "started_at_ms": String(startedAtMs),
             "cold_start": coldStart ? "true" : "false",
             "linked_calendar_event_id": linkedCalEventID ?? ""
         ]
-        if let id = linkedCalEventID {
-            payload["linked_calendar_event_id"] = id
-        }
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: Double(startedAtMs) / 1000.0),
             signalType: .context,
@@ -168,7 +165,7 @@ public struct ZoomMeetingDurationTracker: Sendable {
         droppedTransitionsCount: Int,
         linkedCalEventID: String?
     ) -> RawEvent {
-        var payload: [String: String] = [
+        let payload: [String: String] = [
             "source": "zoom",
             "event_kind": "zoom_meeting_ended",
             "started_at_ms": String(startedAtMs),
@@ -178,9 +175,6 @@ public struct ZoomMeetingDurationTracker: Sendable {
             "dropped_transitions_count": String(droppedTransitionsCount),
             "linked_calendar_event_id": linkedCalEventID ?? ""
         ]
-        if let id = linkedCalEventID {
-            payload["linked_calendar_event_id"] = id
-        }
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: Double(endedAtMs) / 1000.0),
             signalType: .context,

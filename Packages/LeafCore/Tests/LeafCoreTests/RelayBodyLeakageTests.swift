@@ -1833,6 +1833,18 @@ final class RelayBodyLeakageTests: XCTestCase {
     /// actual collector write path) and we assert sentinels never reach the
     /// composite presence row's state_json. 8 sentinel families × 3 P5 kinds
     /// = 24 walkbacks. PMI raw name handled by a separate end-to-end test.
+    ///
+    /// **Scope clarification (Track-6 P5 review):** this asserts only that
+    /// `presence_state.zoom.state_json` is constructed via `buildZoomState(...)`
+    /// from typed parameters — therefore it physically cannot include the
+    /// adversarial `extraPayload` fields, regardless of what the input contains.
+    /// The strong guarantee here is the **builder's allowlisted-key schema**
+    /// (locked by `PresenceStateWriterZoomTests.testStateBuilderRefusesRawURLOrTitleByOmission`).
+    /// These walkbacks add coverage at the write-time boundary: if a future
+    /// refactor changes `upsert` to read from event payload instead of the
+    /// builder-constructed dict, the sentinels would leak and this test would
+    /// catch it. Phase 5.4 follow-up will add relay-broadcast-pipeline walkbacks
+    /// once `presence_outgoing` (M011) lands.
     private func assertP5DoesNotLeakIntoZoomPresence(
         eventKind: String,
         extraPayload: [String: String],
