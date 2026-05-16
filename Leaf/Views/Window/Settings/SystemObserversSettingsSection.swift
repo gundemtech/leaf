@@ -6,6 +6,10 @@
 //  has Input Monitoring TCC badge + "Open Settings" CTA. Reads
 //  PermissionsService for SystemObserversStore + InputMonitoringPermissionStore.
 //
+//  Phase Track-6 P3 — +3 browser bookmark rows at the bottom:
+//  Chrome bookmarks (opt-in sub-field on LocalAppsStore) / Safari bookmarks
+//  (same, gated on FDA) / FDA warning CTA when Safari toggle is ON + FDA denied.
+//
 
 import SwiftUI
 import LeafCore
@@ -22,6 +26,26 @@ struct SystemObserversSettingsSection: View {
                 ForEach(Self.observers, id: \.key) { observer in
                     SystemObserverRow(observer: observer, permissions: permissions)
                 }
+                BrowserBookmarkRow(
+                    displayName: "Browser bookmarks — Chrome",
+                    sfSymbol: "bookmark",
+                    explainer: "Tracks count of bookmarks (no titles, no URLs).",
+                    isEnabled: permissions.localAppsStore.browserBookmarksChromeEnabled,
+                    requiresFDA: false,
+                    fdaGranted: permissions.fdaGranted,
+                    onToggle: { permissions.localAppsStore.setBrowserBookmarksChromeEnabled($0) },
+                    onOpenFDA: {}
+                )
+                BrowserBookmarkRow(
+                    displayName: "Browser bookmarks — Safari",
+                    sfSymbol: "safari",
+                    explainer: "Requires Full Disk Access in System Settings.",
+                    isEnabled: permissions.localAppsStore.browserBookmarksSafariEnabled,
+                    requiresFDA: true,
+                    fdaGranted: permissions.fdaGranted,
+                    onToggle: { permissions.localAppsStore.setBrowserBookmarksSafariEnabled($0) },
+                    onOpenFDA: { permissions.openFDAPane() }
+                )
             }
         }
     }
@@ -106,6 +130,65 @@ struct SystemObserverDescriptor: Sendable {
     let sfSymbol: String
     let explainer: String
     let requiresInputMonitoring: Bool
+}
+
+// MARK: - Phase Track-6 P3 — Browser bookmark rows
+
+/// A Settings row for Chrome or Safari bookmark-count observer opt-in.
+/// `requiresFDA` true → shows a warning LeafBanner when the toggle is ON
+/// but Full Disk Access is not granted, with an "Open System Settings" CTA.
+private struct BrowserBookmarkRow: View {
+    let displayName: String
+    let sfSymbol: String
+    let explainer: String
+    let isEnabled: Bool
+    let requiresFDA: Bool
+    let fdaGranted: Bool
+    let onToggle: (Bool) -> Void
+    let onOpenFDA: () -> Void
+
+    @State private var enabled: Bool = false
+
+    var body: some View {
+        LeafCard(variant: .raised, padding: .regular, header: { EmptyView() }) {
+            VStack(alignment: .leading, spacing: LeafSpace.sm) {
+                HStack(alignment: .center, spacing: LeafSpace.md) {
+                    Image(systemName: sfSymbol)
+                        .font(.system(size: 18))
+                        .foregroundStyle(LeafColor.text.secondary)
+                        .frame(width: 28, height: 28)
+                    VStack(alignment: .leading, spacing: LeafSpace.xxs) {
+                        Text(displayName)
+                            .font(LeafType.body.regular)
+                            .foregroundStyle(LeafColor.text.primary)
+                        Text(explainer)
+                            .font(LeafType.body.small)
+                            .foregroundStyle(LeafColor.text.secondary)
+                    }
+                    Spacer(minLength: 0)
+                    Toggle("", isOn: Binding(
+                        get: { enabled },
+                        set: { newValue in
+                            enabled = newValue
+                            onToggle(newValue)
+                        }
+                    )).labelsHidden().toggleStyle(.switch).tint(LeafColor.accent.primary)
+                }
+                if requiresFDA && enabled && !fdaGranted {
+                    LeafBanner(
+                        tone: .warning,
+                        title: "Full Disk Access required",
+                        description: "Safari bookmarks live in ~/Library/Safari — readable only with Full Disk Access. After granting, restart Leaf.",
+                        ctaTitle: "Open System Settings",
+                        onCTA: onOpenFDA
+                    )
+                }
+            }
+        } footer: {
+            EmptyView()
+        }
+        .onAppear { enabled = isEnabled }
+    }
 }
 
 private struct SystemObserverRow: View {

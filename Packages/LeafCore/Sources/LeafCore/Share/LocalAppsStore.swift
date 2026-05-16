@@ -17,6 +17,8 @@ import Combine
 /// Sub-field opt-ins gate the highest-fidelity third-party PII signals:
 ///  - Mail "mailboxName"        — emits `mail_active_mailbox_changed` if true
 ///  - Zoom "ownMeetingTopic"    — emits `zoom_meeting_name_observed` if true
+///  - Chrome "bookmarksEnabled" — emits `chrome_bookmark_changed` if true (Track-6 P3)
+///  - Safari "bookmarksEnabled" — emits `safari_bookmark_changed` if true (Track-6 P3)
 ///
 /// Default is OFF for every (bundleID, field) pair — opt-in is always explicit.
 public final class LocalAppsStore: ObservableObject, @unchecked Sendable {
@@ -79,6 +81,28 @@ public final class LocalAppsStore: ObservableObject, @unchecked Sendable {
         DispatchQueue.main.async { [self] in
             self.objectWillChange.send()
         }
+    }
+
+    // MARK: - Phase Track-6 P3 — Browser bookmark sub-field convenience API
+
+    /// Sub-field key used by Chrome + Safari bookmark watchers and Settings UI.
+    public static let bookmarksEnabledField = "bookmarksEnabled"
+
+    /// Whether the Chrome FSEvents bookmark watcher is opted-in by the user.
+    public var browserBookmarksChromeEnabled: Bool {
+        isSubFieldOptedIn("com.google.Chrome", field: Self.bookmarksEnabledField)
+    }
+    public func setBrowserBookmarksChromeEnabled(_ value: Bool) {
+        setSubFieldOptedIn("com.google.Chrome", field: Self.bookmarksEnabledField, optedIn: value)
+    }
+
+    /// Whether the Safari FSEvents bookmark watcher is opted-in by the user.
+    /// Requires Full Disk Access in addition to this flag being true.
+    public var browserBookmarksSafariEnabled: Bool {
+        isSubFieldOptedIn("com.apple.Safari", field: Self.bookmarksEnabledField)
+    }
+    public func setBrowserBookmarksSafariEnabled(_ value: Bool) {
+        setSubFieldOptedIn("com.apple.Safari", field: Self.bookmarksEnabledField, optedIn: value)
     }
 
     private static func enabledKey(_ bundleID: String) -> String {

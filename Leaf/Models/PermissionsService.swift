@@ -127,6 +127,11 @@ final class PermissionsService {
         openSystemSettings("Privacy_AllFiles")
     }
 
+    /// Phase Track-6 P3 — alias for the Safari bookmark watcher FDA CTA.
+    func openFDAPane() {
+        openFDASettings()
+    }
+
     // MARK: - Phase Track-4 S1 — Calendar + Focus grant flow
 
     /// Triggers Calendar permission prompt via EventKit. On first call shows
