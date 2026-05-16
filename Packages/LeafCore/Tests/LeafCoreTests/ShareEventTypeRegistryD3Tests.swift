@@ -19,7 +19,7 @@ final class ShareEventTypeRegistryD3Tests: XCTestCase {
         // Track-6 P2 grew 182 → 188 (6 Xcode Deep kinds).
         // Track-6 P5 grew 188 → 191 (3 Zoom Deep kinds).
         // D3 keys' presence above is the core invariant; size is sanity-only.
-        XCTAssertEqual(ShareEventTypeKey.allCases.count, 191)
+        XCTAssertEqual(ShareEventTypeKey.allCases.count, 195)
     }
 
     func testAllD3KeysDefaultOff() {

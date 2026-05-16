@@ -269,6 +269,12 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     case zoomMeetingStarted               = "zoom_meeting_started"
     case zoomMeetingEnded                 = "zoom_meeting_ended"
     case zoomMeetingCalendarLinked        = "zoom_meeting_calendar_linked"
+
+    // MARK: - Phase Track-6 P6 — IDEs surface cap (default OFF per ADR-020).
+    case vscodeActiveDocChanged           = "vscode_active_doc_changed"
+    case vscodeWorkspaceOpened            = "vscode_workspace_opened"
+    case jetbrainsRecentProjectObserved   = "jetbrains_recent_project_observed"
+    case ideWindowTitleObserved           = "ide_window_title_observed"
 }
 
 /// Phase 4.7.A — onboarding default enabled-state per event_kind.
@@ -533,6 +539,12 @@ public enum ShareEventTypeDefaults {
         // Phase Track-6 P5 — Zoom Deep. All default OFF per ADR-020.
         .init(key: .zoomMeetingStarted, defaultEnabled: false),
         .init(key: .zoomMeetingEnded, defaultEnabled: false),
-        .init(key: .zoomMeetingCalendarLinked, defaultEnabled: false)
+        .init(key: .zoomMeetingCalendarLinked, defaultEnabled: false),
+
+        // Phase Track-6 P6 — IDEs surface cap. All default OFF per ADR-020.
+        .init(key: .vscodeActiveDocChanged, defaultEnabled: false),
+        .init(key: .vscodeWorkspaceOpened, defaultEnabled: false),
+        .init(key: .jetbrainsRecentProjectObserved, defaultEnabled: false),
+        .init(key: .ideWindowTitleObserved, defaultEnabled: false)
     ]
 }

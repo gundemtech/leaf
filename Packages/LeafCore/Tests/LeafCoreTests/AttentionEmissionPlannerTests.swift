@@ -8,11 +8,16 @@ final class AttentionEmissionPlannerTests: XCTestCase {
     private final class StubContextProvider: WindowContextProvider, @unchecked Sendable {
         var stubbedTitle: String? = nil
         var stubbedURL: String? = nil
+        /// Per-bundle title override (takes precedence over `stubbedTitle` for
+        /// matched bundle IDs). Used by Track-6 P6 tests to stub vscode-family
+        /// titles independently of Xcode/Safari fixtures.
+        var titlesByBundle: [String: String] = [:]
         var titleQueriedFor: [String] = []
         var urlQueriedFor: [String] = []
 
         func windowTitle(forPid pid: pid_t, bundleID: String) -> String? {
             titleQueriedFor.append(bundleID)
+            if let t = titlesByBundle[bundleID] { return t }
             return stubbedTitle
         }
 
@@ -28,7 +33,15 @@ final class AttentionEmissionPlannerTests: XCTestCase {
     }
 
     private struct StubClassifier: AppCategoryClassifier {
-        let dev: Set<String> = ["com.apple.dt.Xcode"]
+        // Track-6 P6 — vscode-family bundles classified as .dev so policy
+        // returns L3 (window title read enabled).
+        let dev: Set<String> = [
+            "com.apple.dt.Xcode",
+            "com.microsoft.VSCode",
+            "com.microsoft.VSCodeInsiders",
+            "com.todesktop.230313mzl4w4u92",  // Cursor
+            "com.visualstudio.code.oss"        // VSCodium
+        ]
         let browse: Set<String> = ["com.apple.Safari"]
         func category(for bundleID: String) -> AppCategory {
             if dev.contains(bundleID) { return .dev }
@@ -50,6 +63,34 @@ final class AttentionEmissionPlannerTests: XCTestCase {
             contextProvider: context,
             trustChecker: trust
         )
+    }
+
+    /// Track-6 P6 ergonomic overload: pin a fixed granularity for ALL bundles
+    /// via a forcing policy + stub per-bundle window titles + AX trust toggle.
+    /// Keeps test bodies focused on the parser-hook contract without restating
+    /// the policy/classifier/trust plumbing.
+    private func makePlanner(
+        level: AttentionGranularityLevel,
+        axTrusted: Bool,
+        titles: [String: String]
+    ) -> AttentionEmissionPlanner {
+        let ctx = StubContextProvider()
+        ctx.titlesByBundle = titles
+        let trust = StubTrustChecker()
+        trust.trusted = axTrusted
+        let classifier = StubClassifier()
+        let forcingPolicy = ForcingGranularityPolicy(level: level)
+        return AttentionEmissionPlanner(
+            policy: forcingPolicy,
+            classifier: classifier,
+            contextProvider: ctx,
+            trustChecker: trust
+        )
+    }
+
+    private struct ForcingGranularityPolicy: AttentionGranularityPolicy {
+        let level: AttentionGranularityLevel
+        func maxGranularity(for bundleID: String) -> AttentionGranularityLevel { level }
     }
 
     // MARK: - App-switch path
@@ -255,5 +296,73 @@ final class AttentionEmissionPlannerTests: XCTestCase {
         XCTAssertNotNil(event)
         XCTAssertGreaterThanOrEqual(event!.timestamp, before)
         XCTAssertLessThanOrEqual(event!.timestamp, after)
+    }
+
+    // MARK: - Track-6 P6 — vscode-family parser hook
+
+    func test_p6_vscodeFamily_parsedTitleEmitsVSCodeKind() {
+        let planner = makePlanner(
+            level: .l3, axTrusted: true,
+            titles: ["com.microsoft.VSCode": "Foo.swift — leaf — Visual Studio Code"]
+        )
+        let event = planner.plan(
+            bundleID: "com.microsoft.VSCode", pid: 1, reason: .appSwitch
+        )
+        XCTAssertEqual(event?.payload["event_kind"], "vscode_active_doc_changed")
+        XCTAssertEqual(event?.payload["workspace_name"], "leaf")
+        XCTAssertEqual(event?.payload["file_basename"], "Foo.swift")
+        XCTAssertNil(event?.payload["window_title"], "Raw window_title must be removed from payload after parse-success — privacy walkback")
+        XCTAssertNil(event?.payload["raw_title"], "Success path must not emit raw_title — that's fallback-only")
+        XCTAssertEqual(event?.payload["ide_bundle_id"], "com.microsoft.VSCode")
+    }
+
+    func test_p6_vscodeFamily_unparsedTitleEmitsFallback() {
+        let planner = makePlanner(
+            level: .l3, axTrusted: true,
+            titles: ["com.microsoft.VSCode": "Custom $$$ title shape unknown"]
+        )
+        let event = planner.plan(
+            bundleID: "com.microsoft.VSCode", pid: 1, reason: .appSwitch
+        )
+        XCTAssertEqual(event?.payload["event_kind"], "ide_window_title_observed")
+        XCTAssertNotNil(event?.payload["raw_title"])
+        // Sanitizer left non-path tokens intact.
+        XCTAssertTrue(event?.payload["raw_title"]?.contains("Custom") ?? false)
+        XCTAssertNil(event?.payload["window_title"], "Raw window_title must be removed from payload after fallback emit — privacy walkback")
+        XCTAssertEqual(event?.payload["ide_bundle_id"], "com.microsoft.VSCode")
+    }
+
+    func test_p6_nonVSCodeBundle_unchanged() {
+        // Non-vscode bundles must not gain event_kind — generic attention preserved.
+        let planner = makePlanner(
+            level: .l3, axTrusted: true,
+            titles: ["com.apple.dt.Xcode": "Foo.swift — Xcode"]
+        )
+        let event = planner.plan(bundleID: "com.apple.dt.Xcode", pid: 1, reason: .appSwitch)
+        XCTAssertNil(event?.payload["event_kind"])
+        XCTAssertEqual(event?.payload["window_title"], "Foo.swift — Xcode")
+    }
+
+    func test_p6_vscodeFamily_fallbackSanitizesPath() {
+        let planner = makePlanner(
+            level: .l3, axTrusted: true,
+            titles: ["com.microsoft.VSCode":
+                "Foo.swift in /Users/alice/secret/project running Visual Studio Code"]
+        )
+        let event = planner.plan(bundleID: "com.microsoft.VSCode", pid: 1, reason: .appSwitch)
+        let raw = event?.payload["raw_title"] ?? ""
+        XCTAssertFalse(raw.contains("alice"))
+        XCTAssertFalse(raw.contains("/secret"))
+        XCTAssertTrue(raw.contains("project"))  // basename retained
+    }
+
+    func test_p6_vscodeFamily_axUntrustedSuppressesParserHook() {
+        let planner = makePlanner(
+            level: .l3, axTrusted: false,  // not trusted → no AX read → no parser hook
+            titles: ["com.microsoft.VSCode": "Foo.swift — leaf — Visual Studio Code"]
+        )
+        let event = planner.plan(bundleID: "com.microsoft.VSCode", pid: 1, reason: .appSwitch)
+        XCTAssertNil(event?.payload["event_kind"])
+        XCTAssertNil(event?.payload["window_title"])
     }
 }

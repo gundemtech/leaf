@@ -95,6 +95,14 @@ public enum EventKindIcon {
              "google_calendar_ooo_ended":                 return "airplane"
         case "google_calendar_working_location_changed":  return "building.2"
 
+        // Track-6 P6 — IDE surface cap (vscode/Cursor/Insiders/VSCodium parsed
+        // active-doc + workspace-opened; jetbrains recent-project observed).
+        // ide_window_title_observed intentionally absent — debug-only signal,
+        // skipped by ActivityFeedMapper.mapLocalOS, no icon rendered.
+        case "vscode_active_doc_changed":          return "chevron.left.forwardslash.chevron.right"
+        case "vscode_workspace_opened":            return "folder.fill.badge.plus"
+        case "jetbrains_recent_project_observed":  return "chevron.left.forwardslash.chevron.right"
+
         default: return nil
         }
     }

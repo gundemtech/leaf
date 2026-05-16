@@ -622,7 +622,12 @@ public enum ActivityFeedMapper {
         "display_connected", "display_disconnected",
         "vpn_state_changed", "wifi_state_changed",
         "screenshot_taken", "download_added",
-        "trash_changed"
+        "trash_changed",
+        // Track-6 P6 — IDE surface cap (3 visible; ide_window_title_observed
+        // intentionally not in this whitelist — debug-only, never renders).
+        "vscode_active_doc_changed",
+        "vscode_workspace_opened",
+        "jetbrains_recent_project_observed"
     ]
 
     /// Track-6 P1 — Claude Code AI event_kinds with explicit feed rendering.
@@ -837,6 +842,28 @@ public enum ActivityFeedMapper {
             default:        primary = "Trash: \(action)"
             }
 
+        // Track-6 P6 — IDE surface cap
+        // VSCodeFamilyDispatcher emits `workspace_name` + `file_basename` +
+        // `ide_bundle_id`. App name is derived per fork via vscodeAppName(forBundleID:).
+        // ADR-010: only workspace_name and file_basename are allowed — no file path,
+        // no editor content, no full workspace path.
+        case "vscode_active_doc_changed":
+            let appName  = vscodeAppName(forBundleID: payload["ide_bundle_id"] ?? bundleID)
+            let workspace = sanitize(payload["workspace_name"])
+            let file      = sanitize(payload["file_basename"])
+            switch (workspace, file) {
+            case let (w?, f?): primary = "\(appName): \(w) — \(f)"
+            case let (nil, f?): primary = "\(appName): \(f)"
+            case let (w?, nil): primary = "\(appName): \(w)"
+            case (nil, nil):   primary = "\(appName): —"
+            }
+        case "vscode_workspace_opened":
+            primary = "Opened workspace: \(sanitize(payload["workspace_name"]) ?? "—")"
+        case "jetbrains_recent_project_observed":
+            // JetBrainsRecentProjectsWatcher emits `project_name` + `ide_version_dir`.
+            primary = "JetBrains: \(sanitize(payload["project_name"]) ?? "—")"
+            secondary = sanitize(payload["ide_version_dir"])
+
         default:
             return nil
         }
@@ -897,6 +924,18 @@ public enum ActivityFeedMapper {
         if delta > 0 { return "+\(delta)" }
         if delta < 0 { return "\(delta)" }
         return "updated"
+    }
+
+    /// Track-6 P6 — bundle-ID → user-facing app name for Activity rows.
+    /// Falls back to "VSCode" for any unrecognized vscode-family bundle.
+    private static func vscodeAppName(forBundleID bundleID: String?) -> String {
+        switch bundleID {
+        case "com.microsoft.VSCode":           return "VSCode"
+        case "com.todesktop.230313mzl4w4u92":  return "Cursor"
+        case "com.microsoft.VSCodeInsiders":   return "VSCode Insiders"
+        case "com.visualstudio.code.oss":      return "VSCodium"
+        default:                                return "VSCode"
+        }
     }
 
     private static func parsePayload(_ json: String) -> [String: String] {

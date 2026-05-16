@@ -140,4 +140,19 @@ final class EventKindIconTests: XCTestCase {
         XCTAssertEqual(EventKindIcon.symbol(for: "xcode_scheme_changed"), "square.stack.3d.up")
         XCTAssertEqual(EventKindIcon.symbol(for: "xcode_run_destination_changed"), "display")
     }
+
+    // Track-6 P6 — IDE surface cap
+    func test_p6_vscodeKindsHaveIcons() {
+        XCTAssertEqual(EventKindIcon.symbol(for: "vscode_active_doc_changed"),
+                       "chevron.left.forwardslash.chevron.right")
+        XCTAssertEqual(EventKindIcon.symbol(for: "vscode_workspace_opened"),
+                       "folder.fill.badge.plus")
+        XCTAssertEqual(EventKindIcon.symbol(for: "jetbrains_recent_project_observed"),
+                       "chevron.left.forwardslash.chevron.right")
+    }
+
+    func test_p6_ideWindowTitleObservedHasNoIcon() {
+        // Debug-only signal, skipped by ActivityFeedMapper — no icon.
+        XCTAssertNil(EventKindIcon.symbol(for: "ide_window_title_observed"))
+    }
 }

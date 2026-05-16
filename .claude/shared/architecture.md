@@ -65,6 +65,18 @@ Leaf — ambient memory layer для macOS (далее iOS) + Native UI + MCP-с
     - **Apple Intelligence routing** — inbound в ChatGPT через Apple privacy framework; third-party readback Apple не exposes.
     - Generic AX window-title collector (line 56 выше) — currently planned, не shipped. Когда ship'нется — `com.openai.chat` default-OFF в per-app redaction list (chat title leak'ит intent).
 - Spotlight `NSMetadataQuery` (`kMDItemFSName == ".git"`) — только onboarding wow-момент
+- **Track-6 P6** — `AttentionEmissionPlanner` extension: for vscode-family
+  bundles (`com.microsoft.VSCode`, Cursor, Insiders, VSCodium) a per-fork
+  title parser (`Insights/Parsers/VSCodeFamily/`) replaces generic attention
+  with `vscode_active_doc_changed` (parsed `workspace_name` + `file_basename`).
+  Unparsed titles → `ide_window_title_observed` fallback (default OFF,
+  `IDETitlePathSanitizer` strips path tokens). FSEvents on
+  `~/Library/Application Support/{Code,Cursor,Code - Insiders,VSCodium}/User/workspaceStorage/`
+  emits `vscode_workspace_opened`. FSEvents on
+  `~/Library/Application Support/JetBrains/<Product><Y>/options/recentProjects*.xml`
+  emits `jetbrains_recent_project_observed`. JetBrains bundle list 13
+  (−AppCode, +DataGrip/RustRover/DataSpell). Plugin work (per-edit, debugger,
+  terminal, extension list) = Layer D V2, separate track.
 
 **Отложено в v1.1:** AppleScript / Automation (Slack huddle, Xcode active doc) — отдельный TCC-промпт per target app.
 
