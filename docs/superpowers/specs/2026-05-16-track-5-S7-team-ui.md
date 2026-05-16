@@ -35,7 +35,7 @@ S7 unifies Team-facing surfaces into a single feed + introduces the multi-worksp
 6. **Cross-post badges render.** DM with cross-post entries shows clickable `LeafLinkedEventCard` per platform (Slack channel name or Linear issue key) below message body; click → external URL.
 7. **Linked event embed renders.** DM with `attachment_external_ref` shows `LeafLinkedEventCard` with cached metadata (title + status + author) or `Loading…` placeholder + fetch on miss.
 8. **Token discipline preserved.** `just check-tokens` passes BASE+MIGRATION+RETIRED tiers across all new/modified UI files. No hardcoded colors/spacing/typography.
-9. **Test baseline grows green.** S6 baseline ~2320 SPM tests → S7 ~2450 (estimated +130 across new readers/services/atoms/feed merge logic). 5/5 xcodebuild schemes compile green (Leaf + LeafAgent + LeafCore + LeafCorePrivate + LeafMCP, no-sign dev config).
+9. **Test baseline grows green.** S6 baseline ~2320 SPM tests → S7 ~2460 (estimated +140 across new readers/services/atoms/feed merge logic — itemized breakdown in §14). 5/5 xcodebuild schemes compile green (Leaf + LeafAgent + LeafCore + LeafCorePrivate + LeafMCP, no-sign dev config).
 10. **Deeplink works.** APNs notification click from inactive workspace → app activates → switches to message's workspace → scrolls to message + transient highlight.
 
 **Manual smoke G19** verifies signals 1-10 end-to-end on two-Mac signed-build session (alongside S3 G15+G16, S4 G21, S5 G18, S6 G18). See §13.
@@ -115,21 +115,26 @@ LeafApp
 
 ### 4.2 Reader topology
 
-**New readers (LeafCore public):**
+**New readers — placement convention.**
 
-Convention per S4/S5: UI-visible state types are `@MainActor @Observable final class` (SwiftUI binds them directly); I/O bottlenecks delegated to nested `actor` services (off-main concurrency isolation).
+Existing precedent (per Discovery): app-level `@MainActor @Observable` reader wrappers live in `Leaf/Models/` (e.g., `Leaf/Models/DirectMessageInboxReader.swift`, `Leaf/Models/TeamEventMirrorReader.swift`, `Leaf/Models/WorkspaceReader.swift`). Underlying services live in `Packages/LeafCore/Sources/LeafCore/Team/*Service.swift` as `struct Sendable` or `actor`. SwiftUI binds readers directly; readers delegate to services for off-main I/O.
 
-- `TeamFeedReader` — `@MainActor @Observable final class`. Composite query merging `messages_mirror` + `team_events_mirror` filtered by active workspace + selected filters. Paginated. Nested `actor TeamFeedQueryService` runs the GRDB read on a background queue. Exposes `loadInitial / loadOlder / refresh / applyGrouping` (5+/15m threshold).
-- `CrossPostLogReader` — `@MainActor @Observable final class`. Wraps `SupabaseClient.fetchCrossPostLog(messageIDs:)` calls (SupabaseClient is already `actor`). Caches by message_id; refreshes on Realtime push. Exposes `crossPosts(for messageID:) -> [CrossPostLogRow]`.
-- `AttachmentMetadataResolver` — pure `actor` (not @Observable). Internal to TeamFeedReader / LeafMessageCard render path. Resolves `(provider, external_ref) -> AttachmentMetadata` via local `events` table lookup first, then collector fetch fallback. Cache TTL: 5min. Exposes `resolve(provider:, externalRef:) async -> AttachmentMetadata?`.
-- `LeafRealtimeService` — `@MainActor @Observable final class` for connection state visibility. Wraps internal `actor RealtimeWebSocketDriver` that owns `URLSessionWebSocketTask` + Phoenix channel state + reconnect state machine. Subscribes to 2 CDC channels (`team_events` + `direct_messages` filtered by `workspace_id`) per active workspace. On INSERT/UPDATE push → invokes corresponding mirror service `absorbRealtimePush(rawRow:)`.
+S7 new types follow this split:
+
+- `TeamFeedReader` (`Leaf/Models/TeamFeedReader.swift`) — `@MainActor @Observable final class`. Composite query merging `messages_mirror` + `team_events_mirror` filtered by active workspace + selected filters. Paginated. Delegates SQL to new `TeamFeedQueryService` actor in `Packages/LeafCore/Sources/LeafCore/Team/TeamFeedQueryService.swift`. Exposes `loadInitial / loadOlder / refresh / applyGrouping` (5+/15m threshold).
+- `CrossPostLogReader` (`Leaf/Models/CrossPostLogReader.swift`) — `@MainActor @Observable final class`. Wraps `SupabaseClient.fetchCrossPostLog(messageIDs:)` calls (SupabaseClient is already `actor` per `Packages/LeafCore/Sources/LeafCore/Network/SupabaseClient.swift:17`). Caches by message_id; refreshes when feed page loads or new DM arrives. Exposes `crossPosts(for messageID:) -> [CrossPostLogRow]`.
+- `AttachmentMetadataResolver` (`Packages/LeafCore/Sources/LeafCore/Team/AttachmentMetadataResolver.swift`) — pure `actor` (not @Observable). Used internally by feed render path. Resolves `(provider, external_ref) -> AttachmentMetadata` via local `events` table lookup first, then collector fetch fallback. Cache TTL: 5min. Exposes `resolve(provider:, externalRef:) async -> AttachmentMetadata?`.
+- `LeafRealtimeService` (`Leaf/Models/LeafRealtimeService.swift`) — `@MainActor @Observable final class` for connection state visibility. Wraps internal `actor RealtimeWebSocketDriver` (in `Packages/LeafCore/Sources/LeafCore/Network/RealtimeWebSocketDriver.swift`) that owns `URLSessionWebSocketTask` + Phoenix channel state + reconnect state machine. Subscribes to 2 channels (`team_events` INSERT + `direct_messages` INSERT/UPDATE) filtered by active `workspace_id`. On push → invokes corresponding mirror service `absorbRealtimePush(rawRow:)`.
+
+Rationale for split: UI-bound observables in app target (`Leaf/`); pure I/O actors + value types in LeafCore (reusable by Agent / MCPServer processes if needed in future).
 
 **Reader extensions:**
 
-- `DirectMessageInboxReader.unreadCountByWorkspace: [String: Int]` — published map. Computed via SQL `SELECT workspace_id, COUNT(*) FROM messages_mirror WHERE direction='inbound' AND read_at_ms IS NULL GROUP BY workspace_id`. Refreshed on `tick()` + Realtime push.
-- `WorkspaceService.renameWorkspace(id:String, newName:String) async throws` — RLS-gated PATCH on Supabase `workspaces` table + local UPDATE.
-- `WorkspaceService.deleteWorkspace(id:String) async throws` — admin-only. Cascade: local DELETE of all workspace-scoped rows (`team_events_mirror`, `messages_mirror`, `share_rules`, `pending_invites` for this workspace) + Supabase `UPDATE workspaces SET deleted_at_ms = now()` + keystore directory removal (`rm -rf ~/Library/Application Support/Leaf/keystore/workspaces/<wid>/`).
-- `WorkspaceReader.leaveActiveWorkspace() async throws` — implements NIT-3 carry-over from S2. Soft-mark current workspace's `left_at_ms`, re-resolve active to next alphabetical, transition state to `.loaded(newActive)` or `.empty`.
+- `DirectMessageInboxReader.unreadCountByWorkspace: [String: Int]` — new published map alongside existing `unreadCount: Int` (current per-active-workspace count). Computed via SQL `SELECT workspace_id, COUNT(*) FROM messages_mirror WHERE direction='inbound' AND read_at_ms IS NULL GROUP BY workspace_id`. New method `refreshUnreadCounts()` invoked from existing `tick()` post-success + on Realtime push absorption. Existing `tick()` signature (no args; reads `activeWorkspaceStore` internally) preserved.
+- `WorkspaceService` (struct Sendable, sync) gains: `updateName(workspaceID:String, newName:String) throws` (local UPDATE), `softDelete(workspaceID:String, at:Date) throws` (local UPDATE setting `deleted_at_ms` + cascade local DELETE of workspace-scoped rows + keystore directory removal). Server-side PATCH/DELETE is orchestrated separately via `SupabaseClient`.
+- `SupabaseClient` (actor) gains: `patchWorkspaceName(id:String, name:String) async throws`, `softDeleteWorkspace(id:String) async throws` — RLS-gated PATCH on `workspaces` table.
+- `WorkspaceReader` (Leaf/Models, `@MainActor @Observable`) gains: `func rename(workspaceID:String, newName:String) async` (orchestrates Supabase PATCH then `WorkspaceService.updateName` then `refresh()`), `func delete(workspaceID:String) async` (admin-only; orchestrates `SupabaseClient.softDeleteWorkspace` then `WorkspaceService.softDelete` then re-resolve active workspace via `ActiveWorkspaceStore.setActive`), `func leaveActiveWorkspace() async` (implements NIT-3 carry-over from S2: soft-mark current workspace's `left_at_ms` via existing `WorkspaceService.markLeft`, re-resolve active to next alphabetical, transition state to `.loaded(newActive)` or `.empty`).
+- `ActiveWorkspaceStore` unchanged (existing `setActive(_:)` already suffices).
 
 ### 4.3 View hierarchy detail (TeamView refactor)
 
@@ -158,40 +163,58 @@ TeamView (entry point — replaces OrganizationView surface)
 
 ### 4.4 Composition root changes
 
-`LeafApp.swift` additions:
+`Leaf/LeafApp.swift` additions (alongside existing 20+ readers per Discovery line 14-75):
 - `@State private var teamFeedReader: TeamFeedReader`
 - `@State private var crossPostLogReader: CrossPostLogReader`
 - `@State private var attachmentMetadataResolver: AttachmentMetadataResolver`
 - `@State private var realtimeService: LeafRealtimeService`
 
-Injection chain (in `LeafApp.init`):
-```
-teamFeedReader = TeamFeedReader(database: leafDB)
-crossPostLogReader = CrossPostLogReader(supabaseClient: supabaseClient)
-attachmentMetadataResolver = AttachmentMetadataResolver(database: leafDB, collectorsRegistry: collectorsRegistry)
-realtimeService = LeafRealtimeService(
-    supabaseClient: supabaseClient,
-    mirrorService: directMessageInboxReader.service,
-    teamEventMirrorService: teamEventMirrorReader.service,
-    crossPostLogReader: crossPostLogReader
+Injection chain (in `LeafApp.init`, after existing reader composition at line ~146):
+
+```swift
+let attachmentResolver = AttachmentMetadataResolver(databaseURL: dbURL, collectorsRegistry: collectorsRegistry)
+let teamFeed = TeamFeedReader(
+    databaseURL: dbURL,
+    databaseEncryption: encryptionOptions,
+    attachmentResolver: attachmentResolver,
+    activeWorkspaceStore: active
 )
+let crossPostLog = CrossPostLogReader(supabase: supabase)
+let realtime = LeafRealtimeService(
+    supabase: supabase,
+    activeWorkspaceStore: active,
+    directMessageInboxReader: inboxReader,
+    teamEventMirrorReader: teamEventMirrorReader,
+    crossPostLogReader: crossPostLog
+)
+
+_attachmentMetadataResolver = State(initialValue: attachmentResolver)
+_teamFeedReader = State(initialValue: teamFeed)
+_crossPostLogReader = State(initialValue: crossPostLog)
+_realtimeService = State(initialValue: realtime)
 ```
 
 Window scene `.environment()` chain extended with 4 new readers. `MenuBarExtra` does not consume any of these (menu bar stays minimal — Team feed lives in window).
 
-Lifecycle (in `RootView.task`):
-```
-.task(id: activeWorkspaceID) {
-    realtimeService.subscribe(workspaceID: activeWorkspaceID)
+Lifecycle (in `RootView` or `TeamView`):
+
+```swift
+.task(id: activeWorkspaceStore.activeWorkspaceID) {
+    if let wid = activeWorkspaceStore.activeWorkspaceID {
+        await realtimeService.subscribe(workspaceID: wid)
+        await teamFeedReader.loadInitial(workspaceID: wid, filters: filterStore.selected)
+    }
 }
-.onChange(of: scenePhase) { phase in
-    if phase == .active { realtimeService.resume() }
-    else { realtimeService.suspend() }
+.onChange(of: scenePhase) { _, phase in
+    if phase == .active { Task { await realtimeService.resume() } }
+    else { Task { await realtimeService.suspend() } }
 }
 .onDisappear {
-    realtimeService.unsubscribe()
+    Task { await realtimeService.unsubscribe() }
 }
 ```
+
+Reader cross-talk: `LeafRealtimeService` accepts existing reader handles by reference so it can call `inboxReader.absorbRealtimePush(_:)` + `teamEventMirrorReader.absorbRealtimePush(_:)` + `crossPostLogReader.absorbRealtimePush(_:)` from incoming WS messages — new public methods added to each reader per §7.5.
 
 ### 4.5 Filter state model
 
@@ -221,26 +244,29 @@ Persisted per-workspace: `UserDefaults.standard.set([codedFilters], forKey: "lea
 
 ### 5.1 On-device (SQLCipher)
 
-**M026 — workspace soft-delete + workspace name editable.** New migration:
+**M025 — workspace soft-delete column + partial-active index.** New migration following existing M001-M024 pattern in `Packages/LeafCore/Sources/LeafCore/DB/Migrations/M025_WorkspaceSoftDelete.swift`:
 
 ```swift
-struct M026_WorkspaceSoftDelete: Migration {
-    static let identifier = "M026_WorkspaceSoftDelete"
-
-    func register(_ migrator: inout DatabaseMigrator) {
-        migrator.registerMigration(Self.identifier) { db in
-            // workspaces.name already TEXT NOT NULL per S2 M019 — confirm mutable
+extension DatabaseMigrator {
+    mutating func registerMigration025WorkspaceSoftDelete() {
+        registerMigration("025_workspace_soft_delete") { db in
+            // workspaces.name already TEXT NOT NULL per S2 M019 — UPDATE-mutable.
             try db.alter(table: "workspaces") { t in
                 t.add(column: "deleted_at_ms", .integer)  // nullable; non-null = soft-deleted
             }
-            try db.create(index: "idx_workspaces_active",
-                          on: "workspaces",
-                          columns: ["id"],
-                          condition: Column("deleted_at_ms") == nil)
+            // Partial index for hot-path "list active workspaces" query
+            try db.create(
+                index: "idx_workspaces_active",
+                on: "workspaces",
+                columns: ["id"],
+                condition: Column("deleted_at_ms") == nil && Column("left_at_ms") == nil
+            )
         }
     }
 }
 ```
+
+Register in `Database.swift` after `registerMigration024TeamEventBroadcastOffsets()`.
 
 **Why:** `WorkspaceService.deleteWorkspace` needs soft-delete column for audit + 30d retention before hard purge (cron prunes via S5 retention pattern). Hard-delete on local row would prevent realtime push handling for in-flight events that arrived after delete-initiation.
 
@@ -248,7 +274,7 @@ struct M026_WorkspaceSoftDelete: Migration {
 
 ### 5.2 Supabase migration
 
-**M026 (server-side):** Cross-platform sibling.
+**M025 (server-side):** Cross-platform sibling.
 
 ```sql
 -- 20260516120200_workspace_soft_delete_s7.sql
@@ -279,9 +305,9 @@ CREATE POLICY workspaces_delete_creator ON workspaces
 
 ### 5.3 No other on-device migrations
 
-`messages_mirror` (M020), `team_events_mirror` (M023), `share_rules` (M022), `team_event_broadcast_offsets` (M024), `apns_token_local` (M021) — all stay as-is.
+`messages_mirror` (M020), `apns_token_local` (M021), `share_rules` (M022), `team_events_mirror` (M023), `team_event_broadcast_offsets` (M024) — all stay as-is. (Note: actual M020-M024 ordering per `Packages/LeafCore/Sources/LeafCore/DB/Database.swift:58-62`; current-state.md mentions «M020-M024» without exact assignment per index — this spec uses canonical migration file names.)
 
-**Total SQLCipher tables after S7:** 34 (33 baseline + M026 doesn't add new table, just column — count unchanged). Migration count: M001..M026.
+**Total SQLCipher tables after S7:** unchanged from S6 baseline (`current-state.md` cites "33 SQLCipher tables M001-M024" — M025 only adds column `deleted_at_ms` + partial index `idx_workspaces_active`, no new table). Migration count progresses: M001..M025.
 
 ---
 
@@ -500,7 +526,7 @@ Per OQ-S7-7 resolution:
 
 **State 2 — members joined, no activity yet.**
 - Icon: `bubble.left.and.bubble.right` (large, accent color)
-- Title: "<N> teammates here"
+- Title: pluralized — `members == 1` → "1 teammate here"; else "<N> teammates here"
 - Body: "Activity will appear as your team shares work."
 - Primary CTA: `LeafButton.primary "+ Send first message"`
 - Secondary link: "Share Controls: <X of 9> sources enabled" → opens Settings → Share Controls
@@ -526,7 +552,9 @@ Sheet remains S6 `SendDirectMessageSheet` — closure injection preserved per B3
 
 ### 7.1 TeamFeedReader
 
-**File:** `Packages/LeafCore/Sources/LeafCore/Team/TeamFeedReader.swift` (~250 LOC).
+**Files (split per §4.2 convention):**
+- App-target wrapper: `Leaf/Models/TeamFeedReader.swift` (~120 LOC) — @MainActor @Observable reader exposing state + invoking query service.
+- LeafCore query service: `Packages/LeafCore/Sources/LeafCore/Team/TeamFeedQueryService.swift` (~130 LOC) — actor running off-main GRDB SQL + grouping pure function.
 
 **API:**
 
@@ -649,7 +677,7 @@ func applyGrouping(_ items: [FeedItem]) -> [FeedItem] {
 
 ### 7.2 CrossPostLogReader
 
-**File:** `Packages/LeafCore/Sources/LeafCore/Team/CrossPostLogReader.swift` (~150 LOC).
+**File:** `Leaf/Models/CrossPostLogReader.swift` (~150 LOC) — app-target reader following S4 `DirectMessageInboxReader` precedent.
 
 **API:**
 
@@ -699,28 +727,37 @@ public actor AttachmentMetadataResolver {
 ```
 
 **Resolution flow:**
-1. Cache lookup (in-actor `[String: (AttachmentMetadata, Date)]` map; TTL 5min).
-2. Local `events` table lookup — `SELECT payload_json FROM events WHERE provider = ? AND payload_json LIKE '%"external_ref":"<ref>"%' ORDER BY ts_ms DESC LIMIT 1`. Parse payload → AttachmentMetadata.
-3. Miss → collector fetch:
-   - `.github` → `GitHubCollector.fetchPRByRef("gundemtech/leaf#142")` (existing method or new helper).
-   - `.linear` → `LinearCollector.fetchIssueByIdentifier("LEA-123")` (existing or new).
-   - `.slack` → `SlackCollector.fetchMessageByTS(channelID:, ts:)` (new helper; channel resolution from external_ref format).
-4. Store result in cache; emit @Observable update via callback to host reader.
+1. Cache lookup (in-actor `[CacheKey: (AttachmentMetadata, Date)]` map keyed by `(provider, externalRef)`; TTL 5min).
+2. Local `events` table lookup using SQLite JSON1 extension `json_extract`:
+   - `.github` PR: `SELECT payload_json FROM events WHERE event_kind = 'github_pr_opened' AND json_extract(payload_json, '$.external_ref') = ? ORDER BY ts_ms DESC LIMIT 1`. (Similar for other relevant PR-flavor kinds.)
+   - `.linear` issue: `WHERE event_kind LIKE 'linear_%' AND json_extract(payload_json, '$.identifier') = ?` (Linear stores `identifier` like "LEA-123").
+   - `.slack` message: `WHERE event_kind LIKE 'slack_%' AND json_extract(payload_json, '$.channel_id') = ? AND json_extract(payload_json, '$.ts') = ?`.
+   - Performance: query plan uses existing `idx_events_kind_ts` (M011). JSON1 extraction on filtered subset (~thousands of rows post-filter, not millions) is fast enough for feed-render hot path. If profiling shows latency, add expression index in v1.1: `CREATE INDEX idx_events_external_ref ON events(event_kind, json_extract(payload_json, '$.external_ref'))`.
+3. Miss → collector fetch fallback:
+   - `.github` → existing `GitHubAPIProvider.fetchPullRequest(repoFullName:, number:)` — already implemented per Phase 4.2 substrate.
+   - `.linear` → existing `LinearAPIProvider.fetchIssueByIdentifier(...)` or new helper if not present.
+   - `.slack` → existing `SlackAPIProvider.fetchMessage(channelID:, ts:)` or new helper.
+   - Each provider call gated by valid OAuth scope; on auth-expired → returns nil; resolver caches nil-result for 60s to avoid retry storm; UI shows "Couldn't load" placeholder.
+4. Store result in cache; resolver returns; host UI re-renders via @Observable trigger (resolver itself is not @Observable — caller observes via Task .result and triggers @State refresh on host view).
 
-**Privacy:** Resolver lookups against own collectors only — no third-party network from feed render (latency cost + auth chains). If collector fetch fails (auth expired, rate-limited) → return nil → card shows "Couldn't load" placeholder with retry on tap.
+**Privacy:** Resolver lookups against own collectors only — never third-party network call originating from feed render (latency + auth chains). If collector fetch fails → return nil → card shows placeholder with retry-on-tap.
 
 ### 7.4 LeafRealtimeService
 
-**File:** `Packages/LeafCore/Sources/LeafCore/Realtime/LeafRealtimeService.swift` (~400 LOC).
+**Files:**
+- App-target wrapper: `Leaf/Models/LeafRealtimeService.swift` (~150 LOC) — @MainActor @Observable connection state surface + dispatch into existing readers.
+- LeafCore driver: `Packages/LeafCore/Sources/LeafCore/Network/RealtimeWebSocketDriver.swift` (~300 LOC) — pure actor wrapping `URLSessionWebSocketTask` + Phoenix protocol + reconnect state machine.
 
-**API:**
+**API (app target wrapper):**
 
 ```swift
-@MainActor @Observable
-public final class LeafRealtimeService {
-    public private(set) var state: ConnectionState = .disconnected
+@MainActor
+@Observable
+final class LeafRealtimeService {
+    private(set) var state: ConnectionState = .disconnected
+    private(set) var currentWorkspaceID: String?
 
-    public enum ConnectionState {
+    enum ConnectionState: Equatable {
         case disconnected
         case connecting
         case connected
@@ -728,29 +765,39 @@ public final class LeafRealtimeService {
         case suspended  // scenePhase != .active
     }
 
-    public init(
-        supabaseClient: SupabaseClient,
-        directMessageMirrorService: DirectMessageInboxService,
-        teamEventMirrorService: TeamEventMirrorService,
+    init(
+        supabase: SupabaseClient,
+        activeWorkspaceStore: ActiveWorkspaceStore,
+        directMessageInboxReader: DirectMessageInboxReader,
+        teamEventMirrorReader: TeamEventMirrorReader,
         crossPostLogReader: CrossPostLogReader
     ) { ... }
 
-    public func subscribe(workspaceID: String) async
-    public func unsubscribe() async
-    public func suspend()
-    public func resume()
+    /// Idempotent: if called with same wid, no-op; if called with different wid,
+    /// internally sends phx_leave for old topic + phx_join for new (channel
+    /// switch on persistent WS connection).
+    func subscribe(workspaceID: String) async
+
+    /// Sends phx_leave for current channel; keeps WS connection open.
+    func unsubscribe() async
+
+    /// Closes WS gracefully; cancels reconnect timers; transitions to .suspended.
+    func suspend() async
+
+    /// Re-opens WS using last-known activeWorkspaceID (if any).
+    func resume() async
 }
 ```
 
-**Protocol:** Phoenix Channels over WebSocket.
+LeafCore driver (`RealtimeWebSocketDriver`) is pure actor — exposed callbacks via async stream `AsyncStream<RealtimeEvent>` that the app-target wrapper consumes and dispatches to readers.
+
+**Protocol:** Phoenix Channels over WebSocket (full message format in §8.1).
 
 - WS URL: `wss://<project>.supabase.co/realtime/v1/websocket?apikey=<anon>&vsn=1.0.0`
-- Connect → send Phoenix `phx_join` for each topic:
-  - `realtime:public:team_events:workspace_id=eq.<wid>`
-  - `realtime:public:direct_messages:workspace_id=eq.<wid>`
-  - `realtime:public:cross_post_log:message_id=in.(<batch>)` — dynamic topic; subscribed lazily per visible-message batch (max 200 IDs per topic; re-subscribe on feed scroll)
-- Auth: send `access_token` in join payload (JWT from `SupabaseClient.session.accessToken`); rejoin on token refresh.
-- Incoming Phoenix message → if event type = `INSERT` → invoke appropriate mirror service.
+- Single channel per active workspace: `realtime:leaf-workspace-<wid>`. `phx_join` payload includes 3 `postgres_changes` subscriptions (team_events INSERT + direct_messages INSERT + direct_messages UPDATE).
+- Auth: send `access_token` in join payload (JWT from `SupabaseClient.session.accessToken`); rejoin on token refresh via tokenRefresh callback.
+- Cross_post_log is **NOT** subscribed (no workspace_id column; polling-only via `CrossPostLogReader.loadForMessages` per §8.1 + §7.2).
+- Incoming Phoenix message dispatch on `payload.table` (see §8.4).
 
 **Reconnect:**
 - Initial connect failure → log + retry 1s.
@@ -771,93 +818,185 @@ public final class LeafRealtimeService {
 
 ### 7.5 DirectMessageInboxReader extensions
 
-Add published map for switcher unread badges:
+Existing reader (per `Leaf/Models/DirectMessageInboxReader.swift`): `@MainActor @Observable final class` with `tick() async` (no args — reads `activeWorkspaceStore` internally) + `unreadCount: Int` (per-active-workspace). Adds:
 
 ```swift
 @MainActor @Observable
-public final class DirectMessageInboxReader {
-    // existing properties...
-    public private(set) var unreadCountByWorkspace: [String: Int] = [:]
+final class DirectMessageInboxReader {
+    // existing: recentMessages, unreadCount, lastTickError, cachedPubkeyHex, etc.
+    private(set) var unreadCountByWorkspace: [String: Int] = [:]   // NEW — per-workspace map
 
-    // existing tick(workspaceID:) extended:
-    public func tick(workspaceID: String) async {
+    // Existing tick() extended (signature unchanged):
+    func tick() async {
         // ... existing tick logic ...
         await refreshUnreadCounts()
     }
 
-    public func refreshUnreadCounts() async {
-        let counts = try? await database.read { db -> [String: Int] in
-            // SQL: SELECT workspace_id, COUNT(*) ...
+    // NEW — absorbs Realtime INSERT/UPDATE push from LeafRealtimeService dispatch
+    func absorbRealtimePush(_ row: DirectMessageRow) async {
+        let svc: DirectMessageInboxService
+        do { svc = try ensureService() } catch { return }
+        await svc.absorbRealtimePush(row)   // service-level UPSERT with C2/C3 guards
+        if row.workspace_id == activeWorkspaceStore.activeWorkspaceID {
+            refreshLocalState(workspaceID: row.workspace_id)
         }
-        await MainActor.run { unreadCountByWorkspace = counts ?? [:] }
+        await refreshUnreadCounts()
+    }
+
+    // NEW — queries across all workspaces (single SQL, no per-workspace key access needed)
+    func refreshUnreadCounts() async {
+        guard let database = try? ensureDatabase() else { return }
+        let counts: [String: Int] = (try? database.read { db -> [String: Int] in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT workspace_id, COUNT(*) AS cnt
+                FROM messages_mirror
+                WHERE direction = 'inbound' AND read_at_ms IS NULL
+                GROUP BY workspace_id
+            """)
+            return Dictionary(uniqueKeysWithValues: rows.map { ($0["workspace_id"], $0["cnt"]) })
+        }) ?? [:]
+        await MainActor.run { unreadCountByWorkspace = counts }
     }
 }
 ```
 
-Triggered:
-- On every `tick(workspaceID:)` for active workspace.
-- On every Realtime push that absorbs new inbound DM (calls `refreshUnreadCounts()` post-UPSERT).
-- On every mark-read action (PATCH success → callback to reader → refresh map).
+Trigger paths:
+- Every `tick()` (existing 30s foreground loop in OrganizationView → relocated to TeamView `.task(id:)`)
+- `absorbRealtimePush` after Realtime UPSERT
+- After mark-read action (existing `markRead`/`markDone` flows extended to invoke `refreshUnreadCounts()` post-PATCH)
+
+`TeamEventMirrorReader` mirror service similarly extended with `absorbRealtimePush(_ row: TeamEventRow)` for INSERT events on `team_events` table.
 
 ### 7.6 WorkspaceService extensions
 
-```swift
-public actor WorkspaceService {
-    // existing markLeft, createWorkspace, listWorkspaces, etc...
+`WorkspaceService` is `struct Sendable` with synchronous methods (per `Packages/LeafCore/Sources/LeafCore/Team/WorkspaceService.swift:17`). S7 keeps that convention: new sync methods on the struct for local DB ops; orchestration (server PATCH + local UPDATE) lives in `WorkspaceReader` (Leaf/Models async layer).
 
-    public func renameWorkspace(id: String, newName: String) async throws {
-        guard !newName.isEmpty, newName.count <= 80 else { throw LeafError.invalidWorkspaceName }
-        try await supabaseClient.patchWorkspace(id: id, name: newName)
-        try await database.write { db in
-            try db.execute(sql: "UPDATE workspaces SET name = ? WHERE id = ?", arguments: [newName, id])
-        }
+```swift
+public struct WorkspaceService: Sendable {
+    // existing: createWorkspace(displayName:), readWorkspace(id:), listWorkspaces(includeLeft:),
+    //          markLeft(workspaceID:at:), rejoin(workspaceID:)
+
+    // NEW — local-only sync ops (server PATCH orchestrated separately by WorkspaceReader)
+    public func updateName(workspaceID: String, newName: String) throws {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.count <= 80 else { throw LeafError.invalidPayload }
+        try database.updateWorkspaceName(workspaceID: workspaceID, name: trimmed)
     }
 
-    public func deleteWorkspace(id: String) async throws {
-        // Must be creator — check via Supabase RLS (server enforces; client checks for UX)
-        try await supabaseClient.softDeleteWorkspace(id: id)  // PATCH setting deleted_at_ms; RLS gates to creator
-        try await database.write { db in
-            // Cascade DELETE local rows (forever) — soft-deleted workspace data is no longer accessible to user
-            try db.execute(sql: "DELETE FROM messages_mirror WHERE workspace_id = ?", arguments: [id])
-            try db.execute(sql: "DELETE FROM team_events_mirror WHERE workspace_id = ?", arguments: [id])
-            try db.execute(sql: "DELETE FROM share_rules WHERE workspace_id = ?", arguments: [id])
-            try db.execute(sql: "DELETE FROM pending_invites WHERE workspace_id = ?", arguments: [id])
-            try db.execute(sql: "DELETE FROM team_event_broadcast_offsets WHERE workspace_id = ?", arguments: [id])
+    /// Soft-delete local copy of workspace + cascade DELETE workspace-scoped rows
+    /// + remove keystore directory. Server PATCH already done via SupabaseClient
+    /// before this call (per orchestration in WorkspaceReader.delete).
+    public func softDelete(workspaceID: String, at: Date) throws {
+        try database.write { db in
+            try db.execute(sql: "DELETE FROM messages_mirror WHERE workspace_id = ?",
+                          arguments: [workspaceID])
+            try db.execute(sql: "DELETE FROM team_events_mirror WHERE workspace_id = ?",
+                          arguments: [workspaceID])
+            try db.execute(sql: "DELETE FROM share_rules WHERE workspace_id = ?",
+                          arguments: [workspaceID])
+            try db.execute(sql: "DELETE FROM pending_invites WHERE workspace_id = ?",
+                          arguments: [workspaceID])
+            try db.execute(sql: "DELETE FROM team_event_broadcast_offsets WHERE workspace_id = ?",
+                          arguments: [workspaceID])
             try db.execute(sql: "UPDATE workspaces SET deleted_at_ms = ? WHERE id = ?",
-                          arguments: [Int64(Date().timeIntervalSince1970 * 1000), id])
+                          arguments: [Int64(at.timeIntervalSince1970 * 1000), workspaceID])
         }
-        try? FileManager.default.removeItem(at: keystoreURL(for: id))
+        // Per-workspace keystore subdirectory removal (S2 layout)
+        let keystoreDir = keystoreRoot
+            .appendingPathComponent("workspaces", isDirectory: true)
+            .appendingPathComponent(workspaceID, isDirectory: true)
+        try? FileManager.default.removeItem(at: keystoreDir)
     }
 }
-
-// Server-side cleanup: Supabase rows (team_events, direct_messages, cross_post_log, invites)
-// remain until natural expiry per S5 retention policy (30d via expires_at). Cron job
-// (task_reminders pattern from S4) extended in S8 to also nuke rows from soft-deleted
-// workspaces (workspaces.deleted_at_ms IS NOT NULL AND deleted_at_ms < now() - 30d).
-// For S7 MVP: client deletes local copies + workspace soft-marked; server-side rows
-// auto-expire. Members of deleted workspace receive their existing rows until expiry —
-// no forced sync-on-delete. Acceptable for MVP; cleanup cron deferred to S8.
 ```
 
-### 7.7 WorkspaceReader leaveActiveWorkspace
+**SupabaseClient (actor) additions:**
 
 ```swift
-public extension WorkspaceReader {
+public actor SupabaseClient {
+    // existing: signInAnonymously, registerPubkey, resolveInvite, probeInvite,
+    //           postInvite, insertWorkspaceMember, sendDirectMessage, ...
+
+    // NEW
+    public func patchWorkspaceName(id: String, name: String) async throws {
+        // PATCH /rest/v1/workspaces?id=eq.<id>
+        // Body: {"name": "<name>"}
+        // RLS gates: only creator can UPDATE (per M025 policy)
+    }
+    public func softDeleteWorkspace(id: String) async throws {
+        // PATCH /rest/v1/workspaces?id=eq.<id>
+        // Body: {"deleted_at_ms": now()}
+        // RLS gates: only creator (per M025 policy workspaces_delete_creator)
+    }
+    public func fetchCrossPostLog(messageIDs: [String]) async throws -> [CrossPostLogRow] {
+        // GET /rest/v1/cross_post_log?message_id=in.(<comma-joined-IDs>)
+        // RLS gates: sender OR recipient via JOIN (per S6 baseline)
+    }
+}
+```
+
+**Server-side cleanup (S8 carry-over):** Supabase rows (`team_events`, `direct_messages`, `cross_post_log`, `invites`) remain until natural expiry per S5 retention policy (30d via `expires_at` for team_events; forever for direct_messages). Cron job (extending S4 `task_reminders` pattern) in S8 will nuke rows from soft-deleted workspaces (`workspaces.deleted_at_ms IS NOT NULL AND deleted_at_ms < now() - 30d`). For S7 MVP: client deletes local copies + workspace soft-marked; server-side rows auto-expire. Other members of deleted workspace continue receiving their existing rows until expiry — no forced sync-on-delete (acceptable for MVP; cleanup cron deferred to S8).
+```
+
+### 7.7 WorkspaceReader extensions (Leaf/Models)
+
+Existing `WorkspaceReader` (per `Leaf/Models/WorkspaceReader.swift`) is `@MainActor @Observable final class` with sync `refresh()` method. S7 adds three async methods that orchestrate Supabase + WorkspaceService + ActiveWorkspaceStore:
+
+```swift
+@MainActor
+@Observable
+final class WorkspaceReader {
+    // existing: state, refresh()
+
+    // NEW — closes S2 NIT-3 carry-over
     func leaveActiveWorkspace() async {
         guard case .loaded(let active, _, _) = state else { return }
         do {
-            try await workspaceService.markLeft(workspaceID: active.id)
-            // Re-resolve active: first remaining alphabetical
-            let remaining = try await workspaceService.listActiveWorkspaces()
-            let newActive = remaining.sorted(by: { $0.name < $1.name }).first
-            await activeWorkspaceStore.setActive(newActive?.id)
-            await refresh()  // re-fetch state
+            try workspaceService.markLeft(workspaceID: active.id, at: Date())
+            let remaining = try workspaceService.listWorkspaces(includeLeft: false)
+                .filter { $0.id != active.id }
+                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            activeWorkspaceStore.setActive(remaining.first?.id)
+            refresh()
         } catch {
-            await MainActor.run { state = .error(error.localizedDescription) }
+            state = .error(error.localizedDescription)
+        }
+    }
+
+    // NEW — rename via Supabase PATCH then local UPDATE
+    func rename(workspaceID: String, newName: String) async {
+        do {
+            try await supabase.patchWorkspaceName(id: workspaceID, name: newName)
+            try workspaceService.updateName(workspaceID: workspaceID, newName: newName)
+            refresh()
+        } catch {
+            state = .error(error.localizedDescription)
+        }
+    }
+
+    // NEW — admin-only delete via Supabase soft-delete then local cascade
+    func delete(workspaceID: String) async {
+        do {
+            try await supabase.softDeleteWorkspace(id: workspaceID)
+            try workspaceService.softDelete(workspaceID: workspaceID, at: Date())
+            if activeWorkspaceStore.activeWorkspaceID == workspaceID {
+                let remaining = try workspaceService.listWorkspaces(includeLeft: false)
+                    .filter { $0.id != workspaceID }
+                    .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+                activeWorkspaceStore.setActive(remaining.first?.id)
+            }
+            refresh()
+        } catch {
+            state = .error(error.localizedDescription)
         }
     }
 }
 ```
+
+Failure semantics:
+- `leaveActiveWorkspace` → on success, state transitions to `.loaded(newActive)` or `.empty` (if no remaining); on Supabase / DB error → `.error`.
+- `rename` → if Supabase PATCH succeeds but local UPDATE fails → inconsistent state until next refresh tick reads server-of-truth (acceptable; idempotent retry on next manual edit).
+- `delete` → if Supabase PATCH succeeds but local cascade fails → user sees error banner; can retry; idempotent (UPDATE workspaces SET deleted_at_ms only changes nil → ts; cascade DELETEs only delete rows that exist).
 
 ---
 
@@ -867,33 +1006,43 @@ Comprehensive impl detail in §7.4 + below.
 
 ### 8.1 Phoenix protocol primer
 
-Supabase Realtime uses Phoenix Channels over WebSocket. Message format:
+Supabase Realtime is built on Phoenix Channels over WebSocket. Modern API (post-2023) uses **arbitrary channel topic names** + `postgres_changes` config in the join payload. We multiplex multiple CDC subscriptions onto a single Phoenix channel per active workspace.
+
+**Connection:**
+- WS URL: `wss://<project>.supabase.co/realtime/v1/websocket?apikey=<anon>&vsn=1.0.0`
+- After WS open → send `phx_join` for the workspace topic:
 
 ```json
 {
-  "topic": "realtime:public:team_events:workspace_id=eq.abc-123",
+  "topic": "realtime:leaf-workspace-<wid>",
   "event": "phx_join",
   "payload": {
     "config": {
+      "broadcast": {"self": false},
+      "presence": {"key": ""},
       "postgres_changes": [
-        {"event": "INSERT", "schema": "public", "table": "team_events", "filter": "workspace_id=eq.abc-123"}
+        {"event": "INSERT", "schema": "public", "table": "team_events", "filter": "workspace_id=eq.<wid>"},
+        {"event": "INSERT", "schema": "public", "table": "direct_messages", "filter": "workspace_id=eq.<wid>"},
+        {"event": "UPDATE", "schema": "public", "table": "direct_messages", "filter": "workspace_id=eq.<wid>"}
       ]
     },
-    "access_token": "<JWT>"
+    "access_token": "<JWT from SupabaseClient.session.accessToken>"
   },
   "ref": "1"
 }
 ```
 
-Server sends back `phx_reply` (ack) and subsequently `postgres_changes` events:
+Server reply (`phx_reply` with `status: "ok"`) — confirms channel join + RLS permits subscriptions.
+
+**Incoming CDC events:**
 
 ```json
 {
-  "topic": "realtime:public:team_events:workspace_id=eq.abc-123",
+  "topic": "realtime:leaf-workspace-<wid>",
   "event": "postgres_changes",
   "payload": {
     "type": "INSERT",
-    "record": { /* row */ },
+    "record": { /* row matching column shape */ },
     "schema": "public",
     "table": "team_events",
     "commit_timestamp": "2026-05-16T12:00:00Z"
@@ -901,7 +1050,11 @@ Server sends back `phx_reply` (ack) and subsequently `postgres_changes` events:
 }
 ```
 
-Heartbeat: send `{"topic":"phoenix","event":"heartbeat","payload":{},"ref":"hb-N"}` every 30s; server replies; missing 3 consecutive heartbeats → assume disconnect → reconnect.
+Single channel delivers events across all 3 subscriptions; dispatch on `payload.table`.
+
+**Heartbeat:** every 30s send `{"topic":"phoenix","event":"heartbeat","payload":{},"ref":"hb-N"}`. Server replies with `phx_reply` ack. 3 consecutive missing heartbeats → driver assumes disconnect + initiates reconnect.
+
+**Cross_post_log — no Realtime.** Per §7.2: `cross_post_log` lacks `workspace_id` column (it has `message_id` FK only). Realtime `postgres_changes` filter doesn't support JOINs. S7 fetches cross-post status **polling-only** via `CrossPostLogReader.loadForMessages(messageIDs:)` called whenever feed page loads or new DM arrives via Realtime push. Acceptable latency: cross-post badges appear within next feed refresh after DM lands (~1-2s in practice).
 
 ### 8.2 Connection lifecycle
 
@@ -925,22 +1078,15 @@ If only one WS connection (one user, one app), single channel per (table, wid) s
 
 ### 8.4 Message dispatch
 
-Incoming `postgres_changes` event → switch on `table`:
+Incoming `postgres_changes` event → switch on `(payload.table, payload.type)`:
 
-- `team_events` → decode `record` payload → invoke `teamEventMirrorService.absorbRealtimePush(row:)` → UPSERT mirror.
-- `direct_messages` → decode → `directMessageMirrorService.absorbRealtimePush(row:)` → UPSERT mirror + APNs reconciliation (mark already-delivered).
-- `cross_post_log` → decode → `crossPostLogReader.absorbRealtimePush(row:)` → update in-memory map.
+- `(team_events, INSERT)` → decode `record` → invoke `teamEventMirrorReader.absorbRealtimePush(row:)` → UPSERT mirror via existing `TeamEventMirrorService` plaintext-trust gates (C2/C3 from S5 fix-bundle).
+- `(direct_messages, INSERT)` → decode → `directMessageInboxReader.absorbRealtimePush(row:)` → UPSERT mirror; if recipient_pubkey = me, this is inbound — APNs reconciliation idempotent (Realtime arrives ahead of APNs typically; both paths converge on same UPSERT).
+- `(direct_messages, UPDATE)` → decode → same `absorbRealtimePush(row:)` — mirror UPSERT preserves `read_at_ms` from latest server state → outbound DM card re-renders with «Read 2m ago» receipt (OQ-14 enhancement).
 
-For DMs: special case — UPDATE (not INSERT) events when recipient marks read updates `read_at_ms` column. Subscribe to UPDATE too:
+After any DM push → trigger `crossPostLogReader.loadForMessages([row.message_id])` to populate badge cache (cross_post_log row arrives 1-2s after DM INSERT once Edge Function completes; subsequent fetch picks it up).
 
-```json
-"postgres_changes": [
-  {"event": "INSERT", "schema": "public", "table": "direct_messages", "filter": "workspace_id=eq.<wid>"},
-  {"event": "UPDATE", "schema": "public", "table": "direct_messages", "filter": "workspace_id=eq.<wid>"}
-]
-```
-
-On UPDATE → `directMessageMirrorService.absorbRealtimePush(row:)` — mirror UPSERT preserves `read_at_ms` from latest server state → outbound DM card re-renders with read receipt.
+All `absorbRealtimePush` methods on readers are new `@MainActor` methods added in §7.5 — they wrap underlying service UPSERT calls.
 
 ### 8.5 Decryption + trust gates
 
@@ -1015,12 +1161,17 @@ Inline edit: tap workspace name → transitions to `TextField` bound to `editing
 
 ### 9.4 WorkspaceMembersAdminList
 
+Admin determination uses canonical `TeamMember.role == .admin` (set on creator via `WorkspaceService.createWorkspace` line 76, and on first joiner via `InviteAcceptService` — see `Packages/LeafCore/Sources/LeafCore/Team/InviteAcceptService.swift:150,158`):
+
 ```swift
+let myMember = members.first { $0.pubkeyHex == identity.pubkeyHex }
+let viewerIsAdmin = (myMember?.role == .admin)
+
 ForEach members { member in
     WorkspaceMemberAdminRow(
         member: member,
         isMe: member.pubkeyHex == identity.pubkeyHex,
-        isAdmin: workspace.createdByPubkey == identity.pubkeyHex,
+        viewerIsAdmin: viewerIsAdmin,
         onRemove: { /* shows confirmation modal → KeyRotationService.removeMember */ }
     )
 }
@@ -1028,9 +1179,9 @@ ForEach members { member in
 
 Per row:
 - LeafAvatar + display name + joined date (LeafType.caption)
-- Role badge: if `member.pubkeyHex == workspace.createdByPubkey` → "Admin"; else "Member"
-- Action menu (visible if `isAdmin && !isMe`): `LeafIconButton(icon: "ellipsis")` → context menu:
-  - "Remove from workspace" (destructive) → confirmation modal → `KeyRotationService.removeMember(workspaceID:, memberID:)` (S3 substrate)
+- Role badge: `member.role == .admin` → "Admin" (LeafStatusPill.accent); else "Member" (LeafStatusPill.neutral)
+- Action menu (visible if `viewerIsAdmin && !isMe`): `LeafIconButton(icon: "ellipsis")` → context menu:
+  - "Remove from workspace" (destructive) → confirmation modal → `KeyRotationService.removeMember(workspaceID:, memberID:)` (S3/Phase 5.3 substrate)
 
 ### 9.5 PendingInvitesAdminSection
 
@@ -1093,7 +1244,7 @@ struct DeleteWorkspaceConfirmationModal: View {
 
 ### 9.8 WorkspaceCreateSheet
 
-Relocated/copy from `OnboardingView` creation step. Single field (workspace name) + create button → calls `workspaceService.createWorkspace(name:)` → on success → `activeWorkspaceStore.setActive(newID)` → dismiss.
+Relocated/copy from `OnboardingView.CreateTeamStepView` (existing). Single field (workspace name) + create button → calls `workspaceService.createWorkspace(displayName:)` (per actual API: `Packages/LeafCore/Sources/LeafCore/Team/WorkspaceService.swift:50`) → on success → `activeWorkspaceStore.setActive(newID)` → dismiss sheet → `WorkspaceReader.refresh()`.
 
 ---
 
@@ -1184,7 +1335,7 @@ Per `2026-05-16-track-5-S7-team-ui-alternatives.md` Amendment 2026-05-16:
 
 ## §13 Manual smoke (G19) — signed two-Mac gate
 
-**Pre-conditions:** S1+S2+S3+S4+S5+S6+S7 merged to main; Supabase production has M013 + M025 + M026; alpha.16+ ship; two Macs (Anton's + Dima's).
+**Pre-conditions:** S1+S2+S3+S4+S5+S6+S7 merged to main; Supabase production has all migrations through `20260516120200_workspace_soft_delete_s7.sql` (S3 invite migration `2026051512*` + S5 team_events `20260516120000_team_events_s5.sql` + S6 cross-post `20260516120100_cross_post_s6.sql` + S7 workspace soft-delete `20260516120200_workspace_soft_delete_s7.sql`); on-device SQLCipher migrations M001..M025 applied; alpha.16+ ship; two Macs (Anton's + Dima's).
 
 **G19 golden path:**
 
@@ -1194,7 +1345,7 @@ Per `2026-05-16-track-5-S7-team-ui-alternatives.md` Amendment 2026-05-16:
 4. **Cross-post badge + click** — Anton sends Task DM to Dima with Slack + Linear cross-post (matches G18). Dima's inbound DM card shows two compact badges: `#leaf-architecture` + `LEA-XXX`. Click `#leaf-architecture` → opens Slack to that channel. Click `LEA-XXX` → opens Linear to that issue.
 5. **Linked event card** — Anton sends Handoff with attached GitHub PR (`gundemtech/leaf#142`). Dima's inbound DM card shows `LeafLinkedEventCard` with title + status + author + timestamp. Click → opens GitHub PR in browser.
 6. **Sticky Send + ⌘N** — Anton scrolls feed deep, [+ Send] button still visible top-right. Press `⌘N` → sheet opens. Send Ping. Sheet auto-dismisses 1.5s on success (S6 pattern preserved).
-7. **Settings → Workspace full surface** — Anton opens Settings → Workspace section first. Sees: workspace name "Leaf" (editable on click). Click → text field. Type "Leaf Team". Press Return → workspace renamed; Dima's sidebar updates within ≤30s (workspaceReader.refresh on tick or Realtime UPDATE on workspaces table — implementation dependent). Members list shows both Anton + Dima with avatars + joined dates. Anton (creator/admin) has "Admin" badge; Dima has "Member" badge. Anton sees `…` menu on Dima's row → "Remove from workspace" (destructive). [Cancel] → no action. Pending invites section empty (none pending). [+ Invite teammate] → GenerateInviteSheet opens. [Leave Workspace] → confirmation modal "Leave Leaf Team?" → [Cancel] → no action. [Delete Permanently] (admin-only) → confirmation modal with type-name-to-confirm → [Cancel] → no action.
+7. **Settings → Workspace full surface** — Anton opens Settings → Workspace section first. Sees: workspace name "Leaf" (editable on click). Click → text field. Type "Leaf Team". Press Return → workspace renamed locally; Supabase PATCH succeeds. Dima's sidebar updates within ≤30s — propagation via Dima's `WorkspaceReader.refresh()` next polling tick (workspaces table NOT Realtime-subscribed per §8 — rare event, polling sufficient). Members list shows both Anton + Dima with avatars + joined dates. Anton (creator/admin, `member.role == .admin`) has "Admin" LeafStatusPill; Dima has "Member" LeafStatusPill. Anton sees `…` menu on Dima's row → "Remove from workspace" (destructive). [Cancel] → no action. Pending invites section empty (none pending). [+ Invite teammate] → GenerateInviteSheet opens. [Leave Workspace] → confirmation modal "Leave Leaf Team?" → [Cancel] → no action. [Delete Permanently] (admin-only) → confirmation modal with type-name-to-confirm → [Cancel] → no action.
 8. **Deeplink** — Anton's Mac inactive (other app). Dima sends Handoff DM in workspace "TestClientCorp" (not active on Anton's Mac). APNs notification arrives "🤝 Dima handed off: ...". Click → Anton's Mac activates → switches active workspace to TestClientCorp → Team tab open → feed scrolled to Dima's new DM card → 2s background pulse highlight (LeafColor.accent.subtle).
 9. **Leave workspace** — Anton's Mac, switcher shows 2 workspaces. Right-click "TestClientCorp" → context menu → "Leave Workspace". Confirmation modal → [Leave Workspace]. Workspace soft-marked. Switcher list refreshes; "TestClientCorp" disappears. Active re-resolves to "Leaf Team" (alphabetical first remaining). Feed re-renders Leaf Team context.
 10. **Empty states** — Anton creates 3rd workspace "QuietRoom" → switcher updates → click QuietRoom → Team feed empty → State 1 ("It's quiet here") visible with [+ Invite teammate] CTA + secondary "or send yourself a test handoff". After self-invite + send → State 2 ("1 teammate here") or filtered-empty State 3 if filters too restrictive.
@@ -1355,7 +1506,7 @@ Per `2026-05-16-track-5-S7-team-ui-alternatives.md` Amendment 2026-05-16:
 Tactical implementation plan lives at `docs/superpowers/plans/2026-05-16-track-5-S7-team-ui.md` (gitignored — contains moat-sensitive impl details: Phoenix protocol exact frames, decryption byte-handling, grouping window tuning, cache TTL values, exponential backoff schedule).
 
 Plan structure (writing-plans skill output):
-- Phase A — Schema migration M026 (local + Supabase + pgTAP test)
+- Phase A — Schema migration M025 (local + Supabase + pgTAP test)
 - Phase B — New atoms (LeafMessageCard, LeafFeedRow, LeafWorkspaceSwitcher, LeafFilterChips, LeafLinkedEventCard) — TDD per atom
 - Phase C — New readers (TeamFeedReader, CrossPostLogReader, AttachmentMetadataResolver) — TDD per reader
 - Phase D — LeafRealtimeService — TDD with mock WebSocket
