@@ -112,6 +112,12 @@ final class BrowserAllowListStore {
         lastErrorMessage = nil
         load()
         onInvalidate?()
+        // Notify the Agent process (cross-process IPC via darwin notification)
+        // so DBDomainAllowListReader flushes its cache on the next tick.
+        DistributedNotificationCenter.default().post(
+            name: Notification.Name(browserDomainAllowChangedNotification),
+            object: nil
+        )
     }
 
     private func ensureDatabase() throws -> Database {

@@ -424,9 +424,23 @@ enum AgentMain {
         let appleScriptBridge = AppleScriptBridge.production()
         let appleScriptPermissionStore = AppleScriptPermissionStore()
         let localAppsStore = LocalAppsStore()
+        #if LEAF_PROD
+        let allowListReader = DBDomainAllowListReader(pool: database.pool)
+        // Track-6 P3 — observe cross-process notification posted by BrowserAllowListStore
+        // (MenuBarApp) after every add/remove. Invalidates the cache so the next
+        // adapter call reads fresh rows. Pattern mirrors FSEventsCollector darwin observer.
+        let allowListObserverToken: NSObjectProtocol = DistributedNotificationCenter.default()
+            .addObserver(
+                forName: Notification.Name(browserDomainAllowChangedNotification),
+                object: nil,
+                queue: nil
+            ) { _ in
+                allowListReader.invalidate()
+            }
+        AgentLifetime.allowListObserverToken = allowListObserverToken
+        #endif
         let appleScriptRegistry: any AppleScriptAdapterRegistry = {
             #if LEAF_PROD
-            let allowListReader = DBDomainAllowListReader(pool: database.pool)
             return ProdAppleScriptAdapterRegistry(allowListReader: allowListReader)
             #else
             return EmptyAppleScriptAdapterRegistry()
@@ -745,6 +759,11 @@ enum AgentMain {
             await MainActor.run { AgentLifetime.localFilesWatcher?.stop() }
             // Phase Track-6 P3 — stop browser bookmark watcher after localFiles.
             if let b = AgentLifetime.browserBookmarksWatcher { await b.stop() }
+            // Phase Track-6 P3 — remove allow-list darwin observer.
+            if let t = AgentLifetime.allowListObserverToken {
+                DistributedNotificationCenter.default().removeObserver(t)
+                AgentLifetime.allowListObserverToken = nil
+            }
             // Phase Track-4 S2 — stop AppleScript collector before S1
             // collectors. Polling tasks cancel cooperatively.
             if let a = AgentLifetime.appleScriptCollector { await a.stop() }
@@ -841,4 +860,7 @@ enum AgentLifetime {
     nonisolated(unsafe) static var localFilesWatcher: LocalFilesWatcher?
     // Phase Track-6 P3 — browser bookmark FSEvents watcher.
     nonisolated(unsafe) static var browserBookmarksWatcher: BrowserBookmarksWatcher?
+    // Phase Track-6 P3 — darwin notification observer token for browser allow-list
+    // cross-process invalidation. Retained here so it lives for the Agent's lifetime.
+    nonisolated(unsafe) static var allowListObserverToken: NSObjectProtocol?
 }

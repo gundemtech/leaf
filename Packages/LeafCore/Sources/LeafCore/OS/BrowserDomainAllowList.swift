@@ -1,6 +1,12 @@
 // Packages/LeafCore/Sources/LeafCore/OS/BrowserDomainAllowList.swift
 import Foundation
 
+/// Phase Track-6 P3 — darwin notification name posted by `BrowserAllowListStore`
+/// (MenuBarApp process) after every add/remove mutation. The Agent process observes
+/// this and calls `DBDomainAllowListReader.invalidate()` to flush its stale cache.
+/// Pattern mirrors `FSEventsCollector.darwinNotificationName` / `WatchedFoldersService`.
+public let browserDomainAllowChangedNotification = "tech.gundem.leaf.browser-domain-allow.changed"
+
 /// Phase Track-6 P3 — per-domain URL granularity. See spec §4 + §9.
 public enum URLGranularity: String, Sendable, Hashable {
     case fullUrl = "full_url"
