@@ -131,6 +131,33 @@ When any trigger fires → fresh Stage 0 research pass; new phase spec. The won'
 
 ---
 
+## 6.1 Branch pollution warning for collective Track-6 integration session
+
+During P7 work, parallel P2 / P5 Claude Code sessions raced this repo's single working tree and committed onto `feature/track-6-P7-gpt-cap` between my own commits. Two orphan commits sit inline in P7 history:
+
+| SHA | Author | What it is |
+|---|---|---|
+| `bf9da9f4` | parallel P2 session | "docs(track-6-P2): design spec — Xcode Deep Approach A" |
+| `9175ec61` | parallel P5 session | "docs(track-6-P5): Stage 0 research + Stage 3 spec — Zoom Deep" |
+
+These commits are **not reachable from `feature/track-6-P2-xcode-deep` or `feature/track-6-P5-zoom-deep`** (verified via `git branch --contains <sha>`). The proper P2/P5 branches have different (rebased / divergent) commits with the same human messages. So these two SHAs are the **only persistent copies** of the parallel sessions' work at those moments.
+
+**Integration session implications:**
+
+- **Do NOT `git merge feature/track-6-P7-gpt-cap` into `track-6-integration`** — that would pull `bf9da9f4` + `9175ec61` into the integration branch alongside P7. If P2/P5 sessions have moved their proper branches forward, the integration merge would conflate two different snapshots of their work.
+- **Instead, cherry-pick P7-only commits by SHA:**
+  - `a8874927` — initial P7 ratification
+  - `a5707c49` — amendment 1: two-fold reasoning
+  - `7b5e8756` — amendment 2: extended probe (16 surfaces)
+  - `2fcaeee7` — code-review fixes (this round)
+- Or equivalently: `git diff` with explicit `-- docs/superpowers/specs/2026-05-16-track-6-P7-gpt-cap*.md .claude/shared/architecture.md .claude/shared/current-state.md` pathspecs.
+
+**Don't destroy the orphan commits.** `bf9da9f4` and `9175ec61` should either (a) be cherry-picked onto their respective proper P2/P5 branches by the parallel sessions before they finalize, OR (b) be intentionally re-created on the proper branches because the parallel sessions' rebased shape supersedes them. P7 isn't authority on that judgment; just preserves them in this branch's reachability set.
+
+This is the documented mitigation of branch race — destructive cleanup deferred to coordination between sessions, not unilaterally executed by P7.
+
+---
+
 ## 7. Acceptance criteria
 
 P7 is shipped when:
