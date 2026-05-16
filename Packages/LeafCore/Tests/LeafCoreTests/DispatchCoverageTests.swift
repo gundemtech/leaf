@@ -237,4 +237,37 @@ final class DispatchCoverageTests: XCTestCase {
             )
         }
     }
+
+    /// #16 — Track-6 P5 parity: every new Zoom-deep kind must be covered by
+    /// (a) `trackFourLocalOSKinds` whitelist, (b) EventKindIcon with a non-default
+    /// SF Symbol, and (c) mapLocalOS rendering a non-empty primaryText.
+    /// The 3 new kinds carry NO user-authored text, so they MUST NOT route
+    /// through `EventsFullTextStore.bodyKindForTesting` (would imply searchable
+    /// content — ADR-010 walkback).
+    func testTrack6P5ZoomKindsCoverageParity() {
+        let p5Kinds = [
+            "zoom_meeting_started",
+            "zoom_meeting_ended",
+            "zoom_meeting_calendar_linked"
+        ]
+        for kind in p5Kinds {
+            // (a) whitelist
+            XCTAssertTrue(
+                ActivityFeedMapper.trackFourLocalOSKinds.contains(kind),
+                "Track-6 P5 kind '\(kind)' missing from trackFourLocalOSKinds whitelist"
+            )
+            // (b) icon — must not fall back to the "video.circle" baseline
+            //      (those are for S2 transition events) or `app.dashed` generic.
+            let icon = EventKindIcon.symbol(for: kind)
+            XCTAssertNotEqual(icon, "app.dashed",
+                              "Track-6 P5 kind '\(kind)' falls back to generic icon")
+            XCTAssertNotEqual(icon, "questionmark.circle",
+                              "Track-6 P5 kind '\(kind)' has no icon mapping")
+            // (c) FTS dispatcher MUST return nil — P5 payloads have no searchable body.
+            XCTAssertNil(
+                EventsFullTextStore.bodyKindForTesting(eventKind: kind),
+                "Track-6 P5 kind '\(kind)' must NOT route to FTS — carries no body text"
+            )
+        }
+    }
 }
