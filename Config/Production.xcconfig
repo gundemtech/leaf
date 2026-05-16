@@ -31,3 +31,16 @@ GITHUB_OAUTH_CLIENT_ID = Ov23liIkwUV0UbBNivve
 // SlackOAuthService показывает "not configured" error в Settings (collector
 // в Agent process пропускает startup).
 SLACK_OAUTH_CLIENT_ID = 10976749635137.11005549911623
+
+// Track-6 P4 — Google Calendar OAuth public client (PKCE loopback, ephemeral port).
+// `client_id` is public per OAuth 2.0; `client_secret` for installed apps is also
+// public per Google Identity guidance (RFC 8252 §8.5) but treated as build-time
+// config rather than source-committed for the avoidance of doubt. Production
+// values are wired at ship time via Local.xcconfig override or .env interpolation;
+// empty defaults here cause `GoogleCalendarCollector` to skip startup gracefully
+// and `GoogleCalendarOAuthService` to surface a "not configured" error in
+// Settings → Connections. Created on console.cloud.google.com → APIs & Services →
+// Credentials, redirect URI = http://127.0.0.1:<ephemeral>/callback (variable port
+// per spec §6.9, RFC 8252-compliant).
+GOOGLE_CALENDAR_OAUTH_CLIENT_ID =
+GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET =

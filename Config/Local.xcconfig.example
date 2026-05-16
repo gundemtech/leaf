@@ -21,3 +21,13 @@
 // раскомментируй:
 //
 // GITHUB_OAUTH_CLIENT_ID = Iv1.xxxxxxxxxxxxxxxx
+
+// Track-6 P4 — Google Calendar OAuth public client (PKCE loopback).
+// Создай OAuth 2.0 Client ID на https://console.cloud.google.com → APIs & Services →
+// Credentials (Application type = Desktop). Redirect URI variable port — Google
+// разрешает any loopback port (RFC 8252-compliant). Empty defaults в Production.xcconfig
+// → GoogleCalendarOAuthService показывает "not configured" error в Settings и
+// GoogleCalendarCollector silently skips startup в Agent process.
+//
+// GOOGLE_CALENDAR_OAUTH_CLIENT_ID = xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com
+// GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET = GOCSPX-xxxxxxxxxxxxxxxxxxxxxxxx

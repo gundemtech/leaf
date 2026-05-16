@@ -445,6 +445,41 @@ enum AgentMain {
             screenshotDirectoryOverride: agentThresholds.screenshotDirectoryOverridePath
         )
 
+        // Track-6 P4 — Google Calendar collector (Layer C: meeting context).
+        // OAuth client_id + client_secret resolved at build time from .env via
+        // xcconfig → Info.plist interpolation (mirror Linear/Slack precedent;
+        // see Config/Production.xcconfig + Config/Local.xcconfig.example).
+        // Unsubstituted `$(...)` placeholder OR empty string → collector
+        // skips startup gracefully so substrate builds (CI, dev without
+        // GCP project) stay green.
+        let googleCalendarCollector: GoogleCalendarCollector? = {
+            let clientIDKey = GoogleCalendarOAuthEndpoints.infoPlistClientIDKey
+            let clientSecretKey = GoogleCalendarOAuthEndpoints.infoPlistClientSecretKey
+            guard
+                let clientID = Bundle.main.object(forInfoDictionaryKey: clientIDKey) as? String,
+                !clientID.isEmpty,
+                !clientID.hasPrefix("$("),
+                let clientSecret = Bundle.main.object(forInfoDictionaryKey: clientSecretKey) as? String,
+                !clientSecret.isEmpty,
+                !clientSecret.hasPrefix("$(")
+            else {
+                agentLogger.info("Google Calendar OAuth client not configured — collector disabled")
+                return nil
+            }
+            let apiClient = ProdGoogleCalendarAPIClient(urlSession: .shared)
+            let oauthHTTP = GoogleCalendarOAuthClient(urlSession: .shared)
+            let refresher = GoogleCalendarTokenRefresher(
+                http: oauthHTTP,
+                clientID: clientID,
+                clientSecret: clientSecret
+            )
+            return GoogleCalendarCollector(
+                apiClient: apiClient,
+                tokenRefresher: refresher,
+                database: database
+            )
+        }()
+
         AgentLifetime.writer = writer
         AgentLifetime.activeAppCollector = activeAppCollector
         AgentLifetime.idleCollector = idleCollector
@@ -487,6 +522,8 @@ enum AgentMain {
         AgentLifetime.wifiCollector = wifiCollector
         AgentLifetime.clipboardCollector = clipboardCollector
         AgentLifetime.localFilesWatcher = localFilesWatcher
+        // Track-6 P4 — Google Calendar collector lifetime slot.
+        AgentLifetime.googleCalendarCollector = googleCalendarCollector
 
         // Phase 5.3.D — Key rotation orchestrator + RotationOutbox resume.
         // Drains unposted rotation_outbox rows from prior sessions on startup
@@ -622,6 +659,10 @@ enum AgentMain {
         Task { await wifiCollector.start() }
         Task { await clipboardCollector.start() }
         DispatchQueue.main.async { localFilesWatcher.start() }
+        // Track-6 P4 — start Google Calendar collector. Internal `start()` spawns a
+        // single polling Task (5min cadence; pacing via internal sleep). Skipped
+        // gracefully when OAuth client_id/secret are not configured at build time.
+        if let gcc = googleCalendarCollector { Task { await gcc.start() } }
         Task { await rotationFetchScheduler.start() }
         Task { await detectorScheduler.start() }
 
@@ -689,6 +730,12 @@ enum AgentMain {
             if let l = AgentLifetime.linearCollector { await l.stop() }
             if let g = AgentLifetime.githubCollector { await g.stop() }
             if let s = AgentLifetime.slackCollector { await s.stop() }
+            // Track-6 P4 — stop Google Calendar collector alongside Layer B
+            // network-heavy collectors. Collector flushes any in-flight tick
+            // atomically (rawEvents + sync_tokens + tracker writes are
+            // separate transactions inside `tick()`; loop sleeps cancel
+            // cooperatively via Task.cancel).
+            if let gcc = AgentLifetime.googleCalendarCollector { await gcc.stop() }
             if let w = AgentLifetime.writer {
                 await w.flush()
                 await w.stop()
@@ -757,4 +804,6 @@ enum AgentLifetime {
     nonisolated(unsafe) static var wifiCollector: WiFiCollector?
     nonisolated(unsafe) static var clipboardCollector: ClipboardCollector?
     nonisolated(unsafe) static var localFilesWatcher: LocalFilesWatcher?
+    // Track-6 P4 — Google Calendar collector (Layer C: meeting context).
+    nonisolated(unsafe) static var googleCalendarCollector: GoogleCalendarCollector?
 }
