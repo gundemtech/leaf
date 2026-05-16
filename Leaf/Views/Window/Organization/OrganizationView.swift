@@ -16,6 +16,9 @@ struct OrganizationView: View {
     @Environment(ActiveWorkspaceStore.self) private var activeStore
     @Environment(TeamEventBroadcastReader.self) private var broadcastReader
     @Environment(TeamEventMirrorReader.self) private var mirrorReader
+    /// Track 5 / S6 T13 — composition refs for SendDirectMessageSheet closure wiring.
+    @Environment(SlackOAuthService.self) private var slackOAuth
+    @Environment(\.linearUsersResolver) private var linearUsersResolver
     @State private var nameInput: String = ""
     @State private var showingAcceptSheet: Bool = false
     @State private var sendSheetRecipient: SendRecipient?
@@ -62,7 +65,16 @@ struct OrganizationView: View {
             AcceptInviteSheet()
         }
         .sheet(item: $sendSheetRecipient) { recipient in
-            SendDirectMessageSheet(recipient: recipient.member)
+            SendDirectMessageSheet(
+                recipient: recipient.member,
+                // Track 5 / S6 — wire real OAuth re-auth + assignee fuzzy resolve.
+                onReauthorizeSlack: { @MainActor in
+                    await slackOAuth.connect()
+                },
+                resolveLinearAssignee: { @MainActor displayName in
+                    try? await linearUsersResolver.resolve(displayName: displayName)
+                }
+            )
         }
     }
 

@@ -64,6 +64,11 @@ struct LeafApp: App {
     @State private var teamEventBroadcastReader: TeamEventBroadcastReader
     /// Track 5 / S5 — recipient-side mirror loop + retention pruner reader.
     @State private var teamEventMirrorReader: TeamEventMirrorReader
+    /// Track 5 / S6 — cross-post UI readers + assignee resolver.
+    @State private var slackChannelsReader: SlackChannelsReader
+    @State private var linearTeamsReader: LinearTeamsReader
+    @State private var linearScopesReader: LinearScopesReader
+    @State private var linearUsersResolver: LinearUsersResolver
     @State private var memberRemovalReader = MemberRemovalReader()  // Phase 5.3.E
     @State private var pendingInvitesReader = PendingInvitesReader()  // Phase 5.5.C
     @State private var inviteURLHandler = InviteURLHandler()  // Phase 5.5.B
@@ -140,6 +145,34 @@ struct LeafApp: App {
         _teamEventBroadcastReader = State(initialValue: TeamEventBroadcastReader(supabase: supabase))
         _teamEventMirrorReader = State(initialValue: TeamEventMirrorReader(supabase: supabase))
 
+        // Track 5 / S6 T13 — cross-post composition wiring.
+        // SlackChannels + LinearTeams use Stub providers (returns empty arrays)
+        // in non-LEAF_PROD builds; production HTTP impls live в LeafCorePrivate
+        // (gitignored moat) and are swapped в via #if LEAF_PROD when present.
+        // For initial T13 ship, all builds use Stub — Send sheet pickers show
+        // empty list; production provider wiring is incremental polish.
+        _slackChannelsReader = State(initialValue: SlackChannelsReader(provider: StubSlackChannelsProvider()))
+        _linearTeamsReader = State(initialValue: LinearTeamsReader(provider: StubLinearTeamsProvider()))
+
+        // LinearScopesReader wraps LinearScopesService (DB-backed) + adapter
+        // bridging the Sendable `LinearOAuthReauthorizing` protocol to the
+        // app-target `LinearOAuthService.connect()` flow (which opens browser).
+        // _linearOAuth.wrappedValue used here because Swift can't prove `self`
+        // is initialized for `self.linearOAuth` access before all @State props
+        // are set — the underlying storage IS initialized at declaration.
+        let linearScopesService = LeafApp.makeLinearScopesService()
+        let linearReauth = LinearOAuthReauthorizeAdapter(service: _linearOAuth.wrappedValue)
+        _linearScopesReader = State(initialValue: LinearScopesReader(
+            service: linearScopesService ?? LinearScopesService(grantedOverride: []),
+            reauthorizer: linearReauth
+        ))
+
+        // LinearUsersResolver — fuzzy assignee resolution (T9). Stub provider
+        // returns empty list in dev; production HTTP impl via LeafCorePrivate.
+        _linearUsersResolver = State(initialValue: LinearUsersResolver(
+            provider: StubLinearGraphQLProvider()
+        ))
+
         // C1 fix — Track 5 / S4 Stage 6 review:
         // AppDelegate handles APNs callbacks and needs reader references. SwiftUI
         // doesn't propagate @Environment into AppDelegate callbacks; static weak
@@ -185,6 +218,12 @@ struct LeafApp: App {
                 .environment(shareRulesReader)          // Track 5 / S5
                 .environment(teamEventBroadcastReader)  // Track 5 / S5
                 .environment(teamEventMirrorReader)     // Track 5 / S5
+                .environment(slackChannelsReader)       // Track 5 / S6
+                .environment(linearTeamsReader)         // Track 5 / S6
+                .environment(linearScopesReader)        // Track 5 / S6
+                // LinearUsersResolver is an actor (not @Observable); plumbed via
+                // explicit closure into Send sheet from OrganizationView call site.
+                .environment(\.linearUsersResolver, linearUsersResolver)
                 .environment(memberRemovalReader)  // Phase 5.3.E
                 .environment(pendingInvitesReader)  // Phase 5.5.C
                 .environment(inviteURLHandler)  // Phase 5.5.B
@@ -269,6 +308,36 @@ struct LeafApp: App {
             return GitHubScopesService(database: db)
         } catch {
             leafAppLogger.error("makeGitHubScopesService failed: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+    }
+
+    // MARK: - Linear scopes reader DB bootstrap (Track 5 / S6 T13)
+
+    /// Same DB-open shape as `makeGitHubScopesService` — `LinearScopesService`
+    /// reads its `provider = linear` row from the same encrypted SQLCipher file.
+    /// Returns `nil` on failure → composition root falls back to empty-grant
+    /// LinearScopesService (UI shows scope-missing banner permanently).
+    private static func makeLinearScopesService() -> LinearScopesService? {
+        let url = DatabasePath.defaultURL()
+        #if LEAF_PROD
+        let config = ProdConfigs.database
+        let encryption: EncryptionOptions? = EncryptionOptions(
+            keyProvider: .callback { @Sendable in
+                try FileKeyStore.fetchOrCreate()
+            },
+            preKeyPragmas: ProdConfigs.sqlcipherPragmasPreKey,
+            postKeyPragmas: ProdConfigs.sqlcipherPragmasPostKey
+        )
+        #else
+        let config = DatabaseConfig.weakDefaults
+        let encryption: EncryptionOptions? = nil
+        #endif
+        do {
+            let db = try LeafCore.Database.openForWrite(at: url, config: config, encryption: encryption)
+            return LinearScopesService(database: db)
+        } catch {
+            leafAppLogger.error("makeLinearScopesService failed: \(String(describing: error), privacy: .public)")
             return nil
         }
     }
