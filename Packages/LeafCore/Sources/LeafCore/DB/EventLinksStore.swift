@@ -93,6 +93,20 @@ public enum EventLinksStore {
                            createdAtMs: ts, in: db)
             }
         }
+
+        // 5) Track-6 P5 — Zoom → Calendar link. Collector pre-computes SHA256(EKEvent.id)
+        //    hash via ZoomCalendarLinker and writes it to the started-event payload;
+        //    deriveLinks reads the structured field and inserts the link row.
+        if eventKind == "zoom_meeting_started",
+           let linkedID = payload[Schema.EventPayloadKeys.linkedCalendarEventID],
+           !linkedID.isEmpty {
+            try insert(eventID: eventID,
+                       linkKind: Schema.LinkKinds.zoomToCalendarMeeting,
+                       targetKind: Schema.TargetKinds.calendarEvent,
+                       targetRef: linkedID,
+                       confidence: derivers.confidence.zoomToCalendarMeeting,
+                       createdAtMs: ts, in: db)
+        }
     }
 
     /// Reverse lookup — returns DISTINCT event IDs that link to the given target,
