@@ -1,0 +1,164 @@
+import Foundation
+import CoreServices
+import OSLog
+
+// MARK: - Protocol
+
+/// Phase Track-6 P3 — narrow batch write interface for the bookmarks watcher.
+/// `Database` already conforms via its existing `func write(_ events: [RawEvent]) throws`.
+/// Tests provide an in-memory stub (`MockBookmarkWriter`).
+public protocol BookmarkEventBatchWriter: Sendable {
+    func write(_ events: [RawEvent]) throws
+}
+
+extension Database: BookmarkEventBatchWriter {
+    // Satisfy protocol by forwarding to the existing `write(_:knownLinearPrefixes:derivers:)`
+    // overload that carries default parameters (protocol witness requires exact signature).
+    public func write(_ events: [RawEvent]) throws {
+        try write(events, knownLinearPrefixes: [], derivers: .publicSubstrate)
+    }
+}
+
+// MARK: - Actor
+
+/// Phase Track-6 P3 — independent FSEvents-backed bookmark count watcher.
+/// Owns its own FSEventStream per browser; recursive watch with filename
+/// suffix filter. Spec §8.
+///
+/// Chrome: multi-profile, counter keyed by profile label (last path component
+/// of the profile directory). Each profile is tracked independently.
+///
+/// Safari: single counter, gated on Full Disk Access (`fdaGranted`).
+/// If FDA is not granted at `init` time, Safari events are silently skipped.
+///
+/// Semantics (cold/warm tick):
+///   - First FSEvent for a given profile seeds the counter; no emit.
+///   - Subsequent events compute delta (may be 0 for renames); always emit.
+public actor BrowserBookmarksWatcher {
+    public typealias ChromeCountProbe = @Sendable (_ profileLabel: String) -> Int?
+    public typealias SafariCountProbe = @Sendable (_ path: String) -> Int?
+
+    private let writer: any BookmarkEventBatchWriter
+    private let chromeCountProbe: ChromeCountProbe
+    private let safariCountProbe: SafariCountProbe
+    private let fdaGranted: Bool
+
+    private var chromeCounts: [String: Int] = [:]
+    private var safariCount: Int? = nil
+
+    private var chromeStream: FSEventStream?
+    private var safariStream: FSEventStream?
+
+    public init(
+        writer: any BookmarkEventBatchWriter,
+        chromeCountProbe: @escaping ChromeCountProbe,
+        safariCountProbe: @escaping SafariCountProbe,
+        fdaGranted: Bool
+    ) {
+        self.writer = writer
+        self.chromeCountProbe = chromeCountProbe
+        self.safariCountProbe = safariCountProbe
+        self.fdaGranted = fdaGranted
+    }
+
+    // MARK: - Lifecycle
+
+    public func start() async {
+        let chromeRoot = NSHomeDirectory() + "/Library/Application Support/Google/Chrome"
+        if FileManager.default.fileExists(atPath: chromeRoot) {
+            chromeStream = try? FSEventStream(
+                paths: [chromeRoot],
+                latency: 1.5,
+                queueLabel: "tech.gundem.leaf.fsevents.chromebookmarks"
+            ) { [weak self] paths, _ in
+                guard let self else { return }
+                for path in paths where path.hasSuffix("/Bookmarks") {
+                    let profile = ((path as NSString).deletingLastPathComponent as NSString).lastPathComponent
+                    let now = Int64(Date().timeIntervalSince1970 * 1000)
+                    Task { await self.handleChromeEvent(profileLabel: profile, nowMs: now) }
+                }
+            }
+            chromeStream?.start()
+        }
+        if fdaGranted {
+            let safariDir = NSHomeDirectory() + "/Library/Safari"
+            safariStream = try? FSEventStream(
+                paths: [safariDir],
+                latency: 1.5,
+                queueLabel: "tech.gundem.leaf.fsevents.safaribookmarks"
+            ) { [weak self] paths, _ in
+                guard let self else { return }
+                for path in paths where path.hasSuffix("/Bookmarks.plist") {
+                    let now = Int64(Date().timeIntervalSince1970 * 1000)
+                    Task { await self.handleSafariEvent(nowMs: now) }
+                }
+            }
+            safariStream?.start()
+        }
+    }
+
+    public func stop() async {
+        chromeStream?.stop(); chromeStream = nil
+        safariStream?.stop(); safariStream = nil
+    }
+
+    // MARK: - Event handlers (visible for tests)
+
+    public func handleChromeEvent(profileLabel: String, nowMs: Int64) {
+        guard let newCount = chromeCountProbe(profileLabel) else { return }
+        let prev = chromeCounts[profileLabel]
+        chromeCounts[profileLabel] = newCount
+        guard let prev else { return }   // cold tick — seed only
+        try? writer.write([makeEvent(
+            bundleID: "com.google.Chrome",
+            eventKind: "chrome_bookmark_changed",
+            totalCount: newCount,
+            delta: newCount - prev,
+            profileLabel: profileLabel,
+            nowMs: nowMs
+        )])
+    }
+
+    public func handleSafariEvent(nowMs: Int64) {
+        guard fdaGranted else { return }
+        let safariPath = NSHomeDirectory() + "/Library/Safari/Bookmarks.plist"
+        guard let newCount = safariCountProbe(safariPath) else { return }
+        let prev = safariCount
+        safariCount = newCount
+        guard let prev else { return }   // cold tick — seed only
+        try? writer.write([makeEvent(
+            bundleID: "com.apple.Safari",
+            eventKind: "safari_bookmark_changed",
+            totalCount: newCount,
+            delta: newCount - prev,
+            profileLabel: nil,
+            nowMs: nowMs
+        )])
+    }
+
+    // MARK: - Private helpers
+
+    private func makeEvent(
+        bundleID: String,
+        eventKind: String,
+        totalCount: Int,
+        delta: Int,
+        profileLabel: String?,
+        nowMs: Int64
+    ) -> RawEvent {
+        var payload: [String: String] = [
+            "event_kind": eventKind,
+            "total_count": String(totalCount),
+            "delta": String(delta)
+        ]
+        if let p = profileLabel {
+            payload["profile_label"] = p
+        }
+        return RawEvent(
+            timestamp: Date(timeIntervalSince1970: Double(nowMs) / 1000.0),
+            signalType: .context,
+            bundleID: bundleID,
+            payload: payload
+        )
+    }
+}
