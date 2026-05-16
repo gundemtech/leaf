@@ -209,6 +209,14 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     case screenshotTaken                  = "screenshot_taken"
     case downloadAdded                    = "download_added"
     case trashChanged                     = "trash_changed"
+
+    // MARK: - Track-6 P4 — Google Calendar Deep (default OFF per ADR-020).
+    case googleCalendarEventObserved          = "google_calendar_event_observed"
+    case googleCalendarFocusBlockStarted      = "google_calendar_focus_block_started"
+    case googleCalendarFocusBlockEnded        = "google_calendar_focus_block_ended"
+    case googleCalendarOOOStarted             = "google_calendar_ooo_started"
+    case googleCalendarOOOEnded               = "google_calendar_ooo_ended"
+    case googleCalendarWorkingLocationChanged = "google_calendar_working_location_changed"
 }
 
 /// Phase 4.7.A — onboarding default enabled-state per event_kind.
@@ -425,6 +433,15 @@ public enum ShareEventTypeDefaults {
         .init(key: .clipboardEventCount, defaultEnabled: false),
         .init(key: .screenshotTaken, defaultEnabled: false),
         .init(key: .downloadAdded, defaultEnabled: false),
-        .init(key: .trashChanged, defaultEnabled: false)
+        .init(key: .trashChanged, defaultEnabled: false),
+
+        // Track-6 P4 — Google Calendar Deep. All default OFF per ADR-020
+        // (capture-everything locally, share-selectively).
+        .init(key: .googleCalendarEventObserved, defaultEnabled: false),
+        .init(key: .googleCalendarFocusBlockStarted, defaultEnabled: false),
+        .init(key: .googleCalendarFocusBlockEnded, defaultEnabled: false),
+        .init(key: .googleCalendarOOOStarted, defaultEnabled: false),
+        .init(key: .googleCalendarOOOEnded, defaultEnabled: false),
+        .init(key: .googleCalendarWorkingLocationChanged, defaultEnabled: false)
     ]
 }

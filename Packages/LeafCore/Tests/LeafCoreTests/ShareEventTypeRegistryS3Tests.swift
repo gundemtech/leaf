@@ -29,8 +29,9 @@ final class ShareEventTypeRegistryS3Tests: XCTestCase {
     }
 
     func testRegistrySizeIs152() {
-        XCTAssertEqual(ShareEventTypeKey.allCases.count, 152)
-        XCTAssertEqual(ShareEventTypeDefaults.all.count, 152)
+        // S3 contract baseline = 152. Track-6 P4 grew it 152 → 158.
+        XCTAssertEqual(ShareEventTypeKey.allCases.count, 158)
+        XCTAssertEqual(ShareEventTypeDefaults.all.count, 158)
     }
 
     func testAllS3KeysDefaultOff() {

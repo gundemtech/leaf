@@ -3,11 +3,11 @@ import XCTest
 
 final class ShareEventTypeRegistryS2Tests: XCTestCase {
     func testRegistrySizeIs139() {
-        XCTAssertEqual(ShareEventTypeKey.allCases.count, 152)
+        XCTAssertEqual(ShareEventTypeKey.allCases.count, 158)
     }
 
     func testDefaultsCountMatches() {
-        XCTAssertEqual(ShareEventTypeDefaults.all.count, 152)
+        XCTAssertEqual(ShareEventTypeDefaults.all.count, 158)
     }
 
     func testAllNewS2KeysDefaultOff() {

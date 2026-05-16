@@ -610,6 +610,10 @@ public enum CollectorID {
     /// `lastModifiedMs` holds last cold tick ms (catch-up gate uses
     /// `now - lastModifiedMs > 24h`).
     public static let slackColdPolling = "slack_cold_polling"
+    /// Track-6 P4 — Google Calendar API polling collector. sourceID
+    /// `google_calendar:<accountID>`. `lastModifiedMs` хранит cursor
+    /// (epoch ms newest processed event update).
+    public static let googleCalendarPolling = "google_calendar_polling"
 }
 
 /// Канонические `provider` значения для `integrations` таблицы. Литералы —
@@ -618,4 +622,6 @@ public enum IntegrationProvider: String, Sendable, Hashable, CaseIterable {
     case linear
     case github
     case slack
+    /// Track-6 P4 — Google Calendar Deep (OAuth 2.0 PKCE loopback).
+    case googleCalendar = "google_calendar"
 }
