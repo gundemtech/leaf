@@ -41,6 +41,18 @@ The Stage 0 research doc (§2) enumerates every outbound vendor surface checked.
 
 **Conclusion:** there is no outbound surface from ChatGPT Desktop that yields per-event capture comparable to Claude Code hooks. Pursuing the per-event ceiling would require either (a) Apple Intelligence framework readback, which Apple does not expose; (b) reverse-engineering vendor-internal state, which ADR-010 and `/pre-push-leaf` won't-list forbid; or (c) waiting for OpenAI to ship an outbound surface, which they have not.
 
+### 2.1 Unofficial surfaces that exist but are won't-list anti-patterns
+
+On-Mac probe (research §2.4) surfaced two **unofficial** capture paths that technically work but fail the won't-list test on independent grounds — vendor-internal store with no stability contract:
+
+| Surface | What it would yield | Why won't-list |
+|---|---|---|
+| `defaults read com.openai.chat` polling | `activeUserWorkspaceID` (workspace switch detection), `SEGVersionKey` (app version), `firstLaunchDate`. Readable without TCC. | (a) Vendor-internal keyspace, no stability contract — keys disappear/rename across updates (2024 plaintext-store → encrypted overnight precedent). (b) `activeUserWorkspaceID` is raw vendor PII identifier — ADR-010 prefers anonymized buckets. (c) Workspace-switch event_kind is thin signal that closely tracks app-foreground L1 already captured. **Anti-pattern: parsing vendor-internal config layout.** |
+| FSEvents on `~/Library/Application Support/com.openai.chat/conversations-v3-<workspace-uuid>/` | Structural metadata: conversation count, per-conversation mtime (activity pulse), new-conversation / delete-conversation events. Bodies remain encrypted by vendor (file(1) reports opaque data). | (a) Same vendor-managed-store anti-pattern — directory layout has zero stability contract; vendor can rotate `conversations-v3` → `conversations-v4` or move to Keychain-backed CoreData next release. (b) Pre-2024 plaintext-store precedent demonstrates this exact directory has been silently restructured before. (c) Activity rhythm signal closely tracks `NSWorkspace` foreground + `CGEventSource` intensity already at L1/L2. **Marginal additional value, anti-pattern entry-cost.** |
+| Codex agent task artifacts (`codex-taskItems-v2-*` FSEvents) | Per-task lifecycle — parallel to Claude Code's `~/.claude/projects/<slug>/*.jsonl`. Codex is bundled inside `/Applications/ChatGPT.app` on macOS (single binary). | **Out of P7 scope** — contract §11 reserves AI-agent tool hooks (Cursor / Windsurf / Continue / Codex) for separate AI-collab track. P7 covers ChatGPT Desktop = chat product surface, not Codex agent surface. Flag-not-pursue this turn. |
+
+**Why this distinction matters.** A future maintainer reading the won't-list entry might ask "why don't you just FSEvents-watch the conversation dir for activity-pulse metadata?". Answer must be on record: not because we forgot, but because vendor-internal store has no stability contract and we explicitly chose ADR-010 discipline over a thin signal that duplicates L1/L2.
+
 ---
 
 ## 3. Privacy walkback — AX window title leak (forward-looking)
