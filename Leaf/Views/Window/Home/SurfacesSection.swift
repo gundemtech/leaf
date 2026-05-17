@@ -124,8 +124,7 @@ private struct ClaudeCodeCardWrapper: View {
     let onTap: () -> Void
 
     var body: some View {
-        let vm = ClaudeCodeSurfaceCardViewModel(toolsStore: toolsStore)
-        switch vm.state(snapshot: snapshot) {
+        switch ClaudeCodeSurfaceCardViewModel.state(toolsStore: toolsStore, snapshot: snapshot) {
         case .disabled:
             // Should not be reached — SurfacesSection only routes here when
             // isEnabled is true. Fall back gracefully.

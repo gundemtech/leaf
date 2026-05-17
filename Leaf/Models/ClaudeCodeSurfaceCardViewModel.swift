@@ -1,35 +1,37 @@
 //
 //  ClaudeCodeSurfaceCardViewModel.swift
-//  Track 7 P1 — derives SurfaceCardState<ClaudeCodeCardPayload> from
-//  AIToolsStore toggle + InsightsReader snapshot presence. Stateless —
-//  SurfacesSection calls `state(snapshot:)` per body pass; SwiftUI re-runs
-//  body on either store change or snapshot change.
+//  Track 7 P1 — pure mapper from (AIToolsStore, InsightsSnapshot?) →
+//  SurfaceCardState<ClaudeCodeCardPayload>. Namespace enum (not a class)
+//  because the mapping is stateless — there's nothing to cache, no
+//  async work, no Observation subscriptions to manage. SurfacesSection
+//  calls `state(toolsStore:snapshot:)` per body pass; SwiftUI already
+//  tracks both inputs via @Observable on AIToolsStore + the snapshot
+//  parameter, so re-evaluation is automatic without us holding a class
+//  instance.
 //
-//  P1 scope: VM does NOT surface real token / tool / session counts.
-//  Aggregating those values requires a separate `aiActivityBreakdown(period:)`
-//  query that's too expensive to run per Home redraw and not exposed on
-//  InsightsSnapshot. The detail screen (ClaudeCodeDetailViewModel, T10/T11)
-//  performs that query on demand. Home card therefore flips between three
-//  visible states: disabled / loading / "open for details".
+//  P1 scope: this mapper does NOT surface real token / tool / session
+//  counts. Aggregating those values requires a separate
+//  `aiActivityBreakdown(period:)` query that's too expensive to run per
+//  Home redraw and not exposed on InsightsSnapshot. The detail screen
+//  (ClaudeCodeDetailViewModel, T10/T11) performs that query on demand.
+//  Home card therefore flips between three visible states:
+//  disabled / loading / "open for details".
+//
+//  P2-P6 surface VMs should follow the same namespace-enum + static
+//  state(...) pattern unless they hold real cached state.
 //
 
 import Foundation
-import Observation
 import LeafCore
 
-@MainActor
-@Observable
-final class ClaudeCodeSurfaceCardViewModel {
-    private let toolsStore: AIToolsStore
-
-    init(toolsStore: AIToolsStore) {
-        self.toolsStore = toolsStore
-    }
-
+enum ClaudeCodeSurfaceCardViewModel {
     /// Returns the card-render state for the current `(toolsStore, snapshot)`
     /// pair. Stateless: callers re-invoke per body pass and SwiftUI tracks
-    /// both inputs via @Observable.
-    func state(snapshot: InsightsSnapshot?) -> SurfaceCardState<ClaudeCodeCardPayload> {
+    /// inputs via @Observable on AIToolsStore + parameter change.
+    static func state(
+        toolsStore: AIToolsStore,
+        snapshot: InsightsSnapshot?
+    ) -> SurfaceCardState<ClaudeCodeCardPayload> {
         guard toolsStore.isEnabled("claude_code") else {
             return .disabled
         }
