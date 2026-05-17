@@ -321,16 +321,7 @@ private struct HomeContent: View {
         case .github:
             GitHubDetailScreen()
         case .slack:
-            VStack {
-                Spacer()
-                LeafEmptyState(
-                    icon: LeafIcons.brand.leaf,
-                    title: "Slack detail coming soon",
-                    description: "This Layer B drill-down lands in a follow-up task within Track-7 P4."
-                )
-                Spacer()
-            }
-            .frame(minHeight: LeafEmptyStateTokens.centeredMinHeight)
+            SlackDetailScreen()
         }
     }
 
