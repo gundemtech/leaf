@@ -176,7 +176,7 @@ public struct SlackTickResult: Sendable, Hashable {
         self.statusExpirationTs = statusExpirationTs
     }
 
-    public static let empty = SlackTickResult(
+    public static let empty = Self(
         huddle: .unknown,
         channelMessageCounts: [],
         cursorMs: nil,
@@ -198,7 +198,7 @@ public enum SlackHuddleState: String, Sendable, Hashable {
 
     /// Forward-compat: неизвестные Slack values → .unknown.
     public init(slackAPIString: String) {
-        self = SlackHuddleState(rawValue: slackAPIString) ?? .unknown
+        self = Self(rawValue: slackAPIString) ?? .unknown
     }
 }
 
@@ -288,7 +288,7 @@ public struct SlackThreadReplyBatch: Sendable {
     }
 
     /// Empty sentinel — used by stub and graceful-degrade paths.
-    public static let empty = SlackThreadReplyBatch(parent: nil, replies: [], nextCursor: nil)
+    public static let empty = Self(parent: nil, replies: [], nextCursor: nil)
 }
 
 /// Bucket: количество self-authored сообщений в одном канале за период tick'а.
@@ -372,7 +372,7 @@ public struct SlackDNDState: Sendable, Hashable {
     /// Graceful sentinel: provider не смог определить state (401 / 429 / network /
     /// parse fail). Collector emit'ит pulse с `dnd_enabled=false` — downstream
     /// видит observation continuity без gap'ов между tick'ами.
-    public static let empty = SlackDNDState(
+    public static let empty = Self(
         dndEnabled: false,
         snoozeUntilMs: nil,
         nextDNDStartMs: nil,
@@ -449,8 +449,8 @@ public struct SlackFileUploadSummary: Sendable, Hashable {
     /// Graceful sentinel: provider не смог определить state (401 / 429 / network /
     /// parse fail). Collector emit'ит aggregate event с count=0 — downstream
     /// видит observation continuity без gap'ов между tick'ами.
-    public static func empty(periodStartMs: Int64, periodEndMs: Int64) -> SlackFileUploadSummary {
-        SlackFileUploadSummary(
+    public static func empty(periodStartMs: Int64, periodEndMs: Int64) -> Self {
+        Self(
             count: 0,
             typesSummary: [:],
             periodStartMs: periodStartMs,

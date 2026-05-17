@@ -9,39 +9,39 @@ import SwiftUI
 
 enum LeafColor {
     enum surface {
-        static let canvas: Color = Color("LeafSurfaceCanvas")
-        static let raised: Color = Color("LeafSurfaceRaised")
-        static let inset: Color = Color("LeafSurfaceInset")
+        static let canvas = Color("LeafSurfaceCanvas")
+        static let raised = Color("LeafSurfaceRaised")
+        static let inset = Color("LeafSurfaceInset")
 
         /// Glass surfaces — material wrapped via LeafGlass.<variant>; accent tint via LeafGlassTintAccent.
         /// `surface.glassTint` exposes the accent overlay colour for accent-tinted glass.
-        static let glassTint: Color = Color("LeafGlassTintAccent")
+        static let glassTint = Color("LeafGlassTintAccent")
     }
 
     enum text {
-        static let primary: Color = Color("LeafTextPrimary")
-        static let secondary: Color = Color("LeafTextSecondary")
-        static let tertiary: Color = Color("LeafTextTertiary")
-        static let quaternary: Color = Color("LeafTextQuaternary")
-        static let inverse: Color = Color("LeafTextInverse")
+        static let primary = Color("LeafTextPrimary")
+        static let secondary = Color("LeafTextSecondary")
+        static let tertiary = Color("LeafTextTertiary")
+        static let quaternary = Color("LeafTextQuaternary")
+        static let inverse = Color("LeafTextInverse")
     }
 
     enum accent {
-        static let primary: Color = Color("LeafAccentPrimary")
-        static let subtle: Color = Color("LeafAccentSubtle")
-        static let emphasis: Color = Color("LeafAccentEmphasis")
+        static let primary = Color("LeafAccentPrimary")
+        static let subtle = Color("LeafAccentSubtle")
+        static let emphasis = Color("LeafAccentEmphasis")
     }
 
     enum status {
-        static let success: Color = Color("LeafStatusSuccess")
-        static let warning: Color = Color("LeafStatusWarning")
-        static let danger: Color = Color("LeafStatusDanger")
-        static let info: Color = Color("LeafStatusInfo")
+        static let success = Color("LeafStatusSuccess")
+        static let warning = Color("LeafStatusWarning")
+        static let danger = Color("LeafStatusDanger")
+        static let info = Color("LeafStatusInfo")
     }
 
     enum border {
-        static let subtle: Color = Color("LeafBorderSubtle")
-        static let strong: Color = Color("LeafBorderStrong")
-        static let focus: Color = Color("LeafBorderFocus")
+        static let subtle = Color("LeafBorderSubtle")
+        static let strong = Color("LeafBorderStrong")
+        static let focus = Color("LeafBorderFocus")
     }
 }

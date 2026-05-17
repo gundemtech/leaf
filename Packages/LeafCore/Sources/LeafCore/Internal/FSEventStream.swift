@@ -56,7 +56,7 @@ final class FSEventStream: @unchecked Sendable {
         guard
             let ref = FSEventStreamCreate(
                 kCFAllocatorDefault,
-                FSEventStream.callback,
+                Self.callback,
                 &context,
                 cfPaths,
                 FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
@@ -108,7 +108,7 @@ final class FSEventStream: @unchecked Sendable {
             _ eventPaths: UnsafeMutableRawPointer,
             _ eventFlags: UnsafePointer<FSEventStreamEventFlags>,
             _ eventIds: UnsafePointer<FSEventStreamEventId>
-        ) -> Void in
+        ) in
 
         guard let info = clientCallBackInfo else { return }
         let owner = Unmanaged<FSEventStream>.fromOpaque(info).takeUnretainedValue()

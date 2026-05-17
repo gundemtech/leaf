@@ -39,7 +39,7 @@ final class DisplayCollector {
         }
         Self.sharedInstance = self
         let status = CGDisplayRegisterReconfigurationCallback(
-            DisplayCollector.reconfigCallback,
+            Self.reconfigCallback,
             nil
         )
         if status == .success {
@@ -54,7 +54,7 @@ final class DisplayCollector {
     func stop() async {
         if registered {
             _ = CGDisplayRemoveReconfigurationCallback(
-                DisplayCollector.reconfigCallback,
+                Self.reconfigCallback,
                 nil
             )
             registered = false

@@ -191,7 +191,7 @@ final class KeyRotationServiceTests: XCTestCase {
                 let resp = HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!
                 return (resp, Data())
             } else {
-                return try KeyRotationServiceTests.stubRelaySuccess201(request, Data())
+                return try Self.stubRelaySuccess201(request, Data())
             }
         }
         let svc = makeService(adminPriv: pubs.adminPriv)
@@ -258,7 +258,7 @@ final class KeyRotationServiceTests: XCTestCase {
                 let resp = HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!
                 return (resp, Data())
             } else {
-                return try KeyRotationServiceTests.stubRelaySuccess201(request, Data())
+                return try Self.stubRelaySuccess201(request, Data())
             }
         }
 

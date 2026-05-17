@@ -37,7 +37,7 @@ final class OrgServiceTests: XCTestCase {
     /// `now` callback всё равно полезен — SQLCipher ms precision rounds Date(),
     /// inject whole-second avoids round-trip drift.
     private func makeService(now: Date = Date(timeIntervalSince1970: 1_700_000_000)) -> OrgService {
-        return OrgService(
+        OrgService(
             database: db,
             keystoreRoot: keystoreRoot,
             now: { now }

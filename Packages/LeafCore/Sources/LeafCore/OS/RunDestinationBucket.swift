@@ -29,7 +29,7 @@ public enum RunDestinationBucket: String, Sendable, Hashable {
     /// The raw input is read inside the parser layer; this function is the
     /// LAST place that string is allowed to live. Once it returns, callers
     /// must drop the raw value.
-    public static func bucket(rawName: String?) -> RunDestinationBucket {
+    public static func bucket(rawName: String?) -> Self {
         guard let raw = rawName?.trimmingCharacters(in: .whitespacesAndNewlines),
             !raw.isEmpty,
             raw != "(none)"

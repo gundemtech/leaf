@@ -41,7 +41,7 @@ public struct InviteBlobHeader: Sendable, Hashable {
 
     /// Read-only parse первых 33 байт. No crypto.
     /// Throws `LeafError.inviteBlobMalformed` если bytes < 33 / version != currentVersion.
-    public static func peek(from blob: InviteBlob) throws -> InviteBlobHeader {
+    public static func peek(from blob: InviteBlob) throws -> Self {
         let bytes = blob.bytes
         guard bytes.count >= prefixSize else {
             throw LeafError.inviteBlobMalformed
@@ -53,6 +53,6 @@ public struct InviteBlobHeader: Sendable, Hashable {
         let pubStart = bytes.index(bytes.startIndex, offsetBy: 1)
         let pubEnd = bytes.index(pubStart, offsetBy: 32)
         let adminPubkey = Data(bytes[pubStart..<pubEnd])
-        return InviteBlobHeader(version: version, adminPubkey: adminPubkey)
+        return Self(version: version, adminPubkey: adminPubkey)
     }
 }

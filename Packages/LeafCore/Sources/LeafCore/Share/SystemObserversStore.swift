@@ -17,7 +17,7 @@ public final class SystemObserversStore: ObservableObject, @unchecked Sendable {
 
     /// `nonisolated(unsafe)` — UserDefaults thread-safe per Apple docs;
     /// matches OAuth-suite global-let pattern из Phase 4.2 + S2 LocalAppsStore.
-    public nonisolated(unsafe) static let sharedDefaults: UserDefaults =
+    nonisolated(unsafe) public static let sharedDefaults: UserDefaults =
         UserDefaults(suiteName: sharedSuiteName) ?? .standard
 
     /// Observers, которые по умолчанию OFF. CGEventTap intensity единственный —

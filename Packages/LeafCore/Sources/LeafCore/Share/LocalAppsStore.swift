@@ -35,7 +35,7 @@ public final class LocalAppsStore: ObservableObject, @unchecked Sendable {
     /// `nonisolated(unsafe)` — UserDefaults is Apple-NSObject (not Sendable
     /// per its declaration) but is documented as thread-safe by Apple, and
     /// matches the OAuth-suite global-let pattern shipped since Phase 4.2.
-    public nonisolated(unsafe) static let sharedDefaults: UserDefaults =
+    nonisolated(unsafe) public static let sharedDefaults: UserDefaults =
         UserDefaults(suiteName: sharedSuiteName) ?? .standard
 
     private let defaults: UserDefaults

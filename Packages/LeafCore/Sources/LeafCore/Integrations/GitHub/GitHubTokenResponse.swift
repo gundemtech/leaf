@@ -15,7 +15,7 @@ import Foundation
 ///   - long-lived OAuth App (token expiration OFF): `expiresIn`/`refreshToken` отсутствуют.
 ///   - rotating OAuth App (token expiration ON): `expiresIn` ~28800 (8h),
 ///     `refreshToken` присутствует, `refreshTokenExpiresIn` ~15724800 (6 месяцев).
-public nonisolated struct GitHubTokenResponse: Decodable, Sendable {
+nonisolated public struct GitHubTokenResponse: Decodable, Sendable {
     public let accessToken: String
     public let tokenType: String
     public let scope: String
@@ -42,7 +42,7 @@ public nonisolated struct GitHubTokenResponse: Decodable, Sendable {
 ///   - `slow_down` — увеличить interval на 5s.
 ///   - `expired_token` — device_code истёк (>15 min), нужен restart.
 ///   - `access_denied` — юзер отклонил.
-public nonisolated struct GitHubTokenError: Decodable, Sendable {
+nonisolated public struct GitHubTokenError: Decodable, Sendable {
     public let error: String
     public let errorDescription: String?
     public let errorURI: String?
@@ -55,7 +55,7 @@ public nonisolated struct GitHubTokenError: Decodable, Sendable {
 }
 
 /// Response для `POST /login/device/code` — initial device code request.
-public nonisolated struct GitHubDeviceCodeResponse: Decodable, Sendable {
+nonisolated public struct GitHubDeviceCodeResponse: Decodable, Sendable {
     /// Long random string — отправляется на `/login/oauth/access_token` polling'ом.
     public let deviceCode: String
     /// Short human-readable code (e.g. "WDJB-MJHT") — юзер вводит на verification_uri.
@@ -80,7 +80,7 @@ public nonisolated struct GitHubDeviceCodeResponse: Decodable, Sendable {
 }
 
 /// `GET /user` viewer identity response. Минимальный subset полей.
-public nonisolated struct GitHubViewerResponse: Decodable, Sendable {
+nonisolated public struct GitHubViewerResponse: Decodable, Sendable {
     public let id: Int
     public let login: String
     public let nodeID: String?

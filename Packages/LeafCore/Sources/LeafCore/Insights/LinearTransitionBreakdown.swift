@@ -33,7 +33,7 @@ public struct LinearTransitionBreakdown: Sendable, Hashable, Codable {
         self.reopened = reopened
     }
 
-    public static let empty = LinearTransitionBreakdown(
+    public static let empty = Self(
         started: 0, completed: 0, canceled: 0, reopened: 0
     )
 }

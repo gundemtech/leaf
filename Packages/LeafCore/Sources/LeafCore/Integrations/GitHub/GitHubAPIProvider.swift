@@ -123,7 +123,7 @@ public struct GitHubEventBatch: Sendable, Hashable {
         self.cursorMs = cursorMs
     }
 
-    public static let empty = GitHubEventBatch(events: [], cursorMs: nil)
+    public static let empty = Self(events: [], cursorMs: nil)
 }
 
 /// Phase Track-1 D1 — PR-specific numeric metadata captured from
@@ -271,8 +271,8 @@ public struct GitHubNotificationsSummary: Sendable, Hashable {
     /// Used при non-200 / parse failure / collector graceful degradation.
     /// `observedAtMs` всё равно populated — потому что pulse event с total_unread=0
     /// семантически валиден ("inbox empty в момент N").
-    public static func empty(nowMs: Int64) -> GitHubNotificationsSummary {
-        GitHubNotificationsSummary(totalUnread: 0, byReason: [:], observedAtMs: nowMs)
+    public static func empty(nowMs: Int64) -> Self {
+        Self(totalUnread: 0, byReason: [:], observedAtMs: nowMs)
     }
 }
 
@@ -297,8 +297,8 @@ public struct GitHubReviewQueueSummary: Sendable, Hashable {
 
     /// Used при non-200 / parse failure / graceful degradation. `count=0` +
     /// `topRepo=nil` — семантически валиден ("review queue empty в момент N").
-    public static func empty(nowMs: Int64) -> GitHubReviewQueueSummary {
-        GitHubReviewQueueSummary(count: 0, topRepo: nil, observedAtMs: nowMs)
+    public static func empty(nowMs: Int64) -> Self {
+        Self(count: 0, topRepo: nil, observedAtMs: nowMs)
     }
 }
 
@@ -317,8 +317,8 @@ public struct GitHubMyOpenPRsSummary: Sendable, Hashable {
     }
 
     /// Used при non-200 / parse failure / graceful degradation.
-    public static func empty(nowMs: Int64) -> GitHubMyOpenPRsSummary {
-        GitHubMyOpenPRsSummary(count: 0, observedAtMs: nowMs)
+    public static func empty(nowMs: Int64) -> Self {
+        Self(count: 0, observedAtMs: nowMs)
     }
 }
 
@@ -395,7 +395,7 @@ public struct GitHubCheckRunsSummary: Sendable, Hashable {
 
     /// Used при non-200 / parse failure / 404 / network error — graceful degradation.
     /// `total=0` всё ещё семантически валиден ("у HEAD commit'а нет check-runs").
-    public static let empty = GitHubCheckRunsSummary(
+    public static let empty = Self(
         total: 0, success: 0, failure: 0, inProgress: 0, neutral: 0
     )
 }
@@ -444,7 +444,7 @@ public struct GitHubContributionsCalendar: Sendable, Hashable {
     /// Used при non-200 / GraphQL error / parse failure / network error.
     /// `todayCount=0` семантически корректен ("calendar недоступен сейчас, у
     /// presence_state.contributions_today останется previous value до next day").
-    public static let empty = GitHubContributionsCalendar(
+    public static let empty = Self(
         totalContributions: 0, todayCount: 0, weeks: []
     )
 }

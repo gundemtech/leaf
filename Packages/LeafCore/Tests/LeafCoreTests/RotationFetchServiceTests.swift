@@ -813,7 +813,7 @@ final class RotationFetchServiceMockURLProtocol: URLProtocol {
         do {
             let (resp, data) = try handler(request, Data())
             client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
-            if let data = data { client?.urlProtocol(self, didLoad: data) }
+            if let data { client?.urlProtocol(self, didLoad: data) }
             client?.urlProtocolDidFinishLoading(self)
         } catch {
             client?.urlProtocol(self, didFailWithError: error)

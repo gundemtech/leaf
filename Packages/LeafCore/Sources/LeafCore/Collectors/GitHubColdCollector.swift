@@ -455,7 +455,6 @@ public actor GitHubColdCollector {
     private func readAuditCursor() -> Int64? {
         guard let snap = readRawSnapshot(Schema.ProviderSnapshotKinds.githubAuditCursor) else { return nil }
         return (try? JSONDecoder().decode(AuditCursorJSON.self, from: Data(snap.snapshotJSON.utf8)).since)
-            ?? nil
     }
 
     private func readRawSnapshot(_ kind: String) -> ProviderSnapshot? {

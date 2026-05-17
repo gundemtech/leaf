@@ -12,7 +12,7 @@ import Foundation
 
 /// `POST /oauth/token` success response (RFC 6749 §4.1.4 + §6).
 /// Linear возвращает refresh_token и для public PKCE clients (verified).
-public nonisolated struct LinearTokenResponse: Decodable, Sendable {
+nonisolated public struct LinearTokenResponse: Decodable, Sendable {
     public let accessToken: String
     public let tokenType: String
     public let expiresIn: Int?
@@ -30,7 +30,7 @@ public nonisolated struct LinearTokenResponse: Decodable, Sendable {
 
 /// `POST /oauth/token` error response (RFC 6749 §5.2).
 /// Codable с обоими `error` и `error_description`; UI показывает description.
-public nonisolated struct LinearTokenError: Decodable, Sendable {
+nonisolated public struct LinearTokenError: Decodable, Sendable {
     public let error: String
     public let errorDescription: String?
 
@@ -42,26 +42,26 @@ public nonisolated struct LinearTokenError: Decodable, Sendable {
 
 /// `viewer { id organization { id name urlKey } }` response shape.
 /// Top-level `data` per GraphQL spec.
-public nonisolated struct LinearViewerResponse: Decodable, Sendable {
+nonisolated public struct LinearViewerResponse: Decodable, Sendable {
     public let data: LinearViewerData?
     public let errors: [LinearGraphQLError]?
 }
 
-public nonisolated struct LinearViewerData: Decodable, Sendable {
+nonisolated public struct LinearViewerData: Decodable, Sendable {
     public let viewer: LinearViewer?
 }
 
-public nonisolated struct LinearViewer: Decodable, Sendable {
+nonisolated public struct LinearViewer: Decodable, Sendable {
     public let id: String
     public let organization: LinearOrganization
 }
 
-public nonisolated struct LinearOrganization: Decodable, Sendable {
+nonisolated public struct LinearOrganization: Decodable, Sendable {
     public let id: String
     public let name: String
     public let urlKey: String
 }
 
-public nonisolated struct LinearGraphQLError: Decodable, Sendable {
+nonisolated public struct LinearGraphQLError: Decodable, Sendable {
     public let message: String
 }

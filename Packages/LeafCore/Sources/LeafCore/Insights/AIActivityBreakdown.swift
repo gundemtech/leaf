@@ -37,7 +37,7 @@ public struct AIActivityBreakdown: Sendable, Hashable {
         self.topProjects = topProjects
     }
 
-    public static let empty = AIActivityBreakdown(
+    public static let empty = Self(
         ratio: 0,
         aiActiveSeconds: 0,
         totalActiveSeconds: 0,

@@ -96,14 +96,14 @@ public struct PresenceUISnapshot: Sendable, Hashable {
         self.slack = slack
     }
 
-    public static let empty = PresenceUISnapshot()
+    public static let empty = Self()
 
     public var isEmpty: Bool { github == nil && linear == nil && slack == nil }
 
     /// Read all `presence_state` rows and map to typed UI snapshot.
     /// Missing rows ↔ optional fields stay nil. Malformed JSON fields default
     /// to safe zeros / "unknown" — never crashes the dashboard.
-    public static func read(database: Database) throws -> PresenceUISnapshot {
+    public static func read(database: Database) throws -> Self {
         var github: GitHub?
         var linear: Linear?
         var slack: Slack?
@@ -151,7 +151,7 @@ public struct PresenceUISnapshot: Sendable, Hashable {
             }
         }
 
-        return PresenceUISnapshot(github: github, linear: linear, slack: slack)
+        return Self(github: github, linear: linear, slack: slack)
     }
 
     // MARK: - Helpers

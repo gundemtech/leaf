@@ -13,7 +13,7 @@ public struct DatabaseConfig: Sendable, Hashable {
         self.walCheckpointMaxBytes = walCheckpointMaxBytes
     }
 
-    public static let weakDefaults = DatabaseConfig(
+    public static let weakDefaults = Self(
         busyTimeoutMs: 1000,
         walCheckpointIntervalSec: 60,
         walCheckpointMaxBytes: 1_048_576

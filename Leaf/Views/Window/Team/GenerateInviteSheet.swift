@@ -181,7 +181,7 @@ struct GenerateInviteSheet: View {
     }
 
     private func inviteeDisplayNameHint() -> String {
-        return ""
+        ""
     }
 
     private func countdownText(expiresAtMs: Int64, now: Date = Date()) -> String {

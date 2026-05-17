@@ -4,29 +4,6 @@ import Foundation
 import IOKit.hid
 import LeafCore
 import os
-import os.lock
-
-/// Phase Track-4 S3 — central intensity collector.
-///
-/// **Counter-only.** Callback NEVER reads `.keycode`, `.characters`,
-/// `.modifierFlags`, `.location`, `.unicodeStringValue` — increments один из
-/// двух bucket counters (`keystrokes` или `mouseMoves`) на основе только
-/// `CGEventType` discriminator (ADR-010 Won't-list; walkback в T12).
-///
-/// **System-state gated.** Callback drops events while `SystemStateCollector`
-/// reports `isLocked` или `isSleeping` (S1 dependency). Minute boundary
-/// flush asks the same flags @MainActor; locked/sleeping buckets emit
-/// `intensity_bucket_dropped` event без `foreground_app`.
-///
-/// **Auto-restart.** Tap recovers from `.tapDisabledByTimeout` /
-/// `.tapDisabledByUserInput` via `CGEvent.tapEnable(enable: true)` —
-/// без metrics emit (avoid noise log).
-///
-/// Concurrency: `@unchecked Sendable`. Callback runs на CFRunLoop thread
-/// (главный главного thread'а после install). Counter state guarded by
-/// `OSAllocatedUnfairLock` — атомарные increments из C-callback +
-/// атомарный snapshot+reset из minute-boundary flush loop. Flush hops
-/// в MainActor для system-state reads + writer.enqueue.
 final class CGEventTapCollector: @unchecked Sendable {
     private struct CounterState {
         var keystrokes: UInt32 = 0
@@ -138,7 +115,7 @@ final class CGEventTapCollector: @unchecked Sendable {
                 place: .headInsertEventTap,
                 options: .listenOnly,
                 eventsOfInterest: mask,
-                callback: CGEventTapCollector.tapCallback,
+                callback: Self.tapCallback,
                 userInfo: refcon
             )
         else {
@@ -190,7 +167,7 @@ final class CGEventTapCollector: @unchecked Sendable {
     // MARK: - C tap callback (counter-only — ADR-010 Won't-list)
 
     private static let tapCallback: CGEventTapCallBack = { _, type, event, refcon in
-        guard let refcon = refcon else { return Unmanaged.passUnretained(event) }
+        guard let refcon else { return Unmanaged.passUnretained(event) }
         let me = Unmanaged<CGEventTapCollector>.fromOpaque(refcon).takeUnretainedValue()
         return me.handleTapEvent(type: type, event: event)
     }

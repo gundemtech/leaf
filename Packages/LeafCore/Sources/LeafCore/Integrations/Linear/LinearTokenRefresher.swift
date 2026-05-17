@@ -22,7 +22,7 @@ public enum LinearTokenRefresherError: Error, Equatable, Sendable {
     case decode(String)
 }
 
-public nonisolated struct LinearTokenRefresher: Sendable {
+nonisolated public struct LinearTokenRefresher: Sendable {
     /// Под Phase 4.2 collector передаст shared writer; под Phase 4.1 — main app
     /// share'ит свой `WatchedFoldersService.database`-эквивалент. См. service wiring.
     public let database: Database

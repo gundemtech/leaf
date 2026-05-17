@@ -36,7 +36,7 @@ public struct DetectorMoat: Sendable {
 
     /// Public-substrate default — no-op detectors. Used by callers without
     /// LeafCorePrivate wiring (CI, public-API integration tests).
-    public static let publicSubstrate = DetectorMoat(
+    public static let publicSubstrate = Self(
         decision: NoOpDecisionDetector(),
         openQuestion: NoOpOpenQuestionDetector(),
         blockerPattern: NoOpBlockerPatternDetector(),

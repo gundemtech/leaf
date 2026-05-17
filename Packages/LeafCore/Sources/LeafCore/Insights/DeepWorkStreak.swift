@@ -13,5 +13,5 @@ public struct DeepWorkStreak: Codable, Sendable, Hashable {
         self.totalSeconds = totalSeconds
     }
 
-    public static let empty = DeepWorkStreak(days: 0, totalSeconds: 0)
+    public static let empty = Self(days: 0, totalSeconds: 0)
 }

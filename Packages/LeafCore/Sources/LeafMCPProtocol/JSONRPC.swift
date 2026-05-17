@@ -17,7 +17,7 @@ public enum JSONRPCID: Codable, Hashable, Sendable {
             return
         }
         throw DecodingError.typeMismatch(
-            JSONRPCID.self,
+            Self.self,
             .init(codingPath: decoder.codingPath, debugDescription: "id must be number or string")
         )
     }
@@ -61,11 +61,11 @@ public struct AnyCodable: Codable, @unchecked Sendable {
             self.value = s
             return
         }
-        if let a = try? c.decode([AnyCodable].self) {
+        if let a = try? c.decode([Self].self) {
             self.value = a.map(\.value)
             return
         }
-        if let o = try? c.decode([String: AnyCodable].self) {
+        if let o = try? c.decode([String: Self].self) {
             self.value = o.mapValues(\.value)
             return
         }
@@ -80,8 +80,8 @@ public struct AnyCodable: Codable, @unchecked Sendable {
         case let i as Int: try c.encode(i)
         case let d as Double: try c.encode(d)
         case let s as String: try c.encode(s)
-        case let a as [Any]: try c.encode(a.map(AnyCodable.init))
-        case let o as [String: Any]: try c.encode(o.mapValues(AnyCodable.init))
+        case let a as [Any]: try c.encode(a.map(Self.init))
+        case let o as [String: Any]: try c.encode(o.mapValues(Self.init))
         default:
             let ctx = EncodingError.Context(
                 codingPath: encoder.codingPath,
@@ -124,12 +124,12 @@ public struct JSONRPCResponse: Codable, Sendable {
     public let result: AnyCodable?
     public let error: JSONRPCErrorObject?
 
-    public static func success(id: JSONRPCID, result: AnyCodable) -> JSONRPCResponse {
-        JSONRPCResponse(jsonrpc: "2.0", id: id, result: result, error: nil)
+    public static func success(id: JSONRPCID, result: AnyCodable) -> Self {
+        Self(jsonrpc: "2.0", id: id, result: result, error: nil)
     }
 
-    public static func error(id: JSONRPCID, code: Int, message: String, data: AnyCodable? = nil) -> JSONRPCResponse {
-        JSONRPCResponse(
+    public static func error(id: JSONRPCID, code: Int, message: String, data: AnyCodable? = nil) -> Self {
+        Self(
             jsonrpc: "2.0", id: id, result: nil,
             error: JSONRPCErrorObject(code: code, message: message, data: data)
         )
