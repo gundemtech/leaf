@@ -7,13 +7,16 @@ final class IntensityBucketAccumulatorTests: XCTestCase {
     func testActiveBucketProducesSnapshot() {
         let accumulator = IntensityBucketAccumulator()
         let snap = accumulator.flushTo(
-            bucketMs: 1_000,
-            keystrokes: 50,
-            mouseMoves: 100,
-            appSwitches: 3,
-            foregroundApp: "com.apple.dt.Xcode",
-            wasLocked: false,
-            wasSleeping: false
+            IntensityBucketAccumulator.MinuteBucket(
+                bucketMs: 1_000,
+                keystrokes: 50,
+                mouseMoves: 100,
+                appSwitches: 3,
+                foregroundApp: "com.apple.dt.Xcode",
+                wasLocked: false,
+                wasSleeping: false
+            )
+
         )
         XCTAssertEqual(snap.minuteBucketMs, 1_000)
         XCTAssertEqual(snap.keystrokes, 50)
@@ -26,10 +29,13 @@ final class IntensityBucketAccumulatorTests: XCTestCase {
     func testForegroundAppPreservedWhenActive() {
         let accumulator = IntensityBucketAccumulator()
         let snap = accumulator.flushTo(
-            bucketMs: 60_000,
-            keystrokes: 0, mouseMoves: 0, appSwitches: 0,
-            foregroundApp: "com.spotify.client",
-            wasLocked: false, wasSleeping: false
+            IntensityBucketAccumulator.MinuteBucket(
+                bucketMs: 60_000,
+                keystrokes: 0, mouseMoves: 0, appSwitches: 0,
+                foregroundApp: "com.spotify.client",
+                wasLocked: false, wasSleeping: false
+            )
+
         )
         XCTAssertEqual(snap.foregroundApp, "com.spotify.client")
     }
@@ -38,10 +44,13 @@ final class IntensityBucketAccumulatorTests: XCTestCase {
         // All-zero bucket valid; UPSERT idempotent on PK даёт row для retention.
         let accumulator = IntensityBucketAccumulator()
         let snap = accumulator.flushTo(
-            bucketMs: 60_000,
-            keystrokes: 0, mouseMoves: 0, appSwitches: 0,
-            foregroundApp: nil,
-            wasLocked: false, wasSleeping: false
+            IntensityBucketAccumulator.MinuteBucket(
+                bucketMs: 60_000,
+                keystrokes: 0, mouseMoves: 0, appSwitches: 0,
+                foregroundApp: nil,
+                wasLocked: false, wasSleeping: false
+            )
+
         )
         XCTAssertNil(snap.droppedReason)
         XCTAssertNil(snap.foregroundApp)
@@ -50,10 +59,13 @@ final class IntensityBucketAccumulatorTests: XCTestCase {
     func testLockedBucketDropsForegroundApp() {
         let accumulator = IntensityBucketAccumulator()
         let snap = accumulator.flushTo(
-            bucketMs: 60_000,
-            keystrokes: 5, mouseMoves: 10, appSwitches: 1,
-            foregroundApp: "com.apple.Safari",
-            wasLocked: true, wasSleeping: false
+            IntensityBucketAccumulator.MinuteBucket(
+                bucketMs: 60_000,
+                keystrokes: 5, mouseMoves: 10, appSwitches: 1,
+                foregroundApp: "com.apple.Safari",
+                wasLocked: true, wasSleeping: false
+            )
+
         )
         XCTAssertNil(snap.foregroundApp, "locked bucket strips foreground_app")
         XCTAssertEqual(snap.droppedReason, .locked)
@@ -62,10 +74,13 @@ final class IntensityBucketAccumulatorTests: XCTestCase {
     func testSleepingBucketDropsForegroundApp() {
         let accumulator = IntensityBucketAccumulator()
         let snap = accumulator.flushTo(
-            bucketMs: 60_000,
-            keystrokes: 0, mouseMoves: 0, appSwitches: 0,
-            foregroundApp: "com.apple.dt.Xcode",
-            wasLocked: false, wasSleeping: true
+            IntensityBucketAccumulator.MinuteBucket(
+                bucketMs: 60_000,
+                keystrokes: 0, mouseMoves: 0, appSwitches: 0,
+                foregroundApp: "com.apple.dt.Xcode",
+                wasLocked: false, wasSleeping: true
+            )
+
         )
         XCTAssertNil(snap.foregroundApp)
         XCTAssertEqual(snap.droppedReason, .sleeping)
@@ -74,10 +89,13 @@ final class IntensityBucketAccumulatorTests: XCTestCase {
     func testLockedAndSleepingPrefersLocked() {
         let accumulator = IntensityBucketAccumulator()
         let snap = accumulator.flushTo(
-            bucketMs: 60_000,
-            keystrokes: 0, mouseMoves: 0, appSwitches: 0,
-            foregroundApp: nil,
-            wasLocked: true, wasSleeping: true
+            IntensityBucketAccumulator.MinuteBucket(
+                bucketMs: 60_000,
+                keystrokes: 0, mouseMoves: 0, appSwitches: 0,
+                foregroundApp: nil,
+                wasLocked: true, wasSleeping: true
+            )
+
         )
         XCTAssertEqual(snap.droppedReason, .locked, "locked takes priority")
     }
@@ -85,10 +103,13 @@ final class IntensityBucketAccumulatorTests: XCTestCase {
     func testBucketMsPreserved() {
         let accumulator = IntensityBucketAccumulator()
         let snap = accumulator.flushTo(
-            bucketMs: 1_777_777_777_777,
-            keystrokes: 1, mouseMoves: 1, appSwitches: 1,
-            foregroundApp: "x",
-            wasLocked: false, wasSleeping: false
+            IntensityBucketAccumulator.MinuteBucket(
+                bucketMs: 1_777_777_777_777,
+                keystrokes: 1, mouseMoves: 1, appSwitches: 1,
+                foregroundApp: "x",
+                wasLocked: false, wasSleeping: false
+            )
+
         )
         XCTAssertEqual(snap.minuteBucketMs, 1_777_777_777_777)
     }
@@ -96,10 +117,13 @@ final class IntensityBucketAccumulatorTests: XCTestCase {
     func testCountersTypedUInt32Max() {
         let accumulator = IntensityBucketAccumulator()
         let snap = accumulator.flushTo(
-            bucketMs: 0,
-            keystrokes: UInt32.max, mouseMoves: UInt32.max, appSwitches: UInt32.max,
-            foregroundApp: nil,
-            wasLocked: false, wasSleeping: false
+            IntensityBucketAccumulator.MinuteBucket(
+                bucketMs: 0,
+                keystrokes: UInt32.max, mouseMoves: UInt32.max, appSwitches: UInt32.max,
+                foregroundApp: nil,
+                wasLocked: false, wasSleeping: false
+            )
+
         )
         XCTAssertEqual(snap.keystrokes, UInt32.max)
         XCTAssertEqual(snap.mouseMoves, UInt32.max)

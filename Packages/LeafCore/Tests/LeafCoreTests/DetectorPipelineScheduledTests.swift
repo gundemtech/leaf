@@ -132,12 +132,14 @@ final class DetectorPipelineScheduledTests: XCTestCase {
         // returned [LEAF-2] in a prior run would have produced this row).
         try db.writeSQL { rawDB in
             _ = try BlockersStore.insertOpenIfAbsent(
-                targetKind: Schema.TargetKinds.linearIssue,
-                targetRef: "LEAF-2",
-                blockerKind: "linear_stuck",
-                excerpt: nil,
-                detectedByEventID: nil,
-                startedAtMs: 1_000,
+                BlockersStore.OpenBlockerInput(
+                    targetKind: Schema.TargetKinds.linearIssue,
+                    targetRef: "LEAF-2",
+                    blockerKind: "linear_stuck",
+                    excerpt: nil,
+                    detectedByEventID: nil,
+                    startedAtMs: 1_000
+                ),
                 in: rawDB
             )
         }

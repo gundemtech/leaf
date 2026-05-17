@@ -40,12 +40,14 @@ public enum EventLinksStore {
             for (_, body) in bodies {
                 for id in LinearIDExtractor.extractAll(text: body, knownPrefixes: knownLinearPrefixes) {
                     try insert(
-                        eventID: eventID,
-                        linkKind: Schema.LinkKinds.linearIDInText,
-                        targetKind: Schema.TargetKinds.linearIssue,
-                        targetRef: id,
-                        confidence: derivers.confidence.linearIDInText,
-                        createdAtMs: ts, in: db)
+                        InsertRow(
+                            eventID: eventID,
+                            linkKind: Schema.LinkKinds.linearIDInText,
+                            targetKind: Schema.TargetKinds.linearIssue,
+                            targetRef: id,
+                            confidence: derivers.confidence.linearIDInText,
+                            createdAtMs: ts
+                        ), in: db)
                 }
             }
         }
@@ -57,33 +59,39 @@ public enum EventLinksStore {
             let id = derivers.extractBranchLinearID(branch, knownLinearPrefixes)
         {
             try insert(
-                eventID: eventID,
-                linkKind: Schema.LinkKinds.branchNameLinearRef,
-                targetKind: Schema.TargetKinds.linearIssue,
-                targetRef: id,
-                confidence: derivers.confidence.branchNameLinearRef,
-                createdAtMs: ts, in: db)
+                InsertRow(
+                    eventID: eventID,
+                    linkKind: Schema.LinkKinds.branchNameLinearRef,
+                    targetKind: Schema.TargetKinds.linearIssue,
+                    targetRef: id,
+                    confidence: derivers.confidence.branchNameLinearRef,
+                    createdAtMs: ts
+                ), in: db)
         }
 
         // 3) PR URL + hash-ref in Slack bodies. Moat extractors via derivers.
         for (kind, body) in bodies where isSlackBody(kind) {
             for ref in derivers.extractPRURLs(body) {
                 try insert(
-                    eventID: eventID,
-                    linkKind: Schema.LinkKinds.prURLInSlack,
-                    targetKind: Schema.TargetKinds.githubPR,
-                    targetRef: ref,
-                    confidence: derivers.confidence.prURLInSlack,
-                    createdAtMs: ts, in: db)
+                    InsertRow(
+                        eventID: eventID,
+                        linkKind: Schema.LinkKinds.prURLInSlack,
+                        targetKind: Schema.TargetKinds.githubPR,
+                        targetRef: ref,
+                        confidence: derivers.confidence.prURLInSlack,
+                        createdAtMs: ts
+                    ), in: db)
             }
             for ref in derivers.extractPRHashRefs(body) {
                 try insert(
-                    eventID: eventID,
-                    linkKind: Schema.LinkKinds.prNumberHashRef,
-                    targetKind: Schema.TargetKinds.githubPR,
-                    targetRef: ref,
-                    confidence: derivers.confidence.prNumberHashRef,
-                    createdAtMs: ts, in: db)
+                    InsertRow(
+                        eventID: eventID,
+                        linkKind: Schema.LinkKinds.prNumberHashRef,
+                        targetKind: Schema.TargetKinds.githubPR,
+                        targetRef: ref,
+                        confidence: derivers.confidence.prNumberHashRef,
+                        createdAtMs: ts
+                    ), in: db)
             }
         }
 
@@ -91,12 +99,14 @@ public enum EventLinksStore {
         if let raw = payload[Schema.EventPayloadKeys.requestedReviewersJson] {
             for login in decodeStringList(raw) {
                 try insert(
-                    eventID: eventID,
-                    linkKind: Schema.LinkKinds.reviewerAssigned,
-                    targetKind: Schema.TargetKinds.githubUser,
-                    targetRef: login,
-                    confidence: derivers.confidence.reviewerAssigned,
-                    createdAtMs: ts, in: db)
+                    InsertRow(
+                        eventID: eventID,
+                        linkKind: Schema.LinkKinds.reviewerAssigned,
+                        targetKind: Schema.TargetKinds.githubUser,
+                        targetRef: login,
+                        confidence: derivers.confidence.reviewerAssigned,
+                        createdAtMs: ts
+                    ), in: db)
             }
         }
 
@@ -108,12 +118,14 @@ public enum EventLinksStore {
             !linkedID.isEmpty
         {
             try insert(
-                eventID: eventID,
-                linkKind: Schema.LinkKinds.zoomToCalendarMeeting,
-                targetKind: Schema.TargetKinds.calendarEvent,
-                targetRef: linkedID,
-                confidence: derivers.confidence.zoomToCalendarMeeting,
-                createdAtMs: ts, in: db)
+                InsertRow(
+                    eventID: eventID,
+                    linkKind: Schema.LinkKinds.zoomToCalendarMeeting,
+                    targetKind: Schema.TargetKinds.calendarEvent,
+                    targetRef: linkedID,
+                    confidence: derivers.confidence.zoomToCalendarMeeting,
+                    createdAtMs: ts
+                ), in: db)
         }
     }
 
@@ -174,13 +186,21 @@ public enum EventLinksStore {
 
     // MARK: - Private
 
+    /// Column bundle for a single `event_links` row insert. Grouped to keep
+    /// the writer signature digestible — every detector callsite supplies all
+    /// six fields together, mirroring the `(from_event_id, link_kind,
+    /// target_kind, target_ref, confidence, created_at_ms)` schema tuple.
+    fileprivate struct InsertRow {
+        let eventID: Int64
+        let linkKind: String
+        let targetKind: String
+        let targetRef: String
+        let confidence: Double
+        let createdAtMs: Int64
+    }
+
     private static func insert(
-        eventID: Int64,
-        linkKind: String,
-        targetKind: String,
-        targetRef: String,
-        confidence: Double,
-        createdAtMs: Int64,
+        _ row: InsertRow,
         in db: GRDB.Database
     ) throws {
         try db.execute(
@@ -189,7 +209,10 @@ public enum EventLinksStore {
                     (from_event_id, link_kind, target_kind, target_ref, confidence, created_at_ms)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
-            arguments: [eventID, linkKind, targetKind, targetRef, confidence, createdAtMs]
+            arguments: [
+                row.eventID, row.linkKind, row.targetKind,
+                row.targetRef, row.confidence, row.createdAtMs,
+            ]
         )
     }
 

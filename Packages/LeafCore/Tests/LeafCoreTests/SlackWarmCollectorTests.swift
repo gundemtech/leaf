@@ -87,18 +87,13 @@ final class SlackWarmCollectorTests: XCTestCase {
             accessToken: String,
             userID: String,
             scopes: SlackScopesChecking,
-            priorMemberChannels: SlackMemberChannelsTopList?,
-            priorPinsPerChannel: [SlackChannelPinsSnapshot],
-            priorBookmarksPerChannel: [SlackChannelBookmarksSnapshot],
-            priorReminders: SlackRemindersSnapshot,
-            priorScheduledMessages: SlackScheduledMessagesSnapshot,
-            priorStars: SlackStarsSnapshot,
+            priors: SlackWarmStatePriorSnapshots,
             since: Int64?,
             now: Int64
         ) async throws -> SlackWarmBatch {
             fetchWarmStateCallCount += 1
-            lastSeenPriorMemberChannels = priorMemberChannels
-            lastSeenPriorPins = priorPinsPerChannel
+            lastSeenPriorMemberChannels = priors.memberChannels
+            lastSeenPriorPins = priors.pinsPerChannel
             lastSeenSince = since
             if shouldThrow { throw StubError() }
             return nextBatch

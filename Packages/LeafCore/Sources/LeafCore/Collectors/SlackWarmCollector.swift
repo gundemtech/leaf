@@ -164,12 +164,14 @@ public actor SlackWarmCollector {
                 accessToken: refreshed.accessToken,
                 userID: userID,
                 scopes: scopes,
-                priorMemberChannels: priorMemberChannels,
-                priorPinsPerChannel: priorPins,
-                priorBookmarksPerChannel: priorBookmarks,
-                priorReminders: priorReminders,
-                priorScheduledMessages: priorScheduled,
-                priorStars: priorStars,
+                priors: SlackWarmStatePriorSnapshots(
+                    memberChannels: priorMemberChannels,
+                    pinsPerChannel: priorPins,
+                    bookmarksPerChannel: priorBookmarks,
+                    reminders: priorReminders,
+                    scheduledMessages: priorScheduled,
+                    stars: priorStars
+                ),
                 since: cursor,
                 now: nowMs
             )

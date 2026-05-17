@@ -51,6 +51,16 @@ final class KeyRotationServiceTests: XCTestCase {
         data.map { String(format: "%02x", $0) }.joined()
     }
 
+    /// Bundle of cryptographic material returned by ``insertTeamFixture(orgID:selfMemberID:priorKeyID:)``.
+    /// Holds the admin + 2 peer X25519 keypairs and the prior team key so callers can drive
+    /// ECDH-bound rotation paths without re-deriving them.
+    private struct TeamFixturePubs {
+        let adminPriv: Curve25519.KeyAgreement.PrivateKey
+        let peerAPriv: Curve25519.KeyAgreement.PrivateKey
+        let peerBPriv: Curve25519.KeyAgreement.PrivateKey
+        let priorTeamKey: Data
+    }
+
     /// Inserts org with self-admin + 2 peer members using real X25519 keypairs
     /// (so ECDH in performRotation succeeds). Returns the keypairs and prior teamKey
     /// for moat/E2E paths. Default IDs: org="org1", self="self-mem", peerA="peer-a",
@@ -60,12 +70,7 @@ final class KeyRotationServiceTests: XCTestCase {
         orgID: String = "org1",
         selfMemberID: String = "self-mem",
         priorKeyID: String = "00000000-0000-0000-0000-000000000000"
-    ) throws -> (
-        adminPriv: Curve25519.KeyAgreement.PrivateKey,
-        peerAPriv: Curve25519.KeyAgreement.PrivateKey,
-        peerBPriv: Curve25519.KeyAgreement.PrivateKey,
-        priorTeamKey: Data
-    ) {
+    ) throws -> TeamFixturePubs {
         let adminPriv = Curve25519.KeyAgreement.PrivateKey()
         let peerAPriv = Curve25519.KeyAgreement.PrivateKey()
         let peerBPriv = Curve25519.KeyAgreement.PrivateKey()
@@ -109,7 +114,12 @@ final class KeyRotationServiceTests: XCTestCase {
         )
         try TeamKeystore.writeTeamKey(priorTeamKey, id: priorKeyID, at: keystoreRoot)
 
-        return (adminPriv, peerAPriv, peerBPriv, priorTeamKey)
+        return TeamFixturePubs(
+            adminPriv: adminPriv,
+            peerAPriv: peerAPriv,
+            peerBPriv: peerBPriv,
+            priorTeamKey: priorTeamKey
+        )
     }
 
     private func makeService(

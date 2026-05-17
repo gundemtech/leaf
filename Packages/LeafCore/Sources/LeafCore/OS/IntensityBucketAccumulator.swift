@@ -66,25 +66,51 @@ public struct IntensityBucketSnapshot: Sendable, Equatable {
 /// тип просто оформляет snapshot. Минутно-граничная semantics тестируется
 /// здесь в изоляции, без CGEventTap callback или DB.
 public struct IntensityBucketAccumulator: Sendable {
+    /// Inputs read from a single minute boundary in `CGEventTapCollector`:
+    /// three event counters (keystroke / mouseMove / appSwitch), the
+    /// foreground-app bundle id at flush time, and the lock/sleep flags that
+    /// gate emission (`locked` / `sleeping` → counters dropped per ADR-010).
+    /// Promoted from a 6-arg flat list to a value-type bundle so the public
+    /// formatter call signature stays digestible.
+    public struct MinuteBucket: Sendable {
+        public let bucketMs: Int64
+        public let keystrokes: UInt32
+        public let mouseMoves: UInt32
+        public let appSwitches: UInt32
+        public let foregroundApp: String?
+        public let wasLocked: Bool
+        public let wasSleeping: Bool
+
+        public init(
+            bucketMs: Int64,
+            keystrokes: UInt32,
+            mouseMoves: UInt32,
+            appSwitches: UInt32,
+            foregroundApp: String?,
+            wasLocked: Bool,
+            wasSleeping: Bool
+        ) {
+            self.bucketMs = bucketMs
+            self.keystrokes = keystrokes
+            self.mouseMoves = mouseMoves
+            self.appSwitches = appSwitches
+            self.foregroundApp = foregroundApp
+            self.wasLocked = wasLocked
+            self.wasSleeping = wasSleeping
+        }
+    }
+
     public init() {}
 
-    public func flushTo(
-        bucketMs: Int64,
-        keystrokes: UInt32,
-        mouseMoves: UInt32,
-        appSwitches: UInt32,
-        foregroundApp: String?,
-        wasLocked: Bool,
-        wasSleeping: Bool
-    ) -> IntensityBucketSnapshot {
+    public func flushTo(_ bucket: MinuteBucket) -> IntensityBucketSnapshot {
         let dropped: IntensityBucketSnapshot.DroppedReason? =
-            wasLocked ? .locked : (wasSleeping ? .sleeping : nil)
+            bucket.wasLocked ? .locked : (bucket.wasSleeping ? .sleeping : nil)
         return IntensityBucketSnapshot(
-            minuteBucketMs: bucketMs,
-            keystrokes: keystrokes,
-            mouseMoves: mouseMoves,
-            appSwitches: appSwitches,
-            foregroundApp: dropped == nil ? foregroundApp : nil,
+            minuteBucketMs: bucket.bucketMs,
+            keystrokes: bucket.keystrokes,
+            mouseMoves: bucket.mouseMoves,
+            appSwitches: bucket.appSwitches,
+            foregroundApp: dropped == nil ? bucket.foregroundApp : nil,
             droppedReason: dropped
         )
     }

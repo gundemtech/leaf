@@ -180,42 +180,45 @@ enum AgentMain {
         // working OAuth integration (same gate as hot LinearCollector — skip
         // if client_id is empty). Reuse the same `linearProvider` instance —
         // protocol now carries fetchWarmState / fetchColdState.
-        let (linearWarmCollector, linearWarmScheduler, linearColdCollector, linearColdScheduler):
-            (
-                LinearWarmCollector?, LinearWarmScheduler?,
-                LinearColdCollector?, LinearColdScheduler?
-            ) = {
-                guard !agentThresholds.linearOAuthClientID.isEmpty else {
-                    return (nil, nil, nil, nil)
-                }
-                let warmRefresher = LinearTokenRefresher(
-                    database: database, clientID: agentThresholds.linearOAuthClientID)
-                let coldRefresher = LinearTokenRefresher(
-                    database: database, clientID: agentThresholds.linearOAuthClientID)
-                let warm = LinearWarmCollector(
-                    database: database, provider: linearProvider,
-                    refresher: warmRefresher,
-                    intervalSec: agentThresholds.linearWarmPollIntervalSec,
-                    backfillWindowDays: agentThresholds.backfillWindowDays,
-                    logger: linearLogger)
-                let warmSched = LinearWarmScheduler(
-                    collector: warm,
-                    intervalSec: agentThresholds.linearWarmPollIntervalSec,
-                    logger: linearLogger)
-                let cold = LinearColdCollector(
-                    database: database, provider: linearProvider,
-                    refresher: coldRefresher,
-                    intervalSec: agentThresholds.linearColdPollIntervalSec,
-                    logger: linearLogger)
-                let coldSched = LinearColdScheduler(
-                    database: database, collector: cold,
-                    workspaceIDProvider: {
-                        // `try?` collapses throws+Optional → IntegrationRecord?.
-                        (try? database.readIntegration(provider: .linear))?.workspaceID
-                    },
-                    logger: linearLogger)
-                return (warm, warmSched, cold, coldSched)
-            }()
+        let linearTiers: LinearTierBundle = {
+            guard !agentThresholds.linearOAuthClientID.isEmpty else {
+                return .disabled
+            }
+            let warmRefresher = LinearTokenRefresher(
+                database: database, clientID: agentThresholds.linearOAuthClientID)
+            let coldRefresher = LinearTokenRefresher(
+                database: database, clientID: agentThresholds.linearOAuthClientID)
+            let warm = LinearWarmCollector(
+                database: database, provider: linearProvider,
+                refresher: warmRefresher,
+                intervalSec: agentThresholds.linearWarmPollIntervalSec,
+                backfillWindowDays: agentThresholds.backfillWindowDays,
+                logger: linearLogger)
+            let warmSched = LinearWarmScheduler(
+                collector: warm,
+                intervalSec: agentThresholds.linearWarmPollIntervalSec,
+                logger: linearLogger)
+            let cold = LinearColdCollector(
+                database: database, provider: linearProvider,
+                refresher: coldRefresher,
+                intervalSec: agentThresholds.linearColdPollIntervalSec,
+                logger: linearLogger)
+            let coldSched = LinearColdScheduler(
+                database: database, collector: cold,
+                workspaceIDProvider: {
+                    // `try?` collapses throws+Optional → IntegrationRecord?.
+                    (try? database.readIntegration(provider: .linear))?.workspaceID
+                },
+                logger: linearLogger)
+            return LinearTierBundle(
+                warmCollector: warm, warmScheduler: warmSched,
+                coldCollector: cold, coldScheduler: coldSched
+            )
+        }()
+        let linearWarmCollector = linearTiers.warmCollector
+        let linearWarmScheduler = linearTiers.warmScheduler
+        let linearColdCollector = linearTiers.coldCollector
+        let linearColdScheduler = linearTiers.coldScheduler
 
         // Phase 4.3 — GitHub REST events polling collector.
         // Mirror Linear: prod parser в moat (ProdGitHubAPIProvider — REST event
@@ -255,44 +258,47 @@ enum AgentMain {
             guard !agentThresholds.githubOAuthClientID.isEmpty else { return nil }
             return GitHubScopesService(database: database)
         }()
-        let (githubWarmCollector, githubWarmScheduler, githubColdCollector, githubColdScheduler):
-            (
-                GitHubWarmCollector?, GitHubWarmScheduler?,
-                GitHubColdCollector?, GitHubColdScheduler?
-            ) = {
-                guard !agentThresholds.githubOAuthClientID.isEmpty,
-                    let scopes = githubScopesService
-                else {
-                    return (nil, nil, nil, nil)
-                }
-                let warmRefresher = GitHubTokenRefresher(
-                    database: database, clientID: agentThresholds.githubOAuthClientID)
-                let coldRefresher = GitHubTokenRefresher(
-                    database: database, clientID: agentThresholds.githubOAuthClientID)
-                let warm = GitHubWarmCollector(
-                    database: database, provider: githubProvider,
-                    refresher: warmRefresher,
-                    scopeService: scopes,
-                    intervalSec: agentThresholds.githubWarmPollIntervalSec,
-                    logger: githubLogger)
-                let warmSched = GitHubWarmScheduler(
-                    collector: warm,
-                    intervalSec: agentThresholds.githubWarmPollIntervalSec,
-                    logger: githubLogger)
-                let cold = GitHubColdCollector(
-                    database: database, provider: githubProvider,
-                    refresher: coldRefresher,
-                    scopeService: scopes,
-                    intervalSec: agentThresholds.githubColdPollIntervalSec,
-                    logger: githubLogger)
-                let coldSched = GitHubColdScheduler(
-                    database: database, collector: cold,
-                    loginProvider: {
-                        (try? database.readIntegration(provider: .github))?.workspaceName
-                    },
-                    logger: githubLogger)
-                return (warm, warmSched, cold, coldSched)
-            }()
+        let githubTiers: GitHubTierBundle = {
+            guard !agentThresholds.githubOAuthClientID.isEmpty,
+                let scopes = githubScopesService
+            else {
+                return .disabled
+            }
+            let warmRefresher = GitHubTokenRefresher(
+                database: database, clientID: agentThresholds.githubOAuthClientID)
+            let coldRefresher = GitHubTokenRefresher(
+                database: database, clientID: agentThresholds.githubOAuthClientID)
+            let warm = GitHubWarmCollector(
+                database: database, provider: githubProvider,
+                refresher: warmRefresher,
+                scopeService: scopes,
+                intervalSec: agentThresholds.githubWarmPollIntervalSec,
+                logger: githubLogger)
+            let warmSched = GitHubWarmScheduler(
+                collector: warm,
+                intervalSec: agentThresholds.githubWarmPollIntervalSec,
+                logger: githubLogger)
+            let cold = GitHubColdCollector(
+                database: database, provider: githubProvider,
+                refresher: coldRefresher,
+                scopeService: scopes,
+                intervalSec: agentThresholds.githubColdPollIntervalSec,
+                logger: githubLogger)
+            let coldSched = GitHubColdScheduler(
+                database: database, collector: cold,
+                loginProvider: {
+                    (try? database.readIntegration(provider: .github))?.workspaceName
+                },
+                logger: githubLogger)
+            return GitHubTierBundle(
+                warmCollector: warm, warmScheduler: warmSched,
+                coldCollector: cold, coldScheduler: coldSched
+            )
+        }()
+        let githubWarmCollector = githubTiers.warmCollector
+        let githubWarmScheduler = githubTiers.warmScheduler
+        let githubColdCollector = githubTiers.coldCollector
+        let githubColdScheduler = githubTiers.coldScheduler
 
         // Phase 4.4 — Slack Web API polling collector.
         // Mirror Linear/GitHub: prod parser в moat (ProdSlackAPIProvider — search.messages
@@ -332,77 +338,80 @@ enum AgentMain {
             guard !agentThresholds.slackOAuthClientID.isEmpty else { return nil }
             return SlackScopesService(database: database)
         }()
-        let (slackWarmCollector, slackWarmScheduler, slackColdCollector, slackColdScheduler):
-            (
-                SlackWarmCollector?, SlackWarmScheduler?,
-                SlackColdCollector?, SlackColdScheduler?
-            ) = {
-                guard !agentThresholds.slackOAuthClientID.isEmpty,
-                    let scopes = slackScopesService
-                else {
-                    return (nil, nil, nil, nil)
-                }
-                // Per-tier refresher instances (mirror GitHub D2 — refresher is cheap,
-                // and avoids any actor-isolation surprises between tiers).
-                let warmRefresher = SlackTokenRefresher(
-                    database: database,
-                    clientID: agentThresholds.slackOAuthClientID
-                )
-                let coldRefresher = SlackTokenRefresher(
-                    database: database,
-                    clientID: agentThresholds.slackOAuthClientID
-                )
-                // workspaceID format is "<team>:<user>". Collectors prefer the
-                // integration record (single source of truth) and only fall back to
-                // these closures if the record's format is malformed — passing
-                // matching readers keeps semantics consistent with hot collector.
-                let workspaceIDProvider: @Sendable () -> String? = {
-                    guard let id = (try? database.readIntegration(provider: .slack))?.workspaceID
-                    else { return nil }
-                    let parts = id.split(separator: ":", omittingEmptySubsequences: false)
-                    guard parts.count == 2, !parts[0].isEmpty else { return nil }
-                    return String(parts[0])
-                }
-                let userIDProvider: @Sendable () -> String? = {
-                    guard let id = (try? database.readIntegration(provider: .slack))?.workspaceID
-                    else { return nil }
-                    let parts = id.split(separator: ":", omittingEmptySubsequences: false)
-                    guard parts.count == 2, !parts[1].isEmpty else { return nil }
-                    return String(parts[1])
-                }
-                let warm = SlackWarmCollector(
-                    database: database,
-                    provider: slackProvider,
-                    tokenRefresher: warmRefresher,
-                    scopes: scopes,
-                    workspaceIDProvider: workspaceIDProvider,
-                    userIDProvider: userIDProvider,
-                    clock: { Date() },
-                    logger: slackLogger
-                )
-                let warmSched = SlackWarmScheduler(
-                    collector: warm,
-                    intervalSec: agentThresholds.slackWarmPollIntervalSec,
-                    logger: slackLogger
-                )
-                let cold = SlackColdCollector(
-                    database: database,
-                    provider: slackProvider,
-                    tokenRefresher: coldRefresher,
-                    scopes: scopes,
-                    workspaceIDProvider: workspaceIDProvider,
-                    userIDProvider: userIDProvider,
-                    clock: { Date() },
-                    logger: slackLogger
-                )
-                let coldSched = SlackColdScheduler(
-                    database: database,
-                    collector: cold,
-                    workspaceIDProvider: workspaceIDProvider,
-                    logger: slackLogger
-                )
-                return (warm, warmSched, cold, coldSched)
-            }()
+        let slackTiers: SlackTierBundle = {
+            guard !agentThresholds.slackOAuthClientID.isEmpty,
+                let scopes = slackScopesService
+            else {
+                return .disabled
+            }
+            // Per-tier refresher instances (mirror GitHub D2 — refresher is cheap,
+            // and avoids any actor-isolation surprises between tiers).
+            let warmRefresher = SlackTokenRefresher(
+                database: database,
+                clientID: agentThresholds.slackOAuthClientID
+            )
+            let coldRefresher = SlackTokenRefresher(
+                database: database,
+                clientID: agentThresholds.slackOAuthClientID
+            )
+            // workspaceID format is "<team>:<user>". Collectors prefer the
+            // integration record (single source of truth) and only fall back to
+            // these closures if the record's format is malformed — passing
+            // matching readers keeps semantics consistent with hot collector.
+            let workspaceIDProvider: @Sendable () -> String? = {
+                guard let id = (try? database.readIntegration(provider: .slack))?.workspaceID
+                else { return nil }
+                let parts = id.split(separator: ":", omittingEmptySubsequences: false)
+                guard parts.count == 2, !parts[0].isEmpty else { return nil }
+                return String(parts[0])
+            }
+            let userIDProvider: @Sendable () -> String? = {
+                guard let id = (try? database.readIntegration(provider: .slack))?.workspaceID
+                else { return nil }
+                let parts = id.split(separator: ":", omittingEmptySubsequences: false)
+                guard parts.count == 2, !parts[1].isEmpty else { return nil }
+                return String(parts[1])
+            }
+            let warm = SlackWarmCollector(
+                database: database,
+                provider: slackProvider,
+                tokenRefresher: warmRefresher,
+                scopes: scopes,
+                workspaceIDProvider: workspaceIDProvider,
+                userIDProvider: userIDProvider,
+                clock: { Date() },
+                logger: slackLogger
+            )
+            let warmSched = SlackWarmScheduler(
+                collector: warm,
+                intervalSec: agentThresholds.slackWarmPollIntervalSec,
+                logger: slackLogger
+            )
+            let cold = SlackColdCollector(
+                database: database,
+                provider: slackProvider,
+                tokenRefresher: coldRefresher,
+                scopes: scopes,
+                workspaceIDProvider: workspaceIDProvider,
+                userIDProvider: userIDProvider,
+                clock: { Date() },
+                logger: slackLogger
+            )
+            let coldSched = SlackColdScheduler(
+                database: database,
+                collector: cold,
+                workspaceIDProvider: workspaceIDProvider,
+                logger: slackLogger
+            )
+            return SlackTierBundle(
+                warmCollector: warm, warmScheduler: warmSched,
+                coldCollector: cold, coldScheduler: coldSched
+            )
+        }()
+        let slackWarmCollector = slackTiers.warmCollector
+        let slackWarmScheduler = slackTiers.warmScheduler
+        let slackColdCollector = slackTiers.coldCollector
+        let slackColdScheduler = slackTiers.coldScheduler
 
         // Phase Track-4 S1 — Architecture catch-up collectors. Substrate-only
         // Layer A observers (Calendar / Focus / system state / spaces). No
@@ -921,4 +930,50 @@ enum AgentLifetime {
     nonisolated(unsafe) static var allowListObserverToken: NSObjectProtocol?
     // Track-6 P4 — Google Calendar collector.
     nonisolated(unsafe) static var googleCalendarCollector: GoogleCalendarCollector?
+}
+
+// MARK: - Tier bundles (Phase 2.3.C.1)
+//
+// Layer B providers (Linear / GitHub / Slack) each ship two polling tiers —
+// warm (frequent, small batches) and cold (4am daily) — plus the
+// corresponding scheduler actor. The bootstrap closure either returns all
+// four wired actors (OAuth configured) or `.disabled` (all-nil — graceful
+// skip on missing client_id). Grouping them into a per-provider bundle keeps
+// the bootstrap closure return shape readable and respects the SwiftLint
+// `large_tuple` invariant.
+
+private struct LinearTierBundle {
+    let warmCollector: LinearWarmCollector?
+    let warmScheduler: LinearWarmScheduler?
+    let coldCollector: LinearColdCollector?
+    let coldScheduler: LinearColdScheduler?
+
+    static let disabled = LinearTierBundle(
+        warmCollector: nil, warmScheduler: nil,
+        coldCollector: nil, coldScheduler: nil
+    )
+}
+
+private struct GitHubTierBundle {
+    let warmCollector: GitHubWarmCollector?
+    let warmScheduler: GitHubWarmScheduler?
+    let coldCollector: GitHubColdCollector?
+    let coldScheduler: GitHubColdScheduler?
+
+    static let disabled = GitHubTierBundle(
+        warmCollector: nil, warmScheduler: nil,
+        coldCollector: nil, coldScheduler: nil
+    )
+}
+
+private struct SlackTierBundle {
+    let warmCollector: SlackWarmCollector?
+    let warmScheduler: SlackWarmScheduler?
+    let coldCollector: SlackColdCollector?
+    let coldScheduler: SlackColdScheduler?
+
+    static let disabled = SlackTierBundle(
+        warmCollector: nil, warmScheduler: nil,
+        coldCollector: nil, coldScheduler: nil
+    )
 }

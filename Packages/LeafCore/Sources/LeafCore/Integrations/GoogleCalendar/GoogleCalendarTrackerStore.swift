@@ -72,21 +72,54 @@ public struct GoogleCalendarTrackerStore: Sendable {
 
     // MARK: - UPSERT
 
+    /// Identity + state columns for ``upsert(_:in:)``. Grouped to keep the
+    /// call signature digestible; emission-timestamp columns
+    /// (`started_emitted_at_ms` / `ended_emitted_at_ms`) are deliberately
+    /// excluded — the ON CONFLICT clause does NOT touch them so emission
+    /// gating stays idempotent under server-driven row refresh.
+    public struct UpsertParams: Sendable {
+        public let eventID: String
+        public let calendarID: String
+        public let iCalUID: String?
+        public let eventType: String
+        public let startMs: Int64
+        public let endMs: Int64
+        public let workingLocationType: String?
+        public let autoDeclineMode: String?
+        public let chatStatus: String?
+        public let upsertedAtMs: Int64
+
+        public init(
+            eventID: String,
+            calendarID: String,
+            iCalUID: String?,
+            eventType: String,
+            startMs: Int64,
+            endMs: Int64,
+            workingLocationType: String?,
+            autoDeclineMode: String?,
+            chatStatus: String?,
+            upsertedAtMs: Int64
+        ) {
+            self.eventID = eventID
+            self.calendarID = calendarID
+            self.iCalUID = iCalUID
+            self.eventType = eventType
+            self.startMs = startMs
+            self.endMs = endMs
+            self.workingLocationType = workingLocationType
+            self.autoDeclineMode = autoDeclineMode
+            self.chatStatus = chatStatus
+            self.upsertedAtMs = upsertedAtMs
+        }
+    }
+
     /// INSERT-or-update on `event_id` PK collision. **Critical:** the
     /// `ON CONFLICT` clause deliberately does NOT touch
     /// `started_emitted_at_ms` / `ended_emitted_at_ms` — emission gating is
     /// idempotent under server-driven row refresh.
     public static func upsert(
-        eventID: String,
-        calendarID: String,
-        iCalUID: String?,
-        eventType: String,
-        startMs: Int64,
-        endMs: Int64,
-        workingLocationType: String?,
-        autoDeclineMode: String?,
-        chatStatus: String?,
-        upsertedAtMs: Int64,
+        _ params: UpsertParams,
         in db: GRDB.Database
     ) throws {
         try db.execute(
@@ -115,9 +148,9 @@ public struct GoogleCalendarTrackerStore: Sendable {
                     \(Schema.GoogleCalendarTracker.upsertedAtMs)        = excluded.\(Schema.GoogleCalendarTracker.upsertedAtMs)
                 """,
             arguments: [
-                eventID, calendarID, iCalUID, eventType,
-                startMs, endMs, workingLocationType,
-                autoDeclineMode, chatStatus, upsertedAtMs,
+                params.eventID, params.calendarID, params.iCalUID, params.eventType,
+                params.startMs, params.endMs, params.workingLocationType,
+                params.autoDeclineMode, params.chatStatus, params.upsertedAtMs,
             ]
         )
     }

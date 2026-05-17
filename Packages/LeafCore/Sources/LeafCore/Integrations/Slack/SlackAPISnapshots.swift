@@ -372,3 +372,43 @@ public struct SlackColdBatch: Sendable, Hashable {
         channelsInfo: .empty
     )
 }
+
+/// Phase 4.7.B / Track-3 D3 — bundle of prior snapshots threaded into
+/// `SlackAPIProvider.fetchWarmState(...)` so the implementation / collector can
+/// short-circuit diffs and preserve cursor-style semantics (id-set / per-channel
+/// id-list / latestTs rank). Grouped to keep the warm-state call signature
+/// readable; each field corresponds to a `Schema.ProviderSnapshotKinds.slack*`
+/// snapshot persisted by the warm collector tick.
+public struct SlackWarmStatePriorSnapshots: Sendable {
+    public let memberChannels: SlackMemberChannelsTopList?
+    public let pinsPerChannel: [SlackChannelPinsSnapshot]
+    public let bookmarksPerChannel: [SlackChannelBookmarksSnapshot]
+    public let reminders: SlackRemindersSnapshot
+    public let scheduledMessages: SlackScheduledMessagesSnapshot
+    public let stars: SlackStarsSnapshot
+
+    public init(
+        memberChannels: SlackMemberChannelsTopList?,
+        pinsPerChannel: [SlackChannelPinsSnapshot],
+        bookmarksPerChannel: [SlackChannelBookmarksSnapshot],
+        reminders: SlackRemindersSnapshot,
+        scheduledMessages: SlackScheduledMessagesSnapshot,
+        stars: SlackStarsSnapshot
+    ) {
+        self.memberChannels = memberChannels
+        self.pinsPerChannel = pinsPerChannel
+        self.bookmarksPerChannel = bookmarksPerChannel
+        self.reminders = reminders
+        self.scheduledMessages = scheduledMessages
+        self.stars = stars
+    }
+
+    public static let empty = Self(
+        memberChannels: nil,
+        pinsPerChannel: [],
+        bookmarksPerChannel: [],
+        reminders: .empty,
+        scheduledMessages: .empty,
+        stars: .empty
+    )
+}

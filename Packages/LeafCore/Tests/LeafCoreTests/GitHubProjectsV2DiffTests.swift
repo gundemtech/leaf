@@ -51,10 +51,10 @@ final class GitHubProjectsV2DiffTests: XCTestCase {
         XCTAssertEqual(cardMoved.count, 1)
         XCTAssertEqual(iter.count, 0)
         XCTAssertEqual(fields.count, 0)
-        XCTAssertEqual(cardMoved[0].0, "I1")
-        XCTAssertEqual(cardMoved[0].1, "P1")
-        XCTAssertEqual(cardMoved[0].2, "todo")
-        XCTAssertEqual(cardMoved[0].3, "in_progress")
+        XCTAssertEqual(cardMoved[0].itemID, "I1")
+        XCTAssertEqual(cardMoved[0].projectID, "P1")
+        XCTAssertEqual(cardMoved[0].oldStatus, "todo")
+        XCTAssertEqual(cardMoved[0].newStatus, "in_progress")
     }
 
     // MARK: - Iteration change
@@ -68,10 +68,10 @@ final class GitHubProjectsV2DiffTests: XCTestCase {
         XCTAssertEqual(cardMoved.count, 0)
         XCTAssertEqual(iter.count, 1)
         XCTAssertEqual(fields.count, 0)
-        XCTAssertEqual(iter[0].0, "I1")
-        XCTAssertEqual(iter[0].1, "P1")
-        XCTAssertEqual(iter[0].2, "sprint-12")
-        XCTAssertEqual(iter[0].3, "sprint-13")
+        XCTAssertEqual(iter[0].itemID, "I1")
+        XCTAssertEqual(iter[0].projectID, "P1")
+        XCTAssertEqual(iter[0].oldIteration, "sprint-12")
+        XCTAssertEqual(iter[0].newIteration, "sprint-13")
     }
 
     // MARK: - Field value swap
@@ -85,11 +85,11 @@ final class GitHubProjectsV2DiffTests: XCTestCase {
         XCTAssertEqual(cardMoved.count, 0)
         XCTAssertEqual(iter.count, 0)
         XCTAssertEqual(fields.count, 1)
-        XCTAssertEqual(fields[0].0, "I1")
-        XCTAssertEqual(fields[0].1, "P1")
-        XCTAssertEqual(fields[0].2, "priority")
-        XCTAssertEqual(fields[0].3, "P0")
-        XCTAssertEqual(fields[0].4, "P1")
+        XCTAssertEqual(fields[0].itemID, "I1")
+        XCTAssertEqual(fields[0].projectID, "P1")
+        XCTAssertEqual(fields[0].fieldName, "priority")
+        XCTAssertEqual(fields[0].oldValue, "P0")
+        XCTAssertEqual(fields[0].newValue, "P1")
     }
 
     // MARK: - No-op on identical input
@@ -135,13 +135,13 @@ final class GitHubProjectsV2DiffTests: XCTestCase {
         XCTAssertEqual(iter.count, 1)
         XCTAssertEqual(fields.count, 1)
 
-        XCTAssertEqual(cardMoved[0].2, "todo")
-        XCTAssertEqual(cardMoved[0].3, "in_progress")
-        XCTAssertEqual(iter[0].2, "sprint-12")
-        XCTAssertEqual(iter[0].3, "sprint-13")
-        XCTAssertEqual(fields[0].2, "priority")
-        XCTAssertEqual(fields[0].3, "P0")
-        XCTAssertEqual(fields[0].4, "P1")
+        XCTAssertEqual(cardMoved[0].oldStatus, "todo")
+        XCTAssertEqual(cardMoved[0].newStatus, "in_progress")
+        XCTAssertEqual(iter[0].oldIteration, "sprint-12")
+        XCTAssertEqual(iter[0].newIteration, "sprint-13")
+        XCTAssertEqual(fields[0].fieldName, "priority")
+        XCTAssertEqual(fields[0].oldValue, "P0")
+        XCTAssertEqual(fields[0].newValue, "P1")
     }
 
     // MARK: - Field added (prior omits, current has)
@@ -155,9 +155,9 @@ final class GitHubProjectsV2DiffTests: XCTestCase {
         XCTAssertEqual(cardMoved.count, 0)
         XCTAssertEqual(iter.count, 0)
         XCTAssertEqual(fields.count, 1)
-        XCTAssertEqual(fields[0].2, "priority")
-        XCTAssertNil(fields[0].3)
-        XCTAssertEqual(fields[0].4, "P1")
+        XCTAssertEqual(fields[0].fieldName, "priority")
+        XCTAssertNil(fields[0].oldValue)
+        XCTAssertEqual(fields[0].newValue, "P1")
     }
 
     // MARK: - Field removed (prior has, current omits)
@@ -171,9 +171,9 @@ final class GitHubProjectsV2DiffTests: XCTestCase {
         XCTAssertEqual(cardMoved.count, 0)
         XCTAssertEqual(iter.count, 0)
         XCTAssertEqual(fields.count, 1)
-        XCTAssertEqual(fields[0].2, "priority")
-        XCTAssertEqual(fields[0].3, "P0")
-        XCTAssertNil(fields[0].4)
+        XCTAssertEqual(fields[0].fieldName, "priority")
+        XCTAssertEqual(fields[0].oldValue, "P0")
+        XCTAssertNil(fields[0].newValue)
     }
 
     // MARK: - Sorted output (deterministic for assertions)
@@ -192,7 +192,7 @@ final class GitHubProjectsV2DiffTests: XCTestCase {
 
         let (cardMoved, _, _) = GitHubWarmCollector.projectsV2Diff(prior: prior, current: current)
 
-        XCTAssertEqual(cardMoved.map { $0.0 }, ["I1", "I2", "I3"])
+        XCTAssertEqual(cardMoved.map { $0.itemID }, ["I1", "I2", "I3"])
     }
 
     func testFieldsSortedByItemThenName() {
@@ -208,13 +208,13 @@ final class GitHubProjectsV2DiffTests: XCTestCase {
         let (_, _, fields) = GitHubWarmCollector.projectsV2Diff(prior: prior, current: current)
 
         XCTAssertEqual(fields.count, 4)
-        XCTAssertEqual(fields[0].0, "I1")
-        XCTAssertEqual(fields[0].2, "alpha")
-        XCTAssertEqual(fields[1].0, "I1")
-        XCTAssertEqual(fields[1].2, "zeta")
-        XCTAssertEqual(fields[2].0, "I2")
-        XCTAssertEqual(fields[2].2, "alpha")
-        XCTAssertEqual(fields[3].0, "I2")
-        XCTAssertEqual(fields[3].2, "zeta")
+        XCTAssertEqual(fields[0].itemID, "I1")
+        XCTAssertEqual(fields[0].fieldName, "alpha")
+        XCTAssertEqual(fields[1].itemID, "I1")
+        XCTAssertEqual(fields[1].fieldName, "zeta")
+        XCTAssertEqual(fields[2].itemID, "I2")
+        XCTAssertEqual(fields[2].fieldName, "alpha")
+        XCTAssertEqual(fields[3].itemID, "I2")
+        XCTAssertEqual(fields[3].fieldName, "zeta")
     }
 }
