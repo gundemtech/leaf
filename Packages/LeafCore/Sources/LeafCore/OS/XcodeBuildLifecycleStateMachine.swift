@@ -35,51 +35,23 @@ public struct XcodeBuildLifecycleStateMachine: Sendable, Hashable {
 
         // 1. scheme_changed — fires before lifecycle events so consumers see
         //    the new scheme name on the matched build_started.
-        if p.schemeName != obs.schemeName {
-            var payload: [String: String] = ["event_kind": "xcode_scheme_changed"]
-            if let s = obs.schemeName { payload["scheme"] = s }
-            if let prevScheme = p.schemeName { payload["scheme_prev"] = prevScheme }
-            if let pj = obs.projectName { payload["project"] = pj }
-            events.append(Self.makeEvent(payload, nowMs: nowMs))
+        if let event = Self.detectSchemeChanged(prev: p, obs: obs, nowMs: nowMs) {
+            events.append(event)
         }
 
-        // 2. run_destination_changed — bucketed diff only. Same-bucket churn
-        //    (iPhone 15 Sim → iPhone 16 Sim) is suppressed to control noise.
-        if p.runDestinationBucket != obs.runDestinationBucket {
-            let payload: [String: String] = [
-                "event_kind": "xcode_run_destination_changed",
-                "run_destination_bucket": obs.runDestinationBucket.rawValue,
-                "run_destination_bucket_prev": p.runDestinationBucket.rawValue,
-            ]
-            events.append(Self.makeEvent(payload, nowMs: nowMs))
+        // 2. run_destination_changed — bucketed diff only.
+        if let event = Self.detectRunDestinationChanged(prev: p, obs: obs, nowMs: nowMs) {
+            events.append(event)
         }
 
         // 3. build_started — any non-running prev → running.
-        if p.buildState != .running, obs.buildState == .running {
-            var payload: [String: String] = [
-                "event_kind": "xcode_build_started",
-                "run_destination_bucket": obs.runDestinationBucket.rawValue,
-            ]
-            if let s = obs.schemeName { payload["scheme"] = s }
-            if let pj = obs.projectName { payload["project"] = pj }
-            events.append(Self.makeEvent(payload, nowMs: nowMs))
-            buildStartedMs = nowMs
+        if let event = detectBuildStarted(prev: p, obs: obs, nowMs: nowMs) {
+            events.append(event)
         }
 
         // 4. build_finished — running → terminal (succeeded/failed).
-        if p.buildState == .running, obs.buildState.isTerminal {
-            var payload: [String: String] = [
-                "event_kind": "xcode_build_finished",
-                "status": obs.buildState.rawValue,
-                "run_destination_bucket": obs.runDestinationBucket.rawValue,
-            ]
-            if let s = obs.schemeName { payload["scheme"] = s }
-            if let pj = obs.projectName { payload["project"] = pj }
-            if let started = buildStartedMs {
-                payload["duration_ms"] = String(max(0, nowMs - started))
-            }
-            events.append(Self.makeEvent(payload, nowMs: nowMs))
-            buildStartedMs = nil
+        if let event = detectBuildFinished(prev: p, obs: obs, nowMs: nowMs) {
+            events.append(event)
         }
 
         // 5. Cancel path — running → idle without going through a terminal
@@ -96,6 +68,61 @@ public struct XcodeBuildLifecycleStateMachine: Sendable, Hashable {
 
         prev = obs
         return events
+    }
+
+    private static func detectSchemeChanged(
+        prev p: XcodeObservation, obs: XcodeObservation, nowMs: Int64
+    ) -> RawEvent? {
+        guard p.schemeName != obs.schemeName else { return nil }
+        var payload: [String: String] = ["event_kind": "xcode_scheme_changed"]
+        if let s = obs.schemeName { payload["scheme"] = s }
+        if let prevScheme = p.schemeName { payload["scheme_prev"] = prevScheme }
+        if let pj = obs.projectName { payload["project"] = pj }
+        return makeEvent(payload, nowMs: nowMs)
+    }
+
+    private static func detectRunDestinationChanged(
+        prev p: XcodeObservation, obs: XcodeObservation, nowMs: Int64
+    ) -> RawEvent? {
+        guard p.runDestinationBucket != obs.runDestinationBucket else { return nil }
+        let payload: [String: String] = [
+            "event_kind": "xcode_run_destination_changed",
+            "run_destination_bucket": obs.runDestinationBucket.rawValue,
+            "run_destination_bucket_prev": p.runDestinationBucket.rawValue,
+        ]
+        return makeEvent(payload, nowMs: nowMs)
+    }
+
+    private mutating func detectBuildStarted(
+        prev p: XcodeObservation, obs: XcodeObservation, nowMs: Int64
+    ) -> RawEvent? {
+        guard p.buildState != .running, obs.buildState == .running else { return nil }
+        var payload: [String: String] = [
+            "event_kind": "xcode_build_started",
+            "run_destination_bucket": obs.runDestinationBucket.rawValue,
+        ]
+        if let s = obs.schemeName { payload["scheme"] = s }
+        if let pj = obs.projectName { payload["project"] = pj }
+        buildStartedMs = nowMs
+        return Self.makeEvent(payload, nowMs: nowMs)
+    }
+
+    private mutating func detectBuildFinished(
+        prev p: XcodeObservation, obs: XcodeObservation, nowMs: Int64
+    ) -> RawEvent? {
+        guard p.buildState == .running, obs.buildState.isTerminal else { return nil }
+        var payload: [String: String] = [
+            "event_kind": "xcode_build_finished",
+            "status": obs.buildState.rawValue,
+            "run_destination_bucket": obs.runDestinationBucket.rawValue,
+        ]
+        if let s = obs.schemeName { payload["scheme"] = s }
+        if let pj = obs.projectName { payload["project"] = pj }
+        if let started = buildStartedMs {
+            payload["duration_ms"] = String(max(0, nowMs - started))
+        }
+        buildStartedMs = nil
+        return Self.makeEvent(payload, nowMs: nowMs)
     }
 
     private static func makeEvent(_ payload: [String: String], nowMs: Int64) -> RawEvent {

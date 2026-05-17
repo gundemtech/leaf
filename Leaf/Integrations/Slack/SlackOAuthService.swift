@@ -158,102 +158,133 @@ final class SlackOAuthService {
             NSWorkspace.shared.open(authorizeURL)
 
             let components = try await listenerTask
-
-            // Validate query params.
-            let query = Self.queryDict(components)
-            if let oauthError = query["error"] {
-                let description = query["error_description"] ?? oauthError
-                state = .error(message: "Slack declined authorization: \(description)")
-                return
+            guard let code = try validateCallback(components: components, challenge: challenge) else {
+                return  // state already set by validator
             }
-            guard let returnedState = query["state"], returnedState == challenge.state else {
-                state = .error(message: "OAuth state mismatch — possible interception. Try again.")
-                return
-            }
-            guard let code = query["code"], !code.isEmpty else {
-                state = .error(message: "Slack callback missing `code` parameter.")
-                return
-            }
-
-            // Exchange code → tokens. Slack ok=false → throws .error.
-            state = .exchangingToken
-            let tokenResponse = try await exchangeCode(
-                code: code,
-                clientID: clientID,
-                verifier: challenge.verifier
-            )
-
-            // oauth.v2.access уже содержит team+user — отдельный auth.test НЕ нужен.
-            state = .fetchingWorkspace
-            guard let team = tokenResponse.team,
-                let authedUser = tokenResponse.authedUser,
-                let userAccessToken = authedUser.accessToken,
-                !userAccessToken.isEmpty
-            else {
-                state = .error(message: "Slack response missing user token (top-level access_token is bot-only).")
-                return
-            }
-
-            // workspaceID = "<team_id>:<user_id>" composite (без `slack:` prefix —
-            // mirror Linear где workspaceID = org UUID без `linear:` prefix; provider
-            // prefix добавляется только при derivation sourceID для CollectorOffset).
-            let now = Date()
-            let workspaceID = "\(team.id):\(authedUser.id)"
-            let expiresAt: Date? = {
-                guard let seconds = authedUser.expiresIn, seconds > 0 else { return nil }
-                return now.addingTimeInterval(TimeInterval(seconds))
-            }()
-            // Granted scopes (user scopes) live в authed_user.scope. Top-level
-            // tokenResponse.scope — bot-token scopes (мы их не запрашиваем, но
-            // берём fallback на пустую строку).
-            let scope = authedUser.scope ?? tokenResponse.scope ?? ""
-            let record = IntegrationRecord(
-                provider: .slack,
-                workspaceID: workspaceID,
-                workspaceName: team.name,
-                accessToken: userAccessToken,
-                refreshToken: authedUser.refreshToken,
-                expiresAt: expiresAt,
-                scope: scope,
-                connectedAt: now,
-                updatedAt: now
-            )
-            try persistWithRetry(record)
-            clearRefreshDenialFlag()
-            postRestartNotification()
-
-            // Slack may grant a partial scope set (user declined some).
-            // Mirror GitHubOAuthService — surface `.connectedScopeOutdated`
-            // if any core scope is missing so the re-auth banner / Sidebar
-            // dot / Connections explainer engage immediately (I1 review fix).
-            let granted = SlackScopesService.parseScopeString(record.scope)
-            let missingCore = SlackScopesService.requiredCore.subtracting(granted)
-            if missingCore.isEmpty {
-                state = .connected(workspaceName: record.workspaceName, connectedAt: record.connectedAt)
-            } else {
-                state = .connectedScopeOutdated(
-                    workspaceName: record.workspaceName,
-                    connectedAt: record.connectedAt,
-                    missing: missingCore
-                )
-            }
+            try await exchangeAndPersist(
+                code: code, clientID: clientID, verifier: challenge.verifier)
         } catch let error as LoopbackCallbackError {
-            switch error {
-            case .timeout:
-                state = .error(message: "Authorization timed out. Try again.")
-            case .bindFailed(let reason):
-                state = .error(
-                    message:
-                        "Couldn't bind to port \(SlackOAuthEndpoints.loopbackPort): \(reason). Close any conflicting app."
-                )
-            case .listenerFailed(let reason):
-                state = .error(message: "Local listener failed: \(reason).")
-            case .parseFailed:
-                state = .error(message: "Couldn't parse callback URL.")
-            }
+            handleListenerError(error)
         } catch {
             oauthLogger.error("connect failed: \(String(describing: error), privacy: .public)")
             state = .error(message: error.localizedDescription)
+        }
+    }
+
+    /// Parse + validate the OAuth callback URL. Returns the `code` on success;
+    /// returns `nil` after setting `state = .error(...)` on validation failures
+    /// so the caller can short-circuit. Throws only on listener-level errors
+    /// (caller catches `LoopbackCallbackError` separately).
+    private func validateCallback(
+        components: URLComponents, challenge: PKCE.Challenge
+    ) throws -> String? {
+        let query = Self.queryDict(components)
+        if let oauthError = query["error"] {
+            let description = query["error_description"] ?? oauthError
+            state = .error(message: "Slack declined authorization: \(description)")
+            return nil
+        }
+        guard let returnedState = query["state"], returnedState == challenge.state else {
+            state = .error(message: "OAuth state mismatch — possible interception. Try again.")
+            return nil
+        }
+        guard let code = query["code"], !code.isEmpty else {
+            state = .error(message: "Slack callback missing `code` parameter.")
+            return nil
+        }
+        return code
+    }
+
+    /// Exchange `code` → tokens via `oauth.v2.access`, persist as
+    /// `IntegrationRecord`, and surface granted / missing-scope state.
+    /// `oauth.v2.access` уже содержит team+user — отдельный auth.test НЕ нужен.
+    private func exchangeAndPersist(code: String, clientID: String, verifier: String) async throws {
+        state = .exchangingToken
+        let tokenResponse = try await exchangeCode(
+            code: code, clientID: clientID, verifier: verifier)
+
+        state = .fetchingWorkspace
+        guard let team = tokenResponse.team,
+            let authedUser = tokenResponse.authedUser,
+            let userAccessToken = authedUser.accessToken,
+            !userAccessToken.isEmpty
+        else {
+            state = .error(message: "Slack response missing user token (top-level access_token is bot-only).")
+            return
+        }
+
+        let record = buildIntegrationRecord(
+            team: team, authedUser: authedUser,
+            userAccessToken: userAccessToken, tokenResponse: tokenResponse)
+        try persistWithRetry(record)
+        clearRefreshDenialFlag()
+        postRestartNotification()
+        surfaceConnectedState(record: record)
+    }
+
+    /// workspaceID = "<team_id>:<user_id>" composite (без `slack:` prefix —
+    /// mirror Linear где workspaceID = org UUID без `linear:` prefix; provider
+    /// prefix добавляется только при derivation sourceID для CollectorOffset).
+    /// Granted scopes (user scopes) live в authed_user.scope. Top-level
+    /// tokenResponse.scope — bot-token scopes (мы их не запрашиваем, но
+    /// берём fallback на пустую строку).
+    private func buildIntegrationRecord(
+        team: SlackOAuthV2Response.SlackTeam,
+        authedUser: SlackOAuthV2Response.SlackAuthedUser,
+        userAccessToken: String,
+        tokenResponse: SlackOAuthV2Response
+    ) -> IntegrationRecord {
+        let now = Date()
+        let workspaceID = "\(team.id):\(authedUser.id)"
+        let expiresAt: Date? = {
+            guard let seconds = authedUser.expiresIn, seconds > 0 else { return nil }
+            return now.addingTimeInterval(TimeInterval(seconds))
+        }()
+        let scope = authedUser.scope ?? tokenResponse.scope ?? ""
+        return IntegrationRecord(
+            provider: .slack,
+            workspaceID: workspaceID,
+            workspaceName: team.name,
+            accessToken: userAccessToken,
+            refreshToken: authedUser.refreshToken,
+            expiresAt: expiresAt,
+            scope: scope,
+            connectedAt: now,
+            updatedAt: now
+        )
+    }
+
+    /// Slack may grant a partial scope set (user declined some). Mirror
+    /// `GitHubOAuthService` — surface `.connectedScopeOutdated` if any core
+    /// scope is missing so the re-auth banner / Sidebar dot / Connections
+    /// explainer engage immediately (I1 review fix).
+    private func surfaceConnectedState(record: IntegrationRecord) {
+        let granted = SlackScopesService.parseScopeString(record.scope)
+        let missingCore = SlackScopesService.requiredCore.subtracting(granted)
+        if missingCore.isEmpty {
+            state = .connected(workspaceName: record.workspaceName, connectedAt: record.connectedAt)
+        } else {
+            state = .connectedScopeOutdated(
+                workspaceName: record.workspaceName,
+                connectedAt: record.connectedAt,
+                missing: missingCore
+            )
+        }
+    }
+
+    private func handleListenerError(_ error: LoopbackCallbackError) {
+        switch error {
+        case .timeout:
+            state = .error(message: "Authorization timed out. Try again.")
+        case .bindFailed(let reason):
+            state = .error(
+                message:
+                    "Couldn't bind to port \(SlackOAuthEndpoints.loopbackPort): \(reason). Close any conflicting app."
+            )
+        case .listenerFailed(let reason):
+            state = .error(message: "Local listener failed: \(reason).")
+        case .parseFailed:
+            state = .error(message: "Couldn't parse callback URL.")
         }
     }
 

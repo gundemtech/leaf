@@ -141,20 +141,7 @@ final class GoogleCalendarOAuthService {
 
     /// Drive the full PKCE flow. Caller — UI "Connect Google Calendar" button.
     func connect() async {
-        guard let clientID = readBundleString(GoogleCalendarOAuthEndpoints.infoPlistClientIDKey) else {
-            state = .error(
-                message:
-                    "\(GoogleCalendarOAuthEndpoints.infoPlistClientIDKey) is not configured. See Config/Local.xcconfig.example."
-            )
-            return
-        }
-        guard let clientSecret = readBundleString(GoogleCalendarOAuthEndpoints.infoPlistClientSecretKey) else {
-            state = .error(
-                message:
-                    "\(GoogleCalendarOAuthEndpoints.infoPlistClientSecretKey) is not configured. See Config/Local.xcconfig.example."
-            )
-            return
-        }
+        guard let creds = readOAuthCreds() else { return }  // state set inside
 
         state = .authorizing
         let challenge = PKCE.makeChallenge()
@@ -171,18 +158,7 @@ final class GoogleCalendarOAuthService {
             onPortAssigned: { @Sendable [portBox] p in portBox.set(p) }
         )
 
-        // Spin-wait briefly (≤ ~1s) for the listener to surface its port.
-        // NWListener typically reaches `.ready` within a few ms on loopback;
-        // 100 × 10ms is a generous ceiling that errs on the safe side.
-        var assignedPortOpt: UInt16? = nil
-        for _ in 0..<100 {
-            if let p = portBox.value() {
-                assignedPortOpt = p
-                break
-            }
-            try? await Task.sleep(for: .milliseconds(10))
-        }
-        guard let assignedPort = assignedPortOpt else {
+        guard let assignedPort = await waitForAssignedPort(portBox: portBox) else {
             state = .error(message: "Listener did not surface an ephemeral port within 1s.")
             _ = try? await listenerTask
             return
@@ -192,7 +168,7 @@ final class GoogleCalendarOAuthService {
         let redirectURI =
             "http://\(GoogleCalendarOAuthEndpoints.redirectHost):\(assignedPort)\(GoogleCalendarOAuthEndpoints.redirectPath)"
         let authorizeURL = GoogleCalendarOAuthEndpoints.authorizeURL(
-            clientID: clientID,
+            clientID: creds.clientID,
             challenge: challenge.challenge,
             state: challenge.state,
             port: assignedPort
@@ -203,99 +179,167 @@ final class GoogleCalendarOAuthService {
             // race window for the redirect to land on a dead socket.
             openURL(authorizeURL)
             let components = try await listenerTask
-
-            // Validate query params.
-            let query = Self.queryDict(components)
-            if let oauthError = query["error"] {
-                let description = query["error_description"] ?? oauthError
-                state = .error(message: "Google declined authorization: \(description)")
+            guard let code = validateCallback(components: components, challenge: challenge) else {
                 return
             }
-            guard let returnedState = query["state"], returnedState == challenge.state else {
-                state = .error(message: "OAuth state mismatch — possible interception. Try again.")
-                return
-            }
-            guard let code = query["code"], !code.isEmpty else {
-                state = .error(message: "Google callback missing `code` parameter.")
-                return
-            }
-
-            // Exchange code → tokens.
-            state = .exchangingToken
-            let tokenResponse: GoogleCalendarAPI.TokenResponse
-            do {
-                tokenResponse = try await http.exchangeCode(
-                    code: code,
-                    codeVerifier: challenge.verifier,
-                    redirectURI: redirectURI,
-                    clientID: clientID,
-                    clientSecret: clientSecret
-                )
-            } catch let error as GoogleCalendarOAuthError {
-                state = .error(message: Self.describe(error))
-                return
-            }
-
-            // Guard contractually-enforced by the client (`missingResponseField`
-            // throws above) — double-check here so the persistence step can
-            // pass a non-optional refresh_token down.
-            guard let refreshToken = tokenResponse.refreshToken else {
-                state = .error(
-                    message: "Google did not return a refresh_token. Sign out of any prior Leaf grant and retry.")
-                return
-            }
-
-            // Identity capture via calendarList.get(primary). `entry.id` is
-            // the authenticated user's primary calendar address (typically
-            // their email) — stable across token rotations, plaintext per
-            // spec §7.3.
-            state = .fetchingWorkspace
-            let primaryEntry: GoogleCalendarAPI.CalendarListEntry
-            do {
-                primaryEntry = try await api.calendarListGetPrimary(accessToken: tokenResponse.accessToken)
-            } catch let error as GoogleCalendarAPIError {
-                state = .error(message: "Couldn't read primary calendar: \(Self.describe(error))")
-                return
-            }
-
-            // Workspace name: prefer user-set override, fall back to system
-            // summary, finally fall back to the calendar id (the email).
-            let workspaceName =
-                primaryEntry.summaryOverride
-                ?? primaryEntry.summary
-                ?? primaryEntry.id
-
-            // Persist + restart-trigger.
-            let now = Date()
-            let record = IntegrationRecord(
-                provider: .googleCalendar,
-                workspaceID: primaryEntry.id,
-                workspaceName: workspaceName,
-                accessToken: tokenResponse.accessToken,
-                refreshToken: refreshToken,
-                expiresAt: now.addingTimeInterval(TimeInterval(tokenResponse.expiresIn)),
-                scope: tokenResponse.scope ?? GoogleCalendarOAuthEndpoints.scope,
-                connectedAt: now,
-                updatedAt: now
-            )
-            try persistWithRetry(record)
-            postRestartNotification()
-
-            state = .connected(workspaceName: record.workspaceName, connectedAt: record.connectedAt)
+            await exchangeAndPersist(
+                code: code, verifier: challenge.verifier, redirectURI: redirectURI, creds: creds)
         } catch let error as LoopbackCallbackError {
-            switch error {
-            case .timeout:
-                state = .error(message: "Authorization timed out. Try again.")
-            case .bindFailed(let reason):
-                state = .error(message: "Couldn't bind loopback listener: \(reason). Close any conflicting app.")
-            case .listenerFailed(let reason):
-                state = .error(message: "Local listener failed: \(reason).")
-            case .parseFailed:
-                state = .error(message: "Couldn't parse callback URL.")
-            }
+            handleListenerError(error)
         } catch {
             oauthLogger.error("connect failed: \(String(describing: error), privacy: .public)")
             state = .error(message: error.localizedDescription)
+        }
+    }
+
+    private struct OAuthCreds {
+        let clientID: String
+        let clientSecret: String
+    }
+
+    /// Read clientID + clientSecret from Info.plist. Sets `.error` state and
+    /// returns nil if either is missing.
+    private func readOAuthCreds() -> OAuthCreds? {
+        guard let clientID = readBundleString(GoogleCalendarOAuthEndpoints.infoPlistClientIDKey) else {
+            state = .error(
+                message:
+                    "\(GoogleCalendarOAuthEndpoints.infoPlistClientIDKey) is not configured. See Config/Local.xcconfig.example."
+            )
+            return nil
+        }
+        guard let clientSecret = readBundleString(GoogleCalendarOAuthEndpoints.infoPlistClientSecretKey) else {
+            state = .error(
+                message:
+                    "\(GoogleCalendarOAuthEndpoints.infoPlistClientSecretKey) is not configured. See Config/Local.xcconfig.example."
+            )
+            return nil
+        }
+        return OAuthCreds(clientID: clientID, clientSecret: clientSecret)
+    }
+
+    /// Spin-wait briefly (≤ ~1s) for the listener to surface its port.
+    /// NWListener typically reaches `.ready` within a few ms on loopback;
+    /// 100 × 10ms is a generous ceiling that errs on the safe side.
+    private func waitForAssignedPort(portBox: AssignedPortBox) async -> UInt16? {
+        for _ in 0..<100 {
+            if let p = portBox.value() {
+                return p
+            }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        return nil
+    }
+
+    /// Parse + validate the OAuth callback URL. Returns the `code` on success;
+    /// returns nil after setting `.error` state on validation failures so the
+    /// caller can short-circuit.
+    private func validateCallback(
+        components: URLComponents, challenge: PKCE.Challenge
+    ) -> String? {
+        let query = Self.queryDict(components)
+        if let oauthError = query["error"] {
+            let description = query["error_description"] ?? oauthError
+            state = .error(message: "Google declined authorization: \(description)")
+            return nil
+        }
+        guard let returnedState = query["state"], returnedState == challenge.state else {
+            state = .error(message: "OAuth state mismatch — possible interception. Try again.")
+            return nil
+        }
+        guard let code = query["code"], !code.isEmpty else {
+            state = .error(message: "Google callback missing `code` parameter.")
+            return nil
+        }
+        return code
+    }
+
+    /// Exchange code → tokens, capture primary calendar identity, persist
+    /// `IntegrationRecord`, post restart notification, surface `.connected`.
+    /// Sets `.error` state and returns silently on any sub-step failure.
+    private func exchangeAndPersist(
+        code: String, verifier: String, redirectURI: String, creds: OAuthCreds
+    ) async {
+        state = .exchangingToken
+        let tokenResponse: GoogleCalendarAPI.TokenResponse
+        do {
+            tokenResponse = try await http.exchangeCode(
+                code: code,
+                codeVerifier: verifier,
+                redirectURI: redirectURI,
+                clientID: creds.clientID,
+                clientSecret: creds.clientSecret
+            )
+        } catch let error as GoogleCalendarOAuthError {
+            state = .error(message: Self.describe(error))
+            return
+        } catch {
+            state = .error(message: error.localizedDescription)
+            return
+        }
+
+        // Guard contractually-enforced by the client (`missingResponseField`
+        // throws above) — double-check here so the persistence step can pass
+        // a non-optional refresh_token down.
+        guard let refreshToken = tokenResponse.refreshToken else {
+            state = .error(
+                message: "Google did not return a refresh_token. Sign out of any prior Leaf grant and retry.")
+            return
+        }
+
+        // Identity capture via calendarList.get(primary). `entry.id` is the
+        // authenticated user's primary calendar address (typically their
+        // email) — stable across token rotations, plaintext per spec §7.3.
+        state = .fetchingWorkspace
+        let primaryEntry: GoogleCalendarAPI.CalendarListEntry
+        do {
+            primaryEntry = try await api.calendarListGetPrimary(accessToken: tokenResponse.accessToken)
+        } catch let error as GoogleCalendarAPIError {
+            state = .error(message: "Couldn't read primary calendar: \(Self.describe(error))")
+            return
+        } catch {
+            state = .error(message: "Couldn't read primary calendar: \(error.localizedDescription)")
+            return
+        }
+
+        // Workspace name: prefer user-set override, fall back to system
+        // summary, finally fall back to the calendar id (the email).
+        let workspaceName =
+            primaryEntry.summaryOverride
+            ?? primaryEntry.summary
+            ?? primaryEntry.id
+
+        let now = Date()
+        let record = IntegrationRecord(
+            provider: .googleCalendar,
+            workspaceID: primaryEntry.id,
+            workspaceName: workspaceName,
+            accessToken: tokenResponse.accessToken,
+            refreshToken: refreshToken,
+            expiresAt: now.addingTimeInterval(TimeInterval(tokenResponse.expiresIn)),
+            scope: tokenResponse.scope ?? GoogleCalendarOAuthEndpoints.scope,
+            connectedAt: now,
+            updatedAt: now
+        )
+        do {
+            try persistWithRetry(record)
+        } catch {
+            state = .error(message: "Couldn't persist integration: \(error.localizedDescription)")
+            return
+        }
+        postRestartNotification()
+        state = .connected(workspaceName: record.workspaceName, connectedAt: record.connectedAt)
+    }
+
+    private func handleListenerError(_ error: LoopbackCallbackError) {
+        switch error {
+        case .timeout:
+            state = .error(message: "Authorization timed out. Try again.")
+        case .bindFailed(let reason):
+            state = .error(message: "Couldn't bind loopback listener: \(reason). Close any conflicting app.")
+        case .listenerFailed(let reason):
+            state = .error(message: "Local listener failed: \(reason).")
+        case .parseFailed:
+            state = .error(message: "Couldn't parse callback URL.")
         }
     }
 

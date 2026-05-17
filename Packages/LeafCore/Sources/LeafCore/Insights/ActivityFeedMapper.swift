@@ -75,6 +75,12 @@ public enum ActivityFeedMapper {
 
     // MARK: - AI collaboration
 
+    // Cyclomatic from per-event_kind enum-style mapping (16 Claude Code
+    // kinds + cross-tool variants). Switch остаётся canonical form —
+    // table-driven dispatch перепишет vendor-specific payload extractors на
+    // closures без выигрыша в читаемости (каждый case несёт уникальную
+    // payload-shape логику).
+    // swiftlint:disable:next cyclomatic_complexity
     private static func mapAI(
         id: Int64,
         timestamp: Date,
@@ -227,6 +233,11 @@ public enum ActivityFeedMapper {
 
     // MARK: - Linear
 
+    // Cyclomatic from per-event_kind enum-style mapping (Linear event
+    // flavors: issue_updated / linear_status_transition / linear_priority /
+    // labels / assignee / cycle / estimate / project_update / document /
+    // initiative / comment). Switch остаётся canonical form.
+    // swiftlint:disable:next cyclomatic_complexity
     private static func mapLinear(
         id: Int64,
         timestamp: Date,
@@ -316,6 +327,10 @@ public enum ActivityFeedMapper {
 
     // MARK: - GitHub
 
+    // Cyclomatic from per-event_kind enum-style mapping (~30 gh_* flavors:
+    // commit_pushed / pr_opened/merged/closed / issue_* / review_* /
+    // release / discussion / actions_run / notifications_pulse / etc).
+    // swiftlint:disable:next cyclomatic_complexity
     private static func mapGitHub(
         id: Int64,
         timestamp: Date,
@@ -417,6 +432,10 @@ public enum ActivityFeedMapper {
 
     // MARK: - Slack
 
+    // Cyclomatic from per-event_kind enum-style mapping (~27 slack_*
+    // flavors: message / reaction / huddle / status / canvas / bookmark /
+    // emoji / channel / thread / dnd / etc).
+    // swiftlint:disable:next cyclomatic_complexity
     private static func mapSlack(
         id: Int64,
         timestamp: Date,
@@ -478,16 +497,20 @@ public enum ActivityFeedMapper {
 
     // MARK: - Google Calendar (Track-6 P4)
 
-    /// Per-event-kind copy mapping for Track-6 P4 Google Calendar events.
-    /// ADR-010 redaction discipline: reads ONLY allowlisted payload fields
-    /// (`summary` — Calendar event title is self-authored, mirrors Linear
-    /// issue title allowance; structural enum buckets like
-    /// `working_location_type` / `chat_status` / `conference_entry_point_type`;
-    /// scalar `attendees_count`). NEVER reads `description` / `location` /
-    /// attendee emails / `decline_message` / conference URI / building/floor/
-    /// desk/label — those fields are forbidden in the payload per spec §6.4
-    /// and never enter primaryText/secondaryText, even if a future collector
-    /// regression were to accidentally store them.
+    // Per-event-kind copy mapping for Track-6 P4 Google Calendar events.
+    // ADR-010 redaction discipline: reads ONLY allowlisted payload fields
+    // (`summary` — Calendar event title is self-authored, mirrors Linear
+    // issue title allowance; structural enum buckets like
+    // `working_location_type` / `chat_status` / `conference_entry_point_type`;
+    // scalar `attendees_count`). NEVER reads `description` / `location` /
+    // attendee emails / `decline_message` / conference URI / building/floor/
+    // desk/label — those fields are forbidden in the payload per spec §6.4
+    // and never enter primaryText/secondaryText, even if a future collector
+    // regression were to accidentally store them.
+    //
+    // Cyclomatic from per-event_kind enum-style mapping (omnibus + 5
+    // transition flavors × per-eventType helpers).
+    // swiftlint:disable:next cyclomatic_complexity
     private static func mapGoogleCalendar(
         id: Int64,
         timestamp: Date,
@@ -658,11 +681,18 @@ public enum ActivityFeedMapper {
 
     // MARK: - Track-4 Local OS (S1 + S2 + S3)
 
-    /// Per-event-kind copy mapping for Track-4 Layer A events. ADR-010 redaction
-    /// discipline: reads ONLY payload fields in the explicit allowlist below.
-    /// Bodies / message texts / file previews / note bodies never enter
-    /// primaryText/secondaryText, even if a future collector accidentally
-    /// stores them in the same payload row.
+    // Per-event-kind copy mapping for Track-4 Layer A events. ADR-010 redaction
+    // discipline: reads ONLY payload fields in the explicit allowlist below.
+    // Bodies / message texts / file previews / note bodies never enter
+    // primaryText/secondaryText, even if a future collector accidentally
+    // stores them in the same payload row.
+    //
+    // Длинное тело + cyclomatic — 33+ Track-4 S1/S2/S3/S4 LocalOS event_kinds
+    // + Track-6 P1-P6 additions (Claude / Xcode / IDEs / browsers / Zoom /
+    // Google Calendar). Switch остаётся canonical form — ADR-010 allowlist
+    // discipline видна inline per case (нельзя выносить в helpers, иначе
+    // audit сложнее: privacy walkback tests grep'ают именно этот файл).
+    // swiftlint:disable:next cyclomatic_complexity function_body_length
     private static func mapLocalOS(
         id: Int64,
         timestamp: Date,

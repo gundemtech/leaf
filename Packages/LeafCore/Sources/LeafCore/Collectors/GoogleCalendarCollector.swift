@@ -680,6 +680,24 @@ public actor GoogleCalendarCollector {
     /// Build RawEvent rows + UPSERT tracker for typed events on a single
     /// events.list page. Atomic per event (separate writes so a single
     /// malformed payload doesn't abort the whole page).
+    private struct TrackerUpsert {
+        let eventID: String
+        let calendarID: String
+        let iCalUID: String?
+        let eventType: String
+        let startMs: Int64
+        let endMs: Int64
+        let workingLocationType: String?
+        let autoDeclineMode: String?
+        let chatStatus: String?
+    }
+
+    private enum ProcessedEvent {
+        case observe(rawEvent: RawEvent, upsert: TrackerUpsert?)
+        case delete(eventID: String)
+        case skip
+    }
+
     private func processEventsPage(
         _ items: [GoogleCalendarAPI.Event],
         calendar: GoogleCalendarSyncTokenStore.KnownCalendar,
@@ -689,111 +707,124 @@ public actor GoogleCalendarCollector {
 
         // Build everything first so a per-row failure doesn't half-write.
         var rawEvents: [RawEvent] = []
-        struct TrackerUpsert {
-            let eventID: String
-            let calendarID: String
-            let iCalUID: String?
-            let eventType: String
-            let startMs: Int64
-            let endMs: Int64
-            let workingLocationType: String?
-            let autoDeclineMode: String?
-            let chatStatus: String?
-        }
         var upserts: [TrackerUpsert] = []
         var deletions: [String] = []
 
         for event in items {
-            let rawType = event.eventType ?? ""
-            // Blocklist BEFORE mapper — skip building payload entirely.
-            if Self.eventTypeBlocklist.contains(rawType) {
+            switch classifyEvent(event, calendar: calendar, userDomain: userDomain, nowMs: nowMs) {
+            case .skip:
                 continue
-            }
-
-            // Cancellations: delete tracker row, do not emit observed payload
-            // (Google's sync stream uses status=cancelled as a tombstone; the
-            // observed-stream consumer treats absence as "row gone").
-            if event.status == "cancelled", let eventId = event.id {
+            case .delete(let eventId):
                 deletions.append(eventId)
-                continue
-            }
-
-            // Build observed payload via the privacy-clipping mapper.
-            guard
-                let dict = GoogleCalendarEventMapper.makeObservedPayload(
-                    event, calendar: calendar, userDomain: userDomain
-                )
-            else {
-                continue
-            }
-            let payload = Self.flatten(dict)
-
-            // Timestamp anchor: prefer event.updated, fall back to start_ms,
-            // fall back to tick time. Stable timestamps matter for the
-            // chronological events index.
-            let timestamp: Date = {
-                if let updated = payload["updated_ms"], let ms = Int64(updated) {
-                    return Date(timeIntervalSince1970: TimeInterval(ms) / 1000.0)
-                }
-                if let start = payload["start_ms"], let ms = Int64(start) {
-                    return Date(timeIntervalSince1970: TimeInterval(ms) / 1000.0)
-                }
-                return Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0)
-            }()
-
-            rawEvents.append(
-                RawEvent(
-                    timestamp: timestamp,
-                    signalType: .context,
-                    bundleID: nil,
-                    payload: payload
-                ))
-
-            // Tracker UPSERT for typed events. Use mapper's parser so the
-            // collector and mapper agree on time semantics.
-            if ["focusTime", "outOfOffice", "workingLocation"].contains(rawType),
-                let eventId = event.id,
-                let startMs = GoogleCalendarEventMapper.parseTimePointMs(event.start),
-                let endMs = GoogleCalendarEventMapper.parseTimePointMs(event.end)
-            {
-                // Source autoDeclineMode / chatStatus from the API Event's
-                // typed-properties blocks. Per Google contract: chatStatus
-                // exists only on focusTimeProperties (OOO has none); both
-                // hold enum buckets, never freeform user text. Persisting on
-                // the tracker lets the Task 14 transition scan rebuild
-                // `_started` payloads without re-fetching the Event.
-                let autoDecline =
-                    (rawType == "focusTime")
-                    ? event.focusTimeProperties?.autoDeclineMode
-                    : ((rawType == "outOfOffice")
-                        ? event.outOfOfficeProperties?.autoDeclineMode
-                        : nil)
-                let chatStatus =
-                    (rawType == "focusTime")
-                    ? event.focusTimeProperties?.chatStatus
-                    : nil
-                upserts.append(
-                    TrackerUpsert(
-                        eventID: eventId,
-                        calendarID: calendar.id,
-                        iCalUID: event.iCalUID,
-                        eventType: rawType,
-                        startMs: startMs,
-                        endMs: endMs,
-                        workingLocationType: event.workingLocationProperties?.type,
-                        autoDeclineMode: autoDecline,
-                        chatStatus: chatStatus
-                    ))
+            case .observe(let raw, let upsert):
+                rawEvents.append(raw)
+                if let upsert { upserts.append(upsert) }
             }
         }
 
-        // Write events through the public Database API so FTS5 + link-derivation
-        // run consistently with every other collector. Tracker mutations land in
-        // a separate transaction — they are idempotent UPSERTs/DELETEs keyed by
-        // event id, so a crash between the two leaves at worst a stale tracker
-        // row that the next tick (or 7d cleanup) repairs.
-        try database.write(rawEvents)
+        try persistProcessedPage(
+            rawEvents: rawEvents, upserts: upserts, deletions: deletions, nowMs: nowMs)
+    }
 
+    /// Translate one API event into a `ProcessedEvent`. Pure (no DB writes).
+    private func classifyEvent(
+        _ event: GoogleCalendarAPI.Event,
+        calendar: GoogleCalendarSyncTokenStore.KnownCalendar,
+        userDomain: String,
+        nowMs: Int64
+    ) -> ProcessedEvent {
+        let rawType = event.eventType ?? ""
+        // Blocklist BEFORE mapper — skip building payload entirely.
+        if Self.eventTypeBlocklist.contains(rawType) {
+            return .skip
+        }
+        // Cancellations: delete tracker row, do not emit observed payload
+        // (Google's sync stream uses status=cancelled as a tombstone; the
+        // observed-stream consumer treats absence as "row gone").
+        if event.status == "cancelled", let eventId = event.id {
+            return .delete(eventID: eventId)
+        }
+        // Build observed payload via the privacy-clipping mapper.
+        guard
+            let dict = GoogleCalendarEventMapper.makeObservedPayload(
+                event, calendar: calendar, userDomain: userDomain
+            )
+        else {
+            return .skip
+        }
+        let payload = Self.flatten(dict)
+        let timestamp = Self.anchorTimestamp(payload: payload, nowMs: nowMs)
+        let rawEvent = RawEvent(
+            timestamp: timestamp, signalType: .context, bundleID: nil, payload: payload)
+        let upsert = Self.makeTrackerUpsert(event: event, rawType: rawType, calendar: calendar)
+        return .observe(rawEvent: rawEvent, upsert: upsert)
+    }
+
+    /// Timestamp anchor: prefer event.updated, fall back to start_ms, fall
+    /// back to tick time. Stable timestamps matter for the chronological
+    /// events index.
+    private static func anchorTimestamp(payload: [String: String], nowMs: Int64) -> Date {
+        if let updated = payload["updated_ms"], let ms = Int64(updated) {
+            return Date(timeIntervalSince1970: TimeInterval(ms) / 1000.0)
+        }
+        if let start = payload["start_ms"], let ms = Int64(start) {
+            return Date(timeIntervalSince1970: TimeInterval(ms) / 1000.0)
+        }
+        return Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0)
+    }
+
+    /// Tracker UPSERT for typed events. Use mapper's parser so the collector
+    /// and mapper agree on time semantics.
+    ///
+    /// Source autoDeclineMode / chatStatus from the API Event's typed-
+    /// properties blocks. Per Google contract: chatStatus exists only on
+    /// focusTimeProperties (OOO has none); both hold enum buckets, never
+    /// freeform user text. Persisting on the tracker lets the Task 14
+    /// transition scan rebuild `_started` payloads without re-fetching the
+    /// Event.
+    private static func makeTrackerUpsert(
+        event: GoogleCalendarAPI.Event,
+        rawType: String,
+        calendar: GoogleCalendarSyncTokenStore.KnownCalendar
+    ) -> TrackerUpsert? {
+        guard
+            ["focusTime", "outOfOffice", "workingLocation"].contains(rawType),
+            let eventId = event.id,
+            let startMs = GoogleCalendarEventMapper.parseTimePointMs(event.start),
+            let endMs = GoogleCalendarEventMapper.parseTimePointMs(event.end)
+        else { return nil }
+        let autoDecline =
+            (rawType == "focusTime")
+            ? event.focusTimeProperties?.autoDeclineMode
+            : ((rawType == "outOfOffice")
+                ? event.outOfOfficeProperties?.autoDeclineMode
+                : nil)
+        let chatStatus =
+            (rawType == "focusTime")
+            ? event.focusTimeProperties?.chatStatus
+            : nil
+        return TrackerUpsert(
+            eventID: eventId,
+            calendarID: calendar.id,
+            iCalUID: event.iCalUID,
+            eventType: rawType,
+            startMs: startMs,
+            endMs: endMs,
+            workingLocationType: event.workingLocationProperties?.type,
+            autoDeclineMode: autoDecline,
+            chatStatus: chatStatus
+        )
+    }
+
+    /// Write events through the public Database API so FTS5 + link-derivation
+    /// run consistently with every other collector. Tracker mutations land in
+    /// a separate transaction — they are idempotent UPSERTs/DELETEs keyed by
+    /// event id, so a crash between the two leaves at worst a stale tracker
+    /// row that the next tick (or 7d cleanup) repairs.
+    private func persistProcessedPage(
+        rawEvents: [RawEvent], upserts: [TrackerUpsert], deletions: [String], nowMs: Int64
+    ) throws {
+        try database.write(rawEvents)
         try database.writeSQL { db in
             for u in upserts {
                 try GoogleCalendarTrackerStore.upsert(

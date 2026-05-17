@@ -12,8 +12,15 @@ import Foundation
 /// semantic symbol. Copy strings in `ActivityFeedMapper.mapAI` disambiguate
 /// the shared `sparkles` pair.
 public enum EventKindIcon {
-    /// Returns SF Symbol name for the given event_kind. `nil` means the
-    /// caller should fall through to its provider-level default.
+    // Returns SF Symbol name for the given event_kind. `nil` means the
+    // caller should fall through to its provider-level default.
+    //
+    // Cyclomatic ≈ N cases — это enum-style literal-to-literal mapping.
+    // Конвертация в `[String: String]` dict перепишет 60+ entries вручную
+    // (типо-риск). Switch остаётся читаемым because semantic пары
+    // (entered/exited, started/ended) сидят рядом друг с другом и группы
+    // (Track-4 S1 / Track-6 P2 / Track-6 P1 Claude Code) — комментариями.
+    // swiftlint:disable:next cyclomatic_complexity
     public static func symbol(for eventKind: String) -> String? {
         switch eventKind {
         // Track-4 S1 — system state

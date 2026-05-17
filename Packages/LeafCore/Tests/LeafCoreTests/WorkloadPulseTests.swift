@@ -124,10 +124,15 @@ final class WorkloadPulseTests: XCTestCase {
 
     // MARK: - testExecute_PeriodToday_AggregatesCorrectly
 
-    /// Seed presence_state.{github,linear,slack} composite + events:
-    /// 2 mention events (count=3 each, today) + 1 file-upload (count=5, today)
-    /// + 1 actions_run_initiated в in_progress (24h window).
-    /// → workloadPulse('today') aggregates корректно.
+    // Seed presence_state.{github,linear,slack} composite + events:
+    // 2 mention events (count=3 each, today) + 1 file-upload (count=5, today)
+    // + 1 actions_run_initiated в in_progress (24h window).
+    // → workloadPulse('today') aggregates корректно.
+    //
+    // Длинное тело — seed→act→assert последовательность 7 нумерованных шагов
+    // для трёх провайдеров одновременно. Декомпозиция в helpers скрыла бы
+    // читаемость теста (порядок шагов исчезает за вызовами).
+    // swiftlint:disable:next function_body_length
     func testExecute_PeriodToday_AggregatesCorrectly() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 

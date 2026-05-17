@@ -1596,9 +1596,14 @@ final class LinearCollectorTests: XCTestCase {
 
     // MARK: - Phase 4.7.C — end-to-end collector emission integration
 
-    /// C-12 integration: batch со всеми Phase 4.7.C snapshot flavors → assert все
-    /// expected event_kinds присутствуют в DB, count'ы матчат, signal types
-    /// корректные, sentinel string не просачивается ни в один payload.
+    // C-12 integration: batch со всеми Phase 4.7.C snapshot flavors → assert все
+    // expected event_kinds присутствуют в DB, count'ы матчат, signal types
+    // корректные, sentinel string не просачивается ни в один payload.
+    //
+    // Длинное тело — build всех 12 snapshot flavors + tick + assert по всем
+    // event_kinds + sentinel walk. Декомпозиция в helpers разбила бы trace
+    // «какой snapshot какой event эмитит».
+    // swiftlint:disable:next function_body_length
     func testTick_FullPhase47CBatch_EmitsAllEventKinds() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)

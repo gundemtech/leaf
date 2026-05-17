@@ -106,84 +106,48 @@ public enum EventsFullTextStore {
     /// text from (canonical `body` for Track-1/3 where collectors emit a body
     /// field; non-canonical fields for Track-4 S2/S3 user-authored title/filename
     /// payloads — see ADR-010 commit-message precedent).
-    private static func topLevelBodyKind(forEventKind eventKind: String) -> (payloadKey: String, bodyKind: String)? {
+    /// Static `event_kind → (payloadKey, body_kind)` dispatch table. Mirrors
+    /// `EventLinksStore.bodyKindDispatch` — `DispatchCoverageTests` parity
+    /// fence enforces both sides stay in sync.
+    ///
+    /// Track-1 D2 fix: LinearCollector emits "issue_updated" (без "linear_"
+    /// префикса). Track-3 D2: explicit gh_pr_* cases (not hasPrefix catch-all
+    /// — would spuriously match body-less kinds). Track-4 S4: non-canonical
+    /// payload keys (user-authored titles/filenames — mirror commit-message
+    /// precedent per ADR-010).
+    private static let bodyKindDispatch: [String: (payloadKey: String, bodyKind: String)] = {
         let canonical = Schema.EventPayloadKeys.body
+        var m: [String: (payloadKey: String, bodyKind: String)] = [
+            "issue_updated": (canonical, Schema.BodyKinds.linearDesc),
+            "linear_notification_received": (canonical, Schema.BodyKinds.linearNotificationTitle),
+            GitHubEventKindKey.commitPushed.rawValue: (canonical, Schema.BodyKinds.commitMsg),
+            GitHubEventKindKey.issueCommentAuthored.rawValue: (canonical, Schema.BodyKinds.ghIssueComment),
+            GitHubEventKindKey.prReviewCommentAuthored.rawValue: (canonical, Schema.BodyKinds.ghPRReviewComment),
+            "slack_thread_reply_aggregate": (canonical, Schema.BodyKinds.slackThreadParent),
+            GitHubEventKindKey.prOpened.rawValue: (canonical, Schema.BodyKinds.ghPR),
+            GitHubEventKindKey.prMerged.rawValue: (canonical, Schema.BodyKinds.ghPR),
+            GitHubEventKindKey.prClosed.rawValue: (canonical, Schema.BodyKinds.ghPR),
+            // issue body indexed under same kind as issue comments
+            GitHubEventKindKey.issueOpened.rawValue: (canonical, Schema.BodyKinds.ghIssueComment),
+            GitHubEventKindKey.issueClosed.rawValue: (canonical, Schema.BodyKinds.ghIssueComment),
+            GitHubEventKindKey.gistCreated.rawValue: (canonical, Schema.BodyKinds.ghGistDescription),
+            GitHubEventKindKey.gistUpdated.rawValue: (canonical, Schema.BodyKinds.ghGistDescription),
+            GitHubEventKindKey.releasePublished.rawValue: (canonical, Schema.BodyKinds.ghReleaseBody),
+            GitHubEventKindKey.deploymentCreated.rawValue: (canonical, Schema.BodyKinds.ghDeploymentDescription),
+            SlackEventKindKey.slackCanvasCreated.rawValue: (canonical, Schema.BodyKinds.slackCanvasTitle),
+            SlackEventKindKey.slackCanvasEdited.rawValue: (canonical, Schema.BodyKinds.slackCanvasTitle),
+            SlackEventKindKey.slackBookmarkAdded.rawValue: (canonical, Schema.BodyKinds.slackBookmarkTitle),
+            SlackEventKindKey.slackBookmarkRemoved.rawValue: (canonical, Schema.BodyKinds.slackBookmarkTitle),
+            "notes_active_title_changed": ("note_title", Schema.BodyKinds.notesTitle),
+            "zoom_meeting_name_observed": ("meeting_topic", Schema.BodyKinds.zoomMeetingName),
+            "screenshot_taken": ("filename", Schema.BodyKinds.screenshotFilename),
+            "download_added": ("filename", Schema.BodyKinds.downloadFilename),
+        ]
+        return m
+    }()
 
-        // Track-1 D2 carry-over fix: LinearCollector emits "issue_updated"
-        // (без "linear_" префикса); старая dispatch строка пропускала Linear
-        // descriptions из FTS. Track-3 D1 фиксит, добавляет notification_title.
-        if eventKind == "issue_updated" { return (canonical, Schema.BodyKinds.linearDesc) }
-        if eventKind == "linear_notification_received" { return (canonical, Schema.BodyKinds.linearNotificationTitle) }
-        if eventKind == GitHubEventKindKey.commitPushed.rawValue { return (canonical, Schema.BodyKinds.commitMsg) }
-        if eventKind == GitHubEventKindKey.issueCommentAuthored.rawValue {
-            return (canonical, Schema.BodyKinds.ghIssueComment)
-        }
-        if eventKind == GitHubEventKindKey.prReviewCommentAuthored.rawValue {
-            return (canonical, Schema.BodyKinds.ghPRReviewComment)
-        }
-        if eventKind == "slack_thread_reply_aggregate" { return (canonical, Schema.BodyKinds.slackThreadParent) }
-        // Track-3 D2: explicit gh_* cases instead of bare hasPrefix("gh_pr_")
-        // catch-all (which would spuriously match gh_pr_review_thread_resolved
-        // и gh_pr_awaiting_review_count whose body-bearing is nil).
-        if eventKind == GitHubEventKindKey.prOpened.rawValue
-            || eventKind == GitHubEventKindKey.prMerged.rawValue
-            || eventKind == GitHubEventKindKey.prClosed.rawValue
-        {
-            return (canonical, Schema.BodyKinds.ghPR)
-        }
-        if eventKind == GitHubEventKindKey.issueOpened.rawValue
-            || eventKind == GitHubEventKindKey.issueClosed.rawValue
-        {
-            return (canonical, Schema.BodyKinds.ghIssueComment)  // issue body indexed under same kind as issue comments
-        }
-        // Track-3 D2 §4.3 — gist description / release body / deployment description
-        // body-kind dispatch. Body field, when present in payload, is routed to the
-        // dedicated body_kind so D3 query path can filter.
-        if eventKind == GitHubEventKindKey.gistCreated.rawValue
-            || eventKind == GitHubEventKindKey.gistUpdated.rawValue
-        {
-            return (canonical, Schema.BodyKinds.ghGistDescription)
-        }
-        if eventKind == GitHubEventKindKey.releasePublished.rawValue {
-            return (canonical, Schema.BodyKinds.ghReleaseBody)
-        }
-        if eventKind == GitHubEventKindKey.deploymentCreated.rawValue {
-            return (canonical, Schema.BodyKinds.ghDeploymentDescription)
-        }
-        // Track-3 D3 Task 14 — Slack canvas title body-kind dispatch.
-        // Per ADR-010 §6, canvas titles are user-named structured resources
-        // (not message bodies) and route through FTS via the `body` field.
-        if eventKind == SlackEventKindKey.slackCanvasCreated.rawValue
-            || eventKind == SlackEventKindKey.slackCanvasEdited.rawValue
-        {
-            return (canonical, Schema.BodyKinds.slackCanvasTitle)
-        }
-        // Track-3 D3 Task 14 — Slack bookmark title body-kind dispatch (Task 12
-        // gap closed here; bookmark cases were declared body-bearing but lacked
-        // a dispatch entry until canvas titles were also wired).
-        if eventKind == SlackEventKindKey.slackBookmarkAdded.rawValue
-            || eventKind == SlackEventKindKey.slackBookmarkRemoved.rawValue
-        {
-            return (canonical, Schema.BodyKinds.slackBookmarkTitle)
-        }
-
-        // Track-4 S4 — non-canonical payload keys (user-authored titles/filenames).
-        // Per ADR-010 these are user-namespace labels (note title, meeting topic,
-        // screenshot/download filenames) — mirror commit-message precedent.
-        if eventKind == "notes_active_title_changed" {
-            return ("note_title", Schema.BodyKinds.notesTitle)
-        }
-        if eventKind == "zoom_meeting_name_observed" {
-            return ("meeting_topic", Schema.BodyKinds.zoomMeetingName)
-        }
-        if eventKind == "screenshot_taken" {
-            return ("filename", Schema.BodyKinds.screenshotFilename)
-        }
-        if eventKind == "download_added" {
-            return ("filename", Schema.BodyKinds.downloadFilename)
-        }
-
-        return nil
+    private static func topLevelBodyKind(forEventKind eventKind: String) -> (payloadKey: String, bodyKind: String)? {
+        bodyKindDispatch[eventKind]
     }
 
     /// Test-only accessor for `topLevelBodyKind`. Used by `DispatchCoverageTests`

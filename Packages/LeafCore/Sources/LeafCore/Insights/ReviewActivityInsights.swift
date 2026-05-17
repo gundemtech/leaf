@@ -92,103 +92,16 @@ public enum ReviewActivityInsights {
         let startMs = Int64(interval.start.timeIntervalSince1970 * 1000)
         let endMs = Int64(interval.end.timeIntervalSince1970 * 1000)
 
-        var reviewsSubmitted = 0
-        var reviewComments = 0
-        var threadResolved = 0
+        var counts = ReviewCounts()
         var byRepo: [[String: Any]] = []
         var linkedPRs: [[String: Any]] = []
 
         try database.readSQL { rawDB in
-            // 1. Top-level counts per event_kind. Single SQL grouped scan —
-            // дешевле трёх отдельных COUNT(*) запросов на one events table scan.
-            let countsSQL = """
-                SELECT json_extract(\(Schema.Events.payloadJSON), '$.event_kind') AS k, COUNT(*) AS c
-                FROM \(Schema.Events.tableName)
-                WHERE json_extract(\(Schema.Events.payloadJSON), '$.source') = 'github'
-                  AND json_extract(\(Schema.Events.payloadJSON), '$.event_kind') IN ('gh_pr_review_submitted', 'gh_pr_review_comment_authored', 'gh_pr_review_thread_resolved')
-                  AND \(Schema.Events.ts) >= ? AND \(Schema.Events.ts) < ?
-                  \(repo != nil ? "AND json_extract(\(Schema.Events.payloadJSON), '$.repo') = ?" : "")
-                GROUP BY k
-                """
             var args: [DatabaseValueConvertible] = [startMs, endMs]
             if let r = repo { args.append(r) }
-            let rows = try GRDB.Row.fetchAll(rawDB, sql: countsSQL, arguments: StatementArguments(args))
-            for row in rows {
-                let kind = row["k"] as? String ?? ""
-                let count = (row["c"] as? Int64).map { Int($0) } ?? 0
-                switch kind {
-                case GitHubEventKindKey.prReviewSubmitted.rawValue: reviewsSubmitted = count
-                case GitHubEventKindKey.prReviewCommentAuthored.rawValue: reviewComments = count
-                case GitHubEventKindKey.prReviewThreadResolved.rawValue: threadResolved = count
-                default: break
-                }
-            }
-
-            // 2. by_repo aggregation — GROUP BY repo, conditional sums.
-            // SQLite supports `SUM(CASE WHEN ... THEN 1 ELSE 0 END)` для conditional counts.
-            let byRepoSQL = """
-                SELECT
-                  json_extract(\(Schema.Events.payloadJSON), '$.repo') AS repo,
-                  SUM(CASE WHEN json_extract(\(Schema.Events.payloadJSON), '$.event_kind') = 'gh_pr_review_submitted' THEN 1 ELSE 0 END) AS reviews,
-                  SUM(CASE WHEN json_extract(\(Schema.Events.payloadJSON), '$.event_kind') = 'gh_pr_review_comment_authored' THEN 1 ELSE 0 END) AS comments
-                FROM \(Schema.Events.tableName)
-                WHERE json_extract(\(Schema.Events.payloadJSON), '$.source') = 'github'
-                  AND json_extract(\(Schema.Events.payloadJSON), '$.event_kind') IN ('gh_pr_review_submitted', 'gh_pr_review_comment_authored', 'gh_pr_review_thread_resolved')
-                  AND \(Schema.Events.ts) >= ? AND \(Schema.Events.ts) < ?
-                  \(repo != nil ? "AND json_extract(\(Schema.Events.payloadJSON), '$.repo') = ?" : "")
-                  AND json_extract(\(Schema.Events.payloadJSON), '$.repo') IS NOT NULL
-                  AND json_extract(\(Schema.Events.payloadJSON), '$.repo') != ''
-                GROUP BY repo
-                ORDER BY (reviews + comments) DESC, repo ASC
-                """
-            let byRepoRows = try GRDB.Row.fetchAll(rawDB, sql: byRepoSQL, arguments: StatementArguments(args))
-            for row in byRepoRows {
-                let r = row["repo"] as? String ?? ""
-                let rev = (row["reviews"] as? Int64).map { Int($0) } ?? 0
-                let com = (row["comments"] as? Int64).map { Int($0) } ?? 0
-                byRepo.append([
-                    "repo": r,
-                    "reviews": rev,
-                    "comments": com,
-                ])
-            }
-
-            // 3. linked_prs — distinct (repo, pr_number, linked_linear_id) tuples
-            // на gh_pr_* event'ах с непустым linked_linear_id. Phase 4.7.A `gh_pr_opened`
-            // / `gh_pr_merged` / `gh_pr_closed` / `gh_commit_pushed` могут нести этот field.
-            // Filter: pr_number != "" (gh_commit_pushed без PR context отбрасываем).
-            // Period фильтр сохраняется — same window as review aggregates.
-            let linkedSQL = """
-                SELECT DISTINCT
-                  json_extract(\(Schema.Events.payloadJSON), '$.repo') AS repo,
-                  json_extract(\(Schema.Events.payloadJSON), '$.number') AS pr_number,
-                  json_extract(\(Schema.Events.payloadJSON), '$.linked_linear_id') AS linked
-                FROM \(Schema.Events.tableName)
-                WHERE json_extract(\(Schema.Events.payloadJSON), '$.source') = 'github'
-                  AND json_extract(\(Schema.Events.payloadJSON), '$.linked_linear_id') IS NOT NULL
-                  AND json_extract(\(Schema.Events.payloadJSON), '$.linked_linear_id') != ''
-                  AND json_extract(\(Schema.Events.payloadJSON), '$.number') IS NOT NULL
-                  AND json_extract(\(Schema.Events.payloadJSON), '$.number') != ''
-                  AND json_extract(\(Schema.Events.payloadJSON), '$.repo') IS NOT NULL
-                  AND json_extract(\(Schema.Events.payloadJSON), '$.repo') != ''
-                  AND \(Schema.Events.ts) >= ? AND \(Schema.Events.ts) < ?
-                  \(repo != nil ? "AND json_extract(\(Schema.Events.payloadJSON), '$.repo') = ?" : "")
-                ORDER BY repo ASC, pr_number ASC
-                """
-            let linkedRows = try GRDB.Row.fetchAll(rawDB, sql: linkedSQL, arguments: StatementArguments(args))
-            for row in linkedRows {
-                let r = row["repo"] as? String ?? ""
-                // pr_number stored as String ("42") поверх RawEvent [String:String] payload;
-                // json_extract returns it as TEXT → cast to Int safely.
-                let prNumberRaw = row["pr_number"] as? String ?? ""
-                guard let prNumber = Int(prNumberRaw) else { continue }
-                let linked = row["linked"] as? String ?? ""
-                linkedPRs.append([
-                    "repo": r,
-                    "pr_number": prNumber,
-                    "linked_linear_id": linked,
-                ])
-            }
+            counts = try fetchCounts(rawDB: rawDB, repoFilter: repo, args: args)
+            byRepo = try fetchByRepo(rawDB: rawDB, repoFilter: repo, args: args)
+            linkedPRs = try fetchLinkedPRs(rawDB: rawDB, repoFilter: repo, args: args)
         }
 
         let iso = ISO8601DateFormatter()
@@ -196,11 +109,118 @@ public enum ReviewActivityInsights {
             "period": period.rawValue,
             "from": iso.string(from: interval.start),
             "to": iso.string(from: interval.end),
-            "reviews_submitted_count": reviewsSubmitted,
-            "review_comments_count": reviewComments,
-            "review_thread_resolved_count": threadResolved,
+            "reviews_submitted_count": counts.reviewsSubmitted,
+            "review_comments_count": counts.reviewComments,
+            "review_thread_resolved_count": counts.threadResolved,
             "by_repo": byRepo,
             "linked_prs": linkedPRs,
         ]
+    }
+
+    // MARK: - Internals
+
+    private struct ReviewCounts {
+        var reviewsSubmitted = 0
+        var reviewComments = 0
+        var threadResolved = 0
+    }
+
+    /// 1. Top-level counts per event_kind. Single SQL grouped scan — дешевле
+    /// трёх отдельных COUNT(*) запросов на one events table scan.
+    private static func fetchCounts(
+        rawDB: GRDB.Database, repoFilter: String?, args: [DatabaseValueConvertible]
+    ) throws -> ReviewCounts {
+        let countsSQL = """
+            SELECT json_extract(\(Schema.Events.payloadJSON), '$.event_kind') AS k, COUNT(*) AS c
+            FROM \(Schema.Events.tableName)
+            WHERE json_extract(\(Schema.Events.payloadJSON), '$.source') = 'github'
+              AND json_extract(\(Schema.Events.payloadJSON), '$.event_kind') IN ('gh_pr_review_submitted', 'gh_pr_review_comment_authored', 'gh_pr_review_thread_resolved')
+              AND \(Schema.Events.ts) >= ? AND \(Schema.Events.ts) < ?
+              \(repoFilter != nil ? "AND json_extract(\(Schema.Events.payloadJSON), '$.repo') = ?" : "")
+            GROUP BY k
+            """
+        let rows = try GRDB.Row.fetchAll(rawDB, sql: countsSQL, arguments: StatementArguments(args))
+        var counts = ReviewCounts()
+        for row in rows {
+            let kind = row["k"] as? String ?? ""
+            let count = (row["c"] as? Int64).map { Int($0) } ?? 0
+            switch kind {
+            case GitHubEventKindKey.prReviewSubmitted.rawValue: counts.reviewsSubmitted = count
+            case GitHubEventKindKey.prReviewCommentAuthored.rawValue: counts.reviewComments = count
+            case GitHubEventKindKey.prReviewThreadResolved.rawValue: counts.threadResolved = count
+            default: break
+            }
+        }
+        return counts
+    }
+
+    /// 2. by_repo aggregation — GROUP BY repo, conditional sums.
+    /// SQLite supports `SUM(CASE WHEN ... THEN 1 ELSE 0 END)` для conditional counts.
+    private static func fetchByRepo(
+        rawDB: GRDB.Database, repoFilter: String?, args: [DatabaseValueConvertible]
+    ) throws -> [[String: Any]] {
+        let byRepoSQL = """
+            SELECT
+              json_extract(\(Schema.Events.payloadJSON), '$.repo') AS repo,
+              SUM(CASE WHEN json_extract(\(Schema.Events.payloadJSON), '$.event_kind') = 'gh_pr_review_submitted' THEN 1 ELSE 0 END) AS reviews,
+              SUM(CASE WHEN json_extract(\(Schema.Events.payloadJSON), '$.event_kind') = 'gh_pr_review_comment_authored' THEN 1 ELSE 0 END) AS comments
+            FROM \(Schema.Events.tableName)
+            WHERE json_extract(\(Schema.Events.payloadJSON), '$.source') = 'github'
+              AND json_extract(\(Schema.Events.payloadJSON), '$.event_kind') IN ('gh_pr_review_submitted', 'gh_pr_review_comment_authored', 'gh_pr_review_thread_resolved')
+              AND \(Schema.Events.ts) >= ? AND \(Schema.Events.ts) < ?
+              \(repoFilter != nil ? "AND json_extract(\(Schema.Events.payloadJSON), '$.repo') = ?" : "")
+              AND json_extract(\(Schema.Events.payloadJSON), '$.repo') IS NOT NULL
+              AND json_extract(\(Schema.Events.payloadJSON), '$.repo') != ''
+            GROUP BY repo
+            ORDER BY (reviews + comments) DESC, repo ASC
+            """
+        let byRepoRows = try GRDB.Row.fetchAll(rawDB, sql: byRepoSQL, arguments: StatementArguments(args))
+        var result: [[String: Any]] = []
+        for row in byRepoRows {
+            let r = row["repo"] as? String ?? ""
+            let rev = (row["reviews"] as? Int64).map { Int($0) } ?? 0
+            let com = (row["comments"] as? Int64).map { Int($0) } ?? 0
+            result.append(["repo": r, "reviews": rev, "comments": com])
+        }
+        return result
+    }
+
+    /// 3. linked_prs — distinct (repo, pr_number, linked_linear_id) tuples
+    /// на gh_pr_* event'ах с непустым linked_linear_id. Phase 4.7.A `gh_pr_opened`
+    /// / `gh_pr_merged` / `gh_pr_closed` / `gh_commit_pushed` могут нести этот field.
+    /// Filter: pr_number != "" (gh_commit_pushed без PR context отбрасываем).
+    /// Period фильтр сохраняется — same window as review aggregates.
+    private static func fetchLinkedPRs(
+        rawDB: GRDB.Database, repoFilter: String?, args: [DatabaseValueConvertible]
+    ) throws -> [[String: Any]] {
+        let linkedSQL = """
+            SELECT DISTINCT
+              json_extract(\(Schema.Events.payloadJSON), '$.repo') AS repo,
+              json_extract(\(Schema.Events.payloadJSON), '$.number') AS pr_number,
+              json_extract(\(Schema.Events.payloadJSON), '$.linked_linear_id') AS linked
+            FROM \(Schema.Events.tableName)
+            WHERE json_extract(\(Schema.Events.payloadJSON), '$.source') = 'github'
+              AND json_extract(\(Schema.Events.payloadJSON), '$.linked_linear_id') IS NOT NULL
+              AND json_extract(\(Schema.Events.payloadJSON), '$.linked_linear_id') != ''
+              AND json_extract(\(Schema.Events.payloadJSON), '$.number') IS NOT NULL
+              AND json_extract(\(Schema.Events.payloadJSON), '$.number') != ''
+              AND json_extract(\(Schema.Events.payloadJSON), '$.repo') IS NOT NULL
+              AND json_extract(\(Schema.Events.payloadJSON), '$.repo') != ''
+              AND \(Schema.Events.ts) >= ? AND \(Schema.Events.ts) < ?
+              \(repoFilter != nil ? "AND json_extract(\(Schema.Events.payloadJSON), '$.repo') = ?" : "")
+            ORDER BY repo ASC, pr_number ASC
+            """
+        let linkedRows = try GRDB.Row.fetchAll(rawDB, sql: linkedSQL, arguments: StatementArguments(args))
+        var result: [[String: Any]] = []
+        for row in linkedRows {
+            let r = row["repo"] as? String ?? ""
+            // pr_number stored as String ("42") поверх RawEvent [String:String] payload;
+            // json_extract returns it as TEXT → cast to Int safely.
+            let prNumberRaw = row["pr_number"] as? String ?? ""
+            guard let prNumber = Int(prNumberRaw) else { continue }
+            let linked = row["linked"] as? String ?? ""
+            result.append(["repo": r, "pr_number": prNumber, "linked_linear_id": linked])
+        }
+        return result
     }
 }
