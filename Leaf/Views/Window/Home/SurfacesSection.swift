@@ -199,13 +199,7 @@ private struct ClaudeCodeCardWrapper: View {
                 onTap: onTap
             )
         case .enabledZeroToday, .enabledEmpty:
-            SurfaceCard(
-                surface: .claudeCode,
-                headline: "Open for details",
-                subStats: ["Daily activity in the detail screen"],
-                spark: { Color.clear },
-                onTap: onTap
-            )
+            SurfaceCardCompact(surface: .claudeCode, onTap: onTap)
         case .enabledPopulated(let payload):
             SurfaceCard(
                 surface: .claudeCode,
@@ -268,13 +262,7 @@ private struct XcodeCardWrapper: View {
                 onTap: onTap
             )
         case .enabledZeroToday, .enabledEmpty:
-            SurfaceCard(
-                surface: .xcode,
-                headline: "Open for details",
-                subStats: ["Daily activity in the detail screen"],
-                spark: { Color.clear },
-                onTap: onTap
-            )
+            SurfaceCardCompact(surface: .xcode, onTap: onTap)
         case .enabledPopulated(let payload):
             SurfaceCard(
                 surface: .xcode,
@@ -329,13 +317,7 @@ private struct IDEsCardWrapper: View {
                 onTap: onTap
             )
         case .enabledZeroToday, .enabledEmpty:
-            SurfaceCard(
-                surface: .ides,
-                headline: "Open for details",
-                subStats: ["Daily activity in the detail screen"],
-                spark: { Color.clear },
-                onTap: onTap
-            )
+            SurfaceCardCompact(surface: .ides, onTap: onTap)
         case .enabledPopulated(let payload):
             SurfaceCard(
                 surface: .ides,
@@ -395,13 +377,7 @@ private struct BrowsersCardWrapper: View {
                 onTap: onTap
             )
         case .enabledZeroToday, .enabledEmpty:
-            SurfaceCard(
-                surface: .browsers,
-                headline: "Open for details",
-                subStats: ["Daily activity in the detail screen"],
-                spark: { Color.clear },
-                onTap: onTap
-            )
+            SurfaceCardCompact(surface: .browsers, onTap: onTap)
         case .enabledPopulated(let payload):
             SurfaceCard(
                 surface: .browsers,
@@ -459,13 +435,7 @@ private struct ZoomCardWrapper: View {
                 onTap: onTap
             )
         case .enabledZeroToday, .enabledEmpty:
-            SurfaceCard(
-                surface: .zoom,
-                headline: "Open for details",
-                subStats: ["Daily activity in the detail screen"],
-                spark: { Color.clear },
-                onTap: onTap
-            )
+            SurfaceCardCompact(surface: .zoom, onTap: onTap)
         case .enabledPopulated(let payload):
             SurfaceCard(
                 surface: .zoom,
@@ -500,10 +470,10 @@ private struct ZoomCardWrapper: View {
 
 // MARK: - Google Calendar card wrapper
 
-/// Calendar carve-out per spec §3.5: zero-today renders `"Captured · Waiting
-/// for events"` (not the generic "Open for details"), because the surface is
-/// gated on GCP acceptance and we want to differentiate between
-/// "captured-but-quiet today" and "captured-but-not-yet-aggregated".
+/// Calendar carve-out per spec §3.5: card itself uses the same
+/// `SurfaceCardCompact` empty-state treatment as the other surfaces; the GCP-gate
+/// messaging now lives only on `GoogleCalendarDetailScreen` (LeafEmptyState),
+/// so the Surfaces section reads as visually uniform.
 private struct GoogleCalendarCardWrapper: View {
     let snapshot: InsightsSnapshot?
     let calendarOAuth: GoogleCalendarOAuthService
@@ -522,13 +492,7 @@ private struct GoogleCalendarCardWrapper: View {
                 onTap: onTap
             )
         case .enabledZeroToday, .enabledEmpty:
-            SurfaceCard(
-                surface: .calendar,
-                headline: "Captured · Waiting for events",
-                subStats: ["Detail aggregates after GCP gate clears"],
-                spark: { Color.clear },
-                onTap: onTap
-            )
+            SurfaceCardCompact(surface: .calendar, onTap: onTap)
         case .enabledPopulated(let payload):
             SurfaceCard(
                 surface: .calendar,
