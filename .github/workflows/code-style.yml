@@ -17,7 +17,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Select Xcode
         run: sudo xcode-select -switch /Applications/Xcode.app
@@ -54,15 +54,17 @@ jobs:
       - name: Style summary
         if: always()
         run: |
+          fmt_count=$(wc -l < swift-format.log 2>/dev/null | tr -d ' ' || echo "?")
           {
             echo "## Style check (Phase 1 — report-only)"
             echo ""
-            echo "| Tool | Outcome |"
-            echo "|---|---|"
-            echo "| swift-format | \`${{ steps.fmt.outcome }}\` |"
-            echo "| SwiftLint | \`${{ steps.lint.outcome }}\` |"
+            echo "| Tool | Outcome | Violations |"
+            echo "|---|---|---|"
+            echo "| swift-format | \`${{ steps.fmt.outcome }}\` | ${fmt_count} (see step log; Phase 2 cleanup roadmap) |"
+            echo "| SwiftLint | \`${{ steps.lint.outcome }}\` | 0 new (vs baseline; existing grandfathered in .swiftlint-baseline.json) |"
             echo ""
-            echo "Violations отображены как PR annotations (Files-changed view)."
+            echo "SwiftLint violations отображены как PR annotations (Files-changed view)."
+            echo "swift-format violations — в raw step log (нет baseline mechanism; Phase 2 cleanup PR через \`just format\`)."
             echo "Phase 1 — **report-only**; merge не блокируется."
             echo ""
             echo "См. [STYLE.md](https://github.com/${{ github.repository }}/blob/main/STYLE.md) и [.swiftlint.yml](https://github.com/${{ github.repository }}/blob/main/.swiftlint.yml)."

@@ -8,7 +8,7 @@ Leaf is a macOS ambient-memory utility (Swift 6, SwiftUI, MCP server). См. [RE
 - **Xcode 16+** — ships Apple `swift-format`.
 - **Homebrew** для CLI tools.
 - **[just](https://github.com/casey/just):** `brew install just`.
-- **[SwiftLint](https://github.com/realm/SwiftLint):** `brew install swiftlint` (≥ 0.59).
+- **[SwiftLint](https://github.com/realm/SwiftLint):** `brew install swiftlint` (≥ 0.63 — baseline JSON shape locked at this version).
 
 Linux / Windows — не поддерживаемые targets.
 

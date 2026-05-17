@@ -98,7 +98,7 @@ disabled_rules:
   - trailing_closure                           # 165 — SwiftUI conventional `.task { }`, `.onAppear { }`
   # === Other ===
   - inclusive_language                         # 5 — false positives на 'master' (git default-branch context)
-  - non_optional_string_data_conversion        # 27 — narrow rule, low value
+  - non_optional_string_data_conversion        # 27 — flags safe `Data(string.utf8)` pattern; suppress noise. Sibling `optional_data_string_conversion` stays active (default-on, 2 force-unwrap hits grandfathered → Phase 2 cleanup candidates).
   - implicit_optional_initialization           # 40 — `var x: Int? = nil` allowed для explicitness
   - static_over_final_class                    # 20 — `final class` widely used by design
 

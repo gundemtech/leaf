@@ -23,6 +23,8 @@
 
 Boundary discipline: каждое style правило имеет **один владелец**. Например `line_length` — swift-format, не SwiftLint (см. `.swiftlint.yml` § disabled_rules).
 
+Иногда rule existуют у обоих tools, и мы делегируем **semantic preferences** (например `implicit_return` shorthand, `redundant_type_annotation`) SwiftLint'у — swift-format остаётся neutral на этих преобразованиях (`OmitExplicitReturns: false`). После `just lint-fix` (SwiftLint авто-фиксит) → `just format` не сломает результат. Tools cooperate, не конфликтуют.
+
 ---
 
 ## Naming
@@ -134,7 +136,7 @@ public enum FooCardViewModel {
 }
 ```
 
-См. `ClaudeCodeSurfaceCardViewModel` (когда Track-7 P2 merges на main).
+См. `VSCodeFamilyDispatcher` (`Packages/LeafCore/Sources/LeafCore/Insights/Parsers/VSCodeFamily/VSCodeFamilyDispatcher.swift:6`) — namespace enum со `static let supportedBundleIDs` + `static func isVSCodeFamily(...)` + `static func parse(...)`. Дополнительные stateless card VMs landing'аются с Track-7 P2.
 
 ---
 
