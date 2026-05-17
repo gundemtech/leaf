@@ -19,6 +19,10 @@ public enum HomeSurface: String, CaseIterable, Hashable, Codable, Sendable, Iden
 
     public var id: String { rawValue }
 
+    /// English display name. UI consumers must render via
+    /// `Text(LocalizedStringKey(localizationKey))` — `displayName` is the
+    /// fallback / accessibility label only. Track 7 P1 ships English literals;
+    /// `Localizable.strings` entries land in P11 polish.
     public var displayName: String {
         switch self {
         case .claudeCode: "Claude Code"
@@ -36,7 +40,16 @@ public enum HomeSurface: String, CaseIterable, Hashable, Codable, Sendable, Iden
 }
 
 public enum SurfaceCatalog {
+    /// Canonical ordering (capture-volume heuristic per spec §3 / §A5).
+    /// Enabled surfaces render first as full cards; disabled surfaces
+    /// render below as compact rows. Within each partition, ordering
+    /// follows this array.
     public static let all: [HomeSurface] = [
-        .claudeCode, .xcode, .ides, .browsers, .zoom, .calendar
+        .claudeCode,  // 1 — highest volume (AI coding flow)
+        .xcode,       // 2 — primary dev IDE on macOS
+        .ides,        // 3 — secondary dev IDEs
+        .browsers,    // 4 — research / docs
+        .zoom,        // 5 — async-light
+        .calendar     // 6 — atomic state events
     ]
 }

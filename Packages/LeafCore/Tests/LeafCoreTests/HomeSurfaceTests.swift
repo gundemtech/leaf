@@ -33,11 +33,15 @@ final class HomeSurfaceTests: XCTestCase {
         }
     }
 
-    func testLocalizationKeyPrefix() {
+    func testLocalizationKeyFullFormat() {
+        // Spec §11 — keys are `home.surface.<rawValue>.name`. Pin both
+        // prefix and suffix so a future rename of the suffix (e.g. `.title`)
+        // is caught here, not at integration.
         for surface in HomeSurface.allCases {
-            XCTAssertTrue(
-                surface.localizationKey.hasPrefix("home.surface."),
-                "wrong key prefix: \(surface.localizationKey)"
+            XCTAssertEqual(
+                surface.localizationKey,
+                "home.surface.\(surface.rawValue).name",
+                "localization key format drift for \(surface)"
             )
         }
     }
