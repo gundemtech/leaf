@@ -54,8 +54,16 @@ struct WindowSettingsView: View {
             withAnimation(.easeOut(duration: 0.25)) {
                 proxy.scrollTo(target.section, anchor: .top)
             }
-            // `sub` anchor is not yet wired (sub-section views don't expose
-            // sub-IDs in P1). P2 will add them as part of Xcode row routing.
+            // Track-7 P2 — chained sub-anchor scroll. After the section header
+            // settles (~0.25s), scroll a second time to the specific sub-row
+            // (e.g. Local Apps → Xcode, System Observers → Browsers).
+            if let sub = target.sub {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        proxy.scrollTo(sub, anchor: .top)
+                    }
+                }
+            }
         }
     }
 }
