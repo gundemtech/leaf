@@ -67,7 +67,7 @@ public actor JetBrainsRecentProjectsWatcher {
             "ide_version_dir": versionDir,
             "project_name": displayName,
             "activation_timestamp_ms": String(activationTimestampMs),
-            "outside_watched_folder": outsideWatchedFolder ? "true" : "false"
+            "outside_watched_folder": outsideWatchedFolder ? "true" : "false",
         ]
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: Double(activationTimestampMs) / 1000.0),
@@ -90,9 +90,11 @@ public actor JetBrainsRecentProjectsWatcher {
         private var depth = 0
         private var metaInfoDepth = 0
 
-        func parser(_ parser: XMLParser, didStartElement elementName: String,
-                    namespaceURI: String?, qualifiedName qName: String?,
-                    attributes attributeDict: [String: String]) {
+        func parser(
+            _ parser: XMLParser, didStartElement elementName: String,
+            namespaceURI: String?, qualifiedName qName: String?,
+            attributes attributeDict: [String: String]
+        ) {
             depth += 1
             if elementName == "RecentProjectMetaInfo" {
                 inMetaInfo = true
@@ -106,21 +108,25 @@ public actor JetBrainsRecentProjectsWatcher {
                 // Only direct <option> children of RecentProjectMetaInfo —
                 // ignores nested option inside runManager / frame / etc.
                 if attributeDict["name"] == "displayName",
-                   let v = attributeDict["value"] {
+                    let v = attributeDict["value"]
+                {
                     currentDisplayName = v
                 }
             }
             // Other children (runManager, frame, etc.) deliberately ignored.
         }
 
-        func parser(_ parser: XMLParser, didEndElement elementName: String,
-                    namespaceURI: String?, qualifiedName qName: String?) {
+        func parser(
+            _ parser: XMLParser, didEndElement elementName: String,
+            namespaceURI: String?, qualifiedName qName: String?
+        ) {
             if elementName == "RecentProjectMetaInfo", inMetaInfo {
                 if let name = currentDisplayName, let ts = currentActivationTs {
-                    entries.append(ParsedEntry(
-                        displayName: name,
-                        activationTimestampMs: ts
-                    ))
+                    entries.append(
+                        ParsedEntry(
+                            displayName: name,
+                            activationTimestampMs: ts
+                        ))
                 }
                 inMetaInfo = false
                 currentDisplayName = nil

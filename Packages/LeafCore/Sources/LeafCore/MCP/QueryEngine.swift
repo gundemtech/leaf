@@ -65,8 +65,10 @@ public struct QueryEngine: Sendable {
 
     // MARK: - queryActivity
 
-    public func queryActivity(period: PeriodSpec,
-                              filter: String?) throws -> QueryActivityResponse {
+    public func queryActivity(
+        period: PeriodSpec,
+        filter: String?
+    ) throws -> QueryActivityResponse {
         let db = try Database.openForRead(at: dbURL, config: dbConfig, encryption: dbEncryption)
         return try db.readSQL { rawDB -> QueryActivityResponse in
             // 1. Event-id set: FTS branch when filter present + non-empty,
@@ -75,16 +77,18 @@ public struct QueryEngine: Sendable {
             if let filter, !filter.trimmingCharacters(in: .whitespaces).isEmpty {
                 eventIDs = try EventsFullTextStore.search(
                     query: filter,
-                    period: period.startMs ... period.endMs,
+                    period: period.startMs...period.endMs,
                     limit: Self.sqlEventLimit,
                     in: rawDB
                 )
             } else {
-                eventIDs = try Int64.fetchAll(rawDB, sql: """
-                    SELECT id FROM events
-                     WHERE ts BETWEEN ? AND ?
-                     ORDER BY ts DESC LIMIT ?
-                """, arguments: [period.startMs, period.endMs, Self.sqlEventLimit])
+                eventIDs = try Int64.fetchAll(
+                    rawDB,
+                    sql: """
+                            SELECT id FROM events
+                             WHERE ts BETWEEN ? AND ?
+                             ORDER BY ts DESC LIMIT ?
+                        """, arguments: [period.startMs, period.endMs, Self.sqlEventLimit])
             }
 
             // 2. Project events (slim shape, body excerpt capped).
@@ -133,9 +137,9 @@ public struct QueryEngine: Sendable {
             // doesn't scope; `EventsFullTextStore.search` filters by events.ts.
             let range: ClosedRange<Int64>
             if let p = period {
-                range = p.startMs ... p.endMs
+                range = p.startMs...p.endMs
             } else {
-                range = Int64.min ... Int64.max
+                range = Int64.min...Int64.max
             }
 
             // FTS over event bodies — events_fts is contentless over
@@ -150,13 +154,15 @@ public struct QueryEngine: Sendable {
             }
 
             let placeholders = Array(repeating: "?", count: candidateIDs.count).joined(separator: ",")
-            let row = try Row.fetchOne(rawDB, sql: """
-                SELECT id, event_id, topic_keywords_json, reasoning_excerpt, confidence, detected_at_ms
-                  FROM decisions
-                 WHERE event_id IN (\(placeholders))
-                 ORDER BY confidence DESC, detected_at_ms DESC
-                 LIMIT 1
-            """, arguments: StatementArguments(candidateIDs))
+            let row = try Row.fetchOne(
+                rawDB,
+                sql: """
+                        SELECT id, event_id, topic_keywords_json, reasoning_excerpt, confidence, detected_at_ms
+                          FROM decisions
+                         WHERE event_id IN (\(placeholders))
+                         ORDER BY confidence DESC, detected_at_ms DESC
+                         LIMIT 1
+                    """, arguments: StatementArguments(candidateIDs))
 
             guard let row else {
                 return GetDecisionResponse(decision: nil, relatedEvents: [], truncationNote: nil)
@@ -164,9 +170,10 @@ public struct QueryEngine: Sendable {
 
             let decisionView = decisionView(from: row)
             let originatingEventID = decisionView.eventID
-            let originatingEvent = try projectEvents(
-                eventIDs: [originatingEventID], in: rawDB
-            ).first ?? Self.placeholderEvent(eventID: originatingEventID)
+            let originatingEvent =
+                try projectEvents(
+                    eventIDs: [originatingEventID], in: rawDB
+                ).first ?? Self.placeholderEvent(eventID: originatingEventID)
 
             // Outbound links from the originating event = pointers to
             // implementation (Linear ticket / GitHub PR / Slack thread).
@@ -209,44 +216,53 @@ public struct QueryEngine: Sendable {
         let db = try Database.openForRead(at: dbURL, config: dbConfig, encryption: dbEncryption)
         return try db.readSQL { rawDB -> CurrentWorkResponse in
             // current_app: latest attention-signal event.
-            let currentApp: String? = try String.fetchOne(rawDB, sql: """
-                SELECT bundle_id FROM events
-                 WHERE signal_type = 'attention' AND bundle_id IS NOT NULL
-                 ORDER BY ts DESC LIMIT 1
-            """)
+            let currentApp: String? = try String.fetchOne(
+                rawDB,
+                sql: """
+                        SELECT bundle_id FROM events
+                         WHERE signal_type = 'attention' AND bundle_id IS NOT NULL
+                         ORDER BY ts DESC LIMIT 1
+                    """)
 
             // current_branch: latest gh_commit_pushed payload.branch.
-            let currentBranch: String? = try String.fetchOne(rawDB, sql: """
-                SELECT json_extract(payload_json, '$.branch') FROM events
-                 WHERE json_extract(payload_json, '$.event_kind') = 'gh_commit_pushed'
-                   AND json_extract(payload_json, '$.branch') IS NOT NULL
-                 ORDER BY ts DESC LIMIT 1
-            """)
+            let currentBranch: String? = try String.fetchOne(
+                rawDB,
+                sql: """
+                        SELECT json_extract(payload_json, '$.branch') FROM events
+                         WHERE json_extract(payload_json, '$.event_kind') = 'gh_commit_pushed'
+                           AND json_extract(payload_json, '$.branch') IS NOT NULL
+                         ORDER BY ts DESC LIMIT 1
+                    """)
 
             // current_file: latest attention event with non-empty window_title
             // (collectors emit window_title onto attention payloads — see
             // `AttentionEmissionPlanner`; there is no separate `ax_window`
             // signal type in substrate).
-            let currentFile: String? = try String.fetchOne(rawDB, sql: """
-                SELECT json_extract(payload_json, '$.window_title') FROM events
-                 WHERE signal_type = 'attention'
-                   AND json_extract(payload_json, '$.window_title') IS NOT NULL
-                   AND json_extract(payload_json, '$.window_title') != ''
-                 ORDER BY ts DESC LIMIT 1
-            """)
+            let currentFile: String? = try String.fetchOne(
+                rawDB,
+                sql: """
+                        SELECT json_extract(payload_json, '$.window_title') FROM events
+                         WHERE signal_type = 'attention'
+                           AND json_extract(payload_json, '$.window_title') IS NOT NULL
+                           AND json_extract(payload_json, '$.window_title') != ''
+                         ORDER BY ts DESC LIMIT 1
+                    """)
 
             // in_progress_linear_ticket: latest issue_updated whose status != 'Done'.
             // Linear collector emits payload.event_kind = "issue_updated" + payload.status.
-            let linearTicket: LinearTicketRef? = try Row.fetchOne(rawDB, sql: """
-                SELECT json_extract(payload_json, '$.issue_key')   AS issue_ref,
-                       json_extract(payload_json, '$.title')       AS title,
-                       json_extract(payload_json, '$.status')      AS status
-                  FROM events
-                 WHERE json_extract(payload_json, '$.event_kind') = 'issue_updated'
-                   AND COALESCE(json_extract(payload_json, '$.status'), '') != 'Done'
-                   AND json_extract(payload_json, '$.issue_key') IS NOT NULL
-                 ORDER BY ts DESC LIMIT 1
-            """).flatMap { row -> LinearTicketRef? in
+            let linearTicket: LinearTicketRef? = try Row.fetchOne(
+                rawDB,
+                sql: """
+                        SELECT json_extract(payload_json, '$.issue_key')   AS issue_ref,
+                               json_extract(payload_json, '$.title')       AS title,
+                               json_extract(payload_json, '$.status')      AS status
+                          FROM events
+                         WHERE json_extract(payload_json, '$.event_kind') = 'issue_updated'
+                           AND COALESCE(json_extract(payload_json, '$.status'), '') != 'Done'
+                           AND json_extract(payload_json, '$.issue_key') IS NOT NULL
+                         ORDER BY ts DESC LIMIT 1
+                    """
+            ).flatMap { row -> LinearTicketRef? in
                 guard let ref: String = row["issue_ref"] else { return nil }
                 return LinearTicketRef(
                     issueRef: ref,
@@ -256,15 +272,18 @@ public struct QueryEngine: Sendable {
             }
 
             // last_commit: latest gh_commit_pushed projection.
-            let lastCommit: CommitRef? = try Row.fetchOne(rawDB, sql: """
-                SELECT ts,
-                       json_extract(payload_json, '$.sha')     AS sha,
-                       json_extract(payload_json, '$.body')    AS message,
-                       json_extract(payload_json, '$.branch')  AS branch
-                  FROM events
-                 WHERE json_extract(payload_json, '$.event_kind') = 'gh_commit_pushed'
-                 ORDER BY ts DESC LIMIT 1
-            """).map { row in
+            let lastCommit: CommitRef? = try Row.fetchOne(
+                rawDB,
+                sql: """
+                        SELECT ts,
+                               json_extract(payload_json, '$.sha')     AS sha,
+                               json_extract(payload_json, '$.body')    AS message,
+                               json_extract(payload_json, '$.branch')  AS branch
+                          FROM events
+                         WHERE json_extract(payload_json, '$.event_kind') = 'gh_commit_pushed'
+                         ORDER BY ts DESC LIMIT 1
+                    """
+            ).map { row in
                 CommitRef(
                     sha: row["sha"] as String?,
                     message: row["message"] as String?,
@@ -274,30 +293,36 @@ public struct QueryEngine: Sendable {
             }
 
             // current_open_questions: limit 20, unresolved.
-            let openQs = try Row.fetchAll(rawDB, sql: """
-                SELECT id, event_id, question_excerpt, alternatives_json,
-                       slack_thread_ts, linear_issue_ref, github_pr_ref,
-                       resolved_by_event_id, opened_at_ms, resolved_at_ms
-                  FROM open_questions
-                 WHERE resolved_at_ms IS NULL
-                 ORDER BY opened_at_ms DESC LIMIT 20
-            """).map(Self.openQuestionView(from:))
+            let openQs = try Row.fetchAll(
+                rawDB,
+                sql: """
+                        SELECT id, event_id, question_excerpt, alternatives_json,
+                               slack_thread_ts, linear_issue_ref, github_pr_ref,
+                               resolved_by_event_id, opened_at_ms, resolved_at_ms
+                          FROM open_questions
+                         WHERE resolved_at_ms IS NULL
+                         ORDER BY opened_at_ms DESC LIMIT 20
+                    """
+            ).map(Self.openQuestionView(from:))
 
             // current_blockers: limit 10, unresolved.
-            let blockers = try Row.fetchAll(rawDB, sql: """
-                SELECT id, target_kind, target_ref, blocker_kind, blocker_excerpt,
-                       detected_by_event_id, started_at_ms, resolved_at_ms,
-                       resolved_by_event_id
-                  FROM blockers
-                 WHERE resolved_at_ms IS NULL
-                 ORDER BY started_at_ms DESC LIMIT 10
-            """).map(Self.blockerView(from:))
+            let blockers = try Row.fetchAll(
+                rawDB,
+                sql: """
+                        SELECT id, target_kind, target_ref, blocker_kind, blocker_excerpt,
+                               detected_by_event_id, started_at_ms, resolved_at_ms,
+                               resolved_by_event_id
+                          FROM blockers
+                         WHERE resolved_at_ms IS NULL
+                         ORDER BY started_at_ms DESC LIMIT 10
+                    """
+            ).map(Self.blockerView(from:))
 
             // where_stopped: latest where_stopped_log row IF generated within
             // the last 24h (older snapshots are stale for "current work").
             let whereStopped: WhereStoppedOutput? = try {
                 guard let row = try WhereStoppedLogStore.latest(in: rawDB),
-                      let generatedAtMs: Int64 = row["generated_at_ms"]
+                    let generatedAtMs: Int64 = row["generated_at_ms"]
                 else { return nil }
                 guard nowMs - generatedAtMs <= Self.whereStoppedFreshnessWindowMs else { return nil }
                 let excerpt: String = (row["excerpt"] as String?) ?? ""
@@ -305,7 +330,8 @@ public struct QueryEngine: Sendable {
                 let wipJSON: String? = row["wip_signals_json"] as String?
                 let wip: WipSignals
                 if let wipJSON, let data = wipJSON.data(using: .utf8),
-                   let decoded = try? JSONDecoder().decode(WipSignals.self, from: data) {
+                    let decoded = try? JSONDecoder().decode(WipSignals.self, from: data)
+                {
                     wip = decoded
                 } else {
                     wip = WipSignals(commitWip: false, ciFailing: false, midEdit: false)
@@ -334,11 +360,13 @@ public struct QueryEngine: Sendable {
     private func projectEvents(eventIDs: [Int64], in db: GRDB.Database) throws -> [ActivityEvent] {
         guard !eventIDs.isEmpty else { return [] }
         let placeholders = Array(repeating: "?", count: eventIDs.count).joined(separator: ",")
-        let rows = try Row.fetchAll(db, sql: """
-            SELECT id, ts, signal_type, bundle_id, payload_json
-              FROM events WHERE id IN (\(placeholders))
-              ORDER BY ts DESC
-        """, arguments: StatementArguments(eventIDs))
+        let rows = try Row.fetchAll(
+            db,
+            sql: """
+                    SELECT id, ts, signal_type, bundle_id, payload_json
+                      FROM events WHERE id IN (\(placeholders))
+                      ORDER BY ts DESC
+                """, arguments: StatementArguments(eventIDs))
         return rows.map { row -> ActivityEvent in
             let id: Int64 = row["id"]
             let ts: Int64 = row["ts"]
@@ -350,7 +378,8 @@ public struct QueryEngine: Sendable {
             var bodyExcerpt: String?
             var bodyTruncated = false
             if let data = payloadJSON.data(using: .utf8),
-               let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            {
                 eventKind = dict["event_kind"] as? String
                 if let body = dict[Schema.EventPayloadKeys.body] as? String, !body.isEmpty {
                     let (excerpt, truncated) = BodyExcerpt.capped(body, charCap: bodyExcerptCharCap)
@@ -384,25 +413,29 @@ public struct QueryEngine: Sendable {
         eventIDs: [Int64], period: PeriodSpec, in db: GRDB.Database
     ) throws -> [DecisionView] {
         if eventIDs.isEmpty {
-            let rows = try Row.fetchAll(db, sql: """
-                SELECT id, event_id, topic_keywords_json, reasoning_excerpt,
-                       confidence, detected_at_ms
-                  FROM decisions
-                 WHERE detected_at_ms BETWEEN ? AND ?
-                 ORDER BY detected_at_ms DESC
-            """, arguments: [period.startMs, period.endMs])
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                        SELECT id, event_id, topic_keywords_json, reasoning_excerpt,
+                               confidence, detected_at_ms
+                          FROM decisions
+                         WHERE detected_at_ms BETWEEN ? AND ?
+                         ORDER BY detected_at_ms DESC
+                    """, arguments: [period.startMs, period.endMs])
             return rows.map(Self.decisionView(from:))
         }
         let placeholders = Array(repeating: "?", count: eventIDs.count).joined(separator: ",")
         let args: [DatabaseValueConvertible] = eventIDs.map { $0 } + [period.startMs, period.endMs]
-        let rows = try Row.fetchAll(db, sql: """
-            SELECT id, event_id, topic_keywords_json, reasoning_excerpt,
-                   confidence, detected_at_ms
-              FROM decisions
-             WHERE event_id IN (\(placeholders))
-                OR detected_at_ms BETWEEN ? AND ?
-             ORDER BY detected_at_ms DESC
-        """, arguments: StatementArguments(args))
+        let rows = try Row.fetchAll(
+            db,
+            sql: """
+                    SELECT id, event_id, topic_keywords_json, reasoning_excerpt,
+                           confidence, detected_at_ms
+                      FROM decisions
+                     WHERE event_id IN (\(placeholders))
+                        OR detected_at_ms BETWEEN ? AND ?
+                     ORDER BY detected_at_ms DESC
+                """, arguments: StatementArguments(args))
         return rows.map(Self.decisionView(from:))
     }
 
@@ -410,42 +443,48 @@ public struct QueryEngine: Sendable {
         eventIDs: [Int64], period: PeriodSpec, in db: GRDB.Database
     ) throws -> [OpenQuestionView] {
         if eventIDs.isEmpty {
-            let rows = try Row.fetchAll(db, sql: """
-                SELECT id, event_id, question_excerpt, alternatives_json,
-                       slack_thread_ts, linear_issue_ref, github_pr_ref,
-                       resolved_by_event_id, opened_at_ms, resolved_at_ms
-                  FROM open_questions
-                 WHERE opened_at_ms BETWEEN ? AND ?
-                 ORDER BY opened_at_ms DESC
-            """, arguments: [period.startMs, period.endMs])
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                        SELECT id, event_id, question_excerpt, alternatives_json,
+                               slack_thread_ts, linear_issue_ref, github_pr_ref,
+                               resolved_by_event_id, opened_at_ms, resolved_at_ms
+                          FROM open_questions
+                         WHERE opened_at_ms BETWEEN ? AND ?
+                         ORDER BY opened_at_ms DESC
+                    """, arguments: [period.startMs, period.endMs])
             return rows.map(Self.openQuestionView(from:))
         }
         let placeholders = Array(repeating: "?", count: eventIDs.count).joined(separator: ",")
         let args: [DatabaseValueConvertible] = eventIDs.map { $0 } + [period.startMs, period.endMs]
-        let rows = try Row.fetchAll(db, sql: """
-            SELECT id, event_id, question_excerpt, alternatives_json,
-                   slack_thread_ts, linear_issue_ref, github_pr_ref,
-                   resolved_by_event_id, opened_at_ms, resolved_at_ms
-              FROM open_questions
-             WHERE event_id IN (\(placeholders))
-                OR opened_at_ms BETWEEN ? AND ?
-             ORDER BY opened_at_ms DESC
-        """, arguments: StatementArguments(args))
+        let rows = try Row.fetchAll(
+            db,
+            sql: """
+                    SELECT id, event_id, question_excerpt, alternatives_json,
+                           slack_thread_ts, linear_issue_ref, github_pr_ref,
+                           resolved_by_event_id, opened_at_ms, resolved_at_ms
+                      FROM open_questions
+                     WHERE event_id IN (\(placeholders))
+                        OR opened_at_ms BETWEEN ? AND ?
+                     ORDER BY opened_at_ms DESC
+                """, arguments: StatementArguments(args))
         return rows.map(Self.openQuestionView(from:))
     }
 
     private func fetchBlockersForResponse(
         period: PeriodSpec, in db: GRDB.Database
     ) throws -> [BlockerView] {
-        let rows = try Row.fetchAll(db, sql: """
-            SELECT id, target_kind, target_ref, blocker_kind, blocker_excerpt,
-                   detected_by_event_id, started_at_ms, resolved_at_ms,
-                   resolved_by_event_id
-              FROM blockers
-             WHERE started_at_ms BETWEEN ? AND ?
-                OR (resolved_at_ms IS NOT NULL AND resolved_at_ms BETWEEN ? AND ?)
-             ORDER BY started_at_ms DESC
-        """, arguments: [period.startMs, period.endMs, period.startMs, period.endMs])
+        let rows = try Row.fetchAll(
+            db,
+            sql: """
+                    SELECT id, target_kind, target_ref, blocker_kind, blocker_excerpt,
+                           detected_by_event_id, started_at_ms, resolved_at_ms,
+                           resolved_by_event_id
+                      FROM blockers
+                     WHERE started_at_ms BETWEEN ? AND ?
+                        OR (resolved_at_ms IS NOT NULL AND resolved_at_ms BETWEEN ? AND ?)
+                     ORDER BY started_at_ms DESC
+                """, arguments: [period.startMs, period.endMs, period.startMs, period.endMs])
         return rows.map(Self.blockerView(from:))
     }
 
@@ -454,11 +493,13 @@ public struct QueryEngine: Sendable {
     ) throws -> [LinkView] {
         guard !eventIDs.isEmpty else { return [] }
         let placeholders = Array(repeating: "?", count: eventIDs.count).joined(separator: ",")
-        let rows = try Row.fetchAll(db, sql: """
-            SELECT from_event_id, link_kind, target_kind, target_ref, confidence
-              FROM event_links
-             WHERE from_event_id IN (\(placeholders))
-        """, arguments: StatementArguments(eventIDs))
+        let rows = try Row.fetchAll(
+            db,
+            sql: """
+                    SELECT from_event_id, link_kind, target_kind, target_ref, confidence
+                      FROM event_links
+                     WHERE from_event_id IN (\(placeholders))
+                """, arguments: StatementArguments(eventIDs))
         return rows.map { row in
             LinkView(
                 fromEventID: row["from_event_id"],
@@ -486,8 +527,9 @@ public struct QueryEngine: Sendable {
             guard let payload = try fetchPayload(eventID: ev.eventID, in: db) else { continue }
             let reviewers: [String]
             if let raw = payload[Schema.EventPayloadKeys.requestedReviewersJson] as? String,
-               let data = raw.data(using: .utf8),
-               let arr = try? JSONSerialization.jsonObject(with: data) as? [String] {
+                let data = raw.data(using: .utf8),
+                let arr = try? JSONSerialization.jsonObject(with: data) as? [String]
+            {
                 reviewers = arr
             } else if let arr = payload[Schema.EventPayloadKeys.requestedReviewersJson] as? [String] {
                 // Tolerate already-decoded array form (test fixtures may insert it raw).
@@ -512,21 +554,25 @@ public struct QueryEngine: Sendable {
                 lastActivityMs = ev.tsMs
             } else {
                 let placeholders = Array(repeating: "?", count: threadEventIDs.count).joined(separator: ",")
-                lastActivityMs = (try Int64.fetchOne(db, sql: """
-                    SELECT MAX(ts) FROM events WHERE id IN (\(placeholders))
-                """, arguments: StatementArguments(threadEventIDs))) ?? ev.tsMs
+                lastActivityMs =
+                    (try Int64.fetchOne(
+                        db,
+                        sql: """
+                                SELECT MAX(ts) FROM events WHERE id IN (\(placeholders))
+                            """, arguments: StatementArguments(threadEventIDs))) ?? ev.tsMs
             }
 
             for login in reviewers {
                 if detectorMoat.absence.match(
                     githubLogin: login, slackIdentifiers: slackIdentifiers
                 ) == nil {
-                    out.append(AbsenceFlag(
-                        prRef: prRef,
-                        reviewerLogin: login,
-                        designChoiceExcerpt: ev.bodyExcerpt ?? "",
-                        lastThreadActivityMs: lastActivityMs
-                    ))
+                    out.append(
+                        AbsenceFlag(
+                            prRef: prRef,
+                            reviewerLogin: login,
+                            designChoiceExcerpt: ev.bodyExcerpt ?? "",
+                            lastThreadActivityMs: lastActivityMs
+                        ))
                 }
             }
         }
@@ -541,30 +587,37 @@ public struct QueryEngine: Sendable {
     ) throws -> [SlackIdentifier] {
         guard !eventIDs.isEmpty else { return [] }
         let placeholders = Array(repeating: "?", count: eventIDs.count).joined(separator: ",")
-        let rows = try Row.fetchAll(db, sql: """
-            SELECT payload_json FROM events WHERE id IN (\(placeholders))
-        """, arguments: StatementArguments(eventIDs))
+        let rows = try Row.fetchAll(
+            db,
+            sql: """
+                    SELECT payload_json FROM events WHERE id IN (\(placeholders))
+                """, arguments: StatementArguments(eventIDs))
         var out: [SlackIdentifier] = []
         for row in rows {
             let raw: String = (row["payload_json"] as String?) ?? "{}"
             guard let data = raw.data(using: .utf8),
-                  let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+                let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
             else { continue }
             if let userID = dict["user_id"] as? String, !userID.isEmpty {
-                out.append(SlackIdentifier(
-                    userID: userID,
-                    displayName: dict["display_name"] as? String,
-                    realName: dict["real_name"] as? String
-                ))
+                out.append(
+                    SlackIdentifier(
+                        userID: userID,
+                        displayName: dict["display_name"] as? String,
+                        realName: dict["real_name"] as? String
+                    ))
             }
         }
         return out
     }
 
     private func fetchPayload(eventID: Int64, in db: GRDB.Database) throws -> [String: Any]? {
-        guard let raw = try String.fetchOne(db, sql: """
-            SELECT payload_json FROM events WHERE id = ?
-        """, arguments: [eventID]) else { return nil }
+        guard
+            let raw = try String.fetchOne(
+                db,
+                sql: """
+                        SELECT payload_json FROM events WHERE id = ?
+                    """, arguments: [eventID])
+        else { return nil }
         guard let data = raw.data(using: .utf8) else { return nil }
         return try JSONSerialization.jsonObject(with: data) as? [String: Any]
     }
@@ -633,7 +686,8 @@ public struct QueryEngine: Sendable {
         let topicJSON: String? = row["topic_keywords_json"] as String?
         let keywords: [String]
         if let topicJSON, let data = topicJSON.data(using: .utf8),
-           let arr = try? JSONDecoder().decode([String].self, from: data) {
+            let arr = try? JSONDecoder().decode([String].self, from: data)
+        {
             keywords = arr
         } else {
             keywords = []
@@ -652,7 +706,8 @@ public struct QueryEngine: Sendable {
         let altsJSON: String? = row["alternatives_json"] as String?
         let alternatives: [String]?
         if let altsJSON, let data = altsJSON.data(using: .utf8),
-           let arr = try? JSONDecoder().decode([String].self, from: data) {
+            let arr = try? JSONDecoder().decode([String].self, from: data)
+        {
             alternatives = arr
         } else {
             alternatives = nil

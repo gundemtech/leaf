@@ -1,8 +1,9 @@
 // Phase Track-4 S3 — IntensityAggregatesStore CRUD + M018 migration coverage.
 // Mirrors PendingInvitesStore pattern (static methods over GRDB.Database handle).
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class IntensityAggregatesStoreTests: XCTestCase {
@@ -146,10 +147,12 @@ final class IntensityAggregatesStoreTests: XCTestCase {
     func testM018CreatesTable() throws {
         let db = try openDB()
         try db.readSQL { rawDB in
-            let tableExists = try Bool.fetchOne(rawDB, sql: """
-                SELECT count(*) > 0 FROM sqlite_master
-                 WHERE type='table' AND name='intensity_aggregates'
-                """)
+            let tableExists = try Bool.fetchOne(
+                rawDB,
+                sql: """
+                    SELECT count(*) > 0 FROM sqlite_master
+                     WHERE type='table' AND name='intensity_aggregates'
+                    """)
             XCTAssertEqual(tableExists, true)
             // `INTEGER PRIMARY KEY` aliases rowid in SQLite — no separate
             // sqlite_autoindex row is created. Range scans / lookups use

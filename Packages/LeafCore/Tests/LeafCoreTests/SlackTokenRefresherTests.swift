@@ -3,8 +3,9 @@
 // `LeafCorePrivateTests.MockURLProtocol`, но локальная копия (test target
 // `LeafCoreTests` не может линковаться с private test target).
 
-import XCTest
 import Foundation
+import XCTest
+
 @testable import LeafCore
 
 private final class SlackMockURLProtocol: URLProtocol {
@@ -124,7 +125,7 @@ final class SlackTokenRefresherTests: XCTestCase {
     func testRefreshIfNeededWhenNotExpired_ReturnsExisting() async throws {
         let db = try makeDatabase()
         let now = Date(timeIntervalSince1970: 1_700_000_000)
-        try upsertConnected(db: db, expiresAt: now.addingTimeInterval(3600)) // +1h
+        try upsertConnected(db: db, expiresAt: now.addingTimeInterval(3600))  // +1h
         SlackMockURLProtocol.handler = { _, _ in
             XCTFail("Refresh should NOT hit network when token has plenty of life")
             return (self.httpResponse(status: 500), Data())
@@ -161,7 +162,7 @@ final class SlackTokenRefresherTests: XCTestCase {
     func testForceRefreshHappy_StoresNewToken() async throws {
         let db = try makeDatabase()
         let now = Date(timeIntervalSince1970: 1_700_000_000)
-        try upsertConnected(db: db, expiresAt: now.addingTimeInterval(60)) // expires soon
+        try upsertConnected(db: db, expiresAt: now.addingTimeInterval(60))  // expires soon
 
         let payload: [String: Any] = [
             "ok": true,
@@ -170,7 +171,7 @@ final class SlackTokenRefresherTests: XCTestCase {
             "token_type": "user",
             "expires_in": 43200,
             "scope": "users:read,users.profile:read,search:read",
-            "team": ["id": "T123", "name": "Acme"]
+            "team": ["id": "T123", "name": "Acme"],
         ]
         let json = try JSONSerialization.data(withJSONObject: payload)
 
@@ -270,7 +271,8 @@ final class SlackTokenRefresherTests: XCTestCase {
 
         // Row жив — не было permanent denial.
         XCTAssertNotNil(try db.readIntegration(provider: .slack))
-        let flag = UserDefaults(suiteName: SlackOAuthEndpoints.userDefaultsSuite)?
+        let flag =
+            UserDefaults(suiteName: SlackOAuthEndpoints.userDefaultsSuite)?
             .bool(forKey: SlackOAuthEndpoints.refreshDeniedFlagKey) ?? false
         XCTAssertFalse(flag)
     }

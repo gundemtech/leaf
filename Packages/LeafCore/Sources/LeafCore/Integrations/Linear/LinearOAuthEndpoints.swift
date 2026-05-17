@@ -38,17 +38,17 @@ public enum LinearOAuthEndpoints {
     /// для отображения в Settings UI. `urlKey` — короткий human-readable slug
     /// (e.g. "acme"); `name` — полное имя workspace.
     public static let viewerQuery = """
-    query LeafViewer {
-      viewer {
-        id
-        organization {
-          id
-          name
-          urlKey
+        query LeafViewer {
+          viewer {
+            id
+            organization {
+              id
+              name
+              urlKey
+            }
+          }
         }
-      }
-    }
-    """
+        """
 
     /// DistributedNotification name, постится при connect/disconnect/refreshDenied.
     /// Слушают: ConnectionsSettings (UI re-render), LinearCollector (Phase 4.2 reload).

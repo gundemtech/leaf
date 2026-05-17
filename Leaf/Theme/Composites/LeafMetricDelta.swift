@@ -14,7 +14,7 @@ enum LeafDeltaDirection {
     /// Foreground (icon + text) colour.
     var color: Color {
         switch self {
-        case .up:   LeafMetricTokens.Delta.upColor
+        case .up: LeafMetricTokens.Delta.upColor
         case .down: LeafMetricTokens.Delta.downColor
         case .flat: LeafMetricTokens.Delta.flatColor
         }
@@ -24,7 +24,7 @@ enum LeafDeltaDirection {
     /// low opacity; flat falls back to neutral surface.inset (no useful tint).
     var background: Color {
         switch self {
-        case .up:   LeafMetricTokens.Delta.upColor.opacity(LeafMetricTokens.Delta.bgOpacity)
+        case .up: LeafMetricTokens.Delta.upColor.opacity(LeafMetricTokens.Delta.bgOpacity)
         case .down: LeafMetricTokens.Delta.downColor.opacity(LeafMetricTokens.Delta.bgOpacity)
         case .flat: LeafMetricTokens.Delta.flatBackground
         }
@@ -33,7 +33,7 @@ enum LeafDeltaDirection {
     /// Asset Catalog name (template-rendered Figma SVG) for the directional arrow.
     var arrow: String {
         switch self {
-        case .up:   LeafIcons.metric.up
+        case .up: LeafIcons.metric.up
         case .down: LeafIcons.metric.down
         case .flat: LeafIcons.metric.flat
         }
@@ -50,8 +50,9 @@ struct LeafMetricDelta: View {
                 .renderingMode(.template)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
-                .frame(width: LeafMetricTokens.Delta.arrowSize,
-                       height: LeafMetricTokens.Delta.arrowSize)
+                .frame(
+                    width: LeafMetricTokens.Delta.arrowSize,
+                    height: LeafMetricTokens.Delta.arrowSize)
             Text(value)
                 .font(LeafType.body.small.monospacedDigit())
         }

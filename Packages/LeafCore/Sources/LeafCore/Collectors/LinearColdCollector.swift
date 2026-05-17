@@ -66,7 +66,9 @@ public actor LinearColdCollector {
         public let removed: [LinearProjectMembershipSnapshot]
     }
 
-    public static func customViewsDiff(prior: [LinearCustomViewSnapshot], current: [LinearCustomViewSnapshot]) -> CustomViewsDiff {
+    public static func customViewsDiff(
+        prior: [LinearCustomViewSnapshot], current: [LinearCustomViewSnapshot]
+    ) -> CustomViewsDiff {
         let priorByID = Dictionary(uniqueKeysWithValues: prior.map { ($0.id, $0) })
         let currentByID = Dictionary(uniqueKeysWithValues: current.map { ($0.id, $0) })
         var created: [LinearCustomViewSnapshot] = []
@@ -88,7 +90,9 @@ public actor LinearColdCollector {
         )
     }
 
-    public static func projectMembershipsDiff(prior: [LinearProjectMembershipSnapshot], current: [LinearProjectMembershipSnapshot]) -> ProjectMembershipsDiff {
+    public static func projectMembershipsDiff(
+        prior: [LinearProjectMembershipSnapshot], current: [LinearProjectMembershipSnapshot]
+    ) -> ProjectMembershipsDiff {
         let priorByID = Dictionary(uniqueKeysWithValues: prior.map { ($0.projectId, $0) })
         let currentByID = Dictionary(uniqueKeysWithValues: current.map { ($0.projectId, $0) })
         let added = currentByID.values.filter { priorByID[$0.projectId] == nil }
@@ -187,22 +191,39 @@ public actor LinearColdCollector {
     // MARK: - Snapshot read / encode helpers
 
     private struct ViewsSnapshotJSON: Codable {
-        struct V: Codable { let id: String; let name: String; let teamId: String?; let updatedAtMs: Int64 }
+        struct V: Codable {
+            let id: String
+            let name: String
+            let teamId: String?
+            let updatedAtMs: Int64
+        }
         let views: [V]
     }
     private struct MembershipsSnapshotJSON: Codable {
-        struct M: Codable { let projectId: String; let projectName: String }
+        struct M: Codable {
+            let projectId: String
+            let projectName: String
+        }
         let memberships: [M]
     }
     private struct RoadmapSnapshotJSON: Codable {
-        struct P: Codable { let roadmapId: String; let projectId: String; let projectName: String; let stateEnum: String }
+        struct P: Codable {
+            let roadmapId: String
+            let projectId: String
+            let projectName: String
+            let stateEnum: String
+        }
         let pairs: [P]
     }
 
     private func readPriorViews() -> [LinearCustomViewSnapshot] {
         guard let snap = readSnapshot(Schema.ProviderSnapshotKinds.linearCustomViews) else { return [] }
-        guard let parsed = try? JSONDecoder().decode(ViewsSnapshotJSON.self, from: Data(snap.snapshotJSON.utf8)) else { return [] }
-        return parsed.views.map { LinearCustomViewSnapshot(id: $0.id, name: $0.name, teamId: $0.teamId, updatedAtMs: $0.updatedAtMs) }
+        guard let parsed = try? JSONDecoder().decode(ViewsSnapshotJSON.self, from: Data(snap.snapshotJSON.utf8)) else {
+            return []
+        }
+        return parsed.views.map {
+            LinearCustomViewSnapshot(id: $0.id, name: $0.name, teamId: $0.teamId, updatedAtMs: $0.updatedAtMs)
+        }
     }
 
     private func priorViewsSnapshotPresent() -> Bool {
@@ -211,8 +232,11 @@ public actor LinearColdCollector {
 
     private func readPriorMemberships() -> [LinearProjectMembershipSnapshot] {
         guard let snap = readSnapshot(Schema.ProviderSnapshotKinds.linearProjectMemberships) else { return [] }
-        guard let parsed = try? JSONDecoder().decode(MembershipsSnapshotJSON.self, from: Data(snap.snapshotJSON.utf8)) else { return [] }
-        return parsed.memberships.map { LinearProjectMembershipSnapshot(projectId: $0.projectId, projectName: $0.projectName) }
+        guard let parsed = try? JSONDecoder().decode(MembershipsSnapshotJSON.self, from: Data(snap.snapshotJSON.utf8))
+        else { return [] }
+        return parsed.memberships.map {
+            LinearProjectMembershipSnapshot(projectId: $0.projectId, projectName: $0.projectName)
+        }
     }
 
     private func priorMembersSnapshotPresent() -> Bool {
@@ -226,31 +250,47 @@ public actor LinearColdCollector {
     }
 
     private func encodeViewsSnapshot(_ views: [LinearCustomViewSnapshot], capturedAtMs: Int64) -> ProviderSnapshot {
-        let payload = ViewsSnapshotJSON(views: views.map { .init(id: $0.id, name: $0.name, teamId: $0.teamId, updatedAtMs: $0.updatedAtMs) })
+        let payload = ViewsSnapshotJSON(
+            views: views.map { .init(id: $0.id, name: $0.name, teamId: $0.teamId, updatedAtMs: $0.updatedAtMs) })
         let s = (try? JSONEncoder().encode(payload)).flatMap { String(data: $0, encoding: .utf8) } ?? "{\"views\":[]}"
-        return ProviderSnapshot(provider: "linear", snapshotKind: Schema.ProviderSnapshotKinds.linearCustomViews, snapshotJSON: s, capturedAtMs: capturedAtMs)
+        return ProviderSnapshot(
+            provider: "linear", snapshotKind: Schema.ProviderSnapshotKinds.linearCustomViews, snapshotJSON: s,
+            capturedAtMs: capturedAtMs)
     }
 
-    private func encodeMembershipsSnapshot(_ ms: [LinearProjectMembershipSnapshot], capturedAtMs: Int64) -> ProviderSnapshot {
-        let payload = MembershipsSnapshotJSON(memberships: ms.map { .init(projectId: $0.projectId, projectName: $0.projectName) })
-        let s = (try? JSONEncoder().encode(payload)).flatMap { String(data: $0, encoding: .utf8) } ?? "{\"memberships\":[]}"
-        return ProviderSnapshot(provider: "linear", snapshotKind: Schema.ProviderSnapshotKinds.linearProjectMemberships, snapshotJSON: s, capturedAtMs: capturedAtMs)
+    private func encodeMembershipsSnapshot(
+        _ ms: [LinearProjectMembershipSnapshot], capturedAtMs: Int64
+    ) -> ProviderSnapshot {
+        let payload = MembershipsSnapshotJSON(
+            memberships: ms.map { .init(projectId: $0.projectId, projectName: $0.projectName) })
+        let s =
+            (try? JSONEncoder().encode(payload)).flatMap { String(data: $0, encoding: .utf8) } ?? "{\"memberships\":[]}"
+        return ProviderSnapshot(
+            provider: "linear", snapshotKind: Schema.ProviderSnapshotKinds.linearProjectMemberships, snapshotJSON: s,
+            capturedAtMs: capturedAtMs)
     }
 
     private func encodeRoadmapSnapshot(_ rs: [LinearRoadmapSnapshot], capturedAtMs: Int64) -> ProviderSnapshot {
         var pairs: [RoadmapSnapshotJSON.P] = []
         for r in rs {
             for p in r.projects {
-                pairs.append(.init(roadmapId: r.id, projectId: p.projectId, projectName: p.projectName, stateEnum: p.stateEnum))
+                pairs.append(
+                    .init(roadmapId: r.id, projectId: p.projectId, projectName: p.projectName, stateEnum: p.stateEnum))
             }
         }
-        let s = (try? JSONEncoder().encode(RoadmapSnapshotJSON(pairs: pairs))).flatMap { String(data: $0, encoding: .utf8) } ?? "{\"pairs\":[]}"
-        return ProviderSnapshot(provider: "linear", snapshotKind: Schema.ProviderSnapshotKinds.linearRoadmapState, snapshotJSON: s, capturedAtMs: capturedAtMs)
+        let s =
+            (try? JSONEncoder().encode(RoadmapSnapshotJSON(pairs: pairs))).flatMap { String(data: $0, encoding: .utf8) }
+            ?? "{\"pairs\":[]}"
+        return ProviderSnapshot(
+            provider: "linear", snapshotKind: Schema.ProviderSnapshotKinds.linearRoadmapState, snapshotJSON: s,
+            capturedAtMs: capturedAtMs)
     }
 
     // MARK: - Event builders
 
-    static func makeRoadmapStateObservedEvent(roadmap: LinearRoadmapSnapshot, project: LinearRoadmapProjectSnapshot, observedAtMs: Int64) -> RawEvent {
+    static func makeRoadmapStateObservedEvent(
+        roadmap: LinearRoadmapSnapshot, project: LinearRoadmapProjectSnapshot, observedAtMs: Int64
+    ) -> RawEvent {
         var payload: [String: String] = [
             "source": "linear",
             "event_kind": "linear_roadmap_state_observed",
@@ -258,7 +298,7 @@ public actor LinearColdCollector {
             Schema.EventPayloadKeys.projectId: project.projectId,
             Schema.EventPayloadKeys.projectName: project.projectName,
             Schema.EventPayloadKeys.stateEnum: project.stateEnum,
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         if let n = roadmap.name { payload[Schema.EventPayloadKeys.roadmapName] = n }
         return RawEvent(
@@ -273,11 +313,12 @@ public actor LinearColdCollector {
             "event_kind": "linear_custom_view_created",
             Schema.EventPayloadKeys.viewId: v.id,
             Schema.EventPayloadKeys.viewName: v.name,
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         if let t = v.teamId { payload[Schema.EventPayloadKeys.teamId] = t }
-        return RawEvent(timestamp: Date(timeIntervalSince1970: TimeInterval(observedAtMs) / 1000.0),
-                        signalType: .action, bundleID: nil, payload: payload)
+        return RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(observedAtMs) / 1000.0),
+            signalType: .action, bundleID: nil, payload: payload)
     }
 
     static func makeCustomViewUpdatedEvent(_ v: LinearCustomViewSnapshot, observedAtMs: Int64) -> RawEvent {
@@ -286,11 +327,12 @@ public actor LinearColdCollector {
             "event_kind": "linear_custom_view_updated",
             Schema.EventPayloadKeys.viewId: v.id,
             Schema.EventPayloadKeys.viewName: v.name,
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         if let t = v.teamId { payload[Schema.EventPayloadKeys.teamId] = t }
-        return RawEvent(timestamp: Date(timeIntervalSince1970: TimeInterval(observedAtMs) / 1000.0),
-                        signalType: .action, bundleID: nil, payload: payload)
+        return RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(observedAtMs) / 1000.0),
+            signalType: .action, bundleID: nil, payload: payload)
     }
 
     static func makeCustomViewDeletedEvent(_ v: LinearCustomViewSnapshot, observedAtMs: Int64) -> RawEvent {
@@ -299,11 +341,12 @@ public actor LinearColdCollector {
             "event_kind": "linear_custom_view_deleted",
             Schema.EventPayloadKeys.viewId: v.id,
             Schema.EventPayloadKeys.viewName: v.name,
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         if let t = v.teamId { payload[Schema.EventPayloadKeys.teamId] = t }
-        return RawEvent(timestamp: Date(timeIntervalSince1970: TimeInterval(observedAtMs) / 1000.0),
-                        signalType: .action, bundleID: nil, payload: payload)
+        return RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(observedAtMs) / 1000.0),
+            signalType: .action, bundleID: nil, payload: payload)
     }
 
     static func makeProjectMembershipAddedEvent(_ m: LinearProjectMembershipSnapshot, observedAtMs: Int64) -> RawEvent {
@@ -315,11 +358,12 @@ public actor LinearColdCollector {
                 "event_kind": "linear_project_membership_added",
                 Schema.EventPayloadKeys.projectId: m.projectId,
                 Schema.EventPayloadKeys.projectName: m.projectName,
-                Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+                Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
             ])
     }
 
-    static func makeProjectMembershipRemovedEvent(_ m: LinearProjectMembershipSnapshot, observedAtMs: Int64) -> RawEvent {
+    static func makeProjectMembershipRemovedEvent(_ m: LinearProjectMembershipSnapshot, observedAtMs: Int64) -> RawEvent
+    {
         RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(observedAtMs) / 1000.0),
             signalType: .action, bundleID: nil,
@@ -328,7 +372,7 @@ public actor LinearColdCollector {
                 "event_kind": "linear_project_membership_removed",
                 Schema.EventPayloadKeys.projectId: m.projectId,
                 Schema.EventPayloadKeys.projectName: m.projectName,
-                Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+                Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
             ])
     }
 }

@@ -2,8 +2,9 @@
 // Покрывает гэп beyond OrgServiceTests: что happens при close+reopen DB
 // (idempotency guard survives, file bytes survive, ID references match).
 
-import XCTest
 import CryptoKit
+import XCTest
+
 @testable import LeafCore
 
 final class OrgPersistenceIntegrationTests: XCTestCase {
@@ -70,13 +71,15 @@ final class OrgPersistenceIntegrationTests: XCTestCase {
         XCTAssertEqual(reopenedTeamKey?.generatedByMemberID, createdMember.id)
 
         // Keystore files on disk: existence + sizes (independent от DB lifecycle).
-        let privPath = keystoreRoot
+        let privPath =
+            keystoreRoot
             .appendingPathComponent(TeamKeystore.x25519PrivateFilename).path
         XCTAssertTrue(FileManager.default.fileExists(atPath: privPath))
         let privBytes = try Data(contentsOf: URL(fileURLWithPath: privPath))
         XCTAssertEqual(privBytes.count, TeamKeystore.x25519PrivateLength)
 
-        let teamKeyPath = keystoreRoot
+        let teamKeyPath =
+            keystoreRoot
             .appendingPathComponent(TeamKeystore.teamKeysSubdir, isDirectory: true)
             .appendingPathComponent("\(createdTeamKey.id).\(TeamKeystore.teamKeyExtension)").path
         XCTAssertTrue(FileManager.default.fileExists(atPath: teamKeyPath))
@@ -99,7 +102,8 @@ final class OrgPersistenceIntegrationTests: XCTestCase {
 
         XCTAssertThrowsError(try svc2.createPersonalOrg(displayName: "Other")) { error in
             guard let leafErr = error as? LeafError,
-                  case .orgAlreadyExists = leafErr else {
+                case .orgAlreadyExists = leafErr
+            else {
                 XCTFail("expected .orgAlreadyExists, got: \(error)")
                 return
             }
@@ -129,7 +133,8 @@ final class OrgPersistenceIntegrationTests: XCTestCase {
         _ = try svc.createPersonalOrg(displayName: "Personal")
 
         let teamKey = try db.readActiveTeamKey()!
-        let onDiskPath = keystoreRoot
+        let onDiskPath =
+            keystoreRoot
             .appendingPathComponent(TeamKeystore.teamKeysSubdir, isDirectory: true)
             .appendingPathComponent("\(teamKey.id).\(TeamKeystore.teamKeyExtension)").path
 

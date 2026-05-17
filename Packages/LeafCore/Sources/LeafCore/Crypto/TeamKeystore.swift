@@ -33,11 +33,13 @@ public enum TeamKeystore {
     /// та же subdir что у `DatabasePath`, отдельная sub-folder под team
     /// material (изоляция от SQLCipher key файла).
     public static func defaultRoot() -> URL {
-        let support = FileManager.default.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        ).first ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        return support
+        let support =
+            FileManager.default.urls(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask
+            ).first ?? URL(fileURLWithPath: NSTemporaryDirectory())
+        return
+            support
             .appendingPathComponent(DatabasePath.applicationSupportSubdir, isDirectory: true)
             .appendingPathComponent("keystore", isDirectory: true)
     }
@@ -78,7 +80,8 @@ public enum TeamKeystore {
     // MARK: - Internals
 
     private static func teamKeyURL(id: String, root: URL) -> URL {
-        return root
+        return
+            root
             .appendingPathComponent(teamKeysSubdir, isDirectory: true)
             .appendingPathComponent("\(id).\(teamKeyExtension)", isDirectory: false)
     }

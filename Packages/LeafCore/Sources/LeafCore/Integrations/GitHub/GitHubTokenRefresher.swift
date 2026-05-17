@@ -83,7 +83,7 @@ public nonisolated struct GitHubTokenRefresher: Sendable {
         request.httpBody = formEncoded([
             "grant_type": "refresh_token",
             "refresh_token": refreshToken,
-            "client_id": clientID
+            "client_id": clientID,
         ])
 
         let (data, response): (Data, URLResponse)

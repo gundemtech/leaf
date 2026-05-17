@@ -12,8 +12,8 @@ import GRDB
 ///
 /// OTP at rest: acceptable per Phase 5.5 §4.2 — sits in same SQLCipher DB as
 /// teamKey (no incremental confidentiality risk).
-public extension DatabaseMigrator {
-    mutating func registerMigration010PendingInvites() {
+extension DatabaseMigrator {
+    public mutating func registerMigration010PendingInvites() {
         registerMigration("010_pending_invites") { db in
             try db.create(table: Schema.PendingInvites.tableName, ifNotExists: true) { t in
                 t.column(Schema.PendingInvites.token, .text).primaryKey().notNull()

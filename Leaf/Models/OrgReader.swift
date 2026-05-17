@@ -16,9 +16,10 @@
 
 import CryptoKit
 import Foundation
-import Observation
-import OSLog
 import LeafCore
+import OSLog
+import Observation
+
 #if LEAF_PROD
 import LeafCorePrivate
 #endif
@@ -30,7 +31,7 @@ final class OrgReader {
         case loading
         case empty
         case loaded(Org, [TeamMember])
-        case removedFromOrg(orgName: String)        // Phase 5.3.E
+        case removedFromOrg(orgName: String)  // Phase 5.3.E
         case error(message: String)
     }
 
@@ -75,7 +76,8 @@ final class OrgReader {
             let myPubHex = priv.publicKey.rawRepresentation
                 .map { String(format: "%02x", $0) }.joined()
             if let selfMember = allMembers.first(where: { $0.pubkeyHex == myPubHex }),
-               selfMember.removedAt != nil {
+                selfMember.removedAt != nil
+            {
                 state = .removedFromOrg(orgName: org.name)
                 return
             }

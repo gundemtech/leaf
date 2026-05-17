@@ -32,9 +32,13 @@ struct GetDecisionTool: ToolExecutor {
         case .ok(let (topic, period)):
             guard FileManager.default.fileExists(atPath: dbURL.path) else {
                 return ToolCallResult(
-                    content: [.text(TextContent(
-                        text: "Leaf database not found at \(dbURL.path). Enable 'Background collection' in Settings first."
-                    ))],
+                    content: [
+                        .text(
+                            TextContent(
+                                text:
+                                    "Leaf database not found at \(dbURL.path). Enable 'Background collection' in Settings first."
+                            ))
+                    ],
                     isError: true
                 )
             }

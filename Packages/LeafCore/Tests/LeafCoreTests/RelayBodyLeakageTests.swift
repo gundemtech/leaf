@@ -7,8 +7,9 @@
 // write helper, so the tests below call `runIncremental` / `runScheduled`
 // explicitly after the write.
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class RelayBodyLeakageTests: XCTestCase {
@@ -49,7 +50,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             payload: [
                 "event_kind": "issue_updated",
                 "issue_key": "LEA-100",
-                Schema.EventPayloadKeys.body: bodyText
+                Schema.EventPayloadKeys.body: bodyText,
             ]
         )
         let presenceState: [String: Any] = ["assigned_count": 3, "active_cycle_progress": 0.5]
@@ -64,10 +65,12 @@ final class RelayBodyLeakageTests: XCTestCase {
             let row = try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")
             let stateJSON = (row?["state_json"] as String?) ?? ""
             XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after upsert")
-            XCTAssertFalse(stateJSON.contains(bodyText),
-                           "Body string MUST NOT appear in presence_state.state_json")
-            XCTAssertFalse(stateJSON.contains("\"body\""),
-                           "Payload key 'body' should not appear in presence_state.state_json")
+            XCTAssertFalse(
+                stateJSON.contains(bodyText),
+                "Body string MUST NOT appear in presence_state.state_json")
+            XCTAssertFalse(
+                stateJSON.contains("\"body\""),
+                "Payload key 'body' should not appear in presence_state.state_json")
         }
     }
 
@@ -83,7 +86,7 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "event_kind": "gh_pr_opened",
                 "repo": "o/r",
                 Schema.EventPayloadKeys.body: bodyText,
-                Schema.EventPayloadKeys.additions: "50"
+                Schema.EventPayloadKeys.additions: "50",
             ]
         )
         let presenceState: [String: Any] = ["my_open_prs": 2]
@@ -117,7 +120,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             payload: [
                 "event_kind": "slack_message_authored_aggregate",
                 "channel_name": "general",
-                Schema.EventPayloadKeys.messagesJson: messagesJSON
+                Schema.EventPayloadKeys.messagesJson: messagesJSON,
             ]
         )
         let event2 = RawEvent(
@@ -128,7 +131,7 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "event_kind": "slack_thread_reply_aggregate",
                 "channel_name": "general",
                 Schema.EventPayloadKeys.body: parentText,
-                Schema.EventPayloadKeys.threadRepliesJson: threadReplies
+                Schema.EventPayloadKeys.threadRepliesJson: threadReplies,
             ]
         )
         let presenceState: [String: Any] = ["presence": "active", "dnd": false]
@@ -158,7 +161,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             bundleID: "linear",
             payload: [
                 "event_kind": "issue_updated",
-                Schema.EventPayloadKeys.body: "discusses LEAF-127"
+                Schema.EventPayloadKeys.body: "discusses LEAF-127",
             ]
         )
         let presenceState: [String: Any] = ["assigned_count": 7]
@@ -172,16 +175,20 @@ final class RelayBodyLeakageTests: XCTestCase {
 
         // Confirm the link DID get derived (otherwise the assertion below is vacuous).
         let linkCount = try db.readSQL { rawDB in
-            try Int.fetchOne(rawDB, sql: "SELECT COUNT(*) FROM event_links WHERE target_ref = ?",
-                             arguments: ["LEAF-127"]) ?? 0
+            try Int.fetchOne(
+                rawDB, sql: "SELECT COUNT(*) FROM event_links WHERE target_ref = ?",
+                arguments: ["LEAF-127"]) ?? 0
         }
         XCTAssertEqual(linkCount, 1, "Sanity: link should exist before asserting it does not leak")
 
         try db.readSQL { rawDB in
-            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            let stateJSON =
+                (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?[
+                    "state_json"] as String?) ?? ""
             XCTAssertFalse(stateJSON.isEmpty)
-            XCTAssertFalse(stateJSON.contains("LEAF-127"),
-                           "event_links target_ref MUST NOT leak into presence_state.state_json")
+            XCTAssertFalse(
+                stateJSON.contains("LEAF-127"),
+                "event_links target_ref MUST NOT leak into presence_state.state_json")
         }
     }
 
@@ -195,7 +202,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             bundleID: "linear",
             payload: [
                 "event_kind": "issue_updated",
-                Schema.EventPayloadKeys.body: bodyText
+                Schema.EventPayloadKeys.body: bodyText,
             ]
         )
         try db.writeEventsOffsetAndPresence(
@@ -209,16 +216,20 @@ final class RelayBodyLeakageTests: XCTestCase {
         // Confirm body was indexed in FTS (sanity). Contentless FTS5 stores no column data,
         // so we sanity-check via the sidecar meta table written atomically with each FTS row.
         let ftsCount = try db.readSQL { rawDB in
-            try Int.fetchOne(rawDB, sql: "SELECT COUNT(*) FROM events_fts_meta WHERE body_kind = ?",
-                             arguments: [Schema.BodyKinds.linearDesc]) ?? 0
+            try Int.fetchOne(
+                rawDB, sql: "SELECT COUNT(*) FROM events_fts_meta WHERE body_kind = ?",
+                arguments: [Schema.BodyKinds.linearDesc]) ?? 0
         }
         XCTAssertEqual(ftsCount, 1, "Sanity: body should be indexed before asserting it does not leak")
 
         try db.readSQL { rawDB in
-            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            let stateJSON =
+                (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?[
+                    "state_json"] as String?) ?? ""
             XCTAssertFalse(stateJSON.isEmpty)
-            XCTAssertFalse(stateJSON.contains(bodyText),
-                           "FTS-indexed body MUST NOT appear in presence_state.state_json")
+            XCTAssertFalse(
+                stateJSON.contains(bodyText),
+                "FTS-indexed body MUST NOT appear in presence_state.state_json")
         }
     }
 
@@ -237,7 +248,7 @@ final class RelayBodyLeakageTests: XCTestCase {
                 Schema.EventPayloadKeys.body: prBody,
                 Schema.EventPayloadKeys.requestedReviewersJson: #"["alice"]"#,
                 Schema.EventPayloadKeys.additions: "10",
-                Schema.EventPayloadKeys.deletions: "2"
+                Schema.EventPayloadKeys.deletions: "2",
             ]
         )
 
@@ -245,7 +256,7 @@ final class RelayBodyLeakageTests: XCTestCase {
         let presenceState: [String: Any] = [
             "review_count": 1,
             "additions": 10,
-            "deletions": 2
+            "deletions": 2,
         ]
         try db.writeEventsOffsetAndPresence(
             [event],
@@ -256,20 +267,27 @@ final class RelayBodyLeakageTests: XCTestCase {
         )
 
         try db.readSQL { rawDB in
-            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?["state_json"] as String?) ?? ""
+            let stateJSON =
+                (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?[
+                    "state_json"] as String?) ?? ""
             XCTAssertFalse(stateJSON.isEmpty)
             // Body text MUST NOT be in presence_state.
-            XCTAssertFalse(stateJSON.contains("Adds support"),
-                           "PR body excerpt must not appear in presence_state")
-            XCTAssertFalse(stateJSON.contains(prBody),
-                           "PR body must not appear in presence_state")
+            XCTAssertFalse(
+                stateJSON.contains("Adds support"),
+                "PR body excerpt must not appear in presence_state")
+            XCTAssertFalse(
+                stateJSON.contains(prBody),
+                "PR body must not appear in presence_state")
             // Link target_refs MUST NOT be in presence_state.
-            XCTAssertFalse(stateJSON.contains("LEAF-450"),
-                           "Linear ID target_ref must not appear in presence_state")
-            XCTAssertFalse(stateJSON.contains("o/r/pull/9"),
-                           "PR URL target_ref must not appear in presence_state")
-            XCTAssertFalse(stateJSON.contains("alice"),
-                           "Reviewer login target_ref must not appear in presence_state")
+            XCTAssertFalse(
+                stateJSON.contains("LEAF-450"),
+                "Linear ID target_ref must not appear in presence_state")
+            XCTAssertFalse(
+                stateJSON.contains("o/r/pull/9"),
+                "PR URL target_ref must not appear in presence_state")
+            XCTAssertFalse(
+                stateJSON.contains("alice"),
+                "Reviewer login target_ref must not appear in presence_state")
         }
     }
 
@@ -285,9 +303,10 @@ final class RelayBodyLeakageTests: XCTestCase {
         let sentinel: String
         func detect(body: String, kind: BodyKind, eventTsMs: Int64) -> DecisionHit? {
             guard body.contains(sentinel) else { return nil }
-            return DecisionHit(topicKeywords: ["sentinel"],
-                               reasoningExcerpt: "Decision: \(sentinel)",
-                               confidence: 0.9)
+            return DecisionHit(
+                topicKeywords: ["sentinel"],
+                reasoningExcerpt: "Decision: \(sentinel)",
+                confidence: 0.9)
         }
     }
 
@@ -295,8 +314,9 @@ final class RelayBodyLeakageTests: XCTestCase {
         let sentinel: String
         func detect(body: String, kind: BodyKind) -> OpenQuestionHit? {
             guard body.contains(sentinel) else { return nil }
-            return OpenQuestionHit(questionExcerpt: "Question: \(sentinel)",
-                                   alternatives: nil)
+            return OpenQuestionHit(
+                questionExcerpt: "Question: \(sentinel)",
+                alternatives: nil)
         }
     }
 
@@ -356,7 +376,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             bundleID: "com.linear.linear",
             payload: [
                 "event_kind": "issue_updated",
-                Schema.EventPayloadKeys.body: "We DECIDE: \(sentinel)"
+                Schema.EventPayloadKeys.body: "We DECIDE: \(sentinel)",
             ]
         )
         let presenceState: [String: Any] = ["assigned_count": 3]
@@ -374,17 +394,22 @@ final class RelayBodyLeakageTests: XCTestCase {
 
         // Positive: sentinel landed in detector table (otherwise negative is vacuous).
         let inDecisions = try db.readSQL { rawDB in
-            try Bool.fetchOne(rawDB, sql:
-                "SELECT count(*)>0 FROM decisions WHERE reasoning_excerpt LIKE '%' || ? || '%'",
+            try Bool.fetchOne(
+                rawDB,
+                sql:
+                    "SELECT count(*)>0 FROM decisions WHERE reasoning_excerpt LIKE '%' || ? || '%'",
                 arguments: [sentinel]) ?? false
         }
         XCTAssertTrue(inDecisions, "Sanity: sentinel should be in decisions before asserting it does not leak")
 
         try db.readSQL { rawDB in
-            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            let stateJSON =
+                (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?[
+                    "state_json"] as String?) ?? ""
             XCTAssertFalse(stateJSON.isEmpty)
-            XCTAssertFalse(stateJSON.contains(sentinel),
-                           "Decision reasoning_excerpt MUST NOT leak into presence_state.state_json")
+            XCTAssertFalse(
+                stateJSON.contains(sentinel),
+                "Decision reasoning_excerpt MUST NOT leak into presence_state.state_json")
         }
     }
 
@@ -399,7 +424,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             payload: [
                 "event_kind": "issue_updated",
                 Schema.EventPayloadKeys.body: "Open question: \(sentinel)?",
-                "linked_linear_id": "LEAF-42"
+                "linked_linear_id": "LEAF-42",
             ]
         )
         let presenceState: [String: Any] = ["assigned_count": 1]
@@ -415,17 +440,22 @@ final class RelayBodyLeakageTests: XCTestCase {
         )
 
         let inQuestions = try db.readSQL { rawDB in
-            try Bool.fetchOne(rawDB, sql:
-                "SELECT count(*)>0 FROM open_questions WHERE question_excerpt LIKE '%' || ? || '%'",
+            try Bool.fetchOne(
+                rawDB,
+                sql:
+                    "SELECT count(*)>0 FROM open_questions WHERE question_excerpt LIKE '%' || ? || '%'",
                 arguments: [sentinel]) ?? false
         }
         XCTAssertTrue(inQuestions, "Sanity: sentinel should be in open_questions before asserting it does not leak")
 
         try db.readSQL { rawDB in
-            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            let stateJSON =
+                (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?[
+                    "state_json"] as String?) ?? ""
             XCTAssertFalse(stateJSON.isEmpty)
-            XCTAssertFalse(stateJSON.contains(sentinel),
-                           "OpenQuestion question_excerpt MUST NOT leak into presence_state.state_json")
+            XCTAssertFalse(
+                stateJSON.contains(sentinel),
+                "OpenQuestion question_excerpt MUST NOT leak into presence_state.state_json")
         }
     }
 
@@ -440,7 +470,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             payload: [
                 "event_kind": "issue_updated",
                 Schema.EventPayloadKeys.body: "We are BLOCKED: \(sentinel)",
-                "linked_linear_id": "LEAF-7"
+                "linked_linear_id": "LEAF-7",
             ]
         )
         let presenceState: [String: Any] = ["assigned_count": 5]
@@ -456,17 +486,22 @@ final class RelayBodyLeakageTests: XCTestCase {
         )
 
         let inBlockers = try db.readSQL { rawDB in
-            try Bool.fetchOne(rawDB, sql:
-                "SELECT count(*)>0 FROM blockers WHERE blocker_excerpt LIKE '%' || ? || '%'",
+            try Bool.fetchOne(
+                rawDB,
+                sql:
+                    "SELECT count(*)>0 FROM blockers WHERE blocker_excerpt LIKE '%' || ? || '%'",
                 arguments: [sentinel]) ?? false
         }
         XCTAssertTrue(inBlockers, "Sanity: sentinel should be in blockers before asserting it does not leak")
 
         try db.readSQL { rawDB in
-            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            let stateJSON =
+                (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?[
+                    "state_json"] as String?) ?? ""
             XCTAssertFalse(stateJSON.isEmpty)
-            XCTAssertFalse(stateJSON.contains(sentinel),
-                           "Blocker blocker_excerpt MUST NOT leak into presence_state.state_json")
+            XCTAssertFalse(
+                stateJSON.contains(sentinel),
+                "Blocker blocker_excerpt MUST NOT leak into presence_state.state_json")
         }
     }
 
@@ -497,17 +532,22 @@ final class RelayBodyLeakageTests: XCTestCase {
         )
 
         let inLog = try db.readSQL { rawDB in
-            try Bool.fetchOne(rawDB, sql:
-                "SELECT count(*)>0 FROM where_stopped_log WHERE excerpt LIKE '%' || ? || '%'",
+            try Bool.fetchOne(
+                rawDB,
+                sql:
+                    "SELECT count(*)>0 FROM where_stopped_log WHERE excerpt LIKE '%' || ? || '%'",
                 arguments: [sentinel]) ?? false
         }
         XCTAssertTrue(inLog, "Sanity: sentinel should be in where_stopped_log before asserting it does not leak")
 
         try db.readSQL { rawDB in
-            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            let stateJSON =
+                (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?[
+                    "state_json"] as String?) ?? ""
             XCTAssertFalse(stateJSON.isEmpty)
-            XCTAssertFalse(stateJSON.contains(sentinel),
-                           "WhereStopped excerpt MUST NOT leak into presence_state.state_json")
+            XCTAssertFalse(
+                stateJSON.contains(sentinel),
+                "WhereStopped excerpt MUST NOT leak into presence_state.state_json")
         }
     }
 
@@ -532,7 +572,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             payload: [
                 "event_kind": "issue_updated",
                 Schema.EventPayloadKeys.body: body,
-                "linked_linear_id": "LEAF-100"
+                "linked_linear_id": "LEAF-100",
             ]
         )
         let presenceState: [String: Any] = ["assigned_count": 2]
@@ -554,39 +594,57 @@ final class RelayBodyLeakageTests: XCTestCase {
 
         // Positive sanity: each sentinel landed in its own detector table.
         try db.readSQL { rawDB in
-            let inDecisions = try Bool.fetchOne(rawDB, sql:
-                "SELECT count(*)>0 FROM decisions WHERE reasoning_excerpt LIKE '%' || ? || '%'",
-                arguments: [decisionSentinel]) ?? false
+            let inDecisions =
+                try Bool.fetchOne(
+                    rawDB,
+                    sql:
+                        "SELECT count(*)>0 FROM decisions WHERE reasoning_excerpt LIKE '%' || ? || '%'",
+                    arguments: [decisionSentinel]) ?? false
             XCTAssertTrue(inDecisions, "Sanity: decisions populated")
 
-            let inOpenQ = try Bool.fetchOne(rawDB, sql:
-                "SELECT count(*)>0 FROM open_questions WHERE question_excerpt LIKE '%' || ? || '%'",
-                arguments: [openQSentinel]) ?? false
+            let inOpenQ =
+                try Bool.fetchOne(
+                    rawDB,
+                    sql:
+                        "SELECT count(*)>0 FROM open_questions WHERE question_excerpt LIKE '%' || ? || '%'",
+                    arguments: [openQSentinel]) ?? false
             XCTAssertTrue(inOpenQ, "Sanity: open_questions populated")
 
-            let inBlockers = try Bool.fetchOne(rawDB, sql:
-                "SELECT count(*)>0 FROM blockers WHERE blocker_excerpt LIKE '%' || ? || '%'",
-                arguments: [blockerSentinel]) ?? false
+            let inBlockers =
+                try Bool.fetchOne(
+                    rawDB,
+                    sql:
+                        "SELECT count(*)>0 FROM blockers WHERE blocker_excerpt LIKE '%' || ? || '%'",
+                    arguments: [blockerSentinel]) ?? false
             XCTAssertTrue(inBlockers, "Sanity: blockers populated")
 
-            let inWhereStopped = try Bool.fetchOne(rawDB, sql:
-                "SELECT count(*)>0 FROM where_stopped_log WHERE excerpt LIKE '%' || ? || '%'",
-                arguments: [whereStoppedSentinel]) ?? false
+            let inWhereStopped =
+                try Bool.fetchOne(
+                    rawDB,
+                    sql:
+                        "SELECT count(*)>0 FROM where_stopped_log WHERE excerpt LIKE '%' || ? || '%'",
+                    arguments: [whereStoppedSentinel]) ?? false
             XCTAssertTrue(inWhereStopped, "Sanity: where_stopped_log populated")
         }
 
         // Negative invariant: NONE of the sentinels appear in presence_state.
         try db.readSQL { rawDB in
-            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            let stateJSON =
+                (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?[
+                    "state_json"] as String?) ?? ""
             XCTAssertFalse(stateJSON.isEmpty)
-            XCTAssertFalse(stateJSON.contains(decisionSentinel),
-                           "Decision sentinel must not appear in presence_state.state_json")
-            XCTAssertFalse(stateJSON.contains(openQSentinel),
-                           "OpenQuestion sentinel must not appear in presence_state.state_json")
-            XCTAssertFalse(stateJSON.contains(blockerSentinel),
-                           "Blocker sentinel must not appear in presence_state.state_json")
-            XCTAssertFalse(stateJSON.contains(whereStoppedSentinel),
-                           "WhereStopped sentinel must not appear in presence_state.state_json")
+            XCTAssertFalse(
+                stateJSON.contains(decisionSentinel),
+                "Decision sentinel must not appear in presence_state.state_json")
+            XCTAssertFalse(
+                stateJSON.contains(openQSentinel),
+                "OpenQuestion sentinel must not appear in presence_state.state_json")
+            XCTAssertFalse(
+                stateJSON.contains(blockerSentinel),
+                "Blocker sentinel must not appear in presence_state.state_json")
+            XCTAssertFalse(
+                stateJSON.contains(whereStoppedSentinel),
+                "WhereStopped sentinel must not appear in presence_state.state_json")
         }
     }
 
@@ -622,17 +680,21 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "notification_id": "n1",
                 "notification_kind": "issueAssignedToYou",
                 "notification_title": "Alice mentioned you in LEAF-42 rebuild_oauth",
-                "body": "Alice mentioned you in LEAF-42 rebuild_oauth"
+                "body": "Alice mentioned you in LEAF-42 rebuild_oauth",
             ]
         )
         try db.write(event)
 
         try db.readSQL { rawDB in
-            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            let stateJSON =
+                (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?[
+                    "state_json"] as String?) ?? ""
             XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
-            XCTAssertFalse(stateJSON.contains("rebuild_oauth"),
+            XCTAssertFalse(
+                stateJSON.contains("rebuild_oauth"),
                 "D1 notification title MUST NOT leak into presence_state.state_json")
-            XCTAssertFalse(stateJSON.contains("Alice mentioned"),
+            XCTAssertFalse(
+                stateJSON.contains("Alice mentioned"),
                 "D1 notification title prefix MUST NOT leak")
         }
     }
@@ -657,15 +719,18 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "issue_id": "i1",
                 "issue_identifier": "LEAF-7",
                 "emoji": "rocket-unique-marker",
-                "reacted_at_ms": "100"
+                "reacted_at_ms": "100",
             ]
         )
         try db.write(event)
 
         try db.readSQL { rawDB in
-            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            let stateJSON =
+                (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?[
+                    "state_json"] as String?) ?? ""
             XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
-            XCTAssertFalse(stateJSON.contains("rocket-unique-marker"),
+            XCTAssertFalse(
+                stateJSON.contains("rocket-unique-marker"),
                 "Reaction emoji MUST NOT leak into presence_state.state_json")
         }
     }
@@ -703,15 +768,18 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "event_kind": GitHubEventKindKey.gistCreated.rawValue,
                 Schema.EventPayloadKeys.gistId: "g1",
                 Schema.EventPayloadKeys.gistDescription: "BODY_SENTINEL_GIST",
-                Schema.EventPayloadKeys.body: "BODY_SENTINEL_GIST"
+                Schema.EventPayloadKeys.body: "BODY_SENTINEL_GIST",
             ]
         )
         try db.write(event)
 
         try db.readSQL { rawDB in
-            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?["state_json"] as String?) ?? ""
+            let stateJSON =
+                (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?[
+                    "state_json"] as String?) ?? ""
             XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
-            XCTAssertFalse(stateJSON.contains("BODY_SENTINEL_GIST"),
+            XCTAssertFalse(
+                stateJSON.contains("BODY_SENTINEL_GIST"),
                 "Gist description body MUST NOT leak into presence_state.state_json")
         }
     }
@@ -734,15 +802,18 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "event_kind": GitHubEventKindKey.releasePublished.rawValue,
                 "repo": "o/r",
                 "tag_name": "v1.2.3",
-                Schema.EventPayloadKeys.body: "BODY_SENTINEL_RELEASE changelog with details"
+                Schema.EventPayloadKeys.body: "BODY_SENTINEL_RELEASE changelog with details",
             ]
         )
         try db.write(event)
 
         try db.readSQL { rawDB in
-            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?["state_json"] as String?) ?? ""
+            let stateJSON =
+                (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?[
+                    "state_json"] as String?) ?? ""
             XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
-            XCTAssertFalse(stateJSON.contains("BODY_SENTINEL_RELEASE"),
+            XCTAssertFalse(
+                stateJSON.contains("BODY_SENTINEL_RELEASE"),
                 "Release body MUST NOT leak into presence_state.state_json")
         }
     }
@@ -765,15 +836,18 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "event_kind": GitHubEventKindKey.deploymentCreated.rawValue,
                 "repo": "o/r",
                 "environment": "production",
-                Schema.EventPayloadKeys.body: "BODY_SENTINEL_DEPLOY description text"
+                Schema.EventPayloadKeys.body: "BODY_SENTINEL_DEPLOY description text",
             ]
         )
         try db.write(event)
 
         try db.readSQL { rawDB in
-            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?["state_json"] as String?) ?? ""
+            let stateJSON =
+                (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?[
+                    "state_json"] as String?) ?? ""
             XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
-            XCTAssertFalse(stateJSON.contains("BODY_SENTINEL_DEPLOY"),
+            XCTAssertFalse(
+                stateJSON.contains("BODY_SENTINEL_DEPLOY"),
                 "Deployment description MUST NOT leak into presence_state.state_json")
         }
     }
@@ -796,15 +870,18 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "event_kind": GitHubEventKindKey.projectFieldUpdated.rawValue,
                 "project_id": "p1",
                 "field_name": "Status",
-                Schema.EventPayloadKeys.projectV2NewValue: "BODY_SENTINEL_PROJECTV2_VALUE"
+                Schema.EventPayloadKeys.projectV2NewValue: "BODY_SENTINEL_PROJECTV2_VALUE",
             ]
         )
         try db.write(event)
 
         try db.readSQL { rawDB in
-            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?["state_json"] as String?) ?? ""
+            let stateJSON =
+                (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?[
+                    "state_json"] as String?) ?? ""
             XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
-            XCTAssertFalse(stateJSON.contains("BODY_SENTINEL_PROJECTV2_VALUE"),
+            XCTAssertFalse(
+                stateJSON.contains("BODY_SENTINEL_PROJECTV2_VALUE"),
                 "ProjectV2 field value MUST NOT leak into presence_state.state_json")
         }
     }
@@ -826,15 +903,18 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "source": "github",
                 "event_kind": GitHubEventKindKey.codespaceStarted.rawValue,
                 Schema.EventPayloadKeys.codespaceName: "BODY_SENTINEL_CODESPACE_NAME",
-                "repo": "o/r"
+                "repo": "o/r",
             ]
         )
         try db.write(event)
 
         try db.readSQL { rawDB in
-            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?["state_json"] as String?) ?? ""
+            let stateJSON =
+                (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?[
+                    "state_json"] as String?) ?? ""
             XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
-            XCTAssertFalse(stateJSON.contains("BODY_SENTINEL_CODESPACE_NAME"),
+            XCTAssertFalse(
+                stateJSON.contains("BODY_SENTINEL_CODESPACE_NAME"),
                 "Codespace name MUST NOT leak into presence_state.state_json")
         }
     }
@@ -857,15 +937,18 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "event_kind": GitHubEventKindKey.repoInvitationReceived.rawValue,
                 "invitation_id": "inv1",
                 "repo": "o/r",
-                Schema.EventPayloadKeys.repoInvitationFromLogin: "BODY_SENTINEL_INVITER_LOGIN"
+                Schema.EventPayloadKeys.repoInvitationFromLogin: "BODY_SENTINEL_INVITER_LOGIN",
             ]
         )
         try db.write(event)
 
         try db.readSQL { rawDB in
-            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?["state_json"] as String?) ?? ""
+            let stateJSON =
+                (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?[
+                    "state_json"] as String?) ?? ""
             XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
-            XCTAssertFalse(stateJSON.contains("BODY_SENTINEL_INVITER_LOGIN"),
+            XCTAssertFalse(
+                stateJSON.contains("BODY_SENTINEL_INVITER_LOGIN"),
                 "Repo invitation from-login MUST NOT leak into presence_state.state_json")
         }
     }
@@ -888,15 +971,18 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "event_kind": GitHubEventKindKey.secretAlertObserved.rawValue,
                 "repo": "o/r",
                 "alert_id": "a1",
-                Schema.EventPayloadKeys.alertRule: "BODY_SENTINEL_ALERT_RULE"
+                Schema.EventPayloadKeys.alertRule: "BODY_SENTINEL_ALERT_RULE",
             ]
         )
         try db.write(event)
 
         try db.readSQL { rawDB in
-            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?["state_json"] as String?) ?? ""
+            let stateJSON =
+                (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?[
+                    "state_json"] as String?) ?? ""
             XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
-            XCTAssertFalse(stateJSON.contains("BODY_SENTINEL_ALERT_RULE"),
+            XCTAssertFalse(
+                stateJSON.contains("BODY_SENTINEL_ALERT_RULE"),
                 "Security alert rule MUST NOT leak into presence_state.state_json")
         }
     }
@@ -918,15 +1004,18 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "source": "github",
                 "event_kind": GitHubEventKindKey.auditActionObserved.rawValue,
                 "org": "o",
-                Schema.EventPayloadKeys.auditAction: "BODY_SENTINEL_AUDIT_ACTION"
+                Schema.EventPayloadKeys.auditAction: "BODY_SENTINEL_AUDIT_ACTION",
             ]
         )
         try db.write(event)
 
         try db.readSQL { rawDB in
-            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?["state_json"] as String?) ?? ""
+            let stateJSON =
+                (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?[
+                    "state_json"] as String?) ?? ""
             XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
-            XCTAssertFalse(stateJSON.contains("BODY_SENTINEL_AUDIT_ACTION"),
+            XCTAssertFalse(
+                stateJSON.contains("BODY_SENTINEL_AUDIT_ACTION"),
                 "Audit action string MUST NOT leak into presence_state.state_json")
         }
     }
@@ -950,15 +1039,18 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "repo": "o/r",
                 "issue_number": "42",
                 Schema.EventPayloadKeys.reactionEmoji: "BODY_SENTINEL_REACTION_EMOJI",
-                Schema.EventPayloadKeys.body: "BODY_SENTINEL_REACTION_EMOJI"
+                Schema.EventPayloadKeys.body: "BODY_SENTINEL_REACTION_EMOJI",
             ]
         )
         try db.write(event)
 
         try db.readSQL { rawDB in
-            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?["state_json"] as String?) ?? ""
+            let stateJSON =
+                (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='github'")?[
+                    "state_json"] as String?) ?? ""
             XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
-            XCTAssertFalse(stateJSON.contains("BODY_SENTINEL_REACTION_EMOJI"),
+            XCTAssertFalse(
+                stateJSON.contains("BODY_SENTINEL_REACTION_EMOJI"),
                 "Issue reaction emoji MUST NOT leak into presence_state.state_json")
         }
     }
@@ -983,7 +1075,7 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "from_issue_identifier": "LEAF-1",
                 "to_issue_identifier": "LEAF-99-unique-marker",
                 "relation_kind": "blocks",
-                "started_at_ms": "100"
+                "started_at_ms": "100",
             ]
         )
         let triage = RawEvent(
@@ -999,18 +1091,22 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "to_state_name": "Done-canary-marker",
                 "to_state_type": "completed",
                 "resolution_kind": "completed",
-                "completed_at_ms": "100"
+                "completed_at_ms": "100",
             ]
         )
         try db.write(rel)
         try db.write(triage)
 
         try db.readSQL { rawDB in
-            let stateJSON = (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            let stateJSON =
+                (try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")?[
+                    "state_json"] as String?) ?? ""
             XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
-            XCTAssertFalse(stateJSON.contains("LEAF-99-unique-marker"),
+            XCTAssertFalse(
+                stateJSON.contains("LEAF-99-unique-marker"),
                 "D1 relation target_identifier MUST NOT leak")
-            XCTAssertFalse(stateJSON.contains("Done-canary-marker"),
+            XCTAssertFalse(
+                stateJSON.contains("Done-canary-marker"),
                 "D1 triage to_state_name MUST NOT leak")
         }
     }
@@ -1043,7 +1139,7 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "event_kind": SlackEventKindKey.slackCanvasCreated.rawValue,
                 Schema.EventPayloadKeys.canvasId: "c1",
                 Schema.EventPayloadKeys.bookmarkTitle: sentinel,
-                Schema.EventPayloadKeys.body: sentinel
+                Schema.EventPayloadKeys.body: sentinel,
             ]
         )
         let presenceState: [String: Any] = ["presence": "active"]
@@ -1056,18 +1152,25 @@ final class RelayBodyLeakageTests: XCTestCase {
 
         // Sanity: canvas title indexed in FTS via the slack_canvas_title body_kind.
         let ftsCount = try db.readSQL { rawDB in
-            try Int.fetchOne(rawDB, sql:
-                "SELECT COUNT(*) FROM events_fts_meta WHERE body_kind = ?",
+            try Int.fetchOne(
+                rawDB,
+                sql:
+                    "SELECT COUNT(*) FROM events_fts_meta WHERE body_kind = ?",
                 arguments: [Schema.BodyKinds.slackCanvasTitle]) ?? 0
         }
-        XCTAssertEqual(ftsCount, 1,
+        XCTAssertEqual(
+            ftsCount, 1,
             "Sanity: canvas title should be indexed under slack_canvas_title before asserting it does not leak")
 
         try db.readSQL { rawDB in
-            let stateJSON = (try Row.fetchOne(rawDB, sql:
-                "SELECT state_json FROM presence_state WHERE provider='slack'")?["state_json"] as String?) ?? ""
+            let stateJSON =
+                (try Row.fetchOne(
+                    rawDB,
+                    sql:
+                        "SELECT state_json FROM presence_state WHERE provider='slack'")?["state_json"] as String?) ?? ""
             XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
-            XCTAssertFalse(stateJSON.contains(sentinel),
+            XCTAssertFalse(
+                stateJSON.contains(sentinel),
                 "Slack canvas title MUST NOT leak into presence_state.state_json")
         }
     }
@@ -1087,7 +1190,7 @@ final class RelayBodyLeakageTests: XCTestCase {
                 Schema.EventPayloadKeys.bookmarkId: "b1",
                 Schema.EventPayloadKeys.bookmarkTitle: sentinel,
                 Schema.EventPayloadKeys.bookmarkURL: "https://example.com",
-                Schema.EventPayloadKeys.body: sentinel
+                Schema.EventPayloadKeys.body: sentinel,
             ]
         )
         let presenceState: [String: Any] = ["presence": "active"]
@@ -1099,18 +1202,25 @@ final class RelayBodyLeakageTests: XCTestCase {
         )
 
         let ftsCount = try db.readSQL { rawDB in
-            try Int.fetchOne(rawDB, sql:
-                "SELECT COUNT(*) FROM events_fts_meta WHERE body_kind = ?",
+            try Int.fetchOne(
+                rawDB,
+                sql:
+                    "SELECT COUNT(*) FROM events_fts_meta WHERE body_kind = ?",
                 arguments: [Schema.BodyKinds.slackBookmarkTitle]) ?? 0
         }
-        XCTAssertEqual(ftsCount, 1,
+        XCTAssertEqual(
+            ftsCount, 1,
             "Sanity: bookmark title should be indexed under slack_bookmark_title before asserting it does not leak")
 
         try db.readSQL { rawDB in
-            let stateJSON = (try Row.fetchOne(rawDB, sql:
-                "SELECT state_json FROM presence_state WHERE provider='slack'")?["state_json"] as String?) ?? ""
+            let stateJSON =
+                (try Row.fetchOne(
+                    rawDB,
+                    sql:
+                        "SELECT state_json FROM presence_state WHERE provider='slack'")?["state_json"] as String?) ?? ""
             XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after seed")
-            XCTAssertFalse(stateJSON.contains(sentinel),
+            XCTAssertFalse(
+                stateJSON.contains(sentinel),
                 "Slack bookmark title MUST NOT leak into presence_state.state_json")
         }
     }
@@ -1146,7 +1256,7 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "event_kind": SlackEventKindKey.slackPinAdded.rawValue,
                 Schema.EventPayloadKeys.channelId: "C1",
                 Schema.EventPayloadKeys.itemRef: sentinel,
-                Schema.EventPayloadKeys.pinnedAtMs: "100"
+                Schema.EventPayloadKeys.pinnedAtMs: "100",
             ]
         )
         let presenceState: [String: Any] = ["presence": "active"]
@@ -1158,13 +1268,21 @@ final class RelayBodyLeakageTests: XCTestCase {
         )
 
         try db.readSQL { rawDB in
-            let ftsHits = try Int.fetchOne(rawDB, sql:
-                "SELECT COUNT(*) FROM events_fts_meta") ?? 0
-            XCTAssertEqual(ftsHits, 0,
+            let ftsHits =
+                try Int.fetchOne(
+                    rawDB,
+                    sql:
+                        "SELECT COUNT(*) FROM events_fts_meta") ?? 0
+            XCTAssertEqual(
+                ftsHits, 0,
                 "Pin events MUST NOT produce FTS rows (no body-kind dispatch entry)")
-            let stateJSON = (try Row.fetchOne(rawDB, sql:
-                "SELECT state_json FROM presence_state WHERE provider='slack'")?["state_json"] as String?) ?? ""
-            XCTAssertFalse(stateJSON.contains(sentinel),
+            let stateJSON =
+                (try Row.fetchOne(
+                    rawDB,
+                    sql:
+                        "SELECT state_json FROM presence_state WHERE provider='slack'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(
+                stateJSON.contains(sentinel),
                 "Pin itemRef sentinel MUST NOT leak into presence_state.state_json")
         }
     }
@@ -1181,7 +1299,7 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "source": "slack",
                 "event_kind": SlackEventKindKey.slackReminderCreated.rawValue,
                 Schema.EventPayloadKeys.reminderId: sentinel,
-                Schema.EventPayloadKeys.dueTs: "200"
+                Schema.EventPayloadKeys.dueTs: "200",
             ]
         )
         let presenceState: [String: Any] = ["presence": "active"]
@@ -1193,13 +1311,21 @@ final class RelayBodyLeakageTests: XCTestCase {
         )
 
         try db.readSQL { rawDB in
-            let ftsHits = try Int.fetchOne(rawDB, sql:
-                "SELECT COUNT(*) FROM events_fts_meta") ?? 0
-            XCTAssertEqual(ftsHits, 0,
+            let ftsHits =
+                try Int.fetchOne(
+                    rawDB,
+                    sql:
+                        "SELECT COUNT(*) FROM events_fts_meta") ?? 0
+            XCTAssertEqual(
+                ftsHits, 0,
                 "Reminder events MUST NOT produce FTS rows (reminder.text is dropped at provider boundary)")
-            let stateJSON = (try Row.fetchOne(rawDB, sql:
-                "SELECT state_json FROM presence_state WHERE provider='slack'")?["state_json"] as String?) ?? ""
-            XCTAssertFalse(stateJSON.contains(sentinel),
+            let stateJSON =
+                (try Row.fetchOne(
+                    rawDB,
+                    sql:
+                        "SELECT state_json FROM presence_state WHERE provider='slack'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(
+                stateJSON.contains(sentinel),
                 "Reminder id sentinel MUST NOT leak into presence_state.state_json")
         }
     }
@@ -1217,7 +1343,7 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "event_kind": SlackEventKindKey.slackMessageScheduled.rawValue,
                 Schema.EventPayloadKeys.scheduledMessageId: sentinel,
                 Schema.EventPayloadKeys.scheduledFor: "200",
-                Schema.EventPayloadKeys.channelId: "C1"
+                Schema.EventPayloadKeys.channelId: "C1",
             ]
         )
         let presenceState: [String: Any] = ["presence": "active"]
@@ -1229,13 +1355,21 @@ final class RelayBodyLeakageTests: XCTestCase {
         )
 
         try db.readSQL { rawDB in
-            let ftsHits = try Int.fetchOne(rawDB, sql:
-                "SELECT COUNT(*) FROM events_fts_meta") ?? 0
-            XCTAssertEqual(ftsHits, 0,
+            let ftsHits =
+                try Int.fetchOne(
+                    rawDB,
+                    sql:
+                        "SELECT COUNT(*) FROM events_fts_meta") ?? 0
+            XCTAssertEqual(
+                ftsHits, 0,
                 "Scheduled-message events MUST NOT produce FTS rows (scheduled body is dropped at provider boundary)")
-            let stateJSON = (try Row.fetchOne(rawDB, sql:
-                "SELECT state_json FROM presence_state WHERE provider='slack'")?["state_json"] as String?) ?? ""
-            XCTAssertFalse(stateJSON.contains(sentinel),
+            let stateJSON =
+                (try Row.fetchOne(
+                    rawDB,
+                    sql:
+                        "SELECT state_json FROM presence_state WHERE provider='slack'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(
+                stateJSON.contains(sentinel),
                 "Scheduled message id sentinel MUST NOT leak into presence_state.state_json")
         }
     }
@@ -1255,7 +1389,7 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "source": "slack",
                 "event_kind": SlackEventKindKey.slackCustomEmojiAdded.rawValue,
                 Schema.EventPayloadKeys.emojiName: sentinel,
-                Schema.EventPayloadKeys.workspaceId: "W1"
+                Schema.EventPayloadKeys.workspaceId: "W1",
             ]
         )
         let presenceState: [String: Any] = ["presence": "active"]
@@ -1267,13 +1401,21 @@ final class RelayBodyLeakageTests: XCTestCase {
         )
 
         try db.readSQL { rawDB in
-            let ftsHits = try Int.fetchOne(rawDB, sql:
-                "SELECT COUNT(*) FROM events_fts_meta") ?? 0
-            XCTAssertEqual(ftsHits, 0,
+            let ftsHits =
+                try Int.fetchOne(
+                    rawDB,
+                    sql:
+                        "SELECT COUNT(*) FROM events_fts_meta") ?? 0
+            XCTAssertEqual(
+                ftsHits, 0,
                 "Custom emoji events MUST NOT produce FTS rows (image URL is dropped at provider boundary)")
-            let stateJSON = (try Row.fetchOne(rawDB, sql:
-                "SELECT state_json FROM presence_state WHERE provider='slack'")?["state_json"] as String?) ?? ""
-            XCTAssertFalse(stateJSON.contains(sentinel),
+            let stateJSON =
+                (try Row.fetchOne(
+                    rawDB,
+                    sql:
+                        "SELECT state_json FROM presence_state WHERE provider='slack'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(
+                stateJSON.contains(sentinel),
                 "Custom emoji name sentinel MUST NOT leak into presence_state.state_json")
         }
     }
@@ -1295,7 +1437,7 @@ final class RelayBodyLeakageTests: XCTestCase {
                 Schema.EventPayloadKeys.groupId: "G1",
                 Schema.EventPayloadKeys.addedUserIdsJson: #"[""# + sentinel + #""]"#,
                 Schema.EventPayloadKeys.removedUserIdsJson: "[]",
-                Schema.EventPayloadKeys.workspaceId: "W1"
+                Schema.EventPayloadKeys.workspaceId: "W1",
             ]
         )
         let presenceState: [String: Any] = ["presence": "active"]
@@ -1307,13 +1449,21 @@ final class RelayBodyLeakageTests: XCTestCase {
         )
 
         try db.readSQL { rawDB in
-            let ftsHits = try Int.fetchOne(rawDB, sql:
-                "SELECT COUNT(*) FROM events_fts_meta") ?? 0
-            XCTAssertEqual(ftsHits, 0,
+            let ftsHits =
+                try Int.fetchOne(
+                    rawDB,
+                    sql:
+                        "SELECT COUNT(*) FROM events_fts_meta") ?? 0
+            XCTAssertEqual(
+                ftsHits, 0,
                 "Usergroup membership events MUST NOT produce FTS rows (no body-kind dispatch entry)")
-            let stateJSON = (try Row.fetchOne(rawDB, sql:
-                "SELECT state_json FROM presence_state WHERE provider='slack'")?["state_json"] as String?) ?? ""
-            XCTAssertFalse(stateJSON.contains(sentinel),
+            let stateJSON =
+                (try Row.fetchOne(
+                    rawDB,
+                    sql:
+                        "SELECT state_json FROM presence_state WHERE provider='slack'")?["state_json"] as String?) ?? ""
+            XCTAssertFalse(
+                stateJSON.contains(sentinel),
                 "Usergroup membership user-ID sentinel MUST NOT leak into presence_state.state_json")
         }
     }
@@ -1336,7 +1486,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             payload: [
                 "event_kind": "meeting_state_entered",
                 "state": "in_meeting",
-                "title": titleMarker
+                "title": titleMarker,
             ]
         )
         let presenceState: [String: Any] = ["dummy": true]
@@ -1347,9 +1497,14 @@ final class RelayBodyLeakageTests: XCTestCase {
             nowMs: nowMs
         )
         try db.readSQL { rawDB in
-            let stateJSON = (try Row.fetchOne(rawDB, sql:
-                "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
-            XCTAssertFalse(stateJSON.contains(titleMarker),
+            let stateJSON =
+                (try Row.fetchOne(
+                    rawDB,
+                    sql:
+                        "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?)
+                ?? ""
+            XCTAssertFalse(
+                stateJSON.contains(titleMarker),
                 "Meeting title MUST NOT appear in presence_state.state_json")
         }
     }
@@ -1366,7 +1521,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             payload: [
                 "event_kind": "focus_mode_enabled",
                 "state": "focused",
-                "mode_name": modeNameMarker
+                "mode_name": modeNameMarker,
             ]
         )
         let presenceState: [String: Any] = ["dummy": true]
@@ -1377,9 +1532,14 @@ final class RelayBodyLeakageTests: XCTestCase {
             nowMs: nowMs
         )
         try db.readSQL { rawDB in
-            let stateJSON = (try Row.fetchOne(rawDB, sql:
-                "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
-            XCTAssertFalse(stateJSON.contains(modeNameMarker),
+            let stateJSON =
+                (try Row.fetchOne(
+                    rawDB,
+                    sql:
+                        "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?)
+                ?? ""
+            XCTAssertFalse(
+                stateJSON.contains(modeNameMarker),
                 "Focus mode name MUST NOT appear in presence_state.state_json")
         }
     }
@@ -1395,7 +1555,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             bundleID: nil,
             payload: [
                 "event_kind": "system_locked",
-                "host": hostMarker
+                "host": hostMarker,
             ]
         )
         let presenceState: [String: Any] = ["dummy": true]
@@ -1406,9 +1566,14 @@ final class RelayBodyLeakageTests: XCTestCase {
             nowMs: nowMs
         )
         try db.readSQL { rawDB in
-            let stateJSON = (try Row.fetchOne(rawDB, sql:
-                "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
-            XCTAssertFalse(stateJSON.contains(hostMarker),
+            let stateJSON =
+                (try Row.fetchOne(
+                    rawDB,
+                    sql:
+                        "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?)
+                ?? ""
+            XCTAssertFalse(
+                stateJSON.contains(hostMarker),
                 "System hostname MUST NOT appear in presence_state.state_json")
         }
     }
@@ -1424,7 +1589,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             bundleID: nil,
             payload: [
                 "event_kind": "space_switched",
-                "space_id": spaceIDMarker
+                "space_id": spaceIDMarker,
             ]
         )
         let presenceState: [String: Any] = ["dummy": true]
@@ -1435,9 +1600,14 @@ final class RelayBodyLeakageTests: XCTestCase {
             nowMs: nowMs
         )
         try db.readSQL { rawDB in
-            let stateJSON = (try Row.fetchOne(rawDB, sql:
-                "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
-            XCTAssertFalse(stateJSON.contains(spaceIDMarker),
+            let stateJSON =
+                (try Row.fetchOne(
+                    rawDB,
+                    sql:
+                        "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?)
+                ?? ""
+            XCTAssertFalse(
+                stateJSON.contains(spaceIDMarker),
                 "Space identifier MUST NOT appear in presence_state.state_json")
         }
     }
@@ -1474,10 +1644,15 @@ final class RelayBodyLeakageTests: XCTestCase {
             nowMs: nowMs
         )
         try db.readSQL { rawDB in
-            let stateJSON = (try Row.fetchOne(rawDB, sql:
-                "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?) ?? ""
+            let stateJSON =
+                (try Row.fetchOne(
+                    rawDB,
+                    sql:
+                        "SELECT state_json FROM presence_state WHERE provider='linear'")?["state_json"] as String?)
+                ?? ""
             for m in markers {
-                XCTAssertFalse(stateJSON.contains(m),
+                XCTAssertFalse(
+                    stateJSON.contains(m),
                     "Marker '\(m)' MUST NOT appear in presence_state.state_json for \(eventKind)",
                     file: file, line: line)
             }
@@ -1508,7 +1683,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             extraPayload: [
                 "ide_bundle_id": "com.jetbrains.pycharm",
                 "doc_path": "/p.py",
-                "content": "SECRET-JETBRAINS-CONTENT-S2"
+                "content": "SECRET-JETBRAINS-CONTENT-S2",
             ],
             markers: ["SECRET-JETBRAINS-CONTENT-S2"],
             collectorID: "applescript_jetbrains"
@@ -1539,7 +1714,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             extraPayload: [
                 "note_title": "T",
                 "body": "SECRET-NOTE-BODY-MARKER-S2",
-                "plaintext": "SECRET-NOTE-PLAINTEXT-MARKER-S2"
+                "plaintext": "SECRET-NOTE-PLAINTEXT-MARKER-S2",
             ],
             markers: ["SECRET-NOTE-BODY-MARKER-S2", "SECRET-NOTE-PLAINTEXT-MARKER-S2"],
             collectorID: "applescript_notes"
@@ -1553,7 +1728,7 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "list_name": "Inbox",
                 "completed_count_delta": "3",
                 "reminder_title": "SECRET-REMINDER-TITLE-S2",
-                "notes": "SECRET-REMINDER-NOTES-S2"
+                "notes": "SECRET-REMINDER-NOTES-S2",
             ],
             markers: ["SECRET-REMINDER-TITLE-S2", "SECRET-REMINDER-NOTES-S2"],
             collectorID: "applescript_reminders"
@@ -1567,7 +1742,7 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "view_mode": "week",
                 "visible_date_range_days": "7",
                 "event_title": "SECRET-EVENT-TITLE-S2",
-                "attendees": "SECRET-ATTENDEES-LIST-S2"
+                "attendees": "SECRET-ATTENDEES-LIST-S2",
             ],
             markers: ["SECRET-EVENT-TITLE-S2", "SECRET-ATTENDEES-LIST-S2"],
             collectorID: "applescript_calendar"
@@ -1581,7 +1756,7 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "mailbox_name": "Inbox",
                 "body": "SECRET-MAIL-BODY-S2",
                 "subject": "SECRET-MAIL-SUBJECT-S2",
-                "from": "SECRET-MAIL-FROM-S2"
+                "from": "SECRET-MAIL-FROM-S2",
             ],
             markers: ["SECRET-MAIL-BODY-S2", "SECRET-MAIL-SUBJECT-S2", "SECRET-MAIL-FROM-S2"],
             collectorID: "applescript_mail"
@@ -1594,7 +1769,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             extraPayload: [
                 "meeting_state": "in_meeting",
                 "attendees": "SECRET-ZOOM-ATTENDEES-LIST-S2",
-                "password": "SECRET-ZOOM-PASSWORD-S2"
+                "password": "SECRET-ZOOM-PASSWORD-S2",
             ],
             markers: ["SECRET-ZOOM-ATTENDEES-LIST-S2", "SECRET-ZOOM-PASSWORD-S2"],
             collectorID: "applescript_zoom"
@@ -1607,7 +1782,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             extraPayload: [
                 "meeting_topic": "T",
                 "password": "SECRET-ZOOM-NAME-PASSWORD-S2",
-                "chat_history": "SECRET-ZOOM-CHAT-S2"
+                "chat_history": "SECRET-ZOOM-CHAT-S2",
             ],
             markers: ["SECRET-ZOOM-NAME-PASSWORD-S2", "SECRET-ZOOM-CHAT-S2"],
             collectorID: "applescript_zoom"
@@ -1621,7 +1796,7 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "tabs": "[]",
                 "cookies": "SECRET-SAFARI-COOKIES-S2",
                 "source": "SECRET-SAFARI-SOURCE-S2",
-                "history": "SECRET-SAFARI-HISTORY-S2"
+                "history": "SECRET-SAFARI-HISTORY-S2",
             ],
             markers: ["SECRET-SAFARI-COOKIES-S2", "SECRET-SAFARI-SOURCE-S2", "SECRET-SAFARI-HISTORY-S2"],
             collectorID: "applescript_safari"
@@ -1634,7 +1809,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             extraPayload: [
                 "tabs": "[]",
                 "cookies": "SECRET-CHROME-COOKIES-S2",
-                "source": "SECRET-CHROME-SOURCE-S2"
+                "source": "SECRET-CHROME-SOURCE-S2",
             ],
             markers: ["SECRET-CHROME-COOKIES-S2", "SECRET-CHROME-SOURCE-S2"],
             collectorID: "applescript_chrome"
@@ -1647,7 +1822,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             extraPayload: [
                 "tabs": "[]",
                 "cookies": "SECRET-ARC-COOKIES-S2",
-                "source": "SECRET-ARC-SOURCE-S2"
+                "source": "SECRET-ARC-SOURCE-S2",
             ],
             markers: ["SECRET-ARC-COOKIES-S2", "SECRET-ARC-SOURCE-S2"],
             collectorID: "applescript_arc"
@@ -1674,14 +1849,14 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "source": "SECRET-SAFARI-NAV-SOURCE-P3",
                 "history": "SECRET-SAFARI-NAV-HISTORY-P3",
                 "form_data": "SECRET-SAFARI-NAV-FORM-P3",
-                "autofill": "SECRET-SAFARI-NAV-AUTOFILL-P3"
+                "autofill": "SECRET-SAFARI-NAV-AUTOFILL-P3",
             ],
             markers: [
                 "SECRET-SAFARI-NAV-COOKIES-P3",
                 "SECRET-SAFARI-NAV-SOURCE-P3",
                 "SECRET-SAFARI-NAV-HISTORY-P3",
                 "SECRET-SAFARI-NAV-FORM-P3",
-                "SECRET-SAFARI-NAV-AUTOFILL-P3"
+                "SECRET-SAFARI-NAV-AUTOFILL-P3",
             ],
             collectorID: "applescript_safari"
         )
@@ -1698,14 +1873,14 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "source": "SECRET-CHROME-NAV-SOURCE-P3",
                 "history": "SECRET-CHROME-NAV-HISTORY-P3",
                 "form_data": "SECRET-CHROME-NAV-FORM-P3",
-                "autofill": "SECRET-CHROME-NAV-AUTOFILL-P3"
+                "autofill": "SECRET-CHROME-NAV-AUTOFILL-P3",
             ],
             markers: [
                 "SECRET-CHROME-NAV-COOKIES-P3",
                 "SECRET-CHROME-NAV-SOURCE-P3",
                 "SECRET-CHROME-NAV-HISTORY-P3",
                 "SECRET-CHROME-NAV-FORM-P3",
-                "SECRET-CHROME-NAV-AUTOFILL-P3"
+                "SECRET-CHROME-NAV-AUTOFILL-P3",
             ],
             collectorID: "applescript_chrome"
         )
@@ -1722,14 +1897,14 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "source": "SECRET-ARC-NAV-SOURCE-P3",
                 "history": "SECRET-ARC-NAV-HISTORY-P3",
                 "form_data": "SECRET-ARC-NAV-FORM-P3",
-                "autofill": "SECRET-ARC-NAV-AUTOFILL-P3"
+                "autofill": "SECRET-ARC-NAV-AUTOFILL-P3",
             ],
             markers: [
                 "SECRET-ARC-NAV-COOKIES-P3",
                 "SECRET-ARC-NAV-SOURCE-P3",
                 "SECRET-ARC-NAV-HISTORY-P3",
                 "SECRET-ARC-NAV-FORM-P3",
-                "SECRET-ARC-NAV-AUTOFILL-P3"
+                "SECRET-ARC-NAV-AUTOFILL-P3",
             ],
             collectorID: "applescript_arc"
         )
@@ -1746,14 +1921,14 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "source": "SECRET-SAFARI-ACT-SOURCE-P3",
                 "history": "SECRET-SAFARI-ACT-HISTORY-P3",
                 "form_data": "SECRET-SAFARI-ACT-FORM-P3",
-                "autofill": "SECRET-SAFARI-ACT-AUTOFILL-P3"
+                "autofill": "SECRET-SAFARI-ACT-AUTOFILL-P3",
             ],
             markers: [
                 "SECRET-SAFARI-ACT-COOKIES-P3",
                 "SECRET-SAFARI-ACT-SOURCE-P3",
                 "SECRET-SAFARI-ACT-HISTORY-P3",
                 "SECRET-SAFARI-ACT-FORM-P3",
-                "SECRET-SAFARI-ACT-AUTOFILL-P3"
+                "SECRET-SAFARI-ACT-AUTOFILL-P3",
             ],
             collectorID: "applescript_safari"
         )
@@ -1770,14 +1945,14 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "source": "SECRET-CHROME-ACT-SOURCE-P3",
                 "history": "SECRET-CHROME-ACT-HISTORY-P3",
                 "form_data": "SECRET-CHROME-ACT-FORM-P3",
-                "autofill": "SECRET-CHROME-ACT-AUTOFILL-P3"
+                "autofill": "SECRET-CHROME-ACT-AUTOFILL-P3",
             ],
             markers: [
                 "SECRET-CHROME-ACT-COOKIES-P3",
                 "SECRET-CHROME-ACT-SOURCE-P3",
                 "SECRET-CHROME-ACT-HISTORY-P3",
                 "SECRET-CHROME-ACT-FORM-P3",
-                "SECRET-CHROME-ACT-AUTOFILL-P3"
+                "SECRET-CHROME-ACT-AUTOFILL-P3",
             ],
             collectorID: "applescript_chrome"
         )
@@ -1794,14 +1969,14 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "source": "SECRET-ARC-ACT-SOURCE-P3",
                 "history": "SECRET-ARC-ACT-HISTORY-P3",
                 "form_data": "SECRET-ARC-ACT-FORM-P3",
-                "autofill": "SECRET-ARC-ACT-AUTOFILL-P3"
+                "autofill": "SECRET-ARC-ACT-AUTOFILL-P3",
             ],
             markers: [
                 "SECRET-ARC-ACT-COOKIES-P3",
                 "SECRET-ARC-ACT-SOURCE-P3",
                 "SECRET-ARC-ACT-HISTORY-P3",
                 "SECRET-ARC-ACT-FORM-P3",
-                "SECRET-ARC-ACT-AUTOFILL-P3"
+                "SECRET-ARC-ACT-AUTOFILL-P3",
             ],
             collectorID: "applescript_arc"
         )
@@ -1818,14 +1993,14 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "source": "SECRET-CHROME-BM-SOURCE-P3",
                 "history": "SECRET-CHROME-BM-HISTORY-P3",
                 "form_data": "SECRET-CHROME-BM-FORM-P3",
-                "autofill": "SECRET-CHROME-BM-AUTOFILL-P3"
+                "autofill": "SECRET-CHROME-BM-AUTOFILL-P3",
             ],
             markers: [
                 "SECRET-CHROME-BM-COOKIES-P3",
                 "SECRET-CHROME-BM-SOURCE-P3",
                 "SECRET-CHROME-BM-HISTORY-P3",
                 "SECRET-CHROME-BM-FORM-P3",
-                "SECRET-CHROME-BM-AUTOFILL-P3"
+                "SECRET-CHROME-BM-AUTOFILL-P3",
             ],
             collectorID: "fsevents_browser_bookmarks"
         )
@@ -1842,14 +2017,14 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "source": "SECRET-SAFARI-BM-SOURCE-P3",
                 "history": "SECRET-SAFARI-BM-HISTORY-P3",
                 "form_data": "SECRET-SAFARI-BM-FORM-P3",
-                "autofill": "SECRET-SAFARI-BM-AUTOFILL-P3"
+                "autofill": "SECRET-SAFARI-BM-AUTOFILL-P3",
             ],
             markers: [
                 "SECRET-SAFARI-BM-COOKIES-P3",
                 "SECRET-SAFARI-BM-SOURCE-P3",
                 "SECRET-SAFARI-BM-HISTORY-P3",
                 "SECRET-SAFARI-BM-FORM-P3",
-                "SECRET-SAFARI-BM-AUTOFILL-P3"
+                "SECRET-SAFARI-BM-AUTOFILL-P3",
             ],
             collectorID: "fsevents_browser_bookmarks"
         )
@@ -1865,7 +2040,7 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "tab_key": "i1",
                 "previous_url": "github.com",
                 "current_url": "linear.app",
-                "title": "SECRET-DOMAIN-IN-TITLE-P3"
+                "title": "SECRET-DOMAIN-IN-TITLE-P3",
             ],
             markers: ["SECRET-DOMAIN-IN-TITLE-P3"],
             collectorID: "applescript_safari"
@@ -1879,7 +2054,7 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "current_tab_key": "1",
                 "previous_tab_key": "2",
                 "current_url": "linear.app/i/LEAF-SECRET-P3",
-                "title": "Secret · LEAF-SECRET-P3"
+                "title": "Secret · LEAF-SECRET-P3",
             ],
             markers: ["LEAF-SECRET-P3"],
             collectorID: "applescript_chrome"
@@ -1901,7 +2076,7 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "app_switch_count": "2",
                 "foreground_app": "com.apple.dt.Xcode",
                 "characters": "SECRET-KEYS-INTENSITY-S3",
-                "body": "SECRET-INTENSITY-BODY-S3"
+                "body": "SECRET-INTENSITY-BODY-S3",
             ],
             markers: ["SECRET-KEYS-INTENSITY-S3", "SECRET-INTENSITY-BODY-S3"],
             collectorID: "cgevent_tap"
@@ -1913,7 +2088,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             eventKind: "intensity_bucket_dropped",
             extraPayload: [
                 "state": "locked",
-                "body": "SECRET-DROPPED-BUCKET-BODY-S3"
+                "body": "SECRET-DROPPED-BUCKET-BODY-S3",
             ],
             markers: ["SECRET-DROPPED-BUCKET-BODY-S3"],
             collectorID: "cgevent_tap"
@@ -1926,7 +2101,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             extraPayload: [
                 "audio_route": "bluetooth",
                 "device_name": "SECRET-AIRPODS-NAME-S3",
-                "manufacturer": "SECRET-MANUFACTURER-S3"
+                "manufacturer": "SECRET-MANUFACTURER-S3",
             ],
             markers: ["SECRET-AIRPODS-NAME-S3", "SECRET-MANUFACTURER-S3"],
             collectorID: "audio_route"
@@ -1938,7 +2113,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             eventKind: "mic_in_use_entered",
             extraPayload: [
                 "state": "mic_in_use",
-                "audio_samples": "SECRET-MIC-SAMPLES-S3"
+                "audio_samples": "SECRET-MIC-SAMPLES-S3",
             ],
             markers: ["SECRET-MIC-SAMPLES-S3"],
             collectorID: "mic_in_use"
@@ -1950,7 +2125,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             eventKind: "mic_in_use_exited",
             extraPayload: [
                 "state": "mic_idle",
-                "audio_samples": "SECRET-MIC-EXIT-S3"
+                "audio_samples": "SECRET-MIC-EXIT-S3",
             ],
             markers: ["SECRET-MIC-EXIT-S3"],
             collectorID: "mic_in_use"
@@ -1962,7 +2137,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             eventKind: "display_connected",
             extraPayload: [
                 "state": "display_connected",
-                "screen_image": "SECRET-DISPLAY-PIXELS-S3"
+                "screen_image": "SECRET-DISPLAY-PIXELS-S3",
             ],
             markers: ["SECRET-DISPLAY-PIXELS-S3"],
             collectorID: "display"
@@ -1974,7 +2149,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             eventKind: "display_disconnected",
             extraPayload: [
                 "state": "display_disconnected",
-                "screen_image": "SECRET-DISCONNECT-PIXELS-S3"
+                "screen_image": "SECRET-DISCONNECT-PIXELS-S3",
             ],
             markers: ["SECRET-DISCONNECT-PIXELS-S3"],
             collectorID: "display"
@@ -1987,7 +2162,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             extraPayload: [
                 "state": "connected",
                 "server_address": "SECRET-VPN-SERVER-S3",
-                "username": "SECRET-VPN-USER-S3"
+                "username": "SECRET-VPN-USER-S3",
             ],
             markers: ["SECRET-VPN-SERVER-S3", "SECRET-VPN-USER-S3"],
             collectorID: "vpn"
@@ -2000,7 +2175,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             extraPayload: [
                 "state": "connected",
                 "ssid": "SECRET-WIFI-SSID-S3",
-                "bssid": "SECRET-WIFI-BSSID-S3"
+                "bssid": "SECRET-WIFI-BSSID-S3",
             ],
             markers: ["SECRET-WIFI-SSID-S3", "SECRET-WIFI-BSSID-S3"],
             collectorID: "wifi"
@@ -2013,7 +2188,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             extraPayload: [
                 "count": "3",
                 "clipboard_content": "SECRET-CLIPBOARD-TEXT-S3",
-                "body": "SECRET-CLIPBOARD-BODY-S3"
+                "body": "SECRET-CLIPBOARD-BODY-S3",
             ],
             markers: ["SECRET-CLIPBOARD-TEXT-S3", "SECRET-CLIPBOARD-BODY-S3"],
             collectorID: "clipboard"
@@ -2026,7 +2201,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             extraPayload: [
                 "filename": "Screenshot 2026-05-13.png",
                 "body": "SECRET-SCREENSHOT-BODY-S3",
-                "image_data": "SECRET-SCREENSHOT-PIXELS-S3"
+                "image_data": "SECRET-SCREENSHOT-PIXELS-S3",
             ],
             markers: ["SECRET-SCREENSHOT-BODY-S3", "SECRET-SCREENSHOT-PIXELS-S3"],
             collectorID: "local_files"
@@ -2039,7 +2214,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             extraPayload: [
                 "filename": "report.pdf",
                 "body": "SECRET-DOWNLOAD-BODY-S3",
-                "source_url": "SECRET-DOWNLOAD-URL-S3"
+                "source_url": "SECRET-DOWNLOAD-URL-S3",
             ],
             markers: ["SECRET-DOWNLOAD-BODY-S3", "SECRET-DOWNLOAD-URL-S3"],
             collectorID: "local_files"
@@ -2052,7 +2227,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             extraPayload: [
                 "action": "added",
                 "deleted_filename": "SECRET-TRASH-FILENAME-S3",
-                "body": "SECRET-TRASH-BODY-S3"
+                "body": "SECRET-TRASH-BODY-S3",
             ],
             markers: ["SECRET-TRASH-FILENAME-S3", "SECRET-TRASH-BODY-S3"],
             collectorID: "local_files"
@@ -2093,7 +2268,7 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "command_length_chars": "23",
                 "tool_use_id": "toolu_x",
                 "source": "jsonl",
-                "cwd": "/Users/x/proj"
+                "cwd": "/Users/x/proj",
             ]
         )
         let promptEvent = RawEvent(
@@ -2104,7 +2279,7 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "event_kind": "claude_prompt_submitted",
                 "session_id": "S-LEAK",
                 "prompt_length_chars": "180",
-                "source": "jsonl"
+                "source": "jsonl",
             ]
         )
         let tokensEvent = RawEvent(
@@ -2120,7 +2295,7 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "cache_creation_input_tokens": "100645",
                 "cache_read_input_tokens": "0",
                 "service_tier": "standard",
-                "source": "jsonl"
+                "source": "jsonl",
             ]
         )
 
@@ -2129,7 +2304,7 @@ final class RelayBodyLeakageTests: XCTestCase {
         let presenceState: [String: Any] = [
             "active_session_id": "S-LEAK",
             "current_model": "claude-opus-4-7",
-            "tokens_in_last_minute": 737
+            "tokens_in_last_minute": 737,
         ]
         try db.writeEventsOffsetAndPresence(
             [toolUseEvent, promptEvent, tokensEvent],
@@ -2186,15 +2361,19 @@ final class RelayBodyLeakageTests: XCTestCase {
 
     /// One sentinel per forbidden-field family (spec §6.4).
     private static let googleCalendarSentinels: [(field: String, sentinel: String)] = [
-        ("description",                                       "SECRET-GCAL-DESC-WALKBACK"),
-        ("location",                                          "SECRET-GCAL-LOC-WALKBACK"),
-        ("attendees[].email",                                 "SECRET-GCAL-ATTENDEE-WALKBACK@evil.example.com"),
-        ("focusTimeProperties|outOfOfficeProperties.declineMessage",
-                                                              "SECRET-GCAL-DECLINE-WALKBACK"),
-        ("conferenceData.entryPoints[].uri",                  "SECRET-GCAL-CONF-URI-WALKBACK"),
-        ("workingLocationProperties.officeLocation.buildingId",
-                                                              "SECRET-GCAL-BUILDING-WALKBACK"),
-        ("workingLocationProperties.customLocation.label",    "SECRET-GCAL-CUSTOM-LOC-WALKBACK"),
+        ("description", "SECRET-GCAL-DESC-WALKBACK"),
+        ("location", "SECRET-GCAL-LOC-WALKBACK"),
+        ("attendees[].email", "SECRET-GCAL-ATTENDEE-WALKBACK@evil.example.com"),
+        (
+            "focusTimeProperties|outOfOfficeProperties.declineMessage",
+            "SECRET-GCAL-DECLINE-WALKBACK"
+        ),
+        ("conferenceData.entryPoints[].uri", "SECRET-GCAL-CONF-URI-WALKBACK"),
+        (
+            "workingLocationProperties.officeLocation.buildingId",
+            "SECRET-GCAL-BUILDING-WALKBACK"
+        ),
+        ("workingLocationProperties.customLocation.label", "SECRET-GCAL-CUSTOM-LOC-WALKBACK"),
     ]
 
     /// Mapping from event_kind to the Google API `eventType` string we need
@@ -2203,12 +2382,12 @@ final class RelayBodyLeakageTests: XCTestCase {
     /// "default" so external_attendee_count etc. all compute normally.
     private static func googleCalendarEventTypeForKind(_ kind: GoogleCalendarEventKind) -> String {
         switch kind {
-        case .eventObserved:           return "default"
-        case .focusBlockStarted:       return "focusTime"
-        case .focusBlockEnded:         return "focusTime"
-        case .oooStarted:              return "outOfOffice"
-        case .oooEnded:                return "outOfOffice"
-        case .workingLocationChanged:  return "workingLocation"
+        case .eventObserved: return "default"
+        case .focusBlockStarted: return "focusTime"
+        case .focusBlockEnded: return "focusTime"
+        case .oooStarted: return "outOfOffice"
+        case .oooEnded: return "outOfOffice"
+        case .workingLocationChanged: return "workingLocation"
         }
     }
 
@@ -2229,65 +2408,65 @@ final class RelayBodyLeakageTests: XCTestCase {
         let eventType = googleCalendarEventTypeForKind(kind)
 
         // Per-field injection — leave non-targeted forbidden paths empty.
-        let description     = field == "description"                                              ? sentinel : ""
-        let location        = field == "location"                                                 ? sentinel : ""
-        let attendeeEmail   = field == "attendees[].email"                                        ? sentinel : "noreply@example.com"
-        let declineMessage  = field == "focusTimeProperties|outOfOfficeProperties.declineMessage" ? sentinel : ""
-        let confURI         = field == "conferenceData.entryPoints[].uri"                         ? sentinel : "https://meet.example.com/abc"
-        let buildingId      = field == "workingLocationProperties.officeLocation.buildingId"      ? sentinel : ""
-        let customLabel     = field == "workingLocationProperties.customLocation.label"           ? sentinel : ""
+        let description = field == "description" ? sentinel : ""
+        let location = field == "location" ? sentinel : ""
+        let attendeeEmail = field == "attendees[].email" ? sentinel : "noreply@example.com"
+        let declineMessage = field == "focusTimeProperties|outOfOfficeProperties.declineMessage" ? sentinel : ""
+        let confURI = field == "conferenceData.entryPoints[].uri" ? sentinel : "https://meet.example.com/abc"
+        let buildingId = field == "workingLocationProperties.officeLocation.buildingId" ? sentinel : ""
+        let customLabel = field == "workingLocationProperties.customLocation.label" ? sentinel : ""
 
         // JSON-escape every interpolated string (sentinels contain no `"` or
         // backslash, but `attendeeEmail` is an arbitrary email — be safe).
         func esc(_ s: String) -> String {
             s.replacingOccurrences(of: "\\", with: "\\\\")
-             .replacingOccurrences(of: "\"", with: "\\\"")
+                .replacingOccurrences(of: "\"", with: "\\\"")
         }
 
         return """
-        {
-          "id": "gcal-evt-walkback",
-          "iCalUID": "gcal-evt-walkback@google.com",
-          "status": "confirmed",
-          "summary": "Walkback synthetic",
-          "description": "\(esc(description))",
-          "location": "\(esc(location))",
-          "start": {"dateTime": "2026-05-16T14:00:00+02:00", "timeZone": "Europe/Berlin"},
-          "end":   {"dateTime": "2026-05-16T16:00:00+02:00", "timeZone": "Europe/Berlin"},
-          "eventType": "\(eventType)",
-          "htmlLink": "https://calendar.google.com/event?eid=gcal-evt-walkback",
-          "organizer": {"email": "organizer@example.com", "self": true},
-          "creator":   {"email": "creator@example.com",   "self": true},
-          "attendees": [
-            {"email": "\(esc(attendeeEmail))", "responseStatus": "accepted", "self": true}
-          ],
-          "conferenceData": {
-            "entryPoints": [
-              {"entryPointType": "video", "uri": "\(esc(confURI))", "pin": "1234", "accessCode": "ZZ", "password": "p", "passcode": "pc", "meetingCode": "mc"}
-            ],
-            "conferenceSolution": {"key": {"type": "hangoutsMeet"}}
-          },
-          "focusTimeProperties": {
-            "autoDeclineMode": "declineAllConflictingInvitations",
-            "declineMessage": "\(esc(declineMessage))",
-            "chatStatus": "doNotDisturb"
-          },
-          "outOfOfficeProperties": {
-            "autoDeclineMode": "declineAllConflictingInvitations",
-            "declineMessage": "\(esc(declineMessage))"
-          },
-          "workingLocationProperties": {
-            "type": "officeLocation",
-            "officeLocation": {
-              "buildingId": "\(esc(buildingId))",
-              "floorId": "F2",
-              "deskId": "D17",
-              "label": "Headquarters"
-            },
-            "customLocation": {"label": "\(esc(customLabel))"}
-          }
-        }
-        """
+            {
+              "id": "gcal-evt-walkback",
+              "iCalUID": "gcal-evt-walkback@google.com",
+              "status": "confirmed",
+              "summary": "Walkback synthetic",
+              "description": "\(esc(description))",
+              "location": "\(esc(location))",
+              "start": {"dateTime": "2026-05-16T14:00:00+02:00", "timeZone": "Europe/Berlin"},
+              "end":   {"dateTime": "2026-05-16T16:00:00+02:00", "timeZone": "Europe/Berlin"},
+              "eventType": "\(eventType)",
+              "htmlLink": "https://calendar.google.com/event?eid=gcal-evt-walkback",
+              "organizer": {"email": "organizer@example.com", "self": true},
+              "creator":   {"email": "creator@example.com",   "self": true},
+              "attendees": [
+                {"email": "\(esc(attendeeEmail))", "responseStatus": "accepted", "self": true}
+              ],
+              "conferenceData": {
+                "entryPoints": [
+                  {"entryPointType": "video", "uri": "\(esc(confURI))", "pin": "1234", "accessCode": "ZZ", "password": "p", "passcode": "pc", "meetingCode": "mc"}
+                ],
+                "conferenceSolution": {"key": {"type": "hangoutsMeet"}}
+              },
+              "focusTimeProperties": {
+                "autoDeclineMode": "declineAllConflictingInvitations",
+                "declineMessage": "\(esc(declineMessage))",
+                "chatStatus": "doNotDisturb"
+              },
+              "outOfOfficeProperties": {
+                "autoDeclineMode": "declineAllConflictingInvitations",
+                "declineMessage": "\(esc(declineMessage))"
+              },
+              "workingLocationProperties": {
+                "type": "officeLocation",
+                "officeLocation": {
+                  "buildingId": "\(esc(buildingId))",
+                  "floorId": "F2",
+                  "deskId": "D17",
+                  "label": "Headquarters"
+                },
+                "customLocation": {"label": "\(esc(customLabel))"}
+              }
+            }
+            """
     }
 
     /// Invoke the right mapper entry point for `kind` and return the
@@ -2354,7 +2533,7 @@ final class RelayBodyLeakageTests: XCTestCase {
                 XCTAssertFalse(
                     payloadJSON.contains(sentinel),
                     "Sentinel '\(sentinel)' for forbidden field '\(field)' leaked into "
-                    + "\(kind.rawValue) mapper output: \(payloadJSON)"
+                        + "\(kind.rawValue) mapper output: \(payloadJSON)"
                 )
             }
         }
@@ -2410,10 +2589,14 @@ final class RelayBodyLeakageTests: XCTestCase {
             nowMs: nowMs
         )
         try db.readSQL { rawDB in
-            let stateJSON = (try Row.fetchOne(rawDB, sql:
-                "SELECT state_json FROM presence_state WHERE provider='zoom'")?["state_json"] as String?) ?? ""
+            let stateJSON =
+                (try Row.fetchOne(
+                    rawDB,
+                    sql:
+                        "SELECT state_json FROM presence_state WHERE provider='zoom'")?["state_json"] as String?) ?? ""
             for m in markers {
-                XCTAssertFalse(stateJSON.contains(m),
+                XCTAssertFalse(
+                    stateJSON.contains(m),
                     "Marker '\(m)' MUST NOT appear in presence_state.zoom.state_json for \(eventKind)",
                     file: file, line: line)
             }
@@ -2627,16 +2810,20 @@ final class RelayBodyLeakageTests: XCTestCase {
         guard let obs = VSCodeStableParser.parse(titleWithSentinel) else {
             // Parser correctly returns nil for non-default shape — fallback path:
             let sanitized = IDETitlePathSanitizer.sanitize(titleWithSentinel)
-            XCTAssertFalse(sanitized.contains("/Users/alice"),
+            XCTAssertFalse(
+                sanitized.contains("/Users/alice"),
                 "absolute home path leaked through fallback sanitizer: \(sanitized)")
-            XCTAssertFalse(sanitized.contains("/project"),
+            XCTAssertFalse(
+                sanitized.contains("/project"),
                 "intermediate path component leaked through fallback sanitizer: \(sanitized)")
             return
         }
         // If the parser somehow matched (future format change), assert only basename fields.
-        XCTAssertFalse(obs.workspaceName?.contains("/Users/alice") ?? false,
+        XCTAssertFalse(
+            obs.workspaceName?.contains("/Users/alice") ?? false,
             "absolute path leaked into workspaceName: \(obs.workspaceName ?? "")")
-        XCTAssertFalse(obs.fileBasename?.contains(sentinel) ?? false,
+        XCTAssertFalse(
+            obs.fileBasename?.contains(sentinel) ?? false,
             "sentinel leaked into fileBasename: \(obs.fileBasename ?? "")")
     }
 
@@ -2655,7 +2842,8 @@ final class RelayBodyLeakageTests: XCTestCase {
             nowMs: 1_000
         )
         for (key, value) in event.payload {
-            XCTAssertFalse(value.contains("/Users/alice"),
+            XCTAssertFalse(
+                value.contains("/Users/alice"),
                 "absolute path leaked through walkback: \(key)=\(value)")
         }
     }
@@ -2664,9 +2852,11 @@ final class RelayBodyLeakageTests: XCTestCase {
         let sentinel = "LEAKED_SENTINEL_VSCODE_P6_TITLE"
         let customTitle = "[main] Foo.swift in /Users/alice/secret/\(sentinel) @ Visual Studio Code"
         let sanitized = IDETitlePathSanitizer.sanitize(customTitle)
-        XCTAssertFalse(sanitized.contains("/Users/alice"),
+        XCTAssertFalse(
+            sanitized.contains("/Users/alice"),
             "absolute path in sanitized title: \(sanitized)")
-        XCTAssertFalse(sanitized.contains("/secret"),
+        XCTAssertFalse(
+            sanitized.contains("/secret"),
             "intermediate path component in sanitized title: \(sanitized)")
         // Basename of the sentinel path token IS retained — that's the
         // sanitizer's intended behavior. Verify it.
@@ -2676,28 +2866,29 @@ final class RelayBodyLeakageTests: XCTestCase {
     func test_p6_walkback_jetbrainsRecentProjectObserved_runManagerNeverLeaks() {
         let sentinel = "LEAKED_SENTINEL_JB_P6"
         let xml = """
-        <application>
-          <component name="RecentProjectsManager">
-            <option name="additionalInfo">
-              <map>
-                <entry key="$USER_HOME$/Desktop/leaf">
-                  <value>
-                    <RecentProjectMetaInfo activationTimestamp="1747000000000">
-                      <option name="displayName" value="leaf" />
-                      <runManager><secret>\(sentinel)</secret></runManager>
-                      <frame><option name="extendedState" value="\(sentinel)-frame" /></frame>
-                    </RecentProjectMetaInfo>
-                  </value>
-                </entry>
-              </map>
-            </option>
-          </component>
-        </application>
-        """
+            <application>
+              <component name="RecentProjectsManager">
+                <option name="additionalInfo">
+                  <map>
+                    <entry key="$USER_HOME$/Desktop/leaf">
+                      <value>
+                        <RecentProjectMetaInfo activationTimestamp="1747000000000">
+                          <option name="displayName" value="leaf" />
+                          <runManager><secret>\(sentinel)</secret></runManager>
+                          <frame><option name="extendedState" value="\(sentinel)-frame" /></frame>
+                        </RecentProjectMetaInfo>
+                      </value>
+                    </entry>
+                  </map>
+                </option>
+              </component>
+            </application>
+            """
         let entries = JetBrainsRecentProjectsWatcher.parseRecentProjectsXML(xml)
         XCTAssertEqual(entries.count, 1)
         for entry in entries {
-            XCTAssertFalse(entry.displayName.contains(sentinel),
+            XCTAssertFalse(
+                entry.displayName.contains(sentinel),
                 "sentinel leaked into displayName: \(entry.displayName)")
         }
         // Walk the build event too.
@@ -2709,7 +2900,8 @@ final class RelayBodyLeakageTests: XCTestCase {
             outsideWatchedFolder: true
         )
         for (key, value) in event.payload {
-            XCTAssertFalse(value.contains(sentinel),
+            XCTAssertFalse(
+                value.contains(sentinel),
                 "sentinel leaked through JetBrains walkback: \(key)=\(value)")
         }
     }
@@ -2722,7 +2914,7 @@ final class RelayBodyLeakageTests: XCTestCase {
             "LEAKED_SENTINEL_VSCODE_P6_FILE_BODY",
             "LEAKED_SENTINEL_VSCODE_P6_PATH",
             "LEAKED_SENTINEL_VSCODE_P6_TITLE",
-            "LEAKED_SENTINEL_JB_P6"
+            "LEAKED_SENTINEL_JB_P6",
         ]
         var events: [RawEvent] = []
 
@@ -2739,23 +2931,25 @@ final class RelayBodyLeakageTests: XCTestCase {
             #"{"folder":"file:///Users/alice/Desktop/leaf"}"#,
             homeDir: "/Users/alice"
         ) {
-            events.append(VSCodeWorkspaceWatcher.buildEvent(
-                bundleID: "com.microsoft.VSCode",
-                workspaceName: parsed.workspaceName,
-                sanitizedPath: parsed.sanitizedPath,
-                watchedFolderID: nil,
-                nowMs: 1_000
-            ))
+            events.append(
+                VSCodeWorkspaceWatcher.buildEvent(
+                    bundleID: "com.microsoft.VSCode",
+                    workspaceName: parsed.workspaceName,
+                    sanitizedPath: parsed.sanitizedPath,
+                    watchedFolderID: nil,
+                    nowMs: 1_000
+                ))
         }
 
         // jetbrains_recent_project_observed — displayName only.
-        events.append(JetBrainsRecentProjectsWatcher.buildEvent(
-            bundleID: "com.jetbrains.pycharm",
-            versionDir: "PyCharm2025.1",
-            displayName: "ml-research",
-            activationTimestampMs: 1_747_000_000_000,
-            outsideWatchedFolder: true
-        ))
+        events.append(
+            JetBrainsRecentProjectsWatcher.buildEvent(
+                bundleID: "com.jetbrains.pycharm",
+                versionDir: "PyCharm2025.1",
+                displayName: "ml-research",
+                activationTimestampMs: 1_747_000_000_000,
+                outsideWatchedFolder: true
+            ))
 
         // ide_window_title_observed payload would only be built via the
         // planner; sanitizer is its sole privacy gate — covered by
@@ -2764,7 +2958,8 @@ final class RelayBodyLeakageTests: XCTestCase {
         for event in events {
             let mirror = String(describing: event.payload)
             for sentinel in sentinels {
-                XCTAssertFalse(mirror.contains(sentinel),
+                XCTAssertFalse(
+                    mirror.contains(sentinel),
                     "P6 sentinel \(sentinel) leaked in payload: \(mirror)")
             }
         }

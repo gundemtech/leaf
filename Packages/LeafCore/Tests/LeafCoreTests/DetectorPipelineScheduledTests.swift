@@ -5,8 +5,9 @@
 // assert blocker emission, partial-unique idempotency, auto-resolve when a
 // linear status_transition event lands, and where_stopped append/skip behavior.
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class DetectorPipelineScheduledTests: XCTestCase {
@@ -85,20 +86,24 @@ final class DetectorPipelineScheduledTests: XCTestCase {
 
     private func blockerRows(_ db: LeafCore.Database) throws -> [Row] {
         try db.readSQL { rawDB in
-            try Row.fetchAll(rawDB, sql: """
-                SELECT id, target_kind, target_ref, blocker_kind,
-                       started_at_ms, resolved_at_ms, resolved_by_event_id
-                  FROM blockers ORDER BY id ASC
-                """)
+            try Row.fetchAll(
+                rawDB,
+                sql: """
+                    SELECT id, target_kind, target_ref, blocker_kind,
+                           started_at_ms, resolved_at_ms, resolved_by_event_id
+                      FROM blockers ORDER BY id ASC
+                    """)
         }
     }
 
     private func whereStoppedRows(_ db: LeafCore.Database) throws -> [Row] {
         try db.readSQL { rawDB in
-            try Row.fetchAll(rawDB, sql: """
-                SELECT id, generated_at_ms, anchor_event_id, excerpt, wip_signals_json
-                  FROM where_stopped_log ORDER BY id ASC
-                """)
+            try Row.fetchAll(
+                rawDB,
+                sql: """
+                    SELECT id, generated_at_ms, anchor_event_id, excerpt, wip_signals_json
+                      FROM where_stopped_log ORDER BY id ASC
+                    """)
         }
     }
 
@@ -139,23 +144,28 @@ final class DetectorPipelineScheduledTests: XCTestCase {
 
         // A recent status_transition event for LEAF-2 — the auto-resolve query
         // matches on payload.event_kind == "status_transition" + issue_key.
-        try writeEvent(db, tsMs: 5_000, payload: [
-            "event_kind": "status_transition",
-            "issue_key": "LEAF-2",
-            "to_state_name": "In Review",
-            "to_state_type": "started"
-        ])
+        try writeEvent(
+            db, tsMs: 5_000,
+            payload: [
+                "event_kind": "status_transition",
+                "issue_key": "LEAF-2",
+                "to_state_name": "In Review",
+                "to_state_type": "started",
+            ])
 
         // Sentinel returns empty list → LEAF-2 is no longer stuck.
-        try DetectorPipeline.runScheduled(moat: scheduledMoat(stuckHits: []),
-                                          nowMs: 9_999, in: db)
+        try DetectorPipeline.runScheduled(
+            moat: scheduledMoat(stuckHits: []),
+            nowMs: 9_999, in: db)
 
         let rows = try blockerRows(db)
         XCTAssertEqual(rows.count, 1)
-        XCTAssertEqual(rows.first?["resolved_at_ms"] as Int64?, 5_000,
-                       "resolved_at_ms == ts of the status_transition event")
-        XCTAssertEqual(rows.first?["resolved_by_event_id"] as Int64?, 1,
-                       "resolved_by_event_id == id of the transition event (event #1)")
+        XCTAssertEqual(
+            rows.first?["resolved_at_ms"] as Int64?, 5_000,
+            "resolved_at_ms == ts of the status_transition event")
+        XCTAssertEqual(
+            rows.first?["resolved_by_event_id"] as Int64?, 1,
+            "resolved_by_event_id == id of the transition event (event #1)")
     }
 
     func testNoDoubleEmitOnSameRun() throws {

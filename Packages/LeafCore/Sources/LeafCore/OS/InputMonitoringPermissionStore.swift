@@ -7,7 +7,7 @@ import Foundation
 public enum InputMonitoringPermissionState: Equatable, Sendable {
     case notRequested
     case granted
-    case denied(Int64)   // ms epoch когда зарегистрировано
+    case denied(Int64)  // ms epoch когда зарегистрировано
     case unavailable
 }
 
@@ -67,7 +67,7 @@ public final class InputMonitoringPermissionStore: @unchecked Sendable {
     public func shouldProbe(nowMs: Int64) -> Bool {
         switch cachedState() {
         case .notRequested: return true
-        case .granted: return true   // re-check: юзер мог revoke в System Settings
+        case .granted: return true  // re-check: юзер мог revoke в System Settings
         case .denied(let t): return (nowMs - t) > Self.denialBackoffMs
         case .unavailable: return false
         }

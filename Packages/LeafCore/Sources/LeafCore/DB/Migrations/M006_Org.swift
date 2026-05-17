@@ -8,8 +8,8 @@ import GRDB
 /// `created_by_member_id` — logical FK на `team_members.id`; SQL FOREIGN KEY
 /// не объявляется (см. spec 5.1.A §4 — insertion order paradox + foreign_keys
 /// pragma не enabled).
-public extension DatabaseMigrator {
-    mutating func registerMigration006Org() {
+extension DatabaseMigrator {
+    public mutating func registerMigration006Org() {
         registerMigration("006_org") { db in
             try db.create(table: Schema.Org.tableName, ifNotExists: true) { t in
                 t.primaryKey(Schema.Org.id, .text)

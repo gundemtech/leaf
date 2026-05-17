@@ -18,7 +18,7 @@ let package = Package(
         // Track-6 P1 Phase E — thin native binary invoked by Claude Code hooks.
         // Reads JSON payload from stdin, forwards envelope to Unix domain socket
         // where Agent listens. See Sources/LeafHookBridge/main.swift.
-        .executable(name: "leaf-hook-bridge", targets: ["LeafHookBridge"])
+        .executable(name: "leaf-hook-bridge", targets: ["LeafHookBridge"]),
     ],
     dependencies: [
         // GRDB fork with SQLCipher enabled. Tracks groue/GRDB.swift v7.10.0
@@ -37,7 +37,7 @@ let package = Package(
             name: "LeafCorePrivate",
             dependencies: [
                 "LeafCore",
-                .product(name: "GRDB", package: "GRDB.swift-sqlcipher")
+                .product(name: "GRDB", package: "GRDB.swift-sqlcipher"),
             ],
             path: "Sources/LeafCorePrivate"
         ),
@@ -69,6 +69,6 @@ let package = Package(
             name: "LeafHookBridgeTests",
             dependencies: ["LeafHookBridge"],
             path: "Tests/LeafHookBridgeTests"
-        )
+        ),
     ]
 )

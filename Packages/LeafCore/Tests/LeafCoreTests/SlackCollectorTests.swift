@@ -4,6 +4,7 @@
 
 import XCTest
 import os
+
 @testable import LeafCore
 
 final class SlackCollectorTests: XCTestCase {
@@ -239,7 +240,7 @@ final class SlackCollectorTests: XCTestCase {
             payload: [
                 "source": "slack",
                 "event_kind": "slack_huddle_state_change",
-                "state": state
+                "state": state,
             ]
         )
     }
@@ -273,16 +274,17 @@ final class SlackCollectorTests: XCTestCase {
         let cursorMs: Int64 = 1_700_000_300_000
         let periodStart: Int64 = 1_700_000_000_000
         let periodEnd: Int64 = 1_700_000_300_000
-        await provider.setResult(SlackTickResult(
-            huddle: .unknown,  // не emit'ит huddle event — очищает изоляцию теста
-            channelMessageCounts: [
-                SlackChannelMessageCount(channelName: "engineering", count: 3),
-                SlackChannelMessageCount(channelName: "DM", count: 5)
-            ],
-            cursorMs: cursorMs,
-            periodStartMs: periodStart,
-            periodEndMs: periodEnd
-        ))
+        await provider.setResult(
+            SlackTickResult(
+                huddle: .unknown,  // не emit'ит huddle event — очищает изоляцию теста
+                channelMessageCounts: [
+                    SlackChannelMessageCount(channelName: "engineering", count: 3),
+                    SlackChannelMessageCount(channelName: "DM", count: 5),
+                ],
+                cursorMs: cursorMs,
+                periodStartMs: periodStart,
+                periodEndMs: periodEnd
+            ))
 
         let collector = makeCollector(db: db, provider: provider)
         let result = await collector.performTick()
@@ -332,13 +334,14 @@ final class SlackCollectorTests: XCTestCase {
         try db.write([huddleEventInDB(state: "default_unset", atMs: 1_700_000_000_000)])
 
         let provider = MockSlackAPIProvider()
-        await provider.setResult(SlackTickResult(
-            huddle: .inAHuddle,
-            channelMessageCounts: [],
-            cursorMs: nil,
-            periodStartMs: 0,
-            periodEndMs: 0
-        ))
+        await provider.setResult(
+            SlackTickResult(
+                huddle: .inAHuddle,
+                channelMessageCounts: [],
+                cursorMs: nil,
+                periodStartMs: 0,
+                periodEndMs: 0
+            ))
 
         let now = Date(timeIntervalSince1970: 1_700_000_900)
         let collector = makeCollector(db: db, provider: provider)
@@ -362,13 +365,14 @@ final class SlackCollectorTests: XCTestCase {
         try db.write([huddleEventInDB(state: "in_a_huddle", atMs: baselineMs)])
 
         let provider = MockSlackAPIProvider()
-        await provider.setResult(SlackTickResult(
-            huddle: .inAHuddle,
-            channelMessageCounts: [],
-            cursorMs: nil,
-            periodStartMs: 0,
-            periodEndMs: 0
-        ))
+        await provider.setResult(
+            SlackTickResult(
+                huddle: .inAHuddle,
+                channelMessageCounts: [],
+                cursorMs: nil,
+                periodStartMs: 0,
+                periodEndMs: 0
+            ))
 
         let collector = makeCollector(db: db, provider: provider)
         let result = await collector.performTick()
@@ -388,13 +392,14 @@ final class SlackCollectorTests: XCTestCase {
         try db.write([huddleEventInDB(state: "in_a_huddle", atMs: 1_700_000_000_000)])
 
         let provider = MockSlackAPIProvider()
-        await provider.setResult(SlackTickResult(
-            huddle: .unknown,
-            channelMessageCounts: [],
-            cursorMs: nil,
-            periodStartMs: 0,
-            periodEndMs: 0
-        ))
+        await provider.setResult(
+            SlackTickResult(
+                huddle: .unknown,
+                channelMessageCounts: [],
+                cursorMs: nil,
+                periodStartMs: 0,
+                periodEndMs: 0
+            ))
 
         let collector = makeCollector(db: db, provider: provider)
         let result = await collector.performTick()
@@ -411,26 +416,28 @@ final class SlackCollectorTests: XCTestCase {
 
         let provider = MockSlackAPIProvider()
         // First tick: даёт cursor=10000.
-        await provider.setResult(SlackTickResult(
-            huddle: .unknown,
-            channelMessageCounts: [
-                SlackChannelMessageCount(channelName: "engineering", count: 1)
-            ],
-            cursorMs: 10_000,
-            periodStartMs: 5_000,
-            periodEndMs: 10_000
-        ))
+        await provider.setResult(
+            SlackTickResult(
+                huddle: .unknown,
+                channelMessageCounts: [
+                    SlackChannelMessageCount(channelName: "engineering", count: 1)
+                ],
+                cursorMs: 10_000,
+                periodStartMs: 5_000,
+                periodEndMs: 10_000
+            ))
         let collector = makeCollector(db: db, provider: provider)
         _ = await collector.performTick()
 
         // Second tick: empty batch, no transition.
-        await provider.setResult(SlackTickResult(
-            huddle: .unknown,
-            channelMessageCounts: [],
-            cursorMs: nil,
-            periodStartMs: 0,
-            periodEndMs: 0
-        ))
+        await provider.setResult(
+            SlackTickResult(
+                huddle: .unknown,
+                channelMessageCounts: [],
+                cursorMs: nil,
+                periodStartMs: 0,
+                periodEndMs: 0
+            ))
         let result = await collector.performTick()
 
         XCTAssertEqual(result.messageEventsEmitted, 0)
@@ -461,16 +468,17 @@ final class SlackCollectorTests: XCTestCase {
         let cursorMs: Int64 = 1_700_000_300_000
         let periodStart: Int64 = 1_700_000_000_000
         let periodEnd: Int64 = 1_700_000_300_000
-        await provider.setResult(SlackTickResult(
-            huddle: .unknown,
-            channelMessageCounts: [
-                SlackChannelMessageCount(channelName: "engineering", count: 3, reactionsCount: 7),
-                SlackChannelMessageCount(channelName: "random", count: 1, reactionsCount: 0)
-            ],
-            cursorMs: cursorMs,
-            periodStartMs: periodStart,
-            periodEndMs: periodEnd
-        ))
+        await provider.setResult(
+            SlackTickResult(
+                huddle: .unknown,
+                channelMessageCounts: [
+                    SlackChannelMessageCount(channelName: "engineering", count: 3, reactionsCount: 7),
+                    SlackChannelMessageCount(channelName: "random", count: 1, reactionsCount: 0),
+                ],
+                cursorMs: cursorMs,
+                periodStartMs: periodStart,
+                periodEndMs: periodEnd
+            ))
 
         let collector = makeCollector(db: db, provider: provider)
         let result = await collector.performTick()
@@ -486,7 +494,8 @@ final class SlackCollectorTests: XCTestCase {
         let eng = writtenEvents.first(where: { $0.payload["channel_name"] == "engineering" })
         let rand = writtenEvents.first(where: { $0.payload["channel_name"] == "random" })
         XCTAssertEqual(eng?.payload["reactions_count"], "7")
-        XCTAssertNil(rand?.payload["reactions_count"], "ключ должен ОТСУТСТВОВАТЬ при reactionsCount=0, не быть пустой строкой")
+        XCTAssertNil(
+            rand?.payload["reactions_count"], "ключ должен ОТСУТСТВОВАТЬ при reactionsCount=0, не быть пустой строкой")
 
         // Sanity: existing fields неизменны.
         XCTAssertEqual(eng?.payload["count"], "3")
@@ -505,14 +514,15 @@ final class SlackCollectorTests: XCTestCase {
         let collector = makeCollector(db: db, provider: provider)
 
         // Tick 1: observed=":coffee:" → emit slack_status_change.
-        await provider.setResult(SlackTickResult(
-            huddle: .defaultUnset,
-            channelMessageCounts: [],
-            cursorMs: nil,
-            periodStartMs: 0, periodEndMs: 0,
-            statusEmoji: ":coffee:",
-            statusExpirationTs: 0
-        ))
+        await provider.setResult(
+            SlackTickResult(
+                huddle: .defaultUnset,
+                channelMessageCounts: [],
+                cursorMs: nil,
+                periodStartMs: 0, periodEndMs: 0,
+                statusEmoji: ":coffee:",
+                statusExpirationTs: 0
+            ))
         let r1 = await collector.performTick()
         XCTAssertTrue(r1.statusChangeEmitted, "first observation always emits")
 
@@ -521,26 +531,29 @@ final class SlackCollectorTests: XCTestCase {
         XCTAssertFalse(r2.statusChangeEmitted, "unchanged emoji не emit")
 
         // Tick 3: different emoji → emit.
-        await provider.setResult(SlackTickResult(
-            huddle: .defaultUnset,
-            channelMessageCounts: [],
-            cursorMs: nil,
-            periodStartMs: 0, periodEndMs: 0,
-            statusEmoji: ":pizza:",
-            statusExpirationTs: 1_730_000_000_000
-        ))
+        await provider.setResult(
+            SlackTickResult(
+                huddle: .defaultUnset,
+                channelMessageCounts: [],
+                cursorMs: nil,
+                periodStartMs: 0, periodEndMs: 0,
+                statusEmoji: ":pizza:",
+                statusExpirationTs: 1_730_000_000_000
+            ))
         let r3 = await collector.performTick()
         XCTAssertTrue(r3.statusChangeEmitted, "different emoji → emit")
 
         // Verify DB rows.
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSinceNow: -3600),
-            end: Date(timeIntervalSinceNow: 3600)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSinceNow: -3600),
+                end: Date(timeIntervalSinceNow: 3600)
+            ))
         let statusEvents = stored.filter { $0.payload["event_kind"] == "slack_status_change" }
         XCTAssertEqual(statusEvents.count, 2, "1 + 1 status_change events")
-        XCTAssertEqual(Set(statusEvents.compactMap { $0.payload["status_emoji"] }),
-                       Set([":coffee:", ":pizza:"]))
+        XCTAssertEqual(
+            Set(statusEvents.compactMap { $0.payload["status_emoji"] }),
+            Set([":coffee:", ":pizza:"]))
         let pizza = try XCTUnwrap(statusEvents.first { $0.payload["status_emoji"] == ":pizza:" })
         XCTAssertEqual(pizza.payload["status_expiration_ts"], "1730000000000")
     }
@@ -553,14 +566,15 @@ final class SlackCollectorTests: XCTestCase {
         let provider = MockSlackAPIProvider()
         let collector = makeCollector(db: db, provider: provider)
 
-        await provider.setResult(SlackTickResult(
-            huddle: .defaultUnset,
-            channelMessageCounts: [],
-            cursorMs: nil,
-            periodStartMs: 0, periodEndMs: 0,
-            statusEmoji: "",
-            statusExpirationTs: 0
-        ))
+        await provider.setResult(
+            SlackTickResult(
+                huddle: .defaultUnset,
+                channelMessageCounts: [],
+                cursorMs: nil,
+                periodStartMs: 0, periodEndMs: 0,
+                statusEmoji: "",
+                statusExpirationTs: 0
+            ))
         // First-ever observation always emits (nil → "").
         let r1 = await collector.performTick()
         XCTAssertTrue(r1.statusChangeEmitted)
@@ -578,31 +592,33 @@ final class SlackCollectorTests: XCTestCase {
         let collector = makeCollector(db: db, provider: provider)
 
         let baseMs: Int64 = 1_700_000_000_000
-        await provider.setResult(SlackTickResult(
-            huddle: .defaultUnset,
-            channelMessageCounts: [
-                SlackChannelMessageCount(
-                    channelName: "engineering",
-                    count: 7,
-                    reactionsCount: 0,
-                    threadReplyCount: 5
-                )
-            ],
-            cursorMs: baseMs,
-            periodStartMs: baseMs - 300_000,
-            periodEndMs: baseMs,
-            statusEmoji: "",
-            statusExpirationTs: 0
-        ))
+        await provider.setResult(
+            SlackTickResult(
+                huddle: .defaultUnset,
+                channelMessageCounts: [
+                    SlackChannelMessageCount(
+                        channelName: "engineering",
+                        count: 7,
+                        reactionsCount: 0,
+                        threadReplyCount: 5
+                    )
+                ],
+                cursorMs: baseMs,
+                periodStartMs: baseMs - 300_000,
+                periodEndMs: baseMs,
+                statusEmoji: "",
+                statusExpirationTs: 0
+            ))
 
         let r = await collector.performTick()
         XCTAssertEqual(r.messageEventsEmitted, 1)
         XCTAssertEqual(r.threadReplyEventsEmitted, 1)
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1_000_000) / 1000),
-            end: Date(timeIntervalSince1970: TimeInterval(baseMs + 1_000_000) / 1000)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1_000_000) / 1000),
+                end: Date(timeIntervalSince1970: TimeInterval(baseMs + 1_000_000) / 1000)
+            ))
         let regular = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "slack_message_authored_aggregate" })
         XCTAssertEqual(regular.payload["count"], "7")
 
@@ -618,20 +634,21 @@ final class SlackCollectorTests: XCTestCase {
         let collector = makeCollector(db: db, provider: provider)
 
         let baseMs: Int64 = 1_700_000_000_000
-        await provider.setResult(SlackTickResult(
-            huddle: .defaultUnset,
-            channelMessageCounts: [
-                SlackChannelMessageCount(
-                    channelName: "engineering",
-                    count: 5,
-                    reactionsCount: 0,
-                    threadReplyCount: 0
-                )
-            ],
-            cursorMs: baseMs,
-            periodStartMs: baseMs - 300_000,
-            periodEndMs: baseMs
-        ))
+        await provider.setResult(
+            SlackTickResult(
+                huddle: .defaultUnset,
+                channelMessageCounts: [
+                    SlackChannelMessageCount(
+                        channelName: "engineering",
+                        count: 5,
+                        reactionsCount: 0,
+                        threadReplyCount: 0
+                    )
+                ],
+                cursorMs: baseMs,
+                periodStartMs: baseMs - 300_000,
+                periodEndMs: baseMs
+            ))
 
         let r = await collector.performTick()
         XCTAssertEqual(r.messageEventsEmitted, 1)
@@ -652,13 +669,14 @@ final class SlackCollectorTests: XCTestCase {
 
         // Tick 1 — presence=active.
         await provider.setPresence(.active)
-        await provider.setResult(SlackTickResult(
-            huddle: .unknown,
-            channelMessageCounts: [],
-            cursorMs: nil,
-            periodStartMs: 0,
-            periodEndMs: 0
-        ))
+        await provider.setResult(
+            SlackTickResult(
+                huddle: .unknown,
+                channelMessageCounts: [],
+                cursorMs: nil,
+                periodStartMs: 0,
+                periodEndMs: 0
+            ))
         let now1 = Date(timeIntervalSince1970: 1_700_000_100)
         let r1 = await collector.performTick(now: now1)
         XCTAssertTrue(r1.presenceStateEmitted, "always emit on non-skipped tick")
@@ -682,10 +700,11 @@ final class SlackCollectorTests: XCTestCase {
         XCTAssertEqual(calls3, 3)
 
         // Verify DB: 3 slack_presence_state events с правильным state mapping.
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSince1970: 1_700_000_000),
-            end: Date(timeIntervalSince1970: 1_700_001_000)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: 1_700_000_000),
+                end: Date(timeIntervalSince1970: 1_700_001_000)
+            ))
         let presenceEvents = stored.filter { $0.payload["event_kind"] == "slack_presence_state" }
         XCTAssertEqual(presenceEvents.count, 3, "3 ticks → 3 pulses")
         for e in presenceEvents {
@@ -693,7 +712,8 @@ final class SlackCollectorTests: XCTestCase {
             XCTAssertEqual(e.payload["source"], "slack")
             XCTAssertNotNil(e.payload["observed_at_ms"])
         }
-        let states = presenceEvents
+        let states =
+            presenceEvents
             .compactMap { $0.payload["state"] }
             .sorted()
         XCTAssertEqual(states, ["active", "away", "unknown"])
@@ -716,19 +736,21 @@ final class SlackCollectorTests: XCTestCase {
         let collector = makeCollector(db: db, provider: provider)
 
         // Tick 1 — DND active с user-set snooze.
-        await provider.setDND(SlackDNDState(
-            dndEnabled: true,
-            snoozeUntilMs: 1_700_001_000_000,
-            nextDNDStartMs: nil,
-            nextDNDEndMs: nil
-        ))
-        await provider.setResult(SlackTickResult(
-            huddle: .unknown,
-            channelMessageCounts: [],
-            cursorMs: nil,
-            periodStartMs: 0,
-            periodEndMs: 0
-        ))
+        await provider.setDND(
+            SlackDNDState(
+                dndEnabled: true,
+                snoozeUntilMs: 1_700_001_000_000,
+                nextDNDStartMs: nil,
+                nextDNDEndMs: nil
+            ))
+        await provider.setResult(
+            SlackTickResult(
+                huddle: .unknown,
+                channelMessageCounts: [],
+                cursorMs: nil,
+                periodStartMs: 0,
+                periodEndMs: 0
+            ))
         let now1 = Date(timeIntervalSince1970: 1_700_000_100)
         let r1 = await collector.performTick(now: now1)
         XCTAssertTrue(r1.dndStateEmitted, "always emit on non-skipped tick")
@@ -736,12 +758,13 @@ final class SlackCollectorTests: XCTestCase {
         XCTAssertEqual(calls1, 1)
 
         // Tick 2 — scheduled DND only (recurring schedule), no active snooze.
-        await provider.setDND(SlackDNDState(
-            dndEnabled: false,
-            snoozeUntilMs: nil,
-            nextDNDStartMs: 1_700_010_000_000,
-            nextDNDEndMs: 1_700_020_000_000
-        ))
+        await provider.setDND(
+            SlackDNDState(
+                dndEnabled: false,
+                snoozeUntilMs: nil,
+                nextDNDStartMs: 1_700_010_000_000,
+                nextDNDEndMs: 1_700_020_000_000
+            ))
         let now2 = Date(timeIntervalSince1970: 1_700_000_400)
         let r2 = await collector.performTick(now: now2)
         XCTAssertTrue(r2.dndStateEmitted)
@@ -757,10 +780,11 @@ final class SlackCollectorTests: XCTestCase {
         XCTAssertEqual(calls3, 3)
 
         // Verify DB: 3 slack_dnd_state events с правильным payload mapping.
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSince1970: 1_700_000_000),
-            end: Date(timeIntervalSince1970: 1_700_001_000)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: 1_700_000_000),
+                end: Date(timeIntervalSince1970: 1_700_001_000)
+            ))
         let dndEvents = stored.filter { $0.payload["event_kind"] == "slack_dnd_state" }
         XCTAssertEqual(dndEvents.count, 3, "3 ticks → 3 pulses")
         for e in dndEvents {
@@ -771,27 +795,30 @@ final class SlackCollectorTests: XCTestCase {
         }
 
         // Tick 1 — dnd_enabled=true + snooze_until_ms; next_dnd_* ОМИТЯТСЯ (nil → no key).
-        let activeEv = try XCTUnwrap(dndEvents.first {
-            $0.payload["observed_at_ms"] == String(Int64(now1.timeIntervalSince1970 * 1000))
-        })
+        let activeEv = try XCTUnwrap(
+            dndEvents.first {
+                $0.payload["observed_at_ms"] == String(Int64(now1.timeIntervalSince1970 * 1000))
+            })
         XCTAssertEqual(activeEv.payload["dnd_enabled"], "true")
         XCTAssertEqual(activeEv.payload["snooze_until_ms"], "1700001000000")
         XCTAssertNil(activeEv.payload["next_dnd_start_ms"], "nil ts → omitted from payload")
         XCTAssertNil(activeEv.payload["next_dnd_end_ms"])
 
         // Tick 2 — dnd_enabled=false + scheduled window; snooze_until ОМИТНУТ.
-        let scheduledEv = try XCTUnwrap(dndEvents.first {
-            $0.payload["observed_at_ms"] == String(Int64(now2.timeIntervalSince1970 * 1000))
-        })
+        let scheduledEv = try XCTUnwrap(
+            dndEvents.first {
+                $0.payload["observed_at_ms"] == String(Int64(now2.timeIntervalSince1970 * 1000))
+            })
         XCTAssertEqual(scheduledEv.payload["dnd_enabled"], "false")
         XCTAssertNil(scheduledEv.payload["snooze_until_ms"])
         XCTAssertEqual(scheduledEv.payload["next_dnd_start_ms"], "1700010000000")
         XCTAssertEqual(scheduledEv.payload["next_dnd_end_ms"], "1700020000000")
 
         // Tick 3 — graceful empty: dnd_enabled=false, все ts nil.
-        let emptyEv = try XCTUnwrap(dndEvents.first {
-            $0.payload["observed_at_ms"] == String(Int64(now3.timeIntervalSince1970 * 1000))
-        })
+        let emptyEv = try XCTUnwrap(
+            dndEvents.first {
+                $0.payload["observed_at_ms"] == String(Int64(now3.timeIntervalSince1970 * 1000))
+            })
         XCTAssertEqual(emptyEv.payload["dnd_enabled"], "false")
         XCTAssertNil(emptyEv.payload["snooze_until_ms"])
         XCTAssertNil(emptyEv.payload["next_dnd_start_ms"])
@@ -824,15 +851,16 @@ final class SlackCollectorTests: XCTestCase {
                 count: 1,
                 periodStartMs: periodStart,
                 periodEndMs: periodEnd
-            )
+            ),
         ])
-        await provider.setResult(SlackTickResult(
-            huddle: .unknown,
-            channelMessageCounts: [],
-            cursorMs: nil,
-            periodStartMs: 0,
-            periodEndMs: 0
-        ))
+        await provider.setResult(
+            SlackTickResult(
+                huddle: .unknown,
+                channelMessageCounts: [],
+                cursorMs: nil,
+                periodStartMs: 0,
+                periodEndMs: 0
+            ))
 
         let now = Date(timeIntervalSince1970: 1_700_000_400)
         let result = await collector.performTick(now: now)
@@ -844,10 +872,11 @@ final class SlackCollectorTests: XCTestCase {
         let mentionSinceHistory = await provider.mentionSinceHistory()
         XCTAssertEqual(mentionSinceHistory, [0], "bootstrap → since=0 (no stored cursor)")
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSince1970: TimeInterval(periodEnd) / 1000.0 - 1),
-            end: Date(timeIntervalSince1970: TimeInterval(periodEnd) / 1000.0 + 1)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: TimeInterval(periodEnd) / 1000.0 - 1),
+                end: Date(timeIntervalSince1970: TimeInterval(periodEnd) / 1000.0 + 1)
+            ))
         let mentions = stored.filter { $0.payload["event_kind"] == "slack_mention_received_aggregate" }
         XCTAssertEqual(mentions.count, 2)
         for e in mentions {
@@ -877,19 +906,21 @@ final class SlackCollectorTests: XCTestCase {
         // 5 files: 2 images + 1 code + 1 doc + 1 other.
         let periodStart: Int64 = 1_700_000_000_000
         let periodEnd: Int64 = 1_700_000_300_000
-        await provider.setFiles(SlackFileUploadSummary(
-            count: 5,
-            typesSummary: ["image": 2, "code": 1, "doc": 1, "other": 1],
-            periodStartMs: periodStart,
-            periodEndMs: periodEnd
-        ))
-        await provider.setResult(SlackTickResult(
-            huddle: .unknown,
-            channelMessageCounts: [],
-            cursorMs: nil,
-            periodStartMs: 0,
-            periodEndMs: 0
-        ))
+        await provider.setFiles(
+            SlackFileUploadSummary(
+                count: 5,
+                typesSummary: ["image": 2, "code": 1, "doc": 1, "other": 1],
+                periodStartMs: periodStart,
+                periodEndMs: periodEnd
+            ))
+        await provider.setResult(
+            SlackTickResult(
+                huddle: .unknown,
+                channelMessageCounts: [],
+                cursorMs: nil,
+                periodStartMs: 0,
+                periodEndMs: 0
+            ))
 
         let now = Date(timeIntervalSince1970: 1_700_000_400)
         let result = await collector.performTick(now: now)
@@ -903,10 +934,11 @@ final class SlackCollectorTests: XCTestCase {
 
         // Найти сам event — timestamp = nowMs (UTC).
         let nowMs = Int64(now.timeIntervalSince1970 * 1000)
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0 - 1),
-            end: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0 + 1)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0 - 1),
+                end: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0 + 1)
+            ))
         let fileEvents = stored.filter { $0.payload["event_kind"] == "slack_file_uploaded_aggregate" }
         XCTAssertEqual(fileEvents.count, 1, "single aggregate per tick")
         let ev = try XCTUnwrap(fileEvents.first)
@@ -926,10 +958,11 @@ final class SlackCollectorTests: XCTestCase {
         let result2 = await collector.performTick(now: now2)
         XCTAssertTrue(result2.fileUploadEventEmitted, "zero count → still emit (substrate continuity)")
         let nowMs2 = Int64(now2.timeIntervalSince1970 * 1000)
-        let stored2 = try db.events(in: DateInterval(
-            start: Date(timeIntervalSince1970: TimeInterval(nowMs2) / 1000.0 - 1),
-            end: Date(timeIntervalSince1970: TimeInterval(nowMs2) / 1000.0 + 1)
-        ))
+        let stored2 = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: TimeInterval(nowMs2) / 1000.0 - 1),
+                end: Date(timeIntervalSince1970: TimeInterval(nowMs2) / 1000.0 + 1)
+            ))
         let fileEvents2 = stored2.filter { $0.payload["event_kind"] == "slack_file_uploaded_aggregate" }
         XCTAssertEqual(fileEvents2.count, 1)
         let ev2 = try XCTUnwrap(fileEvents2.first)
@@ -953,25 +986,27 @@ final class SlackCollectorTests: XCTestCase {
 
         let periodStart: Int64 = 1_700_000_000_000
         let periodEnd: Int64 = 1_700_000_300_000
-        await provider.setResult(SlackTickResult(
-            huddle: .inAHuddle,
-            channelMessageCounts: [
-                SlackChannelMessageCount(channelName: "engineering", count: 5),
-                SlackChannelMessageCount(channelName: "DM", count: 2)
-            ],
-            cursorMs: periodEnd,
-            periodStartMs: periodStart,
-            periodEndMs: periodEnd,
-            statusEmoji: ":coffee:",
-            statusExpirationTs: 1_700_010_000_000
-        ))
+        await provider.setResult(
+            SlackTickResult(
+                huddle: .inAHuddle,
+                channelMessageCounts: [
+                    SlackChannelMessageCount(channelName: "engineering", count: 5),
+                    SlackChannelMessageCount(channelName: "DM", count: 2),
+                ],
+                cursorMs: periodEnd,
+                periodStartMs: periodStart,
+                periodEndMs: periodEnd,
+                statusEmoji: ":coffee:",
+                statusExpirationTs: 1_700_010_000_000
+            ))
         await provider.setPresence(.active)
-        await provider.setDND(SlackDNDState(
-            dndEnabled: true,
-            snoozeUntilMs: 1_700_001_000_000,
-            nextDNDStartMs: 1_700_010_000_000,
-            nextDNDEndMs: 1_700_020_000_000
-        ))
+        await provider.setDND(
+            SlackDNDState(
+                dndEnabled: true,
+                snoozeUntilMs: 1_700_001_000_000,
+                nextDNDStartMs: 1_700_010_000_000,
+                nextDNDEndMs: 1_700_020_000_000
+            ))
         await provider.setMentions([
             SlackMentionChannelCount(
                 channelName: "engineering",
@@ -984,14 +1019,15 @@ final class SlackCollectorTests: XCTestCase {
                 count: 2,
                 periodStartMs: periodStart,
                 periodEndMs: periodEnd
-            )
+            ),
         ])
-        await provider.setFiles(SlackFileUploadSummary(
-            count: 4,
-            typesSummary: ["image": 2, "code": 1, "doc": 1, "other": 0],
-            periodStartMs: periodStart,
-            periodEndMs: periodEnd
-        ))
+        await provider.setFiles(
+            SlackFileUploadSummary(
+                count: 4,
+                typesSummary: ["image": 2, "code": 1, "doc": 1, "other": 0],
+                periodStartMs: periodStart,
+                periodEndMs: periodEnd
+            ))
 
         _ = await collector.performTick()
 
@@ -1007,8 +1043,9 @@ final class SlackCollectorTests: XCTestCase {
         XCTAssertEqual(state["status_expiration_ts"] as? Int64, 1_700_010_000_000)
         XCTAssertEqual(state["in_huddle"] as? Bool, true)
         XCTAssertEqual(state["huddle_channel"] as? String, "")
-        XCTAssertEqual(state["last_activity_channel"] as? String, "engineering",
-                       "max-count channel — engineering (5) > DM (2)")
+        XCTAssertEqual(
+            state["last_activity_channel"] as? String, "engineering",
+            "max-count channel — engineering (5) > DM (2)")
         XCTAssertEqual(state["mention_count_today"] as? Int, 5, "3 + 2 = 5")
         XCTAssertEqual(state["file_count_today"] as? Int, 4)
 
@@ -1031,17 +1068,18 @@ final class SlackCollectorTests: XCTestCase {
 
         // Inject sentinel-like channel name (paranoid: это всё равно public-safe
         // identifier, но сверим что body keys никогда не появляются).
-        await provider.setResult(SlackTickResult(
-            huddle: .defaultUnset,
-            channelMessageCounts: [
-                SlackChannelMessageCount(channelName: "engineering", count: 1)
-            ],
-            cursorMs: 1_700_000_300_000,
-            periodStartMs: 1_700_000_000_000,
-            periodEndMs: 1_700_000_300_000,
-            statusEmoji: ":pizza:",
-            statusExpirationTs: 0
-        ))
+        await provider.setResult(
+            SlackTickResult(
+                huddle: .defaultUnset,
+                channelMessageCounts: [
+                    SlackChannelMessageCount(channelName: "engineering", count: 1)
+                ],
+                cursorMs: 1_700_000_300_000,
+                periodStartMs: 1_700_000_000_000,
+                periodEndMs: 1_700_000_300_000,
+                statusEmoji: ":pizza:",
+                statusExpirationTs: 0
+            ))
         await provider.setPresence(.active)
         await provider.setDND(.empty)
 
@@ -1052,21 +1090,26 @@ final class SlackCollectorTests: XCTestCase {
         }
         let row = try XCTUnwrap(presence)
         let topLevelKeys = Set(row.state.keys)
-        XCTAssertFalse(topLevelKeys.contains("text"),
-                       "presence_state.slack не должен содержать 'text' top-level key")
-        XCTAssertFalse(topLevelKeys.contains("preview"),
-                       "presence_state.slack не должен содержать 'preview' top-level key")
-        XCTAssertFalse(topLevelKeys.contains("title"),
-                       "presence_state.slack не должен содержать 'title' top-level key")
-        XCTAssertFalse(topLevelKeys.contains("body"),
-                       "presence_state.slack не должен содержать 'body' top-level key")
+        XCTAssertFalse(
+            topLevelKeys.contains("text"),
+            "presence_state.slack не должен содержать 'text' top-level key")
+        XCTAssertFalse(
+            topLevelKeys.contains("preview"),
+            "presence_state.slack не должен содержать 'preview' top-level key")
+        XCTAssertFalse(
+            topLevelKeys.contains("title"),
+            "presence_state.slack не должен содержать 'title' top-level key")
+        XCTAssertFalse(
+            topLevelKeys.contains("body"),
+            "presence_state.slack не должен содержать 'body' top-level key")
 
         // Paranoid: serialized JSON не должен иметь body markers.
         let serialized = try JSONSerialization.data(withJSONObject: row.state, options: [])
         let serializedStr = String(data: serialized, encoding: .utf8) ?? ""
         for forbidden in ["\"text\"", "\"preview\"", "\"title\"", "\"body\""] {
-            XCTAssertFalse(serializedStr.contains(forbidden),
-                           "serialized state не должен содержать ключ \(forbidden)")
+            XCTAssertFalse(
+                serializedStr.contains(forbidden),
+                "serialized state не должен содержать ключ \(forbidden)")
         }
     }
 
@@ -1081,25 +1124,27 @@ final class SlackCollectorTests: XCTestCase {
 
         let periodStart: Int64 = 1_700_000_000_000
         let periodEnd: Int64 = 1_700_000_300_000
-        await provider.setResult(SlackTickResult(
-            huddle: .defaultUnset,
-            channelMessageCounts: [
-                SlackChannelMessageCount(channelName: "design", count: 7),
-                SlackChannelMessageCount(channelName: "engineering", count: 3)
-            ],
-            cursorMs: periodEnd,
-            periodStartMs: periodStart,
-            periodEndMs: periodEnd,
-            statusEmoji: ":spiral_calendar_pad:",
-            statusExpirationTs: 1_700_005_000_000
-        ))
+        await provider.setResult(
+            SlackTickResult(
+                huddle: .defaultUnset,
+                channelMessageCounts: [
+                    SlackChannelMessageCount(channelName: "design", count: 7),
+                    SlackChannelMessageCount(channelName: "engineering", count: 3),
+                ],
+                cursorMs: periodEnd,
+                periodStartMs: periodStart,
+                periodEndMs: periodEnd,
+                statusEmoji: ":spiral_calendar_pad:",
+                statusExpirationTs: 1_700_005_000_000
+            ))
         await provider.setPresence(.away)
-        await provider.setDND(SlackDNDState(
-            dndEnabled: false,
-            snoozeUntilMs: nil,
-            nextDNDStartMs: 1_700_030_000_000,
-            nextDNDEndMs: 1_700_050_000_000
-        ))
+        await provider.setDND(
+            SlackDNDState(
+                dndEnabled: false,
+                snoozeUntilMs: nil,
+                nextDNDStartMs: 1_700_030_000_000,
+                nextDNDEndMs: 1_700_050_000_000
+            ))
         await provider.setMentions([
             SlackMentionChannelCount(
                 channelName: "design",
@@ -1108,12 +1153,13 @@ final class SlackCollectorTests: XCTestCase {
                 periodEndMs: periodEnd
             )
         ])
-        await provider.setFiles(SlackFileUploadSummary(
-            count: 0,
-            typesSummary: [:],
-            periodStartMs: periodStart,
-            periodEndMs: periodEnd
-        ))
+        await provider.setFiles(
+            SlackFileUploadSummary(
+                count: 0,
+                typesSummary: [:],
+                periodStartMs: periodStart,
+                periodEndMs: periodEnd
+            ))
 
         _ = await collector.performTick()
 
@@ -1129,27 +1175,31 @@ final class SlackCollectorTests: XCTestCase {
         XCTAssertEqual(state["status_expiration_ts"] as? Int64, 1_700_005_000_000)
         XCTAssertEqual(state["in_huddle"] as? Bool, false, ".defaultUnset → in_huddle=false")
         XCTAssertEqual(state["huddle_channel"] as? String, "")
-        XCTAssertEqual(state["last_activity_channel"] as? String, "design",
-                       "max-count channel — design (7) > engineering (3)")
+        XCTAssertEqual(
+            state["last_activity_channel"] as? String, "design",
+            "max-count channel — design (7) > engineering (3)")
         XCTAssertEqual(state["mention_count_today"] as? Int, 1)
         XCTAssertEqual(state["file_count_today"] as? Int, 0)
 
         // dnd nested dict roundtripped:
         let dnd = try XCTUnwrap(state["dnd"] as? [String: Any])
-        XCTAssertEqual(dnd.keys.sorted(),
-                       ["is_active", "next_dnd_end_ms", "next_dnd_start_ms", "snooze_until_ms"],
-                       "ровно 4 keys в nested dnd dict")
+        XCTAssertEqual(
+            dnd.keys.sorted(),
+            ["is_active", "next_dnd_end_ms", "next_dnd_start_ms", "snooze_until_ms"],
+            "ровно 4 keys в nested dnd dict")
         XCTAssertEqual(dnd["is_active"] as? Bool, false)
         XCTAssertEqual(dnd["snooze_until_ms"] as? Int64, 0, "nil → 0 per plan literal")
         XCTAssertEqual(dnd["next_dnd_start_ms"] as? Int64, 1_700_030_000_000)
         XCTAssertEqual(dnd["next_dnd_end_ms"] as? Int64, 1_700_050_000_000)
 
         // Top-level keys count check (defensive against accidental drift).
-        XCTAssertEqual(Set(state.keys), [
-            "native_presence", "dnd", "status_emoji", "status_expiration_ts",
-            "in_huddle", "huddle_channel", "last_activity_channel",
-            "mention_count_today", "file_count_today"
-        ])
+        XCTAssertEqual(
+            Set(state.keys),
+            [
+                "native_presence", "dnd", "status_emoji", "status_expiration_ts",
+                "in_huddle", "huddle_channel", "last_activity_channel",
+                "mention_count_today", "file_count_today",
+            ])
     }
 
     /// Skip path: без integration row → presence_state.slack row НЕ записан
@@ -1197,21 +1247,22 @@ final class SlackCollectorTests: XCTestCase {
         let periodEnd: Int64 = 1_700_000_300_000
         let msgs = [
             SlackMessageRecord(ts: "1700000001.000001", threadTs: nil, channelID: "C001", text: "Hello team"),
-            SlackMessageRecord(ts: "1700000002.000001", threadTs: nil, channelID: "C001", text: "Follow-up message")
+            SlackMessageRecord(ts: "1700000002.000001", threadTs: nil, channelID: "C001", text: "Follow-up message"),
         ]
-        await provider.setResult(SlackTickResult(
-            huddle: .unknown,
-            channelMessageCounts: [
-                SlackChannelMessageCount(
-                    channelName: "engineering",
-                    count: 2,
-                    messages: msgs
-                )
-            ],
-            cursorMs: periodEnd,
-            periodStartMs: periodStart,
-            periodEndMs: periodEnd
-        ))
+        await provider.setResult(
+            SlackTickResult(
+                huddle: .unknown,
+                channelMessageCounts: [
+                    SlackChannelMessageCount(
+                        channelName: "engineering",
+                        count: 2,
+                        messages: msgs
+                    )
+                ],
+                cursorMs: periodEnd,
+                periodStartMs: periodStart,
+                periodEndMs: periodEnd
+            ))
 
         let collector = makeCollector(db: db, provider: provider)
         let result = await collector.performTick()
@@ -1231,8 +1282,9 @@ final class SlackCollectorTests: XCTestCase {
         let event = try XCTUnwrap(events.first)
 
         // messages_json must be present and decodable.
-        let messagesJsonStr = try XCTUnwrap(event.payload["messages_json"],
-                                            "messages_json payload key должен присутствовать")
+        let messagesJsonStr = try XCTUnwrap(
+            event.payload["messages_json"],
+            "messages_json payload key должен присутствовать")
         let messagesData = try XCTUnwrap(messagesJsonStr.data(using: .utf8))
         let decoded = try JSONDecoder().decode([SlackMessageRecord].self, from: messagesData)
         XCTAssertEqual(decoded.count, 2)
@@ -1264,30 +1316,36 @@ final class SlackCollectorTests: XCTestCase {
         }
 
         // Set a non-empty reply batch so threads are actually processed.
-        let parentMsg = SlackMessageRecord(ts: "1700000001.000001", threadTs: "1700000001.000001", channelID: "C001", text: "Parent")
-        let replyMsg = SlackMessageRecord(ts: "1700000001.000100", threadTs: "1700000001.000001", channelID: "C001", text: "Reply")
-        await provider.setThreadReplyBatch(SlackThreadReplyBatch(parent: parentMsg, replies: [replyMsg], nextCursor: nil))
+        let parentMsg = SlackMessageRecord(
+            ts: "1700000001.000001", threadTs: "1700000001.000001", channelID: "C001", text: "Parent")
+        let replyMsg = SlackMessageRecord(
+            ts: "1700000001.000100", threadTs: "1700000001.000001", channelID: "C001", text: "Reply")
+        await provider.setThreadReplyBatch(
+            SlackThreadReplyBatch(parent: parentMsg, replies: [replyMsg], nextCursor: nil))
 
-        await provider.setResult(SlackTickResult(
-            huddle: .unknown,
-            channelMessageCounts: [
-                SlackChannelMessageCount(
-                    channelName: "engineering",
-                    count: 5,
-                    messages: msgs
-                )
-            ],
-            cursorMs: periodEnd,
-            periodStartMs: 1_700_000_000_000,
-            periodEndMs: periodEnd
-        ))
+        await provider.setResult(
+            SlackTickResult(
+                huddle: .unknown,
+                channelMessageCounts: [
+                    SlackChannelMessageCount(
+                        channelName: "engineering",
+                        count: 5,
+                        messages: msgs
+                    )
+                ],
+                cursorMs: periodEnd,
+                periodStartMs: 1_700_000_000_000,
+                periodEndMs: periodEnd
+            ))
 
         let collector = makeCollector(db: db, provider: provider, maxThreadsPerTick: cap)
         _ = await collector.performTick()
 
         let calls = await provider.threadReplyCallHistory()
-        XCTAssertEqual(calls.count, cap,
-                       "fetchThreadReplies должен вызываться не более maxThreadsPerTick раз (\(cap)), но вызван \(calls.count) раз")
+        XCTAssertEqual(
+            calls.count, cap,
+            "fetchThreadReplies должен вызываться не более maxThreadsPerTick раз (\(cap)), но вызван \(calls.count) раз"
+        )
     }
 
     /// Track-1 D1: per-thread cursor advances after successful reply fetch.
@@ -1309,16 +1367,18 @@ final class SlackCollectorTests: XCTestCase {
         let parentMsg = SlackMessageRecord(ts: threadTs, threadTs: threadTs, channelID: channelID, text: "Parent text")
         let replyMsg = SlackMessageRecord(ts: replyTs, threadTs: threadTs, channelID: channelID, text: "Reply text")
 
-        await provider.setThreadReplyBatch(SlackThreadReplyBatch(parent: parentMsg, replies: [replyMsg], nextCursor: nil))
-        await provider.setResult(SlackTickResult(
-            huddle: .unknown,
-            channelMessageCounts: [
-                SlackChannelMessageCount(channelName: "engineering", count: 1, messages: msgs)
-            ],
-            cursorMs: periodEnd,
-            periodStartMs: 1_700_000_000_000,
-            periodEndMs: periodEnd
-        ))
+        await provider.setThreadReplyBatch(
+            SlackThreadReplyBatch(parent: parentMsg, replies: [replyMsg], nextCursor: nil))
+        await provider.setResult(
+            SlackTickResult(
+                huddle: .unknown,
+                channelMessageCounts: [
+                    SlackChannelMessageCount(channelName: "engineering", count: 1, messages: msgs)
+                ],
+                cursorMs: periodEnd,
+                periodStartMs: 1_700_000_000_000,
+                periodEndMs: periodEnd
+            ))
 
         let collector = makeCollector(db: db, provider: provider)
 
@@ -1334,8 +1394,9 @@ final class SlackCollectorTests: XCTestCase {
         XCTAssertNotNil(storedOffset, "collector_offsets должен содержать курсор для thread \(threadTs)")
         // The cursor should reflect the latest reply ts.
         let expectedCursorMs = Int64(Double(replyTs)! * 1000)
-        XCTAssertEqual(storedOffset?.lastModifiedMs, expectedCursorMs,
-                       "Cursor должен соответствовать ms времени последнего reply")
+        XCTAssertEqual(
+            storedOffset?.lastModifiedMs, expectedCursorMs,
+            "Cursor должен соответствовать ms времени последнего reply")
 
         // Second tick — collector must pass oldest based on stored cursor (ms precision).
         // Slack ts "1700000002.000050" → Int64 ms truncation → "1700000002.000000".
@@ -1346,8 +1407,9 @@ final class SlackCollectorTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(calls.count, 2, "второй tick должен вызвать fetchThreadReplies снова")
         let secondCall = calls[1]
         let expectedOldest = String(format: "%.6f", Double(Int64(Double(replyTs)! * 1000)) / 1000.0)
-        XCTAssertEqual(secondCall.oldest, expectedOldest,
-                       "второй tick должен передавать oldest с ms-точностью (Slack ts truncated to ms)")
+        XCTAssertEqual(
+            secondCall.oldest, expectedOldest,
+            "второй tick должен передавать oldest с ms-точностью (Slack ts truncated to ms)")
     }
 
     /// Track-1 D1: mock throws RateLimitError on N-th thread.
@@ -1366,37 +1428,42 @@ final class SlackCollectorTests: XCTestCase {
         let msgs = [
             SlackMessageRecord(ts: ts1, threadTs: ts1, channelID: channelID, text: "Thread 1"),
             SlackMessageRecord(ts: ts2, threadTs: ts2, channelID: channelID, text: "Thread 2"),
-            SlackMessageRecord(ts: ts3, threadTs: ts3, channelID: channelID, text: "Thread 3")
+            SlackMessageRecord(ts: ts3, threadTs: ts3, channelID: channelID, text: "Thread 3"),
         ]
 
         let parentMsg = SlackMessageRecord(ts: ts1, threadTs: ts1, channelID: channelID, text: "Parent")
         let replyMsg = SlackMessageRecord(ts: "1700000001.500000", threadTs: ts1, channelID: channelID, text: "Reply")
-        await provider.setThreadReplyBatch(SlackThreadReplyBatch(parent: parentMsg, replies: [replyMsg], nextCursor: nil))
+        await provider.setThreadReplyBatch(
+            SlackThreadReplyBatch(parent: parentMsg, replies: [replyMsg], nextCursor: nil))
 
         // 3rd thread throws 429.
         await provider.setThreadReplyThrowOn(ts3)
 
-        await provider.setResult(SlackTickResult(
-            huddle: .unknown,
-            channelMessageCounts: [
-                SlackChannelMessageCount(channelName: "engineering", count: 3, messages: msgs)
-            ],
-            cursorMs: periodEnd,
-            periodStartMs: 1_700_000_000_000,
-            periodEndMs: periodEnd
-        ))
+        await provider.setResult(
+            SlackTickResult(
+                huddle: .unknown,
+                channelMessageCounts: [
+                    SlackChannelMessageCount(channelName: "engineering", count: 3, messages: msgs)
+                ],
+                cursorMs: periodEnd,
+                periodStartMs: 1_700_000_000_000,
+                periodEndMs: periodEnd
+            ))
 
         let collector = makeCollector(db: db, provider: provider)
         _ = await collector.performTick()
 
         // Threads 1 and 2 should have cursor offsets (processed successfully).
-        let offset1 = try db.readOffset(collectorID: CollectorID.slackPolling,
-                                        sourceID: "slack:thread:\(channelID):\(ts1)")
-        let offset2 = try db.readOffset(collectorID: CollectorID.slackPolling,
-                                        sourceID: "slack:thread:\(channelID):\(ts2)")
+        let offset1 = try db.readOffset(
+            collectorID: CollectorID.slackPolling,
+            sourceID: "slack:thread:\(channelID):\(ts1)")
+        let offset2 = try db.readOffset(
+            collectorID: CollectorID.slackPolling,
+            sourceID: "slack:thread:\(channelID):\(ts2)")
         // Thread 3 should NOT have a cursor (429 broke the loop before it was processed).
-        let offset3 = try db.readOffset(collectorID: CollectorID.slackPolling,
-                                        sourceID: "slack:thread:\(channelID):\(ts3)")
+        let offset3 = try db.readOffset(
+            collectorID: CollectorID.slackPolling,
+            sourceID: "slack:thread:\(channelID):\(ts3)")
 
         XCTAssertNotNil(offset1, "thread 1 должен иметь курсор — успешно обработан")
         XCTAssertNotNil(offset2, "thread 2 должен иметь курсор — успешно обработан")

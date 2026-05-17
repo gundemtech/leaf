@@ -20,20 +20,24 @@ struct LeafIconButton: View {
     var size: LeafButtonTokens.Size = .md
     let action: () -> Void
 
-    init(systemName: String,
-         variant: LeafButtonTokens.Variant = .ghost,
-         size: LeafButtonTokens.Size = .md,
-         action: @escaping () -> Void) {
+    init(
+        systemName: String,
+        variant: LeafButtonTokens.Variant = .ghost,
+        size: LeafButtonTokens.Size = .md,
+        action: @escaping () -> Void
+    ) {
         self.source = .system(systemName)
         self.variant = variant
         self.size = size
         self.action = action
     }
 
-    init(asset: String,
-         variant: LeafButtonTokens.Variant = .ghost,
-         size: LeafButtonTokens.Size = .md,
-         action: @escaping () -> Void) {
+    init(
+        asset: String,
+        variant: LeafButtonTokens.Variant = .ghost,
+        size: LeafButtonTokens.Size = .md,
+        action: @escaping () -> Void
+    ) {
         self.source = .asset(asset)
         self.variant = variant
         self.size = size
@@ -49,9 +53,10 @@ struct LeafIconButton: View {
                 .frame(width: size.height, height: size.height)
                 .background(
                     RoundedRectangle(cornerRadius: LeafRadius.md, style: .continuous)
-                        .fill(isHovering
-                              ? LeafButtonTokens.Background.hover(variant)
-                              : LeafButtonTokens.Background.resting(variant))
+                        .fill(
+                            isHovering
+                                ? LeafButtonTokens.Background.hover(variant)
+                                : LeafButtonTokens.Background.resting(variant))
                 )
         }
         .buttonStyle(.plain)

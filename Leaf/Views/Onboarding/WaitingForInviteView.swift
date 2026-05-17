@@ -9,8 +9,8 @@
 //  Track 2 / D4 — migrated to D1 atoms (LeafType / LeafButton / LeafColor / LeafSpace).
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct WaitingForInviteView: View {
     let onManualPaste: () -> Void
@@ -24,10 +24,12 @@ struct WaitingForInviteView: View {
                     .font(LeafType.title.small)
                     .foregroundStyle(LeafColor.text.primary)
             }
-            Text("Open Leaf after admin sends the invite link — it'll auto-fill from clipboard or open via the link itself.")
-                .font(LeafType.body.small)
-                .foregroundStyle(LeafColor.text.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            Text(
+                "Open Leaf after admin sends the invite link — it'll auto-fill from clipboard or open via the link itself."
+            )
+            .font(LeafType.body.small)
+            .foregroundStyle(LeafColor.text.secondary)
+            .fixedSize(horizontal: false, vertical: true)
 
             HStack {
                 LeafButton("Back", variant: .ghost, size: .sm, action: onCancel)

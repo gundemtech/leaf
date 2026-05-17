@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 /// Phase Track-4 S3 — defence-in-depth privacy walkback против CGEventTap
@@ -18,11 +19,11 @@ final class CGEventTapNoContentLeakageTests: XCTestCase {
 
     private func repoRoot() -> URL {
         URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()    // LeafCoreTests/
-            .deletingLastPathComponent()    // Tests/
-            .deletingLastPathComponent()    // LeafCore/
-            .deletingLastPathComponent()    // Packages/
-            .deletingLastPathComponent()    // <repo root>/
+            .deletingLastPathComponent()  // LeafCoreTests/
+            .deletingLastPathComponent()  // Tests/
+            .deletingLastPathComponent()  // LeafCore/
+            .deletingLastPathComponent()  // Packages/
+            .deletingLastPathComponent()  // <repo root>/
     }
 
     private func readSource(_ relPath: String) throws -> String {
@@ -46,21 +47,24 @@ final class CGEventTapNoContentLeakageTests: XCTestCase {
         ".modifierFlags",
         ".location",
         "event.location",
-        ".mouseLocation"
+        ".mouseLocation",
     ]
 
     func testCGEventTapCollectorSourceGrep() throws {
         let src = stripComments(try readSource("LeafAgent/Collectors/CGEventTapCollector.swift"))
         for token in forbiddenContentTokens {
-            XCTAssertFalse(src.contains(token),
+            XCTAssertFalse(
+                src.contains(token),
                 "CGEventTapCollector.swift must NOT contain forbidden content-read API: \(token)")
         }
     }
 
     func testIntensityBucketAccumulatorSourceGrep() throws {
-        let src = stripComments(try readSource("Packages/LeafCore/Sources/LeafCore/OS/IntensityBucketAccumulator.swift"))
+        let src = stripComments(
+            try readSource("Packages/LeafCore/Sources/LeafCore/OS/IntensityBucketAccumulator.swift"))
         for token in forbiddenContentTokens {
-            XCTAssertFalse(src.contains(token),
+            XCTAssertFalse(
+                src.contains(token),
                 "IntensityBucketAccumulator.swift must NOT contain forbidden token: \(token)")
         }
     }
@@ -77,10 +81,11 @@ final class CGEventTapNoContentLeakageTests: XCTestCase {
             Schema.EventPayloadKeys.keystrokeCount,
             Schema.EventPayloadKeys.mouseMoveCount,
             Schema.EventPayloadKeys.appSwitchCount,
-            Schema.EventPayloadKeys.foregroundApp
+            Schema.EventPayloadKeys.foregroundApp,
         ]
         let payloadKeys = Set(snap.toRawEventPayload().keys)
-        XCTAssertTrue(payloadKeys.isSubset(of: allowedKeys),
+        XCTAssertTrue(
+            payloadKeys.isSubset(of: allowedKeys),
             "Active snapshot payload keys must be subset of \(allowedKeys), got \(payloadKeys)")
     }
 
@@ -93,7 +98,8 @@ final class CGEventTapNoContentLeakageTests: XCTestCase {
         )
         let allowedKeys: Set<String> = ["event_kind", "state"]
         let payloadKeys = Set(snap.toRawEventPayload().keys)
-        XCTAssertTrue(payloadKeys.isSubset(of: allowedKeys),
+        XCTAssertTrue(
+            payloadKeys.isSubset(of: allowedKeys),
             "Dropped snapshot payload keys must be subset of \(allowedKeys), got \(payloadKeys)")
     }
 
@@ -111,10 +117,11 @@ final class CGEventTapNoContentLeakageTests: XCTestCase {
             ".mouseMoved.rawValue",
             ".leftMouseDragged.rawValue",
             ".rightMouseDragged.rawValue",
-            ".scrollWheel.rawValue"
+            ".scrollWheel.rawValue",
         ]
         for needle in allowedRawNames {
-            XCTAssertTrue(src.contains(needle),
+            XCTAssertTrue(
+                src.contains(needle),
                 "CGEventTapCollector tap mask must include \(needle)")
         }
         // Forbidden event types — would expose key state pairs / location data.
@@ -124,10 +131,11 @@ final class CGEventTapNoContentLeakageTests: XCTestCase {
             ".otherMouseDown.rawValue",
             ".otherMouseUp.rawValue",
             ".tabletPointer.rawValue",
-            ".tabletProximity.rawValue"
+            ".tabletProximity.rawValue",
         ]
         for needle in forbiddenInMask {
-            XCTAssertFalse(src.contains(needle),
+            XCTAssertFalse(
+                src.contains(needle),
                 "CGEventTapCollector tap mask must NOT include \(needle)")
         }
     }

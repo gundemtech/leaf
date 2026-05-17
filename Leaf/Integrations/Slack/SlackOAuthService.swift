@@ -19,11 +19,12 @@
 //  (тот же Swift module Leaf — namespace это просто папка).
 //
 
-import Foundation
-import SwiftUI
 import AppKit
+import Foundation
 import LeafCore
+import SwiftUI
 import os
+
 #if LEAF_PROD
 import LeafCorePrivate
 #endif
@@ -139,7 +140,8 @@ final class SlackOAuthService {
         let port = SlackOAuthEndpoints.loopbackPort
         let authorizeURL: URL
         do {
-            authorizeURL = try buildAuthorizeURL(clientID: clientID, challenge: challenge, scopeParameter: scopeParameter)
+            authorizeURL = try buildAuthorizeURL(
+                clientID: clientID, challenge: challenge, scopeParameter: scopeParameter)
         } catch {
             state = .error(message: "Failed to build authorize URL: \(error.localizedDescription)")
             return
@@ -184,9 +186,9 @@ final class SlackOAuthService {
             // oauth.v2.access уже содержит team+user — отдельный auth.test НЕ нужен.
             state = .fetchingWorkspace
             guard let team = tokenResponse.team,
-                  let authedUser = tokenResponse.authedUser,
-                  let userAccessToken = authedUser.accessToken,
-                  !userAccessToken.isEmpty
+                let authedUser = tokenResponse.authedUser,
+                let userAccessToken = authedUser.accessToken,
+                !userAccessToken.isEmpty
             else {
                 state = .error(message: "Slack response missing user token (top-level access_token is bot-only).")
                 return
@@ -240,7 +242,10 @@ final class SlackOAuthService {
             case .timeout:
                 state = .error(message: "Authorization timed out. Try again.")
             case .bindFailed(let reason):
-                state = .error(message: "Couldn't bind to port \(SlackOAuthEndpoints.loopbackPort): \(reason). Close any conflicting app.")
+                state = .error(
+                    message:
+                        "Couldn't bind to port \(SlackOAuthEndpoints.loopbackPort): \(reason). Close any conflicting app."
+                )
             case .listenerFailed(let reason):
                 state = .error(message: "Local listener failed: \(reason).")
             case .parseFailed:
@@ -270,8 +275,8 @@ final class SlackOAuthService {
 
     private func readClientID() -> String? {
         guard let id = Bundle.main.object(forInfoDictionaryKey: "LeafSlackOAuthClientID") as? String,
-              !id.isEmpty,
-              !id.contains("$(")
+            !id.isEmpty,
+            !id.contains("$(")
         else { return nil }
         return id
     }
@@ -290,7 +295,7 @@ final class SlackOAuthService {
             URLQueryItem(name: "redirect_uri", value: SlackOAuthEndpoints.redirectURI),
             URLQueryItem(name: "state", value: challenge.state),
             URLQueryItem(name: "code_challenge", value: challenge.challenge),
-            URLQueryItem(name: "code_challenge_method", value: "S256")
+            URLQueryItem(name: "code_challenge_method", value: "S256"),
         ]
         guard let url = components?.url else {
             throw makeError("Couldn't build authorize URL")
@@ -310,7 +315,7 @@ final class SlackOAuthService {
             "client_id": clientID,
             "code": code,
             "redirect_uri": SlackOAuthEndpoints.redirectURI,
-            "code_verifier": verifier
+            "code_verifier": verifier,
         ])
 
         let (data, response) = try await URLSession.shared.data(for: request)

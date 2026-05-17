@@ -31,7 +31,7 @@ public struct GoogleCalendarOAuthEndpoints {
 
     // Info.plist key names — values plumbed at build time from .env per spec §7.6.
     // Никогда не hardcode client_id/client_secret в source — moat per CLAUDE.md.
-    public static let infoPlistClientIDKey     = "LeafGoogleCalendarOAuthClientID"
+    public static let infoPlistClientIDKey = "LeafGoogleCalendarOAuthClientID"
     public static let infoPlistClientSecretKey = "LeafGoogleCalendarOAuthClientSecret"
 
     /// `DistributedNotificationCenter` channel name posted by the OAuthService

@@ -6,9 +6,9 @@
 //  Track 2 / D4 — migrated from system .borderedProminent / .bordered to LeafButton primary/secondary.
 //
 
-import SwiftUI
 import AppKit
 import LeafCore
+import SwiftUI
 
 struct ShareTemplateButton: View {
     let templateBody: String

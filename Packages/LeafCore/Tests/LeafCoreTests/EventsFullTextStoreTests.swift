@@ -6,8 +6,9 @@
 // by `EventsFullTextStore.indexEvent`. Body content is verified indirectly via
 // `MATCH` queries (token presence implies indexing).
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class EventsFullTextStoreTests: XCTestCase {
@@ -29,7 +30,9 @@ final class EventsFullTextStoreTests: XCTestCase {
         try LeafCore.Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
     }
 
-    private func insertRawEventRow(_ db: LeafCore.Database, signalType: String = "action", bundleID: String = "x") throws -> Int64 {
+    private func insertRawEventRow(
+        _ db: LeafCore.Database, signalType: String = "action", bundleID: String = "x"
+    ) throws -> Int64 {
         try db.writeSQL { rawDB in
             try rawDB.execute(
                 sql: "INSERT INTO events (ts, signal_type, bundle_id, payload_json) VALUES (?, ?, ?, '{}')",
@@ -41,7 +44,9 @@ final class EventsFullTextStoreTests: XCTestCase {
 
     /// Reads sidecar rows associated with an event_id. Body content not retrievable
     /// from contentless FTS5 — verify body presence via separate MATCH assertions.
-    private func ftsMetaRowsForEvent(_ db: LeafCore.Database, eventID: Int64) throws -> [(bodyKind: String, ftsRowID: Int64)] {
+    private func ftsMetaRowsForEvent(
+        _ db: LeafCore.Database, eventID: Int64
+    ) throws -> [(bodyKind: String, ftsRowID: Int64)] {
         try db.readSQL { rawDB in
             try Row.fetchAll(
                 rawDB,
@@ -54,14 +59,16 @@ final class EventsFullTextStoreTests: XCTestCase {
     /// Asserts MATCH-search hits at least one FTS row associated with the given event.
     private func ftsContains(_ db: LeafCore.Database, eventID: Int64, query: String) throws -> Bool {
         try db.readSQL { rawDB in
-            try Bool.fetchOne(rawDB, sql: """
-                SELECT EXISTS (
-                    SELECT 1
-                    FROM events_fts
-                    JOIN events_fts_meta ON events_fts_meta.fts_rowid = events_fts.rowid
-                    WHERE events_fts MATCH ? AND events_fts_meta.event_id = ?
-                )
-                """, arguments: [query, eventID]) ?? false
+            try Bool.fetchOne(
+                rawDB,
+                sql: """
+                    SELECT EXISTS (
+                        SELECT 1
+                        FROM events_fts
+                        JOIN events_fts_meta ON events_fts_meta.fts_rowid = events_fts.rowid
+                        WHERE events_fts MATCH ? AND events_fts_meta.event_id = ?
+                    )
+                    """, arguments: [query, eventID]) ?? false
         }
     }
 
@@ -70,7 +77,7 @@ final class EventsFullTextStoreTests: XCTestCase {
         let eid = try insertRawEventRow(db)
         let payload = [
             "event_kind": "issue_updated",
-            Schema.EventPayloadKeys.body: "OAuth refactor"
+            Schema.EventPayloadKeys.body: "OAuth refactor",
         ]
         try db.writeSQL { rawDB in
             try EventsFullTextStore.indexEvent(
@@ -91,7 +98,7 @@ final class EventsFullTextStoreTests: XCTestCase {
         let payload = [
             "event_kind": "issue_updated",
             Schema.EventPayloadKeys.body: "Description here",
-            Schema.EventPayloadKeys.commentBodiesJson: comments
+            Schema.EventPayloadKeys.commentBodiesJson: comments,
         ]
         try db.writeSQL { rawDB in
             try EventsFullTextStore.indexEvent(
@@ -113,7 +120,7 @@ final class EventsFullTextStoreTests: XCTestCase {
         let msgs = #"[{"text":"alpha"},{"text":"bravo"},{"text":"charlie"},{"text":"delta"},{"text":"echo"}]"#
         let payload = [
             "event_kind": "slack_message_aggregate",
-            Schema.EventPayloadKeys.messagesJson: msgs
+            Schema.EventPayloadKeys.messagesJson: msgs,
         ]
         try db.writeSQL { rawDB in
             try EventsFullTextStore.indexEvent(
@@ -135,7 +142,7 @@ final class EventsFullTextStoreTests: XCTestCase {
         let payload = [
             "event_kind": "slack_thread_reply_aggregate",
             Schema.EventPayloadKeys.body: "parent message",
-            Schema.EventPayloadKeys.threadRepliesJson: replies
+            Schema.EventPayloadKeys.threadRepliesJson: replies,
         ]
         try db.writeSQL { rawDB in
             try EventsFullTextStore.indexEvent(
@@ -156,7 +163,7 @@ final class EventsFullTextStoreTests: XCTestCase {
         let eid = try insertRawEventRow(db)
         let payload = [
             "event_kind": "gh_pr_opened",
-            Schema.EventPayloadKeys.body: "Summary fix the auth bug"
+            Schema.EventPayloadKeys.body: "Summary fix the auth bug",
         ]
         try db.writeSQL { rawDB in
             try EventsFullTextStore.indexEvent(
@@ -174,7 +181,7 @@ final class EventsFullTextStoreTests: XCTestCase {
         let eid = try insertRawEventRow(db)
         let payload = [
             "event_kind": "gh_commit_pushed",
-            Schema.EventPayloadKeys.body: "fix(auth): tighten token refresh"
+            Schema.EventPayloadKeys.body: "fix(auth): tighten token refresh",
         ]
         try db.writeSQL { rawDB in
             try EventsFullTextStore.indexEvent(
@@ -191,7 +198,7 @@ final class EventsFullTextStoreTests: XCTestCase {
         let eid = try insertRawEventRow(db)
         let payload = [
             "event_kind": "gh_issue_comment_authored",
-            Schema.EventPayloadKeys.body: "agreed, lets ship it"
+            Schema.EventPayloadKeys.body: "agreed, lets ship it",
         ]
         try db.writeSQL { rawDB in
             try EventsFullTextStore.indexEvent(
@@ -208,7 +215,7 @@ final class EventsFullTextStoreTests: XCTestCase {
         let eid = try insertRawEventRow(db)
         let payload = [
             "event_kind": "gh_pr_review_comment_authored",
-            Schema.EventPayloadKeys.body: "nit: extract this constant"
+            Schema.EventPayloadKeys.body: "nit: extract this constant",
         ]
         try db.writeSQL { rawDB in
             try EventsFullTextStore.indexEvent(
@@ -227,7 +234,7 @@ final class EventsFullTextStoreTests: XCTestCase {
         let eid = try insertRawEventRow(db)
         let payload = [
             "event_kind": GitHubEventKindKey.gistCreated.rawValue,
-            Schema.EventPayloadKeys.body: "snippet for hkdf info string sample"
+            Schema.EventPayloadKeys.body: "snippet for hkdf info string sample",
         ]
         try db.writeSQL { rawDB in
             try EventsFullTextStore.indexEvent(
@@ -245,7 +252,7 @@ final class EventsFullTextStoreTests: XCTestCase {
         let eid = try insertRawEventRow(db)
         let payload = [
             "event_kind": GitHubEventKindKey.gistUpdated.rawValue,
-            Schema.EventPayloadKeys.body: "edited description for snippet"
+            Schema.EventPayloadKeys.body: "edited description for snippet",
         ]
         try db.writeSQL { rawDB in
             try EventsFullTextStore.indexEvent(
@@ -263,7 +270,7 @@ final class EventsFullTextStoreTests: XCTestCase {
         let eid = try insertRawEventRow(db)
         let payload = [
             "event_kind": GitHubEventKindKey.releasePublished.rawValue,
-            Schema.EventPayloadKeys.body: "v1.2.0 ships sparkle delta updates"
+            Schema.EventPayloadKeys.body: "v1.2.0 ships sparkle delta updates",
         ]
         try db.writeSQL { rawDB in
             try EventsFullTextStore.indexEvent(
@@ -281,7 +288,7 @@ final class EventsFullTextStoreTests: XCTestCase {
         let eid = try insertRawEventRow(db)
         let payload = [
             "event_kind": GitHubEventKindKey.deploymentCreated.rawValue,
-            Schema.EventPayloadKeys.body: "promote staging to production"
+            Schema.EventPayloadKeys.body: "promote staging to production",
         ]
         try db.writeSQL { rawDB in
             try EventsFullTextStore.indexEvent(
@@ -315,20 +322,26 @@ final class EventsFullTextStoreTests: XCTestCase {
         try db.writeSQL { rawDB in
             try EventsFullTextStore.indexEvent(
                 eventID: eHigh, signalType: "action", bundleID: "x",
-                payload: ["event_kind": "issue_updated",
-                          Schema.EventPayloadKeys.body: "auth auth auth filler filler"],
+                payload: [
+                    "event_kind": "issue_updated",
+                    Schema.EventPayloadKeys.body: "auth auth auth filler filler",
+                ],
                 in: rawDB
             )
             try EventsFullTextStore.indexEvent(
                 eventID: eMid, signalType: "action", bundleID: "x",
-                payload: ["event_kind": "issue_updated",
-                          Schema.EventPayloadKeys.body: "auth filler filler filler filler"],
+                payload: [
+                    "event_kind": "issue_updated",
+                    Schema.EventPayloadKeys.body: "auth filler filler filler filler",
+                ],
                 in: rawDB
             )
             try EventsFullTextStore.indexEvent(
                 eventID: eLow, signalType: "action", bundleID: "x",
-                payload: ["event_kind": "issue_updated",
-                          Schema.EventPayloadKeys.body: "auth filler filler filler filler filler filler filler filler filler"],
+                payload: [
+                    "event_kind": "issue_updated",
+                    Schema.EventPayloadKeys.body: "auth filler filler filler filler filler filler filler filler filler",
+                ],
                 in: rawDB
             )
         }
@@ -337,8 +350,9 @@ final class EventsFullTextStoreTests: XCTestCase {
         let results: [Int64] = try db.readSQL { rawDB in
             try EventsFullTextStore.search(query: "auth", period: (now - 60_000)...(now + 60_000), limit: 10, in: rawDB)
         }
-        XCTAssertEqual(results, [eHigh, eMid, eLow],
-                       "BM25 should order: high TF first, then short doc with TF=1, then long doc with TF=1")
+        XCTAssertEqual(
+            results, [eHigh, eMid, eLow],
+            "BM25 should order: high TF first, then short doc with TF=1, then long doc with TF=1")
     }
 
     /// Track-1 D2 carry-over fix regression: LinearCollector emits event_kind
@@ -359,7 +373,7 @@ final class EventsFullTextStoreTests: XCTestCase {
                 "status": "In Progress",
                 "project": "",
                 "team_key": "LEAF",
-                Schema.EventPayloadKeys.body: "decided to migrate the auth refresh path"
+                Schema.EventPayloadKeys.body: "decided to migrate the auth refresh path",
             ]
         )
         try db.write(event)
@@ -380,14 +394,15 @@ final class EventsFullTextStoreTests: XCTestCase {
                 "event_kind": "linear_notification_received",
                 Schema.EventPayloadKeys.notificationId: "n1",
                 Schema.EventPayloadKeys.notificationKind: "issueAssignedToYou",
-                Schema.EventPayloadKeys.body: "Alice assigned LEAF-99 to you: rework migrations"
+                Schema.EventPayloadKeys.body: "Alice assigned LEAF-99 to you: rework migrations",
             ]
         )
         try db.write(event)
         let hits = try db.readSQL { rawDB in
             try EventsFullTextStore.search(query: "rework migrations", period: 0...100_000, in: rawDB)
         }
-        XCTAssertGreaterThan(hits.count, 0, "linear_notification_received body must FTS-index under linear_notification_title body_kind")
+        XCTAssertGreaterThan(
+            hits.count, 0, "linear_notification_received body must FTS-index under linear_notification_title body_kind")
     }
 
     func testSearch_PeriodFilterExcludesOutOfRange() throws {
@@ -413,14 +428,18 @@ final class EventsFullTextStoreTests: XCTestCase {
         try db.writeSQL { rawDB in
             try EventsFullTextStore.indexEvent(
                 eventID: eOld, signalType: "action", bundleID: "x",
-                payload: ["event_kind": "issue_updated",
-                          Schema.EventPayloadKeys.body: "matchword"],
+                payload: [
+                    "event_kind": "issue_updated",
+                    Schema.EventPayloadKeys.body: "matchword",
+                ],
                 in: rawDB
             )
             try EventsFullTextStore.indexEvent(
                 eventID: eNew, signalType: "action", bundleID: "x",
-                payload: ["event_kind": "issue_updated",
-                          Schema.EventPayloadKeys.body: "matchword"],
+                payload: [
+                    "event_kind": "issue_updated",
+                    Schema.EventPayloadKeys.body: "matchword",
+                ],
                 in: rawDB
             )
         }

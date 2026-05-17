@@ -1,7 +1,7 @@
-import Foundation
 import AppKit
-import os
+import Foundation
 import LeafCore
+import os
 
 /// Phase Track-4 S1 — Layer A catch-up. Subscribes to
 /// `NSWorkspace.activeSpaceDidChangeNotification` and emits `space_switched`

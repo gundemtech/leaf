@@ -24,10 +24,11 @@ struct GetWorkloadPulseTool: ToolExecutor {
                 "period": [
                     "type": "string",
                     "enum": ["today", "this_week", "last_24h"],
-                    "description": "Aggregation window for events-based counts (default: today). presence_state rows are always live."
+                    "description":
+                        "Aggregation window for events-based counts (default: today). presence_state rows are always live.",
                 ]
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
         ]
         return ToolDefinition(
             name: "get_workload_pulse",
@@ -48,8 +49,9 @@ struct GetWorkloadPulseTool: ToolExecutor {
         // — plan testExecute_InvalidPeriod_DefaultsToToday verifies этот invariant.
         let period: PresenceInsights.WorkloadPulsePeriod
         if let dict = arguments?.value as? [String: Any],
-           let raw = dict["period"] as? String,
-           let parsed = PresenceInsights.WorkloadPulsePeriod(rawValue: raw) {
+            let raw = dict["period"] as? String,
+            let parsed = PresenceInsights.WorkloadPulsePeriod(rawValue: raw)
+        {
             period = parsed
         } else {
             period = .today
@@ -57,9 +59,13 @@ struct GetWorkloadPulseTool: ToolExecutor {
 
         guard FileManager.default.fileExists(atPath: dbURL.path) else {
             return ToolCallResult(
-                content: [.text(TextContent(
-                    text: "Leaf database not found at \(dbURL.path). Enable 'Background collection' in Settings first."
-                ))],
+                content: [
+                    .text(
+                        TextContent(
+                            text:
+                                "Leaf database not found at \(dbURL.path). Enable 'Background collection' in Settings first."
+                        ))
+                ],
                 isError: true
             )
         }

@@ -9,5 +9,5 @@ import CoreGraphics
 
 enum LeafOnboardingStepLayoutTokens {
     static let progressBarHeight: CGFloat = 4
-    static let contentMaxWidth:   CGFloat = 560
+    static let contentMaxWidth: CGFloat = 560
 }

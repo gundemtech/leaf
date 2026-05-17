@@ -340,14 +340,14 @@ public enum Schema {
     /// transition events; per-row `_emitted_at_ms` columns gate idempotency.
     public enum GoogleCalendarTracker {
         public static let tableName = "google_calendar_typed_event_tracker"
-        public static let eventID            = "event_id"
-        public static let calendarID         = "calendar_id"
-        public static let iCalUID            = "i_cal_uid"
-        public static let eventType          = "event_type"
-        public static let startMs            = "start_ms"
-        public static let endMs              = "end_ms"
+        public static let eventID = "event_id"
+        public static let calendarID = "calendar_id"
+        public static let iCalUID = "i_cal_uid"
+        public static let eventType = "event_type"
+        public static let startMs = "start_ms"
+        public static let endMs = "end_ms"
         public static let startedEmittedAtMs = "started_emitted_at_ms"
-        public static let endedEmittedAtMs   = "ended_emitted_at_ms"
+        public static let endedEmittedAtMs = "ended_emitted_at_ms"
         public static let workingLocationType = "working_location_type"
         // Active-phase metadata sourced from the original Google API Event's
         // focusTimeProperties / outOfOfficeProperties (autoDeclineMode applies
@@ -356,9 +356,9 @@ public enum Schema {
         // re-fetching the Event. ADR-010: both are public Google enum buckets
         // (none / declineOnlyNewConflictingInvitations / declineAllConflictingInvitations
         // for autoDeclineMode; doNotDisturb for chatStatus), not freeform text.
-        public static let autoDeclineMode    = "auto_decline_mode"
-        public static let chatStatus         = "chat_status"
-        public static let upsertedAtMs       = "upserted_at_ms"
+        public static let autoDeclineMode = "auto_decline_mode"
+        public static let chatStatus = "chat_status"
+        public static let upsertedAtMs = "upserted_at_ms"
     }
 
     /// Phase Track-1 D2 — FTS5 contentless virtual table over event bodies
@@ -583,7 +583,7 @@ public enum Schema {
         public static let githubGists = "github_gists"
         public static let githubCodespaces = "github_codespaces"
         public static let githubRepoInvitations = "github_repo_invitations"
-        public static let githubAuditCursor = "github_audit_cursor" // Cursor (last-processed audit event id), not state snapshot
+        public static let githubAuditCursor = "github_audit_cursor"  // Cursor (last-processed audit event id), not state snapshot
 
         // GitHub D2 — parameterized snapshot kind prefixes (composite key embedded in value).
         // Callers compose: `Schema.ProviderSnapshotKinds.githubProjectV2ItemsPrefix + projectID`.

@@ -11,8 +11,8 @@
 //  Track 2 / D4 — migrated to LeafSheetLayout + LeafCard.raised + LeafTab inputMode picker.
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct GenerateInviteSheet: View {
     @Environment(InviteOutboxReader.self) private var reader
@@ -38,7 +38,8 @@ struct GenerateInviteSheet: View {
         }
         .onAppear {
             if case .joinCode(let bytes) = urlHandler.probeClipboard(),
-               let formatted = try? JoinCode.encode(pubkey: bytes) {
+                let formatted = try? JoinCode.encode(pubkey: bytes)
+            {
                 joinCodeInput = formatted
             }
         }
@@ -56,7 +57,11 @@ struct GenerateInviteSheet: View {
         case .generating:
             modePicker
             modeContent(disabled: true)
-            HStack { Spacer(); ProgressView(); Spacer() }
+            HStack {
+                Spacer()
+                ProgressView()
+                Spacer()
+            }
         case .ready(let outbound):
             readyOutput(outbound: outbound)
         }
@@ -98,9 +103,11 @@ struct GenerateInviteSheet: View {
             LeafCard(variant: .raised, padding: .regular) {
                 VStack(alignment: .leading, spacing: LeafSpace.md) {
                     Text("SEND ASK-TO-JOIN TEMPLATE").leafSectionLabel().foregroundStyle(LeafColor.text.tertiary)
-                    Text("Pick a teammate to invite. They'll install Leaf, copy their Join code, and send it back to you.")
-                        .font(LeafType.body.small)
-                        .foregroundStyle(LeafColor.text.secondary)
+                    Text(
+                        "Pick a teammate to invite. They'll install Leaf, copy their Join code, and send it back to you."
+                    )
+                    .font(LeafType.body.small)
+                    .foregroundStyle(LeafColor.text.secondary)
                     ShareTemplateButton(
                         templateBody: ShareTemplate.compose(.askToJoin(orgName: orgName)),
                         mailSubject: "Join Leaf team — \(orgName)"
@@ -126,10 +133,11 @@ struct GenerateInviteSheet: View {
                     .lineLimit(3)
 
                 ShareTemplateButton(
-                    templateBody: ShareTemplate.compose(.adminShare(
-                        displayName: inviteeDisplayNameHint(),
-                        inviteURL: url
-                    )),
+                    templateBody: ShareTemplate.compose(
+                        .adminShare(
+                            displayName: inviteeDisplayNameHint(),
+                            inviteURL: url
+                        )),
                     mailSubject: "Your Leaf invite link"
                 )
 

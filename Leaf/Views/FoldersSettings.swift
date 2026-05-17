@@ -11,9 +11,9 @@
 //  uses empty title (just the switch); description rewritten en, tightened.
 //
 
-import SwiftUI
 import AppKit
 import LeafCore
+import SwiftUI
 
 struct FoldersSettings: View {
     @Bindable var service: WatchedFoldersService
@@ -21,7 +21,8 @@ struct FoldersSettings: View {
     var body: some View {
         LeafSection(
             title: "Watched folders",
-            description: "Leaf tracks file activity (creation, modification, deletion) only inside selected folders. L4 keeps the folder name; L5 also captures file basenames. Toggle applies to new events only."
+            description:
+                "Leaf tracks file activity (creation, modification, deletion) only inside selected folders. L4 keeps the folder name; L5 also captures file basenames. Toggle applies to new events only."
         ) {
             VStack(alignment: .leading, spacing: LeafSpace.md) {
                 if service.folders.isEmpty {

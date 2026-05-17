@@ -1,4 +1,5 @@
 import Foundation
+
 #if canImport(Combine)
 import Combine
 #endif
@@ -47,7 +48,8 @@ public final class LocalAppsStore: ObservableObject, @unchecked Sendable {
     }
 
     public func isEnabled(_ bundleID: String) -> Bool {
-        lock.lock(); defer { lock.unlock() }
+        lock.lock()
+        defer { lock.unlock() }
         if let cached = enabledCache[bundleID] { return cached }
         return defaults.bool(forKey: Self.enabledKey(bundleID))
     }
@@ -66,7 +68,8 @@ public final class LocalAppsStore: ObservableObject, @unchecked Sendable {
     }
 
     public func isSubFieldOptedIn(_ bundleID: String, field: String) -> Bool {
-        lock.lock(); defer { lock.unlock() }
+        lock.lock()
+        defer { lock.unlock() }
         if let bucket = subFieldCache[bundleID], let cached = bucket[field] { return cached }
         return defaults.bool(forKey: Self.subFieldKey(bundleID, field))
     }
@@ -123,7 +126,8 @@ public final class LocalAppsStore: ObservableObject, @unchecked Sendable {
         "localApps.systemObservers.derivedDataWatcherEnabled"
 
     public func derivedDataWatcherEnabled() -> Bool {
-        lock.lock(); defer { lock.unlock() }
+        lock.lock()
+        defer { lock.unlock() }
         return defaults.bool(forKey: Self.kDerivedDataWatcherEnabled)
     }
 
@@ -140,7 +144,7 @@ public final class LocalAppsStore: ObservableObject, @unchecked Sendable {
 
     /// UserDefaults keys for IDE-storage FSEvents watcher toggles. Both default
     /// `false` per ADR-020 / Track-4 S3 opt-in posture.
-    static let vscodeStorageEnabledKey    = "ide-storage.vscode.enabled"
+    static let vscodeStorageEnabledKey = "ide-storage.vscode.enabled"
     static let jetbrainsStorageEnabledKey = "ide-storage.jetbrains.enabled"
 
     public var vscodeStorageEnabled: Bool {

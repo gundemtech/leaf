@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class ScreenshotMatcherTests: XCTestCase {
@@ -54,7 +55,8 @@ final class ScreenshotMatcherTests: XCTestCase {
     func testCustomAdditionalPrefix() {
         let custom = ScreenshotMatcher(additionalPrefixes: ["MyShot"])
         XCTAssertTrue(custom.matches(filename: "MyShot 2024.png"))
-        XCTAssertFalse(matcher.matches(filename: "MyShot 2024.png"),
-                       "default matcher must not recognise custom prefix")
+        XCTAssertFalse(
+            matcher.matches(filename: "MyShot 2024.png"),
+            "default matcher must not recognise custom prefix")
     }
 }

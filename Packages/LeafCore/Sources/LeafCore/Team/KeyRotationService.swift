@@ -1,5 +1,5 @@
-import Foundation
 import CryptoKit
+import Foundation
 
 /// Phase 5.3.D — admin-side orchestrator for team key rotation. Composes
 /// 5.3.A DB lifecycle helpers + 5.3.B codec/KDF + 5.3.C wire layer into a
@@ -186,14 +186,15 @@ public struct KeyRotationService: Sendable {
             if let removed = removedMember, member.id == removed.id {
                 // .tombstone wrap (raw prior teamKey, no HKDF — 5.3.B AD #6).
                 // KeyAgreement.decodePublicKey validates 64-char hex format.
-                let removedPubkey = try KeyAgreement
+                let removedPubkey =
+                    try KeyAgreement
                     .decodePublicKey(hex: member.pubkeyHex)
                     .rawRepresentation
                 let wrapKey = SymmetricKey(data: priorTeamKeyBytes)
                 let plaintext = RotationPlaintext(
                     kind: .tombstone,
                     newTeamKeyBase64: "",
-                    newKeyID: priorKeyID,                          // tombstone: new == prior
+                    newKeyID: priorKeyID,  // tombstone: new == prior
                     priorKeyID: priorKeyID,
                     generatedAtMs: nowMs,
                     removedMemberID: member.id
@@ -203,22 +204,24 @@ public struct KeyRotationService: Sendable {
                     recipientPubkey: removedPubkey,
                     wrapKey: wrapKey
                 )
-                outboxRows.append(RotationOutboxRow(
-                    peerPubkeyHex: member.pubkeyHex,
-                    newKeyID: priorKeyID,
-                    priorKeyID: priorKeyID,
-                    kind: .tombstone,
-                    peerMemberID: member.id,
-                    blob: blob.bytes,
-                    expiresAtMs: expiresAtMs,
-                    createdAtMs: nowMs,
-                    postedAtMs: nil
-                ))
+                outboxRows.append(
+                    RotationOutboxRow(
+                        peerPubkeyHex: member.pubkeyHex,
+                        newKeyID: priorKeyID,
+                        priorKeyID: priorKeyID,
+                        kind: .tombstone,
+                        peerMemberID: member.id,
+                        blob: blob.bytes,
+                        expiresAtMs: expiresAtMs,
+                        createdAtMs: nowMs,
+                        postedAtMs: nil
+                    ))
             } else {
                 // .rotation wrap — ECDH(admin, peer) + HKDF. KeyAgreement helper
                 // encapsulates hex validation + Curve25519 PublicKey reconstruction
                 // + sharedSecret derivation (Phase 5.2.A).
-                let peerPubData = try KeyAgreement
+                let peerPubData =
+                    try KeyAgreement
                     .decodePublicKey(hex: member.pubkeyHex)
                     .rawRepresentation
                 let sharedSecret = try KeyAgreement.sharedSecret(
@@ -239,17 +242,18 @@ public struct KeyRotationService: Sendable {
                     recipientPubkey: peerPubData,
                     wrapKey: wrapKey
                 )
-                outboxRows.append(RotationOutboxRow(
-                    peerPubkeyHex: member.pubkeyHex,
-                    newKeyID: newKeyID,
-                    priorKeyID: priorKeyID,
-                    kind: .rotation,
-                    peerMemberID: member.id,
-                    blob: blob.bytes,
-                    expiresAtMs: expiresAtMs,
-                    createdAtMs: nowMs,
-                    postedAtMs: nil
-                ))
+                outboxRows.append(
+                    RotationOutboxRow(
+                        peerPubkeyHex: member.pubkeyHex,
+                        newKeyID: newKeyID,
+                        priorKeyID: priorKeyID,
+                        kind: .rotation,
+                        peerMemberID: member.id,
+                        blob: blob.bytes,
+                        expiresAtMs: expiresAtMs,
+                        createdAtMs: nowMs,
+                        postedAtMs: nil
+                    ))
             }
         }
 

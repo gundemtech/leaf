@@ -103,7 +103,7 @@ public enum KeychainKeyStore {
             // Phase 3.5 — silent migration: если Keychain locked / нужна authorization,
             // вернём errSecInteractionNotAllowed без UI prompt вместо modal у юзера.
             // SecItemAdd параметр игнорирует, fetch/delete получают тихий fail.
-            kSecUseAuthenticationUI as String: kSecUseAuthenticationUISkip
+            kSecUseAuthenticationUI as String: kSecUseAuthenticationUISkip,
         ]
         // Access group применяется только для подписанных бинарей (с подходящим entitlement).
         // В unit-тестах (unsigned) оставляем пустой — Keychain работает в default keychain.

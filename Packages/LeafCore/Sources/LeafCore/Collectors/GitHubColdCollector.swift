@@ -213,7 +213,9 @@ public actor GitHubColdCollector {
                         }
                     }
                 } catch {
-                    logger.error("fetchOrgAuditLog \(org.login, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+                    logger.error(
+                        "fetchOrgAuditLog \(org.login, privacy: .public) failed: \(String(describing: error), privacy: .public)"
+                    )
                 }
             }
             // Persist cursor — even if unchanged, harmless (UPSERT idempotent).
@@ -261,11 +263,12 @@ public actor GitHubColdCollector {
             // don't carry timestamps).
             let byName = Dictionary(uniqueKeysWithValues: current.map { ($0.repoFullName, $0.starredAtMs) })
             for repo in d.starred {
-                events.append(Self.makeRepoStarredEvent(
-                    repoFullName: repo,
-                    starredAtMs: byName[repo] ?? nowMs,
-                    observedAtMs: nowMs
-                ))
+                events.append(
+                    Self.makeRepoStarredEvent(
+                        repoFullName: repo,
+                        starredAtMs: byName[repo] ?? nowMs,
+                        observedAtMs: nowMs
+                    ))
             }
             for repo in d.unstarred {
                 events.append(Self.makeRepoUnstarredEvent(repoFullName: repo, observedAtMs: nowMs))
@@ -317,7 +320,9 @@ public actor GitHubColdCollector {
                 nowMs: nowMs, events: &events, snapshots: &snapshots
             )
         } catch {
-            logger.error("fetchSecretScanningAlerts \(repoFullName, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+            logger.error(
+                "fetchSecretScanningAlerts \(repoFullName, privacy: .public) failed: \(String(describing: error), privacy: .public)"
+            )
         }
         // Code.
         do {
@@ -332,7 +337,9 @@ public actor GitHubColdCollector {
                 nowMs: nowMs, events: &events, snapshots: &snapshots
             )
         } catch {
-            logger.error("fetchCodeScanningAlerts \(repoFullName, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+            logger.error(
+                "fetchCodeScanningAlerts \(repoFullName, privacy: .public) failed: \(String(describing: error), privacy: .public)"
+            )
         }
         // Dependabot.
         do {
@@ -347,7 +354,9 @@ public actor GitHubColdCollector {
                 nowMs: nowMs, events: &events, snapshots: &snapshots
             )
         } catch {
-            logger.error("fetchDependabotAlerts \(repoFullName, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+            logger.error(
+                "fetchDependabotAlerts \(repoFullName, privacy: .public) failed: \(String(describing: error), privacy: .public)"
+            )
         }
     }
 
@@ -476,14 +485,17 @@ public actor GitHubColdCollector {
         )
     }
 
-    private func makeAlertsSnapshot(snapshotKind: String, alerts: [GitHubSecurityAlertSnapshot], capturedAtMs: Int64) -> ProviderSnapshot {
-        let payload = AlertsSnapshotJSON(alerts: alerts.map { a in
-            .init(
-                kind: a.kind.rawValue, repoFullName: a.repoFullName, alertNumber: a.alertNumber,
-                severity: a.severity, rule: a.rule, packageName: a.packageName,
-                state: a.state, createdAtMs: a.createdAtMs, updatedAtMs: a.updatedAtMs
-            )
-        })
+    private func makeAlertsSnapshot(
+        snapshotKind: String, alerts: [GitHubSecurityAlertSnapshot], capturedAtMs: Int64
+    ) -> ProviderSnapshot {
+        let payload = AlertsSnapshotJSON(
+            alerts: alerts.map { a in
+                .init(
+                    kind: a.kind.rawValue, repoFullName: a.repoFullName, alertNumber: a.alertNumber,
+                    severity: a.severity, rule: a.rule, packageName: a.packageName,
+                    state: a.state, createdAtMs: a.createdAtMs, updatedAtMs: a.updatedAtMs
+                )
+            })
         let s = (try? JSONEncoder().encode(payload)).flatMap { String(data: $0, encoding: .utf8) } ?? "{\"alerts\":[]}"
         return ProviderSnapshot(
             provider: "github", snapshotKind: snapshotKind,
@@ -550,8 +562,12 @@ public actor GitHubColdCollector {
             let repo: String
             let number: Int
         }
-        let priorByKey = Dictionary(uniqueKeysWithValues: prior.map { (Key(kind: $0.kind, repo: $0.repoFullName, number: $0.alertNumber), $0) })
-        let currentByKey = Dictionary(uniqueKeysWithValues: current.map { (Key(kind: $0.kind, repo: $0.repoFullName, number: $0.alertNumber), $0) })
+        let priorByKey = Dictionary(
+            uniqueKeysWithValues: prior.map { (Key(kind: $0.kind, repo: $0.repoFullName, number: $0.alertNumber), $0) })
+        let currentByKey = Dictionary(
+            uniqueKeysWithValues: current.map {
+                (Key(kind: $0.kind, repo: $0.repoFullName, number: $0.alertNumber), $0)
+            })
         let resolvedStates: Set<String> = ["fixed", "resolved", "dismissed"]
         let openStates: Set<String> = ["open"]
 
@@ -596,7 +612,7 @@ public actor GitHubColdCollector {
             "source": "github",
             "event_kind": GitHubEventKindKey.repoStarred.rawValue,
             Schema.EventPayloadKeys.repoFullName: repoFullName,
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(starredAtMs) / 1000.0),
@@ -611,7 +627,7 @@ public actor GitHubColdCollector {
             "source": "github",
             "event_kind": GitHubEventKindKey.repoUnstarred.rawValue,
             Schema.EventPayloadKeys.repoFullName: repoFullName,
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(observedAtMs) / 1000.0),
@@ -626,7 +642,7 @@ public actor GitHubColdCollector {
             "source": "github",
             "event_kind": GitHubEventKindKey.repoWatched.rawValue,
             Schema.EventPayloadKeys.repoFullName: repoFullName,
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(observedAtMs) / 1000.0),
@@ -641,7 +657,7 @@ public actor GitHubColdCollector {
             "source": "github",
             "event_kind": GitHubEventKindKey.repoUnwatched.rawValue,
             Schema.EventPayloadKeys.repoFullName: repoFullName,
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(observedAtMs) / 1000.0),
@@ -661,7 +677,7 @@ public actor GitHubColdCollector {
             Schema.EventPayloadKeys.alertNumber: String(alert.alertNumber),
             Schema.EventPayloadKeys.alertSeverity: alert.severity,
             Schema.EventPayloadKeys.alertRule: alert.rule,
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         if let pkg = alert.packageName {
             payload[Schema.EventPayloadKeys.dependabotPackageName] = pkg
@@ -680,7 +696,7 @@ public actor GitHubColdCollector {
             "event_kind": GitHubEventKindKey.auditActionObserved.rawValue,
             Schema.EventPayloadKeys.auditAction: entry.action,
             Schema.EventPayloadKeys.auditActorLogin: entry.actorLogin,
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(entry.createdAtMs) / 1000.0),

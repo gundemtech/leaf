@@ -12,9 +12,9 @@ struct LeafButtonPreview: View {
             Text("LeafButton").font(LeafType.title.medium).foregroundStyle(LeafColor.text.primary)
 
             VStack(alignment: .leading, spacing: LeafSpace.md) {
-                variantRow(.primary,     label: "primary")
-                variantRow(.secondary,   label: "secondary")
-                variantRow(.ghost,       label: "ghost")
+                variantRow(.primary, label: "primary")
+                variantRow(.secondary, label: "secondary")
+                variantRow(.ghost, label: "ghost")
                 variantRow(.destructive, label: "destructive")
             }
 

@@ -10,8 +10,10 @@
 //
 
 import XCTest
-import class GRDB.Row
 import os
+
+import class GRDB.Row
+
 @testable import LeafCore
 
 final class GitHubWarmCollectorTests: XCTestCase {
@@ -72,12 +74,18 @@ final class GitHubWarmCollectorTests: XCTestCase {
         func fetchMyOpenPRs(accessToken: String, login: String) async throws -> GitHubMyOpenPRsSummary {
             .empty(nowMs: 0)
         }
-        func fetchActionsRunsForActor(accessToken: String, login: String, repos: [String], since: Int64) async throws -> [GitHubActionsRunSnapshot] { [] }
-        func fetchCheckRunsForCommit(accessToken: String, repo: String, sha: String) async throws -> GitHubCheckRunsSummary { .empty }
+        func fetchActionsRunsForActor(
+            accessToken: String, login: String, repos: [String], since: Int64
+        ) async throws -> [GitHubActionsRunSnapshot] { [] }
+        func fetchCheckRunsForCommit(
+            accessToken: String, repo: String, sha: String
+        ) async throws -> GitHubCheckRunsSummary { .empty }
         func fetchContributionsCalendar(accessToken: String) async throws -> GitHubContributionsCalendar { .empty }
 
         // Warm tier.
-        func fetchProjectsV2State(accessToken: String, login: String, topN: Int) async throws -> GitHubProjectsV2Snapshot {
+        func fetchProjectsV2State(
+            accessToken: String, login: String, topN: Int
+        ) async throws -> GitHubProjectsV2Snapshot {
             fetchProjectsV2Called = true
             return nextProjects
         }
@@ -93,7 +101,9 @@ final class GitHubWarmCollectorTests: XCTestCase {
             fetchCodespacesCalled = true
             return nextCodespaces
         }
-        func fetchIssueReactions(accessToken: String, owner: String, repo: String, issueNumber: Int) async throws -> GitHubIssueReactionsSnapshot {
+        func fetchIssueReactions(
+            accessToken: String, owner: String, repo: String, issueNumber: Int
+        ) async throws -> GitHubIssueReactionsSnapshot {
             fetchIssueReactionsCallCount += 1
             let key = "\(owner)/\(repo)#\(issueNumber)"
             return nextReactions[key]
@@ -103,27 +113,36 @@ final class GitHubWarmCollectorTests: XCTestCase {
         // Cold tier no-ops.
         func fetchStarredRepos(accessToken: String, login: String) async throws -> [GitHubStarredRepoSnapshot] { [] }
         func fetchWatchedRepos(accessToken: String, login: String) async throws -> [GitHubWatchedRepoSnapshot] { [] }
-        func fetchSecretScanningAlerts(accessToken: String, owner: String, repo: String) async throws -> [GitHubSecurityAlertSnapshot] { [] }
-        func fetchCodeScanningAlerts(accessToken: String, owner: String, repo: String) async throws -> [GitHubSecurityAlertSnapshot] { [] }
-        func fetchDependabotAlerts(accessToken: String, owner: String, repo: String) async throws -> [GitHubSecurityAlertSnapshot] { [] }
+        func fetchSecretScanningAlerts(
+            accessToken: String, owner: String, repo: String
+        ) async throws -> [GitHubSecurityAlertSnapshot] { [] }
+        func fetchCodeScanningAlerts(
+            accessToken: String, owner: String, repo: String
+        ) async throws -> [GitHubSecurityAlertSnapshot] { [] }
+        func fetchDependabotAlerts(
+            accessToken: String, owner: String, repo: String
+        ) async throws -> [GitHubSecurityAlertSnapshot] { [] }
         func fetchOrganizations(accessToken: String) async throws -> [GitHubOrgSnapshot] { [] }
-        func fetchOrgAuditLog(accessToken: String, org: String, since: Int64?) async throws -> GitHubOrgAuditLogBatch { .empty }
+        func fetchOrgAuditLog(accessToken: String, org: String, since: Int64?) async throws -> GitHubOrgAuditLogBatch {
+            .empty
+        }
     }
 
     // MARK: - Helpers
 
     private func insertGitHubIntegration(_ db: Database, login: String = "alice") throws {
-        try db.upsertIntegration(IntegrationRecord(
-            provider: .github,
-            workspaceID: "github:\(login)",
-            workspaceName: login,
-            accessToken: "tok",
-            refreshToken: nil, // long-lived OAuth App
-            expiresAt: nil,
-            scope: "repo,read:project",
-            connectedAt: Date(),
-            updatedAt: Date()
-        ))
+        try db.upsertIntegration(
+            IntegrationRecord(
+                provider: .github,
+                workspaceID: "github:\(login)",
+                workspaceName: login,
+                accessToken: "tok",
+                refreshToken: nil,  // long-lived OAuth App
+                expiresAt: nil,
+                scope: "repo,read:project",
+                connectedAt: Date(),
+                updatedAt: Date()
+            ))
     }
 
     private func makeRefresher(_ db: Database) -> GitHubTokenRefresher {
@@ -158,14 +177,16 @@ final class GitHubWarmCollectorTests: XCTestCase {
             "title": "test",
             "number": String(number),
             "sha": "",
-            "branch": ""
+            "branch": "",
         ]
-        try db.write([RawEvent(
-            timestamp: Date(timeIntervalSince1970: TimeInterval(tsMs) / 1000.0),
-            signalType: .action,
-            bundleID: nil,
-            payload: payload
-        )])
+        try db.write([
+            RawEvent(
+                timestamp: Date(timeIntervalSince1970: TimeInterval(tsMs) / 1000.0),
+                signalType: .action,
+                bundleID: nil,
+                payload: payload
+            )
+        ])
     }
 
     // MARK: - Tests
@@ -189,18 +210,21 @@ final class GitHubWarmCollectorTests: XCTestCase {
         XCTAssertEqual(r.eventsEmitted, 0)
         // Confirm singleton snapshots were written even with empty arrays.
         try db.readSQL { raw in
-            XCTAssertNotNil(try ProviderSnapshotsStore.read(
-                provider: "github",
-                snapshotKind: Schema.ProviderSnapshotKinds.githubGists,
-                in: raw))
-            XCTAssertNotNil(try ProviderSnapshotsStore.read(
-                provider: "github",
-                snapshotKind: Schema.ProviderSnapshotKinds.githubCodespaces,
-                in: raw))
-            XCTAssertNotNil(try ProviderSnapshotsStore.read(
-                provider: "github",
-                snapshotKind: Schema.ProviderSnapshotKinds.githubRepoInvitations,
-                in: raw))
+            XCTAssertNotNil(
+                try ProviderSnapshotsStore.read(
+                    provider: "github",
+                    snapshotKind: Schema.ProviderSnapshotKinds.githubGists,
+                    in: raw))
+            XCTAssertNotNil(
+                try ProviderSnapshotsStore.read(
+                    provider: "github",
+                    snapshotKind: Schema.ProviderSnapshotKinds.githubCodespaces,
+                    in: raw))
+            XCTAssertNotNil(
+                try ProviderSnapshotsStore.read(
+                    provider: "github",
+                    snapshotKind: Schema.ProviderSnapshotKinds.githubRepoInvitations,
+                    in: raw))
         }
         // Offset row written with lastModifiedMs = nowMs.
         let off = try db.readOffset(
@@ -215,26 +239,32 @@ final class GitHubWarmCollectorTests: XCTestCase {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertGitHubIntegration(db)
         let p = SpyProvider()
-        await p.setProjects(GitHubProjectsV2Snapshot(projects: [
-            GitHubProjectV2Snapshot(projectID: "p1", projectTitle: "Roadmap", items: [
-                GitHubProjectV2ItemSnapshot(
-                    itemID: "i1", projectID: "p1", title: "Foo",
-                    status: "Todo", iterationID: nil,
-                    fieldValues: ["Priority": "P1"], updatedAtMs: 1
-                )
-            ])
-        ]))
+        await p.setProjects(
+            GitHubProjectsV2Snapshot(projects: [
+                GitHubProjectV2Snapshot(
+                    projectID: "p1", projectTitle: "Roadmap",
+                    items: [
+                        GitHubProjectV2ItemSnapshot(
+                            itemID: "i1", projectID: "p1", title: "Foo",
+                            status: "Todo", iterationID: nil,
+                            fieldValues: ["Priority": "P1"], updatedAtMs: 1
+                        )
+                    ])
+            ]))
         await p.setGists([
-            GitHubGistSnapshot(gistID: "g1", description: "alpha",
-                               isPublic: true, createdAtMs: 1, updatedAtMs: 1)
+            GitHubGistSnapshot(
+                gistID: "g1", description: "alpha",
+                isPublic: true, createdAtMs: 1, updatedAtMs: 1)
         ])
         await p.setCodespaces([
-            GitHubCodespaceSnapshot(codespaceName: "musical-octo", repoFullName: "o/r",
-                                    state: "Available", createdAtMs: 1, lastUsedAtMs: nil)
+            GitHubCodespaceSnapshot(
+                codespaceName: "musical-octo", repoFullName: "o/r",
+                state: "Available", createdAtMs: 1, lastUsedAtMs: nil)
         ])
         await p.setInvitations([
-            GitHubRepoInvitationSnapshot(invitationID: "iv1", repoFullName: "o/r",
-                                         inviterLogin: "bob", invitedAtMs: 1)
+            GitHubRepoInvitationSnapshot(
+                invitationID: "iv1", repoFullName: "o/r",
+                inviterLogin: "bob", invitedAtMs: 1)
         ])
         let c = makeCollector(db, p)
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
@@ -267,17 +297,19 @@ final class GitHubWarmCollectorTests: XCTestCase {
         try insertGitHubIntegration(db)
         // Seed prior snapshot with empty list.
         try db.writeSQL { raw in
-            try ProviderSnapshotsStore.upsert(ProviderSnapshot(
-                provider: "github",
-                snapshotKind: Schema.ProviderSnapshotKinds.githubGists,
-                snapshotJSON: "[]",
-                capturedAtMs: 0
-            ), in: raw)
+            try ProviderSnapshotsStore.upsert(
+                ProviderSnapshot(
+                    provider: "github",
+                    snapshotKind: Schema.ProviderSnapshotKinds.githubGists,
+                    snapshotJSON: "[]",
+                    capturedAtMs: 0
+                ), in: raw)
         }
         let p = SpyProvider()
         await p.setGists([
-            GitHubGistSnapshot(gistID: "g1", description: "alpha",
-                               isPublic: true, createdAtMs: 1, updatedAtMs: 1)
+            GitHubGistSnapshot(
+                gistID: "g1", description: "alpha",
+                isPublic: true, createdAtMs: 1, updatedAtMs: 1)
         ])
         let c = makeCollector(db, p)
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
@@ -294,20 +326,22 @@ final class GitHubWarmCollectorTests: XCTestCase {
         try insertGitHubIntegration(db)
         // Seed prior snapshot: codespace existed in Shutdown state.
         let priorJSON = """
-        [{"codespaceName":"musical-octo","repoFullName":"o/r","state":"Shutdown","createdAtMs":1,"lastUsedAtMs":null}]
-        """
+            [{"codespaceName":"musical-octo","repoFullName":"o/r","state":"Shutdown","createdAtMs":1,"lastUsedAtMs":null}]
+            """
         try db.writeSQL { raw in
-            try ProviderSnapshotsStore.upsert(ProviderSnapshot(
-                provider: "github",
-                snapshotKind: Schema.ProviderSnapshotKinds.githubCodespaces,
-                snapshotJSON: priorJSON,
-                capturedAtMs: 0
-            ), in: raw)
+            try ProviderSnapshotsStore.upsert(
+                ProviderSnapshot(
+                    provider: "github",
+                    snapshotKind: Schema.ProviderSnapshotKinds.githubCodespaces,
+                    snapshotJSON: priorJSON,
+                    capturedAtMs: 0
+                ), in: raw)
         }
         let p = SpyProvider()
         await p.setCodespaces([
-            GitHubCodespaceSnapshot(codespaceName: "musical-octo", repoFullName: "o/r",
-                                    state: "Available", createdAtMs: 1, lastUsedAtMs: 100)
+            GitHubCodespaceSnapshot(
+                codespaceName: "musical-octo", repoFullName: "o/r",
+                state: "Available", createdAtMs: 1, lastUsedAtMs: 100)
         ])
         let c = makeCollector(db, p)
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
@@ -329,7 +363,7 @@ final class GitHubWarmCollectorTests: XCTestCase {
         for i in 1...15 {
             try insertViewerAuthoredIssueEvent(
                 db, repo: "octo/repo", number: i,
-                tsMs: nowMs - Int64(i * 1000) // each 1s older
+                tsMs: nowMs - Int64(i * 1000)  // each 1s older
             )
         }
         let p = SpyProvider()
@@ -349,12 +383,13 @@ final class GitHubWarmCollectorTests: XCTestCase {
         // Seed prior reactions snapshot for this issue: 1 "+1" reaction.
         let priorJSON = #"{"owner":"octo","repo":"repo","issueNumber":7,"byEmoji":{"+1":1},"observedAtMs":0}"#
         try db.writeSQL { raw in
-            try ProviderSnapshotsStore.upsert(ProviderSnapshot(
-                provider: "github",
-                snapshotKind: Schema.ProviderSnapshotKinds.githubIssueReactionsPrefix + "octo/repo#7",
-                snapshotJSON: priorJSON,
-                capturedAtMs: 0
-            ), in: raw)
+            try ProviderSnapshotsStore.upsert(
+                ProviderSnapshot(
+                    provider: "github",
+                    snapshotKind: Schema.ProviderSnapshotKinds.githubIssueReactionsPrefix + "octo/repo#7",
+                    snapshotJSON: priorJSON,
+                    capturedAtMs: 0
+                ), in: raw)
         }
         let p = SpyProvider()
         await p.setReactions([
@@ -368,11 +403,13 @@ final class GitHubWarmCollectorTests: XCTestCase {
         // 2 events: +1 delta of 2, heart delta of 1.
         XCTAssertEqual(r.eventsEmitted, 2)
         try db.readSQL { raw in
-            let rows = try Row.fetchAll(raw, sql: """
-                SELECT payload_json FROM events
-                WHERE json_extract(payload_json, '$.event_kind') = 'gh_issue_reaction_received'
-                ORDER BY id ASC
-                """)
+            let rows = try Row.fetchAll(
+                raw,
+                sql: """
+                    SELECT payload_json FROM events
+                    WHERE json_extract(payload_json, '$.event_kind') = 'gh_issue_reaction_received'
+                    ORDER BY id ASC
+                    """)
             XCTAssertEqual(rows.count, 2)
         }
     }

@@ -2,6 +2,7 @@
 // Prod parser tested in LeafCorePrivateTests/ProdLinearGraphQLProviderTests.swift (moat).
 
 import XCTest
+
 @testable import LeafCore
 
 final class LinearGraphQLProviderTests: XCTestCase {

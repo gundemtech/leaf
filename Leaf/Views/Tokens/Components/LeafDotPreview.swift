@@ -32,12 +32,12 @@ struct LeafDotPreview: View {
                 .font(LeafType.mono.small)
                 .foregroundStyle(LeafColor.text.tertiary)
                 .frame(width: 24, alignment: .leading)
-            LeafDot(tone: .accent,  size: size)
+            LeafDot(tone: .accent, size: size)
             LeafDot(tone: .success, size: size)
             LeafDot(tone: .warning, size: size)
-            LeafDot(tone: .danger,  size: size)
-            LeafDot(tone: .info,    size: size)
-            LeafDot(tone: .muted,   size: size)
+            LeafDot(tone: .danger, size: size)
+            LeafDot(tone: .info, size: size)
+            LeafDot(tone: .muted, size: size)
         }
     }
 }

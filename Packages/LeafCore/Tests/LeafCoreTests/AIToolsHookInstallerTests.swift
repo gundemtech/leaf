@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class AIToolsHookInstallerTests: XCTestCase {
@@ -7,8 +8,9 @@ final class AIToolsHookInstallerTests: XCTestCase {
 
     override func setUp() async throws {
         // /tmp/ to stay well under sun_path limits (not strictly relevant here but consistent).
-        tempDir = URL(fileURLWithPath: "/tmp/leaf-installer-\(UUID().uuidString.prefix(8))",
-                      isDirectory: true)
+        tempDir = URL(
+            fileURLWithPath: "/tmp/leaf-installer-\(UUID().uuidString.prefix(8))",
+            isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         // We emulate ~/.claude/settings.json layout.
         let claudeDir = tempDir.appendingPathComponent(".claude", isDirectory: true)
@@ -37,9 +39,9 @@ final class AIToolsHookInstallerTests: XCTestCase {
     private func firstCommand(in hooks: [String: Any], for event: String) -> String {
         let arr = hooks[event] as? [[String: Any]] ?? []
         guard let matcher = arr.first,
-              let innerHooks = matcher["hooks"] as? [[String: Any]],
-              let first = innerHooks.first,
-              let cmd = first["command"] as? String
+            let innerHooks = matcher["hooks"] as? [[String: Any]],
+            let first = innerHooks.first,
+            let cmd = first["command"] as? String
         else { return "" }
         return cmd
     }
@@ -65,8 +67,8 @@ final class AIToolsHookInstallerTests: XCTestCase {
     func testInstallPreservesUserForeignHook() throws {
         // User pre-installed a foreign PostToolUse hook (e.g. prettier autoformat).
         let initial = #"""
-        {"hooks":{"PostToolUse":[{"matcher":"Edit","hooks":[{"type":"command","command":"/usr/local/bin/prettier"}]}]}}
-        """#
+            {"hooks":{"PostToolUse":[{"matcher":"Edit","hooks":[{"type":"command","command":"/usr/local/bin/prettier"}]}]}}
+            """#
         try Data(initial.utf8).write(to: settingsURL)
 
         let installer = makeInstaller()
@@ -110,7 +112,7 @@ final class AIToolsHookInstallerTests: XCTestCase {
         var postToolUse = hooks["PostToolUse"] as? [[String: Any]] ?? []
         postToolUse.append([
             "matcher": "Write",
-            "hooks": [["type": "command", "command": "/usr/local/bin/format"]]
+            "hooks": [["type": "command", "command": "/usr/local/bin/format"]],
         ])
         hooks["PostToolUse"] = postToolUse
         json["hooks"] = hooks
@@ -152,8 +154,9 @@ final class AIToolsHookInstallerTests: XCTestCase {
         _ = try installerOld.install()
 
         let installerNew = makeInstaller(bundlePath: "/Applications/Leaf.app")
-        XCTAssertEqual(installerNew.currentStatus(), .drifted,
-                       "different bundle path → drifted state")
+        XCTAssertEqual(
+            installerNew.currentStatus(), .drifted,
+            "different bundle path → drifted state")
     }
 
     // MARK: - Robustness
@@ -172,7 +175,8 @@ final class AIToolsHookInstallerTests: XCTestCase {
 
     func testInstallCreatesParentDirectoryIfMissing() throws {
         // Use a settings URL deeper than the existing claude-dir
-        let deep = tempDir
+        let deep =
+            tempDir
             .appendingPathComponent("deeper", isDirectory: true)
             .appendingPathComponent(".claude", isDirectory: true)
             .appendingPathComponent("settings.json")
@@ -188,10 +192,12 @@ final class AIToolsHookInstallerTests: XCTestCase {
         let hooks = json["hooks"] as? [String: Any] ?? [:]
         for event in ["PreToolUse", "PostToolUse", "UserPromptSubmit", "SessionEnd", "PreCompact"] {
             let cmd = firstCommand(in: hooks, for: event)
-            XCTAssertTrue(cmd.hasSuffix(" \(event)"),
-                          "Command ends with event name for \(event); got: \(cmd)")
-            XCTAssertTrue(cmd.contains("leaf-hook-bridge"),
-                          "Command points at bridge for \(event); got: \(cmd)")
+            XCTAssertTrue(
+                cmd.hasSuffix(" \(event)"),
+                "Command ends with event name for \(event); got: \(cmd)")
+            XCTAssertTrue(
+                cmd.contains("leaf-hook-bridge"),
+                "Command points at bridge for \(event); got: \(cmd)")
         }
     }
 

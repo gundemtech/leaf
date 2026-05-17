@@ -10,8 +10,8 @@
 //  with per-row rows separated by LeafDivider, "Add Domain" → sheet.
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct BrowserAllowListSection: View {
     @Bindable var store: BrowserAllowListStore
@@ -21,7 +21,8 @@ struct BrowserAllowListSection: View {
     var body: some View {
         LeafSection(
             title: "Browser Allow-list",
-            description: "Domains added here capture full URLs and page titles when you visit them. All other domains record only the domain name."
+            description:
+                "Domains added here capture full URLs and page titles when you visit them. All other domains record only the domain name."
         ) {
             VStack(alignment: .leading, spacing: LeafSpace.md) {
                 if store.entries.isEmpty {
@@ -187,16 +188,16 @@ private struct AddBrowserDomainSheet: View {
 
 // MARK: - URLGranularity UI helpers
 
-private extension URLGranularity {
-    var shortLabel: String {
+extension URLGranularity {
+    fileprivate var shortLabel: String {
         switch self {
-        case .fullUrl:       return "Full URL"
-        case .pathStripped:  return "URL + path"
-        case .domainOnly:    return "Domain only"
+        case .fullUrl: return "Full URL"
+        case .pathStripped: return "URL + path"
+        case .domainOnly: return "Domain only"
         }
     }
 
-    var explainer: String {
+    fileprivate var explainer: String {
         switch self {
         case .fullUrl:
             return "Captures the complete URL including query parameters."
@@ -207,4 +208,3 @@ private extension URLGranularity {
         }
     }
 }
-

@@ -13,12 +13,12 @@ enum LeafDotTone {
 
     var color: Color {
         switch self {
-        case .accent:  LeafColor.accent.primary
+        case .accent: LeafColor.accent.primary
         case .success: LeafColor.status.success
         case .warning: LeafColor.status.warning
-        case .danger:  LeafColor.status.danger
-        case .info:    LeafColor.status.info
-        case .muted:   LeafColor.text.tertiary
+        case .danger: LeafColor.status.danger
+        case .info: LeafColor.status.info
+        case .muted: LeafColor.text.tertiary
         }
     }
 }

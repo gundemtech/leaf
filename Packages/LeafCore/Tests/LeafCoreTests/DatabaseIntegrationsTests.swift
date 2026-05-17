@@ -3,8 +3,9 @@
 // (Network.framework + URLSession + NSWorkspace.open — heavy mocking
 // без выгоды; manual smoke в PR description).
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class DatabaseIntegrationsTests: XCTestCase {
@@ -92,17 +93,18 @@ final class DatabaseIntegrationsTests: XCTestCase {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
         let now = Date(timeIntervalSince1970: 1_700_000_000)
-        try db.upsertIntegration(IntegrationRecord(
-            provider: .linear,
-            workspaceID: "ws-1",
-            workspaceName: "Workspace",
-            accessToken: "access",
-            refreshToken: nil,
-            expiresAt: nil,
-            scope: "read",
-            connectedAt: now,
-            updatedAt: now
-        ))
+        try db.upsertIntegration(
+            IntegrationRecord(
+                provider: .linear,
+                workspaceID: "ws-1",
+                workspaceName: "Workspace",
+                accessToken: "access",
+                refreshToken: nil,
+                expiresAt: nil,
+                scope: "read",
+                connectedAt: now,
+                updatedAt: now
+            ))
 
         let loaded = try db.readIntegration(provider: .linear)
         XCTAssertNotNil(loaded)
@@ -117,18 +119,20 @@ final class DatabaseIntegrationsTests: XCTestCase {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
         let now = Date(timeIntervalSince1970: 1_700_000_000)
-        try db.upsertIntegration(IntegrationRecord(
-            provider: .linear, workspaceID: "ws-1", workspaceName: "First",
-            accessToken: "old-tok", refreshToken: "old-ref", expiresAt: nil,
-            scope: "read", connectedAt: now, updatedAt: now
-        ))
+        try db.upsertIntegration(
+            IntegrationRecord(
+                provider: .linear, workspaceID: "ws-1", workspaceName: "First",
+                accessToken: "old-tok", refreshToken: "old-ref", expiresAt: nil,
+                scope: "read", connectedAt: now, updatedAt: now
+            ))
 
         let later = now.addingTimeInterval(3600)
-        try db.upsertIntegration(IntegrationRecord(
-            provider: .linear, workspaceID: "ws-2", workspaceName: "Second",
-            accessToken: "new-tok", refreshToken: "new-ref", expiresAt: nil,
-            scope: "read", connectedAt: later, updatedAt: later
-        ))
+        try db.upsertIntegration(
+            IntegrationRecord(
+                provider: .linear, workspaceID: "ws-2", workspaceName: "Second",
+                accessToken: "new-tok", refreshToken: "new-ref", expiresAt: nil,
+                scope: "read", connectedAt: later, updatedAt: later
+            ))
 
         let loaded = try db.readIntegration(provider: .linear)
         XCTAssertEqual(loaded?.workspaceID, "ws-2")
@@ -151,11 +155,12 @@ final class DatabaseIntegrationsTests: XCTestCase {
         XCTAssertNoThrow(try db.deleteIntegration(provider: .linear))
 
         let now = Date(timeIntervalSince1970: 1_700_000_000)
-        try db.upsertIntegration(IntegrationRecord(
-            provider: .linear, workspaceID: "ws", workspaceName: "Name",
-            accessToken: "t", refreshToken: nil, expiresAt: nil,
-            scope: "read", connectedAt: now, updatedAt: now
-        ))
+        try db.upsertIntegration(
+            IntegrationRecord(
+                provider: .linear, workspaceID: "ws", workspaceName: "Name",
+                accessToken: "t", refreshToken: nil, expiresAt: nil,
+                scope: "read", connectedAt: now, updatedAt: now
+            ))
         XCTAssertNotNil(try db.readIntegration(provider: .linear))
 
         try db.deleteIntegration(provider: .linear)
@@ -180,7 +185,7 @@ final class DatabaseIntegrationsTests: XCTestCase {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
         let connected = Date(timeIntervalSince1970: 1_700_000_000)
-        let expires = connected.addingTimeInterval(43200) // 12h
+        let expires = connected.addingTimeInterval(43200)  // 12h
         let record = IntegrationRecord(
             provider: .slack,
             workspaceID: "T01ABC:U01DEF",

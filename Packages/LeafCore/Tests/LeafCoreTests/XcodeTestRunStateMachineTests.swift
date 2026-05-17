@@ -1,5 +1,6 @@
 // Phase Track-6 P2 — XcodeTestRunStateMachine coverage.
 import Testing
+
 @testable import LeafCore
 
 @Suite("XcodeTestRunStateMachine")
@@ -44,8 +45,9 @@ struct XcodeTestRunStateMachineTests {
             expectedFailureCount: 1, totalCount: 1506, durationMs: 30_000,
             scheme: "Leaf", destinationBucket: .macos
         )
-        let e = m.observeFinished(bundlePath: "/a/b/1.xcresult",
-                                  summary: summary, nowMs: 300)
+        let e = m.observeFinished(
+            bundlePath: "/a/b/1.xcresult",
+            summary: summary, nowMs: 300)
         #expect(e.count == 1)
         let p = e[0].payload
         #expect(p["event_kind"] == "xcode_test_run_finished")
@@ -67,8 +69,9 @@ struct XcodeTestRunStateMachineTests {
             expectedFailureCount: 0, totalCount: 102, durationMs: 5_000,
             scheme: nil, destinationBucket: .iosSimulator
         )
-        let e = m.observeFinished(bundlePath: "/x.xcresult",
-                                  summary: summary, nowMs: 100)
+        let e = m.observeFinished(
+            bundlePath: "/x.xcresult",
+            summary: summary, nowMs: 100)
         #expect(e[0].payload["status"] == "failed")
         #expect(e[0].payload["scheme"] == nil)
     }

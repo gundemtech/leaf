@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafMCPProtocol
 
 final class DispatcherTests: XCTestCase {

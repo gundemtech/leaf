@@ -3,8 +3,9 @@
 // (same pattern as GoogleCalendarOAuthClientTests). Stub round-trip tests
 // verify enqueue ordering + call-log instrumentation.
 
-import XCTest
 import Foundation
+import XCTest
+
 @testable import LeafCore
 
 private final class GoogleCalendarAPIMockURLProtocol: URLProtocol {
@@ -39,7 +40,9 @@ final class GoogleCalendarAPIClientTests: XCTestCase {
         return ProdGoogleCalendarAPIClient(urlSession: URLSession(configuration: cfg))
     }
 
-    private func httpResponse(url: URL, status: Int, headers: [String: String] = ["Content-Type": "application/json"]) -> HTTPURLResponse {
+    private func httpResponse(
+        url: URL, status: Int, headers: [String: String] = ["Content-Type": "application/json"]
+    ) -> HTTPURLResponse {
         HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: headers)!
     }
 
@@ -104,18 +107,18 @@ final class GoogleCalendarAPIClientTests: XCTestCase {
 
     func testEventsList200DecodesResponse() async throws {
         let canned = #"""
-        {
-          "kind": "calendar#events",
-          "summary": "demidovdmitry07@gmail.com",
-          "timeZone": "Europe/Berlin",
-          "accessRole": "owner",
-          "items": [
-            {"id": "evt-1", "iCalUID": "u1", "status": "confirmed", "summary": "Standup"}
-          ],
-          "nextPageToken": "p2",
-          "nextSyncToken": "sync-new"
-        }
-        """#
+            {
+              "kind": "calendar#events",
+              "summary": "demidovdmitry07@gmail.com",
+              "timeZone": "Europe/Berlin",
+              "accessRole": "owner",
+              "items": [
+                {"id": "evt-1", "iCalUID": "u1", "status": "confirmed", "summary": "Standup"}
+              ],
+              "nextPageToken": "p2",
+              "nextSyncToken": "sync-new"
+            }
+            """#
         GoogleCalendarAPIMockURLProtocol.handler = { req in
             XCTAssertEqual(req.value(forHTTPHeaderField: "Authorization"), "Bearer ya29.tok")
             XCTAssertEqual(req.value(forHTTPHeaderField: "Accept"), "application/json")
@@ -140,8 +143,8 @@ final class GoogleCalendarAPIClientTests: XCTestCase {
 
     func testEventsList410FullSyncRequiredThrows() async throws {
         let body = #"""
-        {"error":{"code":410,"message":"Sync token is no longer valid","errors":[{"reason":"fullSyncRequired","domain":"calendar"}]}}
-        """#
+            {"error":{"code":410,"message":"Sync token is no longer valid","errors":[{"reason":"fullSyncRequired","domain":"calendar"}]}}
+            """#
         GoogleCalendarAPIMockURLProtocol.handler = { req in
             (self.httpResponse(url: req.url!, status: 410), Data(body.utf8))
         }
@@ -196,7 +199,10 @@ final class GoogleCalendarAPIClientTests: XCTestCase {
     func testEventsList429ThrowsRateLimitedWithRetryAfter() async throws {
         GoogleCalendarAPIMockURLProtocol.handler = { req in
             let headers: [String: String] = ["Content-Type": "application/json", "Retry-After": "42"]
-            return (self.httpResponse(url: req.url!, status: 429, headers: headers), Data(#"{"error":{"code":429,"message":"slow down"}}"#.utf8))
+            return (
+                self.httpResponse(url: req.url!, status: 429, headers: headers),
+                Data(#"{"error":{"code":429,"message":"slow down"}}"#.utf8)
+            )
         }
         let client = makeClient()
         do {

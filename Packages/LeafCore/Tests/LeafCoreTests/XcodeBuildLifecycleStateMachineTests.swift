@@ -1,6 +1,7 @@
+import Foundation
 // Phase Track-6 P2 — XcodeBuildLifecycleStateMachine transition coverage.
 import Testing
-import Foundation
+
 @testable import LeafCore
 
 @Suite("XcodeBuildLifecycleStateMachine")
@@ -174,8 +175,10 @@ struct XcodeBuildLifecycleStateMachineTests {
         _ = m.observe(obs(state: .running), nowMs: 10_000)
         let finish = m.observe(obs(state: .succeeded), nowMs: 12_000)
         let finished = finish.first { $0.payload["event_kind"] == "xcode_build_finished" }
-        #expect(finished?.payload["duration_ms"] == "2000",
-                "duration_ms must come from second build start (10000), not stale buildStartedMs from canceled first build (200)")
+        #expect(
+            finished?.payload["duration_ms"] == "2000",
+            "duration_ms must come from second build start (10000), not stale buildStartedMs from canceled first build (200)"
+        )
     }
 
     /// Once a build finishes, the next `running` observation must start a fresh
@@ -185,10 +188,11 @@ struct XcodeBuildLifecycleStateMachineTests {
         _ = m.observe(obs(state: .idle), nowMs: 100)
         _ = m.observe(obs(state: .running), nowMs: 200)
         _ = m.observe(obs(state: .succeeded), nowMs: 1_200)  // first build done
-        _ = m.observe(obs(state: .running), nowMs: 10_000)   // second build starts
+        _ = m.observe(obs(state: .running), nowMs: 10_000)  // second build starts
         let finish = m.observe(obs(state: .succeeded), nowMs: 12_000)
         let finished = finish.first { $0.payload["event_kind"] == "xcode_build_finished" }
-        #expect(finished?.payload["duration_ms"] == "2000",
-                "duration must come from second build's start (10000), not first (200)")
+        #expect(
+            finished?.payload["duration_ms"] == "2000",
+            "duration must come from second build's start (10000), not first (200)")
     }
 }

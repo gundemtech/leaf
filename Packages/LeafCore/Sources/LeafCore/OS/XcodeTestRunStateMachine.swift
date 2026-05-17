@@ -28,7 +28,7 @@ public struct XcodeTestRunStateMachine: Sendable, Hashable {
         }
         var payload: [String: String] = [
             "event_kind": "xcode_test_run_started",
-            "run_destination_bucket": runDestinationBucket.rawValue
+            "run_destination_bucket": runDestinationBucket.rawValue,
         ]
         if let s = scheme { payload["scheme"] = s }
         return [Self.event(payload, nowMs: nowMs)]
@@ -52,7 +52,7 @@ public struct XcodeTestRunStateMachine: Sendable, Hashable {
             "expected_failure_count": String(summary.expectedFailureCount),
             "total_count": String(summary.totalCount),
             "status": summary.failedCount > 0 ? "failed" : "succeeded",
-            "run_destination_bucket": summary.destinationBucket.rawValue
+            "run_destination_bucket": summary.destinationBucket.rawValue,
         ]
         if let s = summary.scheme { payload["scheme"] = s }
         if let d = summary.durationMs { payload["duration_ms"] = String(d) }

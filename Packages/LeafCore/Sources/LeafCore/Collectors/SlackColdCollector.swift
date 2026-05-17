@@ -124,7 +124,8 @@ public actor SlackColdCollector {
             teamID = w
             userID = u
         } else {
-            logger.error("malformed workspaceID '\(refreshed.workspaceID, privacy: .public)' — expected '<team>:<user>'")
+            logger.error(
+                "malformed workspaceID '\(refreshed.workspaceID, privacy: .public)' — expected '<team>:<user>'")
             return TickResult(skipped: true, eventsEmitted: 0)
         }
         let sourceID = "slack:cold:\(teamID)"
@@ -179,14 +180,16 @@ public actor SlackColdCollector {
         if await scopes.has("canvases:read"), priorCanvasesRowPresent {
             let (created, edited) = Self.canvasesPerChannelDiff(prior: priorCanvases, current: batch.canvases)
             for c in created {
-                events.append(Self.makeCanvasCreatedEvent(
-                    canvas: c, workspaceID: workspaceID, userID: userID, observedAtMs: nowMs
-                ))
+                events.append(
+                    Self.makeCanvasCreatedEvent(
+                        canvas: c, workspaceID: workspaceID, userID: userID, observedAtMs: nowMs
+                    ))
             }
             for c in edited {
-                events.append(Self.makeCanvasEditedEvent(
-                    canvas: c, workspaceID: workspaceID, userID: userID, observedAtMs: nowMs
-                ))
+                events.append(
+                    Self.makeCanvasEditedEvent(
+                        canvas: c, workspaceID: workspaceID, userID: userID, observedAtMs: nowMs
+                    ))
             }
         }
 
@@ -194,9 +197,10 @@ public actor SlackColdCollector {
         if await scopes.has("emoji:read"), priorEmojiRowPresent {
             let d = Self.emojiSetDiff(prior: priorEmoji, current: batch.emoji)
             for name in d.added.sorted() {
-                events.append(Self.makeCustomEmojiAddedEvent(
-                    emojiName: name, workspaceID: workspaceID, observedAtMs: nowMs
-                ))
+                events.append(
+                    Self.makeCustomEmojiAddedEvent(
+                        emojiName: name, workspaceID: workspaceID, observedAtMs: nowMs
+                    ))
             }
         }
 
@@ -204,12 +208,13 @@ public actor SlackColdCollector {
         if await scopes.has("usergroups:read"), priorUsergroupsRowPresent {
             let deltas = Self.usergroupsDiff(prior: priorUsergroups, current: batch.usergroups)
             for delta in deltas {
-                events.append(Self.makeUsergroupMembershipChangedEvent(
-                    groupID: delta.groupID,
-                    addedUserIDs: delta.addedUserIDs,
-                    removedUserIDs: delta.removedUserIDs,
-                    workspaceID: workspaceID, userID: userID, observedAtMs: nowMs
-                ))
+                events.append(
+                    Self.makeUsergroupMembershipChangedEvent(
+                        groupID: delta.groupID,
+                        addedUserIDs: delta.addedUserIDs,
+                        removedUserIDs: delta.removedUserIDs,
+                        workspaceID: workspaceID, userID: userID, observedAtMs: nowMs
+                    ))
             }
         }
 
@@ -218,15 +223,17 @@ public actor SlackColdCollector {
         if priorChannelsInfoRowPresent {
             let (renamed, archived) = Self.channelsInfoDiff(prior: priorChannelsInfo, current: batch.channelsInfo)
             for r in renamed {
-                events.append(Self.makeChannelRenamedEvent(
-                    channelID: r.channelID, oldName: r.oldName, newName: r.newName,
-                    workspaceID: workspaceID, observedAtMs: nowMs
-                ))
+                events.append(
+                    Self.makeChannelRenamedEvent(
+                        channelID: r.channelID, oldName: r.oldName, newName: r.newName,
+                        workspaceID: workspaceID, observedAtMs: nowMs
+                    ))
             }
             for c in archived {
-                events.append(Self.makeChannelArchivedEvent(
-                    channel: c, workspaceID: workspaceID, observedAtMs: nowMs
-                ))
+                events.append(
+                    Self.makeChannelArchivedEvent(
+                        channel: c, workspaceID: workspaceID, observedAtMs: nowMs
+                    ))
             }
         }
 
@@ -241,14 +248,18 @@ public actor SlackColdCollector {
         // 9. Snapshots — always written (bootstrap discipline gates events, not
         // persistence).
         let snapshots: [ProviderSnapshot] = [
-            makeSnapshot(kind: Schema.ProviderSnapshotKinds.slackCanvasesPerChannel,
-                         encoding: batch.canvases, nowMs: nowMs),
-            makeSnapshot(kind: Schema.ProviderSnapshotKinds.slackEmojiList,
-                         encoding: batch.emoji, nowMs: nowMs),
-            makeSnapshot(kind: Schema.ProviderSnapshotKinds.slackUsergroups,
-                         encoding: batch.usergroups, nowMs: nowMs),
-            makeSnapshot(kind: Schema.ProviderSnapshotKinds.slackChannelsInfo,
-                         encoding: batch.channelsInfo, nowMs: nowMs)
+            makeSnapshot(
+                kind: Schema.ProviderSnapshotKinds.slackCanvasesPerChannel,
+                encoding: batch.canvases, nowMs: nowMs),
+            makeSnapshot(
+                kind: Schema.ProviderSnapshotKinds.slackEmojiList,
+                encoding: batch.emoji, nowMs: nowMs),
+            makeSnapshot(
+                kind: Schema.ProviderSnapshotKinds.slackUsergroups,
+                encoding: batch.usergroups, nowMs: nowMs),
+            makeSnapshot(
+                kind: Schema.ProviderSnapshotKinds.slackChannelsInfo,
+                encoding: batch.channelsInfo, nowMs: nowMs),
         ]
 
         // 10. Atomic write.
@@ -293,7 +304,8 @@ public actor SlackColdCollector {
     private func makeSnapshot<T: Encodable>(kind: String, encoding value: T, nowMs: Int64) -> ProviderSnapshot {
         let json: String
         if let data = try? JSONEncoder().encode(value),
-           let s = String(data: data, encoding: .utf8) {
+            let s = String(data: data, encoding: .utf8)
+        {
             json = s
         } else {
             json = "{}"
@@ -321,7 +333,7 @@ public actor SlackColdCollector {
             Schema.EventPayloadKeys.lastEditedMs: String(canvas.lastEditedMs),
             Schema.EventPayloadKeys.workspaceId: workspaceID,
             Schema.EventPayloadKeys.userId: userID,
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         if let cid = canvas.channelID {
             payload[Schema.EventPayloadKeys.channelId] = cid
@@ -344,7 +356,7 @@ public actor SlackColdCollector {
             Schema.EventPayloadKeys.lastEditedMs: String(canvas.lastEditedMs),
             Schema.EventPayloadKeys.workspaceId: workspaceID,
             Schema.EventPayloadKeys.userId: userID,
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         if let cid = canvas.channelID {
             payload[Schema.EventPayloadKeys.channelId] = cid
@@ -363,7 +375,7 @@ public actor SlackColdCollector {
             "event_kind": SlackEventKindKey.slackCustomEmojiAdded.rawValue,
             Schema.EventPayloadKeys.emojiName: emojiName,
             Schema.EventPayloadKeys.workspaceId: workspaceID,
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(observedAtMs) / 1000.0),
@@ -385,7 +397,7 @@ public actor SlackColdCollector {
             Schema.EventPayloadKeys.removedUserIdsJson: encodeIDArray(removedUserIDs),
             Schema.EventPayloadKeys.workspaceId: workspaceID,
             Schema.EventPayloadKeys.userId: userID,
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(observedAtMs) / 1000.0),
@@ -404,7 +416,7 @@ public actor SlackColdCollector {
             Schema.EventPayloadKeys.oldName: oldName,
             Schema.EventPayloadKeys.newName: newName,
             Schema.EventPayloadKeys.workspaceId: workspaceID,
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(observedAtMs) / 1000.0),
@@ -421,7 +433,7 @@ public actor SlackColdCollector {
             Schema.EventPayloadKeys.channelId: channel.channelID,
             Schema.EventPayloadKeys.channelName: channel.name,
             Schema.EventPayloadKeys.workspaceId: workspaceID,
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(observedAtMs) / 1000.0),
@@ -435,7 +447,8 @@ public actor SlackColdCollector {
     private static func encodeIDArray(_ ids: Set<String>) -> String {
         let sorted = ids.sorted()
         guard let data = try? JSONEncoder().encode(sorted),
-              let s = String(data: data, encoding: .utf8) else {
+            let s = String(data: data, encoding: .utf8)
+        else {
             return "[]"
         }
         return s

@@ -1,7 +1,8 @@
 // Phase Track-1 D2 — M012 FTS5 virtual table over event bodies.
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class M012EventsFTSTests: XCTestCase {
@@ -38,10 +39,12 @@ final class M012EventsFTSTests: XCTestCase {
             XCTAssertTrue(sqlStr.contains("fts5("), "Should be FTS5 virtual table")
             XCTAssertTrue(sqlStr.contains("unicode61"), "Tokenizer should be unicode61")
             XCTAssertTrue(sqlStr.contains("remove_diacritics 2"), "remove_diacritics 2 expected")
-            XCTAssertTrue(sqlStr.contains("tokenchars '_-'") || sqlStr.contains("tokenchars ''_-''"),
-                          "tokenchars '_-' expected")
-            XCTAssertTrue(sqlStr.contains("content=''") || sqlStr.contains("content = ''"),
-                          "Contentless mode (content='') expected")
+            XCTAssertTrue(
+                sqlStr.contains("tokenchars '_-'") || sqlStr.contains("tokenchars ''_-''"),
+                "tokenchars '_-' expected")
+            XCTAssertTrue(
+                sqlStr.contains("content=''") || sqlStr.contains("content = ''"),
+                "Contentless mode (content='') expected")
         }
     }
 
@@ -82,7 +85,8 @@ final class M012EventsFTSTests: XCTestCase {
             let cols = pragmaRows.compactMap { $0["name"] as String? }
             XCTAssertEqual(Set(cols), Set(["fts_rowid", "event_id", "body_kind"]))
 
-            let pkCols = pragmaRows
+            let pkCols =
+                pragmaRows
                 .filter { ($0["pk"] as Int? ?? 0) > 0 }
                 .compactMap { $0["name"] as String? }
             XCTAssertEqual(pkCols, ["fts_rowid"], "fts_rowid is the sole PK")

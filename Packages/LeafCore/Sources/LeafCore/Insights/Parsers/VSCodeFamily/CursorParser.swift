@@ -7,11 +7,13 @@ public enum CursorParser: VSCodeFamilyTitleParser {
     public static let appNameLiteral = "Cursor"
 
     public static func parse(_ title: String) -> VSCodeObservation? {
-        guard let obs = VSCodeFamilyParseHelper.parseDefaultFormat(
-            title,
-            bundleID: bundleID,
-            appNameRegexLiteral: appNameLiteral
-        ) else { return nil }
+        guard
+            let obs = VSCodeFamilyParseHelper.parseDefaultFormat(
+                title,
+                bundleID: bundleID,
+                appNameRegexLiteral: appNameLiteral
+            )
+        else { return nil }
         return VSCodeObservation(
             ideBundleID: obs.ideBundleID,
             workspaceName: VSCodeFamilyParseHelper.stripSSHPrefix(obs.workspaceName),

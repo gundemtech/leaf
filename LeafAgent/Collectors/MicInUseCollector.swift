@@ -1,7 +1,7 @@
-import Foundation
 import CoreAudio
-import os
+import Foundation
 import LeafCore
+import os
 
 /// Phase Track-4 S3 — CoreAudio `kAudioDevicePropertyDeviceIsRunningSomewhere`
 /// boolean listener on default input device. Detects ANY process recording
@@ -99,8 +99,12 @@ final class MicInUseCollector {
         let eventKind: String
         let state: String
         switch transition {
-        case .entered: eventKind = "mic_in_use_entered"; state = "mic_in_use"
-        case .exited:  eventKind = "mic_in_use_exited";  state = "mic_idle"
+        case .entered:
+            eventKind = "mic_in_use_entered"
+            state = "mic_in_use"
+        case .exited:
+            eventKind = "mic_in_use_exited"
+            state = "mic_idle"
         }
         let raw = RawEvent(
             signalType: .context,

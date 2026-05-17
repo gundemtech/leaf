@@ -12,8 +12,8 @@ import GRDB
 /// trivial). `kind` constrained to `'rotation'` или `'tombstone'`.
 ///
 /// Partial index `rotation_outbox_unposted` — query "drain unposted" cheap.
-public extension DatabaseMigrator {
-    mutating func registerMigration009RotationOutbox() {
+extension DatabaseMigrator {
+    public mutating func registerMigration009RotationOutbox() {
         registerMigration("009_rotation_outbox") { db in
             try db.create(table: Schema.RotationOutbox.tableName, ifNotExists: true) { t in
                 t.column(Schema.RotationOutbox.peerPubkeyHex, .text).notNull()

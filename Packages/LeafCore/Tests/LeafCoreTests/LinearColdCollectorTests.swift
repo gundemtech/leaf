@@ -1,6 +1,8 @@
 import XCTest
-import class GRDB.Row
 import os
+
+import class GRDB.Row
+
 @testable import LeafCore
 
 final class LinearColdCollectorTests: XCTestCase {
@@ -25,25 +27,31 @@ final class LinearColdCollectorTests: XCTestCase {
     }
 
     private func insertIntegration(_ db: Database) throws {
-        try db.upsertIntegration(IntegrationRecord(
-            provider: .linear, workspaceID: "w1", workspaceName: "WS",
-            accessToken: "t", refreshToken: "r",
-            expiresAt: Date().addingTimeInterval(3600), scope: "read",
-            connectedAt: Date(), updatedAt: Date()))
+        try db.upsertIntegration(
+            IntegrationRecord(
+                provider: .linear, workspaceID: "w1", workspaceName: "WS",
+                accessToken: "t", refreshToken: "r",
+                expiresAt: Date().addingTimeInterval(3600), scope: "read",
+                connectedAt: Date(), updatedAt: Date()))
     }
 
     func testBootstrapEmitsOnlyRoadmapHeartbeats() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertIntegration(db)
         let p = MockProvider()
-        await p.setCold(LinearColdBatch(
-            roadmaps: [LinearRoadmapSnapshot(id: "r1", name: "RM1", projects: [
-                .init(projectId: "pr1", projectName: "PRJ1", stateEnum: "onTrack"),
-                .init(projectId: "pr2", projectName: "PRJ2", stateEnum: "atRisk")
-            ])],
-            customViews: [.init(id: "v1", name: "V1", teamId: nil, updatedAtMs: 1)],
-            projectMemberships: [.init(projectId: "pr1", projectName: "PRJ1")]
-        ))
+        await p.setCold(
+            LinearColdBatch(
+                roadmaps: [
+                    LinearRoadmapSnapshot(
+                        id: "r1", name: "RM1",
+                        projects: [
+                            .init(projectId: "pr1", projectName: "PRJ1", stateEnum: "onTrack"),
+                            .init(projectId: "pr2", projectName: "PRJ2", stateEnum: "atRisk"),
+                        ])
+                ],
+                customViews: [.init(id: "v1", name: "V1", teamId: nil, updatedAtMs: 1)],
+                projectMemberships: [.init(projectId: "pr1", projectName: "PRJ1")]
+            ))
         let c = LinearColdCollector(
             database: db, provider: p,
             refresher: LinearTokenRefresher(database: db, clientID: "cid"),
@@ -53,9 +61,15 @@ final class LinearColdCollectorTests: XCTestCase {
         XCTAssertEqual(r.eventsEmitted, 2, "Bootstrap: roadmap heartbeats only (2 pairs)")
         // All 3 snapshots must now exist.
         try db.readSQL { raw in
-            XCTAssertNotNil(try ProviderSnapshotsStore.read(provider: "linear", snapshotKind: Schema.ProviderSnapshotKinds.linearCustomViews, in: raw))
-            XCTAssertNotNil(try ProviderSnapshotsStore.read(provider: "linear", snapshotKind: Schema.ProviderSnapshotKinds.linearProjectMemberships, in: raw))
-            XCTAssertNotNil(try ProviderSnapshotsStore.read(provider: "linear", snapshotKind: Schema.ProviderSnapshotKinds.linearRoadmapState, in: raw))
+            XCTAssertNotNil(
+                try ProviderSnapshotsStore.read(
+                    provider: "linear", snapshotKind: Schema.ProviderSnapshotKinds.linearCustomViews, in: raw))
+            XCTAssertNotNil(
+                try ProviderSnapshotsStore.read(
+                    provider: "linear", snapshotKind: Schema.ProviderSnapshotKinds.linearProjectMemberships, in: raw))
+            XCTAssertNotNil(
+                try ProviderSnapshotsStore.read(
+                    provider: "linear", snapshotKind: Schema.ProviderSnapshotKinds.linearRoadmapState, in: raw))
         }
     }
 
@@ -64,26 +78,30 @@ final class LinearColdCollectorTests: XCTestCase {
         try insertIntegration(db)
         // Seed prior snapshots.
         try db.writeSQL { raw in
-            try ProviderSnapshotsStore.upsert(ProviderSnapshot(
-                provider: "linear",
-                snapshotKind: Schema.ProviderSnapshotKinds.linearCustomViews,
-                snapshotJSON: "{\"views\":[{\"id\":\"v1\",\"name\":\"Old\",\"teamId\":null,\"updatedAtMs\":1},{\"id\":\"v2\",\"name\":\"V2\",\"teamId\":null,\"updatedAtMs\":1}]}",
-                capturedAtMs: 0), in: raw)
-            try ProviderSnapshotsStore.upsert(ProviderSnapshot(
-                provider: "linear",
-                snapshotKind: Schema.ProviderSnapshotKinds.linearProjectMemberships,
-                snapshotJSON: "{\"memberships\":[]}", capturedAtMs: 0), in: raw)
+            try ProviderSnapshotsStore.upsert(
+                ProviderSnapshot(
+                    provider: "linear",
+                    snapshotKind: Schema.ProviderSnapshotKinds.linearCustomViews,
+                    snapshotJSON:
+                        "{\"views\":[{\"id\":\"v1\",\"name\":\"Old\",\"teamId\":null,\"updatedAtMs\":1},{\"id\":\"v2\",\"name\":\"V2\",\"teamId\":null,\"updatedAtMs\":1}]}",
+                    capturedAtMs: 0), in: raw)
+            try ProviderSnapshotsStore.upsert(
+                ProviderSnapshot(
+                    provider: "linear",
+                    snapshotKind: Schema.ProviderSnapshotKinds.linearProjectMemberships,
+                    snapshotJSON: "{\"memberships\":[]}", capturedAtMs: 0), in: raw)
         }
         let p = MockProvider()
-        await p.setCold(LinearColdBatch(
-            roadmaps: [],
-            customViews: [
-                .init(id: "v1", name: "New", teamId: nil, updatedAtMs: 1),  // updated by name
-                .init(id: "v3", name: "V3", teamId: nil, updatedAtMs: 5)     // created
-                // v2 deleted (absent)
-            ],
-            projectMemberships: []
-        ))
+        await p.setCold(
+            LinearColdBatch(
+                roadmaps: [],
+                customViews: [
+                    .init(id: "v1", name: "New", teamId: nil, updatedAtMs: 1),  // updated by name
+                    .init(id: "v3", name: "V3", teamId: nil, updatedAtMs: 5),  // created
+                    // v2 deleted (absent)
+                ],
+                projectMemberships: []
+            ))
         let c = LinearColdCollector(
             database: db, provider: p,
             refresher: LinearTokenRefresher(database: db, clientID: "cid"),
@@ -92,9 +110,12 @@ final class LinearColdCollectorTests: XCTestCase {
         try db.readSQL { raw in
             let rows = try Row.fetchAll(raw, sql: "SELECT payload_json FROM events ORDER BY id ASC")
             let texts = rows.compactMap { $0["payload_json"] as String? }
-            XCTAssertTrue(texts.contains { $0.contains("linear_custom_view_updated") && $0.contains("\"view_id\":\"v1\"") })
-            XCTAssertTrue(texts.contains { $0.contains("linear_custom_view_created") && $0.contains("\"view_id\":\"v3\"") })
-            XCTAssertTrue(texts.contains { $0.contains("linear_custom_view_deleted") && $0.contains("\"view_id\":\"v2\"") })
+            XCTAssertTrue(
+                texts.contains { $0.contains("linear_custom_view_updated") && $0.contains("\"view_id\":\"v1\"") })
+            XCTAssertTrue(
+                texts.contains { $0.contains("linear_custom_view_created") && $0.contains("\"view_id\":\"v3\"") })
+            XCTAssertTrue(
+                texts.contains { $0.contains("linear_custom_view_deleted") && $0.contains("\"view_id\":\"v2\"") })
         }
     }
 

@@ -39,7 +39,7 @@ struct LeafBadge: View {
     private var bg: Color {
         switch variant {
         case .neutral: LeafColor.surface.inset
-        case .accent:  LeafColor.accent.subtle
+        case .accent: LeafColor.accent.subtle
         case .numeric: LeafColor.accent.primary
         }
     }
@@ -47,7 +47,7 @@ struct LeafBadge: View {
     private var fg: Color {
         switch variant {
         case .neutral: LeafColor.text.secondary
-        case .accent:  LeafColor.accent.emphasis
+        case .accent: LeafColor.accent.emphasis
         case .numeric: LeafColor.text.inverse
         }
     }

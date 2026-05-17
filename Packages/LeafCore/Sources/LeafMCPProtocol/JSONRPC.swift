@@ -8,8 +8,14 @@ public enum JSONRPCID: Codable, Hashable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.singleValueContainer()
-        if let i = try? c.decode(Int.self) { self = .number(i); return }
-        if let s = try? c.decode(String.self) { self = .string(s); return }
+        if let i = try? c.decode(Int.self) {
+            self = .number(i)
+            return
+        }
+        if let s = try? c.decode(String.self) {
+            self = .string(s)
+            return
+        }
         throw DecodingError.typeMismatch(
             JSONRPCID.self,
             .init(codingPath: decoder.codingPath, debugDescription: "id must be number or string")
@@ -35,13 +41,34 @@ public struct AnyCodable: Codable, @unchecked Sendable {
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.singleValueContainer()
-        if c.decodeNil() { self.value = NSNull(); return }
-        if let b = try? c.decode(Bool.self) { self.value = b; return }
-        if let i = try? c.decode(Int.self) { self.value = i; return }
-        if let d = try? c.decode(Double.self) { self.value = d; return }
-        if let s = try? c.decode(String.self) { self.value = s; return }
-        if let a = try? c.decode([AnyCodable].self) { self.value = a.map(\.value); return }
-        if let o = try? c.decode([String: AnyCodable].self) { self.value = o.mapValues(\.value); return }
+        if c.decodeNil() {
+            self.value = NSNull()
+            return
+        }
+        if let b = try? c.decode(Bool.self) {
+            self.value = b
+            return
+        }
+        if let i = try? c.decode(Int.self) {
+            self.value = i
+            return
+        }
+        if let d = try? c.decode(Double.self) {
+            self.value = d
+            return
+        }
+        if let s = try? c.decode(String.self) {
+            self.value = s
+            return
+        }
+        if let a = try? c.decode([AnyCodable].self) {
+            self.value = a.map(\.value)
+            return
+        }
+        if let o = try? c.decode([String: AnyCodable].self) {
+            self.value = o.mapValues(\.value)
+            return
+        }
         throw DecodingError.dataCorruptedError(in: c, debugDescription: "Unsupported JSON value")
     }
 
@@ -67,7 +94,7 @@ public struct AnyCodable: Codable, @unchecked Sendable {
 
 public struct JSONRPCRequest: Codable, Sendable {
     public let jsonrpc: String
-    public let id: JSONRPCID?        // nil = notification per JSON-RPC 2.0
+    public let id: JSONRPCID?  // nil = notification per JSON-RPC 2.0
     public let method: String
     public let params: AnyCodable?
 
@@ -112,9 +139,9 @@ public struct JSONRPCResponse: Codable, Sendable {
 /// Standard JSON-RPC 2.0 error codes. MCP spec использует стандартные —
 /// tool-level errors идут в result.isError, не в error.code.
 public enum JSONRPCErrorCode {
-    public static let parseError      = -32700
-    public static let invalidRequest  = -32600
-    public static let methodNotFound  = -32601
-    public static let invalidParams   = -32602
-    public static let internalError   = -32603
+    public static let parseError = -32700
+    public static let invalidRequest = -32600
+    public static let methodNotFound = -32601
+    public static let invalidParams = -32602
+    public static let internalError = -32603
 }

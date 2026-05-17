@@ -15,8 +15,8 @@
 //  in LeafApp.swift (Window scene level) — RootView does not duplicate.
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct RootView: View {
     @Environment(WindowState.self) private var windowState
@@ -53,7 +53,7 @@ struct RootView: View {
                 }
         }
         .frame(
-            minWidth:  LeafWindowLayoutTokens.windowMinWidth,
+            minWidth: LeafWindowLayoutTokens.windowMinWidth,
             minHeight: LeafWindowLayoutTokens.windowMinHeight
         )
     }
@@ -61,13 +61,13 @@ struct RootView: View {
     @ViewBuilder
     private func detail(for section: WindowSection) -> some View {
         switch section {
-        case .home:         HomeView()
-        case .activity:     ActivityView()
-        case .team:         TeamView()
-        case .connections:  ConnectionsView()
+        case .home: HomeView()
+        case .activity: ActivityView()
+        case .team: TeamView()
+        case .connections: ConnectionsView()
         case .organization: OrganizationView()
-        case .settings:     WindowSettingsView()
-        case .profile:      ProfileView()
+        case .settings: WindowSettingsView()
+        case .profile: ProfileView()
         }
     }
 
@@ -78,8 +78,8 @@ struct RootView: View {
     /// (single source of truth — Phase 5.4 will reuse for presence snapshot).
     private func derivedStatusPillState() -> LeafStatusPillState {
         guard case .loaded(let snapshot, _) = reader.state,
-              let mostRecent = snapshot.recentSessions.first,
-              Date().timeIntervalSince(mostRecent.end) <= LeafStatusPillTokens.activeThresholdSeconds
+            let mostRecent = snapshot.recentSessions.first,
+            Date().timeIntervalSince(mostRecent.end) <= LeafStatusPillTokens.activeThresholdSeconds
         else {
             return .idle
         }

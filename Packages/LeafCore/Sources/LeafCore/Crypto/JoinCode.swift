@@ -39,7 +39,7 @@ public enum JoinCode {
         var groups: [String] = []
         let chars = Array(dataChars)
         for i in 0..<8 {
-            groups.append(String(chars[i*8..<(i+1)*8]))
+            groups.append(String(chars[i * 8..<(i + 1) * 8]))
         }
         groups.append(checksumChars)
         return groups.joined(separator: "-")

@@ -6,8 +6,9 @@
 // Sentinel detector moat lives inline so test assertions don't depend on the
 // public-substrate no-op detectors / matcher.
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class QueryEngineQueryActivityTests: XCTestCase {
@@ -105,14 +106,18 @@ final class QueryEngineQueryActivityTests: XCTestCase {
 
     func testWithFilter_RoutesThroughFTS() throws {
         let db = try openWriter()
-        try writeEvent(db, tsMs: 1_000, payload: [
-            "event_kind": "gh_commit_pushed",
-            Schema.EventPayloadKeys.body: "auth refactor — moved refresh logic"
-        ])
-        try writeEvent(db, tsMs: 2_000, payload: [
-            "event_kind": "gh_commit_pushed",
-            Schema.EventPayloadKeys.body: "unrelated payments hotfix"
-        ])
+        try writeEvent(
+            db, tsMs: 1_000,
+            payload: [
+                "event_kind": "gh_commit_pushed",
+                Schema.EventPayloadKeys.body: "auth refactor — moved refresh logic",
+            ])
+        try writeEvent(
+            db, tsMs: 2_000,
+            payload: [
+                "event_kind": "gh_commit_pushed",
+                Schema.EventPayloadKeys.body: "unrelated payments hotfix",
+            ])
 
         let engine = makeEngine()
         let response = try engine.queryActivity(period: widePeriod(), filter: "auth")
@@ -159,16 +164,19 @@ final class QueryEngineQueryActivityTests: XCTestCase {
         // 200 events × ~500-byte body = ~100KB raw → guarantees over-budget.
         let bigBody = String(repeating: "x", count: 600)
         for i in 1...200 {
-            try writeEvent(db, tsMs: Int64(i), payload: [
-                "event_kind": "gh_commit_pushed",
-                Schema.EventPayloadKeys.body: bigBody
-            ])
+            try writeEvent(
+                db, tsMs: Int64(i),
+                payload: [
+                    "event_kind": "gh_commit_pushed",
+                    Schema.EventPayloadKeys.body: bigBody,
+                ])
         }
         let engine = makeEngine()
         let response = try engine.queryActivity(period: widePeriod(), filter: nil)
 
         XCTAssertLessThan(response.events.count, 200, "Byte budget must trim some events")
-        XCTAssertGreaterThan(response.events.count, 0, "Byte budget should keep a non-zero event count for moderate payloads")
+        XCTAssertGreaterThan(
+            response.events.count, 0, "Byte budget should keep a non-zero event count for moderate payloads")
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -182,10 +190,12 @@ final class QueryEngineQueryActivityTests: XCTestCase {
         let db = try openWriter()
         let bigBody = String(repeating: "y", count: 600)
         for i in 1...200 {
-            try writeEvent(db, tsMs: Int64(i), payload: [
-                "event_kind": "gh_commit_pushed",
-                Schema.EventPayloadKeys.body: bigBody
-            ])
+            try writeEvent(
+                db, tsMs: Int64(i),
+                payload: [
+                    "event_kind": "gh_commit_pushed",
+                    Schema.EventPayloadKeys.body: bigBody,
+                ])
         }
         let engine = makeEngine()
         let response = try engine.queryActivity(period: widePeriod(), filter: nil)
@@ -204,10 +214,12 @@ final class QueryEngineQueryActivityTests: XCTestCase {
 
     func testDecisionsInPeriodComposition() throws {
         let db = try openWriter()
-        try writeEvent(db, tsMs: 5_000, payload: [
-            "event_kind": "slack_thread_reply_aggregate",
-            Schema.EventPayloadKeys.body: "DECIDE: ship without reviewer ack"
-        ])
+        try writeEvent(
+            db, tsMs: 5_000,
+            payload: [
+                "event_kind": "slack_thread_reply_aggregate",
+                Schema.EventPayloadKeys.body: "DECIDE: ship without reviewer ack",
+            ])
         // Run detectors over the seeded events so `decisions` table is populated.
         try DetectorPipeline.runIncremental(moat: sentinelMoat(), in: db)
 
@@ -221,11 +233,13 @@ final class QueryEngineQueryActivityTests: XCTestCase {
 
     func testOpenQuestionsComposition() throws {
         let db = try openWriter()
-        try writeEvent(db, tsMs: 5_000, payload: [
-            "event_kind": "slack_thread_reply_aggregate",
-            Schema.EventPayloadKeys.body: "QUESTION should we use Postgres or Redis?",
-            "thread_ts": "1700000000.001"
-        ])
+        try writeEvent(
+            db, tsMs: 5_000,
+            payload: [
+                "event_kind": "slack_thread_reply_aggregate",
+                Schema.EventPayloadKeys.body: "QUESTION should we use Postgres or Redis?",
+                "thread_ts": "1700000000.001",
+            ])
         try DetectorPipeline.runIncremental(moat: sentinelMoat(), in: db)
 
         let engine = makeEngine()
@@ -239,11 +253,13 @@ final class QueryEngineQueryActivityTests: XCTestCase {
 
     func testBlockersComposition() throws {
         let db = try openWriter()
-        try writeEvent(db, tsMs: 5_000, payload: [
-            "event_kind": "slack_thread_reply_aggregate",
-            Schema.EventPayloadKeys.body: "BLOCKED on infra team waking up",
-            "linked_github_pr": "owner/repo/pull/42"
-        ])
+        try writeEvent(
+            db, tsMs: 5_000,
+            payload: [
+                "event_kind": "slack_thread_reply_aggregate",
+                Schema.EventPayloadKeys.body: "BLOCKED on infra team waking up",
+                "linked_github_pr": "owner/repo/pull/42",
+            ])
         try DetectorPipeline.runIncremental(moat: sentinelMoat(), in: db)
 
         let engine = makeEngine()
@@ -257,15 +273,18 @@ final class QueryEngineQueryActivityTests: XCTestCase {
 
     func testLinksComposition() throws {
         let db = try openWriter()
-        try writeEvent(db, tsMs: 5_000, payload: [
-            "event_kind": "gh_commit_pushed",
-            Schema.EventPayloadKeys.body: "LEAF-42 implement auth refactor"
-        ])
+        try writeEvent(
+            db, tsMs: 5_000,
+            payload: [
+                "event_kind": "gh_commit_pushed",
+                Schema.EventPayloadKeys.body: "LEAF-42 implement auth refactor",
+            ])
         let engine = makeEngine()
         let response = try engine.queryActivity(period: widePeriod(), filter: nil)
         // LinearIDExtractor pulls "LEAF-42" → linear_id_in_text link.
-        XCTAssertTrue(response.links.contains { $0.targetRef == "LEAF-42" },
-                      "Expected LEAF-42 link from commit body, got \(response.links)")
+        XCTAssertTrue(
+            response.links.contains { $0.targetRef == "LEAF-42" },
+            "Expected LEAF-42 link from commit body, got \(response.links)")
     }
 
     // MARK: - 10. Absence flag fuzz match success + failure
@@ -274,33 +293,39 @@ final class QueryEngineQueryActivityTests: XCTestCase {
         let db = try openWriter()
         // 1) PR event with two reviewers; one matches, one doesn't.
         let reviewersJSON = "[\"alice\",\"bob\"]"
-        try writeEvent(db, tsMs: 5_000, payload: [
-            "event_kind": "gh_pr_opened",
-            Schema.EventPayloadKeys.body: "Adopt new auth scheme — design choice excerpt",
-            "linked_github_pr": "owner/repo/pull/142",
-            Schema.EventPayloadKeys.requestedReviewersJson: reviewersJSON
-        ])
+        try writeEvent(
+            db, tsMs: 5_000,
+            payload: [
+                "event_kind": "gh_pr_opened",
+                Schema.EventPayloadKeys.body: "Adopt new auth scheme — design choice excerpt",
+                "linked_github_pr": "owner/repo/pull/142",
+                Schema.EventPayloadKeys.requestedReviewersJson: reviewersJSON,
+            ])
         // 2) Slack thread event linked to the same PR (so eventsLinkingTo finds it).
-        try writeEvent(db, tsMs: 6_000, signalType: .action, payload: [
-            "event_kind": "slack_thread_reply_aggregate",
-            Schema.EventPayloadKeys.body: "discussion about https://github.com/owner/repo/pull/142",
-            "user_id": "alice"
-        ])
+        try writeEvent(
+            db, tsMs: 6_000, signalType: .action,
+            payload: [
+                "event_kind": "slack_thread_reply_aggregate",
+                Schema.EventPayloadKeys.body: "discussion about https://github.com/owner/repo/pull/142",
+                "user_id": "alice",
+            ])
         // Manually insert a link from the Slack event to the PR (avoids
         // pulling LeafCorePrivate URL extractor into the test).
         try db.writeSQL { rawDB in
-            try rawDB.execute(sql: """
-                INSERT OR IGNORE INTO event_links
-                    (from_event_id, link_kind, target_kind, target_ref, confidence, created_at_ms)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, arguments: [
-                2,
-                Schema.LinkKinds.prURLInSlack,
-                Schema.TargetKinds.githubPR,
-                "owner/repo/pull/142",
-                0.5,
-                6_000
-            ])
+            try rawDB.execute(
+                sql: """
+                        INSERT OR IGNORE INTO event_links
+                            (from_event_id, link_kind, target_kind, target_ref, confidence, created_at_ms)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                arguments: [
+                    2,
+                    Schema.LinkKinds.prURLInSlack,
+                    Schema.TargetKinds.githubPR,
+                    "owner/repo/pull/142",
+                    0.5,
+                    6_000,
+                ])
         }
 
         let engine = makeEngine(absence: StubAbsenceMatcher(knownMatches: ["alice"]))

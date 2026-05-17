@@ -37,11 +37,13 @@ struct LeafMetricCard: View {
     let sparklineValues: [Double]?
     let isFresh: Bool
 
-    init(title: String? = nil,
-         value: String,
-         delta: Delta? = nil,
-         sparklineValues: [Double]? = nil,
-         isFresh: Bool = false) {
+    init(
+        title: String? = nil,
+        value: String,
+        delta: Delta? = nil,
+        sparklineValues: [Double]? = nil,
+        isFresh: Bool = false
+    ) {
         self.title = title
         self.value = value
         self.delta = delta

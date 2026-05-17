@@ -4,6 +4,7 @@
 // path the collector took (bootstrap vs subsequent vs primary lookup).
 
 import Foundation
+
 @testable import LeafCore
 
 public actor StubGoogleCalendarAPIClient: GoogleCalendarAPIClient {

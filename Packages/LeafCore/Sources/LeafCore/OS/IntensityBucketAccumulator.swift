@@ -47,7 +47,7 @@ public struct IntensityBucketSnapshot: Sendable, Equatable {
         if let dropped = droppedReason {
             return [
                 "event_kind": "intensity_bucket_dropped",
-                "state": dropped.rawValue
+                "state": dropped.rawValue,
             ]
         }
         return [
@@ -55,7 +55,7 @@ public struct IntensityBucketSnapshot: Sendable, Equatable {
             Schema.EventPayloadKeys.keystrokeCount: String(keystrokes),
             Schema.EventPayloadKeys.mouseMoveCount: String(mouseMoves),
             Schema.EventPayloadKeys.appSwitchCount: String(appSwitches),
-            Schema.EventPayloadKeys.foregroundApp: foregroundApp ?? ""
+            Schema.EventPayloadKeys.foregroundApp: foregroundApp ?? "",
         ]
     }
 }

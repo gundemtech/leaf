@@ -9,8 +9,8 @@
 //  primary text per spec § OQ-2.
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct ActivityRow: View {
     let entry: ActivityFeedEntry
@@ -21,7 +21,7 @@ struct ActivityRow: View {
             secondary: secondaryText
         ) {
             ProviderIcon(entry: entry)
-                .frame(width: LeafSpace.xxl, height: LeafSpace.xxl)   // 32×32
+                .frame(width: LeafSpace.xxl, height: LeafSpace.xxl)  // 32×32
         } trailing: {
             Text(relativeTime)
                 .font(LeafType.mono.small)
@@ -33,8 +33,9 @@ struct ActivityRow: View {
     private var composedPrimary: String {
         let resolved: String = {
             if entry.provider == .local,
-               let bundleID = entry.bundleID,
-               entry.primaryText == bundleID {
+                let bundleID = entry.bundleID,
+                entry.primaryText == bundleID
+            {
                 return AppNameResolver.shared.displayName(for: bundleID)
             }
             return entry.primaryText
@@ -50,13 +51,13 @@ struct ActivityRow: View {
 
     private var providerLabel: String {
         switch entry.provider {
-        case .local:   return "LOCAL"
-        case .linear:  return "LINEAR"
-        case .github:  return "GITHUB"
-        case .slack:   return "SLACK"
-        case .ai:              return "AI"
-        case .googleCalendar:  return "CALENDAR"
-        case .unknown:         return "EVENT"
+        case .local: return "LOCAL"
+        case .linear: return "LINEAR"
+        case .github: return "GITHUB"
+        case .slack: return "SLACK"
+        case .ai: return "AI"
+        case .googleCalendar: return "CALENDAR"
+        case .unknown: return "EVENT"
         }
     }
 
@@ -113,25 +114,25 @@ private struct ProviderIcon: View {
         case "issue_updated": return "list.bullet.clipboard"
         case GitHubEventKindKey.commitPushed.rawValue: return "arrow.up.circle"
         case GitHubEventKindKey.prOpened.rawValue,
-             GitHubEventKindKey.prClosed.rawValue,
-             GitHubEventKindKey.prMerged.rawValue:
+            GitHubEventKindKey.prClosed.rawValue,
+            GitHubEventKindKey.prMerged.rawValue:
             return "arrow.triangle.pull"
         case GitHubEventKindKey.prReviewCommentAuthored.rawValue,
-             GitHubEventKindKey.prReviewThreadResolved.rawValue,
-             GitHubEventKindKey.prReviewSubmitted.rawValue:
+            GitHubEventKindKey.prReviewThreadResolved.rawValue,
+            GitHubEventKindKey.prReviewSubmitted.rawValue:
             return "checkmark.bubble"
         case GitHubEventKindKey.issueOpened.rawValue,
-             GitHubEventKindKey.issueClosed.rawValue,
-             GitHubEventKindKey.issueCommentAuthored.rawValue:
+            GitHubEventKindKey.issueClosed.rawValue,
+            GitHubEventKindKey.issueCommentAuthored.rawValue:
             return "ladybug"
         case GitHubEventKindKey.branchCreated.rawValue,
-             GitHubEventKindKey.branchDeleted.rawValue:
+            GitHubEventKindKey.branchDeleted.rawValue:
             return "arrow.triangle.branch"
         case GitHubEventKindKey.tagCreated.rawValue,
-             GitHubEventKindKey.releasePublished.rawValue:
+            GitHubEventKindKey.releasePublished.rawValue:
             return "tag.fill"
         case GitHubEventKindKey.discussionAuthored.rawValue,
-             GitHubEventKindKey.discussionCommentAuthored.rawValue:
+            GitHubEventKindKey.discussionCommentAuthored.rawValue:
             return "text.bubble"
         case GitHubEventKindKey.actionsRunInitiated.rawValue: return "gearshape.2"
         case "slack_message_authored_aggregate", "slack_thread_reply_aggregate": return "message"
@@ -142,13 +143,13 @@ private struct ProviderIcon: View {
         default: break
         }
         switch entry.provider {
-        case .local:   return "app.dashed"
-        case .linear:  return "circle.hexagonpath"
-        case .github:  return "chevron.left.forwardslash.chevron.right"
-        case .slack:   return "bubble.left.and.bubble.right"
-        case .ai:              return "sparkles"
-        case .googleCalendar:  return "calendar"
-        case .unknown:         return "circle"
+        case .local: return "app.dashed"
+        case .linear: return "circle.hexagonpath"
+        case .github: return "chevron.left.forwardslash.chevron.right"
+        case .slack: return "bubble.left.and.bubble.right"
+        case .ai: return "sparkles"
+        case .googleCalendar: return "calendar"
+        case .unknown: return "circle"
         }
     }
 }

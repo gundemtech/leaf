@@ -2,8 +2,9 @@
 // URLProtocol stub harness mirror'ит SlackTokenRefresherTests pattern: file-local
 // subclass, ephemeral session per call, setUp/tearDown reset static handler.
 
-import XCTest
 import Foundation
+import XCTest
+
 @testable import LeafCore
 
 private final class RelayMockURLProtocol: URLProtocol {
@@ -85,9 +86,12 @@ final class RelayClientTests: XCTestCase {
         RelayClient(baseURL: stubBase, urlSession: makeStubSession())
     }
 
-    private func httpResponse(_ status: Int, url: URL? = nil, contentType: String = "application/json") -> HTTPURLResponse {
-        HTTPURLResponse(url: url ?? stubBase, statusCode: status, httpVersion: nil,
-                        headerFields: ["Content-Type": contentType])!
+    private func httpResponse(
+        _ status: Int, url: URL? = nil, contentType: String = "application/json"
+    ) -> HTTPURLResponse {
+        HTTPURLResponse(
+            url: url ?? stubBase, statusCode: status, httpVersion: nil,
+            headerFields: ["Content-Type": contentType])!
     }
 
     private let validPubkeyHex = String(repeating: "a", count: 64)
@@ -101,9 +105,10 @@ final class RelayClientTests: XCTestCase {
             return (self.httpResponse(201, url: req.url), body)
         }
         let client = makeClient()
-        let token = try await client.postInvite(memberPubkeyHex: validPubkeyHex,
-                                                blob: sampleBlob,
-                                                expiresAtMs: 1_700_000_000_000)
+        let token = try await client.postInvite(
+            memberPubkeyHex: validPubkeyHex,
+            blob: sampleBlob,
+            expiresAtMs: 1_700_000_000_000)
         XCTAssertEqual(token.value, "tok_abc123")
         XCTAssertEqual(token.expiresAtMs, 1_700_000_000_000)
     }
@@ -117,9 +122,10 @@ final class RelayClientTests: XCTestCase {
         let blob = Data([0x01, 0x02, 0x03])  // base64url no-pad → "AQID"
         // Caller (InviteService) is responsible for lowercasing; RelayClient passes through.
         let lowercasedHex = "aabbccdd" + String(repeating: "0", count: 56)
-        _ = try await client.postInvite(memberPubkeyHex: lowercasedHex,
-                                        blob: blob,
-                                        expiresAtMs: 9_999_999_999)
+        _ = try await client.postInvite(
+            memberPubkeyHex: lowercasedHex,
+            blob: blob,
+            expiresAtMs: 9_999_999_999)
         let req = try XCTUnwrap(RelayMockURLProtocol.lastRequest)
         let body = try XCTUnwrap(RelayMockURLProtocol.lastBody)
 
@@ -138,8 +144,9 @@ final class RelayClientTests: XCTestCase {
         RelayMockURLProtocol.handler = { req, _ in (self.httpResponse(400, url: req.url), nil) }
         let client = makeClient()
         do {
-            _ = try await client.postInvite(memberPubkeyHex: validPubkeyHex,
-                                            blob: sampleBlob, expiresAtMs: 1)
+            _ = try await client.postInvite(
+                memberPubkeyHex: validPubkeyHex,
+                blob: sampleBlob, expiresAtMs: 1)
             XCTFail("expected throw")
         } catch let LeafError.inviteRequestRejected(reason) {
             XCTAssertEqual(reason, "bad-input")
@@ -152,8 +159,9 @@ final class RelayClientTests: XCTestCase {
         RelayMockURLProtocol.handler = { req, _ in (self.httpResponse(413, url: req.url), nil) }
         let client = makeClient()
         do {
-            _ = try await client.postInvite(memberPubkeyHex: validPubkeyHex,
-                                            blob: sampleBlob, expiresAtMs: 1)
+            _ = try await client.postInvite(
+                memberPubkeyHex: validPubkeyHex,
+                blob: sampleBlob, expiresAtMs: 1)
             XCTFail("expected throw")
         } catch let LeafError.inviteRequestRejected(reason) {
             XCTAssertEqual(reason, "size")
@@ -166,8 +174,9 @@ final class RelayClientTests: XCTestCase {
         RelayMockURLProtocol.handler = { req, _ in (self.httpResponse(500, url: req.url), nil) }
         let client = makeClient()
         do {
-            _ = try await client.postInvite(memberPubkeyHex: validPubkeyHex,
-                                            blob: sampleBlob, expiresAtMs: 1)
+            _ = try await client.postInvite(
+                memberPubkeyHex: validPubkeyHex,
+                blob: sampleBlob, expiresAtMs: 1)
             XCTFail("expected throw")
         } catch let LeafError.relayUnreachable(reason) {
             XCTAssertEqual(reason, "server-error")
@@ -180,8 +189,9 @@ final class RelayClientTests: XCTestCase {
         RelayMockURLProtocol.networkError = URLError(.notConnectedToInternet)
         let client = makeClient()
         do {
-            _ = try await client.postInvite(memberPubkeyHex: validPubkeyHex,
-                                            blob: sampleBlob, expiresAtMs: 1)
+            _ = try await client.postInvite(
+                memberPubkeyHex: validPubkeyHex,
+                blob: sampleBlob, expiresAtMs: 1)
             XCTFail("expected throw")
         } catch let LeafError.relayUnreachable(reason) {
             XCTAssertEqual(reason, "transport")
@@ -197,8 +207,9 @@ final class RelayClientTests: XCTestCase {
         }
         let client = makeClient()
         do {
-            _ = try await client.postInvite(memberPubkeyHex: validPubkeyHex,
-                                            blob: sampleBlob, expiresAtMs: 1)
+            _ = try await client.postInvite(
+                memberPubkeyHex: validPubkeyHex,
+                blob: sampleBlob, expiresAtMs: 1)
             XCTFail("expected throw")
         } catch let LeafError.relayUnreachable(reason) {
             XCTAssertEqual(reason, "malformed-response")

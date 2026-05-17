@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class TeamKeystoreTests: XCTestCase {
@@ -72,7 +73,8 @@ final class TeamKeystoreTests: XCTestCase {
         let bytes = Data(repeating: 0xBB, count: 32)
         try TeamKeystore.writeTeamKey(bytes, id: id, at: tempRoot)
 
-        let path = tempRoot
+        let path =
+            tempRoot
             .appendingPathComponent(TeamKeystore.teamKeysSubdir, isDirectory: true)
             .appendingPathComponent("\(id).\(TeamKeystore.teamKeyExtension)")
             .path

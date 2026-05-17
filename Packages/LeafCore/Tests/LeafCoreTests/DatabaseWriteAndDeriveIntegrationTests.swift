@@ -1,7 +1,8 @@
 // Phase Track-1 D2 — atomic write of event + FTS5 + event_links + offset + presence_state.
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class DatabaseWriteAndDeriveIntegrationTests: XCTestCase {
@@ -35,7 +36,9 @@ final class DatabaseWriteAndDeriveIntegrationTests: XCTestCase {
         )
     }
 
-    private func count(_ db: LeafCore.Database, sql: String, args: StatementArguments = StatementArguments()) throws -> Int {
+    private func count(
+        _ db: LeafCore.Database, sql: String, args: StatementArguments = StatementArguments()
+    ) throws -> Int {
         try db.readSQL { rawDB in
             try Int.fetchOne(rawDB, sql: sql, arguments: args) ?? 0
         }
@@ -49,7 +52,7 @@ final class DatabaseWriteAndDeriveIntegrationTests: XCTestCase {
             bundleID: "linear",
             payload: [
                 "event_kind": "issue_updated",
-                Schema.EventPayloadKeys.body: "Working on LEAF-127"
+                Schema.EventPayloadKeys.body: "Working on LEAF-127",
             ]
         )
         try db.write(event, knownLinearPrefixes: ["LEAF"])
@@ -66,9 +69,12 @@ final class DatabaseWriteAndDeriveIntegrationTests: XCTestCase {
     func testWriteBatch_AllEventsIndexed() throws {
         let db = try makeDB()
         let mk: (String) -> RawEvent = { body in
-            RawEvent(timestamp: Date(), signalType: .action, bundleID: "linear",
-                     payload: ["event_kind": "issue_updated",
-                               Schema.EventPayloadKeys.body: body])
+            RawEvent(
+                timestamp: Date(), signalType: .action, bundleID: "linear",
+                payload: [
+                    "event_kind": "issue_updated",
+                    Schema.EventPayloadKeys.body: body,
+                ])
         }
         try db.write([mk("first"), mk("second"), mk("third")], knownLinearPrefixes: [])
         XCTAssertEqual(try count(db, sql: "SELECT COUNT(*) FROM events"), 3)
@@ -84,7 +90,7 @@ final class DatabaseWriteAndDeriveIntegrationTests: XCTestCase {
             bundleID: "linear",
             payload: [
                 "event_kind": "issue_updated",
-                Schema.EventPayloadKeys.body: "fixes LEAF-300"
+                Schema.EventPayloadKeys.body: "fixes LEAF-300",
             ]
         )
         try db.writeEventsOffsetAndPresence(
@@ -111,19 +117,20 @@ final class DatabaseWriteAndDeriveIntegrationTests: XCTestCase {
             bundleID: "linear",
             payload: [
                 "event_kind": "issue_updated",
-                Schema.EventPayloadKeys.body: "would-be LEAF-500"
+                Schema.EventPayloadKeys.body: "would-be LEAF-500",
             ]
         )
         // Inject failure: a non-encodable value (a Date) in presence state — JSONSerialization throws.
         let badPresence: [String: Any] = ["bad_value": Date()]
 
-        XCTAssertThrowsError(try db.writeEventsOffsetAndPresence(
-            [event],
-            offset: makeOffset(nowMs: nowMs),
-            presence: (provider: .linear, state: badPresence, derivedMode: nil),
-            knownLinearPrefixes: ["LEAF"],
-            nowMs: nowMs
-        ))
+        XCTAssertThrowsError(
+            try db.writeEventsOffsetAndPresence(
+                [event],
+                offset: makeOffset(nowMs: nowMs),
+                presence: (provider: .linear, state: badPresence, derivedMode: nil),
+                knownLinearPrefixes: ["LEAF"],
+                nowMs: nowMs
+            ))
 
         // Atomic rollback — no rows in any of the affected tables.
         XCTAssertEqual(try count(db, sql: "SELECT COUNT(*) FROM events"), 0)

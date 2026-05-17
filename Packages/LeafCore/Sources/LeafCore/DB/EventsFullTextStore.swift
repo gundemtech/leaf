@@ -43,8 +43,9 @@ public enum EventsFullTextStore {
         // resolve to canonical `body` field, Track-4 S2/S3 routes return non-canonical
         // user-authored title/filename keys (`note_title`, `meeting_topic`, `filename`).
         if let (payloadKey, bodyKind) = topLevelBodyKind(forEventKind: eventKind),
-           let raw = payload[payloadKey],
-           !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let raw = payload[payloadKey],
+            !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
             try insertRow(eventID: eventID, bodyKind: bodyKind, body: raw, in: db)
         }
 
@@ -114,26 +115,33 @@ public enum EventsFullTextStore {
         if eventKind == "issue_updated" { return (canonical, Schema.BodyKinds.linearDesc) }
         if eventKind == "linear_notification_received" { return (canonical, Schema.BodyKinds.linearNotificationTitle) }
         if eventKind == GitHubEventKindKey.commitPushed.rawValue { return (canonical, Schema.BodyKinds.commitMsg) }
-        if eventKind == GitHubEventKindKey.issueCommentAuthored.rawValue { return (canonical, Schema.BodyKinds.ghIssueComment) }
-        if eventKind == GitHubEventKindKey.prReviewCommentAuthored.rawValue { return (canonical, Schema.BodyKinds.ghPRReviewComment) }
+        if eventKind == GitHubEventKindKey.issueCommentAuthored.rawValue {
+            return (canonical, Schema.BodyKinds.ghIssueComment)
+        }
+        if eventKind == GitHubEventKindKey.prReviewCommentAuthored.rawValue {
+            return (canonical, Schema.BodyKinds.ghPRReviewComment)
+        }
         if eventKind == "slack_thread_reply_aggregate" { return (canonical, Schema.BodyKinds.slackThreadParent) }
         // Track-3 D2: explicit gh_* cases instead of bare hasPrefix("gh_pr_")
         // catch-all (which would spuriously match gh_pr_review_thread_resolved
         // и gh_pr_awaiting_review_count whose body-bearing is nil).
         if eventKind == GitHubEventKindKey.prOpened.rawValue
             || eventKind == GitHubEventKindKey.prMerged.rawValue
-            || eventKind == GitHubEventKindKey.prClosed.rawValue {
+            || eventKind == GitHubEventKindKey.prClosed.rawValue
+        {
             return (canonical, Schema.BodyKinds.ghPR)
         }
         if eventKind == GitHubEventKindKey.issueOpened.rawValue
-            || eventKind == GitHubEventKindKey.issueClosed.rawValue {
+            || eventKind == GitHubEventKindKey.issueClosed.rawValue
+        {
             return (canonical, Schema.BodyKinds.ghIssueComment)  // issue body indexed under same kind as issue comments
         }
         // Track-3 D2 §4.3 — gist description / release body / deployment description
         // body-kind dispatch. Body field, when present in payload, is routed to the
         // dedicated body_kind so D3 query path can filter.
         if eventKind == GitHubEventKindKey.gistCreated.rawValue
-            || eventKind == GitHubEventKindKey.gistUpdated.rawValue {
+            || eventKind == GitHubEventKindKey.gistUpdated.rawValue
+        {
             return (canonical, Schema.BodyKinds.ghGistDescription)
         }
         if eventKind == GitHubEventKindKey.releasePublished.rawValue {
@@ -146,14 +154,16 @@ public enum EventsFullTextStore {
         // Per ADR-010 §6, canvas titles are user-named structured resources
         // (not message bodies) and route through FTS via the `body` field.
         if eventKind == SlackEventKindKey.slackCanvasCreated.rawValue
-            || eventKind == SlackEventKindKey.slackCanvasEdited.rawValue {
+            || eventKind == SlackEventKindKey.slackCanvasEdited.rawValue
+        {
             return (canonical, Schema.BodyKinds.slackCanvasTitle)
         }
         // Track-3 D3 Task 14 — Slack bookmark title body-kind dispatch (Task 12
         // gap closed here; bookmark cases were declared body-bearing but lacked
         // a dispatch entry until canvas titles were also wired).
         if eventKind == SlackEventKindKey.slackBookmarkAdded.rawValue
-            || eventKind == SlackEventKindKey.slackBookmarkRemoved.rawValue {
+            || eventKind == SlackEventKindKey.slackBookmarkRemoved.rawValue
+        {
             return (canonical, Schema.BodyKinds.slackBookmarkTitle)
         }
 

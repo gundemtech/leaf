@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class WriteEventsOffsetsAndSnapshotsTests: XCTestCase {
@@ -47,11 +48,15 @@ final class WriteEventsOffsetsAndSnapshotsTests: XCTestCase {
             offsets: [makeOffset("linear:notifications:w1", 100), makeOffset("linear:cycles:w1", 200)],
             snapshots: [makeSnapshot(Schema.ProviderSnapshotKinds.linearSubscribedIssues, "{}", 200)]
         )
-        XCTAssertEqual(try db.eventCount(in: DateInterval(start: Date(timeIntervalSince1970: 0), end: Date(timeIntervalSince1970: 1))), 2)
-        XCTAssertNotNil(try db.readOffset(collectorID: CollectorID.linearWarmPolling, sourceID: "linear:notifications:w1"))
+        XCTAssertEqual(
+            try db.eventCount(
+                in: DateInterval(start: Date(timeIntervalSince1970: 0), end: Date(timeIntervalSince1970: 1))), 2)
+        XCTAssertNotNil(
+            try db.readOffset(collectorID: CollectorID.linearWarmPolling, sourceID: "linear:notifications:w1"))
         XCTAssertNotNil(try db.readOffset(collectorID: CollectorID.linearWarmPolling, sourceID: "linear:cycles:w1"))
         try db.readSQL { rawDB in
-            let snap = try ProviderSnapshotsStore.read(provider: "linear", snapshotKind: Schema.ProviderSnapshotKinds.linearSubscribedIssues, in: rawDB)
+            let snap = try ProviderSnapshotsStore.read(
+                provider: "linear", snapshotKind: Schema.ProviderSnapshotKinds.linearSubscribedIssues, in: rawDB)
             XCTAssertNotNil(snap)
         }
     }
@@ -59,29 +64,36 @@ final class WriteEventsOffsetsAndSnapshotsTests: XCTestCase {
     func testEmptyAllNoOps() throws {
         let db = try openDB()
         try db.writeEventsOffsetsAndSnapshots(events: [], offsets: [], snapshots: [])
-        XCTAssertEqual(try db.eventCount(in: DateInterval(start: Date(timeIntervalSince1970: 0), end: Date(timeIntervalSince1970: 1))), 0)
+        XCTAssertEqual(
+            try db.eventCount(
+                in: DateInterval(start: Date(timeIntervalSince1970: 0), end: Date(timeIntervalSince1970: 1))), 0)
     }
 
     func testOnlyEventsAdvancesNothingElse() throws {
         let db = try openDB()
         try db.writeEventsOffsetsAndSnapshots(events: [makeEvent(50)], offsets: [], snapshots: [])
-        XCTAssertEqual(try db.eventCount(in: DateInterval(start: Date(timeIntervalSince1970: 0), end: Date(timeIntervalSince1970: 1))), 1)
+        XCTAssertEqual(
+            try db.eventCount(
+                in: DateInterval(start: Date(timeIntervalSince1970: 0), end: Date(timeIntervalSince1970: 1))), 1)
         XCTAssertNil(try db.readOffset(collectorID: CollectorID.linearWarmPolling, sourceID: "linear:notifications:w1"))
     }
 
     func testOnlyOffsetsAdvancesNothingElse() throws {
         let db = try openDB()
-        try db.writeEventsOffsetsAndSnapshots(events: [], offsets: [makeOffset("linear:notifications:w1", 999)], snapshots: [])
+        try db.writeEventsOffsetsAndSnapshots(
+            events: [], offsets: [makeOffset("linear:notifications:w1", 999)], snapshots: [])
         let o = try db.readOffset(collectorID: CollectorID.linearWarmPolling, sourceID: "linear:notifications:w1")
         XCTAssertEqual(o?.lastModifiedMs, 999)
     }
 
     func testOnlySnapshotsWrites() throws {
         let db = try openDB()
-        try db.writeEventsOffsetsAndSnapshots(events: [], offsets: [],
+        try db.writeEventsOffsetsAndSnapshots(
+            events: [], offsets: [],
             snapshots: [makeSnapshot(Schema.ProviderSnapshotKinds.linearCustomViews, "vs", 1)])
         try db.readSQL { rawDB in
-            let snap = try ProviderSnapshotsStore.read(provider: "linear", snapshotKind: Schema.ProviderSnapshotKinds.linearCustomViews, in: rawDB)
+            let snap = try ProviderSnapshotsStore.read(
+                provider: "linear", snapshotKind: Schema.ProviderSnapshotKinds.linearCustomViews, in: rawDB)
             XCTAssertEqual(snap?.snapshotJSON, "vs")
         }
     }
@@ -95,13 +107,22 @@ final class WriteEventsOffsetsAndSnapshotsTests: XCTestCase {
             snapshots: [
                 makeSnapshot(Schema.ProviderSnapshotKinds.linearSubscribedIssues, "subs", 1),
                 makeSnapshot(Schema.ProviderSnapshotKinds.linearCustomViews, "views", 1),
-                makeSnapshot(Schema.ProviderSnapshotKinds.linearProjectMemberships, "mems", 1)
+                makeSnapshot(Schema.ProviderSnapshotKinds.linearProjectMemberships, "mems", 1),
             ]
         )
         try db.readSQL { rawDB in
-            XCTAssertEqual(try ProviderSnapshotsStore.read(provider: "linear", snapshotKind: Schema.ProviderSnapshotKinds.linearSubscribedIssues, in: rawDB)?.snapshotJSON, "subs")
-            XCTAssertEqual(try ProviderSnapshotsStore.read(provider: "linear", snapshotKind: Schema.ProviderSnapshotKinds.linearCustomViews, in: rawDB)?.snapshotJSON, "views")
-            XCTAssertEqual(try ProviderSnapshotsStore.read(provider: "linear", snapshotKind: Schema.ProviderSnapshotKinds.linearProjectMemberships, in: rawDB)?.snapshotJSON, "mems")
+            XCTAssertEqual(
+                try ProviderSnapshotsStore.read(
+                    provider: "linear", snapshotKind: Schema.ProviderSnapshotKinds.linearSubscribedIssues, in: rawDB)?
+                    .snapshotJSON, "subs")
+            XCTAssertEqual(
+                try ProviderSnapshotsStore.read(
+                    provider: "linear", snapshotKind: Schema.ProviderSnapshotKinds.linearCustomViews, in: rawDB)?
+                    .snapshotJSON, "views")
+            XCTAssertEqual(
+                try ProviderSnapshotsStore.read(
+                    provider: "linear", snapshotKind: Schema.ProviderSnapshotKinds.linearProjectMemberships, in: rawDB)?
+                    .snapshotJSON, "mems")
         }
     }
 }

@@ -75,9 +75,9 @@ public enum CrossProviderInsights {
             let rows = try GRDB.Row.fetchAll(rawDB, sql: sql, arguments: [linearIssueID, linearIssueID])
             for row in rows {
                 guard let tsMs = row["ts"] as? Int64,
-                      let payloadStr = row["payload_json"] as? String,
-                      let payloadData = payloadStr.data(using: .utf8),
-                      let dict = (try? JSONSerialization.jsonObject(with: payloadData)) as? [String: Any]
+                    let payloadStr = row["payload_json"] as? String,
+                    let payloadData = payloadStr.data(using: .utf8),
+                    let dict = (try? JSONSerialization.jsonObject(with: payloadData)) as? [String: Any]
                 else { continue }
                 let source = dict["source"] as? String ?? ""
                 let eventKind = dict["event_kind"] as? String ?? ""
@@ -86,7 +86,7 @@ public enum CrossProviderInsights {
                     "ts_ms": tsMs,
                     "source": source,
                     "event_kind": eventKind,
-                    "payload": projected
+                    "payload": projected,
                 ])
                 if firstTouchMs == 0 || tsMs < firstTouchMs {
                     firstTouchMs = tsMs
@@ -111,7 +111,7 @@ public enum CrossProviderInsights {
             "events": events,
             "first_touch_ms": firstTouchMs,
             "last_touch_ms": lastTouchMs,
-            "duration_seconds": durationSeconds
+            "duration_seconds": durationSeconds,
         ]
     }
 
@@ -136,7 +136,7 @@ public enum CrossProviderInsights {
         "completion_seconds",
         "cycle_seconds",
         "review_delay_seconds",
-        "action"
+        "action",
     ]
 
     private static func projectPayload(_ raw: [String: Any]) -> [String: Any] {

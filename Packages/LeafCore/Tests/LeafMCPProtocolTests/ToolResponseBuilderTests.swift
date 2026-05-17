@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafMCPProtocol
 
 final class ToolResponseBuilderTests: XCTestCase {
@@ -11,8 +12,9 @@ final class ToolResponseBuilderTests: XCTestCase {
             return XCTFail("Expected .text content")
         }
         // sortedKeys → "entries" до "version"; substring check устойчив к пробелам.
-        XCTAssertTrue(tc.text.contains("\"version\":1"),
-                      "Output should contain version:1, got: \(tc.text)")
+        XCTAssertTrue(
+            tc.text.contains("\"version\":1"),
+            "Output should contain version:1, got: \(tc.text)")
 
         // Parse back and assert top-level version == 1.
         let data = Data(tc.text.utf8)
@@ -25,7 +27,7 @@ final class ToolResponseBuilderTests: XCTestCase {
             "period": "today",
             "from": "2026-04-24T00:00:00Z",
             "to": "2026-04-25T00:00:00Z",
-            "entries": [["bundleID": "com.apple.Xcode", "durationSec": 1800]]
+            "entries": [["bundleID": "com.apple.Xcode", "durationSec": 1800]],
         ]
         let result = try ToolResponseBuilder.versionedJSONResult(payload)
 

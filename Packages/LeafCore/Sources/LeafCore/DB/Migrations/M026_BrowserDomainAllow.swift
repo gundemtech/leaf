@@ -2,11 +2,11 @@
 // control. See docs/superpowers/specs/2026-05-16-track-6-P3-browsers-deep.md §4.
 // Default empty; non-matching domains resolve to `domainOnly` at filter time.
 
-import GRDB
 import Foundation
+import GRDB
 
-public extension DatabaseMigrator {
-    mutating func registerMigration026BrowserDomainAllow() {
+extension DatabaseMigrator {
+    public mutating func registerMigration026BrowserDomainAllow() {
         registerMigration("026_browser_domain_allow") { db in
             try db.create(table: Schema.BrowserDomainAllow.tableName, ifNotExists: true) { t in
                 t.primaryKey(Schema.BrowserDomainAllow.domain, .text)

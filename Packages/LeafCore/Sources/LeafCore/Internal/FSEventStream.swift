@@ -1,5 +1,5 @@
-import Foundation
 import CoreServices
+import Foundation
 
 /// Phase 2.4 — internal Swift wrapper над `FSEventStreamCreate` C API.
 /// Не public — moat-релевантного здесь нет, но интерфейс specific к
@@ -50,20 +50,20 @@ final class FSEventStream: @unchecked Sendable {
         )
 
         let flags = UInt32(
-            kFSEventStreamCreateFlagFileEvents |
-            kFSEventStreamCreateFlagNoDefer |
-            kFSEventStreamCreateFlagUseCFTypes
+            kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagNoDefer | kFSEventStreamCreateFlagUseCFTypes
         )
 
-        guard let ref = FSEventStreamCreate(
-            kCFAllocatorDefault,
-            FSEventStream.callback,
-            &context,
-            cfPaths,
-            FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-            latency,
-            flags
-        ) else {
+        guard
+            let ref = FSEventStreamCreate(
+                kCFAllocatorDefault,
+                FSEventStream.callback,
+                &context,
+                cfPaths,
+                FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
+                latency,
+                flags
+            )
+        else {
             throw FSEventStreamError.createFailed
         }
         self.stream = ref
@@ -101,12 +101,14 @@ final class FSEventStream: @unchecked Sendable {
     /// `@convention(c)` — нельзя captures. Self извлекается из `info`,
     /// preformatted CFArray<CFString> кастится в `[String]`.
     private static let callback: FSEventStreamCallback = {
-        (_ streamRef: ConstFSEventStreamRef,
-         _ clientCallBackInfo: UnsafeMutableRawPointer?,
-         _ numEvents: Int,
-         _ eventPaths: UnsafeMutableRawPointer,
-         _ eventFlags: UnsafePointer<FSEventStreamEventFlags>,
-         _ eventIds: UnsafePointer<FSEventStreamEventId>) -> Void in
+        (
+            _ streamRef: ConstFSEventStreamRef,
+            _ clientCallBackInfo: UnsafeMutableRawPointer?,
+            _ numEvents: Int,
+            _ eventPaths: UnsafeMutableRawPointer,
+            _ eventFlags: UnsafePointer<FSEventStreamEventFlags>,
+            _ eventIds: UnsafePointer<FSEventStreamEventId>
+        ) -> Void in
 
         guard let info = clientCallBackInfo else { return }
         let owner = Unmanaged<FSEventStream>.fromOpaque(info).takeUnretainedValue()

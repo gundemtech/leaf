@@ -32,7 +32,8 @@ struct LeafTabPreview: View {
                 .foregroundStyle(LeafColor.text.tertiary)
 
             TokensInlineSpec(
-                spec: "LeafTab · generic <Tab: Hashable & Identifiable> · underline indicator on selected · spring.gentle move",
+                spec:
+                    "LeafTab · generic <Tab: Hashable & Identifiable> · underline indicator on selected · spring.gentle move",
                 codeSnippet: "LeafTab(selection: $tab, tabs: Section.allCases, label: { $0.label })"
             )
         }

@@ -11,6 +11,7 @@
 //  - GitHubScopesChecking protocol conformance compiles.
 
 import XCTest
+
 @testable import LeafCore
 
 final class GitHubScopesServiceTests: XCTestCase {
@@ -98,17 +99,18 @@ final class GitHubScopesServiceTests: XCTestCase {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
         let now = Date(timeIntervalSince1970: 1_700_000_000)
-        try db.upsertIntegration(IntegrationRecord(
-            provider: .github,
-            workspaceID: "owner",
-            workspaceName: "Owner",
-            accessToken: "tok",
-            refreshToken: nil,
-            expiresAt: nil,
-            scope: "repo",
-            connectedAt: now,
-            updatedAt: now
-        ))
+        try db.upsertIntegration(
+            IntegrationRecord(
+                provider: .github,
+                workspaceID: "owner",
+                workspaceName: "Owner",
+                accessToken: "tok",
+                refreshToken: nil,
+                expiresAt: nil,
+                scope: "repo",
+                connectedAt: now,
+                updatedAt: now
+            ))
 
         let s = GitHubScopesService(database: db)
 
@@ -118,17 +120,18 @@ final class GitHubScopesServiceTests: XCTestCase {
         XCTAssertTrue(beforeRepo)
 
         // User re-auths with broader scope set.
-        try db.upsertIntegration(IntegrationRecord(
-            provider: .github,
-            workspaceID: "owner",
-            workspaceName: "Owner",
-            accessToken: "tok",
-            refreshToken: nil,
-            expiresAt: nil,
-            scope: "repo read:org",
-            connectedAt: now,
-            updatedAt: now
-        ))
+        try db.upsertIntegration(
+            IntegrationRecord(
+                provider: .github,
+                workspaceID: "owner",
+                workspaceName: "Owner",
+                accessToken: "tok",
+                refreshToken: nil,
+                expiresAt: nil,
+                scope: "repo read:org",
+                connectedAt: now,
+                updatedAt: now
+            ))
 
         await s.refresh()
 
@@ -144,13 +147,14 @@ final class GitHubScopesServiceTests: XCTestCase {
     func testWhitespaceTolerantParse() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         let now = Date(timeIntervalSince1970: 1_700_000_000)
-        try db.upsertIntegration(IntegrationRecord(
-            provider: .github,
-            workspaceID: "o", workspaceName: "n",
-            accessToken: "t", refreshToken: nil, expiresAt: nil,
-            scope: "  repo  read:user ",
-            connectedAt: now, updatedAt: now
-        ))
+        try db.upsertIntegration(
+            IntegrationRecord(
+                provider: .github,
+                workspaceID: "o", workspaceName: "n",
+                accessToken: "t", refreshToken: nil, expiresAt: nil,
+                scope: "  repo  read:user ",
+                connectedAt: now, updatedAt: now
+            ))
 
         let s = GitHubScopesService(database: db)
         let granted = await s.currentGranted()
@@ -167,13 +171,14 @@ final class GitHubScopesServiceTests: XCTestCase {
     func testCommaSeparatedScopeFromTokenExchangeParsesCorrectly() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         let now = Date(timeIntervalSince1970: 1_700_000_000)
-        try db.upsertIntegration(IntegrationRecord(
-            provider: .github,
-            workspaceID: "o", workspaceName: "n",
-            accessToken: "t", refreshToken: nil, expiresAt: nil,
-            scope: "repo,read:user,read:org,read:project,security_events,read:audit_log",
-            connectedAt: now, updatedAt: now
-        ))
+        try db.upsertIntegration(
+            IntegrationRecord(
+                provider: .github,
+                workspaceID: "o", workspaceName: "n",
+                accessToken: "t", refreshToken: nil, expiresAt: nil,
+                scope: "repo,read:user,read:org,read:project,security_events,read:audit_log",
+                connectedAt: now, updatedAt: now
+            ))
 
         let s = GitHubScopesService(database: db)
         let granted = await s.currentGranted()
@@ -197,13 +202,14 @@ final class GitHubScopesServiceTests: XCTestCase {
     func testEmptyScopeYieldsEmptyGranted() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         let now = Date(timeIntervalSince1970: 1_700_000_000)
-        try db.upsertIntegration(IntegrationRecord(
-            provider: .github,
-            workspaceID: "o", workspaceName: "n",
-            accessToken: "t", refreshToken: nil, expiresAt: nil,
-            scope: "",
-            connectedAt: now, updatedAt: now
-        ))
+        try db.upsertIntegration(
+            IntegrationRecord(
+                provider: .github,
+                workspaceID: "o", workspaceName: "n",
+                accessToken: "t", refreshToken: nil, expiresAt: nil,
+                scope: "",
+                connectedAt: now, updatedAt: now
+            ))
 
         let s = GitHubScopesService(database: db)
         let granted = await s.currentGranted()

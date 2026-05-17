@@ -1,7 +1,7 @@
 import Foundation
+import LeafCore
 import NetworkExtension
 import os
-import LeafCore
 
 /// Phase Track-4 S3 — `NEVPNManager.shared()` status observer. Emits
 /// `vpn_state_changed` на transition между stable states. Intermediate states
@@ -70,29 +70,30 @@ final class VPNCollector {
         let eventKind = "vpn_state_changed"
         let state: String
         switch transition {
-        case .connected:    state = "connected"
+        case .connected: state = "connected"
         case .disconnected: state = "disconnected"
         }
         let writer = self.writer
         Task {
-            await writer.enqueue(RawEvent(
-                signalType: .context,
-                bundleID: nil,
-                payload: ["event_kind": eventKind, "state": state]
-            ))
+            await writer.enqueue(
+                RawEvent(
+                    signalType: .context,
+                    bundleID: nil,
+                    payload: ["event_kind": eventKind, "state": state]
+                ))
         }
         collectorLogger.info("VPN transition -> \(state, privacy: .public)")
     }
 
     static func mapStatus(_ status: NEVPNStatus) -> VPNRawStatus {
         switch status {
-        case .invalid:        return .invalid
-        case .disconnected:   return .disconnected
-        case .connecting:     return .connecting
-        case .connected:      return .connected
-        case .reasserting:    return .reasserting
-        case .disconnecting:  return .disconnecting
-        @unknown default:     return .invalid
+        case .invalid: return .invalid
+        case .disconnected: return .disconnected
+        case .connecting: return .connecting
+        case .connected: return .connected
+        case .reasserting: return .reasserting
+        case .disconnecting: return .disconnecting
+        @unknown default: return .invalid
         }
     }
 }

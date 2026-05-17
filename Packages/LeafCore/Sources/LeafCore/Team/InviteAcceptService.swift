@@ -109,8 +109,9 @@ public struct InviteAcceptService: Sendable {
         let adminPubHex = header.adminPubkey.map { String(format: "%02x", $0) }.joined()
 
         // 4. ECDH (symmetric — same shared secret as admin computed).
-        let shared = try KeyAgreement.sharedSecret(privateKey: priv,
-                                                   peerPublicKeyHex: adminPubHex)
+        let shared = try KeyAgreement.sharedSecret(
+            privateKey: priv,
+            peerPublicKeyHex: adminPubHex)
 
         // 5. Derive wrap key with OTP salt.
         let wrapKey = try inviteKDF.deriveWrapKey(sharedSecret: shared, otp: otp)
@@ -133,7 +134,8 @@ public struct InviteAcceptService: Sendable {
 
         // 7. Decode teamKey base64 (32B AES-256 key bytes).
         guard let teamKeyBytes = Data(base64Encoded: plaintext.teamKeyBase64),
-              teamKeyBytes.count == 32 else {
+            teamKeyBytes.count == 32
+        else {
             throw LeafError.inviteBlobMalformed
         }
 
@@ -144,36 +146,41 @@ public struct InviteAcceptService: Sendable {
         // 9. Build domain rows.
         let acceptedAt = now()
         let issuedAt = Date(timeIntervalSince1970: TimeInterval(plaintext.issuedAtMs) / 1000)
-        let org = Org(id: plaintext.orgID,
-                      name: plaintext.orgName,
-                      createdAt: issuedAt,
-                      createdByMemberID: plaintext.adminMemberID)
-        let adminMember = TeamMember(id: plaintext.adminMemberID,
-                                     orgID: plaintext.orgID,
-                                     role: .admin,
-                                     pubkeyHex: adminPubHex,
-                                     displayName: plaintext.adminDisplayName,
-                                     addedAt: issuedAt,
-                                     removedAt: nil)
+        let org = Org(
+            id: plaintext.orgID,
+            name: plaintext.orgName,
+            createdAt: issuedAt,
+            createdByMemberID: plaintext.adminMemberID)
+        let adminMember = TeamMember(
+            id: plaintext.adminMemberID,
+            orgID: plaintext.orgID,
+            role: .admin,
+            pubkeyHex: adminPubHex,
+            displayName: plaintext.adminDisplayName,
+            addedAt: issuedAt,
+            removedAt: nil)
         let selfMemberID = generateMemberID()
-        let selfMember = TeamMember(id: selfMemberID,
-                                    orgID: plaintext.orgID,
-                                    role: .member,
-                                    pubkeyHex: selfPubHex,
-                                    displayName: trimmedDN,
-                                    addedAt: acceptedAt,
-                                    removedAt: nil)
-        let teamKey = TeamKey(id: plaintext.teamKeyID,
-                              generatedAt: issuedAt,
-                              deprecatedAt: nil,
-                              generatedByMemberID: plaintext.adminMemberID)
+        let selfMember = TeamMember(
+            id: selfMemberID,
+            orgID: plaintext.orgID,
+            role: .member,
+            pubkeyHex: selfPubHex,
+            displayName: trimmedDN,
+            addedAt: acceptedAt,
+            removedAt: nil)
+        let teamKey = TeamKey(
+            id: plaintext.teamKeyID,
+            generatedAt: issuedAt,
+            deprecatedAt: nil,
+            generatedByMemberID: plaintext.adminMemberID)
 
         // 10. Keystore-first (orphan file < orphan DB rows). Mirror OrgService
         //     ordering — corrupted state stays observable, никаких silent
         //     auto-cleanup'ов.
-        try TeamKeystore.writeTeamKey(teamKeyBytes,
-                                      id: plaintext.teamKeyID,
-                                      at: keystoreRoot)
+        try TeamKeystore.writeTeamKey(
+            teamKeyBytes,
+            id: plaintext.teamKeyID,
+            at: keystoreRoot)
 
         // 11. DB writes (sequential — mirror OrgService.createPersonalOrg).
         try database.upsertOrg(org)
@@ -181,10 +188,11 @@ public struct InviteAcceptService: Sendable {
         try database.insertTeamMember(selfMember)
         try database.insertTeamKey(teamKey)
 
-        return AcceptedInvite(orgID: plaintext.orgID,
-                              orgName: plaintext.orgName,
-                              teamKeyID: plaintext.teamKeyID,
-                              selfMemberID: selfMemberID)
+        return AcceptedInvite(
+            orgID: plaintext.orgID,
+            orgName: plaintext.orgName,
+            teamKeyID: plaintext.teamKeyID,
+            selfMemberID: selfMemberID)
     }
 }
 

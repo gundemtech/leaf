@@ -11,6 +11,7 @@
 // 3) Unknown event_kinds still fall through unchanged.
 
 import XCTest
+
 @testable import LeafCore
 
 final class ActivityFeedMapperLocalOSTests: XCTestCase {
@@ -191,7 +192,8 @@ final class ActivityFeedMapperLocalOSTests: XCTestCase {
     func testSafariTabsChanged() {
         // Safari/Chrome/ArcStateMachine emit `tabs` as JSON array of BrowserTab.
         // Mapper counts array length structurally — never reads url/title.
-        let tabsJSON = #"[{"url":"https://a","title":"A"},{"url":"https://b","title":"B"},{"url":"https://c","title":"C"}]"#
+        let tabsJSON =
+            #"[{"url":"https://a","title":"A"},{"url":"https://b","title":"B"},{"url":"https://c","title":"C"}]"#
         let entry = map(
             kind: "safari_tabs_changed", signalType: "attention",
             bundleID: "com.apple.Safari",
@@ -237,8 +239,9 @@ final class ActivityFeedMapperLocalOSTests: XCTestCase {
         // AudioRouteCollector emits `audio_route` (Schema.EventPayloadKeys.audioRoute)
         // carrying AudioRouteCategory enum rawValue (transport type only,
         // never device name — ADR-010).
-        let entry = map(kind: "audio_route_changed", signalType: "context",
-                        extras: ["audio_route": "headphones"])
+        let entry = map(
+            kind: "audio_route_changed", signalType: "context",
+            extras: ["audio_route": "headphones"])
         XCTAssertEqual(entry?.primaryText, "Audio route: headphones")
     }
 
@@ -253,52 +256,60 @@ final class ActivityFeedMapperLocalOSTests: XCTestCase {
     func testDisplayConnected() {
         // DisplayCollector emits payload {event_kind, state} — no count field
         // (`display_count` was never wired). Mapper renders primary only.
-        let entry = map(kind: "display_connected", signalType: "context",
-                        extras: ["state": "display_connected"])
+        let entry = map(
+            kind: "display_connected", signalType: "context",
+            extras: ["state": "display_connected"])
         XCTAssertEqual(entry?.primaryText, "Display connected")
         XCTAssertNil(entry?.secondaryText)
     }
 
     func testDisplayDisconnected() {
-        let entry = map(kind: "display_disconnected", signalType: "context",
-                        extras: ["state": "display_disconnected"])
+        let entry = map(
+            kind: "display_disconnected", signalType: "context",
+            extras: ["state": "display_disconnected"])
         XCTAssertEqual(entry?.primaryText, "Display disconnected")
         XCTAssertNil(entry?.secondaryText)
     }
 
     func testVPNStateChanged() {
-        let entry = map(kind: "vpn_state_changed", signalType: "context",
-                        extras: ["state": "connected"])
+        let entry = map(
+            kind: "vpn_state_changed", signalType: "context",
+            extras: ["state": "connected"])
         XCTAssertEqual(entry?.primaryText, "VPN: connected")
     }
 
     func testWifiStateChanged() {
-        let entry = map(kind: "wifi_state_changed", signalType: "context",
-                        extras: ["state": "associated"])
+        let entry = map(
+            kind: "wifi_state_changed", signalType: "context",
+            extras: ["state": "associated"])
         XCTAssertEqual(entry?.primaryText, "Wi-Fi: associated")
     }
 
     func testScreenshotTaken() {
-        let entry = map(kind: "screenshot_taken", signalType: "content",
-                        extras: ["filename": "Screen Shot 2026-05-13.png"])
+        let entry = map(
+            kind: "screenshot_taken", signalType: "content",
+            extras: ["filename": "Screen Shot 2026-05-13.png"])
         XCTAssertEqual(entry?.primaryText, "Screenshot: Screen Shot 2026-05-13.png")
     }
 
     func testDownloadAdded() {
-        let entry = map(kind: "download_added", signalType: "content",
-                        extras: ["filename": "report.pdf"])
+        let entry = map(
+            kind: "download_added", signalType: "content",
+            extras: ["filename": "report.pdf"])
         XCTAssertEqual(entry?.primaryText, "Download: report.pdf")
     }
 
     func testTrashChangedEmptied() {
-        let entry = map(kind: "trash_changed", signalType: "context",
-                        extras: ["action": "emptied"])
+        let entry = map(
+            kind: "trash_changed", signalType: "context",
+            extras: ["action": "emptied"])
         XCTAssertEqual(entry?.primaryText, "Trash emptied")
     }
 
     func testTrashChangedAdded() {
-        let entry = map(kind: "trash_changed", signalType: "context",
-                        extras: ["action": "added"])
+        let entry = map(
+            kind: "trash_changed", signalType: "context",
+            extras: ["action": "added"])
         XCTAssertEqual(entry?.primaryText, "Trash items added")
     }
 
@@ -312,7 +323,7 @@ final class ActivityFeedMapperLocalOSTests: XCTestCase {
             extras: [
                 "note_title": "Q1 review",
                 "note_body": "secret content",
-                "preview": "secret preview"
+                "preview": "secret preview",
             ]
         )
         XCTAssertEqual(entry?.primaryText, "Notes: Q1 review")
@@ -466,8 +477,10 @@ final class ActivityFeedMapperLocalOSTests: XCTestCase {
         let entry = map(
             kind: "xcode_build_finished", signalType: "attention",
             bundleID: "com.apple.dt.Xcode",
-            extras: ["status": "succeeded", "scheme": "Leaf",
-                     "run_destination_bucket": "macos"]
+            extras: [
+                "status": "succeeded", "scheme": "Leaf",
+                "run_destination_bucket": "macos",
+            ]
         )
         XCTAssertEqual(entry?.primaryText, "Xcode: build succeeded")
     }
@@ -476,8 +489,10 @@ final class ActivityFeedMapperLocalOSTests: XCTestCase {
         let entry = map(
             kind: "xcode_build_finished", signalType: "attention",
             bundleID: "com.apple.dt.Xcode",
-            extras: ["status": "failed", "scheme": "Leaf",
-                     "error_count": "4", "run_destination_bucket": "macos"]
+            extras: [
+                "status": "failed", "scheme": "Leaf",
+                "error_count": "4", "run_destination_bucket": "macos",
+            ]
         )
         XCTAssertEqual(entry?.primaryText, "Xcode: build failed")
         XCTAssertTrue(entry?.secondaryText?.contains("4 errors") == true)
@@ -497,9 +512,11 @@ final class ActivityFeedMapperLocalOSTests: XCTestCase {
         let entry = map(
             kind: "xcode_test_run_finished", signalType: "attention",
             bundleID: "com.apple.dt.Xcode",
-            extras: ["status": "failed", "passed_count": "1500",
-                     "failed_count": "2", "total_count": "1502",
-                     "run_destination_bucket": "ios_simulator"]
+            extras: [
+                "status": "failed", "passed_count": "1500",
+                "failed_count": "2", "total_count": "1502",
+                "run_destination_bucket": "ios_simulator",
+            ]
         )
         XCTAssertEqual(entry?.primaryText, "Xcode: tests failed")
         XCTAssertEqual(entry?.secondaryText, "1500 passed, 2 failed")
@@ -509,8 +526,10 @@ final class ActivityFeedMapperLocalOSTests: XCTestCase {
         let entry = map(
             kind: "xcode_scheme_changed", signalType: "attention",
             bundleID: "com.apple.dt.Xcode",
-            extras: ["scheme": "LeafAgent", "scheme_prev": "Leaf",
-                     "project": "Leaf"]
+            extras: [
+                "scheme": "LeafAgent", "scheme_prev": "Leaf",
+                "project": "Leaf",
+            ]
         )
         XCTAssertEqual(entry?.primaryText, "Xcode: scheme LeafAgent")
         XCTAssertEqual(entry?.secondaryText, "Leaf")
@@ -520,8 +539,10 @@ final class ActivityFeedMapperLocalOSTests: XCTestCase {
         let entry = map(
             kind: "xcode_run_destination_changed", signalType: "attention",
             bundleID: "com.apple.dt.Xcode",
-            extras: ["run_destination_bucket": "ios_simulator",
-                     "run_destination_bucket_prev": "macos"]
+            extras: [
+                "run_destination_bucket": "ios_simulator",
+                "run_destination_bucket_prev": "macos",
+            ]
         )
         XCTAssertEqual(entry?.primaryText, "Xcode: target ios_simulator")
     }
@@ -534,9 +555,11 @@ final class ActivityFeedMapperLocalOSTests: XCTestCase {
     // walkback fence at test time, not at smoke-gate time.
     func testXcodeP2_WalkbackSentinel() {
         let sentinel = "LEAKED_SENTINEL_XCODE_P2"
-        let kinds = ["xcode_build_started", "xcode_build_finished",
-                     "xcode_test_run_started", "xcode_test_run_finished",
-                     "xcode_scheme_changed", "xcode_run_destination_changed"]
+        let kinds = [
+            "xcode_build_started", "xcode_build_finished",
+            "xcode_test_run_started", "xcode_test_run_finished",
+            "xcode_scheme_changed", "xcode_run_destination_changed",
+        ]
         let forbiddenKeys: [String] = [
             "raw_device_name", "device_name", "deviceName",
             "error_message", "errors", "compiler_error",
@@ -544,7 +567,7 @@ final class ActivityFeedMapperLocalOSTests: XCTestCase {
             "test_identifier", "test_name", "test_method_name",
             "failure_message", "failureMessage",
             "model_name", "modelName", "os_build_number",
-            "build_log", "activity_log", "stderr", "stdout"
+            "build_log", "activity_log", "stderr", "stdout",
         ]
         var sentinelPayload: [String: String] = [:]
         for k in forbiddenKeys { sentinelPayload[k] = sentinel }
@@ -555,10 +578,12 @@ final class ActivityFeedMapperLocalOSTests: XCTestCase {
                 extras: sentinelPayload
             )
             if let e = entry {
-                XCTAssertFalse(e.primaryText.contains(sentinel),
-                               "\(kind) leaked sentinel in primaryText: \(e.primaryText)")
-                XCTAssertFalse(e.secondaryText?.contains(sentinel) == true,
-                               "\(kind) leaked sentinel in secondaryText: \(e.secondaryText ?? "")")
+                XCTAssertFalse(
+                    e.primaryText.contains(sentinel),
+                    "\(kind) leaked sentinel in primaryText: \(e.primaryText)")
+                XCTAssertFalse(
+                    e.secondaryText?.contains(sentinel) == true,
+                    "\(kind) leaked sentinel in secondaryText: \(e.secondaryText ?? "")")
             }
         }
     }
@@ -573,7 +598,7 @@ final class ActivityFeedMapperLocalOSTests: XCTestCase {
             extras: [
                 "workspace_name": "leaf",
                 "file_basename": "Foo.swift",
-                "ide_bundle_id": "com.microsoft.VSCode"
+                "ide_bundle_id": "com.microsoft.VSCode",
             ]
         )
         XCTAssertEqual(entry?.primaryText, "VSCode: leaf — Foo.swift")
@@ -588,7 +613,7 @@ final class ActivityFeedMapperLocalOSTests: XCTestCase {
             extras: [
                 "workspace_name": "leaf",
                 "file_basename": "Foo.swift",
-                "ide_bundle_id": "com.todesktop.230313mzl4w4u92"
+                "ide_bundle_id": "com.todesktop.230313mzl4w4u92",
             ]
         )
         XCTAssertEqual(entry?.primaryText, "Cursor: leaf — Foo.swift")
@@ -600,7 +625,7 @@ final class ActivityFeedMapperLocalOSTests: XCTestCase {
             bundleID: "com.microsoft.VSCode",
             extras: [
                 "workspace_name": "leaf-docs",
-                "ide_bundle_id": "com.microsoft.VSCode"
+                "ide_bundle_id": "com.microsoft.VSCode",
             ]
         )
         XCTAssertEqual(entry?.primaryText, "Opened workspace: leaf-docs")
@@ -614,7 +639,7 @@ final class ActivityFeedMapperLocalOSTests: XCTestCase {
             extras: [
                 "project_name": "ml-research",
                 "ide_version_dir": "PyCharm2025.1",
-                "ide_bundle_id": "com.jetbrains.pycharm"
+                "ide_bundle_id": "com.jetbrains.pycharm",
             ]
         )
         XCTAssertEqual(entry?.primaryText, "JetBrains: ml-research")

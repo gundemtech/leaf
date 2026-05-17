@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class AttentionEmissionPlannerTests: XCTestCase {
@@ -40,7 +41,7 @@ final class AttentionEmissionPlannerTests: XCTestCase {
             "com.microsoft.VSCode",
             "com.microsoft.VSCodeInsiders",
             "com.todesktop.230313mzl4w4u92",  // Cursor
-            "com.visualstudio.code.oss"        // VSCodium
+            "com.visualstudio.code.oss",  // VSCodium
         ]
         let browse: Set<String> = ["com.apple.Safari"]
         func category(for bundleID: String) -> AppCategory {
@@ -311,7 +312,9 @@ final class AttentionEmissionPlannerTests: XCTestCase {
         XCTAssertEqual(event?.payload["event_kind"], "vscode_active_doc_changed")
         XCTAssertEqual(event?.payload["workspace_name"], "leaf")
         XCTAssertEqual(event?.payload["file_basename"], "Foo.swift")
-        XCTAssertNil(event?.payload["window_title"], "Raw window_title must be removed from payload after parse-success — privacy walkback")
+        XCTAssertNil(
+            event?.payload["window_title"],
+            "Raw window_title must be removed from payload after parse-success — privacy walkback")
         XCTAssertNil(event?.payload["raw_title"], "Success path must not emit raw_title — that's fallback-only")
         XCTAssertEqual(event?.payload["ide_bundle_id"], "com.microsoft.VSCode")
     }
@@ -328,7 +331,9 @@ final class AttentionEmissionPlannerTests: XCTestCase {
         XCTAssertNotNil(event?.payload["raw_title"])
         // Sanitizer left non-path tokens intact.
         XCTAssertTrue(event?.payload["raw_title"]?.contains("Custom") ?? false)
-        XCTAssertNil(event?.payload["window_title"], "Raw window_title must be removed from payload after fallback emit — privacy walkback")
+        XCTAssertNil(
+            event?.payload["window_title"],
+            "Raw window_title must be removed from payload after fallback emit — privacy walkback")
         XCTAssertEqual(event?.payload["ide_bundle_id"], "com.microsoft.VSCode")
     }
 
@@ -346,8 +351,10 @@ final class AttentionEmissionPlannerTests: XCTestCase {
     func test_p6_vscodeFamily_fallbackSanitizesPath() {
         let planner = makePlanner(
             level: .l3, axTrusted: true,
-            titles: ["com.microsoft.VSCode":
-                "Foo.swift in /Users/alice/secret/project running Visual Studio Code"]
+            titles: [
+                "com.microsoft.VSCode":
+                    "Foo.swift in /Users/alice/secret/project running Visual Studio Code"
+            ]
         )
         let event = planner.plan(bundleID: "com.microsoft.VSCode", pid: 1, reason: .appSwitch)
         let raw = event?.payload["raw_title"] ?? ""

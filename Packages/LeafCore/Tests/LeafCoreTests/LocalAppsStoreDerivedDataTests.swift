@@ -1,6 +1,7 @@
+import Foundation
 // Phase Track-6 P2 — System Observers DerivedData watcher toggle.
 import Testing
-import Foundation
+
 @testable import LeafCore
 
 @Suite("LocalAppsStore.derivedDataWatcherEnabled")

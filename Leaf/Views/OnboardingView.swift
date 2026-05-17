@@ -14,8 +14,8 @@
 //  preserved 1:1.
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 enum OnboardingStep: String, CaseIterable {
     case welcome, ax, fda, observers, aiTools, team, done
@@ -107,13 +107,13 @@ struct OnboardingView: View {
     @ViewBuilder
     private var stepContent: some View {
         switch step {
-        case .welcome:   welcomeStep
-        case .ax:        axStep
-        case .fda:       fdaStep
+        case .welcome: welcomeStep
+        case .ax: axStep
+        case .fda: fdaStep
         case .observers: observersStep
-        case .aiTools:   aiToolsStep
-        case .team:      teamStep
-        case .done:      doneStep
+        case .aiTools: aiToolsStep
+        case .team: teamStep
+        case .done: doneStep
         }
     }
 
@@ -192,10 +192,12 @@ struct OnboardingView: View {
             Text("Calendar & Focus")
                 .font(LeafType.title.small)
                 .foregroundStyle(LeafColor.text.primary)
-            Text("Lets Leaf see when you're in a meeting or Focus mode — never event titles, attendees, or Focus mode names.")
-                .font(LeafType.body.small)
-                .foregroundStyle(LeafColor.text.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            Text(
+                "Lets Leaf see when you're in a meeting or Focus mode — never event titles, attendees, or Focus mode names."
+            )
+            .font(LeafType.body.small)
+            .foregroundStyle(LeafColor.text.secondary)
+            .fixedSize(horizontal: false, vertical: true)
             HStack {
                 LeafButton(
                     "Grant Calendar",
@@ -238,10 +240,12 @@ struct OnboardingView: View {
             Text("AI tool capture")
                 .font(LeafType.title.small)
                 .foregroundStyle(LeafColor.text.primary)
-            Text("Leaf can detect when you work with Claude Code. Metadata only — file paths, durations, token counts. Prompts, tool inputs, AI responses — never captured.")
-                .font(LeafType.body.small)
-                .foregroundStyle(LeafColor.text.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            Text(
+                "Leaf can detect when you work with Claude Code. Metadata only — file paths, durations, token counts. Prompts, tool inputs, AI responses — never captured."
+            )
+            .font(LeafType.body.small)
+            .foregroundStyle(LeafColor.text.secondary)
+            .fixedSize(horizontal: false, vertical: true)
             HStack {
                 LeafButton(
                     "Install Claude Code hooks",
@@ -291,7 +295,7 @@ struct OnboardingView: View {
                     step = .team
                 case .partial(let msg), .failed(let msg):
                     permissions.aiToolsStore.lastInstallResult = .failed(msg)
-                    // Don't advance — let user see error and retry or skip.
+                // Don't advance — let user see error and retry or skip.
                 }
             } catch {
                 permissions.aiToolsStore.lastInstallResult = .failed("\(error.localizedDescription)")

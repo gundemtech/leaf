@@ -9,8 +9,9 @@
 //   - testExecute_AggregatesByEventKindAndRepo
 //   - testExecute_LinkedPRs_DeduplicatedAndFiltered
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class ReviewActivityTests: XCTestCase {
@@ -43,7 +44,7 @@ final class ReviewActivityTests: XCTestCase {
             "title": "",
             "number": prNumber.map(String.init) ?? "",
             "sha": "",
-            "branch": ""
+            "branch": "",
         ]
         if let linked = linkedLinearID {
             payload["linked_linear_id"] = linked
@@ -70,7 +71,7 @@ final class ReviewActivityTests: XCTestCase {
             "number": prNumber.map(String.init) ?? "",
             "sha": "",
             "branch": "",
-            "action": "created"
+            "action": "created",
         ]
         if let linked = linkedLinearID {
             payload["linked_linear_id"] = linked
@@ -96,7 +97,7 @@ final class ReviewActivityTests: XCTestCase {
             "title": "",
             "number": String(prNumber),
             "sha": "",
-            "branch": ""
+            "branch": "",
         ]
         if let linked = linkedLinearID {
             payload["linked_linear_id"] = linked
@@ -127,8 +128,9 @@ final class ReviewActivityTests: XCTestCase {
         XCTAssertEqual(payload["period"] as? String, "today")
         XCTAssertEqual(payload["reviews_submitted_count"] as? Int, 0)
         XCTAssertEqual(payload["review_comments_count"] as? Int, 0)
-        XCTAssertEqual(payload["review_thread_resolved_count"] as? Int, 0,
-                       "Track C event_kind ещё не emit'ится — count должен быть 0")
+        XCTAssertEqual(
+            payload["review_thread_resolved_count"] as? Int, 0,
+            "Track C event_kind ещё не emit'ится — count должен быть 0")
 
         let byRepo = try XCTUnwrap(payload["by_repo"] as? [[String: Any]])
         XCTAssertTrue(byRepo.isEmpty, "by_repo должен быть пустым массивом")
@@ -160,7 +162,7 @@ final class ReviewActivityTests: XCTestCase {
             makeReviewSubmittedEvent(repo: "owner/repo-b", prNumber: 4, atMs: baseMs + 300),
             makeReviewCommentEvent(repo: "owner/repo-a", prNumber: 1, atMs: baseMs + 400),
             makeReviewCommentEvent(repo: "owner/repo-a", prNumber: 2, atMs: baseMs + 500),
-            makeReviewCommentEvent(repo: "owner/repo-b", prNumber: 4, atMs: baseMs + 600)
+            makeReviewCommentEvent(repo: "owner/repo-b", prNumber: 4, atMs: baseMs + 600),
         ]
         try db.write(events)
 
@@ -229,7 +231,7 @@ final class ReviewActivityTests: XCTestCase {
             // No pr_number (commit_pushed-style review без PR context — synthetic edge) → skip.
             makeReviewSubmittedEvent(
                 repo: "owner/repo-a", prNumber: nil, linkedLinearID: "LEAF-300", atMs: baseMs + 500
-            )
+            ),
         ]
         try db.write(events)
 
@@ -238,8 +240,10 @@ final class ReviewActivityTests: XCTestCase {
         )
 
         let linkedPRs = try XCTUnwrap(payload["linked_prs"] as? [[String: Any]])
-        XCTAssertEqual(linkedPRs.count, 2,
-                       "DISTINCT(repo, pr_number, linked_linear_id) → 3 dup events на (repo-a, 42, LEAF-100) сжимаются в 1; (repo-b, 7, LEAF-200) — отдельная запись; events без linked_id или без pr_number отброшены")
+        XCTAssertEqual(
+            linkedPRs.count, 2,
+            "DISTINCT(repo, pr_number, linked_linear_id) → 3 dup events на (repo-a, 42, LEAF-100) сжимаются в 1; (repo-b, 7, LEAF-200) — отдельная запись; events без linked_id или без pr_number отброшены"
+        )
 
         // Sorted ASC по (repo, pr_number) — детерминизм.
         XCTAssertEqual(linkedPRs[0]["repo"] as? String, "owner/repo-a")
@@ -254,8 +258,9 @@ final class ReviewActivityTests: XCTestCase {
         // от linked_id presence.  Seeded review events (event_kind=review_submitted):
         // (repo-a, 42, LEAF-100), (repo-a, 50, no link), (repo-a, no pr_number, LEAF-300) → 3.
         // pr_opened events (#2, #3) НЕ считаются review_submitted.
-        XCTAssertEqual(payload["reviews_submitted_count"] as? Int, 3,
-                       "3 review_submitted events seeded — pr_opened/comment события не в этом count'е")
+        XCTAssertEqual(
+            payload["reviews_submitted_count"] as? Int, 3,
+            "3 review_submitted events seeded — pr_opened/comment события не в этом count'е")
         XCTAssertEqual(payload["review_comments_count"] as? Int, 1)
     }
 }

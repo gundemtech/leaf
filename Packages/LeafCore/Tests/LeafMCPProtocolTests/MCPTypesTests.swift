@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafMCPProtocol
 
 final class MCPTypesTests: XCTestCase {
@@ -21,7 +22,7 @@ final class MCPTypesTests: XCTestCase {
             "properties": [
                 "period": ["type": "string", "enum": ["today", "yesterday", "last_7_days"]]
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
         ]
         let tool = ToolDefinition(
             name: "get_timeline",

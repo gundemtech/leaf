@@ -13,7 +13,8 @@ struct PrivacySettingsSection: View {
             LeafBanner(
                 tone: .info,
                 title: "Per-app Share Controls land in Phase 2",
-                description: "Phase 1 ships a hardcoded minimal blocklist (Leaf's own processes + system UI). Editable per-app sharing arrives in the next milestone."
+                description:
+                    "Phase 1 ships a hardcoded minimal blocklist (Leaf's own processes + system UI). Editable per-app sharing arrives in the next milestone."
             )
         }
     }

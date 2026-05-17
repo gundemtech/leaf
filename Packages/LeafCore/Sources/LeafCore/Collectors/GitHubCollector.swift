@@ -81,7 +81,9 @@ public actor GitHubCollector {
             Task { await self?.kickTick() }
         }
         loopTask = Task { [weak self] in await self?.runLoop() }
-        logger.info("GitHubCollector started (interval=\(self.intervalSec, privacy: .public)s, backfill=\(self.backfillWindowDays, privacy: .public)d)")
+        logger.info(
+            "GitHubCollector started (interval=\(self.intervalSec, privacy: .public)s, backfill=\(self.backfillWindowDays, privacy: .public)d)"
+        )
     }
 
     public func stop() async {
@@ -267,12 +269,15 @@ public actor GitHubCollector {
                     sha: pair.sha
                 )
             } catch {
-                logger.error("fetchCheckRunsForCommit failed \(pair.repo, privacy: .public)/\(pair.sha, privacy: .public): \(String(describing: error), privacy: .public)")
+                logger.error(
+                    "fetchCheckRunsForCommit failed \(pair.repo, privacy: .public)/\(pair.sha, privacy: .public): \(String(describing: error), privacy: .public)"
+                )
                 summary = .empty
             }
-            events.append(Self.makeCheckRunsStatusEvent(
-                repo: pair.repo, sha: pair.sha, summary: summary, nowMs: nowMs
-            ))
+            events.append(
+                Self.makeCheckRunsStatusEvent(
+                    repo: pair.repo, sha: pair.sha, summary: summary, nowMs: nowMs
+                ))
             if latestPushCheckStatus == nil {
                 // Reduce summary → status string. Severity-ordered: failure > in_progress > success.
                 if summary.failure > 0 {
@@ -326,7 +331,7 @@ public actor GitHubCollector {
             "my_open_prs": myOpenPRsSummary.count,
             "latest_push_check_status": latestPushCheckStatus.map { $0 as Any } ?? NSNull(),
             "contributions_today": lastContributionsToday,
-            "active_repos_count": activeRepos.count
+            "active_repos_count": activeRepos.count,
         ]
 
         // 7. Atomic write — events + offset + presence_state в одной транзакции.
@@ -354,7 +359,9 @@ public actor GitHubCollector {
             return TickResult(skipped: false, eventsProcessed: 0, cursorAdvancedMs: nil)
         }
         if !events.isEmpty {
-            logger.info("tick wrote \(events.count, privacy: .public) events, cursor=\(offset.lastModifiedMs, privacy: .public)")
+            logger.info(
+                "tick wrote \(events.count, privacy: .public) events, cursor=\(offset.lastModifiedMs, privacy: .public)"
+            )
         }
         return TickResult(
             skipped: false,
@@ -375,7 +382,7 @@ public actor GitHubCollector {
             "source": "github",
             "event_kind": GitHubEventKindKey.notificationsPulse.rawValue,
             "total_unread": String(summary.totalUnread),
-            "observed_at_ms": String(nowMs)
+            "observed_at_ms": String(nowMs),
         ]
         // Top-level fields для query-friendly access (избегаем nested JSON в payload).
         for (reason, count) in summary.byReason {
@@ -399,7 +406,7 @@ public actor GitHubCollector {
             "source": "github",
             "event_kind": GitHubEventKindKey.prAwaitingReviewCount.rawValue,
             "count": String(summary.count),
-            "observed_at_ms": String(nowMs)
+            "observed_at_ms": String(nowMs),
         ]
         if let topRepo = summary.topRepo {
             payload["top_repo"] = topRepo
@@ -428,7 +435,7 @@ public actor GitHubCollector {
             "workflow_name": snapshot.workflowName,
             "event": snapshot.event,
             "status": snapshot.status,
-            "created_at_ms": String(snapshot.createdAtMs)
+            "created_at_ms": String(snapshot.createdAtMs),
         ]
         // Только non-nil поля — отличает "completed→success" от "in_progress" (no
         // conclusion yet) на read-side без nullable parsing.
@@ -466,7 +473,7 @@ public actor GitHubCollector {
             "failure": String(summary.failure),
             "in_progress": String(summary.inProgress),
             "neutral": String(summary.neutral),
-            "observed_at_ms": String(nowMs)
+            "observed_at_ms": String(nowMs),
         ]
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0),
@@ -485,7 +492,7 @@ public actor GitHubCollector {
             "source": "github",
             "event_kind": GitHubEventKindKey.myOpenPRCount.rawValue,
             "count": String(summary.count),
-            "observed_at_ms": String(nowMs)
+            "observed_at_ms": String(nowMs),
         ]
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0),
@@ -503,7 +510,7 @@ public actor GitHubCollector {
             "title": snapshot.title,
             "number": snapshot.number.map(String.init) ?? "",
             "sha": snapshot.sha ?? "",
-            "branch": snapshot.branch ?? ""
+            "branch": snapshot.branch ?? "",
         ]
         // Phase 4.6.A.1 — latency fields. Только non-nil → ключ присутствует;
         // отсутствие ключа в payload отличает "не знаем" от "0 секунд".
@@ -554,7 +561,8 @@ public actor GitHubCollector {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
             if let data = try? encoder.encode(pr.requestedReviewers),
-               let str = String(data: data, encoding: .utf8) {
+                let str = String(data: data, encoding: .utf8)
+            {
                 payload[Schema.EventPayloadKeys.requestedReviewersJson] = str
             }
         }
@@ -563,7 +571,8 @@ public actor GitHubCollector {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
             if let data = try? encoder.encode(snapshot.attachments),
-               let str = String(data: data, encoding: .utf8) {
+                let str = String(data: data, encoding: .utf8)
+            {
                 payload[Schema.EventPayloadKeys.attachmentsJson] = str
             }
         }

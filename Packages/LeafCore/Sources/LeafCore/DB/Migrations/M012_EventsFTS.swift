@@ -13,31 +13,34 @@ import GRDB
 /// поверх matched rowid'а держим side table `(fts_rowid, event_id, body_kind)`,
 /// записывается атомарно вместе с FTS5 INSERT'ом в `EventsFullTextStore.indexEvent`.
 /// Index `idx_events_fts_meta_event_id` для reverse lookup (D3 needs).
-public extension DatabaseMigrator {
-    mutating func registerMigration012EventsFTS() {
+extension DatabaseMigrator {
+    public mutating func registerMigration012EventsFTS() {
         registerMigration("012_events_fts") { db in
-            try db.execute(sql: """
-                CREATE VIRTUAL TABLE IF NOT EXISTS events_fts USING fts5(
-                    body,
-                    body_kind UNINDEXED,
-                    event_id UNINDEXED,
-                    tokenize = "unicode61 remove_diacritics 2 tokenchars '_-'",
-                    content = ''
-                )
-                """)
+            try db.execute(
+                sql: """
+                    CREATE VIRTUAL TABLE IF NOT EXISTS events_fts USING fts5(
+                        body,
+                        body_kind UNINDEXED,
+                        event_id UNINDEXED,
+                        tokenize = "unicode61 remove_diacritics 2 tokenchars '_-'",
+                        content = ''
+                    )
+                    """)
 
-            try db.execute(sql: """
-                CREATE TABLE IF NOT EXISTS events_fts_meta (
-                    fts_rowid INTEGER PRIMARY KEY,
-                    event_id INTEGER NOT NULL,
-                    body_kind TEXT NOT NULL
-                )
-                """)
+            try db.execute(
+                sql: """
+                    CREATE TABLE IF NOT EXISTS events_fts_meta (
+                        fts_rowid INTEGER PRIMARY KEY,
+                        event_id INTEGER NOT NULL,
+                        body_kind TEXT NOT NULL
+                    )
+                    """)
 
-            try db.execute(sql: """
-                CREATE INDEX IF NOT EXISTS idx_events_fts_meta_event_id
-                ON events_fts_meta (event_id)
-                """)
+            try db.execute(
+                sql: """
+                    CREATE INDEX IF NOT EXISTS idx_events_fts_meta_event_id
+                    ON events_fts_meta (event_id)
+                    """)
         }
     }
 }

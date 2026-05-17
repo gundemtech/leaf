@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class SystemObserversStoreTests: XCTestCase {
@@ -45,14 +46,17 @@ final class SystemObserversStoreTests: XCTestCase {
 
     func testAllObserversCount() {
         XCTAssertEqual(SystemObserversStore.allObservers.count, 10)
-        XCTAssertEqual(Set(SystemObserversStore.allObservers).count, 10,
-                       "Observer names must be unique")
+        XCTAssertEqual(
+            Set(SystemObserversStore.allObservers).count, 10,
+            "Observer names must be unique")
     }
 
     func testKeyPrefix() {
-        XCTAssertEqual(SystemObserversStore.key("intensity"),
-                       "systemObservers.intensity.enabled")
-        XCTAssertEqual(SystemObserversStore.key("downloads_watcher"),
-                       "systemObservers.downloads_watcher.enabled")
+        XCTAssertEqual(
+            SystemObserversStore.key("intensity"),
+            "systemObservers.intensity.enabled")
+        XCTAssertEqual(
+            SystemObserversStore.key("downloads_watcher"),
+            "systemObservers.downloads_watcher.enabled")
     }
 }

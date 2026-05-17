@@ -76,7 +76,10 @@ public struct ToolCallParams: Codable, Sendable {
 public struct TextContent: Codable, Sendable {
     public let type: String
     public let text: String
-    public init(text: String) { self.type = "text"; self.text = text }
+    public init(text: String) {
+        self.type = "text"
+        self.text = text
+    }
 }
 
 public enum ToolContentItem: Codable, Sendable {

@@ -1,7 +1,7 @@
 import Foundation
 import Intents
-import os
 import LeafCore
+import os
 
 /// Phase Track-4 S1 — Layer A catch-up. Polls
 /// `INFocusStatusCenter.default.focusStatus.isFocused` and emits

@@ -1,7 +1,7 @@
-import Foundation
 import AppKit
-import os
+import Foundation
 import LeafCore
+import os
 
 /// Phase Track-4 S2 — orchestrator over per-app AppleScript adapters. Spawns
 /// one polling Task per adapter and delegates each tick to the pure

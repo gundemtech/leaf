@@ -1,8 +1,8 @@
-import Foundation
 import AppKit
 import ApplicationServices
-import os
+import Foundation
 import LeafCore
+import os
 
 /// Phase 4.10.B — слушает `NSWorkspace.didActivateApplicationNotification`
 /// (app switch) + polling tick раз в `attentionWindowPollIntervalSec` (in-app
@@ -91,8 +91,9 @@ final class ActiveAppCollector: @unchecked Sendable {
     @MainActor
     private func runPollTickOnMain() async {
         guard let app = NSWorkspace.shared.frontmostApplication,
-              let bundleID = app.bundleIdentifier,
-              !blocklist.contains(bundleID) else { return }
+            let bundleID = app.bundleIdentifier,
+            !blocklist.contains(bundleID)
+        else { return }
 
         if let event = planner.plan(
             bundleID: bundleID,
@@ -132,11 +133,13 @@ struct AXWindowContextProvider: WindowContextProvider {
     func windowTitle(forPid pid: pid_t, bundleID: String) -> String? {
         guard let window = focusedOrFallbackWindow(forPid: pid) else { return nil }
         var titleRef: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(
-            window,
-            kAXTitleAttribute as CFString,
-            &titleRef
-        ) == .success else { return nil }
+        guard
+            AXUIElementCopyAttributeValue(
+                window,
+                kAXTitleAttribute as CFString,
+                &titleRef
+            ) == .success
+        else { return nil }
         return titleRef as? String
     }
 
@@ -162,24 +165,28 @@ struct AXWindowContextProvider: WindowContextProvider {
             return win
         }
         var windowsRef: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(
-            appElement,
-            kAXWindowsAttribute as CFString,
-            &windowsRef
-        ) == .success,
-              let windows = windowsRef as? [AXUIElement],
-              let first = windows.first else { return nil }
+        guard
+            AXUIElementCopyAttributeValue(
+                appElement,
+                kAXWindowsAttribute as CFString,
+                &windowsRef
+            ) == .success,
+            let windows = windowsRef as? [AXUIElement],
+            let first = windows.first
+        else { return nil }
         return first
     }
 
     private func copyAXWindow(_ appElement: AXUIElement, attribute: String) -> AXUIElement? {
         var ref: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(
-            appElement,
-            attribute as CFString,
-            &ref
-        ) == .success,
-              let value = ref else { return nil }
+        guard
+            AXUIElementCopyAttributeValue(
+                appElement,
+                attribute as CFString,
+                &ref
+            ) == .success,
+            let value = ref
+        else { return nil }
         // AXUIElementGetTypeID() guard на случай когда attribute exists но не window-shaped.
         if CFGetTypeID(value) != AXUIElementGetTypeID() { return nil }
         return (value as! AXUIElement)
@@ -196,8 +203,9 @@ struct AXWindowContextProvider: WindowContextProvider {
             kAXRoleAttribute as CFString,
             &roleRef
         ) == .success,
-           let role = roleRef as? String,
-           role == "AXWebArea" {
+            let role = roleRef as? String,
+            role == "AXWebArea"
+        {
             var urlRef: CFTypeRef?
             if AXUIElementCopyAttributeValue(
                 element,
@@ -212,12 +220,14 @@ struct AXWindowContextProvider: WindowContextProvider {
 
         // Descend into children
         var childrenRef: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(
-            element,
-            kAXChildrenAttribute as CFString,
-            &childrenRef
-        ) == .success,
-              let children = childrenRef as? [AXUIElement] else { return nil }
+        guard
+            AXUIElementCopyAttributeValue(
+                element,
+                kAXChildrenAttribute as CFString,
+                &childrenRef
+            ) == .success,
+            let children = childrenRef as? [AXUIElement]
+        else { return nil }
 
         for child in children {
             if let found = findWebAreaURL(in: child, depthRemaining: depthRemaining - 1) {

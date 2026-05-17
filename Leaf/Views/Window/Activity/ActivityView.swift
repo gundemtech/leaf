@@ -7,8 +7,8 @@
 //  components dropped — both pickers use D1 LeafTab (organism O9).
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct ActivityView: View {
     @Environment(InsightsReader.self) private var reader
@@ -34,11 +34,13 @@ struct ActivityView: View {
             Text("ACTIVITY · TODAY")
                 .leafSectionLabel()
                 .foregroundStyle(LeafColor.text.tertiary)
-            Text(mode == .sessions
-                 ? "Continuous work blocks: app + window/file context."
-                 : "Every event the agent has captured today.")
-                .font(LeafType.body.regular)
-                .foregroundStyle(LeafColor.text.secondary)
+            Text(
+                mode == .sessions
+                    ? "Continuous work blocks: app + window/file context."
+                    : "Every event the agent has captured today."
+            )
+            .font(LeafType.body.regular)
+            .foregroundStyle(LeafColor.text.secondary)
         }
     }
 
@@ -168,7 +170,7 @@ struct ActivityView: View {
             label: { filter in
                 let count: Int = {
                     switch filter {
-                    case .all:    return counts.values.reduce(0, +)
+                    case .all: return counts.values.reduce(0, +)
                     case .local, .linear, .github, .slack, .ai:
                         guard let p = filter.provider else { return 0 }
                         return counts[p, default: 0]
@@ -231,7 +233,7 @@ enum ActivityMode: String, CaseIterable, Hashable, Identifiable {
 
     var title: String {
         switch self {
-        case .sessions:  "Sessions"
+        case .sessions: "Sessions"
         case .rawEvents: "Raw events"
         }
     }
@@ -246,23 +248,23 @@ enum ActivityFilter: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .all:    "All"
-        case .local:  "Local"
+        case .all: "All"
+        case .local: "Local"
         case .linear: "Linear"
         case .github: "GitHub"
-        case .slack:  "Slack"
-        case .ai:     "AI"
+        case .slack: "Slack"
+        case .ai: "AI"
         }
     }
 
     var provider: ActivityProvider? {
         switch self {
-        case .all:    nil
-        case .local:  .local
+        case .all: nil
+        case .local: .local
         case .linear: .linear
         case .github: .github
-        case .slack:  .slack
-        case .ai:     .ai
+        case .slack: .slack
+        case .ai: .ai
         }
     }
 

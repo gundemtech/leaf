@@ -4,16 +4,19 @@
 // post-P5 (= 152 baseline + 3 Track-6 P5).
 
 import XCTest
+
 @testable import LeafCore
 
 final class ShareEventTypeRegistryP5Tests: XCTestCase {
 
     func testRegistrySize155AfterP5() {
         // Track-6 integration combined: 152 baseline + 16 P1 + 8 P3 + 6 P4 + 6 P2 + 3 P5 + 4 P6 = 195.
-        XCTAssertEqual(ShareEventTypeKey.allCases.count, 195,
-                       "Track-6 P1+P3+P4+P2+P5+P6 collective merge = 195")
-        XCTAssertEqual(ShareEventTypeDefaults.all.count, 195,
-                       "defaults table must enumerate every ShareEventTypeKey case")
+        XCTAssertEqual(
+            ShareEventTypeKey.allCases.count, 195,
+            "Track-6 P1+P3+P4+P2+P5+P6 collective merge = 195")
+        XCTAssertEqual(
+            ShareEventTypeDefaults.all.count, 195,
+            "defaults table must enumerate every ShareEventTypeKey case")
     }
 
     func testP5KindsHaveCanonicalRawValues() {

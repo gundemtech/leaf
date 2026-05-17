@@ -14,7 +14,8 @@ public enum ProviderSnapshotsStore {
     ) throws -> ProviderSnapshot? {
         let row = try Row.fetchOne(
             db,
-            sql: "SELECT provider, snapshot_kind, snapshot_json, captured_at_ms FROM provider_snapshots WHERE provider = ? AND snapshot_kind = ?",
+            sql:
+                "SELECT provider, snapshot_kind, snapshot_json, captured_at_ms FROM provider_snapshots WHERE provider = ? AND snapshot_kind = ?",
             arguments: [provider, snapshotKind]
         )
         guard let row else { return nil }

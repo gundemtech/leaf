@@ -413,8 +413,10 @@ public struct LinearDocumentSnapshot: Sendable, Hashable {
     /// Self-authored document title (e.g. "Q4 Roadmap"). Public-safe per Section 6.
     public let title: String
 
-    public init(documentId: String, updatedAtMs: Int64,
-                projectId: String?, projectName: String?, title: String) {
+    public init(
+        documentId: String, updatedAtMs: Int64,
+        projectId: String?, projectName: String?, title: String
+    ) {
         self.documentId = documentId
         self.updatedAtMs = updatedAtMs
         self.projectId = projectId
@@ -437,8 +439,10 @@ public struct LinearProjectUpdateSnapshot: Sendable, Hashable {
     /// `nil` если field omitted (project без health tracking).
     public let health: String?
 
-    public init(updateId: String, createdAtMs: Int64,
-                projectId: String, projectName: String, health: String?) {
+    public init(
+        updateId: String, createdAtMs: Int64,
+        projectId: String, projectName: String, health: String?
+    ) {
         self.updateId = updateId
         self.createdAtMs = createdAtMs
         self.projectId = projectId
@@ -457,8 +461,10 @@ public struct LinearEstimateTransitionSnapshot: Sendable, Hashable {
     public let fromEstimate: Double?
     public let toEstimate: Double?
 
-    public init(issueKey: String, historyId: String, transitionAtMs: Int64,
-                fromEstimate: Double?, toEstimate: Double?) {
+    public init(
+        issueKey: String, historyId: String, transitionAtMs: Int64,
+        fromEstimate: Double?, toEstimate: Double?
+    ) {
         self.issueKey = issueKey
         self.historyId = historyId
         self.transitionAtMs = transitionAtMs
@@ -518,8 +524,10 @@ public struct LinearAssigneeTransitionSnapshot: Sendable, Hashable {
     public let transitionAtMs: Int64
     public let bucket: Bucket
 
-    public init(issueKey: String, historyId: String, transitionAtMs: Int64,
-                bucket: Bucket) {
+    public init(
+        issueKey: String, historyId: String, transitionAtMs: Int64,
+        bucket: Bucket
+    ) {
         self.issueKey = issueKey
         self.historyId = historyId
         self.transitionAtMs = transitionAtMs
@@ -545,8 +553,10 @@ public struct LinearLabelTransitionSnapshot: Sendable, Hashable {
     /// Self-authored label name (e.g. "bug", "p1") — per Section 6 OK.
     public let labelName: String
 
-    public init(issueKey: String, historyId: String, transitionAtMs: Int64,
-                kind: Kind, labelId: String, labelName: String) {
+    public init(
+        issueKey: String, historyId: String, transitionAtMs: Int64,
+        kind: Kind, labelId: String, labelName: String
+    ) {
         self.issueKey = issueKey
         self.historyId = historyId
         self.transitionAtMs = transitionAtMs
@@ -567,8 +577,10 @@ public struct LinearPriorityTransitionSnapshot: Sendable, Hashable {
     public let fromPriority: Int
     public let toPriority: Int
 
-    public init(issueKey: String, historyId: String, transitionAtMs: Int64,
-                fromPriority: Int, toPriority: Int) {
+    public init(
+        issueKey: String, historyId: String, transitionAtMs: Int64,
+        fromPriority: Int, toPriority: Int
+    ) {
         self.issueKey = issueKey
         self.historyId = historyId
         self.transitionAtMs = transitionAtMs
@@ -590,7 +602,9 @@ public struct LinearCommentReactionSnapshot: Sendable, Hashable {
     public let emoji: String
     public let createdAtMs: Int64
 
-    public init(id: String, commentId: String, issueId: String, issueIdentifier: String, emoji: String, createdAtMs: Int64) {
+    public init(
+        id: String, commentId: String, issueId: String, issueIdentifier: String, emoji: String, createdAtMs: Int64
+    ) {
         self.id = id
         self.commentId = commentId
         self.issueId = issueId
@@ -611,9 +625,11 @@ public struct LinearRelationSnapshot: Sendable, Hashable {
     public let relationKind: String
     public let transitionedAtMs: Int64
 
-    public init(id: String, fromIssueId: String, fromIssueIdentifier: String,
-                toIssueId: String, toIssueIdentifier: String,
-                relationKind: String, transitionedAtMs: Int64) {
+    public init(
+        id: String, fromIssueId: String, fromIssueIdentifier: String,
+        toIssueId: String, toIssueIdentifier: String,
+        relationKind: String, transitionedAtMs: Int64
+    ) {
         self.id = id
         self.fromIssueId = fromIssueId
         self.fromIssueIdentifier = fromIssueIdentifier
@@ -637,9 +653,11 @@ public struct LinearTriageTransitionSnapshot: Sendable, Hashable {
     public let transitionedAtMs: Int64
     public let resolutionKind: String?
 
-    public init(issueId: String, issueIdentifier: String, teamId: String,
-                toStateName: String, toStateType: String,
-                transitionedAtMs: Int64, resolutionKind: String?) {
+    public init(
+        issueId: String, issueIdentifier: String, teamId: String,
+        toStateName: String, toStateType: String,
+        transitionedAtMs: Int64, resolutionKind: String?
+    ) {
         self.issueId = issueId
         self.issueIdentifier = issueIdentifier
         self.teamId = teamId
@@ -666,8 +684,10 @@ public struct LinearNotificationSnapshot: Sendable, Hashable {
     public let readAtMs: Int64?
     public let archivedAtMs: Int64?
 
-    public init(id: String, kind: String, issueId: String?, issueIdentifier: String?,
-                title: String, createdAtMs: Int64, readAtMs: Int64?, archivedAtMs: Int64?) {
+    public init(
+        id: String, kind: String, issueId: String?, issueIdentifier: String?,
+        title: String, createdAtMs: Int64, readAtMs: Int64?, archivedAtMs: Int64?
+    ) {
         self.id = id
         self.kind = kind
         self.issueId = issueId
@@ -702,9 +722,11 @@ public struct LinearCycleLifecycleSnapshot: Sendable, Hashable {
     public let progress: Double?
     public let issuesCompletedCount: Int?
 
-    public init(id: String, number: Int, teamId: String, name: String?,
-                startsAtMs: Int64, endsAtMs: Int64, completedAtMs: Int64?,
-                progress: Double?, issuesCompletedCount: Int?) {
+    public init(
+        id: String, number: Int, teamId: String, name: String?,
+        startsAtMs: Int64, endsAtMs: Int64, completedAtMs: Int64?,
+        progress: Double?, issuesCompletedCount: Int?
+    ) {
         self.id = id
         self.number = number
         self.teamId = teamId

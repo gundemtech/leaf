@@ -54,8 +54,10 @@ struct LeafMetricCardPreview: View {
             }
 
             TokensInlineSpec(
-                spec: "LeafMetricCard · surface.raised · LeafRadius.lg · raised elevation · optional title row + fresh ● · ambient + delta + sparkline slots",
-                codeSnippet: "LeafMetricCard(title: \"Focus\", value: \"4h 32m\", delta: .init(value: \"+12%\", direction: .up), sparklineValues: [...])"
+                spec:
+                    "LeafMetricCard · surface.raised · LeafRadius.lg · raised elevation · optional title row + fresh ● · ambient + delta + sparkline slots",
+                codeSnippet:
+                    "LeafMetricCard(title: \"Focus\", value: \"4h 32m\", delta: .init(value: \"+12%\", direction: .up), sparklineValues: [...])"
             )
         }
         .padding(LeafSpace.lg)

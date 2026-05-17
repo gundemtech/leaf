@@ -69,10 +69,18 @@ enum PreviewAppearance: String, CaseIterable, Identifiable {
     case light, dark, auto
     var id: String { rawValue }
     var label: String {
-        switch self { case .light: "Light"; case .dark: "Dark"; case .auto: "Auto" }
+        switch self {
+        case .light: "Light"
+        case .dark: "Dark"
+        case .auto: "Auto"
+        }
     }
     var colorScheme: ColorScheme? {
-        switch self { case .light: .light; case .dark: .dark; case .auto: nil }
+        switch self {
+        case .light: .light
+        case .dark: .dark
+        case .auto: nil
+        }
     }
 }
 #endif

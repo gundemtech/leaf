@@ -1,5 +1,6 @@
-import XCTest
 import Foundation
+import XCTest
+
 @testable import LeafCore
 
 final class ClipboardMatcherTests: XCTestCase {
@@ -26,7 +27,7 @@ final class ClipboardMatcherTests: XCTestCase {
     }
 
     func testMatch_AcceptsLegacyHexJoinCode() {
-        let pubkeyHex = String(repeating: "ab", count: 32) // 64 hex chars, lowercase
+        let pubkeyHex = String(repeating: "ab", count: 32)  // 64 hex chars, lowercase
         let result = ClipboardMatcher.match("hi \(pubkeyHex) bye")
         guard case .joinCode(let bytes) = result else {
             return XCTFail("expected .joinCode (legacy hex), got \(result)")

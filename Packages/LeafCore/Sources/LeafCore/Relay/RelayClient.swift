@@ -26,15 +26,19 @@ public actor RelayClient: Sendable {
     public let baseURL: URL
     private let urlSession: URLSession
 
-    public init(baseURL: URL = URL(string: "https://oauth.gundem.tech")!,
-                urlSession: URLSession = .shared) {
+    public init(
+        baseURL: URL = URL(string: "https://oauth.gundem.tech")!,
+        urlSession: URLSession = .shared
+    ) {
         self.baseURL = baseURL
         self.urlSession = urlSession
     }
 
-    public func postInvite(memberPubkeyHex: String,
-                           blob: Data,
-                           expiresAtMs: Int64) async throws -> InviteToken {
+    public func postInvite(
+        memberPubkeyHex: String,
+        blob: Data,
+        expiresAtMs: Int64
+    ) async throws -> InviteToken {
         var request = URLRequest(url: baseURL.appendingPathComponent("v1/invite"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -43,7 +47,7 @@ public actor RelayClient: Sendable {
         let payload: [String: Any] = [
             "member_pubkey_hex": memberPubkeyHex,
             "blob": blob.base64URLNoPad,
-            "expires_at_ms": expiresAtMs
+            "expires_at_ms": expiresAtMs,
         ]
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
@@ -126,9 +130,11 @@ public actor RelayClient: Sendable {
     //   - URLSession throw → LeafError.relayUnreachable("transport")
     //   - unparseable / unexpected → LeafError.relayUnreachable("malformed-response")
 
-    public func postRotationBlob(peerPubkeyHex: String,
-                                 blob: Data,
-                                 expiresAtMs: Int64) async throws -> RotationToken {
+    public func postRotationBlob(
+        peerPubkeyHex: String,
+        blob: Data,
+        expiresAtMs: Int64
+    ) async throws -> RotationToken {
         var request = URLRequest(url: baseURL.appendingPathComponent("v1/key-rotation"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -137,7 +143,7 @@ public actor RelayClient: Sendable {
         let payload: [String: Any] = [
             "peer_pubkey_hex": peerPubkeyHex,
             "blob": blob.base64URLNoPad,
-            "expires_at_ms": expiresAtMs
+            "expires_at_ms": expiresAtMs,
         ]
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
@@ -220,7 +226,7 @@ public actor RelayClient: Sendable {
 
     private func parseInviteToken(from data: Data) throws -> InviteToken {
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let token = obj["token"] as? String
+            let token = obj["token"] as? String
         else {
             throw LeafError.relayUnreachable(reason: "malformed-response")
         }
@@ -230,8 +236,8 @@ public actor RelayClient: Sendable {
 
     private func parseInviteFetched(from data: Data) throws -> InviteFetched {
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let blobStr = obj["blob"] as? String,
-              let blobBytes = Data(base64URLNoPad: blobStr)
+            let blobStr = obj["blob"] as? String,
+            let blobBytes = Data(base64URLNoPad: blobStr)
         else {
             throw LeafError.relayUnreachable(reason: "malformed-response")
         }
@@ -248,7 +254,7 @@ public actor RelayClient: Sendable {
 
     private func parseRotationToken(from data: Data) throws -> RotationToken {
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let token = obj["rotation_id"] as? String
+            let token = obj["rotation_id"] as? String
         else {
             throw LeafError.relayUnreachable(reason: "malformed-response")
         }
@@ -258,7 +264,7 @@ public actor RelayClient: Sendable {
 
     private func parseRotationsArray(from data: Data) throws -> [RotationFetched] {
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let arr = obj["rotations"] as? [[String: Any]]
+            let arr = obj["rotations"] as? [[String: Any]]
         else {
             throw LeafError.relayUnreachable(reason: "malformed-response")
         }
@@ -266,15 +272,17 @@ public actor RelayClient: Sendable {
         result.reserveCapacity(arr.count)
         for item in arr {
             guard let rotationID = item["rotation_id"] as? String,
-                  let blobStr = item["blob"] as? String,
-                  let blobBytes = Data(base64URLNoPad: blobStr)
+                let blobStr = item["blob"] as? String,
+                let blobBytes = Data(base64URLNoPad: blobStr)
             else {
                 throw LeafError.relayUnreachable(reason: "malformed-response")
             }
             let expiresAtMs = try parseInt64(item["expires_at_ms"])
-            result.append(RotationFetched(rotationID: rotationID,
-                                          blob: blobBytes,
-                                          expiresAtMs: expiresAtMs))
+            result.append(
+                RotationFetched(
+                    rotationID: rotationID,
+                    blob: blobBytes,
+                    expiresAtMs: expiresAtMs))
         }
         return result
     }
@@ -309,7 +317,8 @@ extension Data {
     }
 
     init?(base64URLNoPad string: String) {
-        var s = string
+        var s =
+            string
             .replacingOccurrences(of: "-", with: "+")
             .replacingOccurrences(of: "_", with: "/")
         while s.count % 4 != 0 { s.append("=") }

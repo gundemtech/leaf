@@ -13,13 +13,15 @@ public struct InvitePlaintext: Sendable, Hashable, Codable {
     public let adminDisplayName: String
     public let issuedAtMs: Int64
 
-    public init(teamKeyBase64: String,
-                teamKeyID: String,
-                orgID: String,
-                orgName: String,
-                adminMemberID: String,
-                adminDisplayName: String,
-                issuedAtMs: Int64) {
+    public init(
+        teamKeyBase64: String,
+        teamKeyID: String,
+        orgID: String,
+        orgName: String,
+        adminMemberID: String,
+        adminDisplayName: String,
+        issuedAtMs: Int64
+    ) {
         self.teamKeyBase64 = teamKeyBase64
         self.teamKeyID = teamKeyID
         self.orgID = orgID

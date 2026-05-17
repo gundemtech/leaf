@@ -26,7 +26,7 @@ public struct XcodeBuildLifecycleStateMachine: Sendable, Hashable {
             // First observation: lock in the state, emit nothing.
             prev = obs
             if obs.buildState == .running {
-                buildStartedMs = nowMs   // best-effort on cold start
+                buildStartedMs = nowMs  // best-effort on cold start
             }
             return []
         }
@@ -49,7 +49,7 @@ public struct XcodeBuildLifecycleStateMachine: Sendable, Hashable {
             let payload: [String: String] = [
                 "event_kind": "xcode_run_destination_changed",
                 "run_destination_bucket": obs.runDestinationBucket.rawValue,
-                "run_destination_bucket_prev": p.runDestinationBucket.rawValue
+                "run_destination_bucket_prev": p.runDestinationBucket.rawValue,
             ]
             events.append(Self.makeEvent(payload, nowMs: nowMs))
         }
@@ -58,7 +58,7 @@ public struct XcodeBuildLifecycleStateMachine: Sendable, Hashable {
         if p.buildState != .running, obs.buildState == .running {
             var payload: [String: String] = [
                 "event_kind": "xcode_build_started",
-                "run_destination_bucket": obs.runDestinationBucket.rawValue
+                "run_destination_bucket": obs.runDestinationBucket.rawValue,
             ]
             if let s = obs.schemeName { payload["scheme"] = s }
             if let pj = obs.projectName { payload["project"] = pj }
@@ -71,7 +71,7 @@ public struct XcodeBuildLifecycleStateMachine: Sendable, Hashable {
             var payload: [String: String] = [
                 "event_kind": "xcode_build_finished",
                 "status": obs.buildState.rawValue,
-                "run_destination_bucket": obs.runDestinationBucket.rawValue
+                "run_destination_bucket": obs.runDestinationBucket.rawValue,
             ]
             if let s = obs.schemeName { payload["scheme"] = s }
             if let pj = obs.projectName { payload["project"] = pj }
@@ -108,11 +108,11 @@ public struct XcodeBuildLifecycleStateMachine: Sendable, Hashable {
     }
 }
 
-private extension XcodeBuildState {
-    var isTerminal: Bool {
+extension XcodeBuildState {
+    fileprivate var isTerminal: Bool {
         switch self {
         case .succeeded, .failed: return true
-        case .idle, .running:     return false
+        case .idle, .running: return false
         }
     }
 }

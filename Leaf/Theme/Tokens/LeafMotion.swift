@@ -9,10 +9,10 @@ import SwiftUI
 
 enum LeafMotion {
     enum duration {
-        static let snap:   Double = 0.12
-        static let short:  Double = 0.20
+        static let snap: Double = 0.12
+        static let short: Double = 0.20
         static let medium: Double = 0.35
-        static let long:   Double = 0.55
+        static let long: Double = 0.55
     }
 
     enum spring {
@@ -22,7 +22,7 @@ enum LeafMotion {
     }
 
     enum easing {
-        static let standard   = Animation.timingCurve(0.25, 0.10, 0.25, 1.00, duration: duration.medium)
+        static let standard = Animation.timingCurve(0.25, 0.10, 0.25, 1.00, duration: duration.medium)
         static let emphasized = Animation.timingCurve(0.20, 0.00, 0.00, 1.00, duration: duration.medium)
     }
 }
@@ -54,7 +54,7 @@ private struct LeafAnimationModifier<V: Equatable>: ViewModifier {
     let animation: Animation
     let value: V
     @Environment(\.accessibilityReduceMotion) private var systemReduce
-    @Environment(\.leafReduceMotionOverride)  private var debugReduce
+    @Environment(\.leafReduceMotionOverride) private var debugReduce
 
     func body(content: Content) -> some View {
         let reduce = systemReduce || debugReduce

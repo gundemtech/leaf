@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class RemindersStateMachineTests: XCTestCase {
@@ -21,8 +22,10 @@ final class RemindersStateMachineTests: XCTestCase {
     func testZeroOrNegativeDeltaEmitsNothing() {
         var sm = RemindersStateMachine()
         _ = sm.observe(RemindersCompletionObservation(listName: nil, completedCountDelta: 0), nowMs: 1000)
-        XCTAssertEqual(sm.observe(RemindersCompletionObservation(listName: nil, completedCountDelta: 0), nowMs: 2000).count, 0)
-        XCTAssertEqual(sm.observe(RemindersCompletionObservation(listName: nil, completedCountDelta: -2), nowMs: 3000).count, 0)
+        XCTAssertEqual(
+            sm.observe(RemindersCompletionObservation(listName: nil, completedCountDelta: 0), nowMs: 2000).count, 0)
+        XCTAssertEqual(
+            sm.observe(RemindersCompletionObservation(listName: nil, completedCountDelta: -2), nowMs: 3000).count, 0)
     }
 
     func testPayloadHasNoReminderTitleField() {

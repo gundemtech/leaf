@@ -7,6 +7,7 @@
 //
 
 import XCTest
+
 @testable import LeafCore
 
 final class SlackUsergroupsDiffTests: XCTestCase {
@@ -52,7 +53,7 @@ final class SlackUsergroupsDiffTests: XCTestCase {
         // (would require synthesizing entire prior set as "removed"; out of scope here).
         let prior = SlackUsergroupsSnapshot(groups: [
             SlackUsergroup(id: "G1", name: "eng", userIDs: ["U1", "U2"]),
-            SlackUsergroup(id: "G2", name: "ops", userIDs: ["U3"])
+            SlackUsergroup(id: "G2", name: "ops", userIDs: ["U3"]),
         ])
         let curr = SlackUsergroupsSnapshot(groups: [
             SlackUsergroup(id: "G1", name: "eng", userIDs: ["U1", "U2"])

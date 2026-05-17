@@ -3,8 +3,9 @@
 // cases (partial-index queries via direct `removed_at_ms` / `deprecated_at_ms`
 // SET через `db.writeSQL` raw-SQL escape — mark/deprecate helpers — задача 5.3).
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class DatabaseTeamTests: XCTestCase {
@@ -125,7 +126,8 @@ final class DatabaseTeamTests: XCTestCase {
 
         try db.writeSQL { rawDB in
             try rawDB.execute(
-                sql: "UPDATE \(Schema.TeamMembers.tableName) SET \(Schema.TeamMembers.removedAtMs) = ? WHERE \(Schema.TeamMembers.id) = ?",
+                sql:
+                    "UPDATE \(Schema.TeamMembers.tableName) SET \(Schema.TeamMembers.removedAtMs) = ? WHERE \(Schema.TeamMembers.id) = ?",
                 arguments: [Int64(1_700_002_000_000), "member-2"]
             )
         }
@@ -146,7 +148,8 @@ final class DatabaseTeamTests: XCTestCase {
         let removedAtMs: Int64 = 1_700_002_000_000
         try db.writeSQL { rawDB in
             try rawDB.execute(
-                sql: "UPDATE \(Schema.TeamMembers.tableName) SET \(Schema.TeamMembers.removedAtMs) = ? WHERE \(Schema.TeamMembers.id) = ?",
+                sql:
+                    "UPDATE \(Schema.TeamMembers.tableName) SET \(Schema.TeamMembers.removedAtMs) = ? WHERE \(Schema.TeamMembers.id) = ?",
                 arguments: [removedAtMs, "member-2"]
             )
         }
@@ -212,16 +215,18 @@ final class DatabaseTeamTests: XCTestCase {
     func testReadActiveTeamKeyExcludesDeprecated() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
-        try db.insertTeamKey(TeamKey(
-            id: "key-rotation-1",
-            generatedAt: Date(timeIntervalSince1970: 1_700_000_000),
-            deprecatedAt: nil,
-            generatedByMemberID: "member-self"
-        ))
+        try db.insertTeamKey(
+            TeamKey(
+                id: "key-rotation-1",
+                generatedAt: Date(timeIntervalSince1970: 1_700_000_000),
+                deprecatedAt: nil,
+                generatedByMemberID: "member-self"
+            ))
 
         try db.writeSQL { rawDB in
             try rawDB.execute(
-                sql: "UPDATE \(Schema.TeamKeys.tableName) SET \(Schema.TeamKeys.deprecatedAtMs) = ? WHERE \(Schema.TeamKeys.id) = ?",
+                sql:
+                    "UPDATE \(Schema.TeamKeys.tableName) SET \(Schema.TeamKeys.deprecatedAtMs) = ? WHERE \(Schema.TeamKeys.id) = ?",
                 arguments: [Int64(1_700_001_000_000), "key-rotation-1"]
             )
         }
@@ -261,39 +266,49 @@ final class DatabaseTeamTests: XCTestCase {
     func testReaderModeWriteHelpersThrowDatabaseUnavailable() throws {
         // Сначала writer создаёт schema + один row для contention test'а:
         let writer = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
-        try writer.upsertOrg(Org(
-            id: "org-aaaa",
-            name: "Personal",
-            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
-            createdByMemberID: "member-self"
-        ))
+        try writer.upsertOrg(
+            Org(
+                id: "org-aaaa",
+                name: "Personal",
+                createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+                createdByMemberID: "member-self"
+            ))
 
         let reader = try Database.openForRead(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
-        XCTAssertThrowsError(try reader.upsertOrg(Org(
-            id: "org-bbbb", name: "Other",
-            createdAt: Date(timeIntervalSince1970: 1_700_001_000),
-            createdByMemberID: "member-self"
-        ))) { error in
+        XCTAssertThrowsError(
+            try reader.upsertOrg(
+                Org(
+                    id: "org-bbbb", name: "Other",
+                    createdAt: Date(timeIntervalSince1970: 1_700_001_000),
+                    createdByMemberID: "member-self"
+                ))
+        ) { error in
             XCTAssertEqual(error as? LeafError, .databaseUnavailable)
         }
 
-        XCTAssertThrowsError(try reader.insertTeamMember(TeamMember(
-            id: "member-x", orgID: "org-aaaa", role: .member,
-            pubkeyHex: String(repeating: "ab", count: 32),
-            displayName: "X",
-            addedAt: Date(timeIntervalSince1970: 1_700_001_000),
-            removedAt: nil
-        ))) { error in
+        XCTAssertThrowsError(
+            try reader.insertTeamMember(
+                TeamMember(
+                    id: "member-x", orgID: "org-aaaa", role: .member,
+                    pubkeyHex: String(repeating: "ab", count: 32),
+                    displayName: "X",
+                    addedAt: Date(timeIntervalSince1970: 1_700_001_000),
+                    removedAt: nil
+                ))
+        ) { error in
             XCTAssertEqual(error as? LeafError, .databaseUnavailable)
         }
 
-        XCTAssertThrowsError(try reader.insertTeamKey(TeamKey(
-            id: "key-x",
-            generatedAt: Date(timeIntervalSince1970: 1_700_001_000),
-            deprecatedAt: nil,
-            generatedByMemberID: "member-self"
-        ))) { error in
+        XCTAssertThrowsError(
+            try reader.insertTeamKey(
+                TeamKey(
+                    id: "key-x",
+                    generatedAt: Date(timeIntervalSince1970: 1_700_001_000),
+                    deprecatedAt: nil,
+                    generatedByMemberID: "member-self"
+                ))
+        ) { error in
             XCTAssertEqual(error as? LeafError, .databaseUnavailable)
         }
     }
@@ -301,23 +316,25 @@ final class DatabaseTeamTests: XCTestCase {
     // MARK: - Helpers
 
     private func insertSampleMembers(_ db: LeafCore.Database, orgID: String) throws {
-        try db.insertTeamMember(TeamMember(
-            id: "member-self",
-            orgID: orgID,
-            role: .admin,
-            pubkeyHex: String(repeating: "ab", count: 32),
-            displayName: "Dmitrii",
-            addedAt: Date(timeIntervalSince1970: 1_700_000_000),
-            removedAt: nil
-        ))
-        try db.insertTeamMember(TeamMember(
-            id: "member-2",
-            orgID: orgID,
-            role: .member,
-            pubkeyHex: String(repeating: "cd", count: 32),
-            displayName: "Anton",
-            addedAt: Date(timeIntervalSince1970: 1_700_001_000),
-            removedAt: nil
-        ))
+        try db.insertTeamMember(
+            TeamMember(
+                id: "member-self",
+                orgID: orgID,
+                role: .admin,
+                pubkeyHex: String(repeating: "ab", count: 32),
+                displayName: "Dmitrii",
+                addedAt: Date(timeIntervalSince1970: 1_700_000_000),
+                removedAt: nil
+            ))
+        try db.insertTeamMember(
+            TeamMember(
+                id: "member-2",
+                orgID: orgID,
+                role: .member,
+                pubkeyHex: String(repeating: "cd", count: 32),
+                displayName: "Anton",
+                addedAt: Date(timeIntervalSince1970: 1_700_001_000),
+                removedAt: nil
+            ))
     }
 }

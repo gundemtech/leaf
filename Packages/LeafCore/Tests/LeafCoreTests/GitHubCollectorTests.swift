@@ -4,6 +4,7 @@
 
 import XCTest
 import os
+
 @testable import LeafCore
 
 final class GitHubCollectorTests: XCTestCase {
@@ -58,25 +59,28 @@ final class GitHubCollectorTests: XCTestCase {
         // events from setBatch(_:), pulse — orthogonal channel).
         func fetchNotifications(accessToken: String) async throws -> GitHubNotificationsSummary {
             notificationsCallCount += 1
-            return notificationsSummaryToReturn ?? .empty(
-                nowMs: Int64(Date().timeIntervalSince1970 * 1000)
-            )
+            return notificationsSummaryToReturn
+                ?? .empty(
+                    nowMs: Int64(Date().timeIntervalSince1970 * 1000)
+                )
         }
 
         // Phase 4.7.B-2 — defaults к `.empty` для backwards compat с existing тестами,
         // которые сосредоточены на batch events / cursor flow.
         func fetchPRsAwaitingReview(accessToken: String, login: String) async throws -> GitHubReviewQueueSummary {
             reviewQueueCallCount += 1
-            return reviewQueueSummaryToReturn ?? .empty(
-                nowMs: Int64(Date().timeIntervalSince1970 * 1000)
-            )
+            return reviewQueueSummaryToReturn
+                ?? .empty(
+                    nowMs: Int64(Date().timeIntervalSince1970 * 1000)
+                )
         }
 
         func fetchMyOpenPRs(accessToken: String, login: String) async throws -> GitHubMyOpenPRsSummary {
             myOpenPRsCallCount += 1
-            return myOpenPRsSummaryToReturn ?? .empty(
-                nowMs: Int64(Date().timeIntervalSince1970 * 1000)
-            )
+            return myOpenPRsSummaryToReturn
+                ?? .empty(
+                    nowMs: Int64(Date().timeIntervalSince1970 * 1000)
+                )
         }
 
         // Phase 4.7.B-3 — defaults к `[]` для backwards compat. setActionsRuns(_:)
@@ -111,20 +115,32 @@ final class GitHubCollectorTests: XCTestCase {
 
         // Phase Track-3 D2 — warm + cold tier mock conformance (no-op defaults; specific
         // expectations come in Tasks 8/10 collector tests).
-        func fetchProjectsV2State(accessToken: String, login: String, topN: Int) async throws -> GitHubProjectsV2Snapshot { .empty }
+        func fetchProjectsV2State(
+            accessToken: String, login: String, topN: Int
+        ) async throws -> GitHubProjectsV2Snapshot { .empty }
         func fetchGists(accessToken: String, login: String) async throws -> [GitHubGistSnapshot] { [] }
         func fetchRepoInvitations(accessToken: String) async throws -> [GitHubRepoInvitationSnapshot] { [] }
         func fetchCodespaces(accessToken: String) async throws -> [GitHubCodespaceSnapshot] { [] }
-        func fetchIssueReactions(accessToken: String, owner: String, repo: String, issueNumber: Int) async throws -> GitHubIssueReactionsSnapshot {
+        func fetchIssueReactions(
+            accessToken: String, owner: String, repo: String, issueNumber: Int
+        ) async throws -> GitHubIssueReactionsSnapshot {
             .empty(owner: owner, repo: repo, issueNumber: issueNumber, nowMs: 0)
         }
         func fetchStarredRepos(accessToken: String, login: String) async throws -> [GitHubStarredRepoSnapshot] { [] }
         func fetchWatchedRepos(accessToken: String, login: String) async throws -> [GitHubWatchedRepoSnapshot] { [] }
-        func fetchSecretScanningAlerts(accessToken: String, owner: String, repo: String) async throws -> [GitHubSecurityAlertSnapshot] { [] }
-        func fetchCodeScanningAlerts(accessToken: String, owner: String, repo: String) async throws -> [GitHubSecurityAlertSnapshot] { [] }
-        func fetchDependabotAlerts(accessToken: String, owner: String, repo: String) async throws -> [GitHubSecurityAlertSnapshot] { [] }
+        func fetchSecretScanningAlerts(
+            accessToken: String, owner: String, repo: String
+        ) async throws -> [GitHubSecurityAlertSnapshot] { [] }
+        func fetchCodeScanningAlerts(
+            accessToken: String, owner: String, repo: String
+        ) async throws -> [GitHubSecurityAlertSnapshot] { [] }
+        func fetchDependabotAlerts(
+            accessToken: String, owner: String, repo: String
+        ) async throws -> [GitHubSecurityAlertSnapshot] { [] }
         func fetchOrganizations(accessToken: String) async throws -> [GitHubOrgSnapshot] { [] }
-        func fetchOrgAuditLog(accessToken: String, org: String, since: Int64?) async throws -> GitHubOrgAuditLogBatch { .empty }
+        func fetchOrgAuditLog(accessToken: String, org: String, since: Int64?) async throws -> GitHubOrgAuditLogBatch {
+            .empty
+        }
 
         func setBatch(_ batch: GitHubEventBatch) {
             self.batchToReturn = batch
@@ -224,26 +240,27 @@ final class GitHubCollectorTests: XCTestCase {
 
         let provider = MockGitHubAPIProvider()
         let cursorMs: Int64 = 1_700_000_000_000
-        await provider.setBatch(GitHubEventBatch(
-            events: [
-                GitHubEventSnapshot(
-                    eventID: "e1", eventKind: "gh_commit_pushed", repoFullName: "octocat/leaf",
-                    title: "Initial commit", number: nil, sha: "abc123", branch: "main",
-                    createdAtMs: cursorMs - 2000
-                ),
-                GitHubEventSnapshot(
-                    eventID: "e2", eventKind: "gh_pr_opened", repoFullName: "octocat/leaf",
-                    title: "Add feature X", number: 42, sha: nil, branch: nil,
-                    createdAtMs: cursorMs - 1000
-                ),
-                GitHubEventSnapshot(
-                    eventID: "e3", eventKind: "gh_issue_closed", repoFullName: "octocat/other",
-                    title: "Bug Y", number: 7, sha: nil, branch: nil,
-                    createdAtMs: cursorMs
-                )
-            ],
-            cursorMs: cursorMs
-        ))
+        await provider.setBatch(
+            GitHubEventBatch(
+                events: [
+                    GitHubEventSnapshot(
+                        eventID: "e1", eventKind: "gh_commit_pushed", repoFullName: "octocat/leaf",
+                        title: "Initial commit", number: nil, sha: "abc123", branch: "main",
+                        createdAtMs: cursorMs - 2000
+                    ),
+                    GitHubEventSnapshot(
+                        eventID: "e2", eventKind: "gh_pr_opened", repoFullName: "octocat/leaf",
+                        title: "Add feature X", number: 42, sha: nil, branch: nil,
+                        createdAtMs: cursorMs - 1000
+                    ),
+                    GitHubEventSnapshot(
+                        eventID: "e3", eventKind: "gh_issue_closed", repoFullName: "octocat/other",
+                        title: "Bug Y", number: 7, sha: nil, branch: nil,
+                        createdAtMs: cursorMs
+                    ),
+                ],
+                cursorMs: cursorMs
+            ))
 
         let refresher = GitHubTokenRefresher(database: db, clientID: "test-client")
         let collector = GitHubCollector(
@@ -261,10 +278,11 @@ final class GitHubCollectorTests: XCTestCase {
         // Pulses (notifications / pr_awaiting_review_count / my_open_pr_count) идут
         // как .context — не пересекаются. Forward-compat: следующие B-tasks могут
         // добавлять new pulse'ы без bumping числовых counts здесь.
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSince1970: TimeInterval(cursorMs - 10_000) / 1000),
-            end: Date(timeIntervalSince1970: TimeInterval(cursorMs + 10_000) / 1000)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: TimeInterval(cursorMs - 10_000) / 1000),
+                end: Date(timeIntervalSince1970: TimeInterval(cursorMs + 10_000) / 1000)
+            ))
         let actionEvents = stored.filter { $0.signalType == .action }
         XCTAssertEqual(actionEvents.count, 3, "3 batch events from fetchEvents")
 
@@ -300,29 +318,30 @@ final class GitHubCollectorTests: XCTestCase {
 
         let provider = MockGitHubAPIProvider()
         let baseMs: Int64 = 1_700_000_000_000
-        await provider.setBatch(GitHubEventBatch(
-            events: [
-                GitHubEventSnapshot(
-                    eventID: "merged-1", eventKind: "gh_pr_merged", repoFullName: "octocat/leaf",
-                    title: "feat: x", number: 42, sha: nil, branch: nil,
-                    createdAtMs: baseMs,
-                    cycleSeconds: 10_800, reviewDelaySeconds: nil
-                ),
-                GitHubEventSnapshot(
-                    eventID: "review-1", eventKind: "gh_pr_review_submitted", repoFullName: "octocat/leaf",
-                    title: "feat: y", number: 50, sha: nil, branch: nil,
-                    createdAtMs: baseMs + 1000,
-                    cycleSeconds: nil, reviewDelaySeconds: 600
-                ),
-                GitHubEventSnapshot(
-                    eventID: "push-1", eventKind: "gh_commit_pushed", repoFullName: "octocat/leaf",
-                    title: "wip", number: nil, sha: "abc", branch: "main",
-                    createdAtMs: baseMs + 2000
-                    // cycleSeconds / reviewDelaySeconds — defaults nil
-                )
-            ],
-            cursorMs: baseMs + 2000
-        ))
+        await provider.setBatch(
+            GitHubEventBatch(
+                events: [
+                    GitHubEventSnapshot(
+                        eventID: "merged-1", eventKind: "gh_pr_merged", repoFullName: "octocat/leaf",
+                        title: "feat: x", number: 42, sha: nil, branch: nil,
+                        createdAtMs: baseMs,
+                        cycleSeconds: 10_800, reviewDelaySeconds: nil
+                    ),
+                    GitHubEventSnapshot(
+                        eventID: "review-1", eventKind: "gh_pr_review_submitted", repoFullName: "octocat/leaf",
+                        title: "feat: y", number: 50, sha: nil, branch: nil,
+                        createdAtMs: baseMs + 1000,
+                        cycleSeconds: nil, reviewDelaySeconds: 600
+                    ),
+                    GitHubEventSnapshot(
+                        eventID: "push-1", eventKind: "gh_commit_pushed", repoFullName: "octocat/leaf",
+                        title: "wip", number: nil, sha: "abc", branch: "main",
+                        createdAtMs: baseMs + 2000
+                            // cycleSeconds / reviewDelaySeconds — defaults nil
+                    ),
+                ],
+                cursorMs: baseMs + 2000
+            ))
 
         let refresher = GitHubTokenRefresher(database: db, clientID: "test-client")
         let collector = GitHubCollector(
@@ -332,10 +351,11 @@ final class GitHubCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1000) / 1000),
-            end: Date(timeIntervalSince1970: TimeInterval(baseMs + 5000) / 1000)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1000) / 1000),
+                end: Date(timeIntervalSince1970: TimeInterval(baseMs + 5000) / 1000)
+            ))
         // Structural assertion: 3 .action events from batch + N .context pulses.
         // Filter by signalType — forward-compat across future B-tasks.
         let actionEvents = stored.filter { $0.signalType == .action }
@@ -343,7 +363,8 @@ final class GitHubCollectorTests: XCTestCase {
 
         let merged = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "gh_pr_merged" })
         XCTAssertEqual(merged.payload["cycle_seconds"], "10800")
-        XCTAssertNil(merged.payload["review_delay_seconds"], "non-review event не должен иметь review_delay_seconds key")
+        XCTAssertNil(
+            merged.payload["review_delay_seconds"], "non-review event не должен иметь review_delay_seconds key")
 
         let review = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "gh_pr_review_submitted" })
         XCTAssertEqual(review.payload["review_delay_seconds"], "600")
@@ -361,14 +382,17 @@ final class GitHubCollectorTests: XCTestCase {
 
         let provider = MockGitHubAPIProvider()
         let cursorMs: Int64 = 1_700_000_000_000
-        await provider.setBatch(GitHubEventBatch(
-            events: [GitHubEventSnapshot(
-                eventID: "e1", eventKind: "gh_commit_pushed", repoFullName: "octocat/leaf",
-                title: "x", number: nil, sha: "deadbeef", branch: "main",
-                createdAtMs: cursorMs
-            )],
-            cursorMs: cursorMs
-        ))
+        await provider.setBatch(
+            GitHubEventBatch(
+                events: [
+                    GitHubEventSnapshot(
+                        eventID: "e1", eventKind: "gh_commit_pushed", repoFullName: "octocat/leaf",
+                        title: "x", number: nil, sha: "deadbeef", branch: "main",
+                        createdAtMs: cursorMs
+                    )
+                ],
+                cursorMs: cursorMs
+            ))
 
         let refresher = GitHubTokenRefresher(database: db, clientID: "test-client")
         let collector = GitHubCollector(
@@ -396,37 +420,38 @@ final class GitHubCollectorTests: XCTestCase {
 
         let provider = MockGitHubAPIProvider()
         let baseMs: Int64 = 1_700_000_000_000
-        await provider.setBatch(GitHubEventBatch(
-            events: [
-                GitHubEventSnapshot(
-                    eventID: "rel-1", eventKind: "gh_release_published",
-                    repoFullName: "octocat/leaf",
-                    title: "", number: nil, sha: nil, branch: nil,
-                    createdAtMs: baseMs,
-                    metadata: [
-                        "tag_name": "v1.0.0",
-                        "action": "published",
-                        // Попытка override reserved key — должна быть проигнорирована.
-                        "event_kind": "OVERRIDE_ATTEMPT"
-                    ]
-                ),
-                GitHubEventSnapshot(
-                    eventID: "tag-1", eventKind: "gh_tag_created",
-                    repoFullName: "octocat/leaf",
-                    title: "", number: nil, sha: nil, branch: nil,
-                    createdAtMs: baseMs + 1000,
-                    metadata: ["tag_name": "v1.1.0"]
-                ),
-                GitHubEventSnapshot(
-                    eventID: "push-1", eventKind: "gh_commit_pushed",
-                    repoFullName: "octocat/leaf",
-                    title: "wip", number: nil, sha: "abc", branch: "main",
-                    createdAtMs: baseMs + 2000
-                    // metadata defaults nil → no extra payload keys
-                )
-            ],
-            cursorMs: baseMs + 2000
-        ))
+        await provider.setBatch(
+            GitHubEventBatch(
+                events: [
+                    GitHubEventSnapshot(
+                        eventID: "rel-1", eventKind: "gh_release_published",
+                        repoFullName: "octocat/leaf",
+                        title: "", number: nil, sha: nil, branch: nil,
+                        createdAtMs: baseMs,
+                        metadata: [
+                            "tag_name": "v1.0.0",
+                            "action": "published",
+                            // Попытка override reserved key — должна быть проигнорирована.
+                            "event_kind": "OVERRIDE_ATTEMPT",
+                        ]
+                    ),
+                    GitHubEventSnapshot(
+                        eventID: "tag-1", eventKind: "gh_tag_created",
+                        repoFullName: "octocat/leaf",
+                        title: "", number: nil, sha: nil, branch: nil,
+                        createdAtMs: baseMs + 1000,
+                        metadata: ["tag_name": "v1.1.0"]
+                    ),
+                    GitHubEventSnapshot(
+                        eventID: "push-1", eventKind: "gh_commit_pushed",
+                        repoFullName: "octocat/leaf",
+                        title: "wip", number: nil, sha: "abc", branch: "main",
+                        createdAtMs: baseMs + 2000
+                            // metadata defaults nil → no extra payload keys
+                    ),
+                ],
+                cursorMs: baseMs + 2000
+            ))
 
         let refresher = GitHubTokenRefresher(database: db, clientID: "test-client")
         let collector = GitHubCollector(
@@ -435,16 +460,18 @@ final class GitHubCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1000) / 1000),
-            end: Date(timeIntervalSince1970: TimeInterval(baseMs + 5000) / 1000)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1000) / 1000),
+                end: Date(timeIntervalSince1970: TimeInterval(baseMs + 5000) / 1000)
+            ))
 
         let release = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "gh_release_published" })
         XCTAssertEqual(release.payload["tag_name"], "v1.0.0")
         XCTAssertEqual(release.payload["action"], "published")
-        XCTAssertEqual(release.payload["event_kind"], "gh_release_published",
-                       "reserved key event_kind не overridable через metadata")
+        XCTAssertEqual(
+            release.payload["event_kind"], "gh_release_published",
+            "reserved key event_kind не overridable через metadata")
 
         let tag = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "gh_tag_created" })
         XCTAssertEqual(tag.payload["tag_name"], "v1.1.0")
@@ -466,15 +493,16 @@ final class GitHubCollectorTests: XCTestCase {
         // Empty events batch + non-empty notifications → tick должен emit'ить только pulse.
         await provider.setBatch(.empty)
         let pulseObservedAt: Int64 = 1_700_000_000_000
-        await provider.setNotificationsSummary(GitHubNotificationsSummary(
-            totalUnread: 4,
-            byReason: [
-                "review_requested": 2,
-                "mention": 1,
-                "comment": 1
-            ],
-            observedAtMs: pulseObservedAt
-        ))
+        await provider.setNotificationsSummary(
+            GitHubNotificationsSummary(
+                totalUnread: 4,
+                byReason: [
+                    "review_requested": 2,
+                    "mention": 1,
+                    "comment": 1,
+                ],
+                observedAtMs: pulseObservedAt
+            ))
 
         let refresher = GitHubTokenRefresher(database: db, clientID: "test-client")
         let collector = GitHubCollector(
@@ -488,13 +516,15 @@ final class GitHubCollectorTests: XCTestCase {
         XCTAssertEqual(notifCalls, 1, "fetchNotifications вызвался ровно раз")
 
         // Read all events; ровно один с event_kind=github_notifications_pulse.
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSince1970: 0),
-            end: Date(timeIntervalSince1970: TimeInterval(Date().timeIntervalSince1970 + 60))
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: 0),
+                end: Date(timeIntervalSince1970: TimeInterval(Date().timeIntervalSince1970 + 60))
+            ))
         // Empty batch → нет .action events; только .context pulses.
-        XCTAssertEqual(stored.filter { $0.signalType == .action }.count, 0,
-                       "empty batch → нет .action events")
+        XCTAssertEqual(
+            stored.filter { $0.signalType == .action }.count, 0,
+            "empty batch → нет .action events")
         let pulse = try XCTUnwrap(
             stored.first { $0.payload["event_kind"] == "gh_notifications_pulse" },
             "ожидался github_notifications_pulse event"
@@ -520,12 +550,14 @@ final class GitHubCollectorTests: XCTestCase {
         let provider = MockGitHubAPIProvider()
         await provider.setBatch(.empty)
         let observedAt: Int64 = 1_700_000_000_000
-        await provider.setReviewQueueSummary(GitHubReviewQueueSummary(
-            count: 5, topRepo: "octocat/leaf", observedAtMs: observedAt
-        ))
-        await provider.setMyOpenPRsSummary(GitHubMyOpenPRsSummary(
-            count: 7, observedAtMs: observedAt
-        ))
+        await provider.setReviewQueueSummary(
+            GitHubReviewQueueSummary(
+                count: 5, topRepo: "octocat/leaf", observedAtMs: observedAt
+            ))
+        await provider.setMyOpenPRsSummary(
+            GitHubMyOpenPRsSummary(
+                count: 7, observedAtMs: observedAt
+            ))
 
         let refresher = GitHubTokenRefresher(database: db, clientID: "test-client")
         let collector = GitHubCollector(
@@ -540,10 +572,11 @@ final class GitHubCollectorTests: XCTestCase {
         XCTAssertEqual(reviewCalls, 1, "fetchPRsAwaitingReview вызвался ровно раз")
         XCTAssertEqual(myOpenCalls, 1, "fetchMyOpenPRs вызвался ровно раз")
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSince1970: 0),
-            end: Date(timeIntervalSince1970: TimeInterval(Date().timeIntervalSince1970 + 60))
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: 0),
+                end: Date(timeIntervalSince1970: TimeInterval(Date().timeIntervalSince1970 + 60))
+            ))
 
         let reviewPulse = try XCTUnwrap(
             stored.first { $0.payload["event_kind"] == "gh_pr_awaiting_review_count" },
@@ -583,10 +616,11 @@ final class GitHubCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSince1970: 0),
-            end: Date(timeIntervalSince1970: TimeInterval(Date().timeIntervalSince1970 + 60))
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: 0),
+                end: Date(timeIntervalSince1970: TimeInterval(Date().timeIntervalSince1970 + 60))
+            ))
         let reviewPulse = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "gh_pr_awaiting_review_count" })
         XCTAssertEqual(reviewPulse.payload["count"], "0")
         XCTAssertNil(reviewPulse.payload["top_repo"], "topRepo=nil → key omitted entirely")
@@ -617,7 +651,7 @@ final class GitHubCollectorTests: XCTestCase {
                 workflowName: "Ci", event: "pull_request",
                 status: "in_progress", conclusion: nil,
                 createdAtMs: baseMs + 1000, headBranch: "feature/x"
-            )
+            ),
         ])
 
         let refresher = GitHubTokenRefresher(database: db, clientID: "test-client")
@@ -631,10 +665,11 @@ final class GitHubCollectorTests: XCTestCase {
         let runsCalls = await provider.actionsRunsCalls()
         XCTAssertEqual(runsCalls, 1, "fetchActionsRunsForActor вызвался ровно раз")
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSince1970: TimeInterval(baseMs - 10_000) / 1000),
-            end: Date(timeIntervalSince1970: TimeInterval(baseMs + 10_000) / 1000)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: TimeInterval(baseMs - 10_000) / 1000),
+                end: Date(timeIntervalSince1970: TimeInterval(baseMs + 10_000) / 1000)
+            ))
         let runEvents = stored.filter { $0.payload["event_kind"] == "gh_actions_run_initiated" }
         XCTAssertEqual(runEvents.count, 2, "2 runs → 2 actions_run_initiated events")
 
@@ -674,23 +709,24 @@ final class GitHubCollectorTests: XCTestCase {
 
         let provider = MockGitHubAPIProvider()
         let baseMs: Int64 = 1_700_000_000_000
-        await provider.setBatch(GitHubEventBatch(
-            events: [
-                GitHubEventSnapshot(
-                    eventID: "push-1", eventKind: "gh_commit_pushed",
-                    repoFullName: "octocat/leaf",
-                    title: "feat: x", number: nil, sha: "aaa111",
-                    branch: "main", createdAtMs: baseMs
-                ),
-                GitHubEventSnapshot(
-                    eventID: "push-2", eventKind: "gh_commit_pushed",
-                    repoFullName: "octocat/other",
-                    title: "fix: y", number: nil, sha: "bbb222",
-                    branch: "main", createdAtMs: baseMs + 1000
-                )
-            ],
-            cursorMs: baseMs + 1000
-        ))
+        await provider.setBatch(
+            GitHubEventBatch(
+                events: [
+                    GitHubEventSnapshot(
+                        eventID: "push-1", eventKind: "gh_commit_pushed",
+                        repoFullName: "octocat/leaf",
+                        title: "feat: x", number: nil, sha: "aaa111",
+                        branch: "main", createdAtMs: baseMs
+                    ),
+                    GitHubEventSnapshot(
+                        eventID: "push-2", eventKind: "gh_commit_pushed",
+                        repoFullName: "octocat/other",
+                        title: "fix: y", number: nil, sha: "bbb222",
+                        branch: "main", createdAtMs: baseMs + 1000
+                    ),
+                ],
+                cursorMs: baseMs + 1000
+            ))
         // Per-(repo, sha) check-runs summaries.
         await provider.setCheckRuns(
             repo: "octocat/leaf", sha: "aaa111",
@@ -715,10 +751,11 @@ final class GitHubCollectorTests: XCTestCase {
         let pairs = Set(args.map { "\($0.repo)|\($0.sha)" })
         XCTAssertEqual(pairs, Set(["octocat/leaf|aaa111", "octocat/other|bbb222"]))
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSince1970: 0),
-            end: Date(timeIntervalSince1970: TimeInterval(Date().timeIntervalSince1970 + 60))
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: 0),
+                end: Date(timeIntervalSince1970: TimeInterval(Date().timeIntervalSince1970 + 60))
+            ))
         let checkEvents = stored.filter { $0.payload["event_kind"] == "gh_check_runs_status" }
         XCTAssertEqual(checkEvents.count, 2, "2 push pairs → 2 check_runs_status events")
         for ev in checkEvents {
@@ -758,23 +795,24 @@ final class GitHubCollectorTests: XCTestCase {
         let provider = MockGitHubAPIProvider()
         let baseMs: Int64 = 1_700_000_000_000
         // Batch только non-push events.
-        await provider.setBatch(GitHubEventBatch(
-            events: [
-                GitHubEventSnapshot(
-                    eventID: "pr-1", eventKind: "gh_pr_opened",
-                    repoFullName: "octocat/leaf",
-                    title: "feat", number: 42, sha: nil, branch: nil,
-                    createdAtMs: baseMs
-                ),
-                GitHubEventSnapshot(
-                    eventID: "issue-1", eventKind: "gh_issue_closed",
-                    repoFullName: "octocat/leaf",
-                    title: "bug", number: 7, sha: nil, branch: nil,
-                    createdAtMs: baseMs + 1000
-                )
-            ],
-            cursorMs: baseMs + 1000
-        ))
+        await provider.setBatch(
+            GitHubEventBatch(
+                events: [
+                    GitHubEventSnapshot(
+                        eventID: "pr-1", eventKind: "gh_pr_opened",
+                        repoFullName: "octocat/leaf",
+                        title: "feat", number: 42, sha: nil, branch: nil,
+                        createdAtMs: baseMs
+                    ),
+                    GitHubEventSnapshot(
+                        eventID: "issue-1", eventKind: "gh_issue_closed",
+                        repoFullName: "octocat/leaf",
+                        title: "bug", number: 7, sha: nil, branch: nil,
+                        createdAtMs: baseMs + 1000
+                    ),
+                ],
+                cursorMs: baseMs + 1000
+            ))
 
         let refresher = GitHubTokenRefresher(database: db, clientID: "test-client")
         let collector = GitHubCollector(
@@ -787,10 +825,11 @@ final class GitHubCollectorTests: XCTestCase {
         let checkCalls = await provider.checkRunsCalls()
         XCTAssertEqual(checkCalls, 0, "non-push batch → 0 fetchCheckRunsForCommit calls")
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSince1970: 0),
-            end: Date(timeIntervalSince1970: TimeInterval(Date().timeIntervalSince1970 + 60))
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: 0),
+                end: Date(timeIntervalSince1970: TimeInterval(Date().timeIntervalSince1970 + 60))
+            ))
         let checkEvents = stored.filter { $0.payload["event_kind"] == "gh_check_runs_status" }
         XCTAssertEqual(checkEvents.count, 0, "0 push pairs → 0 check_runs_status events")
     }
@@ -879,35 +918,40 @@ final class GitHubCollectorTests: XCTestCase {
         let provider = MockGitHubAPIProvider()
         let baseMs: Int64 = 1_700_000_000_000
         // Push event → check_runs reduction → latest_push_check_status="success".
-        await provider.setBatch(GitHubEventBatch(
-            events: [
-                GitHubEventSnapshot(
-                    eventID: "push-1", eventKind: "gh_commit_pushed",
-                    repoFullName: "octocat/leaf", title: "wip",
-                    number: nil, sha: "deadbeef", branch: "main",
-                    createdAtMs: baseMs
-                )
-            ],
-            cursorMs: baseMs
-        ))
-        await provider.setNotificationsSummary(GitHubNotificationsSummary(
-            totalUnread: 4,
-            byReason: ["review_requested": 2, "mention": 1, "comment": 1],
-            observedAtMs: baseMs
-        ))
-        await provider.setReviewQueueSummary(GitHubReviewQueueSummary(
-            count: 3, topRepo: "octocat/leaf", observedAtMs: baseMs
-        ))
-        await provider.setMyOpenPRsSummary(GitHubMyOpenPRsSummary(
-            count: 5, observedAtMs: baseMs
-        ))
+        await provider.setBatch(
+            GitHubEventBatch(
+                events: [
+                    GitHubEventSnapshot(
+                        eventID: "push-1", eventKind: "gh_commit_pushed",
+                        repoFullName: "octocat/leaf", title: "wip",
+                        number: nil, sha: "deadbeef", branch: "main",
+                        createdAtMs: baseMs
+                    )
+                ],
+                cursorMs: baseMs
+            ))
+        await provider.setNotificationsSummary(
+            GitHubNotificationsSummary(
+                totalUnread: 4,
+                byReason: ["review_requested": 2, "mention": 1, "comment": 1],
+                observedAtMs: baseMs
+            ))
+        await provider.setReviewQueueSummary(
+            GitHubReviewQueueSummary(
+                count: 3, topRepo: "octocat/leaf", observedAtMs: baseMs
+            ))
+        await provider.setMyOpenPRsSummary(
+            GitHubMyOpenPRsSummary(
+                count: 5, observedAtMs: baseMs
+            ))
         await provider.setCheckRuns(
             repo: "octocat/leaf", sha: "deadbeef",
             summary: GitHubCheckRunsSummary(total: 2, success: 2, failure: 0, inProgress: 0, neutral: 0)
         )
-        await provider.setContributionsCalendar(GitHubContributionsCalendar(
-            totalContributions: 423, todayCount: 7, weeks: []
-        ))
+        await provider.setContributionsCalendar(
+            GitHubContributionsCalendar(
+                totalContributions: 423, todayCount: 7, weeks: []
+            ))
 
         let refresher = GitHubTokenRefresher(database: db, clientID: "test-client")
         let collector = GitHubCollector(
@@ -934,8 +978,9 @@ final class GitHubCollectorTests: XCTestCase {
         XCTAssertEqual(state["prs_awaiting_my_review"] as? Int, 3)
         XCTAssertEqual(state["prs_awaiting_top_repo"] as? String, "octocat/leaf")
         XCTAssertEqual(state["my_open_prs"] as? Int, 5)
-        XCTAssertEqual(state["latest_push_check_status"] as? String, "success",
-                       "2 success / 0 failure / 0 in_progress → success bucket")
+        XCTAssertEqual(
+            state["latest_push_check_status"] as? String, "success",
+            "2 success / 0 failure / 0 in_progress → success bucket")
         XCTAssertEqual(state["contributions_today"] as? Int, 7)
         // active_repos_count = 0 (events table пуста до этого tick'а — derive
         // query видит just-inserted push, но окно 7 дней назад отработало
@@ -955,20 +1000,22 @@ final class GitHubCollectorTests: XCTestCase {
         // Even if we inject sentinel into "title-bearing" fields, those don't
         // propagate into presence_state — we only push counts/repo identifiers.
         let sentinelTitle = "SENSITIVE_TITLE_LEAK_xyz"
-        await provider.setBatch(GitHubEventBatch(
-            events: [
-                GitHubEventSnapshot(
-                    eventID: "pr-1", eventKind: "gh_pr_opened",
-                    repoFullName: "octocat/leaf",
-                    title: sentinelTitle, number: 42, sha: nil, branch: nil,
-                    createdAtMs: 1_700_000_000_000
-                )
-            ],
-            cursorMs: 1_700_000_000_000
-        ))
-        await provider.setReviewQueueSummary(GitHubReviewQueueSummary(
-            count: 1, topRepo: "octocat/leaf", observedAtMs: 1_700_000_000_000
-        ))
+        await provider.setBatch(
+            GitHubEventBatch(
+                events: [
+                    GitHubEventSnapshot(
+                        eventID: "pr-1", eventKind: "gh_pr_opened",
+                        repoFullName: "octocat/leaf",
+                        title: sentinelTitle, number: 42, sha: nil, branch: nil,
+                        createdAtMs: 1_700_000_000_000
+                    )
+                ],
+                cursorMs: 1_700_000_000_000
+            ))
+        await provider.setReviewQueueSummary(
+            GitHubReviewQueueSummary(
+                count: 1, topRepo: "octocat/leaf", observedAtMs: 1_700_000_000_000
+            ))
 
         let refresher = GitHubTokenRefresher(database: db, clientID: "test-client")
         let collector = GitHubCollector(
@@ -985,19 +1032,23 @@ final class GitHubCollectorTests: XCTestCase {
         }
         let row = try XCTUnwrap(presence)
         let topLevelKeys = Set(row.state.keys)
-        XCTAssertFalse(topLevelKeys.contains("title"),
-                       "presence_state не должен содержать 'title' top-level key")
-        XCTAssertFalse(topLevelKeys.contains("body"),
-                       "presence_state не должен содержать 'body' top-level key")
-        XCTAssertFalse(topLevelKeys.contains("message"),
-                       "presence_state не должен содержать 'message' top-level key")
+        XCTAssertFalse(
+            topLevelKeys.contains("title"),
+            "presence_state не должен содержать 'title' top-level key")
+        XCTAssertFalse(
+            topLevelKeys.contains("body"),
+            "presence_state не должен содержать 'body' top-level key")
+        XCTAssertFalse(
+            topLevelKeys.contains("message"),
+            "presence_state не должен содержать 'message' top-level key")
 
         // Sentinel string из event title не должна leak'ать в стейт через какое-либо
         // поле (paranoid check — guards против accidental forwarding).
         let serialized = try JSONSerialization.data(withJSONObject: row.state, options: [])
         let serializedStr = String(data: serialized, encoding: .utf8) ?? ""
-        XCTAssertFalse(serializedStr.contains(sentinelTitle),
-                       "title content не должен попасть в presence_state JSON")
+        XCTAssertFalse(
+            serializedStr.contains(sentinelTitle),
+            "title content не должен попасть в presence_state JSON")
     }
 
     /// Lifecycle smoke: start запускает loopTask, stop его cancels + awaits.
@@ -1032,18 +1083,21 @@ final class GitHubCollectorTests: XCTestCase {
         let provider = MockGitHubAPIProvider()
         let baseMs: Int64 = 1_700_000_000_000
         let fullBody = "Subject only\n\nLong body paragraph explaining the context and rationale."
-        await provider.setBatch(GitHubEventBatch(
-            events: [GitHubEventSnapshot(
-                eventID: "push-body-1", eventKind: "gh_commit_pushed",
-                repoFullName: "octocat/leaf",
-                title: "Subject only",
-                number: nil, sha: "abc123", branch: "main",
-                createdAtMs: baseMs,
-                body: fullBody,
-                bodyTruncated: false
-            )],
-            cursorMs: baseMs
-        ))
+        await provider.setBatch(
+            GitHubEventBatch(
+                events: [
+                    GitHubEventSnapshot(
+                        eventID: "push-body-1", eventKind: "gh_commit_pushed",
+                        repoFullName: "octocat/leaf",
+                        title: "Subject only",
+                        number: nil, sha: "abc123", branch: "main",
+                        createdAtMs: baseMs,
+                        body: fullBody,
+                        bodyTruncated: false
+                    )
+                ],
+                cursorMs: baseMs
+            ))
 
         let refresher = GitHubTokenRefresher(database: db, clientID: "test-client")
         let collector = GitHubCollector(
@@ -1052,17 +1106,21 @@ final class GitHubCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1000) / 1000),
-            end: Date(timeIntervalSince1970: TimeInterval(baseMs + 1000) / 1000)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1000) / 1000),
+                end: Date(timeIntervalSince1970: TimeInterval(baseMs + 1000) / 1000)
+            ))
         let event = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "gh_commit_pushed" })
-        XCTAssertEqual(event.payload[Schema.EventPayloadKeys.body], fullBody,
-                       "full commit message должен быть в payload.body")
-        XCTAssertTrue(event.payload[Schema.EventPayloadKeys.body]?.contains("Long body paragraph") == true,
-                      "body содержит multi-line content")
-        XCTAssertNil(event.payload[Schema.EventPayloadKeys.bodyTruncated],
-                     "bodyTruncated absent когда не truncated")
+        XCTAssertEqual(
+            event.payload[Schema.EventPayloadKeys.body], fullBody,
+            "full commit message должен быть в payload.body")
+        XCTAssertTrue(
+            event.payload[Schema.EventPayloadKeys.body]?.contains("Long body paragraph") == true,
+            "body содержит multi-line content")
+        XCTAssertNil(
+            event.payload[Schema.EventPayloadKeys.bodyTruncated],
+            "bodyTruncated absent когда не truncated")
     }
 
     /// PRMetadata fields всех 6 ключей присутствуют в payload.
@@ -1077,17 +1135,20 @@ final class GitHubCollectorTests: XCTestCase {
             requestedReviewers: ["alice"],
             mentionCount: 1, linkCount: 0
         )
-        await provider.setBatch(GitHubEventBatch(
-            events: [GitHubEventSnapshot(
-                eventID: "pr-meta-1", eventKind: "gh_pr_opened",
-                repoFullName: "octocat/leaf",
-                title: "feat: new feature",
-                number: 10, sha: nil, branch: nil,
-                createdAtMs: baseMs,
-                prMetadata: meta
-            )],
-            cursorMs: baseMs
-        ))
+        await provider.setBatch(
+            GitHubEventBatch(
+                events: [
+                    GitHubEventSnapshot(
+                        eventID: "pr-meta-1", eventKind: "gh_pr_opened",
+                        repoFullName: "octocat/leaf",
+                        title: "feat: new feature",
+                        number: 10, sha: nil, branch: nil,
+                        createdAtMs: baseMs,
+                        prMetadata: meta
+                    )
+                ],
+                cursorMs: baseMs
+            ))
 
         let refresher = GitHubTokenRefresher(database: db, clientID: "test-client")
         let collector = GitHubCollector(
@@ -1096,10 +1157,11 @@ final class GitHubCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1000) / 1000),
-            end: Date(timeIntervalSince1970: TimeInterval(baseMs + 1000) / 1000)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1000) / 1000),
+                end: Date(timeIntervalSince1970: TimeInterval(baseMs + 1000) / 1000)
+            ))
         let event = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "gh_pr_opened" })
         XCTAssertEqual(event.payload[Schema.EventPayloadKeys.filesCount], "3")
         XCTAssertEqual(event.payload[Schema.EventPayloadKeys.additions], "50")
@@ -1118,17 +1180,20 @@ final class GitHubCollectorTests: XCTestCase {
         let provider = MockGitHubAPIProvider()
         let baseMs: Int64 = 1_700_000_000_200
         let screenshotAttachment = AttachmentMeta(name: "screenshot.png", mime: "image/png", sizeBytes: nil)
-        await provider.setBatch(GitHubEventBatch(
-            events: [GitHubEventSnapshot(
-                eventID: "pr-attach-1", eventKind: "gh_pr_opened",
-                repoFullName: "octocat/leaf",
-                title: "fix: UI bug",
-                number: 20, sha: nil, branch: nil,
-                createdAtMs: baseMs,
-                attachments: [screenshotAttachment]
-            )],
-            cursorMs: baseMs
-        ))
+        await provider.setBatch(
+            GitHubEventBatch(
+                events: [
+                    GitHubEventSnapshot(
+                        eventID: "pr-attach-1", eventKind: "gh_pr_opened",
+                        repoFullName: "octocat/leaf",
+                        title: "fix: UI bug",
+                        number: 20, sha: nil, branch: nil,
+                        createdAtMs: baseMs,
+                        attachments: [screenshotAttachment]
+                    )
+                ],
+                cursorMs: baseMs
+            ))
 
         let refresher = GitHubTokenRefresher(database: db, clientID: "test-client")
         let collector = GitHubCollector(
@@ -1137,17 +1202,20 @@ final class GitHubCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1000) / 1000),
-            end: Date(timeIntervalSince1970: TimeInterval(baseMs + 1000) / 1000)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1000) / 1000),
+                end: Date(timeIntervalSince1970: TimeInterval(baseMs + 1000) / 1000)
+            ))
         let event = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "gh_pr_opened" })
-        let attachmentsJson = try XCTUnwrap(event.payload[Schema.EventPayloadKeys.attachmentsJson],
-                                             "attachments_json должен быть в payload")
+        let attachmentsJson = try XCTUnwrap(
+            event.payload[Schema.EventPayloadKeys.attachmentsJson],
+            "attachments_json должен быть в payload")
         XCTAssertTrue(attachmentsJson.contains("screenshot.png"), "attachments_json содержит filename")
         // JSONEncoder escapes "/" → "\/" in JSON; check for "image" + "png" separately.
-        XCTAssertTrue(attachmentsJson.contains("image") && attachmentsJson.contains("png"),
-                      "attachments_json содержит mime type (image/png, possibly JSON-escaped)")
+        XCTAssertTrue(
+            attachmentsJson.contains("image") && attachmentsJson.contains("png"),
+            "attachments_json содержит mime type (image/png, possibly JSON-escaped)")
     }
 
     // MARK: - Track-3 D2 Task 4 — gh_* rename + 7 new hot-tier event_kinds
@@ -1182,7 +1250,7 @@ final class GitHubCollectorTests: XCTestCase {
             (.deploymentCreated, ["deployment_environment": "production"]),
             (.deploymentStatusChanged, ["deployment_environment": "production", "deployment_state": "success"]),
             (.repoCreated, ["repository_visibility": "public"]),
-            (.repoForked, ["forkee_full_name": "fork/foo"])
+            (.repoForked, ["forkee_full_name": "fork/foo"]),
         ]
         for (kind, metadata) in cases {
             let snapshot = GitHubEventSnapshot(
@@ -1236,21 +1304,24 @@ final class GitHubCollectorTests: XCTestCase {
             filesCount: 5, additions: 42, deletions: 1,
             requestedReviewers: [], mentionCount: 0, linkCount: 0
         )
-        await provider.setBatch(GitHubEventBatch(
-            events: [GitHubEventSnapshot(
-                eventID: "guard-1", eventKind: "gh_pr_opened",
-                repoFullName: "octocat/leaf",
-                title: "test",
-                number: 99, sha: nil, branch: nil,
-                createdAtMs: baseMs,
-                // metadata tries to shadow `body` and `additions` keys
-                metadata: ["body": "metadata-shadow", "additions": "999"],
-                body: realBody,
-                bodyTruncated: false,
-                prMetadata: meta
-            )],
-            cursorMs: baseMs
-        ))
+        await provider.setBatch(
+            GitHubEventBatch(
+                events: [
+                    GitHubEventSnapshot(
+                        eventID: "guard-1", eventKind: "gh_pr_opened",
+                        repoFullName: "octocat/leaf",
+                        title: "test",
+                        number: 99, sha: nil, branch: nil,
+                        createdAtMs: baseMs,
+                        // metadata tries to shadow `body` and `additions` keys
+                        metadata: ["body": "metadata-shadow", "additions": "999"],
+                        body: realBody,
+                        bodyTruncated: false,
+                        prMetadata: meta
+                    )
+                ],
+                cursorMs: baseMs
+            ))
 
         let refresher = GitHubTokenRefresher(database: db, clientID: "test-client")
         let collector = GitHubCollector(
@@ -1259,20 +1330,25 @@ final class GitHubCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1000) / 1000),
-            end: Date(timeIntervalSince1970: TimeInterval(baseMs + 1000) / 1000)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1000) / 1000),
+                end: Date(timeIntervalSince1970: TimeInterval(baseMs + 1000) / 1000)
+            ))
         let event = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "gh_pr_opened" })
         // Real body wins over metadata shadow.
-        XCTAssertEqual(event.payload[Schema.EventPayloadKeys.body], realBody,
-                       "real body из snapshot.body должен присутствовать")
-        XCTAssertFalse(event.payload.values.contains("metadata-shadow"),
-                       "metadata shadow не должен появляться в payload")
+        XCTAssertEqual(
+            event.payload[Schema.EventPayloadKeys.body], realBody,
+            "real body из snapshot.body должен присутствовать")
+        XCTAssertFalse(
+            event.payload.values.contains("metadata-shadow"),
+            "metadata shadow не должен появляться в payload")
         // Real additions from prMetadata wins over metadata shadow.
-        XCTAssertEqual(event.payload[Schema.EventPayloadKeys.additions], "42",
-                       "real additions из prMetadata должны быть в payload")
-        XCTAssertFalse(event.payload.values.contains("999"),
-                       "metadata additions shadow не должен перезаписать реальное значение")
+        XCTAssertEqual(
+            event.payload[Schema.EventPayloadKeys.additions], "42",
+            "real additions из prMetadata должны быть в payload")
+        XCTAssertFalse(
+            event.payload.values.contains("999"),
+            "metadata additions shadow не должен перезаписать реальное значение")
     }
 }

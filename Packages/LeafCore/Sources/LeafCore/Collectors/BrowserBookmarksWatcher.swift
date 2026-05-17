@@ -1,5 +1,5 @@
-import Foundation
 import CoreServices
+import Foundation
 import OSLog
 
 // MARK: - Protocols
@@ -119,8 +119,10 @@ public actor BrowserBookmarksWatcher {
     }
 
     public func stop() async {
-        chromeStream?.stop(); chromeStream = nil
-        safariStream?.stop(); safariStream = nil
+        chromeStream?.stop()
+        chromeStream = nil
+        safariStream?.stop()
+        safariStream = nil
     }
 
     // MARK: - Event handlers (visible for tests)
@@ -134,18 +136,20 @@ public actor BrowserBookmarksWatcher {
         // MINOR-1: write counter AFTER guard so cold-tick seed reads clearly.
         // (Spec §8.3: seed → no emit; subsequent → emit delta.)
         guard let prev else {
-            chromeCounts[profileLabel] = newCount   // cold tick — seed only, no emit
+            chromeCounts[profileLabel] = newCount  // cold tick — seed only, no emit
             return
         }
         chromeCounts[profileLabel] = newCount
-        try? writer.write([makeEvent(
-            bundleID: "com.google.Chrome",
-            eventKind: "chrome_bookmark_changed",
-            totalCount: newCount,
-            delta: newCount - prev,
-            profileLabel: profileLabel,
-            nowMs: nowMs
-        )])
+        try? writer.write([
+            makeEvent(
+                bundleID: "com.google.Chrome",
+                eventKind: "chrome_bookmark_changed",
+                totalCount: newCount,
+                delta: newCount - prev,
+                profileLabel: profileLabel,
+                nowMs: nowMs
+            )
+        ])
     }
 
     public func handleSafariEvent(nowMs: Int64) {
@@ -157,18 +161,20 @@ public actor BrowserBookmarksWatcher {
         let prev = safariCount
         // MINOR-1: write counter AFTER guard (mirror Chrome handler).
         guard let prev else {
-            safariCount = newCount   // cold tick — seed only, no emit
+            safariCount = newCount  // cold tick — seed only, no emit
             return
         }
         safariCount = newCount
-        try? writer.write([makeEvent(
-            bundleID: "com.apple.Safari",
-            eventKind: "safari_bookmark_changed",
-            totalCount: newCount,
-            delta: newCount - prev,
-            profileLabel: nil,
-            nowMs: nowMs
-        )])
+        try? writer.write([
+            makeEvent(
+                bundleID: "com.apple.Safari",
+                eventKind: "safari_bookmark_changed",
+                totalCount: newCount,
+                delta: newCount - prev,
+                profileLabel: nil,
+                nowMs: nowMs
+            )
+        ])
     }
 
     // MARK: - Private helpers
@@ -184,7 +190,7 @@ public actor BrowserBookmarksWatcher {
         var payload: [String: String] = [
             "event_kind": eventKind,
             "total_count": String(totalCount),
-            "delta": String(delta)
+            "delta": String(delta),
         ]
         if let p = profileLabel {
             payload["profile_label"] = p

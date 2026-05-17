@@ -16,12 +16,14 @@ public struct RotationPlaintext: Sendable, Hashable, Codable {
     public let generatedAtMs: Int64
     public let removedMemberID: String?
 
-    public init(kind: RotationKind,
-                newTeamKeyBase64: String,
-                newKeyID: String,
-                priorKeyID: String,
-                generatedAtMs: Int64,
-                removedMemberID: String?) {
+    public init(
+        kind: RotationKind,
+        newTeamKeyBase64: String,
+        newKeyID: String,
+        priorKeyID: String,
+        generatedAtMs: Int64,
+        removedMemberID: String?
+    ) {
         self.kind = kind
         self.newTeamKeyBase64 = newTeamKeyBase64
         self.newKeyID = newKeyID

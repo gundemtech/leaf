@@ -13,9 +13,11 @@ struct LeafDivider: View {
 
     var body: some View {
         Rectangle()
-            .fill(style == .soft
-                  ? LeafColor.border.subtle.opacity(0.5)
-                  : LeafColor.border.subtle)
+            .fill(
+                style == .soft
+                    ? LeafColor.border.subtle.opacity(0.5)
+                    : LeafColor.border.subtle
+            )
             .frame(height: 1)
     }
 }

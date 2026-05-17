@@ -36,9 +36,11 @@ struct LeafOnboardingStepLayoutPreview: View {
                     Text("Connect your team")
                         .font(LeafType.title.large)
                         .foregroundStyle(LeafColor.text.primary)
-                    Text("Leaf shares only what you opt-in to. Bring up to 50 teammates onto an end-to-end-encrypted relay.")
-                        .font(LeafType.body.regular)
-                        .foregroundStyle(LeafColor.text.tertiary)
+                    Text(
+                        "Leaf shares only what you opt-in to. Bring up to 50 teammates onto an end-to-end-encrypted relay."
+                    )
+                    .font(LeafType.body.regular)
+                    .foregroundStyle(LeafColor.text.tertiary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -56,8 +58,10 @@ struct LeafOnboardingStepLayoutPreview: View {
             .clipShape(RoundedRectangle(cornerRadius: LeafRadius.lg, style: .continuous))
 
             TokensInlineSpec(
-                spec: "LeafOnboardingStepLayout · progress capsules h:4 · content maxWidth 560 · padding xxl · canvas bg",
-                codeSnippet: "LeafOnboardingStepLayout(stepIndex:1, totalSteps:4, content: { ... }, navButtons: { ... })"
+                spec:
+                    "LeafOnboardingStepLayout · progress capsules h:4 · content maxWidth 560 · padding xxl · canvas bg",
+                codeSnippet:
+                    "LeafOnboardingStepLayout(stepIndex:1, totalSteps:4, content: { ... }, navButtons: { ... })"
             )
         }
         .padding(LeafSpace.lg)

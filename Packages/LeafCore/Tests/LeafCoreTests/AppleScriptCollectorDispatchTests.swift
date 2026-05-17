@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 /// Phase Track-4 S2 — exercises `AppleScriptDispatchLogic` invariants via
@@ -41,7 +42,8 @@ final class AppleScriptCollectorDispatchTests: XCTestCase {
         XCTAssertTrue(out.events.isEmpty)
         XCTAssertTrue(out.diagnostics.isEmpty)
         // Permission state unchanged
-        if case .notRequested = perm.cachedState(for: "com.example.x") {} else {
+        if case .notRequested = perm.cachedState(for: "com.example.x") {
+        } else {
             XCTFail("expected unchanged .notRequested")
         }
     }
@@ -63,7 +65,7 @@ final class AppleScriptCollectorDispatchTests: XCTestCase {
             permissionStore: perm,
             localAppsStore: store,
             isInstalled: { _ in true },
-            nowMs: 1_500_000 // 0.5h after denial — well within 24h
+            nowMs: 1_500_000  // 0.5h after denial — well within 24h
         )
         XCTAssertTrue(out.events.isEmpty)
     }
@@ -78,7 +80,9 @@ final class AppleScriptCollectorDispatchTests: XCTestCase {
         store.setEnabled("com.example.x", true)
         var adapter: any AppleScriptAdapter = SpyAdapter(
             targetBundleIDs: ["com.example.x"],
-            emitOnObserve: [RawEvent(signalType: .attention, bundleID: "com.example.x", payload: ["event_kind": "spy_observed"])]
+            emitOnObserve: [
+                RawEvent(signalType: .attention, bundleID: "com.example.x", payload: ["event_kind": "spy_observed"])
+            ]
         )
         let out = await AppleScriptDispatchLogic.tickAdapter(
             &adapter,
@@ -90,7 +94,8 @@ final class AppleScriptCollectorDispatchTests: XCTestCase {
         )
         XCTAssertEqual(out.events.count, 1)
         XCTAssertEqual(out.events[0].payload["event_kind"], "spy_observed")
-        if case .granted = perm.cachedState(for: "com.example.x") {} else {
+        if case .granted = perm.cachedState(for: "com.example.x") {
+        } else {
             XCTFail("expected .granted on success")
         }
     }
@@ -112,7 +117,9 @@ final class AppleScriptCollectorDispatchTests: XCTestCase {
         )
         if case .denied(let t) = perm.cachedState(for: "com.example.x") {
             XCTAssertEqual(t, 3_000_000)
-        } else { XCTFail("expected .denied") }
+        } else {
+            XCTFail("expected .denied")
+        }
     }
 
     @MainActor
@@ -133,7 +140,8 @@ final class AppleScriptCollectorDispatchTests: XCTestCase {
             isInstalled: { _ in false },
             nowMs: 4_000_000
         )
-        if case .appNotInstalled = perm.cachedState(for: "com.missing.x") {} else {
+        if case .appNotInstalled = perm.cachedState(for: "com.missing.x") {
+        } else {
             XCTFail("expected .appNotInstalled")
         }
     }
@@ -155,7 +163,8 @@ final class AppleScriptCollectorDispatchTests: XCTestCase {
         )
         XCTAssertEqual(out.diagnostics, [.timeout(bundleID: "com.example.x")])
         // State unchanged — timeout is transient
-        if case .notRequested = perm.cachedState(for: "com.example.x") {} else {
+        if case .notRequested = perm.cachedState(for: "com.example.x") {
+        } else {
             XCTFail("expected unchanged on timeout")
         }
     }
@@ -175,7 +184,8 @@ final class AppleScriptCollectorDispatchTests: XCTestCase {
             isInstalled: { _ in true },
             nowMs: 6_000_000
         )
-        if case .unavailable = perm.cachedState(for: "com.example.x") {} else {
+        if case .unavailable = perm.cachedState(for: "com.example.x") {
+        } else {
             XCTFail("expected .unavailable")
         }
     }

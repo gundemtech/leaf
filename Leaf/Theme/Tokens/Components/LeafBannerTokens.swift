@@ -17,27 +17,27 @@ enum LeafBannerTokens {
         /// background tint. The banner surface itself stays neutral.
         var tint: Color {
             switch self {
-            case .info:    LeafColor.status.info
+            case .info: LeafColor.status.info
             case .success: LeafColor.status.success
             case .warning: LeafColor.status.warning
-            case .danger:  LeafColor.status.danger
+            case .danger: LeafColor.status.danger
             }
         }
 
         /// Asset Catalog name (template-rendered) for the leading glyph.
         var icon: String {
             switch self {
-            case .info:    LeafIcons.status.info
+            case .info: LeafIcons.status.info
             case .success: LeafIcons.status.successFill
             case .warning: LeafIcons.status.warningFill
-            case .danger:  LeafIcons.status.warningFill
+            case .danger: LeafIcons.status.warningFill
             }
         }
     }
 
     static let cornerRadius: CGFloat = LeafRadius.lg
-    static let padding:      CGFloat = LeafSpace.lg
-    static let chipSize:     LeafIconChipTokens.Size = .md
+    static let padding: CGFloat = LeafSpace.lg
+    static let chipSize: LeafIconChipTokens.Size = .md
     static let titleDescriptionGap: CGFloat = LeafSpace.xxs
-    static let bodyCTAGap:   CGFloat = LeafSpace.sm
+    static let bodyCTAGap: CGFloat = LeafSpace.sm
 }

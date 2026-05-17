@@ -1,7 +1,7 @@
-import Foundation
 import CoreAudio
-import os
+import Foundation
 import LeafCore
+import os
 
 /// Phase Track-4 S3 — CoreAudio default output device transport-type observer.
 /// Maps `kAudioDevicePropertyTransportType` (UInt32) to narrow
@@ -92,7 +92,7 @@ final class AudioRouteCollector {
             bundleID: nil,
             payload: [
                 "event_kind": "audio_route_changed",
-                Schema.EventPayloadKeys.audioRoute: transition.rawValue
+                Schema.EventPayloadKeys.audioRoute: transition.rawValue,
             ]
         )
         await writer.enqueue(raw)
@@ -134,14 +134,15 @@ final class AudioRouteCollector {
 
     static func mapTransport(_ raw: UInt32) -> AudioRouteCategory {
         switch raw {
-        case kAudioDeviceTransportTypeBuiltIn:    return .builtin
+        case kAudioDeviceTransportTypeBuiltIn: return .builtin
         case kAudioDeviceTransportTypeBluetooth,
-             kAudioDeviceTransportTypeBluetoothLE: return .bluetooth
-        case kAudioDeviceTransportTypeAirPlay:    return .airplay
-        case kAudioDeviceTransportTypeUSB:        return .usb
+            kAudioDeviceTransportTypeBluetoothLE:
+            return .bluetooth
+        case kAudioDeviceTransportTypeAirPlay: return .airplay
+        case kAudioDeviceTransportTypeUSB: return .usb
         case kAudioDeviceTransportTypeDisplayPort: return .displayPort
-        case kAudioDeviceTransportTypeHDMI:       return .hdmi
-        default:                                  return .unknown
+        case kAudioDeviceTransportTypeHDMI: return .hdmi
+        default: return .unknown
         }
     }
 }

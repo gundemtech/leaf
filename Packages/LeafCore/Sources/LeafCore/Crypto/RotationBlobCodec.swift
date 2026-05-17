@@ -22,9 +22,11 @@ public protocol RotationBlobCodec: Sendable {
     ///              .rotation (ECDH path), либо raw prior teamKey для .tombstone.
     /// - Returns: `RotationBlob` `[ver:1B|priorKeyID:16B|newKeyID:16B|recipientPubkey:32B|nonce:12B|ct|tag:16B]`.
     /// - Throws: `LeafError.rotationBlobMalformed` на bad input sizes / encoding failure.
-    func encode(_ plaintext: RotationPlaintext,
-                recipientPubkey: Data,
-                wrapKey: SymmetricKey) throws -> RotationBlob
+    func encode(
+        _ plaintext: RotationPlaintext,
+        recipientPubkey: Data,
+        wrapKey: SymmetricKey
+    ) throws -> RotationBlob
 
     /// Расшифровывает blob под `wrapKey`. Caller обязан ДО вызова peek'нуть header
     /// (`RotationBlobHeader.peek(from:)`), извлечь `priorKeyID` / `newKeyID` /
@@ -40,9 +42,11 @@ public protocol RotationBlobCodec: Sendable {
 /// в `LeafCorePrivate/Prod/Crypto/` (Phase 5.3.B moat).
 public struct UnimplementedRotationBlobCodec: RotationBlobCodec {
     public init() {}
-    public func encode(_ plaintext: RotationPlaintext,
-                       recipientPubkey: Data,
-                       wrapKey: SymmetricKey) throws -> RotationBlob {
+    public func encode(
+        _ plaintext: RotationPlaintext,
+        recipientPubkey: Data,
+        wrapKey: SymmetricKey
+    ) throws -> RotationBlob {
         throw LeafError.notImplemented
     }
     public func decode(_ blob: RotationBlob, wrapKey: SymmetricKey) throws -> RotationPlaintext {

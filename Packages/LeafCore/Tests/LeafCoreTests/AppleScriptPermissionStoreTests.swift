@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class AppleScriptPermissionStoreTests: XCTestCase {
@@ -20,7 +21,8 @@ final class AppleScriptPermissionStoreTests: XCTestCase {
     @MainActor
     func testInitialStateIsNotRequested() {
         let store = AppleScriptPermissionStore(defaults: defaults)
-        if case .notRequested = store.cachedState(for: "com.example.app") {} else {
+        if case .notRequested = store.cachedState(for: "com.example.app") {
+        } else {
             XCTFail("expected .notRequested")
         }
     }
@@ -29,11 +31,13 @@ final class AppleScriptPermissionStoreTests: XCTestCase {
     func testRecordGrantedPersists() {
         let store = AppleScriptPermissionStore(defaults: defaults)
         store.record(.granted, for: "com.example.app", nowMs: 1_000_000)
-        if case .granted = store.cachedState(for: "com.example.app") {} else {
+        if case .granted = store.cachedState(for: "com.example.app") {
+        } else {
             XCTFail("expected .granted after record")
         }
         let store2 = AppleScriptPermissionStore(defaults: defaults)
-        if case .granted = store2.cachedState(for: "com.example.app") {} else {
+        if case .granted = store2.cachedState(for: "com.example.app") {
+        } else {
             XCTFail("expected .granted persisted across instances")
         }
     }
@@ -44,7 +48,9 @@ final class AppleScriptPermissionStoreTests: XCTestCase {
         store.record(.denied(2_000_000), for: "com.example.app", nowMs: 2_000_000)
         if case .denied(let t) = store.cachedState(for: "com.example.app") {
             XCTAssertEqual(t, 2_000_000)
-        } else { XCTFail("expected .denied(t)") }
+        } else {
+            XCTFail("expected .denied(t)")
+        }
     }
 
     @MainActor
@@ -82,7 +88,8 @@ final class AppleScriptPermissionStoreTests: XCTestCase {
     func testUnavailableTerminalState() {
         let store = AppleScriptPermissionStore(defaults: defaults)
         store.record(.unavailable, for: "com.example.app", nowMs: 1_000_000)
-        if case .unavailable = store.cachedState(for: "com.example.app") {} else {
+        if case .unavailable = store.cachedState(for: "com.example.app") {
+        } else {
             XCTFail("expected .unavailable")
         }
         XCTAssertFalse(store.shouldProbe(for: "com.example.app", nowMs: 5_000_000))
@@ -92,7 +99,8 @@ final class AppleScriptPermissionStoreTests: XCTestCase {
     func testAppNotInstalledTerminalState() {
         let store = AppleScriptPermissionStore(defaults: defaults)
         store.record(.appNotInstalled, for: "com.example.app", nowMs: 1_000_000)
-        if case .appNotInstalled = store.cachedState(for: "com.example.app") {} else {
+        if case .appNotInstalled = store.cachedState(for: "com.example.app") {
+        } else {
             XCTFail("expected .appNotInstalled")
         }
         XCTAssertFalse(store.shouldProbe(for: "com.example.app", nowMs: 5_000_000))
@@ -107,6 +115,8 @@ final class AppleScriptPermissionStoreTests: XCTestCase {
         store.record(.denied(3_000_000), for: "com.example.app", nowMs: 3_000_000)
         if case .denied(let t) = store.cachedState(for: "com.example.app") {
             XCTAssertEqual(t, 3_000_000)
-        } else { XCTFail("expected fresh .denied(3M)") }
+        } else {
+            XCTFail("expected fresh .denied(3M)")
+        }
     }
 }

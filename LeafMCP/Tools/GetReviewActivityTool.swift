@@ -26,14 +26,14 @@ struct GetReviewActivityTool: ToolExecutor {
                 "period": [
                     "type": "string",
                     "enum": ["today", "yesterday", "last_7_days"],
-                    "description": "Time window (default: today)"
+                    "description": "Time window (default: today)",
                 ],
                 "repo": [
                     "type": "string",
-                    "description": "Optional 'owner/name' filter — limit aggregation to single repo."
-                ]
+                    "description": "Optional 'owner/name' filter — limit aggregation to single repo.",
+                ],
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
         ]
         return ToolDefinition(
             name: "get_review_activity",
@@ -71,9 +71,13 @@ struct GetReviewActivityTool: ToolExecutor {
 
         guard FileManager.default.fileExists(atPath: dbURL.path) else {
             return ToolCallResult(
-                content: [.text(TextContent(
-                    text: "Leaf database not found at \(dbURL.path). Enable 'Background collection' in Settings first."
-                ))],
+                content: [
+                    .text(
+                        TextContent(
+                            text:
+                                "Leaf database not found at \(dbURL.path). Enable 'Background collection' in Settings first."
+                        ))
+                ],
                 isError: true
             )
         }

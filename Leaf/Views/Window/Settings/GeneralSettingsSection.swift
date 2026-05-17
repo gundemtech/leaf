@@ -10,9 +10,9 @@
 //  state is actionable (.requiresApproval / lastErrorMessage).
 //
 
-import SwiftUI
-import ServiceManagement
 import LeafCore
+import ServiceManagement
+import SwiftUI
 
 struct BackgroundCollectionSection: View {
     @Bindable var launchAgent: LaunchAgentService
@@ -20,7 +20,8 @@ struct BackgroundCollectionSection: View {
     var body: some View {
         LeafSection(
             title: "Background collection",
-            description: "Agent runs as a LaunchAgent managed by macOS. Disable anytime in System Settings → General → Login Items."
+            description:
+                "Agent runs as a LaunchAgent managed by macOS. Disable anytime in System Settings → General → Login Items."
         ) {
             LeafCard(variant: .raised, padding: .regular) {
                 VStack(alignment: .leading, spacing: LeafSpace.md) {
@@ -29,13 +30,15 @@ struct BackgroundCollectionSection: View {
                             .font(LeafType.body.regular)
                             .foregroundStyle(LeafColor.text.primary)
                         Spacer()
-                        Toggle("", isOn: Binding(
-                            get: { launchAgent.isEnabled },
-                            set: { newValue in
-                                if newValue { launchAgent.register() }
-                                else        { launchAgent.unregister() }
-                            }
-                        ))
+                        Toggle(
+                            "",
+                            isOn: Binding(
+                                get: { launchAgent.isEnabled },
+                                set: { newValue in
+                                    if newValue { launchAgent.register() } else { launchAgent.unregister() }
+                                }
+                            )
+                        )
                         .labelsHidden()
                         .toggleStyle(.switch)
                         .tint(LeafColor.accent.primary)
@@ -53,7 +56,8 @@ struct BackgroundCollectionSection: View {
                         LeafBanner(
                             tone: .warning,
                             title: "Login Items approval needed",
-                            description: "Open System Settings → General → Login Items and enable Leaf to start collection.",
+                            description:
+                                "Open System Settings → General → Login Items and enable Leaf to start collection.",
                             ctaTitle: "Refresh",
                             onCTA: launchAgent.refreshStatus
                         )

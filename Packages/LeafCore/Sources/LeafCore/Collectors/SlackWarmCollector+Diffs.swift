@@ -54,7 +54,7 @@ extension SlackWarmCollector {
     ) -> SlackMemberChannelsTopList {
         let ranked = channels.sorted { l, r in
             switch (l.latestTs, r.latestTs) {
-            case let (.some(a), .some(b)):
+            case (.some(let a), .some(let b)):
                 if a != b { return a > b }
                 return l.id < r.id
             case (.some, .none): return true

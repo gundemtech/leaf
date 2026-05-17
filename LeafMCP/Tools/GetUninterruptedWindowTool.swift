@@ -31,14 +31,15 @@ struct GetUninterruptedWindowTool: ToolExecutor {
                 "period": [
                     "type": "string",
                     "enum": ["today", "yesterday", "last_7_days"],
-                    "description": "Time window (default: today)"
+                    "description": "Time window (default: today)",
                 ]
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
         ]
         return ToolDefinition(
             name: "get_uninterrupted_window",
-            description: "Return the longest uninterrupted window (gap with no Linear/GitHub/Slack activity) within the given period — proxy for deep async work session free of integration interruptions. Metadata only.",
+            description:
+                "Return the longest uninterrupted window (gap with no Linear/GitHub/Slack activity) within the given period — proxy for deep async work session free of integration interruptions. Metadata only.",
             inputSchema: AnyCodable(schema)
         )
     }()
@@ -46,7 +47,8 @@ struct GetUninterruptedWindowTool: ToolExecutor {
     func execute(arguments: AnyCodable?) async throws -> ToolCallResult {
         let period: TimelinePeriod
         if let dict = arguments?.value as? [String: Any],
-           let raw = dict["period"] as? String {
+            let raw = dict["period"] as? String
+        {
             guard let p = TimelinePeriod(rawValue: raw) else {
                 throw MCPProtocolError.invalidParams(
                     "period must be one of: today, yesterday, last_7_days"
@@ -59,9 +61,13 @@ struct GetUninterruptedWindowTool: ToolExecutor {
 
         guard FileManager.default.fileExists(atPath: dbURL.path) else {
             return ToolCallResult(
-                content: [.text(TextContent(
-                    text: "Leaf database not found at \(dbURL.path). Enable 'Background collection' in Settings first."
-                ))],
+                content: [
+                    .text(
+                        TextContent(
+                            text:
+                                "Leaf database not found at \(dbURL.path). Enable 'Background collection' in Settings first."
+                        ))
+                ],
                 isError: true
             )
         }
@@ -75,7 +81,7 @@ struct GetUninterruptedWindowTool: ToolExecutor {
         var payload: [String: Any] = [
             "period": period.rawValue,
             "from": iso.string(from: interval.start),
-            "to": iso.string(from: interval.end)
+            "to": iso.string(from: interval.end),
         ]
         if let win = window {
             payload["start"] = iso.string(from: win.start)

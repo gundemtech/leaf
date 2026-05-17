@@ -4,10 +4,10 @@ import Foundation
 /// CoreWLAN import чтобы state machine был testable без framework dependency.
 /// 4-way 1:1 с `CWInterfaceMode`.
 public enum WiFiMode: Sendable, Hashable, CaseIterable {
-    case none      // CWInterfaceMode.none = 0
-    case station   // CWInterfaceMode.station = 1 (client connected to AP)
-    case ibss      // CWInterfaceMode.IBSS = 2 (ad-hoc)
-    case hostAP    // CWInterfaceMode.hostAP = 3
+    case none  // CWInterfaceMode.none = 0
+    case station  // CWInterfaceMode.station = 1 (client connected to AP)
+    case ibss  // CWInterfaceMode.IBSS = 2 (ad-hoc)
+    case hostAP  // CWInterfaceMode.hostAP = 3
 }
 
 /// Phase Track-4 S3 — snapshot input для WiFiStateMachine от

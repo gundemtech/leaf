@@ -48,9 +48,11 @@ public protocol EnvelopeCodec: Sendable {
     ///   - teamKey: ровно 32 bytes raw AES-256 key.
     /// - Returns: bytes envelope `[ver:1B|keyID:16B|nonce:12B|ct|tag:16B]`.
     /// - Throws: `LeafError.corruptedEnvelope` на bad input sizes.
-    func encode(_ snapshot: PresenceSnapshot,
-                keyID: Data,
-                teamKey: Data) throws -> Data
+    func encode(
+        _ snapshot: PresenceSnapshot,
+        keyID: Data,
+        teamKey: Data
+    ) throws -> Data
 
     /// Расшифровывает envelope под `teamKey`. Caller обязан ДО вызова
     /// peek'нуть header (`EnvelopeHeader.peek(from:)`) и найти
@@ -64,9 +66,11 @@ public protocol EnvelopeCodec: Sendable {
 /// в LeafCorePrivate/Prod/Crypto/ (Phase 5.1.C).
 public struct UnimplementedEnvelopeCodec: EnvelopeCodec {
     public init() {}
-    public func encode(_ snapshot: PresenceSnapshot,
-                       keyID: Data,
-                       teamKey: Data) throws -> Data {
+    public func encode(
+        _ snapshot: PresenceSnapshot,
+        keyID: Data,
+        teamKey: Data
+    ) throws -> Data {
         throw LeafError.notImplemented
     }
     public func decode(_ bytes: Data, teamKey: Data) throws -> PresenceSnapshot {

@@ -20,8 +20,8 @@
 //
 
 import Foundation
-import Observation
 import LeafCore
+import Observation
 
 @MainActor
 @Observable

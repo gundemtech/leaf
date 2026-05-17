@@ -20,7 +20,8 @@ struct LeafKeyboardShortcutPreview: View {
             }
 
             TokensInlineSpec(
-                spec: "LeafKeyboardShortcut · LeafType.mono.small · LeafColor.surface.inset bg · subtle border · radius sm",
+                spec:
+                    "LeafKeyboardShortcut · LeafType.mono.small · LeafColor.surface.inset bg · subtle border · radius sm",
                 codeSnippet: "LeafKeyboardShortcut(glyphs: \"⌘⌥T\")"
             )
         }

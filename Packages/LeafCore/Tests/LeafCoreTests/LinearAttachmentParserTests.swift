@@ -4,6 +4,7 @@
 // title / metadata content не получает (provider их не запрашивает в GraphQL).
 
 import XCTest
+
 @testable import LeafCore
 
 final class LinearAttachmentParserTests: XCTestCase {
@@ -69,23 +70,27 @@ final class LinearAttachmentParserTests: XCTestCase {
 
     func testParseSlackPermalink_NegativeMalformed() {
         XCTAssertNil(LinearAttachmentParser.parseSlackPermalink(""))
-        XCTAssertNil(LinearAttachmentParser.parseSlackPermalink(
-            "https://my-team.slack.com/archives/C01ABCDEF"  // нет /p<ts>
-        ))
-        XCTAssertNil(LinearAttachmentParser.parseSlackPermalink(
-            "https://my-team.slack.com/archives/c01abcdef/p1234567890"  // lowercase channel
-        ))
+        XCTAssertNil(
+            LinearAttachmentParser.parseSlackPermalink(
+                "https://my-team.slack.com/archives/C01ABCDEF"  // нет /p<ts>
+            ))
+        XCTAssertNil(
+            LinearAttachmentParser.parseSlackPermalink(
+                "https://my-team.slack.com/archives/c01abcdef/p1234567890"  // lowercase channel
+            ))
         // Wrong scheme.
-        XCTAssertNil(LinearAttachmentParser.parseSlackPermalink(
-            "http://my-team.slack.com/archives/C01ABCDEF/p1700000000123456"
-        ))
+        XCTAssertNil(
+            LinearAttachmentParser.parseSlackPermalink(
+                "http://my-team.slack.com/archives/C01ABCDEF/p1700000000123456"
+            ))
         XCTAssertNil(LinearAttachmentParser.parseSlackPermalink("not-a-url"))
     }
 
     func testParseSlackPermalink_NegativeNotSlackDomain() {
         // Different domain — даже если path matches.
-        XCTAssertNil(LinearAttachmentParser.parseSlackPermalink(
-            "https://example.com/archives/C01ABCDEF/p1700000000123456"
-        ))
+        XCTAssertNil(
+            LinearAttachmentParser.parseSlackPermalink(
+                "https://example.com/archives/C01ABCDEF/p1700000000123456"
+            ))
     }
 }

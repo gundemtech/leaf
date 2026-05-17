@@ -124,16 +124,18 @@ public actor SlackWarmCollector {
             teamID = w
             userID = u
         } else {
-            logger.error("malformed workspaceID '\(refreshed.workspaceID, privacy: .public)' — expected '<team>:<user>'")
+            logger.error(
+                "malformed workspaceID '\(refreshed.workspaceID, privacy: .public)' — expected '<team>:<user>'")
             return TickResult(skipped: true, eventsEmitted: 0)
         }
         let sourceID = "slack:warm:\(teamID):\(userID)"
 
         // 4. Read cursor + prior snapshots.
-        let cursor = (try? database.readOffset(
-            collectorID: CollectorID.slackWarmPolling,
-            sourceID: sourceID
-        ))?.lastModifiedMs
+        let cursor =
+            (try? database.readOffset(
+                collectorID: CollectorID.slackWarmPolling,
+                sourceID: sourceID
+            ))?.lastModifiedMs
 
         let priorMemberChannels: SlackMemberChannelsTopList? =
             readSnapshotValue(kind: Schema.ProviderSnapshotKinds.slackMemberChannels)
@@ -192,14 +194,16 @@ public actor SlackWarmCollector {
         if await scopes.has("channels:read") {
             let diff = Self.userConversationsDiff(prior: priorMemberChannels, current: fullMemberSet)
             for ch in diff.joined {
-                events.append(Self.makeChannelJoinedEvent(
-                    channel: ch, workspaceID: workspaceID, userID: userID, observedAtMs: nowMs
-                ))
+                events.append(
+                    Self.makeChannelJoinedEvent(
+                        channel: ch, workspaceID: workspaceID, userID: userID, observedAtMs: nowMs
+                    ))
             }
             for ch in diff.left {
-                events.append(Self.makeChannelLeftEvent(
-                    channel: ch, workspaceID: workspaceID, userID: userID, observedAtMs: nowMs
-                ))
+                events.append(
+                    Self.makeChannelLeftEvent(
+                        channel: ch, workspaceID: workspaceID, userID: userID, observedAtMs: nowMs
+                    ))
             }
         }
 
@@ -208,9 +212,10 @@ public actor SlackWarmCollector {
         // reaction in the batch as a fresh observation).
         if await scopes.has("reactions:read") {
             for r in batch.reactions.reactions {
-                events.append(Self.makeReactionAddedEvent(
-                    reaction: r, workspaceID: workspaceID, userID: userID
-                ))
+                events.append(
+                    Self.makeReactionAddedEvent(
+                        reaction: r, workspaceID: workspaceID, userID: userID
+                    ))
             }
         }
 
@@ -221,31 +226,36 @@ public actor SlackWarmCollector {
         if await scopes.has("pins:read"), priorPinsRowPresent {
             let (added, removed) = Self.pinsPerChannelDiff(prior: priorPins, current: batch.pinsPerChannel)
             for entry in added {
-                events.append(Self.makePinAddedEvent(
-                    channelID: entry.channelID, itemRef: entry.itemRef,
-                    workspaceID: workspaceID, userID: userID, observedAtMs: nowMs
-                ))
+                events.append(
+                    Self.makePinAddedEvent(
+                        channelID: entry.channelID, itemRef: entry.itemRef,
+                        workspaceID: workspaceID, userID: userID, observedAtMs: nowMs
+                    ))
             }
             for entry in removed {
-                events.append(Self.makePinRemovedEvent(
-                    channelID: entry.channelID, itemRef: entry.itemRef,
-                    workspaceID: workspaceID, userID: userID, observedAtMs: nowMs
-                ))
+                events.append(
+                    Self.makePinRemovedEvent(
+                        channelID: entry.channelID, itemRef: entry.itemRef,
+                        workspaceID: workspaceID, userID: userID, observedAtMs: nowMs
+                    ))
             }
         }
 
         // 7d. Bookmarks per channel.
         if await scopes.has("bookmarks:read"), priorBookmarksRowPresent {
-            let (added, removed) = Self.bookmarksPerChannelDiff(prior: priorBookmarks, current: batch.bookmarksPerChannel)
+            let (added, removed) = Self.bookmarksPerChannelDiff(
+                prior: priorBookmarks, current: batch.bookmarksPerChannel)
             for bm in added {
-                events.append(Self.makeBookmarkAddedEvent(
-                    bookmark: bm, workspaceID: workspaceID, userID: userID
-                ))
+                events.append(
+                    Self.makeBookmarkAddedEvent(
+                        bookmark: bm, workspaceID: workspaceID, userID: userID
+                    ))
             }
             for bm in removed {
-                events.append(Self.makeBookmarkRemovedEvent(
-                    bookmark: bm, workspaceID: workspaceID, userID: userID
-                ))
+                events.append(
+                    Self.makeBookmarkRemovedEvent(
+                        bookmark: bm, workspaceID: workspaceID, userID: userID
+                    ))
             }
         }
 
@@ -253,14 +263,16 @@ public actor SlackWarmCollector {
         if await scopes.has("reminders:read"), priorRemindersRowPresent {
             let (created, completed) = Self.remindersDiff(prior: priorReminders, current: batch.reminders)
             for r in created {
-                events.append(Self.makeReminderCreatedEvent(
-                    reminder: r, workspaceID: workspaceID, userID: userID, observedAtMs: nowMs
-                ))
+                events.append(
+                    Self.makeReminderCreatedEvent(
+                        reminder: r, workspaceID: workspaceID, userID: userID, observedAtMs: nowMs
+                    ))
             }
             for r in completed {
-                events.append(Self.makeReminderCompletedEvent(
-                    reminder: r, workspaceID: workspaceID, userID: userID, observedAtMs: nowMs
-                ))
+                events.append(
+                    Self.makeReminderCompletedEvent(
+                        reminder: r, workspaceID: workspaceID, userID: userID, observedAtMs: nowMs
+                    ))
             }
         }
 
@@ -270,14 +282,16 @@ public actor SlackWarmCollector {
         if await scopes.has("chat:write"), priorScheduledRowPresent {
             let (scheduled, sent) = Self.scheduledMessagesDiff(prior: priorScheduled, current: batch.scheduledMessages)
             for m in scheduled {
-                events.append(Self.makeMessageScheduledEvent(
-                    message: m, workspaceID: workspaceID, userID: userID, observedAtMs: nowMs
-                ))
+                events.append(
+                    Self.makeMessageScheduledEvent(
+                        message: m, workspaceID: workspaceID, userID: userID, observedAtMs: nowMs
+                    ))
             }
             for m in sent {
-                events.append(Self.makeMessageSentScheduledEvent(
-                    message: m, workspaceID: workspaceID, userID: userID, observedAtMs: nowMs
-                ))
+                events.append(
+                    Self.makeMessageSentScheduledEvent(
+                        message: m, workspaceID: workspaceID, userID: userID, observedAtMs: nowMs
+                    ))
             }
         }
 
@@ -285,14 +299,16 @@ public actor SlackWarmCollector {
         if await scopes.has("stars:read"), priorStarsRowPresent {
             let (saved, unsaved) = Self.starsDiff(prior: priorStars, current: batch.stars)
             for item in saved {
-                events.append(Self.makeItemSavedEvent(
-                    item: item, workspaceID: workspaceID, userID: userID, observedAtMs: nowMs
-                ))
+                events.append(
+                    Self.makeItemSavedEvent(
+                        item: item, workspaceID: workspaceID, userID: userID, observedAtMs: nowMs
+                    ))
             }
             for item in unsaved {
-                events.append(Self.makeItemUnsavedEvent(
-                    item: item, workspaceID: workspaceID, userID: userID, observedAtMs: nowMs
-                ))
+                events.append(
+                    Self.makeItemUnsavedEvent(
+                        item: item, workspaceID: workspaceID, userID: userID, observedAtMs: nowMs
+                    ))
             }
         }
 
@@ -309,19 +325,25 @@ public actor SlackWarmCollector {
             // root for cold tier (cold caps locally via rankTop10ByLatestTs).
             // C3 review fix: previously persisted top-10 cap caused false-
             // positive transitions on rank churn.
-            makeSnapshot(kind: Schema.ProviderSnapshotKinds.slackMemberChannels,
-                         encoding: fullMemberSet,
-                         nowMs: nowMs),
-            makeSnapshot(kind: Schema.ProviderSnapshotKinds.slackPinsPerChannel,
-                         encoding: batch.pinsPerChannel, nowMs: nowMs),
-            makeSnapshot(kind: Schema.ProviderSnapshotKinds.slackBookmarksPerChannel,
-                         encoding: batch.bookmarksPerChannel, nowMs: nowMs),
-            makeSnapshot(kind: Schema.ProviderSnapshotKinds.slackReminders,
-                         encoding: batch.reminders, nowMs: nowMs),
-            makeSnapshot(kind: Schema.ProviderSnapshotKinds.slackScheduledMessages,
-                         encoding: batch.scheduledMessages, nowMs: nowMs),
-            makeSnapshot(kind: Schema.ProviderSnapshotKinds.slackStars,
-                         encoding: batch.stars, nowMs: nowMs)
+            makeSnapshot(
+                kind: Schema.ProviderSnapshotKinds.slackMemberChannels,
+                encoding: fullMemberSet,
+                nowMs: nowMs),
+            makeSnapshot(
+                kind: Schema.ProviderSnapshotKinds.slackPinsPerChannel,
+                encoding: batch.pinsPerChannel, nowMs: nowMs),
+            makeSnapshot(
+                kind: Schema.ProviderSnapshotKinds.slackBookmarksPerChannel,
+                encoding: batch.bookmarksPerChannel, nowMs: nowMs),
+            makeSnapshot(
+                kind: Schema.ProviderSnapshotKinds.slackReminders,
+                encoding: batch.reminders, nowMs: nowMs),
+            makeSnapshot(
+                kind: Schema.ProviderSnapshotKinds.slackScheduledMessages,
+                encoding: batch.scheduledMessages, nowMs: nowMs),
+            makeSnapshot(
+                kind: Schema.ProviderSnapshotKinds.slackStars,
+                encoding: batch.stars, nowMs: nowMs),
         ]
 
         // 9. Atomic write.
@@ -376,7 +398,8 @@ public actor SlackWarmCollector {
     private func makeSnapshot<T: Encodable>(kind: String, encoding value: T, nowMs: Int64) -> ProviderSnapshot {
         let json: String
         if let data = try? JSONEncoder().encode(value),
-           let s = String(data: data, encoding: .utf8) {
+            let s = String(data: data, encoding: .utf8)
+        {
             json = s
         } else {
             json = "{}"
@@ -398,14 +421,15 @@ public actor SlackWarmCollector {
             "+1", "thumbsup", "heart", "tada", "white_check_mark", "ok_hand",
             "rocket", "fire", "100", "raised_hands", "clap", "muscle",
             "smile", "smiley", "grin", "joy", "blush", "wink", "heart_eyes",
-            "star", "sparkles", "trophy", "champagne"
+            "star", "sparkles", "trophy", "champagne",
         ]
         let negative: Set<String> = [
             "-1", "thumbsdown", "cry", "sob", "rage", "angry",
             "x", "no_entry", "no_entry_sign", "warning",
-            "disappointed", "confounded", "frowning", "weary"
+            "disappointed", "confounded", "frowning", "weary",
         ]
-        let normalized = emoji
+        let normalized =
+            emoji
             .trimmingCharacters(in: CharacterSet(charactersIn: ":"))
             .lowercased()
         if positive.contains(normalized) { return "positive" }
@@ -428,7 +452,7 @@ public actor SlackWarmCollector {
                 Schema.EventPayloadKeys.channelName: channel.name,
                 Schema.EventPayloadKeys.workspaceId: workspaceID,
                 Schema.EventPayloadKeys.userId: userID,
-                Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+                Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
             ]
         )
     }
@@ -446,7 +470,7 @@ public actor SlackWarmCollector {
                 Schema.EventPayloadKeys.channelName: channel.name,
                 Schema.EventPayloadKeys.workspaceId: workspaceID,
                 Schema.EventPayloadKeys.userId: userID,
-                Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+                Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
             ]
         )
     }
@@ -465,7 +489,7 @@ public actor SlackWarmCollector {
                 Schema.EventPayloadKeys.reactionCount: "1",
                 Schema.EventPayloadKeys.workspaceId: workspaceID,
                 Schema.EventPayloadKeys.userId: userID,
-                Schema.EventPayloadKeys.reactedAtMs: String(reaction.addedAtMs)
+                Schema.EventPayloadKeys.reactedAtMs: String(reaction.addedAtMs),
             ]
         )
     }
@@ -485,7 +509,7 @@ public actor SlackWarmCollector {
                 Schema.EventPayloadKeys.pinnedAtMs: String(observedAtMs),
                 Schema.EventPayloadKeys.workspaceId: workspaceID,
                 Schema.EventPayloadKeys.userId: userID,
-                Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+                Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
             ]
         )
     }
@@ -504,7 +528,7 @@ public actor SlackWarmCollector {
                 Schema.EventPayloadKeys.itemRef: itemRef,
                 Schema.EventPayloadKeys.workspaceId: workspaceID,
                 Schema.EventPayloadKeys.userId: userID,
-                Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+                Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
             ]
         )
     }
@@ -528,7 +552,7 @@ public actor SlackWarmCollector {
                 // bookmark titles are user-named structured resources).
                 Schema.EventPayloadKeys.body: bookmark.title,
                 Schema.EventPayloadKeys.workspaceId: workspaceID,
-                Schema.EventPayloadKeys.userId: userID
+                Schema.EventPayloadKeys.userId: userID,
             ]
         )
     }
@@ -549,7 +573,7 @@ public actor SlackWarmCollector {
                 Schema.EventPayloadKeys.lastEditedMs: String(bookmark.lastEditedMs),
                 Schema.EventPayloadKeys.body: bookmark.title,
                 Schema.EventPayloadKeys.workspaceId: workspaceID,
-                Schema.EventPayloadKeys.userId: userID
+                Schema.EventPayloadKeys.userId: userID,
             ]
         )
     }
@@ -563,7 +587,7 @@ public actor SlackWarmCollector {
             Schema.EventPayloadKeys.reminderId: reminder.id,
             Schema.EventPayloadKeys.workspaceId: workspaceID,
             Schema.EventPayloadKeys.userId: userID,
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         if let due = reminder.dueTs {
             payload[Schema.EventPayloadKeys.dueTs] = String(due)
@@ -588,7 +612,7 @@ public actor SlackWarmCollector {
                 Schema.EventPayloadKeys.completedTs: String(completedMs),
                 Schema.EventPayloadKeys.workspaceId: workspaceID,
                 Schema.EventPayloadKeys.userId: userID,
-                Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+                Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
             ]
         )
     }
@@ -607,7 +631,7 @@ public actor SlackWarmCollector {
                 Schema.EventPayloadKeys.scheduledFor: String(message.scheduledFor),
                 Schema.EventPayloadKeys.workspaceId: workspaceID,
                 Schema.EventPayloadKeys.userId: userID,
-                Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+                Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
             ]
         )
     }
@@ -625,7 +649,7 @@ public actor SlackWarmCollector {
                 Schema.EventPayloadKeys.channelId: message.channelID,
                 Schema.EventPayloadKeys.workspaceId: workspaceID,
                 Schema.EventPayloadKeys.userId: userID,
-                Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+                Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
             ]
         )
     }
@@ -643,7 +667,7 @@ public actor SlackWarmCollector {
                 Schema.EventPayloadKeys.savedAtMs: String(item.savedAtMs),
                 Schema.EventPayloadKeys.workspaceId: workspaceID,
                 Schema.EventPayloadKeys.userId: userID,
-                Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+                Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
             ]
         )
     }
@@ -660,7 +684,7 @@ public actor SlackWarmCollector {
                 Schema.EventPayloadKeys.itemRef: item.itemRef,
                 Schema.EventPayloadKeys.workspaceId: workspaceID,
                 Schema.EventPayloadKeys.userId: userID,
-                Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+                Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
             ]
         )
     }

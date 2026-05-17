@@ -5,8 +5,9 @@
 // дают deterministic round-trip — test 12 проверяет конкретные ID / bytes /
 // timestamp в DB + keystore files.
 
-import XCTest
 import CryptoKit
+import XCTest
+
 @testable import LeafCore
 
 final class OrgServiceTests: XCTestCase {
@@ -122,7 +123,8 @@ final class OrgServiceTests: XCTestCase {
         let svc = makeService()
         _ = try svc.createPersonalOrg(displayName: "Personal")
 
-        let path = keystoreRoot
+        let path =
+            keystoreRoot
             .appendingPathComponent(TeamKeystore.x25519PrivateFilename)
             .path
         XCTAssertTrue(FileManager.default.fileExists(atPath: path))
@@ -142,7 +144,8 @@ final class OrgServiceTests: XCTestCase {
         _ = try svc.createPersonalOrg(displayName: "Personal")
 
         let teamKey = try db.readActiveTeamKey()!
-        let path = keystoreRoot
+        let path =
+            keystoreRoot
             .appendingPathComponent(TeamKeystore.teamKeysSubdir, isDirectory: true)
             .appendingPathComponent("\(teamKey.id).\(TeamKeystore.teamKeyExtension)")
             .path
@@ -182,8 +185,10 @@ final class OrgServiceTests: XCTestCase {
         let svc = makeService()
 
         for input in ["", "   ", "\n\t"] {
-            XCTAssertThrowsError(try svc.createPersonalOrg(displayName: input),
-                                 "input='\(input)' must throw") { error in
+            XCTAssertThrowsError(
+                try svc.createPersonalOrg(displayName: input),
+                "input='\(input)' must throw"
+            ) { error in
                 XCTAssertTrue(isInvalidPayload(error), "input='\(input)' got: \(error)")
             }
         }
@@ -263,8 +268,9 @@ final class OrgServiceTests: XCTestCase {
             // generate-then-write — но с deterministic `fixedPriv`. Сохраняет
             // file-write side effect (assertion ниже verify'ит storedPriv).
             identity: {
-                try IdentityService.ensureLocalIdentity(at: injectedKeystoreRoot,
-                                                        generate: { fixedPriv })
+                try IdentityService.ensureLocalIdentity(
+                    at: injectedKeystoreRoot,
+                    generate: { fixedPriv })
             }
         )
 

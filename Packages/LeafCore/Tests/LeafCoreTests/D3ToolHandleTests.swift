@@ -12,8 +12,9 @@
 //      LeafMCP shells use to feed `ToolResponseBuilder.versionedJSONResult`,
 //      verifying `schemaVersion` survives the round-trip.
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class D3ToolHandleTests: XCTestCase {

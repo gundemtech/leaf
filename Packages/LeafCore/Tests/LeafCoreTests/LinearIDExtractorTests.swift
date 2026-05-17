@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class LinearIDExtractorTests: XCTestCase {
@@ -21,15 +22,17 @@ final class LinearIDExtractorTests: XCTestCase {
     /// "MAX-1024" matches regex но prefix не whitelist'ed → nil.
     func testExtract_WrongPrefixRejected() {
         XCTAssertNil(
-            LinearIDExtractor.extract(text: "screen 1920x1080 MAX-1024 pixels",
-                                      knownPrefixes: ["LEAF", "ENG"])
+            LinearIDExtractor.extract(
+                text: "screen 1920x1080 MAX-1024 pixels",
+                knownPrefixes: ["LEAF", "ENG"])
         )
     }
 
     func testExtract_RFCFalsePositive() {
         XCTAssertNil(
-            LinearIDExtractor.extract(text: "see RFC-2119 для key words",
-                                      knownPrefixes: ["LEAF"])
+            LinearIDExtractor.extract(
+                text: "see RFC-2119 для key words",
+                knownPrefixes: ["LEAF"])
         )
     }
 

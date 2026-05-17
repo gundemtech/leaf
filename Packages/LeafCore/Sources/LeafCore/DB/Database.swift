@@ -152,7 +152,8 @@ public final class Database: @unchecked Sendable {
         let endMs = Int64(range.end.timeIntervalSince1970 * 1000)
 
         let records: [EventRecord] = try pool.read { db in
-            var request = EventRecord
+            var request =
+                EventRecord
                 .filter(Column(Schema.Events.ts) >= startMs)
                 .filter(Column(Schema.Events.ts) < endMs)
                 .order(Column(Schema.Events.ts))
@@ -208,10 +209,10 @@ public final class Database: @unchecked Sendable {
         return try pool.write { db in
             try db.execute(
                 sql: """
-                DELETE FROM events WHERE id IN (
-                    SELECT id FROM events WHERE ts < ? ORDER BY ts LIMIT ?
-                )
-                """,
+                    DELETE FROM events WHERE id IN (
+                        SELECT id FROM events WHERE ts < ? ORDER BY ts LIMIT ?
+                    )
+                    """,
                 arguments: [tsMs, limit]
             )
             return db.changesCount
@@ -290,15 +291,17 @@ public final class Database: @unchecked Sendable {
     /// для детерминизма (тесты ассертят последовательность).
     public func listOffsets(collectorID: String) throws -> [CollectorOffset] {
         try pool.read { db in
-            try Row.fetchAll(db, sql: """
-                SELECT \(Schema.CollectorOffsets.collectorID), \(Schema.CollectorOffsets.sourceID),
-                       \(Schema.CollectorOffsets.byteOffset), \(Schema.CollectorOffsets.inode),
-                       \(Schema.CollectorOffsets.size), \(Schema.CollectorOffsets.lastModifiedMs),
-                       \(Schema.CollectorOffsets.updatedMs)
-                FROM \(Schema.CollectorOffsets.tableName)
-                WHERE \(Schema.CollectorOffsets.collectorID) = ?
-                ORDER BY \(Schema.CollectorOffsets.sourceID) ASC
-                """,
+            try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT \(Schema.CollectorOffsets.collectorID), \(Schema.CollectorOffsets.sourceID),
+                           \(Schema.CollectorOffsets.byteOffset), \(Schema.CollectorOffsets.inode),
+                           \(Schema.CollectorOffsets.size), \(Schema.CollectorOffsets.lastModifiedMs),
+                           \(Schema.CollectorOffsets.updatedMs)
+                    FROM \(Schema.CollectorOffsets.tableName)
+                    WHERE \(Schema.CollectorOffsets.collectorID) = ?
+                    ORDER BY \(Schema.CollectorOffsets.sourceID) ASC
+                    """,
                 arguments: [collectorID]
             ).map(Self.mapOffsetRow)
         }
@@ -344,9 +347,11 @@ public final class Database: @unchecked Sendable {
     public func writeEventsOffsetAndPresence(
         _ events: [RawEvent],
         offset: CollectorOffset,
-        presence: (provider: PresenceStateWriter.Provider,
-                   state: [String: Any],
-                   derivedMode: String?)?,
+        presence: (
+            provider: PresenceStateWriter.Provider,
+            state: [String: Any],
+            derivedMode: String?
+        )?,
         knownLinearPrefixes: Set<String> = [],
         derivers: LinkDerivers = .publicSubstrate,
         nowMs: Int64
@@ -412,15 +417,17 @@ public final class Database: @unchecked Sendable {
         collectorID: String,
         sourceID: String
     ) throws -> CollectorOffset? {
-        let row = try Row.fetchOne(db, sql: """
-            SELECT \(Schema.CollectorOffsets.collectorID), \(Schema.CollectorOffsets.sourceID),
-                   \(Schema.CollectorOffsets.byteOffset), \(Schema.CollectorOffsets.inode),
-                   \(Schema.CollectorOffsets.size), \(Schema.CollectorOffsets.lastModifiedMs),
-                   \(Schema.CollectorOffsets.updatedMs)
-            FROM \(Schema.CollectorOffsets.tableName)
-            WHERE \(Schema.CollectorOffsets.collectorID) = ?
-              AND \(Schema.CollectorOffsets.sourceID) = ?
-            """,
+        let row = try Row.fetchOne(
+            db,
+            sql: """
+                SELECT \(Schema.CollectorOffsets.collectorID), \(Schema.CollectorOffsets.sourceID),
+                       \(Schema.CollectorOffsets.byteOffset), \(Schema.CollectorOffsets.inode),
+                       \(Schema.CollectorOffsets.size), \(Schema.CollectorOffsets.lastModifiedMs),
+                       \(Schema.CollectorOffsets.updatedMs)
+                FROM \(Schema.CollectorOffsets.tableName)
+                WHERE \(Schema.CollectorOffsets.collectorID) = ?
+                  AND \(Schema.CollectorOffsets.sourceID) = ?
+                """,
             arguments: [collectorID, sourceID]
         )
         return row.map(Self.mapOffsetRow)
@@ -441,23 +448,24 @@ public final class Database: @unchecked Sendable {
     /// SQLite 3.24+ UPSERT (Zetetic SQLCipher 4.14 поверх 3.46+ — supported).
     /// Атомарно INSERT-or-UPDATE по composite PK (collector_id, source_id).
     private static func upsertOffset(_ offset: CollectorOffset, in db: GRDB.Database) throws {
-        try db.execute(sql: """
-            INSERT INTO \(Schema.CollectorOffsets.tableName) (
-                \(Schema.CollectorOffsets.collectorID),
-                \(Schema.CollectorOffsets.sourceID),
-                \(Schema.CollectorOffsets.byteOffset),
-                \(Schema.CollectorOffsets.inode),
-                \(Schema.CollectorOffsets.size),
-                \(Schema.CollectorOffsets.lastModifiedMs),
-                \(Schema.CollectorOffsets.updatedMs)
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(\(Schema.CollectorOffsets.collectorID), \(Schema.CollectorOffsets.sourceID)) DO UPDATE SET
-                \(Schema.CollectorOffsets.byteOffset)      = excluded.\(Schema.CollectorOffsets.byteOffset),
-                \(Schema.CollectorOffsets.inode)           = excluded.\(Schema.CollectorOffsets.inode),
-                \(Schema.CollectorOffsets.size)            = excluded.\(Schema.CollectorOffsets.size),
-                \(Schema.CollectorOffsets.lastModifiedMs)  = excluded.\(Schema.CollectorOffsets.lastModifiedMs),
-                \(Schema.CollectorOffsets.updatedMs)       = excluded.\(Schema.CollectorOffsets.updatedMs)
-            """,
+        try db.execute(
+            sql: """
+                INSERT INTO \(Schema.CollectorOffsets.tableName) (
+                    \(Schema.CollectorOffsets.collectorID),
+                    \(Schema.CollectorOffsets.sourceID),
+                    \(Schema.CollectorOffsets.byteOffset),
+                    \(Schema.CollectorOffsets.inode),
+                    \(Schema.CollectorOffsets.size),
+                    \(Schema.CollectorOffsets.lastModifiedMs),
+                    \(Schema.CollectorOffsets.updatedMs)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(\(Schema.CollectorOffsets.collectorID), \(Schema.CollectorOffsets.sourceID)) DO UPDATE SET
+                    \(Schema.CollectorOffsets.byteOffset)      = excluded.\(Schema.CollectorOffsets.byteOffset),
+                    \(Schema.CollectorOffsets.inode)           = excluded.\(Schema.CollectorOffsets.inode),
+                    \(Schema.CollectorOffsets.size)            = excluded.\(Schema.CollectorOffsets.size),
+                    \(Schema.CollectorOffsets.lastModifiedMs)  = excluded.\(Schema.CollectorOffsets.lastModifiedMs),
+                    \(Schema.CollectorOffsets.updatedMs)       = excluded.\(Schema.CollectorOffsets.updatedMs)
+                """,
             arguments: [
                 offset.collectorID,
                 offset.sourceID,
@@ -465,7 +473,7 @@ public final class Database: @unchecked Sendable {
                 offset.inode,
                 offset.size,
                 offset.lastModifiedMs,
-                offset.updatedMs
+                offset.updatedMs,
             ]
         )
     }
@@ -480,21 +488,21 @@ public final class Database: @unchecked Sendable {
             let sql: String
             if includingDisabled {
                 sql = """
-                    SELECT \(Schema.WatchedFolders.id), \(Schema.WatchedFolders.path),
-                           \(Schema.WatchedFolders.maxGranularity), \(Schema.WatchedFolders.enabled),
-                           \(Schema.WatchedFolders.addedTs), \(Schema.WatchedFolders.updatedMs)
-                    FROM \(Schema.WatchedFolders.tableName)
-                    ORDER BY \(Schema.WatchedFolders.addedTs) ASC
-                """
+                        SELECT \(Schema.WatchedFolders.id), \(Schema.WatchedFolders.path),
+                               \(Schema.WatchedFolders.maxGranularity), \(Schema.WatchedFolders.enabled),
+                               \(Schema.WatchedFolders.addedTs), \(Schema.WatchedFolders.updatedMs)
+                        FROM \(Schema.WatchedFolders.tableName)
+                        ORDER BY \(Schema.WatchedFolders.addedTs) ASC
+                    """
             } else {
                 sql = """
-                    SELECT \(Schema.WatchedFolders.id), \(Schema.WatchedFolders.path),
-                           \(Schema.WatchedFolders.maxGranularity), \(Schema.WatchedFolders.enabled),
-                           \(Schema.WatchedFolders.addedTs), \(Schema.WatchedFolders.updatedMs)
-                    FROM \(Schema.WatchedFolders.tableName)
-                    WHERE \(Schema.WatchedFolders.enabled) = 1
-                    ORDER BY \(Schema.WatchedFolders.addedTs) ASC
-                """
+                        SELECT \(Schema.WatchedFolders.id), \(Schema.WatchedFolders.path),
+                               \(Schema.WatchedFolders.maxGranularity), \(Schema.WatchedFolders.enabled),
+                               \(Schema.WatchedFolders.addedTs), \(Schema.WatchedFolders.updatedMs)
+                        FROM \(Schema.WatchedFolders.tableName)
+                        WHERE \(Schema.WatchedFolders.enabled) = 1
+                        ORDER BY \(Schema.WatchedFolders.addedTs) ASC
+                    """
             }
             return try Row.fetchAll(db, sql: sql).compactMap(Self.mapWatchedFolderRow)
         }
@@ -505,23 +513,24 @@ public final class Database: @unchecked Sendable {
     public func addWatchedFolder(_ folder: WatchedFolder) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         try pool.write { db in
-            try db.execute(sql: """
-                INSERT INTO \(Schema.WatchedFolders.tableName) (
-                    \(Schema.WatchedFolders.id),
-                    \(Schema.WatchedFolders.path),
-                    \(Schema.WatchedFolders.maxGranularity),
-                    \(Schema.WatchedFolders.enabled),
-                    \(Schema.WatchedFolders.addedTs),
-                    \(Schema.WatchedFolders.updatedMs)
-                ) VALUES (?, ?, ?, ?, ?, ?)
-                """,
+            try db.execute(
+                sql: """
+                    INSERT INTO \(Schema.WatchedFolders.tableName) (
+                        \(Schema.WatchedFolders.id),
+                        \(Schema.WatchedFolders.path),
+                        \(Schema.WatchedFolders.maxGranularity),
+                        \(Schema.WatchedFolders.enabled),
+                        \(Schema.WatchedFolders.addedTs),
+                        \(Schema.WatchedFolders.updatedMs)
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """,
                 arguments: [
                     folder.id,
                     folder.path,
                     folder.maxGranularity.rawValue,
                     folder.enabled ? 1 : 0,
                     Int64(folder.addedAt.timeIntervalSince1970 * 1000),
-                    Int64(folder.updatedAt.timeIntervalSince1970 * 1000)
+                    Int64(folder.updatedAt.timeIntervalSince1970 * 1000),
                 ]
             )
         }
@@ -532,9 +541,10 @@ public final class Database: @unchecked Sendable {
     public func removeWatchedFolder(id: String) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         try pool.write { db in
-            try db.execute(sql: """
-                DELETE FROM \(Schema.WatchedFolders.tableName) WHERE \(Schema.WatchedFolders.id) = ?
-                """,
+            try db.execute(
+                sql: """
+                    DELETE FROM \(Schema.WatchedFolders.tableName) WHERE \(Schema.WatchedFolders.id) = ?
+                    """,
                 arguments: [id]
             )
         }
@@ -566,7 +576,8 @@ public final class Database: @unchecked Sendable {
             args.append(id)
 
             try db.execute(
-                sql: "UPDATE \(Schema.WatchedFolders.tableName) SET \(sets.joined(separator: ", ")) WHERE \(Schema.WatchedFolders.id) = ?",
+                sql:
+                    "UPDATE \(Schema.WatchedFolders.tableName) SET \(sets.joined(separator: ", ")) WHERE \(Schema.WatchedFolders.id) = ?",
                 arguments: StatementArguments(args)
             )
         }
@@ -575,20 +586,26 @@ public final class Database: @unchecked Sendable {
     // MARK: - Browser Domain Allow-list (Phase Track-6 P3)
 
     /// Returns all rows ordered by `added_at_ms` ASC (stable UI order).
-    public func listBrowserDomainAllow() throws -> [(domain: String, granularity: URLGranularity, addedAtMs: Int64, notes: String?)] {
+    public func listBrowserDomainAllow() throws -> [(
+        domain: String, granularity: URLGranularity, addedAtMs: Int64, notes: String?
+    )] {
         try pool.read { db in
-            let rows = try Row.fetchAll(db, sql: """
-                SELECT \(Schema.BrowserDomainAllow.domain),
-                       \(Schema.BrowserDomainAllow.granularity),
-                       \(Schema.BrowserDomainAllow.addedAtMs),
-                       \(Schema.BrowserDomainAllow.notes)
-                FROM \(Schema.BrowserDomainAllow.tableName)
-                ORDER BY \(Schema.BrowserDomainAllow.addedAtMs) ASC
-            """)
-            return rows.compactMap { row -> (domain: String, granularity: URLGranularity, addedAtMs: Int64, notes: String?)? in
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                        SELECT \(Schema.BrowserDomainAllow.domain),
+                               \(Schema.BrowserDomainAllow.granularity),
+                               \(Schema.BrowserDomainAllow.addedAtMs),
+                               \(Schema.BrowserDomainAllow.notes)
+                        FROM \(Schema.BrowserDomainAllow.tableName)
+                        ORDER BY \(Schema.BrowserDomainAllow.addedAtMs) ASC
+                    """)
+            return rows.compactMap {
+                row -> (domain: String, granularity: URLGranularity, addedAtMs: Int64, notes: String?)? in
                 guard let domain = row[Schema.BrowserDomainAllow.domain] as String?,
-                      let granStr = row[Schema.BrowserDomainAllow.granularity] as String?,
-                      let gran = URLGranularity(rawValue: granStr) else { return nil }
+                    let granStr = row[Schema.BrowserDomainAllow.granularity] as String?,
+                    let gran = URLGranularity(rawValue: granStr)
+                else { return nil }
                 let addedAtMs = (row[Schema.BrowserDomainAllow.addedAtMs] as Int64?) ?? 0
                 let notes = row[Schema.BrowserDomainAllow.notes] as String?
                 return (domain: domain, granularity: gran, addedAtMs: addedAtMs, notes: notes)
@@ -601,17 +618,18 @@ public final class Database: @unchecked Sendable {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         try pool.write { db in
-            try db.execute(sql: """
-                INSERT INTO \(Schema.BrowserDomainAllow.tableName) (
-                    \(Schema.BrowserDomainAllow.domain),
-                    \(Schema.BrowserDomainAllow.granularity),
-                    \(Schema.BrowserDomainAllow.addedAtMs),
-                    \(Schema.BrowserDomainAllow.notes)
-                ) VALUES (?, ?, ?, ?)
-                ON CONFLICT(\(Schema.BrowserDomainAllow.domain)) DO UPDATE SET
-                    \(Schema.BrowserDomainAllow.granularity) = excluded.\(Schema.BrowserDomainAllow.granularity),
-                    \(Schema.BrowserDomainAllow.notes) = excluded.\(Schema.BrowserDomainAllow.notes)
-                """,
+            try db.execute(
+                sql: """
+                    INSERT INTO \(Schema.BrowserDomainAllow.tableName) (
+                        \(Schema.BrowserDomainAllow.domain),
+                        \(Schema.BrowserDomainAllow.granularity),
+                        \(Schema.BrowserDomainAllow.addedAtMs),
+                        \(Schema.BrowserDomainAllow.notes)
+                    ) VALUES (?, ?, ?, ?)
+                    ON CONFLICT(\(Schema.BrowserDomainAllow.domain)) DO UPDATE SET
+                        \(Schema.BrowserDomainAllow.granularity) = excluded.\(Schema.BrowserDomainAllow.granularity),
+                        \(Schema.BrowserDomainAllow.notes) = excluded.\(Schema.BrowserDomainAllow.notes)
+                    """,
                 arguments: [domain, granularity.rawValue, nowMs, notes]
             )
         }
@@ -636,28 +654,29 @@ public final class Database: @unchecked Sendable {
     public func upsertIntegration(_ record: IntegrationRecord) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         try pool.write { db in
-            try db.execute(sql: """
-                INSERT INTO \(Schema.Integrations.tableName) (
-                    \(Schema.Integrations.provider),
-                    \(Schema.Integrations.workspaceID),
-                    \(Schema.Integrations.workspaceName),
-                    \(Schema.Integrations.accessToken),
-                    \(Schema.Integrations.refreshToken),
-                    \(Schema.Integrations.expiresAtMs),
-                    \(Schema.Integrations.scope),
-                    \(Schema.Integrations.connectedAtMs),
-                    \(Schema.Integrations.updatedMs)
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(\(Schema.Integrations.provider)) DO UPDATE SET
-                    \(Schema.Integrations.workspaceID)   = excluded.\(Schema.Integrations.workspaceID),
-                    \(Schema.Integrations.workspaceName) = excluded.\(Schema.Integrations.workspaceName),
-                    \(Schema.Integrations.accessToken)   = excluded.\(Schema.Integrations.accessToken),
-                    \(Schema.Integrations.refreshToken)  = excluded.\(Schema.Integrations.refreshToken),
-                    \(Schema.Integrations.expiresAtMs)   = excluded.\(Schema.Integrations.expiresAtMs),
-                    \(Schema.Integrations.scope)         = excluded.\(Schema.Integrations.scope),
-                    \(Schema.Integrations.connectedAtMs) = excluded.\(Schema.Integrations.connectedAtMs),
-                    \(Schema.Integrations.updatedMs)     = excluded.\(Schema.Integrations.updatedMs)
-                """,
+            try db.execute(
+                sql: """
+                    INSERT INTO \(Schema.Integrations.tableName) (
+                        \(Schema.Integrations.provider),
+                        \(Schema.Integrations.workspaceID),
+                        \(Schema.Integrations.workspaceName),
+                        \(Schema.Integrations.accessToken),
+                        \(Schema.Integrations.refreshToken),
+                        \(Schema.Integrations.expiresAtMs),
+                        \(Schema.Integrations.scope),
+                        \(Schema.Integrations.connectedAtMs),
+                        \(Schema.Integrations.updatedMs)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(\(Schema.Integrations.provider)) DO UPDATE SET
+                        \(Schema.Integrations.workspaceID)   = excluded.\(Schema.Integrations.workspaceID),
+                        \(Schema.Integrations.workspaceName) = excluded.\(Schema.Integrations.workspaceName),
+                        \(Schema.Integrations.accessToken)   = excluded.\(Schema.Integrations.accessToken),
+                        \(Schema.Integrations.refreshToken)  = excluded.\(Schema.Integrations.refreshToken),
+                        \(Schema.Integrations.expiresAtMs)   = excluded.\(Schema.Integrations.expiresAtMs),
+                        \(Schema.Integrations.scope)         = excluded.\(Schema.Integrations.scope),
+                        \(Schema.Integrations.connectedAtMs) = excluded.\(Schema.Integrations.connectedAtMs),
+                        \(Schema.Integrations.updatedMs)     = excluded.\(Schema.Integrations.updatedMs)
+                    """,
                 arguments: [
                     record.provider.rawValue,
                     record.workspaceID,
@@ -667,7 +686,7 @@ public final class Database: @unchecked Sendable {
                     record.expiresAt.map { Int64($0.timeIntervalSince1970 * 1000) },
                     record.scope,
                     Int64(record.connectedAt.timeIntervalSince1970 * 1000),
-                    Int64(record.updatedAt.timeIntervalSince1970 * 1000)
+                    Int64(record.updatedAt.timeIntervalSince1970 * 1000),
                 ]
             )
         }
@@ -678,15 +697,17 @@ public final class Database: @unchecked Sendable {
     /// (Phase 4.2) — для polling auth.
     public func readIntegration(provider: IntegrationProvider) throws -> IntegrationRecord? {
         try pool.read { db in
-            let row = try Row.fetchOne(db, sql: """
-                SELECT \(Schema.Integrations.provider), \(Schema.Integrations.workspaceID),
-                       \(Schema.Integrations.workspaceName), \(Schema.Integrations.accessToken),
-                       \(Schema.Integrations.refreshToken), \(Schema.Integrations.expiresAtMs),
-                       \(Schema.Integrations.scope), \(Schema.Integrations.connectedAtMs),
-                       \(Schema.Integrations.updatedMs)
-                FROM \(Schema.Integrations.tableName)
-                WHERE \(Schema.Integrations.provider) = ?
-                """,
+            let row = try Row.fetchOne(
+                db,
+                sql: """
+                    SELECT \(Schema.Integrations.provider), \(Schema.Integrations.workspaceID),
+                           \(Schema.Integrations.workspaceName), \(Schema.Integrations.accessToken),
+                           \(Schema.Integrations.refreshToken), \(Schema.Integrations.expiresAtMs),
+                           \(Schema.Integrations.scope), \(Schema.Integrations.connectedAtMs),
+                           \(Schema.Integrations.updatedMs)
+                    FROM \(Schema.Integrations.tableName)
+                    WHERE \(Schema.Integrations.provider) = ?
+                    """,
                 arguments: [provider.rawValue]
             )
             return row.flatMap(Self.mapIntegrationRow)
@@ -727,23 +748,24 @@ public final class Database: @unchecked Sendable {
     public func upsertOrg(_ org: Org) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         try pool.write { db in
-            try db.execute(sql: """
-                INSERT INTO \(Schema.Org.tableName) (
-                    \(Schema.Org.id),
-                    \(Schema.Org.name),
-                    \(Schema.Org.createdAtMs),
-                    \(Schema.Org.createdByMemberID)
-                ) VALUES (?, ?, ?, ?)
-                ON CONFLICT(\(Schema.Org.id)) DO UPDATE SET
-                    \(Schema.Org.name)              = excluded.\(Schema.Org.name),
-                    \(Schema.Org.createdAtMs)       = excluded.\(Schema.Org.createdAtMs),
-                    \(Schema.Org.createdByMemberID) = excluded.\(Schema.Org.createdByMemberID)
-                """,
+            try db.execute(
+                sql: """
+                    INSERT INTO \(Schema.Org.tableName) (
+                        \(Schema.Org.id),
+                        \(Schema.Org.name),
+                        \(Schema.Org.createdAtMs),
+                        \(Schema.Org.createdByMemberID)
+                    ) VALUES (?, ?, ?, ?)
+                    ON CONFLICT(\(Schema.Org.id)) DO UPDATE SET
+                        \(Schema.Org.name)              = excluded.\(Schema.Org.name),
+                        \(Schema.Org.createdAtMs)       = excluded.\(Schema.Org.createdAtMs),
+                        \(Schema.Org.createdByMemberID) = excluded.\(Schema.Org.createdByMemberID)
+                    """,
                 arguments: [
                     org.id,
                     org.name,
                     Int64(org.createdAt.timeIntervalSince1970 * 1000),
-                    org.createdByMemberID
+                    org.createdByMemberID,
                 ]
             )
         }
@@ -753,12 +775,14 @@ public final class Database: @unchecked Sendable {
     /// defensive под edge case "две rows" (схема не constrain'ит на 1 row).
     public func readOrg() throws -> Org? {
         try pool.read { db in
-            let row = try Row.fetchOne(db, sql: """
-                SELECT \(Schema.Org.id), \(Schema.Org.name),
-                       \(Schema.Org.createdAtMs), \(Schema.Org.createdByMemberID)
-                FROM \(Schema.Org.tableName)
-                LIMIT 1
-                """)
+            let row = try Row.fetchOne(
+                db,
+                sql: """
+                    SELECT \(Schema.Org.id), \(Schema.Org.name),
+                           \(Schema.Org.createdAtMs), \(Schema.Org.createdByMemberID)
+                    FROM \(Schema.Org.tableName)
+                    LIMIT 1
+                    """)
             return row.flatMap(Self.mapOrgRow)
         }
     }
@@ -769,17 +793,18 @@ public final class Database: @unchecked Sendable {
     public func insertTeamMember(_ member: TeamMember) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         try pool.write { db in
-            try db.execute(sql: """
-                INSERT INTO \(Schema.TeamMembers.tableName) (
-                    \(Schema.TeamMembers.id),
-                    \(Schema.TeamMembers.orgID),
-                    \(Schema.TeamMembers.role),
-                    \(Schema.TeamMembers.pubkeyHex),
-                    \(Schema.TeamMembers.displayName),
-                    \(Schema.TeamMembers.addedAtMs),
-                    \(Schema.TeamMembers.removedAtMs)
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
+            try db.execute(
+                sql: """
+                    INSERT INTO \(Schema.TeamMembers.tableName) (
+                        \(Schema.TeamMembers.id),
+                        \(Schema.TeamMembers.orgID),
+                        \(Schema.TeamMembers.role),
+                        \(Schema.TeamMembers.pubkeyHex),
+                        \(Schema.TeamMembers.displayName),
+                        \(Schema.TeamMembers.addedAtMs),
+                        \(Schema.TeamMembers.removedAtMs)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
                 arguments: [
                     member.id,
                     member.orgID,
@@ -787,7 +812,7 @@ public final class Database: @unchecked Sendable {
                     member.pubkeyHex,
                     member.displayName,
                     Int64(member.addedAt.timeIntervalSince1970 * 1000),
-                    member.removedAt.map { Int64($0.timeIntervalSince1970 * 1000) }
+                    member.removedAt.map { Int64($0.timeIntervalSince1970 * 1000) },
                 ]
             )
         }
@@ -818,19 +843,20 @@ public final class Database: @unchecked Sendable {
     public func insertTeamKey(_ key: TeamKey) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         try pool.write { db in
-            try db.execute(sql: """
-                INSERT INTO \(Schema.TeamKeys.tableName) (
-                    \(Schema.TeamKeys.id),
-                    \(Schema.TeamKeys.generatedAtMs),
-                    \(Schema.TeamKeys.deprecatedAtMs),
-                    \(Schema.TeamKeys.generatedByMemberID)
-                ) VALUES (?, ?, ?, ?)
-                """,
+            try db.execute(
+                sql: """
+                    INSERT INTO \(Schema.TeamKeys.tableName) (
+                        \(Schema.TeamKeys.id),
+                        \(Schema.TeamKeys.generatedAtMs),
+                        \(Schema.TeamKeys.deprecatedAtMs),
+                        \(Schema.TeamKeys.generatedByMemberID)
+                    ) VALUES (?, ?, ?, ?)
+                    """,
                 arguments: [
                     key.id,
                     Int64(key.generatedAt.timeIntervalSince1970 * 1000),
                     key.deprecatedAt.map { Int64($0.timeIntervalSince1970 * 1000) },
-                    key.generatedByMemberID
+                    key.generatedByMemberID,
                 ]
             )
         }
@@ -845,20 +871,21 @@ public final class Database: @unchecked Sendable {
     public func insertTeamKeyIfAbsent(_ key: TeamKey) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         try pool.write { db in
-            try db.execute(sql: """
-                INSERT INTO \(Schema.TeamKeys.tableName) (
-                    \(Schema.TeamKeys.id),
-                    \(Schema.TeamKeys.generatedAtMs),
-                    \(Schema.TeamKeys.deprecatedAtMs),
-                    \(Schema.TeamKeys.generatedByMemberID)
-                ) VALUES (?, ?, ?, ?)
-                ON CONFLICT(\(Schema.TeamKeys.id)) DO NOTHING
-                """,
+            try db.execute(
+                sql: """
+                    INSERT INTO \(Schema.TeamKeys.tableName) (
+                        \(Schema.TeamKeys.id),
+                        \(Schema.TeamKeys.generatedAtMs),
+                        \(Schema.TeamKeys.deprecatedAtMs),
+                        \(Schema.TeamKeys.generatedByMemberID)
+                    ) VALUES (?, ?, ?, ?)
+                    ON CONFLICT(\(Schema.TeamKeys.id)) DO NOTHING
+                    """,
                 arguments: [
                     key.id,
                     Int64(key.generatedAt.timeIntervalSince1970 * 1000),
                     key.deprecatedAt.map { Int64($0.timeIntervalSince1970 * 1000) },
-                    key.generatedByMemberID
+                    key.generatedByMemberID,
                 ]
             )
         }
@@ -869,14 +896,16 @@ public final class Database: @unchecked Sendable {
     /// active rows" (нормально 1 row, contract'ом на DB-уровне не constraint'ится).
     public func readActiveTeamKey() throws -> TeamKey? {
         try pool.read { db in
-            let row = try Row.fetchOne(db, sql: """
-                SELECT \(Schema.TeamKeys.id), \(Schema.TeamKeys.generatedAtMs),
-                       \(Schema.TeamKeys.deprecatedAtMs), \(Schema.TeamKeys.generatedByMemberID)
-                FROM \(Schema.TeamKeys.tableName)
-                WHERE \(Schema.TeamKeys.deprecatedAtMs) IS NULL
-                ORDER BY \(Schema.TeamKeys.generatedAtMs) DESC
-                LIMIT 1
-                """)
+            let row = try Row.fetchOne(
+                db,
+                sql: """
+                    SELECT \(Schema.TeamKeys.id), \(Schema.TeamKeys.generatedAtMs),
+                           \(Schema.TeamKeys.deprecatedAtMs), \(Schema.TeamKeys.generatedByMemberID)
+                    FROM \(Schema.TeamKeys.tableName)
+                    WHERE \(Schema.TeamKeys.deprecatedAtMs) IS NULL
+                    ORDER BY \(Schema.TeamKeys.generatedAtMs) DESC
+                    LIMIT 1
+                    """)
             return row.flatMap(Self.mapTeamKeyRow)
         }
     }
@@ -889,26 +918,29 @@ public final class Database: @unchecked Sendable {
     public func markTeamMemberRemoved(memberID: String, at removedAt: Date) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         try pool.write { db in
-            try db.execute(sql: """
-                UPDATE \(Schema.TeamMembers.tableName)
-                SET \(Schema.TeamMembers.removedAtMs) = ?
-                WHERE \(Schema.TeamMembers.id) = ?
-                  AND \(Schema.TeamMembers.removedAtMs) IS NULL
-                """,
+            try db.execute(
+                sql: """
+                    UPDATE \(Schema.TeamMembers.tableName)
+                    SET \(Schema.TeamMembers.removedAtMs) = ?
+                    WHERE \(Schema.TeamMembers.id) = ?
+                      AND \(Schema.TeamMembers.removedAtMs) IS NULL
+                    """,
                 arguments: [
                     Int64(removedAt.timeIntervalSince1970 * 1000),
-                    memberID
+                    memberID,
                 ]
             )
             if db.changesCount == 1 { return }
 
             // changesCount == 0: либо already-removed (idempotent no-op), либо missing row.
-            let row = try Row.fetchOne(db, sql: """
-                SELECT \(Schema.TeamMembers.removedAtMs)
-                FROM \(Schema.TeamMembers.tableName)
-                WHERE \(Schema.TeamMembers.id) = ?
-                LIMIT 1
-                """,
+            let row = try Row.fetchOne(
+                db,
+                sql: """
+                    SELECT \(Schema.TeamMembers.removedAtMs)
+                    FROM \(Schema.TeamMembers.tableName)
+                    WHERE \(Schema.TeamMembers.id) = ?
+                    LIMIT 1
+                    """,
                 arguments: [memberID]
             )
             guard row != nil else { throw LeafError.invalidPayload }
@@ -926,20 +958,26 @@ public final class Database: @unchecked Sendable {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         try pool.write { db in
             // Step 1 — sole-active invariant guard.
-            let activeCount = try Int.fetchOne(db, sql: """
-                SELECT count(*)
-                FROM \(Schema.TeamKeys.tableName)
-                WHERE \(Schema.TeamKeys.deprecatedAtMs) IS NULL
-                """) ?? 0
+            let activeCount =
+                try Int.fetchOne(
+                    db,
+                    sql: """
+                        SELECT count(*)
+                        FROM \(Schema.TeamKeys.tableName)
+                        WHERE \(Schema.TeamKeys.deprecatedAtMs) IS NULL
+                        """) ?? 0
             if activeCount <= 1 {
-                let targetActive = try Int.fetchOne(db, sql: """
-                    SELECT count(*)
-                    FROM \(Schema.TeamKeys.tableName)
-                    WHERE \(Schema.TeamKeys.id) = ?
-                      AND \(Schema.TeamKeys.deprecatedAtMs) IS NULL
-                    """,
-                    arguments: [keyID]
-                ) ?? 0
+                let targetActive =
+                    try Int.fetchOne(
+                        db,
+                        sql: """
+                            SELECT count(*)
+                            FROM \(Schema.TeamKeys.tableName)
+                            WHERE \(Schema.TeamKeys.id) = ?
+                              AND \(Schema.TeamKeys.deprecatedAtMs) IS NULL
+                            """,
+                        arguments: [keyID]
+                    ) ?? 0
                 if targetActive == 1 {
                     // Target is the sole active row — deprecate would leave 0 active.
                     throw LeafError.invalidPayload
@@ -950,27 +988,30 @@ public final class Database: @unchecked Sendable {
             }
 
             // Step 2 — conditional UPDATE.
-            try db.execute(sql: """
-                UPDATE \(Schema.TeamKeys.tableName)
-                SET \(Schema.TeamKeys.deprecatedAtMs) = ?
-                WHERE \(Schema.TeamKeys.id) = ?
-                  AND \(Schema.TeamKeys.deprecatedAtMs) IS NULL
-                """,
+            try db.execute(
+                sql: """
+                    UPDATE \(Schema.TeamKeys.tableName)
+                    SET \(Schema.TeamKeys.deprecatedAtMs) = ?
+                    WHERE \(Schema.TeamKeys.id) = ?
+                      AND \(Schema.TeamKeys.deprecatedAtMs) IS NULL
+                    """,
                 arguments: [
                     Int64(deprecatedAt.timeIntervalSince1970 * 1000),
-                    keyID
+                    keyID,
                 ]
             )
             if db.changesCount == 1 { return }
 
             // changesCount == 0: либо already-deprecated (idempotent no-op),
             // либо missing row.
-            let row = try Row.fetchOne(db, sql: """
-                SELECT \(Schema.TeamKeys.deprecatedAtMs)
-                FROM \(Schema.TeamKeys.tableName)
-                WHERE \(Schema.TeamKeys.id) = ?
-                LIMIT 1
-                """,
+            let row = try Row.fetchOne(
+                db,
+                sql: """
+                    SELECT \(Schema.TeamKeys.deprecatedAtMs)
+                    FROM \(Schema.TeamKeys.tableName)
+                    WHERE \(Schema.TeamKeys.id) = ?
+                    LIMIT 1
+                    """,
                 arguments: [keyID]
             )
             guard row != nil else { throw LeafError.invalidPayload }
@@ -984,13 +1025,15 @@ public final class Database: @unchecked Sendable {
     /// Reader-mode safe — read-only API без mode guard.
     public func readTeamKey(byID id: String) throws -> TeamKey? {
         try pool.read { db in
-            let row = try Row.fetchOne(db, sql: """
-                SELECT \(Schema.TeamKeys.id), \(Schema.TeamKeys.generatedAtMs),
-                       \(Schema.TeamKeys.deprecatedAtMs), \(Schema.TeamKeys.generatedByMemberID)
-                FROM \(Schema.TeamKeys.tableName)
-                WHERE \(Schema.TeamKeys.id) = ?
-                LIMIT 1
-                """,
+            let row = try Row.fetchOne(
+                db,
+                sql: """
+                    SELECT \(Schema.TeamKeys.id), \(Schema.TeamKeys.generatedAtMs),
+                           \(Schema.TeamKeys.deprecatedAtMs), \(Schema.TeamKeys.generatedByMemberID)
+                    FROM \(Schema.TeamKeys.tableName)
+                    WHERE \(Schema.TeamKeys.id) = ?
+                    LIMIT 1
+                    """,
                 arguments: [id]
             )
             return row.flatMap(Self.mapTeamKeyRow)
@@ -1034,29 +1077,31 @@ public final class Database: @unchecked Sendable {
 
         try pool.write { db in
             // Step 1: INSERT new team_keys row.
-            try db.execute(sql: """
-                INSERT INTO \(Schema.TeamKeys.tableName) (
-                    \(Schema.TeamKeys.id),
-                    \(Schema.TeamKeys.generatedAtMs),
-                    \(Schema.TeamKeys.deprecatedAtMs),
-                    \(Schema.TeamKeys.generatedByMemberID)
-                ) VALUES (?, ?, ?, ?)
-                """,
+            try db.execute(
+                sql: """
+                    INSERT INTO \(Schema.TeamKeys.tableName) (
+                        \(Schema.TeamKeys.id),
+                        \(Schema.TeamKeys.generatedAtMs),
+                        \(Schema.TeamKeys.deprecatedAtMs),
+                        \(Schema.TeamKeys.generatedByMemberID)
+                    ) VALUES (?, ?, ?, ?)
+                    """,
                 arguments: [
                     newTeamKey.id,
                     newGeneratedAtMs,
                     newDeprecatedAtMs,
-                    newTeamKey.generatedByMemberID
+                    newTeamKey.generatedByMemberID,
                 ]
             )
 
             // Step 2: UPDATE prior team_keys deprecated_at_ms.
-            try db.execute(sql: """
-                UPDATE \(Schema.TeamKeys.tableName)
-                SET \(Schema.TeamKeys.deprecatedAtMs) = ?
-                WHERE \(Schema.TeamKeys.id) = ?
-                  AND \(Schema.TeamKeys.deprecatedAtMs) IS NULL
-                """,
+            try db.execute(
+                sql: """
+                    UPDATE \(Schema.TeamKeys.tableName)
+                    SET \(Schema.TeamKeys.deprecatedAtMs) = ?
+                    WHERE \(Schema.TeamKeys.id) = ?
+                      AND \(Schema.TeamKeys.deprecatedAtMs) IS NULL
+                    """,
                 arguments: [priorDeprecatedAtMs, priorTeamKeyID]
             )
             if db.changesCount != 1 {
@@ -1068,12 +1113,13 @@ public final class Database: @unchecked Sendable {
 
             // Step 3: optional UPDATE team_members removed_at_ms.
             if let memberID = removedMemberID, let memberRemovedMs = removedAtMs {
-                try db.execute(sql: """
-                    UPDATE \(Schema.TeamMembers.tableName)
-                    SET \(Schema.TeamMembers.removedAtMs) = ?
-                    WHERE \(Schema.TeamMembers.id) = ?
-                      AND \(Schema.TeamMembers.removedAtMs) IS NULL
-                    """,
+                try db.execute(
+                    sql: """
+                        UPDATE \(Schema.TeamMembers.tableName)
+                        SET \(Schema.TeamMembers.removedAtMs) = ?
+                        WHERE \(Schema.TeamMembers.id) = ?
+                          AND \(Schema.TeamMembers.removedAtMs) IS NULL
+                        """,
                     arguments: [memberRemovedMs, memberID]
                 )
                 if db.changesCount != 1 {
@@ -1084,19 +1130,20 @@ public final class Database: @unchecked Sendable {
 
             // Step 4: INSERT N rotation_outbox rows. Duplicate composite PK throws.
             for row in outboxRows {
-                try db.execute(sql: """
-                    INSERT INTO \(Schema.RotationOutbox.tableName) (
-                        \(Schema.RotationOutbox.peerPubkeyHex),
-                        \(Schema.RotationOutbox.newKeyID),
-                        \(Schema.RotationOutbox.priorKeyID),
-                        \(Schema.RotationOutbox.kind),
-                        \(Schema.RotationOutbox.peerMemberID),
-                        \(Schema.RotationOutbox.blob),
-                        \(Schema.RotationOutbox.expiresAtMs),
-                        \(Schema.RotationOutbox.createdAtMs),
-                        \(Schema.RotationOutbox.postedAtMs)
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
+                try db.execute(
+                    sql: """
+                        INSERT INTO \(Schema.RotationOutbox.tableName) (
+                            \(Schema.RotationOutbox.peerPubkeyHex),
+                            \(Schema.RotationOutbox.newKeyID),
+                            \(Schema.RotationOutbox.priorKeyID),
+                            \(Schema.RotationOutbox.kind),
+                            \(Schema.RotationOutbox.peerMemberID),
+                            \(Schema.RotationOutbox.blob),
+                            \(Schema.RotationOutbox.expiresAtMs),
+                            \(Schema.RotationOutbox.createdAtMs),
+                            \(Schema.RotationOutbox.postedAtMs)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
                     arguments: [
                         row.peerPubkeyHex,
                         row.newKeyID,
@@ -1106,7 +1153,7 @@ public final class Database: @unchecked Sendable {
                         row.blob,
                         row.expiresAtMs,
                         row.createdAtMs,
-                        row.postedAtMs as Int64?
+                        row.postedAtMs as Int64?,
                     ]
                 )
             }
@@ -1126,13 +1173,14 @@ public final class Database: @unchecked Sendable {
         let postedMs = Int64(postedAt.timeIntervalSince1970 * 1000)
 
         try pool.write { db in
-            try db.execute(sql: """
-                UPDATE \(Schema.RotationOutbox.tableName)
-                SET \(Schema.RotationOutbox.postedAtMs) = ?
-                WHERE \(Schema.RotationOutbox.peerPubkeyHex) = ?
-                  AND \(Schema.RotationOutbox.newKeyID) = ?
-                  AND \(Schema.RotationOutbox.postedAtMs) IS NULL
-                """,
+            try db.execute(
+                sql: """
+                    UPDATE \(Schema.RotationOutbox.tableName)
+                    SET \(Schema.RotationOutbox.postedAtMs) = ?
+                    WHERE \(Schema.RotationOutbox.peerPubkeyHex) = ?
+                      AND \(Schema.RotationOutbox.newKeyID) = ?
+                      AND \(Schema.RotationOutbox.postedAtMs) IS NULL
+                    """,
                 arguments: [postedMs, peerPubkeyHex, newKeyID]
             )
             // changesCount 0 (already-posted or missing) tolerated silently.
@@ -1145,36 +1193,39 @@ public final class Database: @unchecked Sendable {
     /// Phase 5.3.D — used by `KeyRotationService.resumePendingPosts()`.
     public func readUnpostedRotationOutboxRows() throws -> [RotationOutboxRow] {
         try pool.read { db in
-            let rows = try Row.fetchAll(db, sql: """
-                SELECT
-                    \(Schema.RotationOutbox.peerPubkeyHex),
-                    \(Schema.RotationOutbox.newKeyID),
-                    \(Schema.RotationOutbox.priorKeyID),
-                    \(Schema.RotationOutbox.kind),
-                    \(Schema.RotationOutbox.peerMemberID),
-                    \(Schema.RotationOutbox.blob),
-                    \(Schema.RotationOutbox.expiresAtMs),
-                    \(Schema.RotationOutbox.createdAtMs),
-                    \(Schema.RotationOutbox.postedAtMs)
-                FROM \(Schema.RotationOutbox.tableName)
-                WHERE \(Schema.RotationOutbox.postedAtMs) IS NULL
-                ORDER BY \(Schema.RotationOutbox.createdAtMs) ASC,
-                         \(Schema.RotationOutbox.peerPubkeyHex) ASC
-                """)
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT
+                        \(Schema.RotationOutbox.peerPubkeyHex),
+                        \(Schema.RotationOutbox.newKeyID),
+                        \(Schema.RotationOutbox.priorKeyID),
+                        \(Schema.RotationOutbox.kind),
+                        \(Schema.RotationOutbox.peerMemberID),
+                        \(Schema.RotationOutbox.blob),
+                        \(Schema.RotationOutbox.expiresAtMs),
+                        \(Schema.RotationOutbox.createdAtMs),
+                        \(Schema.RotationOutbox.postedAtMs)
+                    FROM \(Schema.RotationOutbox.tableName)
+                    WHERE \(Schema.RotationOutbox.postedAtMs) IS NULL
+                    ORDER BY \(Schema.RotationOutbox.createdAtMs) ASC,
+                             \(Schema.RotationOutbox.peerPubkeyHex) ASC
+                    """)
             return rows.compactMap(Self.mapRotationOutboxRow)
         }
     }
 
     private static func mapRotationOutboxRow(_ row: Row) -> RotationOutboxRow? {
         guard let peer: String = row[Schema.RotationOutbox.peerPubkeyHex],
-              let newID: String = row[Schema.RotationOutbox.newKeyID],
-              let priorID: String = row[Schema.RotationOutbox.priorKeyID],
-              let kindRaw: String = row[Schema.RotationOutbox.kind],
-              let kind = RotationKind(rawValue: kindRaw),
-              let memberID: String = row[Schema.RotationOutbox.peerMemberID],
-              let blob: Data = row[Schema.RotationOutbox.blob],
-              let expiresMs: Int64 = row[Schema.RotationOutbox.expiresAtMs],
-              let createdMs: Int64 = row[Schema.RotationOutbox.createdAtMs] else {
+            let newID: String = row[Schema.RotationOutbox.newKeyID],
+            let priorID: String = row[Schema.RotationOutbox.priorKeyID],
+            let kindRaw: String = row[Schema.RotationOutbox.kind],
+            let kind = RotationKind(rawValue: kindRaw),
+            let memberID: String = row[Schema.RotationOutbox.peerMemberID],
+            let blob: Data = row[Schema.RotationOutbox.blob],
+            let expiresMs: Int64 = row[Schema.RotationOutbox.expiresAtMs],
+            let createdMs: Int64 = row[Schema.RotationOutbox.createdAtMs]
+        else {
             return nil
         }
         let postedMs: Int64? = row[Schema.RotationOutbox.postedAtMs]
@@ -1204,18 +1255,18 @@ public final class Database: @unchecked Sendable {
         return try pool.write { db in
             try db.execute(
                 sql: """
-                DELETE FROM \(Schema.Events.tableName)
-                WHERE \(Schema.Events.signalType) = ?
-                  AND json_extract(\(Schema.Events.payloadJSON), '$.source') = 'linear'
-                """,
+                    DELETE FROM \(Schema.Events.tableName)
+                    WHERE \(Schema.Events.signalType) = ?
+                      AND json_extract(\(Schema.Events.payloadJSON), '$.source') = 'linear'
+                    """,
                 arguments: [SignalType.action.rawValue]
             )
             let eventsDeleted = db.changesCount
             try db.execute(
                 sql: """
-                DELETE FROM \(Schema.CollectorOffsets.tableName)
-                WHERE \(Schema.CollectorOffsets.collectorID) = ?
-                """,
+                    DELETE FROM \(Schema.CollectorOffsets.tableName)
+                    WHERE \(Schema.CollectorOffsets.collectorID) = ?
+                    """,
                 arguments: [CollectorID.linearPolling]
             )
             let offsetsDeleted = db.changesCount
@@ -1235,18 +1286,20 @@ public final class Database: @unchecked Sendable {
     public func queryActiveGitHubRepos(sinceMs: Int64, limit: Int) throws -> [String] {
         guard limit > 0 else { return [] }
         return try pool.read { db in
-            try Row.fetchAll(db, sql: """
-                SELECT json_extract(\(Schema.Events.payloadJSON), '$.repo') AS repo,
-                       COUNT(*) AS c
-                FROM \(Schema.Events.tableName)
-                WHERE json_extract(\(Schema.Events.payloadJSON), '$.source') = 'github'
-                  AND json_extract(\(Schema.Events.payloadJSON), '$.event_kind') = 'gh_commit_pushed'
-                  AND \(Schema.Events.ts) >= ?
-                  AND json_extract(\(Schema.Events.payloadJSON), '$.repo') IS NOT NULL
-                GROUP BY repo
-                ORDER BY c DESC
-                LIMIT ?
-                """,
+            try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT json_extract(\(Schema.Events.payloadJSON), '$.repo') AS repo,
+                           COUNT(*) AS c
+                    FROM \(Schema.Events.tableName)
+                    WHERE json_extract(\(Schema.Events.payloadJSON), '$.source') = 'github'
+                      AND json_extract(\(Schema.Events.payloadJSON), '$.event_kind') = 'gh_commit_pushed'
+                      AND \(Schema.Events.ts) >= ?
+                      AND json_extract(\(Schema.Events.payloadJSON), '$.repo') IS NOT NULL
+                    GROUP BY repo
+                    ORDER BY c DESC
+                    LIMIT ?
+                    """,
                 arguments: [sinceMs, limit]
             ).compactMap { $0["repo"] as String? }
         }
@@ -1261,21 +1314,23 @@ public final class Database: @unchecked Sendable {
     public func queryRecentViewerAuthoredIssues(sinceMs: Int64, limit: Int) throws -> [String] {
         guard limit > 0 else { return [] }
         return try pool.read { db in
-            let rows = try Row.fetchAll(db, sql: """
-                SELECT json_extract(\(Schema.Events.payloadJSON), '$.repo') AS repo,
-                       json_extract(\(Schema.Events.payloadJSON), '$.number') AS num,
-                       MAX(\(Schema.Events.ts)) AS ts
-                FROM \(Schema.Events.tableName)
-                WHERE json_extract(\(Schema.Events.payloadJSON), '$.source') = 'github'
-                  AND json_extract(\(Schema.Events.payloadJSON), '$.event_kind') = 'gh_issue_opened'
-                  AND \(Schema.Events.ts) >= ?
-                  AND json_extract(\(Schema.Events.payloadJSON), '$.repo') IS NOT NULL
-                  AND json_extract(\(Schema.Events.payloadJSON), '$.number') IS NOT NULL
-                  AND json_extract(\(Schema.Events.payloadJSON), '$.number') != ''
-                GROUP BY repo, num
-                ORDER BY ts DESC
-                LIMIT ?
-                """,
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT json_extract(\(Schema.Events.payloadJSON), '$.repo') AS repo,
+                           json_extract(\(Schema.Events.payloadJSON), '$.number') AS num,
+                           MAX(\(Schema.Events.ts)) AS ts
+                    FROM \(Schema.Events.tableName)
+                    WHERE json_extract(\(Schema.Events.payloadJSON), '$.source') = 'github'
+                      AND json_extract(\(Schema.Events.payloadJSON), '$.event_kind') = 'gh_issue_opened'
+                      AND \(Schema.Events.ts) >= ?
+                      AND json_extract(\(Schema.Events.payloadJSON), '$.repo') IS NOT NULL
+                      AND json_extract(\(Schema.Events.payloadJSON), '$.number') IS NOT NULL
+                      AND json_extract(\(Schema.Events.payloadJSON), '$.number') != ''
+                    GROUP BY repo, num
+                    ORDER BY ts DESC
+                    LIMIT ?
+                    """,
                 arguments: [sinceMs, limit]
             )
             return rows.compactMap { row -> String? in
@@ -1314,17 +1369,19 @@ public final class Database: @unchecked Sendable {
     /// (message aggregates) и события других providers.
     public func readLatestSlackHuddleEvent() throws -> SlackHuddleEventSummary? {
         try pool.read { db in
-            let row = try Row.fetchOne(db, sql: """
-                SELECT json_extract(\(Schema.Events.payloadJSON), '$.state') AS state,
-                       \(Schema.Events.ts) AS ts_ms
-                FROM \(Schema.Events.tableName)
-                WHERE \(Schema.Events.signalType) = ?
-                  AND json_extract(\(Schema.Events.payloadJSON), '$.source') = 'slack'
-                  AND json_extract(\(Schema.Events.payloadJSON), '$.event_kind') = 'slack_huddle_state_change'
-                  AND json_extract(\(Schema.Events.payloadJSON), '$.state') IS NOT NULL
-                ORDER BY \(Schema.Events.ts) DESC
-                LIMIT 1
-                """,
+            let row = try Row.fetchOne(
+                db,
+                sql: """
+                    SELECT json_extract(\(Schema.Events.payloadJSON), '$.state') AS state,
+                           \(Schema.Events.ts) AS ts_ms
+                    FROM \(Schema.Events.tableName)
+                    WHERE \(Schema.Events.signalType) = ?
+                      AND json_extract(\(Schema.Events.payloadJSON), '$.source') = 'slack'
+                      AND json_extract(\(Schema.Events.payloadJSON), '$.event_kind') = 'slack_huddle_state_change'
+                      AND json_extract(\(Schema.Events.payloadJSON), '$.state') IS NOT NULL
+                    ORDER BY \(Schema.Events.ts) DESC
+                    LIMIT 1
+                    """,
                 arguments: [SignalType.context.rawValue]
             )
             guard
@@ -1484,7 +1541,9 @@ public final class Database: @unchecked Sendable {
             }
         }
         Logger(subsystem: "tech.gundem.leaf.core", category: "db")
-            .warning("Plaintext SQLite detected at \(path, privacy: .public), renamed to \(backup.path, privacy: .public). Starting fresh encrypted DB.")
+            .warning(
+                "Plaintext SQLite detected at \(path, privacy: .public), renamed to \(backup.path, privacy: .public). Starting fresh encrypted DB."
+            )
     }
 
     // MARK: - Pending invites (Phase 5.5.B)
@@ -1552,8 +1611,8 @@ public final class Database: @unchecked Sendable {
 
 // MARK: - EventRecord conversion
 
-private extension EventRecord {
-    static func make(from event: RawEvent) throws -> EventRecord {
+extension EventRecord {
+    fileprivate static func make(from event: RawEvent) throws -> EventRecord {
         let payloadData = try JSONEncoder().encode(event.payload)
         let payloadJSON = String(decoding: payloadData, as: UTF8.self)
         let tsMs = Int64(event.timestamp.timeIntervalSince1970 * 1000)
@@ -1567,10 +1626,11 @@ private extension EventRecord {
         )
     }
 
-    func toRawEvent() throws -> RawEvent {
+    fileprivate func toRawEvent() throws -> RawEvent {
         let payload: [String: String]
         if let data = payloadJSON.data(using: .utf8),
-           let decoded = try? JSONDecoder().decode([String: String].self, from: data) {
+            let decoded = try? JSONDecoder().decode([String: String].self, from: data)
+        {
             payload = decoded
         } else {
             payload = [:]

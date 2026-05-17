@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class InviteBlobHeaderTests: XCTestCase {
@@ -8,7 +9,7 @@ final class InviteBlobHeaderTests: XCTestCase {
         bytes.append(InviteBlobHeader.currentVersion)
         let pubkey = Data(repeating: 0xAB, count: 32)
         bytes.append(pubkey)
-        bytes.append(Data(repeating: 0xFF, count: 28)) // tail
+        bytes.append(Data(repeating: 0xFF, count: 28))  // tail
 
         let blob = InviteBlob(bytes: bytes)
         let header = try InviteBlobHeader.peek(from: blob)
@@ -18,7 +19,7 @@ final class InviteBlobHeaderTests: XCTestCase {
     }
 
     func testPeek_RejectShortBytes() {
-        let blob = InviteBlob(bytes: Data(repeating: 0x02, count: 32)) // < 33
+        let blob = InviteBlob(bytes: Data(repeating: 0x02, count: 32))  // < 33
         XCTAssertThrowsError(try InviteBlobHeader.peek(from: blob)) { error in
             guard let leafErr = error as? LeafError, case .inviteBlobMalformed = leafErr else {
                 XCTFail("expected .inviteBlobMalformed, got \(error)")
@@ -28,7 +29,7 @@ final class InviteBlobHeaderTests: XCTestCase {
     }
 
     func testPeek_RejectUnknownVersion() {
-        var bytes = Data([0x01]) // wrong version (envelope, not invite)
+        var bytes = Data([0x01])  // wrong version (envelope, not invite)
         bytes.append(Data(repeating: 0x00, count: 64))
         let blob = InviteBlob(bytes: bytes)
         XCTAssertThrowsError(try InviteBlobHeader.peek(from: blob)) { error in

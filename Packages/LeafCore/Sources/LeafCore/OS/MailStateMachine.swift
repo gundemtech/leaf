@@ -27,11 +27,13 @@ public struct MailStateMachine: Sendable, Hashable {
         guard mailboxNameOptedIn else { return [] }
         var payload: [String: String] = ["event_kind": "mail_active_mailbox_changed"]
         if let name = obs.activeMailboxName { payload["mailbox_name"] = name }
-        return [RawEvent(
-            timestamp: Date(timeIntervalSince1970: Double(nowMs) / 1000.0),
-            signalType: .attention,
-            bundleID: "com.apple.mail",
-            payload: payload
-        )]
+        return [
+            RawEvent(
+                timestamp: Date(timeIntervalSince1970: Double(nowMs) / 1000.0),
+                signalType: .attention,
+                bundleID: "com.apple.mail",
+                payload: payload
+            )
+        ]
     }
 }

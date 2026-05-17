@@ -1,5 +1,6 @@
 import XCTest
 import os
+
 @testable import LeafCore
 
 final class SlackColdSchedulerTests: XCTestCase {
@@ -34,7 +35,9 @@ final class SlackColdSchedulerTests: XCTestCase {
         return (db, collector)
     }
 
-    private func makeScheduler(_ clock: @escaping @Sendable () -> Date = { Date() }) throws -> (Database, SlackColdScheduler) {
+    private func makeScheduler(
+        _ clock: @escaping @Sendable () -> Date = { Date() }
+    ) throws -> (Database, SlackColdScheduler) {
         let (db, c) = try makeColdCollector()
         let s = SlackColdScheduler(
             database: db,
@@ -52,8 +55,10 @@ final class SlackColdSchedulerTests: XCTestCase {
         // 2026-05-12 10:00:00 UTC — after 4am UTC → next 4am is 2026-05-13 04:00 UTC
         var cal = Calendar(identifier: .gregorian)
         cal.timeZone = TimeZone(identifier: "UTC")!
-        let now = cal.date(from: DateComponents(timeZone: TimeZone(identifier: "UTC")!,
-                                                year: 2026, month: 5, day: 12, hour: 10))!
+        let now = cal.date(
+            from: DateComponents(
+                timeZone: TimeZone(identifier: "UTC")!,
+                year: 2026, month: 5, day: 12, hour: 10))!
         let next = s.nextLocal4am(after: now)
         XCTAssertGreaterThan(next, now)
     }
@@ -72,8 +77,10 @@ final class SlackColdSchedulerTests: XCTestCase {
             clock: { Date() },
             calendar: utcMut
         )
-        let now = utcMut.date(from: DateComponents(timeZone: TimeZone(identifier: "UTC")!,
-                                                   year: 2026, month: 5, day: 12, hour: 2))!
+        let now = utcMut.date(
+            from: DateComponents(
+                timeZone: TimeZone(identifier: "UTC")!,
+                year: 2026, month: 5, day: 12, hour: 2))!
         let next = s.nextLocal4am(after: now)
         XCTAssertGreaterThan(next, now)
         XCTAssertLessThan(next.timeIntervalSince(now), 4 * 3600)

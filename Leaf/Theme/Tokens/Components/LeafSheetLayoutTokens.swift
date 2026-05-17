@@ -7,6 +7,6 @@
 import CoreGraphics
 
 enum LeafSheetLayoutTokens {
-    static let minWidth:  CGFloat = 480
+    static let minWidth: CGFloat = 480
     static let minHeight: CGFloat = 360
 }

@@ -7,8 +7,8 @@
 //  (Organization workspace metadata). error → LeafBanner.danger top.
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct OrganizationView: View {
     @Environment(OrgReader.self) private var reader
@@ -34,8 +34,12 @@ struct OrganizationView: View {
     private var content: some View {
         switch reader.state {
         case .loading:
-            HStack { Spacer(); ProgressView(); Spacer() }
-                .padding(.top, LeafSpace.xxxl)
+            HStack {
+                Spacer()
+                ProgressView()
+                Spacer()
+            }
+            .padding(.top, LeafSpace.xxxl)
         case .empty:
             emptyContent
         case .loaded(let org, _):
@@ -54,7 +58,8 @@ struct OrganizationView: View {
         VStack(alignment: .leading, spacing: LeafSpace.xxl) {
             LeafSection(
                 title: "Organization",
-                description: "Create your personal org. Solo for now — invite teammates after the org is set up. One org per device; the workspace name is just a label, you can change it later."
+                description:
+                    "Create your personal org. Solo for now — invite teammates after the org is set up. One org per device; the workspace name is just a label, you can change it later."
             ) {
                 LeafCard(variant: .raised, padding: .regular) {
                     VStack(alignment: .leading, spacing: LeafSpace.md) {

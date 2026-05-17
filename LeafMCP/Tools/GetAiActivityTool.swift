@@ -24,14 +24,15 @@ struct GetAiActivityTool: ToolExecutor {
                 "period": [
                     "type": "string",
                     "enum": ["today", "yesterday", "last_7_days"],
-                    "description": "Time window (default: today)"
+                    "description": "Time window (default: today)",
                 ]
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
         ]
         return ToolDefinition(
             name: "get_ai_activity",
-            description: "Return AI collaboration breakdown (Claude Code) for the given period — ratio, active seconds, session count, top tools, top projects. Metadata only — prompt/response content never leaves the device.",
+            description:
+                "Return AI collaboration breakdown (Claude Code) for the given period — ratio, active seconds, session count, top tools, top projects. Metadata only — prompt/response content never leaves the device.",
             inputSchema: AnyCodable(schema)
         )
     }()
@@ -39,7 +40,8 @@ struct GetAiActivityTool: ToolExecutor {
     func execute(arguments: AnyCodable?) async throws -> ToolCallResult {
         let period: TimelinePeriod
         if let dict = arguments?.value as? [String: Any],
-           let raw = dict["period"] as? String {
+            let raw = dict["period"] as? String
+        {
             guard let p = TimelinePeriod(rawValue: raw) else {
                 throw MCPProtocolError.invalidParams(
                     "period must be one of: today, yesterday, last_7_days"
@@ -52,9 +54,13 @@ struct GetAiActivityTool: ToolExecutor {
 
         guard FileManager.default.fileExists(atPath: dbURL.path) else {
             return ToolCallResult(
-                content: [.text(TextContent(
-                    text: "Leaf database not found at \(dbURL.path). Enable 'Background collection' in Settings first."
-                ))],
+                content: [
+                    .text(
+                        TextContent(
+                            text:
+                                "Leaf database not found at \(dbURL.path). Enable 'Background collection' in Settings first."
+                        ))
+                ],
                 isError: true
             )
         }
@@ -78,7 +84,7 @@ struct GetAiActivityTool: ToolExecutor {
             },
             "topProjects": breakdown.topProjects.map { entry -> [String: Any] in
                 ["cwd": entry.cwd, "aiActiveSeconds": Int(entry.aiActiveSeconds)]
-            }
+            },
         ]
         return try ToolResponseBuilder.versionedJSONResult(payload)
     }

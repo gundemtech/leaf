@@ -1,5 +1,7 @@
 import XCTest
+
 import class GRDB.Row
+
 @testable import LeafCore
 
 /// Phase Track-3 D3 — M017 retroactive rename of pre-D3 Slack event_kinds.
@@ -40,10 +42,11 @@ final class M017NormalizeSlackEventKindsTests: XCTestCase {
     ) throws {
         var payload: [String: String] = ["event_kind": kind]
         for (k, v) in extraKeys { payload[k] = v }
-        let payloadJSON = try String(
-            data: JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
-            encoding: .utf8
-        ) ?? "{}"
+        let payloadJSON =
+            try String(
+                data: JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+                encoding: .utf8
+            ) ?? "{}"
         try db.writeSQL { raw in
             try raw.execute(
                 sql: """
@@ -84,7 +87,8 @@ final class M017NormalizeSlackEventKindsTests: XCTestCase {
         let kinds = try eventKinds(db)
         XCTAssertEqual(kinds.count, M017NormalizeSlackEventKinds.renameMap.count)
         let expected = M017NormalizeSlackEventKinds.renameMap.map { $0.new }
-        XCTAssertEqual(kinds, expected, "Each old name should be renamed to its mapped slack_* counterpart in insertion order")
+        XCTAssertEqual(
+            kinds, expected, "Each old name should be renamed to its mapped slack_* counterpart in insertion order")
         for k in kinds {
             XCTAssertTrue(k.hasPrefix("slack_"), "Renamed kind \(k) should carry slack_* prefix")
         }
@@ -110,7 +114,7 @@ final class M017NormalizeSlackEventKindsTests: XCTestCase {
             "slack_presence_state",
             "slack_dnd_state",
             "slack_mention_received_aggregate",
-            "slack_file_uploaded_aggregate"
+            "slack_file_uploaded_aggregate",
         ]
         var ts: Int64 = 1_700_000_000_000
         for k in preserved {
@@ -150,7 +154,8 @@ final class M017NormalizeSlackEventKindsTests: XCTestCase {
             XCTAssertNotNil(row)
             let payloadJSON = (row?["payload_json"] as String?) ?? ""
             guard let data = payloadJSON.data(using: .utf8),
-                  let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else {
                 XCTFail("payload_json should parse as JSON object")
                 return
             }

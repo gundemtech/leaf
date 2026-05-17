@@ -1,6 +1,7 @@
-import XCTest
-import Foundation
 import CryptoKit
+import Foundation
+import XCTest
+
 @testable import LeafCore
 
 /// Phase 5.3.D — `KeyRotationService` admin orchestrator tests.
@@ -68,28 +69,33 @@ final class KeyRotationServiceTests: XCTestCase {
         let peerAPubHex = hexEncode(peerAPriv.publicKey.rawRepresentation)
         let peerBPubHex = hexEncode(peerBPriv.publicKey.rawRepresentation)
 
-        try db.upsertOrg(Org(id: orgID, name: "Test Org", createdAt: makeDate(1_700_000_000_000), createdByMemberID: selfMemberID))
-        try db.insertTeamMember(TeamMember(
-            id: selfMemberID, orgID: orgID, role: .admin,
-            pubkeyHex: selfPubHex, displayName: "Self",
-            addedAt: makeDate(1_700_000_000_000), removedAt: nil
-        ))
-        try db.insertTeamMember(TeamMember(
-            id: "peer-a", orgID: orgID, role: .member,
-            pubkeyHex: peerAPubHex, displayName: "PeerA",
-            addedAt: makeDate(1_700_000_000_500), removedAt: nil
-        ))
-        try db.insertTeamMember(TeamMember(
-            id: "peer-b", orgID: orgID, role: .member,
-            pubkeyHex: peerBPubHex, displayName: "PeerB",
-            addedAt: makeDate(1_700_000_000_600), removedAt: nil
-        ))
-        try db.insertTeamKey(TeamKey(
-            id: priorKeyID,
-            generatedAt: makeDate(1_700_000_000_000),
-            deprecatedAt: nil,
-            generatedByMemberID: selfMemberID
-        ))
+        try db.upsertOrg(
+            Org(id: orgID, name: "Test Org", createdAt: makeDate(1_700_000_000_000), createdByMemberID: selfMemberID))
+        try db.insertTeamMember(
+            TeamMember(
+                id: selfMemberID, orgID: orgID, role: .admin,
+                pubkeyHex: selfPubHex, displayName: "Self",
+                addedAt: makeDate(1_700_000_000_000), removedAt: nil
+            ))
+        try db.insertTeamMember(
+            TeamMember(
+                id: "peer-a", orgID: orgID, role: .member,
+                pubkeyHex: peerAPubHex, displayName: "PeerA",
+                addedAt: makeDate(1_700_000_000_500), removedAt: nil
+            ))
+        try db.insertTeamMember(
+            TeamMember(
+                id: "peer-b", orgID: orgID, role: .member,
+                pubkeyHex: peerBPubHex, displayName: "PeerB",
+                addedAt: makeDate(1_700_000_000_600), removedAt: nil
+            ))
+        try db.insertTeamKey(
+            TeamKey(
+                id: priorKeyID,
+                generatedAt: makeDate(1_700_000_000_000),
+                deprecatedAt: nil,
+                generatedByMemberID: selfMemberID
+            ))
 
         let priorTeamKey = Data(repeating: 0xFF, count: 32)
         try FileManager.default.createDirectory(
@@ -316,7 +322,8 @@ final class KeyRotationServiceTests: XCTestCase {
             _ = try await svc.removeMember(memberID: "self-mem")
             XCTFail("Expected throw")
         } catch let err as LeafError {
-            if case .cannotRemoveSelfFromTeam = err {} else {
+            if case .cannotRemoveSelfFromTeam = err {
+            } else {
                 XCTFail("Expected .cannotRemoveSelfFromTeam, got \(err)")
             }
         }
@@ -330,7 +337,8 @@ final class KeyRotationServiceTests: XCTestCase {
             _ = try await svc.removeMember(memberID: "ghost-mem")
             XCTFail("Expected throw")
         } catch let err as LeafError {
-            if case .invalidPayload = err {} else {
+            if case .invalidPayload = err {
+            } else {
                 XCTFail("Expected .invalidPayload, got \(err)")
             }
         }
@@ -345,7 +353,8 @@ final class KeyRotationServiceTests: XCTestCase {
             _ = try await svc.removeMember(memberID: "peer-b")
             XCTFail("Expected throw")
         } catch let err as LeafError {
-            if case .invalidPayload = err {} else {
+            if case .invalidPayload = err {
+            } else {
                 XCTFail("Expected .invalidPayload, got \(err)")
             }
         }
@@ -360,7 +369,8 @@ final class KeyRotationServiceTests: XCTestCase {
             _ = try await svc.removeMember(memberID: "any-id")
             XCTFail("Expected throw")
         } catch let err as LeafError {
-            if case .invalidPayload = err {} else {
+            if case .invalidPayload = err {
+            } else {
                 XCTFail("Expected .invalidPayload, got \(err)")
             }
         }
@@ -373,24 +383,28 @@ final class KeyRotationServiceTests: XCTestCase {
         let peerPriv = Curve25519.KeyAgreement.PrivateKey()
         let peerPubHex = hexEncode(peerPriv.publicKey.rawRepresentation)
 
-        try db.upsertOrg(Org(id: "org1", name: "Test Org", createdAt: makeDate(1_700_000_000_000), createdByMemberID: "self-mem"))
-        try db.insertTeamMember(TeamMember(
-            id: "self-mem", orgID: "org1", role: .admin,
-            pubkeyHex: selfPubHex, displayName: "Self",
-            addedAt: makeDate(1_700_000_000_000), removedAt: nil
-        ))
-        try db.insertTeamMember(TeamMember(
-            id: "peer-b", orgID: "org1", role: .member,
-            pubkeyHex: peerPubHex, displayName: "PeerB",
-            addedAt: makeDate(1_700_000_000_500), removedAt: nil
-        ))
+        try db.upsertOrg(
+            Org(id: "org1", name: "Test Org", createdAt: makeDate(1_700_000_000_000), createdByMemberID: "self-mem"))
+        try db.insertTeamMember(
+            TeamMember(
+                id: "self-mem", orgID: "org1", role: .admin,
+                pubkeyHex: selfPubHex, displayName: "Self",
+                addedAt: makeDate(1_700_000_000_000), removedAt: nil
+            ))
+        try db.insertTeamMember(
+            TeamMember(
+                id: "peer-b", orgID: "org1", role: .member,
+                pubkeyHex: peerPubHex, displayName: "PeerB",
+                addedAt: makeDate(1_700_000_000_500), removedAt: nil
+            ))
         let svc = makeService(adminPriv: adminPriv)
 
         do {
             _ = try await svc.removeMember(memberID: "peer-b")
             XCTFail("Expected throw")
         } catch let err as LeafError {
-            if case .invalidPayload = err {} else {
+            if case .invalidPayload = err {
+            } else {
                 XCTFail("Expected .invalidPayload, got \(err)")
             }
         }
@@ -405,12 +419,14 @@ final class AtomicCounter: @unchecked Sendable {
     private var value: Int = 0
     private let lock = NSLock()
     func increment() -> Int {
-        lock.lock(); defer { lock.unlock() }
+        lock.lock()
+        defer { lock.unlock() }
         value += 1
         return value
     }
     func current() -> Int {
-        lock.lock(); defer { lock.unlock() }
+        lock.lock()
+        defer { lock.unlock() }
         return value
     }
 }

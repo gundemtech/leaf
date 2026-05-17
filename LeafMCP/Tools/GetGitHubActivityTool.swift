@@ -29,14 +29,15 @@ struct GetGitHubActivityTool: ToolExecutor {
                 "period": [
                     "type": "string",
                     "enum": ["today", "yesterday", "last_7_days"],
-                    "description": "Time window (default: today)"
+                    "description": "Time window (default: today)",
                 ]
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
         ]
         return ToolDefinition(
             name: "get_github_activity",
-            description: "Return GitHub events activity (total events, breakdown by repo and event kind) for the given period. Metadata only — PR/issue bodies, comments, and file diffs never leave the device.",
+            description:
+                "Return GitHub events activity (total events, breakdown by repo and event kind) for the given period. Metadata only — PR/issue bodies, comments, and file diffs never leave the device.",
             inputSchema: AnyCodable(schema)
         )
     }()
@@ -44,7 +45,8 @@ struct GetGitHubActivityTool: ToolExecutor {
     func execute(arguments: AnyCodable?) async throws -> ToolCallResult {
         let period: TimelinePeriod
         if let dict = arguments?.value as? [String: Any],
-           let raw = dict["period"] as? String {
+            let raw = dict["period"] as? String
+        {
             guard let p = TimelinePeriod(rawValue: raw) else {
                 throw MCPProtocolError.invalidParams(
                     "period must be one of: today, yesterday, last_7_days"
@@ -57,9 +59,13 @@ struct GetGitHubActivityTool: ToolExecutor {
 
         guard FileManager.default.fileExists(atPath: dbURL.path) else {
             return ToolCallResult(
-                content: [.text(TextContent(
-                    text: "Leaf database not found at \(dbURL.path). Enable 'Background collection' in Settings first."
-                ))],
+                content: [
+                    .text(
+                        TextContent(
+                            text:
+                                "Leaf database not found at \(dbURL.path). Enable 'Background collection' in Settings first."
+                        ))
+                ],
                 isError: true
             )
         }
@@ -80,14 +86,14 @@ struct GetGitHubActivityTool: ToolExecutor {
             },
             "byEventKind": breakdown.byEventKind.map { entry -> [String: Any] in
                 ["eventKind": entry.eventKind, "count": entry.count]
-            }
+            },
         ]
         if let cycle = breakdown.prCycleStats {
             payload["prCycleStats"] = [
                 "medianSeconds": cycle.medianSeconds,
                 "avgSeconds": cycle.avgSeconds,
                 "maxSeconds": cycle.maxSeconds,
-                "sampleCount": cycle.sampleCount
+                "sampleCount": cycle.sampleCount,
             ]
         }
         if let delay = breakdown.reviewDelayStats {
@@ -95,7 +101,7 @@ struct GetGitHubActivityTool: ToolExecutor {
                 "medianSeconds": delay.medianSeconds,
                 "avgSeconds": delay.avgSeconds,
                 "maxSeconds": delay.maxSeconds,
-                "sampleCount": delay.sampleCount
+                "sampleCount": delay.sampleCount,
             ]
         }
         // Phase 4.6.C.1 — global week-over-week activity delta (additive optional).

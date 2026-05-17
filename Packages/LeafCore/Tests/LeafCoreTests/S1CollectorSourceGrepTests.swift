@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 /// Phase Track-4 S1 — defence-in-depth: source-grep that S1 collectors never
@@ -15,11 +16,11 @@ final class S1CollectorSourceGrepTests: XCTestCase {
 
     private func repoRoot() -> URL {
         URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()    // LeafCoreTests/
-            .deletingLastPathComponent()    // Tests/
-            .deletingLastPathComponent()    // LeafCore/
-            .deletingLastPathComponent()    // Packages/
-            .deletingLastPathComponent()    // <repo root>/
+            .deletingLastPathComponent()  // LeafCoreTests/
+            .deletingLastPathComponent()  // Tests/
+            .deletingLastPathComponent()  // LeafCore/
+            .deletingLastPathComponent()  // Packages/
+            .deletingLastPathComponent()  // <repo root>/
     }
 
     private func readSource(_ relPath: String) throws -> String {
@@ -50,7 +51,7 @@ final class S1CollectorSourceGrepTests: XCTestCase {
     func testCalendarCollectorReadsNoEKEventPIIFields() throws {
         let src = stripComments(try readSource("LeafAgent/Collectors/CalendarCollector.swift"))
         let forbiddenSuffixes = [
-            ".title", ".location", ".attendees", ".notes", ".organizer"
+            ".title", ".location", ".attendees", ".notes", ".organizer",
         ]
         for pattern in forbiddenSuffixes {
             XCTAssertFalse(
@@ -72,9 +73,9 @@ final class S1CollectorSourceGrepTests: XCTestCase {
     func testFocusModeCollectorReadsOnlyIsFocused() throws {
         let src = stripComments(try readSource("LeafAgent/Collectors/FocusModeCollector.swift"))
         let forbidden = [
-            ".identifier",       // future mode-name accessor
+            ".identifier",  // future mode-name accessor
             ".reason",
-            ".focusModeIdentifier"
+            ".focusModeIdentifier",
         ]
         for pattern in forbidden {
             XCTAssertFalse(
@@ -83,7 +84,8 @@ final class S1CollectorSourceGrepTests: XCTestCase {
             )
         }
         // Positive — collector MUST read `.isFocused` to function.
-        XCTAssertTrue(src.contains(".isFocused"),
+        XCTAssertTrue(
+            src.contains(".isFocused"),
             "FocusModeCollector.swift must read `.isFocused` (positive baseline)")
     }
 
@@ -101,7 +103,7 @@ final class S1CollectorSourceGrepTests: XCTestCase {
             "NSWorkspace.shared.activeSpace.",
             "NSWorkspace.shared.activeSpace\n",
             // Common keys that would hold space identifier data.
-            "spaceID", "space_id", ".identifier"
+            "spaceID", "space_id", ".identifier",
         ]
         for pattern in forbidden {
             XCTAssertFalse(

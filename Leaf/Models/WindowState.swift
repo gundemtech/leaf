@@ -9,13 +9,13 @@ enum WindowSection: String, CaseIterable, Hashable, Codable, Identifiable {
 
     var title: String {
         switch self {
-        case .home:         "Home"
-        case .activity:     "Activity"
-        case .team:         "Team"
-        case .connections:  "Connections"
+        case .home: "Home"
+        case .activity: "Activity"
+        case .team: "Team"
+        case .connections: "Connections"
         case .organization: "Organization"
-        case .settings:     "Settings"
-        case .profile:      "Profile"
+        case .settings: "Settings"
+        case .profile: "Profile"
         }
     }
 
@@ -24,13 +24,13 @@ enum WindowSection: String, CaseIterable, Hashable, Codable, Identifiable {
     /// shipped — section будет удалена когда UX уйдёт на single-team модель).
     var icon: String {
         switch self {
-        case .home:         LeafIcons.nav.home
-        case .activity:     LeafIcons.nav.activity
-        case .team:         LeafIcons.nav.team
-        case .connections:  LeafIcons.nav.connections
+        case .home: LeafIcons.nav.home
+        case .activity: LeafIcons.nav.activity
+        case .team: LeafIcons.nav.team
+        case .connections: LeafIcons.nav.connections
         case .organization: LeafIcons.nav.organizationSF
-        case .settings:     LeafIcons.nav.settings
-        case .profile:      LeafIcons.nav.profile
+        case .settings: LeafIcons.nav.settings
+        case .profile: LeafIcons.nav.profile
         }
     }
 

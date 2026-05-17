@@ -29,14 +29,15 @@ struct GetSlackActivityTool: ToolExecutor {
                 "period": [
                     "type": "string",
                     "enum": ["today", "yesterday", "last_7_days"],
-                    "description": "Time window (default: today)"
+                    "description": "Time window (default: today)",
                 ]
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
         ]
         return ToolDefinition(
             name: "get_slack_activity",
-            description: "Return Slack activity (messages count, huddle minutes, breakdown by channel, reactions aggregate, huddle session distribution) for the given period. Metadata only — message bodies, reaction emoji names, and reactor identities are never stored.",
+            description:
+                "Return Slack activity (messages count, huddle minutes, breakdown by channel, reactions aggregate, huddle session distribution) for the given period. Metadata only — message bodies, reaction emoji names, and reactor identities are never stored.",
             inputSchema: AnyCodable(schema)
         )
     }()
@@ -44,7 +45,8 @@ struct GetSlackActivityTool: ToolExecutor {
     func execute(arguments: AnyCodable?) async throws -> ToolCallResult {
         let period: TimelinePeriod
         if let dict = arguments?.value as? [String: Any],
-           let raw = dict["period"] as? String {
+            let raw = dict["period"] as? String
+        {
             guard let p = TimelinePeriod(rawValue: raw) else {
                 throw MCPProtocolError.invalidParams(
                     "period must be one of: today, yesterday, last_7_days"
@@ -57,9 +59,13 @@ struct GetSlackActivityTool: ToolExecutor {
 
         guard FileManager.default.fileExists(atPath: dbURL.path) else {
             return ToolCallResult(
-                content: [.text(TextContent(
-                    text: "Leaf database not found at \(dbURL.path). Enable 'Background collection' in Settings first."
-                ))],
+                content: [
+                    .text(
+                        TextContent(
+                            text:
+                                "Leaf database not found at \(dbURL.path). Enable 'Background collection' in Settings first."
+                        ))
+                ],
                 isError: true
             )
         }
@@ -78,7 +84,7 @@ struct GetSlackActivityTool: ToolExecutor {
             "huddleMinutes": breakdown.huddleMinutes,
             "byChannel": breakdown.byChannel.map { entry -> [String: Any] in
                 ["channel": entry.channelName, "count": entry.count]
-            }
+            },
         ]
         // Phase 4.6.A.3 — additive optional fields (version=1 preserved;
         // older MCP clients ignore unknown keys).
@@ -90,7 +96,7 @@ struct GetSlackActivityTool: ToolExecutor {
                 "medianSeconds": h.medianSeconds,
                 "avgSeconds": h.avgSeconds,
                 "maxSeconds": h.maxSeconds,
-                "sampleCount": h.sampleCount
+                "sampleCount": h.sampleCount,
             ]
         }
         // Phase 4.6.C.1 — global week-over-week activity delta (additive optional).

@@ -1,7 +1,8 @@
 // Phase Track-1 D2 — EventLinksStore derivation + reader API (public substrate).
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class EventLinksStoreTests: XCTestCase {
@@ -40,7 +41,9 @@ final class EventLinksStoreTests: XCTestCase {
         }
     }
 
-    private func derive(_ db: LeafCore.Database, eventID: Int64, ts: Int64, payload: [String: String], prefixes: Set<String>) throws {
+    private func derive(
+        _ db: LeafCore.Database, eventID: Int64, ts: Int64, payload: [String: String], prefixes: Set<String>
+    ) throws {
         try db.writeSQL { rawDB in
             try EventLinksStore.deriveLinks(
                 eventID: eventID, ts: ts, payload: payload,
@@ -54,10 +57,13 @@ final class EventLinksStoreTests: XCTestCase {
     func testDeriveLinks_LinearIDInText_Match() throws {
         let db = try makeDB()
         let eid = try insertRawEventRow(db)
-        try derive(db, eventID: eid, ts: 1_000,
-                   payload: ["event_kind": "issue_updated",
-                             Schema.EventPayloadKeys.body: "Working on LEAF-127"],
-                   prefixes: ["LEAF"])
+        try derive(
+            db, eventID: eid, ts: 1_000,
+            payload: [
+                "event_kind": "issue_updated",
+                Schema.EventPayloadKeys.body: "Working on LEAF-127",
+            ],
+            prefixes: ["LEAF"])
         let rows = try linksForEvent(db, eventID: eid)
         XCTAssertEqual(rows.count, 1)
         XCTAssertEqual(rows[0].linkKind, Schema.LinkKinds.linearIDInText)
@@ -70,10 +76,13 @@ final class EventLinksStoreTests: XCTestCase {
     func testDeriveLinks_LinearIDInText_AllMatches() throws {
         let db = try makeDB()
         let eid = try insertRawEventRow(db)
-        try derive(db, eventID: eid, ts: 1_000,
-                   payload: ["event_kind": "issue_updated",
-                             Schema.EventPayloadKeys.body: "fixes LEAF-127 and LEAF-200"],
-                   prefixes: ["LEAF"])
+        try derive(
+            db, eventID: eid, ts: 1_000,
+            payload: [
+                "event_kind": "issue_updated",
+                Schema.EventPayloadKeys.body: "fixes LEAF-127 and LEAF-200",
+            ],
+            prefixes: ["LEAF"])
         let rows = try linksForEvent(db, eventID: eid)
         XCTAssertEqual(rows.count, 2)
         XCTAssertEqual(Set(rows.map { $0.targetRef }), Set(["LEAF-127", "LEAF-200"]))
@@ -82,20 +91,26 @@ final class EventLinksStoreTests: XCTestCase {
     func testDeriveLinks_LinearIDInText_UnknownPrefixIgnored() throws {
         let db = try makeDB()
         let eid = try insertRawEventRow(db)
-        try derive(db, eventID: eid, ts: 1_000,
-                   payload: ["event_kind": "issue_updated",
-                             Schema.EventPayloadKeys.body: "BAD-99 should be ignored"],
-                   prefixes: ["LEAF"])
+        try derive(
+            db, eventID: eid, ts: 1_000,
+            payload: [
+                "event_kind": "issue_updated",
+                Schema.EventPayloadKeys.body: "BAD-99 should be ignored",
+            ],
+            prefixes: ["LEAF"])
         XCTAssertEqual(try linksForEvent(db, eventID: eid).count, 0)
     }
 
     func testDeriveLinks_RequestedReviewers_FanOut() throws {
         let db = try makeDB()
         let eid = try insertRawEventRow(db)
-        try derive(db, eventID: eid, ts: 1_000,
-                   payload: ["event_kind": "gh_pr_opened",
-                             Schema.EventPayloadKeys.requestedReviewersJson: #"["alice","bob"]"#],
-                   prefixes: [])
+        try derive(
+            db, eventID: eid, ts: 1_000,
+            payload: [
+                "event_kind": "gh_pr_opened",
+                Schema.EventPayloadKeys.requestedReviewersJson: #"["alice","bob"]"#,
+            ],
+            prefixes: [])
         let rows = try linksForEvent(db, eventID: eid)
         XCTAssertEqual(rows.count, 2)
         XCTAssertTrue(rows.allSatisfy { $0.linkKind == Schema.LinkKinds.reviewerAssigned })
@@ -106,17 +121,20 @@ final class EventLinksStoreTests: XCTestCase {
     func testDeriveLinks_NoBody_NoOp() throws {
         let db = try makeDB()
         let eid = try insertRawEventRow(db)
-        try derive(db, eventID: eid, ts: 1_000,
-                   payload: ["event_kind": "issue_updated"],
-                   prefixes: ["LEAF"])
+        try derive(
+            db, eventID: eid, ts: 1_000,
+            payload: ["event_kind": "issue_updated"],
+            prefixes: ["LEAF"])
         XCTAssertEqual(try linksForEvent(db, eventID: eid).count, 0)
     }
 
     func testDeriveLinks_DuplicateInsertIgnored() throws {
         let db = try makeDB()
         let eid = try insertRawEventRow(db)
-        let payload = ["event_kind": "issue_updated",
-                       Schema.EventPayloadKeys.body: "LEAF-127 again"]
+        let payload = [
+            "event_kind": "issue_updated",
+            Schema.EventPayloadKeys.body: "LEAF-127 again",
+        ]
         try derive(db, eventID: eid, ts: 1_000, payload: payload, prefixes: ["LEAF"])
         try derive(db, eventID: eid, ts: 2_000, payload: payload, prefixes: ["LEAF"])
         XCTAssertEqual(try linksForEvent(db, eventID: eid).count, 1)
@@ -125,12 +143,14 @@ final class EventLinksStoreTests: XCTestCase {
     func testEventsLinkingTo_FiltersByPeriod() throws {
         let db = try makeDB()
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
-        let oldMs = nowMs - 10 * 86_400_000   // 10 days ago
+        let oldMs = nowMs - 10 * 86_400_000  // 10 days ago
 
         let eOld = try insertRawEventRow(db, ts: oldMs)
         let eNew = try insertRawEventRow(db, ts: nowMs)
-        let payload = ["event_kind": "issue_updated",
-                       Schema.EventPayloadKeys.body: "fix LEAF-127"]
+        let payload = [
+            "event_kind": "issue_updated",
+            Schema.EventPayloadKeys.body: "fix LEAF-127",
+        ]
         try derive(db, eventID: eOld, ts: oldMs, payload: payload, prefixes: ["LEAF"])
         try derive(db, eventID: eNew, ts: nowMs, payload: payload, prefixes: ["LEAF"])
 
@@ -167,10 +187,13 @@ final class EventLinksStoreTests: XCTestCase {
             let ts = baseMs + Int64(i * 1000)
             let eid = try insertRawEventRow(db, ts: ts)
             insertedEventIDs.append(eid)
-            try derive(db, eventID: eid, ts: ts,
-                       payload: ["event_kind": "issue_updated",
-                                 Schema.EventPayloadKeys.body: "fix LEAF-127"],
-                       prefixes: ["LEAF"])
+            try derive(
+                db, eventID: eid, ts: ts,
+                payload: [
+                    "event_kind": "issue_updated",
+                    Schema.EventPayloadKeys.body: "fix LEAF-127",
+                ],
+                prefixes: ["LEAF"])
         }
 
         // No-period branch: must return newest-first (LIMIT 200 keeps newest, not oldest).
@@ -182,7 +205,8 @@ final class EventLinksStoreTests: XCTestCase {
                 in: rawDB
             )
         }
-        XCTAssertEqual(result, insertedEventIDs.reversed(),
-                       "No-period branch must return events ordered newest-first by ts (LIMIT semantics)")
+        XCTAssertEqual(
+            result, insertedEventIDs.reversed(),
+            "No-period branch must return events ordered newest-first by ts (LIMIT semantics)")
     }
 }

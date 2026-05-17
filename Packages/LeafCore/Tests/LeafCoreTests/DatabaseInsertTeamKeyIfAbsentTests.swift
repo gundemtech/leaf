@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class DatabaseInsertTeamKeyIfAbsentTests: XCTestCase {
@@ -20,8 +21,10 @@ final class DatabaseInsertTeamKeyIfAbsentTests: XCTestCase {
         try? FileManager.default.removeItem(at: tempDir)
     }
 
-    private func makeKey(id: String, generatedAt: Date = Date(timeIntervalSince1970: 1_700_000_000),
-                         deprecated: Bool = false, by: String = "self-mem") -> TeamKey {
+    private func makeKey(
+        id: String, generatedAt: Date = Date(timeIntervalSince1970: 1_700_000_000),
+        deprecated: Bool = false, by: String = "self-mem"
+    ) -> TeamKey {
         TeamKey(
             id: id, generatedAt: generatedAt,
             deprecatedAt: deprecated ? Date(timeIntervalSince1970: 1_700_000_001) : nil,
@@ -51,7 +54,8 @@ final class DatabaseInsertTeamKeyIfAbsentTests: XCTestCase {
     }
 
     func testReaderModeThrowsDatabaseUnavailable() throws {
-        let readerDB = try LeafCore.Database.openForRead(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let readerDB = try LeafCore.Database.openForRead(
+            at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         XCTAssertThrowsError(try readerDB.insertTeamKeyIfAbsent(makeKey(id: "key-1"))) { err in
             guard case LeafError.databaseUnavailable = err else {
                 XCTFail("expected .databaseUnavailable, got \(err)")

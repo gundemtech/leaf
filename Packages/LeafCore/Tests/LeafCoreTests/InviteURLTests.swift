@@ -1,6 +1,7 @@
 // Phase 5.5.A — InviteURL parser/composer (`leaf://invite/<token>#<otp>`).
 
 import XCTest
+
 @testable import LeafCore
 
 final class InviteURLTests: XCTestCase {
@@ -41,7 +42,10 @@ final class InviteURLTests: XCTestCase {
 
     func testParse_RejectsMalformedToken() {
         // Non-base64url chars.
-        let bad1 = URL(string: "leaf://invite/\("token with spaces and !!!".addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)#\(validOTP)")!
+        let bad1 = URL(
+            string:
+                "leaf://invite/\("token with spaces and !!!".addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)#\(validOTP)"
+        )!
         switch InviteURL.parse(bad1) {
         case .success: XCTFail("expected malformed")
         case .failure(let err): XCTAssertEqual(err, .malformed)

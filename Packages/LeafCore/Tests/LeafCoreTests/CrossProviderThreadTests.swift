@@ -13,8 +13,9 @@
 //      + empty-string fallback behavior, что на уровне tool-обёртки даёт
 //      ToolCallResult.isError=true.)
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class CrossProviderThreadTests: XCTestCase {
@@ -50,7 +51,7 @@ final class CrossProviderThreadTests: XCTestCase {
                 "title": "Real PR title that should NOT surface in MCP output",
                 "status": status,
                 "project": "Leaf",
-                "team_key": "LEAF"
+                "team_key": "LEAF",
             ]
         )
     }
@@ -73,7 +74,7 @@ final class CrossProviderThreadTests: XCTestCase {
                 "number": "",
                 "sha": sha,
                 "branch": "main",
-                "linked_linear_id": linkedLinearID
+                "linked_linear_id": linkedLinearID,
             ]
         )
     }
@@ -96,7 +97,7 @@ final class CrossProviderThreadTests: XCTestCase {
                 "number": String(prNumber),
                 "sha": "",
                 "branch": "feat/foo",
-                "linked_linear_id": linkedLinearID
+                "linked_linear_id": linkedLinearID,
             ]
         )
     }
@@ -114,7 +115,7 @@ final class CrossProviderThreadTests: XCTestCase {
             makeLinearIssueUpdatedEvent(issueKey: "LEAF-1", status: "Started", atMs: 1_700_000_010_000),
             makeLinearIssueUpdatedEvent(issueKey: "LEAF-1", status: "Done", atMs: 1_700_000_020_000),
             // Noise — другой issue, не должен matched'иться.
-            makeLinearIssueUpdatedEvent(issueKey: "LEAF-2", status: "Started", atMs: 1_700_000_005_000)
+            makeLinearIssueUpdatedEvent(issueKey: "LEAF-2", status: "Started", atMs: 1_700_000_005_000),
         ]
         try db.write(events)
 
@@ -161,7 +162,8 @@ final class CrossProviderThreadTests: XCTestCase {
             makeCommitPushedEvent(repo: "owner/repo", sha: "abc123", linkedLinearID: "LEAF-1", atMs: 1_730_000_060_000),
             makePROpenedEvent(repo: "owner/repo", prNumber: 42, linkedLinearID: "LEAF-1", atMs: 1_730_000_120_000),
             // Noise — github events с другим linked_linear_id или без него.
-            makeCommitPushedEvent(repo: "owner/repo", sha: "def456", linkedLinearID: "LEAF-99", atMs: 1_730_000_030_000)
+            makeCommitPushedEvent(
+                repo: "owner/repo", sha: "def456", linkedLinearID: "LEAF-99", atMs: 1_730_000_030_000),
         ]
         try db.write(events)
 
@@ -207,7 +209,7 @@ final class CrossProviderThreadTests: XCTestCase {
 
         let events: [RawEvent] = [
             makeLinearIssueUpdatedEvent(issueKey: "LEAF-1", status: "Started", atMs: 1_700_000_000_000),
-            makeCommitPushedEvent(repo: "owner/repo", sha: "abc", linkedLinearID: "LEAF-2", atMs: 1_700_000_001_000)
+            makeCommitPushedEvent(repo: "owner/repo", sha: "abc", linkedLinearID: "LEAF-2", atMs: 1_700_000_001_000),
         ]
         try db.write(events)
 

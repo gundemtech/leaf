@@ -72,7 +72,9 @@ public actor SlackCollector {
             Task { await self?.kickTick() }
         }
         loopTask = Task { [weak self] in await self?.runLoop() }
-        logger.info("SlackCollector started (interval=\(self.intervalSec, privacy: .public)s, backfill=\(self.backfillWindowDays, privacy: .public)d)")
+        logger.info(
+            "SlackCollector started (interval=\(self.intervalSec, privacy: .public)s, backfill=\(self.backfillWindowDays, privacy: .public)d)"
+        )
     }
 
     public func stop() async {
@@ -143,10 +145,12 @@ public actor SlackCollector {
             record = try database.readIntegration(provider: .slack)
         } catch {
             logger.error("readIntegration failed: \(String(describing: error), privacy: .public)")
-            return TickResult(skipped: true, messageEventsEmitted: 0, huddleTransitionEmitted: false, cursorAdvancedMs: nil)
+            return TickResult(
+                skipped: true, messageEventsEmitted: 0, huddleTransitionEmitted: false, cursorAdvancedMs: nil)
         }
         guard record != nil else {
-            return TickResult(skipped: true, messageEventsEmitted: 0, huddleTransitionEmitted: false, cursorAdvancedMs: nil)
+            return TickResult(
+                skipped: true, messageEventsEmitted: 0, huddleTransitionEmitted: false, cursorAdvancedMs: nil)
         }
 
         // 2. Refresh if needed. .refreshDenied → refresher уже сделал
@@ -156,18 +160,22 @@ public actor SlackCollector {
             refreshed = try await refresher.refreshIfNeeded(now: now)
         } catch SlackTokenRefresherError.refreshDenied(let msg) {
             logger.warning("refresh denied — Slack disconnected: \(msg, privacy: .public)")
-            return TickResult(skipped: true, messageEventsEmitted: 0, huddleTransitionEmitted: false, cursorAdvancedMs: nil)
+            return TickResult(
+                skipped: true, messageEventsEmitted: 0, huddleTransitionEmitted: false, cursorAdvancedMs: nil)
         } catch {
             logger.error("refresh failed: \(String(describing: error), privacy: .public)")
-            return TickResult(skipped: true, messageEventsEmitted: 0, huddleTransitionEmitted: false, cursorAdvancedMs: nil)
+            return TickResult(
+                skipped: true, messageEventsEmitted: 0, huddleTransitionEmitted: false, cursorAdvancedMs: nil)
         }
 
         // 3. Parse userID из workspaceID "<team>:<user>" — формат гарантирован
         // SlackOAuthService persistence (B2). Defensive: malformed → skip.
         let parts = refreshed.workspaceID.split(separator: ":", omittingEmptySubsequences: false)
         guard parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty else {
-            logger.error("malformed workspaceID '\(refreshed.workspaceID, privacy: .public)' — expected '<team>:<user>'")
-            return TickResult(skipped: true, messageEventsEmitted: 0, huddleTransitionEmitted: false, cursorAdvancedMs: nil)
+            logger.error(
+                "malformed workspaceID '\(refreshed.workspaceID, privacy: .public)' — expected '<team>:<user>'")
+            return TickResult(
+                skipped: true, messageEventsEmitted: 0, huddleTransitionEmitted: false, cursorAdvancedMs: nil)
         }
         let userID = String(parts[1])
 
@@ -181,7 +189,8 @@ public actor SlackCollector {
             )
         } catch {
             logger.error("readOffset failed: \(String(describing: error), privacy: .public)")
-            return TickResult(skipped: true, messageEventsEmitted: 0, huddleTransitionEmitted: false, cursorAdvancedMs: nil)
+            return TickResult(
+                skipped: true, messageEventsEmitted: 0, huddleTransitionEmitted: false, cursorAdvancedMs: nil)
         }
         let since: Int64? = stored?.lastModifiedMs
 
@@ -196,7 +205,8 @@ public actor SlackCollector {
             )
         } catch {
             logger.error("fetchTick failed: \(String(describing: error), privacy: .public)")
-            return TickResult(skipped: false, messageEventsEmitted: 0, huddleTransitionEmitted: false, cursorAdvancedMs: nil)
+            return TickResult(
+                skipped: false, messageEventsEmitted: 0, huddleTransitionEmitted: false, cursorAdvancedMs: nil)
         }
 
         // 5a. Phase 4.7.B-9 — presence pulse. Independent of fetchTick — observability
@@ -340,7 +350,8 @@ public actor SlackCollector {
                         oldest: cursor
                     )
                 } catch is RateLimitError {
-                    logger.warning("fetchThreadReplies 429 for thread \(thread.threadTs, privacy: .public) — breaking fan-out")
+                    logger.warning(
+                        "fetchThreadReplies 429 for thread \(thread.threadTs, privacy: .public) — breaking fan-out")
                     break
                 } catch {
                     logger.error("fetchThreadReplies failed: \(String(describing: error), privacy: .public)")
@@ -447,7 +458,8 @@ public actor SlackCollector {
         // per channel-bucket с count > 0 (provider гарантирует count > 0 в
         // groups, но belt-and-suspenders filter здесь). count=0 буффер не
         // создаём — provider drop'ает channels без matches до return.
-        let mentionEvents: [RawEvent] = mentionCounts
+        let mentionEvents: [RawEvent] =
+            mentionCounts
             .filter { $0.count > 0 }
             .map { Self.makeMentionReceivedAggregateEvent(channelCount: $0, nowMs: nowMsForPresence) }
 
@@ -522,7 +534,9 @@ public actor SlackCollector {
             )
         }
         if !allEvents.isEmpty {
-            logger.info("tick wrote \(messageEvents.count, privacy: .public) message + \(threadReplyEvents.count, privacy: .public) thread-reply + \(huddleEvent != nil ? 1 : 0, privacy: .public) huddle + \(statusChangeEvent != nil ? 1 : 0, privacy: .public) status + 1 presence + 1 dnd + \(mentionEvents.count, privacy: .public) mentions + 1 file-upload events, cursor=\(offset.lastModifiedMs, privacy: .public)")
+            logger.info(
+                "tick wrote \(messageEvents.count, privacy: .public) message + \(threadReplyEvents.count, privacy: .public) thread-reply + \(huddleEvent != nil ? 1 : 0, privacy: .public) huddle + \(statusChangeEvent != nil ? 1 : 0, privacy: .public) status + 1 presence + 1 dnd + \(mentionEvents.count, privacy: .public) mentions + 1 file-upload events, cursor=\(offset.lastModifiedMs, privacy: .public)"
+            )
         }
         return TickResult(
             skipped: false,
@@ -580,7 +594,8 @@ public actor SlackCollector {
         mentions: [SlackMentionChannelCount],
         files: SlackFileUploadSummary
     ) -> [String: Any] {
-        let lastActivityChannel = tick.channelMessageCounts
+        let lastActivityChannel =
+            tick.channelMessageCounts
             .max(by: { $0.count < $1.count })?
             .channelName ?? ""
         let mentionTotal = mentions.map { $0.count }.reduce(0, +)
@@ -588,7 +603,7 @@ public actor SlackCollector {
             "is_active": dnd.dndEnabled,
             "snooze_until_ms": dnd.snoozeUntilMs ?? 0,
             "next_dnd_start_ms": dnd.nextDNDStartMs ?? 0,
-            "next_dnd_end_ms": dnd.nextDNDEndMs ?? 0
+            "next_dnd_end_ms": dnd.nextDNDEndMs ?? 0,
         ]
         return [
             "native_presence": presenceState.rawValue,
@@ -601,7 +616,7 @@ public actor SlackCollector {
             "huddle_channel": "",
             "last_activity_channel": lastActivityChannel,
             "mention_count_today": mentionTotal,
-            "file_count_today": files.count
+            "file_count_today": files.count,
         ]
     }
 
@@ -618,7 +633,7 @@ public actor SlackCollector {
             "channel_name": channel.channelName,
             "count": String(channel.count),
             "period_start_ms": String(periodStartMs),
-            "period_end_ms": String(periodEndMs)
+            "period_end_ms": String(periodEndMs),
         ]
         // Phase 4.6.A.3 — reactions_count present ↔ "знаем что были реакции".
         // Отсутствие ключа = "0 реакций или старая alpha.6 без 4.6.A.3"
@@ -636,7 +651,8 @@ public actor SlackCollector {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
             if let data = try? encoder.encode(messages),
-               let str = String(data: data, encoding: .utf8) {
+                let str = String(data: data, encoding: .utf8)
+            {
                 payload[Schema.EventPayloadKeys.messagesJson] = str
             }
             let anyTruncated = messages.contains { $0.text.contains("[truncated:") }
@@ -670,7 +686,7 @@ public actor SlackCollector {
                 "channel_name": channel.channelName,
                 "count": String(channel.threadReplyCount),
                 "period_start_ms": String(periodStartMs),
-                "period_end_ms": String(periodEndMs)
+                "period_end_ms": String(periodEndMs),
             ]
         )
     }
@@ -693,7 +709,7 @@ public actor SlackCollector {
             "thread_ts": threadTs,
             "reply_count": String(batch.replies.count),
             "period_start_ms": String(periodStartMs),
-            "period_end_ms": String(periodEndMs)
+            "period_end_ms": String(periodEndMs),
         ]
         // Parent body (BodyCap-applied at moat boundary).
         if let parent = batch.parent, !parent.text.isEmpty {
@@ -707,7 +723,8 @@ public actor SlackCollector {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
             if let data = try? encoder.encode(batch.replies),
-               let str = String(data: data, encoding: .utf8) {
+                let str = String(data: data, encoding: .utf8)
+            {
                 payload[Schema.EventPayloadKeys.threadRepliesJson] = str
             }
         }
@@ -736,7 +753,7 @@ public actor SlackCollector {
                 "event_kind": "slack_status_change",
                 "status_emoji": emoji,
                 "status_expiration_ts": String(expirationTs),
-                "transition_at": String(Int64(now.timeIntervalSince1970 * 1000))
+                "transition_at": String(Int64(now.timeIntervalSince1970 * 1000)),
             ]
         )
     }
@@ -758,7 +775,7 @@ public actor SlackCollector {
                 "source": "slack",
                 "event_kind": "slack_presence_state",
                 "state": state.rawValue,
-                "observed_at_ms": String(nowMs)
+                "observed_at_ms": String(nowMs),
             ]
         )
     }
@@ -777,7 +794,7 @@ public actor SlackCollector {
             "source": "slack",
             "event_kind": "slack_dnd_state",
             "dnd_enabled": state.dndEnabled ? "true" : "false",
-            "observed_at_ms": String(nowMs)
+            "observed_at_ms": String(nowMs),
         ]
         if let snooze = state.snoozeUntilMs {
             payload["snooze_until_ms"] = String(snooze)
@@ -818,7 +835,7 @@ public actor SlackCollector {
                 "channel": channelCount.channelName,
                 "count": String(channelCount.count),
                 "period_start_ms": String(channelCount.periodStartMs),
-                "period_end_ms": String(channelCount.periodEndMs)
+                "period_end_ms": String(channelCount.periodEndMs),
             ]
         )
     }
@@ -849,7 +866,7 @@ public actor SlackCollector {
             "doc_count": String(summary.typesSummary["doc"] ?? 0),
             "other_count": String(summary.typesSummary["other"] ?? 0),
             "period_start_ms": String(summary.periodStartMs),
-            "period_end_ms": String(summary.periodEndMs)
+            "period_end_ms": String(summary.periodEndMs),
         ]
         // Phase Track-1 D1 — per-file metadata as AttachmentMeta for uniform
         // cross-provider payload shape (name + mime + size_bytes).
@@ -860,7 +877,8 @@ public actor SlackCollector {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
             if let data = try? encoder.encode(attachments),
-               let str = String(data: data, encoding: .utf8) {
+                let str = String(data: data, encoding: .utf8)
+            {
                 payload[Schema.EventPayloadKeys.attachmentsJson] = str
             }
         }
@@ -882,7 +900,7 @@ public actor SlackCollector {
             payload: [
                 "source": "slack",
                 "event_kind": SlackEventKindKey.slackHuddleStateChange.rawValue,
-                "state": state.rawValue
+                "state": state.rawValue,
             ]
         )
     }

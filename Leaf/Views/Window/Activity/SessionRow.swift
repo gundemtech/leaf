@@ -6,8 +6,8 @@
 //  identity carries via real OS app icon (AppIconResolver) + app name.
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct SessionRow: View {
     let session: ActivitySession
@@ -18,7 +18,7 @@ struct SessionRow: View {
             secondary: contextLabel
         ) {
             iconView
-                .frame(width: LeafSpace.xxl, height: LeafSpace.xxl)   // 32×32
+                .frame(width: LeafSpace.xxl, height: LeafSpace.xxl)  // 32×32
         } trailing: {
             Text(formatDuration(session.duration))
                 .font(LeafType.mono.small)
@@ -61,7 +61,8 @@ struct SessionRow: View {
         if total < 60 { return "\(total)s" }
         let m = total / 60
         if m < 60 { return "\(m)m" }
-        let h = m / 60, rm = m % 60
+        let h = m / 60
+        let rm = m % 60
         return rm == 0 ? "\(h)h" : "\(h)h \(rm)m"
     }
 }

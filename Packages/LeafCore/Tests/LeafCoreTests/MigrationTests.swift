@@ -1,5 +1,6 @@
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class MigrationTests: XCTestCase {
@@ -57,11 +58,12 @@ final class MigrationTests: XCTestCase {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         let db1 = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         let now = Date(timeIntervalSince1970: 1_700_000_000)
-        try db1.upsertIntegration(IntegrationRecord(
-            provider: .linear, workspaceID: "ws", workspaceName: "Name",
-            accessToken: "tok", refreshToken: nil, expiresAt: nil,
-            scope: "read", connectedAt: now, updatedAt: now
-        ))
+        try db1.upsertIntegration(
+            IntegrationRecord(
+                provider: .linear, workspaceID: "ws", workspaceName: "Name",
+                accessToken: "tok", refreshToken: nil, expiresAt: nil,
+                scope: "read", connectedAt: now, updatedAt: now
+            ))
 
         let db2 = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         let loaded = try db2.readIntegration(provider: .linear)
@@ -103,10 +105,11 @@ final class MigrationTests: XCTestCase {
                 rawDB,
                 sql: "PRAGMA table_info(\(Schema.PresenceState.tableName))"
             )
-            let byName = Dictionary(uniqueKeysWithValues: columns.compactMap { row -> (String, Row)? in
-                guard let name = row["name"] as String? else { return nil }
-                return (name, row)
-            })
+            let byName = Dictionary(
+                uniqueKeysWithValues: columns.compactMap { row -> (String, Row)? in
+                    guard let name = row["name"] as String? else { return nil }
+                    return (name, row)
+                })
 
             // provider — primary key, NOT NULL.
             let provider = try XCTUnwrap(byName[Schema.PresenceState.provider])
@@ -200,7 +203,7 @@ final class MigrationTests: XCTestCase {
                     Schema.Org.id,
                     Schema.Org.name,
                     Schema.Org.createdAtMs,
-                    Schema.Org.createdByMemberID
+                    Schema.Org.createdByMemberID,
                 ])
             )
         }
@@ -216,10 +219,11 @@ final class MigrationTests: XCTestCase {
                 rawDB,
                 sql: "PRAGMA table_info(\(Schema.Org.tableName))"
             )
-            let byName = Dictionary(uniqueKeysWithValues: columns.compactMap { row -> (String, Row)? in
-                guard let name = row["name"] as String? else { return nil }
-                return (name, row)
-            })
+            let byName = Dictionary(
+                uniqueKeysWithValues: columns.compactMap { row -> (String, Row)? in
+                    guard let name = row["name"] as String? else { return nil }
+                    return (name, row)
+                })
 
             let id = try XCTUnwrap(byName[Schema.Org.id])
             XCTAssertEqual(id["pk"] as Int?, 1)
@@ -254,10 +258,11 @@ final class MigrationTests: XCTestCase {
                 rawDB,
                 sql: "PRAGMA table_info(\(Schema.TeamMembers.tableName))"
             )
-            let byName = Dictionary(uniqueKeysWithValues: columns.compactMap { row -> (String, Row)? in
-                guard let name = row["name"] as String? else { return nil }
-                return (name, row)
-            })
+            let byName = Dictionary(
+                uniqueKeysWithValues: columns.compactMap { row -> (String, Row)? in
+                    guard let name = row["name"] as String? else { return nil }
+                    return (name, row)
+                })
 
             XCTAssertEqual(
                 Set(byName.keys),
@@ -268,7 +273,7 @@ final class MigrationTests: XCTestCase {
                     Schema.TeamMembers.pubkeyHex,
                     Schema.TeamMembers.displayName,
                     Schema.TeamMembers.addedAtMs,
-                    Schema.TeamMembers.removedAtMs
+                    Schema.TeamMembers.removedAtMs,
                 ])
             )
 
@@ -283,7 +288,7 @@ final class MigrationTests: XCTestCase {
                 Schema.TeamMembers.role,
                 Schema.TeamMembers.pubkeyHex,
                 Schema.TeamMembers.displayName,
-                Schema.TeamMembers.addedAtMs
+                Schema.TeamMembers.addedAtMs,
             ] {
                 let row = try XCTUnwrap(byName[col])
                 XCTAssertEqual(row["notnull"] as Int?, 1, "column \(col) должен быть NOT NULL")
@@ -352,10 +357,11 @@ final class MigrationTests: XCTestCase {
                 rawDB,
                 sql: "PRAGMA table_info(\(Schema.TeamKeys.tableName))"
             )
-            let byName = Dictionary(uniqueKeysWithValues: columns.compactMap { row -> (String, Row)? in
-                guard let name = row["name"] as String? else { return nil }
-                return (name, row)
-            })
+            let byName = Dictionary(
+                uniqueKeysWithValues: columns.compactMap { row -> (String, Row)? in
+                    guard let name = row["name"] as String? else { return nil }
+                    return (name, row)
+                })
 
             XCTAssertEqual(
                 Set(byName.keys),
@@ -363,7 +369,7 @@ final class MigrationTests: XCTestCase {
                     Schema.TeamKeys.id,
                     Schema.TeamKeys.generatedAtMs,
                     Schema.TeamKeys.deprecatedAtMs,
-                    Schema.TeamKeys.generatedByMemberID
+                    Schema.TeamKeys.generatedByMemberID,
                 ])
             )
 
@@ -440,16 +446,17 @@ final class MigrationTests: XCTestCase {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
         try db.readSQL { rawDB in
-            let tables = try Set(String.fetchAll(
-                rawDB,
-                sql: """
-                    SELECT name FROM sqlite_master
-                    WHERE type='table'
-                      AND name NOT LIKE 'sqlite_%'
-                      AND name <> 'grdb_migrations'
-                      AND name NOT IN ('events_fts_data', 'events_fts_idx', 'events_fts_docsize', 'events_fts_config')
-                    """
-            ))
+            let tables = try Set(
+                String.fetchAll(
+                    rawDB,
+                    sql: """
+                        SELECT name FROM sqlite_master
+                        WHERE type='table'
+                          AND name NOT LIKE 'sqlite_%'
+                          AND name <> 'grdb_migrations'
+                          AND name NOT IN ('events_fts_data', 'events_fts_idx', 'events_fts_docsize', 'events_fts_config')
+                        """
+                ))
             let expected: Set<String> = [
                 Schema.Events.tableName,
                 Schema.CollectorOffsets.tableName,
@@ -549,11 +556,11 @@ final class MigrationTests: XCTestCase {
             let plan = try Row.fetchAll(
                 rawDB,
                 sql: """
-                    EXPLAIN QUERY PLAN
-                    SELECT * FROM events
-                    WHERE json_extract(payload_json, '$.agent_id') IS NOT NULL
-                      AND signal_type = 'aiCollaboration';
-                """
+                        EXPLAIN QUERY PLAN
+                        SELECT * FROM events
+                        WHERE json_extract(payload_json, '$.agent_id') IS NOT NULL
+                          AND signal_type = 'aiCollaboration';
+                    """
             )
             let detail = plan.compactMap { row -> String? in
                 row["detail"] as? String

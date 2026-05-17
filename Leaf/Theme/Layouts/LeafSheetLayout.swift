@@ -29,8 +29,10 @@ struct LeafSheetLayout<Content: View>: View {
                 .padding(LeafSpace.xl)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .frame(minWidth: LeafSheetLayoutTokens.minWidth,
-               minHeight: LeafSheetLayoutTokens.minHeight)
+        .frame(
+            minWidth: LeafSheetLayoutTokens.minWidth,
+            minHeight: LeafSheetLayoutTokens.minHeight
+        )
         .leafGlass(.regular, cornerRadius: LeafRadius.lg)
     }
 }

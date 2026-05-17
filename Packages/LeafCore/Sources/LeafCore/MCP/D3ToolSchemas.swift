@@ -29,18 +29,19 @@ public enum D3ToolSchemas {
                     "type": "object",
                     "properties": [
                         "start_ms": ["type": "integer", "description": "Inclusive start (ms epoch)."],
-                        "end_ms": ["type": "integer", "description": "Inclusive end (ms epoch)."]
+                        "end_ms": ["type": "integer", "description": "Inclusive end (ms epoch)."],
                     ],
                     "required": ["start_ms", "end_ms"],
-                    "additionalProperties": false
+                    "additionalProperties": false,
                 ],
                 "filter": [
                     "type": "string",
-                    "description": "Optional FTS keyword over event bodies (Linear desc/comment, Slack msg, GH PR/issue/review comment, commit msg)."
-                ]
+                    "description":
+                        "Optional FTS keyword over event bodies (Linear desc/comment, Slack msg, GH PR/issue/review comment, commit msg).",
+                ],
             ],
             "required": ["period"],
-            "additionalProperties": false
+            "additionalProperties": false,
         ]
     }
 
@@ -51,21 +52,21 @@ public enum D3ToolSchemas {
             "properties": [
                 "topic": [
                     "type": "string",
-                    "description": "FTS keyword(s) describing the decision topic (e.g. 'rate limiter algorithm')."
+                    "description": "FTS keyword(s) describing the decision topic (e.g. 'rate limiter algorithm').",
                 ],
                 "period": [
                     "type": "object",
                     "properties": [
                         "start_ms": ["type": "integer"],
-                        "end_ms": ["type": "integer"]
+                        "end_ms": ["type": "integer"],
                     ],
                     "required": ["start_ms", "end_ms"],
                     "additionalProperties": false,
-                    "description": "Optional ms-epoch range to scope FTS search."
-                ]
+                    "description": "Optional ms-epoch range to scope FTS search.",
+                ],
             ],
             "required": ["topic"],
-            "additionalProperties": false
+            "additionalProperties": false,
         ]
     }
 
@@ -76,10 +77,10 @@ public enum D3ToolSchemas {
             "properties": [
                 "now_ms": [
                     "type": "integer",
-                    "description": "Optional ms-epoch override for `now` — deterministic testing only."
+                    "description": "Optional ms-epoch override for `now` — deterministic testing only.",
                 ]
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
         ]
     }
 }

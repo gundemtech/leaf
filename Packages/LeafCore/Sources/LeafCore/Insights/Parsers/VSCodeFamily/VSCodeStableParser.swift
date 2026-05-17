@@ -8,11 +8,13 @@ public enum VSCodeStableParser: VSCodeFamilyTitleParser {
     public static let appNameLiteral = "Visual Studio Code"
 
     public static func parse(_ title: String) -> VSCodeObservation? {
-        guard let obs = VSCodeFamilyParseHelper.parseDefaultFormat(
-            title,
-            bundleID: bundleID,
-            appNameRegexLiteral: appNameLiteral
-        ) else {
+        guard
+            let obs = VSCodeFamilyParseHelper.parseDefaultFormat(
+                title,
+                bundleID: bundleID,
+                appNameRegexLiteral: appNameLiteral
+            )
+        else {
             return nil
         }
         return VSCodeObservation(

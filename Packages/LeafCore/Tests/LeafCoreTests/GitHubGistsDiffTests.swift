@@ -12,6 +12,7 @@
 //
 
 import XCTest
+
 @testable import LeafCore
 
 final class GitHubGistsDiffTests: XCTestCase {
@@ -71,12 +72,12 @@ final class GitHubGistsDiffTests: XCTestCase {
     func testCombinedCreateUpdateDelete() {
         let prior = [
             gist(id: "g1", description: "alpha", updatedAt: 100),
-            gist(id: "g2", description: "beta", updatedAt: 100)
+            gist(id: "g2", description: "beta", updatedAt: 100),
         ]
         let current = [
             gist(id: "g1", description: "alpha", updatedAt: 100),  // unchanged
-            gist(id: "g2", description: "beta-v2", updatedAt: 200), // updated
-            gist(id: "g3", description: "gamma", updatedAt: 300)    // created
+            gist(id: "g2", description: "beta-v2", updatedAt: 200),  // updated
+            gist(id: "g3", description: "gamma", updatedAt: 300),  // created
         ]
         let (c, u, d) = GitHubWarmCollector.gistsDiff(prior: prior, current: current)
         XCTAssertEqual(c.map(\.gistID), ["g3"])
@@ -87,7 +88,7 @@ final class GitHubGistsDiffTests: XCTestCase {
     func testOutputSortedByGistID() {
         let prior: [GitHubGistSnapshot] = []
         let current = [
-            gist(id: "g3"), gist(id: "g1"), gist(id: "g2")
+            gist(id: "g3"), gist(id: "g1"), gist(id: "g2"),
         ]
         let (c, _, _) = GitHubWarmCollector.gistsDiff(prior: prior, current: current)
         XCTAssertEqual(c.map(\.gistID), ["g1", "g2", "g3"])
@@ -97,7 +98,7 @@ final class GitHubGistsDiffTests: XCTestCase {
         // Spec: "updated" means updatedAtMs differs. If GitHub returned same
         // updatedAt with mutated description, we trust the timestamp and skip.
         let prior = [gist(id: "g1", description: "alpha", updatedAt: 100)]
-        let current = [gist(id: "g1", description: "beta",  updatedAt: 100)]
+        let current = [gist(id: "g1", description: "beta", updatedAt: 100)]
         let (c, u, d) = GitHubWarmCollector.gistsDiff(prior: prior, current: current)
         XCTAssertTrue(c.isEmpty)
         XCTAssertTrue(u.isEmpty)

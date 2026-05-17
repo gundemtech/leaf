@@ -7,8 +7,8 @@
 //    .consumed → never rendered (filtered at DB-level by readAllPendingInvites).
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct PendingInviteRow: View {
     let invite: PendingInvite
@@ -42,7 +42,8 @@ struct PendingInviteRow: View {
     // MARK: - Subviews
 
     private var avatarInitials: String {
-        let parts = displayLabel
+        let parts =
+            displayLabel
             .split(separator: " ")
             .prefix(2)
             .compactMap { $0.first.map(String.init) }
@@ -108,10 +109,11 @@ struct PendingInviteRow: View {
                 .lineSpacing(2)
 
             ShareTemplateButton(
-                templateBody: ShareTemplate.compose(.adminShare(
-                    displayName: invite.inviteeDisplayNameHint ?? "",
-                    inviteURL: InviteURL.compose(token: invite.token, otp: invite.otp)
-                )),
+                templateBody: ShareTemplate.compose(
+                    .adminShare(
+                        displayName: invite.inviteeDisplayNameHint ?? "",
+                        inviteURL: InviteURL.compose(token: invite.token, otp: invite.otp)
+                    )),
                 mailSubject: "Your Leaf invite link"
             )
         }

@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class GoogleCalendarEventKindsTests: XCTestCase {
@@ -8,12 +9,12 @@ final class GoogleCalendarEventKindsTests: XCTestCase {
 
     func testRawValuesMatchSpec() {
         let expected: [GoogleCalendarEventKind: String] = [
-            .eventObserved:              "google_calendar_event_observed",
-            .focusBlockStarted:          "google_calendar_focus_block_started",
-            .focusBlockEnded:            "google_calendar_focus_block_ended",
-            .oooStarted:                 "google_calendar_ooo_started",
-            .oooEnded:                   "google_calendar_ooo_ended",
-            .workingLocationChanged:     "google_calendar_working_location_changed",
+            .eventObserved: "google_calendar_event_observed",
+            .focusBlockStarted: "google_calendar_focus_block_started",
+            .focusBlockEnded: "google_calendar_focus_block_ended",
+            .oooStarted: "google_calendar_ooo_started",
+            .oooEnded: "google_calendar_ooo_ended",
+            .workingLocationChanged: "google_calendar_working_location_changed",
         ]
         for (kind, raw) in expected {
             XCTAssertEqual(kind.rawValue, raw, "\(kind) rawValue mismatch")

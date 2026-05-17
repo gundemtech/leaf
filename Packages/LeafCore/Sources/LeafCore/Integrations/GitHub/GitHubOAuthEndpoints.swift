@@ -58,7 +58,9 @@ public enum GitHubOAuthEndpoints {
     public static let scopes: [String] = ["repo", "read:user"]
 
     /// Comma-separated form для отправки в `/login/device/code`.
-    @available(*, deprecated, message: "Use GitHubOAuthEndpoints.requestedScopeParameter() — replaced in D2 (scope bump)")
+    @available(
+        *, deprecated, message: "Use GitHubOAuthEndpoints.requestedScopeParameter() — replaced in D2 (scope bump)"
+    )
     public static var scopeParameter: String { scopes.joined(separator: " ") }
 
     /// Canonical scope parameter — union of required core + optional from GitHubScopesService.

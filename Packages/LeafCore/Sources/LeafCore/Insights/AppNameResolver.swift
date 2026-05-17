@@ -36,18 +36,22 @@ public final class AppNameResolver: @unchecked Sendable {
 
     private func resolveUncached(bundleID: String) -> String? {
         if let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first,
-           let name = running.localizedName, !name.isEmpty {
+            let name = running.localizedName, !name.isEmpty
+        {
             return name
         }
 
         if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID),
-           let bundle = Bundle(url: url) {
+            let bundle = Bundle(url: url)
+        {
             if let display = bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String,
-               !display.isEmpty {
+                !display.isEmpty
+            {
                 return display
             }
             if let name = bundle.object(forInfoDictionaryKey: "CFBundleName") as? String,
-               !name.isEmpty {
+                !name.isEmpty
+            {
                 return name
             }
         }

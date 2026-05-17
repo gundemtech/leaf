@@ -1,5 +1,6 @@
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class ProviderSnapshotsStoreTests: XCTestCase {
@@ -29,7 +30,9 @@ final class ProviderSnapshotsStoreTests: XCTestCase {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try db.writeSQL { rawDB in
             try ProviderSnapshotsStore.upsert(
-                ProviderSnapshot(provider: "linear", snapshotKind: "linear_subscribed_issues", snapshotJSON: "{\"ids\":[\"a\"]}", capturedAtMs: 100),
+                ProviderSnapshot(
+                    provider: "linear", snapshotKind: "linear_subscribed_issues", snapshotJSON: "{\"ids\":[\"a\"]}",
+                    capturedAtMs: 100),
                 in: rawDB
             )
         }
@@ -44,11 +47,13 @@ final class ProviderSnapshotsStoreTests: XCTestCase {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try db.writeSQL { rawDB in
             try ProviderSnapshotsStore.upsert(
-                ProviderSnapshot(provider: "linear", snapshotKind: "linear_custom_views", snapshotJSON: "v1", capturedAtMs: 1),
+                ProviderSnapshot(
+                    provider: "linear", snapshotKind: "linear_custom_views", snapshotJSON: "v1", capturedAtMs: 1),
                 in: rawDB
             )
             try ProviderSnapshotsStore.upsert(
-                ProviderSnapshot(provider: "linear", snapshotKind: "linear_custom_views", snapshotJSON: "v2", capturedAtMs: 2),
+                ProviderSnapshot(
+                    provider: "linear", snapshotKind: "linear_custom_views", snapshotJSON: "v2", capturedAtMs: 2),
                 in: rawDB
             )
         }
@@ -63,11 +68,13 @@ final class ProviderSnapshotsStoreTests: XCTestCase {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try db.writeSQL { rawDB in
             try ProviderSnapshotsStore.upsert(
-                ProviderSnapshot(provider: "linear", snapshotKind: "linear_subscribed_issues", snapshotJSON: "subs", capturedAtMs: 1),
+                ProviderSnapshot(
+                    provider: "linear", snapshotKind: "linear_subscribed_issues", snapshotJSON: "subs", capturedAtMs: 1),
                 in: rawDB
             )
             try ProviderSnapshotsStore.upsert(
-                ProviderSnapshot(provider: "linear", snapshotKind: "linear_custom_views", snapshotJSON: "views", capturedAtMs: 1),
+                ProviderSnapshot(
+                    provider: "linear", snapshotKind: "linear_custom_views", snapshotJSON: "views", capturedAtMs: 1),
                 in: rawDB
             )
         }

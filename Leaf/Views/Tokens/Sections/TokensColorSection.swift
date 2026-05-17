@@ -10,34 +10,44 @@ struct TokensColorSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: LeafSpace.lg) {
             sectionTitle("Color")
-            group("Surface", swatches: [
-                ("canvas",  LeafColor.surface.canvas),
-                ("raised",  LeafColor.surface.raised),
-                ("inset",   LeafColor.surface.inset),
-            ])
-            group("Text", swatches: [
-                ("primary",    LeafColor.text.primary),
-                ("secondary",  LeafColor.text.secondary),
-                ("tertiary",   LeafColor.text.tertiary),
-                ("quaternary", LeafColor.text.quaternary),
-                ("inverse",    LeafColor.text.inverse),
-            ])
-            group("Accent", swatches: [
-                ("primary",  LeafColor.accent.primary),
-                ("subtle",   LeafColor.accent.subtle),
-                ("emphasis", LeafColor.accent.emphasis),
-            ])
-            group("Status", swatches: [
-                ("success", LeafColor.status.success),
-                ("warning", LeafColor.status.warning),
-                ("danger",  LeafColor.status.danger),
-                ("info",    LeafColor.status.info),
-            ])
-            group("Border", swatches: [
-                ("subtle", LeafColor.border.subtle),
-                ("strong", LeafColor.border.strong),
-                ("focus",  LeafColor.border.focus),
-            ])
+            group(
+                "Surface",
+                swatches: [
+                    ("canvas", LeafColor.surface.canvas),
+                    ("raised", LeafColor.surface.raised),
+                    ("inset", LeafColor.surface.inset),
+                ])
+            group(
+                "Text",
+                swatches: [
+                    ("primary", LeafColor.text.primary),
+                    ("secondary", LeafColor.text.secondary),
+                    ("tertiary", LeafColor.text.tertiary),
+                    ("quaternary", LeafColor.text.quaternary),
+                    ("inverse", LeafColor.text.inverse),
+                ])
+            group(
+                "Accent",
+                swatches: [
+                    ("primary", LeafColor.accent.primary),
+                    ("subtle", LeafColor.accent.subtle),
+                    ("emphasis", LeafColor.accent.emphasis),
+                ])
+            group(
+                "Status",
+                swatches: [
+                    ("success", LeafColor.status.success),
+                    ("warning", LeafColor.status.warning),
+                    ("danger", LeafColor.status.danger),
+                    ("info", LeafColor.status.info),
+                ])
+            group(
+                "Border",
+                swatches: [
+                    ("subtle", LeafColor.border.subtle),
+                    ("strong", LeafColor.border.strong),
+                    ("focus", LeafColor.border.focus),
+                ])
         }
     }
 

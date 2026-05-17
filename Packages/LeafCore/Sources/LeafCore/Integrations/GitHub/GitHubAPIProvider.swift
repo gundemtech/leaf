@@ -88,15 +88,23 @@ public protocol GitHubAPIProvider: Sendable {
     func fetchGists(accessToken: String, login: String) async throws -> [GitHubGistSnapshot]
     func fetchRepoInvitations(accessToken: String) async throws -> [GitHubRepoInvitationSnapshot]
     func fetchCodespaces(accessToken: String) async throws -> [GitHubCodespaceSnapshot]
-    func fetchIssueReactions(accessToken: String, owner: String, repo: String, issueNumber: Int) async throws -> GitHubIssueReactionsSnapshot
+    func fetchIssueReactions(
+        accessToken: String, owner: String, repo: String, issueNumber: Int
+    ) async throws -> GitHubIssueReactionsSnapshot
 
     // MARK: - Phase Track-3 D2 — cold tier
 
     func fetchStarredRepos(accessToken: String, login: String) async throws -> [GitHubStarredRepoSnapshot]
     func fetchWatchedRepos(accessToken: String, login: String) async throws -> [GitHubWatchedRepoSnapshot]
-    func fetchSecretScanningAlerts(accessToken: String, owner: String, repo: String) async throws -> [GitHubSecurityAlertSnapshot]
-    func fetchCodeScanningAlerts(accessToken: String, owner: String, repo: String) async throws -> [GitHubSecurityAlertSnapshot]
-    func fetchDependabotAlerts(accessToken: String, owner: String, repo: String) async throws -> [GitHubSecurityAlertSnapshot]
+    func fetchSecretScanningAlerts(
+        accessToken: String, owner: String, repo: String
+    ) async throws -> [GitHubSecurityAlertSnapshot]
+    func fetchCodeScanningAlerts(
+        accessToken: String, owner: String, repo: String
+    ) async throws -> [GitHubSecurityAlertSnapshot]
+    func fetchDependabotAlerts(
+        accessToken: String, owner: String, repo: String
+    ) async throws -> [GitHubSecurityAlertSnapshot]
     func fetchOrganizations(accessToken: String) async throws -> [GitHubOrgSnapshot]
     func fetchOrgAuditLog(accessToken: String, org: String, since: Int64?) async throws -> GitHubOrgAuditLogBatch
 }
@@ -478,7 +486,9 @@ public struct StubGitHubAPIProvider: GitHubAPIProvider {
 
     // MARK: - Phase Track-3 D2 — warm tier
 
-    public func fetchProjectsV2State(accessToken: String, login: String, topN: Int) async throws -> GitHubProjectsV2Snapshot {
+    public func fetchProjectsV2State(
+        accessToken: String, login: String, topN: Int
+    ) async throws -> GitHubProjectsV2Snapshot {
         .empty
     }
     public func fetchGists(accessToken: String, login: String) async throws -> [GitHubGistSnapshot] {
@@ -490,7 +500,9 @@ public struct StubGitHubAPIProvider: GitHubAPIProvider {
     public func fetchCodespaces(accessToken: String) async throws -> [GitHubCodespaceSnapshot] {
         []
     }
-    public func fetchIssueReactions(accessToken: String, owner: String, repo: String, issueNumber: Int) async throws -> GitHubIssueReactionsSnapshot {
+    public func fetchIssueReactions(
+        accessToken: String, owner: String, repo: String, issueNumber: Int
+    ) async throws -> GitHubIssueReactionsSnapshot {
         .empty(owner: owner, repo: repo, issueNumber: issueNumber, nowMs: Int64(Date().timeIntervalSince1970 * 1000))
     }
 
@@ -502,19 +514,26 @@ public struct StubGitHubAPIProvider: GitHubAPIProvider {
     public func fetchWatchedRepos(accessToken: String, login: String) async throws -> [GitHubWatchedRepoSnapshot] {
         []
     }
-    public func fetchSecretScanningAlerts(accessToken: String, owner: String, repo: String) async throws -> [GitHubSecurityAlertSnapshot] {
+    public func fetchSecretScanningAlerts(
+        accessToken: String, owner: String, repo: String
+    ) async throws -> [GitHubSecurityAlertSnapshot] {
         []
     }
-    public func fetchCodeScanningAlerts(accessToken: String, owner: String, repo: String) async throws -> [GitHubSecurityAlertSnapshot] {
+    public func fetchCodeScanningAlerts(
+        accessToken: String, owner: String, repo: String
+    ) async throws -> [GitHubSecurityAlertSnapshot] {
         []
     }
-    public func fetchDependabotAlerts(accessToken: String, owner: String, repo: String) async throws -> [GitHubSecurityAlertSnapshot] {
+    public func fetchDependabotAlerts(
+        accessToken: String, owner: String, repo: String
+    ) async throws -> [GitHubSecurityAlertSnapshot] {
         []
     }
     public func fetchOrganizations(accessToken: String) async throws -> [GitHubOrgSnapshot] {
         []
     }
-    public func fetchOrgAuditLog(accessToken: String, org: String, since: Int64?) async throws -> GitHubOrgAuditLogBatch {
+    public func fetchOrgAuditLog(accessToken: String, org: String, since: Int64?) async throws -> GitHubOrgAuditLogBatch
+    {
         .empty
     }
 }

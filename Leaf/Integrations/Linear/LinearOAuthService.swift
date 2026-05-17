@@ -13,11 +13,12 @@
 //  busyTimeout=5000ms serialize'ит, 100ms retry once на конфликт — паттерн WatchedFoldersService.
 //
 
-import Foundation
-import SwiftUI
 import AppKit
+import Foundation
 import LeafCore
+import SwiftUI
 import os
+
 #if LEAF_PROD
 import LeafCorePrivate
 #endif
@@ -174,7 +175,10 @@ final class LinearOAuthService {
             case .timeout:
                 state = .error(message: "Authorization timed out. Try again.")
             case .bindFailed(let reason):
-                state = .error(message: "Couldn't bind to port \(LinearOAuthEndpoints.redirectPort): \(reason). Close any conflicting app.")
+                state = .error(
+                    message:
+                        "Couldn't bind to port \(LinearOAuthEndpoints.redirectPort): \(reason). Close any conflicting app."
+                )
             case .listenerFailed(let reason):
                 state = .error(message: "Local listener failed: \(reason).")
             case .parseFailed:
@@ -203,8 +207,8 @@ final class LinearOAuthService {
 
     private func readClientID() -> String? {
         guard let id = Bundle.main.object(forInfoDictionaryKey: "LeafLinearOAuthClientID") as? String,
-              !id.isEmpty,
-              !id.contains("$(")
+            !id.isEmpty,
+            !id.contains("$(")
         else { return nil }
         return id
     }
@@ -220,12 +224,14 @@ final class LinearOAuthService {
             URLQueryItem(name: "code_challenge", value: challenge.challenge),
             URLQueryItem(name: "code_challenge_method", value: "S256"),
             URLQueryItem(name: "actor", value: LinearOAuthEndpoints.actor),
-            URLQueryItem(name: "prompt", value: "consent")
+            URLQueryItem(name: "prompt", value: "consent"),
         ]
         guard let url = components?.url else {
-            throw NSError(domain: "tech.gundem.leaf.linear-oauth", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "Couldn't build authorize URL"
-            ])
+            throw NSError(
+                domain: "tech.gundem.leaf.linear-oauth", code: 1,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Couldn't build authorize URL"
+                ])
         }
         return url
     }
@@ -240,7 +246,7 @@ final class LinearOAuthService {
             "code": code,
             "redirect_uri": LinearOAuthEndpoints.redirectURI,
             "client_id": clientID,
-            "code_verifier": verifier
+            "code_verifier": verifier,
         ])
 
         let (data, response) = try await URLSession.shared.data(for: request)

@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 /// Phase 4.10.A — pure mapper from raw event rows to ActivityFeedEntry.
@@ -29,15 +30,17 @@ final class ActivityFeedMapperTests: XCTestCase {
     }
 
     func testAttentionDropsRowWithoutBundleID() {
-        XCTAssertNil(ActivityFeedMapper.map(
-            id: 1, timestampMs: ts, signalType: "attention", bundleID: nil, payloadJSON: "{}"
-        ))
+        XCTAssertNil(
+            ActivityFeedMapper.map(
+                id: 1, timestampMs: ts, signalType: "attention", bundleID: nil, payloadJSON: "{}"
+            ))
     }
 
     // MARK: - Linear
 
     func testMapsLinearStatusTransition() {
-        let payload = #"{"source":"linear","event_kind":"status_transition","issue_key":"ENG-1234","to_state_name":"In Review","from_state_name":"In Progress"}"#
+        let payload =
+            #"{"source":"linear","event_kind":"status_transition","issue_key":"ENG-1234","to_state_name":"In Review","from_state_name":"In Progress"}"#
         let entry = ActivityFeedMapper.map(
             id: 10, timestampMs: ts, signalType: "action", bundleID: nil, payloadJSON: payload
         )
@@ -75,7 +78,8 @@ final class ActivityFeedMapperTests: XCTestCase {
     }
 
     func testMapsGitHubCommitPushed() {
-        let payload = #"{"source":"github","event_kind":"gh_commit_pushed","repo":"gundemtech/leaf","branch":"main","sha":"abcdef1234567890"}"#
+        let payload =
+            #"{"source":"github","event_kind":"gh_commit_pushed","repo":"gundemtech/leaf","branch":"main","sha":"abcdef1234567890"}"#
         let entry = ActivityFeedMapper.map(
             id: 21, timestampMs: ts, signalType: "action", bundleID: nil, payloadJSON: payload
         )
@@ -94,7 +98,8 @@ final class ActivityFeedMapperTests: XCTestCase {
     // MARK: - Slack
 
     func testMapsSlackMessageAuthoredAggregate() {
-        let payload = #"{"source":"slack","event_kind":"slack_message_authored_aggregate","channel_name":"engineering","count":"5","reactions_count":"3"}"#
+        let payload =
+            #"{"source":"slack","event_kind":"slack_message_authored_aggregate","channel_name":"engineering","count":"5","reactions_count":"3"}"#
         let entry = ActivityFeedMapper.map(
             id: 30, timestampMs: ts, signalType: "action", bundleID: nil, payloadJSON: payload
         )
@@ -114,7 +119,8 @@ final class ActivityFeedMapperTests: XCTestCase {
     // MARK: - Google Calendar (Track-6 P4)
 
     func testMapGoogleCalendarEventObservedReturnsEntryWithSummaryAsPrimary() {
-        let payload = #"{"source":"google_calendar","event_kind":"google_calendar_event_observed","summary":"Sprint planning"}"#
+        let payload =
+            #"{"source":"google_calendar","event_kind":"google_calendar_event_observed","summary":"Sprint planning"}"#
         let entry = ActivityFeedMapper.map(
             id: 50, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
         )
@@ -133,7 +139,8 @@ final class ActivityFeedMapperTests: XCTestCase {
     }
 
     func testMapGoogleCalendarEventObservedShowsAttendeesCountInSecondary() {
-        let payload = #"{"source":"google_calendar","event_kind":"google_calendar_event_observed","summary":"Team sync","attendees_count":"5"}"#
+        let payload =
+            #"{"source":"google_calendar","event_kind":"google_calendar_event_observed","summary":"Team sync","attendees_count":"5"}"#
         let entry = ActivityFeedMapper.map(
             id: 52, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
         )
@@ -142,7 +149,8 @@ final class ActivityFeedMapperTests: XCTestCase {
     }
 
     func testMapGoogleCalendarEventObservedSingleAttendeeUsesSingularLabel() {
-        let payload = #"{"source":"google_calendar","event_kind":"google_calendar_event_observed","summary":"1:1","attendees_count":"1"}"#
+        let payload =
+            #"{"source":"google_calendar","event_kind":"google_calendar_event_observed","summary":"1:1","attendees_count":"1"}"#
         let entry = ActivityFeedMapper.map(
             id: 53, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
         )
@@ -150,7 +158,8 @@ final class ActivityFeedMapperTests: XCTestCase {
     }
 
     func testMapGoogleCalendarEventObservedAppendsVideoCallHint() {
-        let payload = #"{"source":"google_calendar","event_kind":"google_calendar_event_observed","summary":"Standup","attendees_count":"3","conference_entry_point_type":"video"}"#
+        let payload =
+            #"{"source":"google_calendar","event_kind":"google_calendar_event_observed","summary":"Standup","attendees_count":"3","conference_entry_point_type":"video"}"#
         let entry = ActivityFeedMapper.map(
             id: 54, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
         )
@@ -158,7 +167,8 @@ final class ActivityFeedMapperTests: XCTestCase {
     }
 
     func testMapGoogleCalendarFocusBlockStartedReturnsEntry() {
-        let payload = #"{"source":"google_calendar","event_kind":"google_calendar_focus_block_started","chat_status":"doNotDisturb"}"#
+        let payload =
+            #"{"source":"google_calendar","event_kind":"google_calendar_focus_block_started","chat_status":"doNotDisturb"}"#
         let entry = ActivityFeedMapper.map(
             id: 55, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
         )
@@ -193,7 +203,8 @@ final class ActivityFeedMapperTests: XCTestCase {
     }
 
     func testMapGoogleCalendarWorkingLocationChangedHomeOfficeBucket() {
-        let payload = #"{"source":"google_calendar","event_kind":"google_calendar_working_location_changed","working_location_type":"homeOffice"}"#
+        let payload =
+            #"{"source":"google_calendar","event_kind":"google_calendar_working_location_changed","working_location_type":"homeOffice"}"#
         let entry = ActivityFeedMapper.map(
             id: 59, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
         )
@@ -201,7 +212,8 @@ final class ActivityFeedMapperTests: XCTestCase {
     }
 
     func testMapGoogleCalendarWorkingLocationChangedOfficeLocationBucket() {
-        let payload = #"{"source":"google_calendar","event_kind":"google_calendar_working_location_changed","working_location_type":"officeLocation"}"#
+        let payload =
+            #"{"source":"google_calendar","event_kind":"google_calendar_working_location_changed","working_location_type":"officeLocation"}"#
         let entry = ActivityFeedMapper.map(
             id: 60, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
         )
@@ -209,7 +221,8 @@ final class ActivityFeedMapperTests: XCTestCase {
     }
 
     func testMapGoogleCalendarWorkingLocationChangedCustomLocationBucket() {
-        let payload = #"{"source":"google_calendar","event_kind":"google_calendar_working_location_changed","working_location_type":"customLocation"}"#
+        let payload =
+            #"{"source":"google_calendar","event_kind":"google_calendar_working_location_changed","working_location_type":"customLocation"}"#
         let entry = ActivityFeedMapper.map(
             id: 61, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
         )
@@ -218,9 +231,10 @@ final class ActivityFeedMapperTests: XCTestCase {
 
     func testMapGoogleCalendarRejectsUnknownEventKind() {
         let payload = #"{"source":"google_calendar","event_kind":"google_calendar_made_up"}"#
-        XCTAssertNil(ActivityFeedMapper.map(
-            id: 62, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
-        ))
+        XCTAssertNil(
+            ActivityFeedMapper.map(
+                id: 62, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
+            ))
     }
 
     /// ADR-010 sentinel — mapper MUST NOT surface `description` / `location` /
@@ -230,24 +244,27 @@ final class ActivityFeedMapperTests: XCTestCase {
     /// this test is the second line of defence at the mapper boundary.
     func testGoogleCalendarMapperDropsForbiddenPayloadFields() {
         let payload = """
-        {"source":"google_calendar",
-         "event_kind":"google_calendar_event_observed",
-         "summary":"Real title",
-         "description":"SECRET-DESC-XYZ",
-         "location":"SECRET-LOC-XYZ",
-         "attendee_email":"SECRET-EMAIL-XYZ",
-         "decline_message":"SECRET-DECLINE-XYZ",
-         "conference_uri":"https://meet.google.com/SECRET-URI-XYZ",
-         "building_id":"SECRET-BLDG-XYZ"}
-        """
+            {"source":"google_calendar",
+             "event_kind":"google_calendar_event_observed",
+             "summary":"Real title",
+             "description":"SECRET-DESC-XYZ",
+             "location":"SECRET-LOC-XYZ",
+             "attendee_email":"SECRET-EMAIL-XYZ",
+             "decline_message":"SECRET-DECLINE-XYZ",
+             "conference_uri":"https://meet.google.com/SECRET-URI-XYZ",
+             "building_id":"SECRET-BLDG-XYZ"}
+            """
         let entry = ActivityFeedMapper.map(
             id: 63, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
         )
         let combined = (entry?.primaryText ?? "") + " " + (entry?.secondaryText ?? "")
-        for sentinel in ["SECRET-DESC-XYZ", "SECRET-LOC-XYZ", "SECRET-EMAIL-XYZ",
-                         "SECRET-DECLINE-XYZ", "SECRET-URI-XYZ", "SECRET-BLDG-XYZ"] {
-            XCTAssertFalse(combined.contains(sentinel),
-                           "Mapper leaked forbidden payload sentinel \(sentinel) into row text")
+        for sentinel in [
+            "SECRET-DESC-XYZ", "SECRET-LOC-XYZ", "SECRET-EMAIL-XYZ",
+            "SECRET-DECLINE-XYZ", "SECRET-URI-XYZ", "SECRET-BLDG-XYZ",
+        ] {
+            XCTAssertFalse(
+                combined.contains(sentinel),
+                "Mapper leaked forbidden payload sentinel \(sentinel) into row text")
         }
         XCTAssertEqual(entry?.primaryText, "Real title")
     }
@@ -255,24 +272,28 @@ final class ActivityFeedMapperTests: XCTestCase {
     // MARK: - Pulse / state filtering
 
     func testSkipsLinearWorkloadPulse() {
-        let payload = #"{"source":"linear","event_kind":"linear_assigned_workload_pulse","started_count":"4","top_priority":"high"}"#
-        XCTAssertNil(ActivityFeedMapper.map(
-            id: 40, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
-        ))
+        let payload =
+            #"{"source":"linear","event_kind":"linear_assigned_workload_pulse","started_count":"4","top_priority":"high"}"#
+        XCTAssertNil(
+            ActivityFeedMapper.map(
+                id: 40, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
+            ))
     }
 
     func testSkipsGitHubNotificationsPulse() {
         let payload = #"{"source":"github","event_kind":"gh_notifications_pulse","total_unread":"7"}"#
-        XCTAssertNil(ActivityFeedMapper.map(
-            id: 41, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
-        ))
+        XCTAssertNil(
+            ActivityFeedMapper.map(
+                id: 41, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
+            ))
     }
 
     func testSkipsSlackPresenceState() {
         let payload = #"{"source":"slack","event_kind":"slack_presence_state","state":"active"}"#
-        XCTAssertNil(ActivityFeedMapper.map(
-            id: 42, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
-        ))
+        XCTAssertNil(
+            ActivityFeedMapper.map(
+                id: 42, timestampMs: ts, signalType: "context", bundleID: nil, payloadJSON: payload
+            ))
     }
 
     // MARK: - ADR-010 sentinel-injection regression
@@ -284,8 +305,8 @@ final class ActivityFeedMapperTests: XCTestCase {
         let sentinel = "SHOULD_NOT_LEAK_ADR010_BODY"
         // Linear status_transition with an extra `body` field.
         let linearPayload = """
-        {"source":"linear","event_kind":"status_transition","issue_key":"ENG-1","to_state_name":"Done","body":"\(sentinel)","description":"\(sentinel)","comment_text":"\(sentinel)"}
-        """
+            {"source":"linear","event_kind":"status_transition","issue_key":"ENG-1","to_state_name":"Done","body":"\(sentinel)","description":"\(sentinel)","comment_text":"\(sentinel)"}
+            """
         let linear = ActivityFeedMapper.map(
             id: 50, timestampMs: ts, signalType: "action", bundleID: nil, payloadJSON: linearPayload
         )
@@ -295,8 +316,8 @@ final class ActivityFeedMapperTests: XCTestCase {
 
         // GitHub generic event with body field.
         let githubPayload = """
-        {"source":"github","event_kind":"gh_pr_opened","repo":"r/x","number":"1","body":"\(sentinel)","title":"\(sentinel)"}
-        """
+            {"source":"github","event_kind":"gh_pr_opened","repo":"r/x","number":"1","body":"\(sentinel)","title":"\(sentinel)"}
+            """
         let github = ActivityFeedMapper.map(
             id: 51, timestampMs: ts, signalType: "action", bundleID: nil, payloadJSON: githubPayload
         )
@@ -306,8 +327,8 @@ final class ActivityFeedMapperTests: XCTestCase {
 
         // Slack message aggregate with text field.
         let slackPayload = """
-        {"source":"slack","event_kind":"slack_message_authored_aggregate","channel_name":"eng","count":"1","text":"\(sentinel)","preview":"\(sentinel)","message_text":"\(sentinel)"}
-        """
+            {"source":"slack","event_kind":"slack_message_authored_aggregate","channel_name":"eng","count":"1","text":"\(sentinel)","preview":"\(sentinel)","message_text":"\(sentinel)"}
+            """
         let slack = ActivityFeedMapper.map(
             id: 52, timestampMs: ts, signalType: "action", bundleID: nil, payloadJSON: slackPayload
         )
@@ -317,8 +338,8 @@ final class ActivityFeedMapperTests: XCTestCase {
 
         // Attention row with stray fields.
         let attentionPayload = """
-        {"foo":"\(sentinel)","note":"\(sentinel)"}
-        """
+            {"foo":"\(sentinel)","note":"\(sentinel)"}
+            """
         let attention = ActivityFeedMapper.map(
             id: 53, timestampMs: ts, signalType: "attention", bundleID: "com.apple.Safari",
             payloadJSON: attentionPayload
@@ -331,9 +352,10 @@ final class ActivityFeedMapperTests: XCTestCase {
     // MARK: - Robustness
 
     func testReturnsNilOnMalformedJSON() {
-        XCTAssertNil(ActivityFeedMapper.map(
-            id: 60, timestampMs: ts, signalType: "action", bundleID: nil, payloadJSON: "{not-json"
-        ))
+        XCTAssertNil(
+            ActivityFeedMapper.map(
+                id: 60, timestampMs: ts, signalType: "action", bundleID: nil, payloadJSON: "{not-json"
+            ))
     }
 
     func testEmptyPayloadIsAllowedForAttention() {
@@ -356,7 +378,8 @@ final class ActivityFeedMapperTests: XCTestCase {
     // MARK: - AI collaboration (ClaudeCodeJSONLParser shape)
 
     func testMapsAIToolUseWithFilePath() {
-        let payload = #"{"event_kind":"tool_use","tool_name":"Edit","file_path":"/Users/me/proj/src/Foo.swift","cwd":"/Users/me/proj"}"#
+        let payload =
+            #"{"event_kind":"tool_use","tool_name":"Edit","file_path":"/Users/me/proj/src/Foo.swift","cwd":"/Users/me/proj"}"#
         let entry = ActivityFeedMapper.map(
             id: 70, timestampMs: ts, signalType: "aiCollaboration", bundleID: nil, payloadJSON: payload
         )
@@ -393,7 +416,9 @@ final class ActivityFeedEntryCoalesceTests: XCTestCase {
 
     private let baseTs = Date(timeIntervalSince1970: 1_700_000_000)
 
-    private func entry(_ id: Int64, kind: String, primary: String, bundleID: String? = nil, addingSeconds: TimeInterval = 0) -> ActivityFeedEntry {
+    private func entry(
+        _ id: Int64, kind: String, primary: String, bundleID: String? = nil, addingSeconds: TimeInterval = 0
+    ) -> ActivityFeedEntry {
         ActivityFeedEntry(
             id: id,
             timestamp: baseTs.addingTimeInterval(addingSeconds),
@@ -428,7 +453,7 @@ final class ActivityFeedEntryCoalesceTests: XCTestCase {
     func testNonConsecutiveDuplicatesDoNotMerge() {
         // A, B, A — two A entries are NOT adjacent, so no merge.
         let a1 = entry(1, kind: "tool_use", primary: "Bash", addingSeconds: 0)
-        let b  = entry(2, kind: "tool_use", primary: "Read", addingSeconds: 1)
+        let b = entry(2, kind: "tool_use", primary: "Read", addingSeconds: 1)
         let a2 = entry(3, kind: "tool_use", primary: "Bash", addingSeconds: 2)
         let result = ActivityFeedEntry.coalesceConsecutive([a1, b, a2])
         XCTAssertEqual(result.count, 3)

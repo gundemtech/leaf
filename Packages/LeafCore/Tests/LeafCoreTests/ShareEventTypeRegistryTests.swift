@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class ShareEventTypeRegistryTests: XCTestCase {
@@ -8,8 +9,9 @@ final class ShareEventTypeRegistryTests: XCTestCase {
     func testAllKeysHaveDefaults() {
         let allKeys = Set(ShareEventTypeKey.allCases.map { $0.rawValue })
         let defaultKeys = Set(ShareEventTypeDefaults.all.map { $0.key.rawValue })
-        XCTAssertEqual(allKeys, defaultKeys,
-                       "Each ShareEventTypeKey case must have ShareEventTypeDefault entry")
+        XCTAssertEqual(
+            allKeys, defaultKeys,
+            "Each ShareEventTypeKey case must have ShareEventTypeDefault entry")
     }
 
     /// rawValue uniqueness — два case'а не могут иметь одинаковый
@@ -23,8 +25,9 @@ final class ShareEventTypeRegistryTests: XCTestCase {
     /// Если ломается при добавлении в новые phase'ы — обновить counter сознательно.
     func testRegistrySize66AfterD1() {
         // Superseded by testCount116 after Track-3 D3 — kept as historical anchor.
-        XCTAssertGreaterThanOrEqual(ShareEventTypeKey.allCases.count, 66,
-                       "Registry must contain at least 66 keys (Track-3 D1 baseline)")
+        XCTAssertGreaterThanOrEqual(
+            ShareEventTypeKey.allCases.count, 66,
+            "Registry must contain at least 66 keys (Track-3 D1 baseline)")
     }
 
     /// Track 3 D3 — registry total 116 keys (97 post-D2 + 19 new Slack deep sweep).
@@ -41,9 +44,12 @@ final class ShareEventTypeRegistryTests: XCTestCase {
     /// Track 3 D2 — все GitHub keys must use the canonical `gh_*` rawValue
     /// prefix mirroring `GitHubEventKindKey`.
     func testAllGitHubKeysHaveGhPrefix() {
-        let githubKeys = ShareEventTypeKey.allCases.filter { $0.rawValue.contains("gh_") || $0.rawValue.hasPrefix("github_") }
+        let githubKeys = ShareEventTypeKey.allCases.filter {
+            $0.rawValue.contains("gh_") || $0.rawValue.hasPrefix("github_")
+        }
         for key in githubKeys {
-            XCTAssertTrue(key.rawValue.hasPrefix("gh_"),
+            XCTAssertTrue(
+                key.rawValue.hasPrefix("gh_"),
                 "GitHub key '\(key)' rawValue must start with gh_, got '\(key.rawValue)'")
         }
     }
@@ -65,12 +71,14 @@ final class ShareEventTypeRegistryTests: XCTestCase {
             "gh_secret_alert_observed", "gh_secret_alert_resolved",
             "gh_code_alert_observed", "gh_code_alert_resolved",
             "gh_dependabot_alert_observed", "gh_dependabot_alert_resolved",
-            "gh_audit_action_observed"
+            "gh_audit_action_observed",
         ]
-        let defaultsMap = Dictionary(uniqueKeysWithValues:
-            ShareEventTypeDefaults.all.map { ($0.key.rawValue, $0.defaultEnabled) })
+        let defaultsMap = Dictionary(
+            uniqueKeysWithValues:
+                ShareEventTypeDefaults.all.map { ($0.key.rawValue, $0.defaultEnabled) })
         for rawValue in new {
-            XCTAssertEqual(defaultsMap[rawValue], false,
+            XCTAssertEqual(
+                defaultsMap[rawValue], false,
                 "New D2 GitHub kind '\(rawValue)' must default OFF (ADR-020)")
         }
     }
@@ -80,7 +88,8 @@ final class ShareEventTypeRegistryTests: XCTestCase {
     func testEnumRawValuesMatchGitHubEventKindKey() {
         let registryGhKinds = Set(ShareEventTypeKey.allCases.map { $0.rawValue }.filter { $0.hasPrefix("gh_") })
         let enumKinds = Set(GitHubEventKindKey.allCases.map { $0.rawValue })
-        XCTAssertEqual(registryGhKinds, enumKinds,
+        XCTAssertEqual(
+            registryGhKinds, enumKinds,
             "ShareEventTypeKey GitHub raw values must match GitHubEventKindKey.allCases 1:1")
     }
 
@@ -95,7 +104,7 @@ final class ShareEventTypeRegistryTests: XCTestCase {
             .linearCycleStarted, .linearCycleCompleted,
             .linearRoadmapStateObserved,
             .linearCustomViewCreated, .linearCustomViewUpdated, .linearCustomViewDeleted,
-            .linearProjectMembershipAdded, .linearProjectMembershipRemoved
+            .linearProjectMembershipAdded, .linearProjectMembershipRemoved,
         ]
         XCTAssertEqual(d1Keys.count, 18, "D1 spec mandates 18 new kinds")
         let map = Dictionary(uniqueKeysWithValues: ShareEventTypeDefaults.all.map { ($0.key, $0.defaultEnabled) })
@@ -126,15 +135,16 @@ final class ShareEventTypeRegistryTests: XCTestCase {
             .slackPresenceState,
             .slackDNDState,
             .slackMentionReceivedAggregate,
-            .slackFileUploadedAggregate
+            .slackFileUploadedAggregate,
         ]
         XCTAssertEqual(phase47BKeys.count, 11, "Phase 4.7.B adds exactly 11 new keys")
 
         for key in phase47BKeys {
             let entry = ShareEventTypeDefaults.all.first { $0.key == key }
             XCTAssertNotNil(entry, "Phase 4.7.B key \(key.rawValue) must have default entry")
-            XCTAssertEqual(entry?.defaultEnabled, true,
-                           "Phase 4.7.B key \(key.rawValue) defaults to enabled per design")
+            XCTAssertEqual(
+                entry?.defaultEnabled, true,
+                "Phase 4.7.B key \(key.rawValue) defaults to enabled per design")
         }
     }
 
@@ -150,7 +160,7 @@ final class ShareEventTypeRegistryTests: XCTestCase {
             .linearProjectUpdateAuthored,
             .linearDocumentEdited,
             .linearInitiativeObserved,
-            .githubPullRequestReviewThreadResolved
+            .githubPullRequestReviewThreadResolved,
         ]
         XCTAssertEqual(phase47CKeys.count, 10, "Phase 4.7.C adds exactly 10 new keys")
         for key in phase47CKeys {
@@ -169,13 +179,14 @@ final class ShareEventTypeRegistryTests: XCTestCase {
             .linearPriorityChanged, .linearLabelAdded, .linearLabelRemoved,
             .linearAssigneeChanged, .linearCycleChanged, .linearEstimateChanged,
             .linearProjectUpdateAuthored,
-            .githubPullRequestReviewThreadResolved
+            .githubPullRequestReviewThreadResolved,
         ]
         let offByDefault: Set<ShareEventTypeKey> = [
-            .linearDocumentEdited, .linearInitiativeObserved
+            .linearDocumentEdited, .linearInitiativeObserved,
         ]
-        let map = Dictionary(uniqueKeysWithValues:
-            ShareEventTypeDefaults.all.map { ($0.key, $0.defaultEnabled) })
+        let map = Dictionary(
+            uniqueKeysWithValues:
+                ShareEventTypeDefaults.all.map { ($0.key, $0.defaultEnabled) })
         for key in onByDefault {
             XCTAssertEqual(map[key], true, "\(key.rawValue) should be ON by default")
         }

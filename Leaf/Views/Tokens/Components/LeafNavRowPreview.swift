@@ -11,13 +11,13 @@ struct LeafNavRowPreview: View {
     @State private var selected: WindowSection = .home
 
     private let rows: [(WindowSection, Int?, String?)] = [
-        (.home,         nil, nil),
-        (.activity,     5,   nil),
-        (.team,         3,   nil),
-        (.connections,  nil, nil),
+        (.home, nil, nil),
+        (.activity, 5, nil),
+        (.team, 3, nil),
+        (.connections, nil, nil),
         (.organization, nil, nil),
-        (.settings,     nil, "⌘,"),
-        (.profile,      nil, nil),
+        (.settings, nil, "⌘,"),
+        (.profile, nil, nil),
     ]
 
     var body: some View {
@@ -43,7 +43,8 @@ struct LeafNavRowPreview: View {
             .frame(width: 240)
 
             TokensInlineSpec(
-                spec: "LeafNavRow · 36pt height · rest/hover/selected · accent.subtle bg selected · LeafBadge + LeafKeyboardShortcut slots · icon (asset|system)",
+                spec:
+                    "LeafNavRow · 36pt height · rest/hover/selected · accent.subtle bg selected · LeafBadge + LeafKeyboardShortcut slots · icon (asset|system)",
                 codeSnippet: "LeafNavRow(icon: .asset(LeafIcons.nav.home), title: \"Home\", isSelected: $sel) { tap() }"
             )
         }

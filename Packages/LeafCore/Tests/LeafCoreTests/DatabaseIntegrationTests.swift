@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class DatabaseIntegrationTests: XCTestCase {
@@ -59,8 +60,9 @@ final class DatabaseIntegrationTests: XCTestCase {
         XCTAssertEqual(try db.eventCount(in: narrow), 10)
 
         // Bundle filter
-        let filtered = try db.events(in: DateInterval(start: base, end: base.addingTimeInterval(3600)), bundleID: "com.app.1")
-        XCTAssertEqual(filtered.count, 17) // indices 1, 4, 7, ..., 49 → 17 items
+        let filtered = try db.events(
+            in: DateInterval(start: base, end: base.addingTimeInterval(3600)), bundleID: "com.app.1")
+        XCTAssertEqual(filtered.count, 17)  // indices 1, 4, 7, ..., 49 → 17 items
         XCTAssertTrue(filtered.allSatisfy { $0.bundleID == "com.app.1" })
     }
 
@@ -69,9 +71,11 @@ final class DatabaseIntegrationTests: XCTestCase {
 
         let base = Date(timeIntervalSince1970: 1_700_000_000)
         // Write in reversed order
-        try db.write((0..<5).reversed().map { i in
-            RawEvent(timestamp: base.addingTimeInterval(TimeInterval(i * 60)), signalType: .attention, bundleID: "X")
-        })
+        try db.write(
+            (0..<5).reversed().map { i in
+                RawEvent(
+                    timestamp: base.addingTimeInterval(TimeInterval(i * 60)), signalType: .attention, bundleID: "X")
+            })
 
         let read = try db.events(in: DateInterval(start: base, end: base.addingTimeInterval(3600)))
         let timestamps = read.map(\.timestamp.timeIntervalSince1970)
@@ -130,10 +134,11 @@ final class DatabaseIntegrationTests: XCTestCase {
         let deleted = try db.deleteEventsOlderThan(tsMs: 250, limit: 1000)
         XCTAssertEqual(deleted, 2)
 
-        let remaining = try db.events(in: DateInterval(
-            start: Date(timeIntervalSince1970: 0),
-            end: Date(timeIntervalSince1970: 1)
-        ))
+        let remaining = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: 0),
+                end: Date(timeIntervalSince1970: 1)
+            ))
         XCTAssertEqual(remaining.count, 1)
         XCTAssertEqual(remaining[0].bundleID, "com.app.300")
     }

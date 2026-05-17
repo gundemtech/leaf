@@ -1,4 +1,5 @@
 import Foundation
+
 #if canImport(Darwin)
 import Darwin
 #endif
@@ -26,7 +27,7 @@ public final class AIToolsHookInstaller: @unchecked Sendable {
     public enum Status: Equatable, Sendable {
         case notInstalled
         case installed
-        case drifted   // Leaf entries present but bundle path differs from current
+        case drifted  // Leaf entries present but bundle path differs from current
     }
 
     private let settingsURL: URL
@@ -67,9 +68,10 @@ public final class AIToolsHookInstaller: @unchecked Sendable {
 
     public func currentStatus() -> Status {
         guard let data = try? Data(contentsOf: settingsURL),
-              !data.isEmpty,
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let hooks = json["hooks"] as? [String: Any] else {
+            !data.isEmpty,
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let hooks = json["hooks"] as? [String: Any]
+        else {
             return .notInstalled
         }
         let bridgePath = bridgeCommandPath
@@ -106,8 +108,9 @@ public final class AIToolsHookInstaller: @unchecked Sendable {
         let path = settingsURL.path
         let fd = open(path, O_RDWR | O_CREAT, 0o644)
         guard fd >= 0 else {
-            throw NSError(domain: "AIToolsHookInstaller", code: 1,
-                          userInfo: [NSLocalizedDescriptionKey: "open failed errno=\(errno)"])
+            throw NSError(
+                domain: "AIToolsHookInstaller", code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "open failed errno=\(errno)"])
         }
         defer { close(fd) }
 
@@ -118,8 +121,9 @@ public final class AIToolsHookInstaller: @unchecked Sendable {
             lockOK = flock(fd, LOCK_EX | LOCK_NB) == 0
         }
         guard lockOK else {
-            throw NSError(domain: "AIToolsHookInstaller", code: 2,
-                          userInfo: [NSLocalizedDescriptionKey: "settings.json locked by another process"])
+            throw NSError(
+                domain: "AIToolsHookInstaller", code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "settings.json locked by another process"])
         }
         defer { _ = flock(fd, LOCK_UN) }
 
@@ -134,14 +138,16 @@ public final class AIToolsHookInstaller: @unchecked Sendable {
             // Malformed JSON — recover by writing fresh {}. We do NOT silently
             // overwrite a non-empty file the user may have hand-edited badly;
             // throw so the UI can show error and let the user fix it.
-            throw NSError(domain: "AIToolsHookInstaller", code: 3,
-                          userInfo: [NSLocalizedDescriptionKey: "settings.json contains invalid JSON"])
+            throw NSError(
+                domain: "AIToolsHookInstaller", code: 3,
+                userInfo: [NSLocalizedDescriptionKey: "settings.json contains invalid JSON"])
         }
 
         mutator(&json)
 
         // Atomic write: temp file in same dir + rename.
-        let tempURL = settingsURL
+        let tempURL =
+            settingsURL
             .deletingLastPathComponent()
             .appendingPathComponent("settings.json.tmp-\(UUID().uuidString)")
         let outData = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted])
@@ -205,9 +211,9 @@ public final class AIToolsHookInstaller: @unchecked Sendable {
                     [
                         "type": "command",
                         "command": "\(bridgeCommandPath) \(event)",
-                        "timeout": 2
+                        "timeout": 2,
                     ]
-                ]
+                ],
             ])
             hooks[event] = arr
         }

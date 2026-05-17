@@ -6,8 +6,8 @@ import GRDB
 /// `id` — UUID, PK; `path` — canonical absolute (after `resolvingSymlinksInPath`),
 /// UNIQUE для предотвращения дубликатов; `max_granularity` — `'L4'` (folder только)
 /// или `'L5'` (full path) — применяется в router'е at write-time.
-public extension DatabaseMigrator {
-    mutating func registerMigration003WatchedFolders() {
+extension DatabaseMigrator {
+    public mutating func registerMigration003WatchedFolders() {
         registerMigration("003_watched_folders") { db in
             try db.create(table: Schema.WatchedFolders.tableName, ifNotExists: true) { t in
                 t.primaryKey(Schema.WatchedFolders.id, .text)

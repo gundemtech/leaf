@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class VSCodeFamilyTitleParserTests: XCTestCase {
@@ -122,29 +123,34 @@ final class VSCodeFamilyTitleParserTests: XCTestCase {
     // MARK: - Dispatcher
 
     func test_dispatcher_routesByBundleID() {
-        XCTAssertNotNil(VSCodeFamilyDispatcher.parse(
-            bundleID: "com.microsoft.VSCode",
-            title: "Foo.swift — leaf — Visual Studio Code"
-        ))
-        XCTAssertNotNil(VSCodeFamilyDispatcher.parse(
-            bundleID: "com.todesktop.230313mzl4w4u92",
-            title: "Foo.swift — leaf — Cursor"
-        ))
-        XCTAssertNotNil(VSCodeFamilyDispatcher.parse(
-            bundleID: "com.microsoft.VSCodeInsiders",
-            title: "Foo.swift — leaf — Visual Studio Code - Insiders"
-        ))
-        XCTAssertNotNil(VSCodeFamilyDispatcher.parse(
-            bundleID: "com.visualstudio.code.oss",
-            title: "Foo.swift — leaf — VSCodium"
-        ))
+        XCTAssertNotNil(
+            VSCodeFamilyDispatcher.parse(
+                bundleID: "com.microsoft.VSCode",
+                title: "Foo.swift — leaf — Visual Studio Code"
+            ))
+        XCTAssertNotNil(
+            VSCodeFamilyDispatcher.parse(
+                bundleID: "com.todesktop.230313mzl4w4u92",
+                title: "Foo.swift — leaf — Cursor"
+            ))
+        XCTAssertNotNil(
+            VSCodeFamilyDispatcher.parse(
+                bundleID: "com.microsoft.VSCodeInsiders",
+                title: "Foo.swift — leaf — Visual Studio Code - Insiders"
+            ))
+        XCTAssertNotNil(
+            VSCodeFamilyDispatcher.parse(
+                bundleID: "com.visualstudio.code.oss",
+                title: "Foo.swift — leaf — VSCodium"
+            ))
     }
 
     func test_dispatcher_unknownBundleIDReturnsNil() {
-        XCTAssertNil(VSCodeFamilyDispatcher.parse(
-            bundleID: "com.example.UnknownEditor",
-            title: "Foo.swift — leaf — Whatever"
-        ))
+        XCTAssertNil(
+            VSCodeFamilyDispatcher.parse(
+                bundleID: "com.example.UnknownEditor",
+                title: "Foo.swift — leaf — Whatever"
+            ))
     }
 
     func test_dispatcher_isVSCodeFamilyMembership() {

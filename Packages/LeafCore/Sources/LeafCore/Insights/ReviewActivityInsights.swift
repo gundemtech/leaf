@@ -149,7 +149,7 @@ public enum ReviewActivityInsights {
                 byRepo.append([
                     "repo": r,
                     "reviews": rev,
-                    "comments": com
+                    "comments": com,
                 ])
             }
 
@@ -186,7 +186,7 @@ public enum ReviewActivityInsights {
                 linkedPRs.append([
                     "repo": r,
                     "pr_number": prNumber,
-                    "linked_linear_id": linked
+                    "linked_linear_id": linked,
                 ])
             }
         }
@@ -200,7 +200,7 @@ public enum ReviewActivityInsights {
             "review_comments_count": reviewComments,
             "review_thread_resolved_count": threadResolved,
             "by_repo": byRepo,
-            "linked_prs": linkedPRs
+            "linked_prs": linkedPRs,
         ]
     }
 }

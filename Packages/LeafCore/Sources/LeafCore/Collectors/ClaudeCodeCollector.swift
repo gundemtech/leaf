@@ -66,7 +66,9 @@ public actor ClaudeCodeCollector {
         loopTask = Task { [weak self] in
             await self?.runLoop()
         }
-        logger.info("ClaudeCodeCollector started (root=\(self.projectsRoot.path, privacy: .public), every=\(self.intervalSec, privacy: .public)s, backfill=\(self.backfillWindowDays, privacy: .public)d)")
+        logger.info(
+            "ClaudeCodeCollector started (root=\(self.projectsRoot.path, privacy: .public), every=\(self.intervalSec, privacy: .public)s, backfill=\(self.backfillWindowDays, privacy: .public)d)"
+        )
     }
 
     public func stop() async {
@@ -91,7 +93,8 @@ public actor ClaudeCodeCollector {
     @discardableResult
     public func performTick(now: Date = Date()) async -> TickResult {
         guard FileManager.default.fileExists(atPath: projectsRoot.path) else {
-            return TickResult(filesScanned: 0, filesProcessed: 0, eventsWritten: 0, malformedLines: 0, bootstrappedFiles: 0)
+            return TickResult(
+                filesScanned: 0, filesProcessed: 0, eventsWritten: 0, malformedLines: 0, bootstrappedFiles: 0)
         }
 
         var filesScanned = 0
@@ -111,7 +114,9 @@ public actor ClaudeCodeCollector {
         }
 
         if filesProcessed > 0 || bootstrappedFiles > 0 {
-            logger.info("tick: scanned=\(filesScanned, privacy: .public), processed=\(filesProcessed, privacy: .public), bootstrapped=\(bootstrappedFiles, privacy: .public), events=\(eventsWritten, privacy: .public), malformed=\(malformedLines, privacy: .public)")
+            logger.info(
+                "tick: scanned=\(filesScanned, privacy: .public), processed=\(filesProcessed, privacy: .public), bootstrapped=\(bootstrappedFiles, privacy: .public), events=\(eventsWritten, privacy: .public), malformed=\(malformedLines, privacy: .public)"
+            )
         }
 
         return TickResult(
@@ -151,22 +156,26 @@ public actor ClaudeCodeCollector {
     /// ignored — see `testDoesNotRecurseIntoArbitrarySubdirs`.
     private func listJSONLFiles() -> [URL] {
         let fm = FileManager.default
-        guard let projectDirs = try? fm.contentsOfDirectory(
-            at: projectsRoot,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else {
+        guard
+            let projectDirs = try? fm.contentsOfDirectory(
+                at: projectsRoot,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            )
+        else {
             return []
         }
         var results: [URL] = []
         for projectDir in projectDirs {
             let isDir = (try? projectDir.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
             guard isDir else { continue }
-            guard let entries = try? fm.contentsOfDirectory(
-                at: projectDir,
-                includingPropertiesForKeys: [.isDirectoryKey],
-                options: [.skipsHiddenFiles]
-            ) else { continue }
+            guard
+                let entries = try? fm.contentsOfDirectory(
+                    at: projectDir,
+                    includingPropertiesForKeys: [.isDirectoryKey],
+                    options: [.skipsHiddenFiles]
+                )
+            else { continue }
             for entry in entries {
                 let entryIsDir = (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
                 if !entryIsDir, entry.pathExtension == "jsonl" {
@@ -176,16 +185,20 @@ public actor ClaudeCodeCollector {
                 // Possible session-uuid dir — look for sibling `subagents/agent-*.jsonl`.
                 if entryIsDir {
                     let subagentsDir = entry.appendingPathComponent("subagents")
-                    guard let agentFiles = try? fm.contentsOfDirectory(
-                        at: subagentsDir,
-                        includingPropertiesForKeys: nil,
-                        options: [.skipsHiddenFiles]
-                    ) else { continue }
+                    guard
+                        let agentFiles = try? fm.contentsOfDirectory(
+                            at: subagentsDir,
+                            includingPropertiesForKeys: nil,
+                            options: [.skipsHiddenFiles]
+                        )
+                    else { continue }
                     // `.jsonl` extension alone excludes the sibling `.meta.json` files;
                     // `agent-` prefix is defense-in-depth against future filenames Claude
                     // might add to the subagents dir (e.g. `summary.jsonl`, `index.jsonl`).
-                    for file in agentFiles where file.pathExtension == "jsonl"
-                        && file.lastPathComponent.hasPrefix("agent-") {
+                    for file in agentFiles
+                    where file.pathExtension == "jsonl"
+                        && file.lastPathComponent.hasPrefix("agent-")
+                    {
                         results.append(file)
                     }
                 }
@@ -215,10 +228,11 @@ public actor ClaudeCodeCollector {
         // и тест передают разные представления одного pathname.
         let canonicalPath = url.resolvingSymlinksInPath().path
 
-        let existing = (try? database.readOffset(
-            collectorID: CollectorID.claudeCodeJSONL,
-            sourceID: canonicalPath
-        )) ?? nil
+        let existing =
+            (try? database.readOffset(
+                collectorID: CollectorID.claudeCodeJSONL,
+                sourceID: canonicalPath
+            )) ?? nil
 
         // Bootstrap branch.
         if existing == nil {
@@ -240,14 +254,16 @@ public actor ClaudeCodeCollector {
             startOffset = 0
         }
 
-        return readAndPersist(url: url, canonicalPath: canonicalPath, stat: stat, startOffset: startOffset, nowMs: nowMs)
+        return readAndPersist(
+            url: url, canonicalPath: canonicalPath, stat: stat, startOffset: startOffset, nowMs: nowMs)
     }
 
     private func bootstrap(url: URL, canonicalPath: String, stat: FileStat, nowMs: Int64) -> FileResult {
         let cutoffMs = nowMs - Int64(backfillWindowDays) * 86_400_000
         if stat.mtimeMs >= cutoffMs {
             // В пределах окна — backfill от 0.
-            let result = readAndPersist(url: url, canonicalPath: canonicalPath, stat: stat, startOffset: 0, nowMs: nowMs)
+            let result = readAndPersist(
+                url: url, canonicalPath: canonicalPath, stat: stat, startOffset: 0, nowMs: nowMs)
             return FileResult(
                 didProcess: result.didProcess,
                 didBootstrap: true,
@@ -268,14 +284,18 @@ public actor ClaudeCodeCollector {
             do {
                 try database.writeOffset(offset)
             } catch {
-                logger.error("bootstrap skip-backward failed for \(url.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                logger.error(
+                    "bootstrap skip-backward failed for \(url.path, privacy: .public): \(error.localizedDescription, privacy: .public)"
+                )
                 return FileResult(didProcess: false, didBootstrap: false, eventsWritten: 0, malformedLines: 0)
             }
             return FileResult(didProcess: false, didBootstrap: true, eventsWritten: 0, malformedLines: 0)
         }
     }
 
-    private func readAndPersist(url: URL, canonicalPath: String, stat: FileStat, startOffset: Int64, nowMs: Int64) -> FileResult {
+    private func readAndPersist(
+        url: URL, canonicalPath: String, stat: FileStat, startOffset: Int64, nowMs: Int64
+    ) -> FileResult {
         // Защитный кейс: файл не вырос и offset уже в EOF — нет работы.
         if startOffset >= stat.size {
             // Всё-таки UPSERT'нем offset чтобы lastModifiedMs обновился.
@@ -299,7 +319,8 @@ public actor ClaudeCodeCollector {
             try handle.seek(toOffset: UInt64(startOffset))
             payload = try handle.readToEnd() ?? Data()
         } catch {
-            logger.error("read failed for \(url.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            logger.error(
+                "read failed for \(url.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
             return FileResult(didProcess: false, didBootstrap: false, eventsWritten: 0, malformedLines: 0)
         }
 
@@ -310,7 +331,8 @@ public actor ClaudeCodeCollector {
         var allEvents: [RawEvent] = []
         var malformedCount = 0
         for line in completeLines {
-            let result = parser.parse(line: line, source: url.path, now: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0))
+            let result = parser.parse(
+                line: line, source: url.path, now: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0))
             switch result {
             case .events(let events):
                 allEvents.append(contentsOf: events)
@@ -318,7 +340,8 @@ public actor ClaudeCodeCollector {
                 continue
             case .malformed(let reason):
                 malformedCount += 1
-                logger.warning("malformed jsonl line in \(url.lastPathComponent, privacy: .public): \(reason, privacy: .public)")
+                logger.warning(
+                    "malformed jsonl line in \(url.lastPathComponent, privacy: .public): \(reason, privacy: .public)")
             }
         }
 
@@ -353,7 +376,8 @@ public actor ClaudeCodeCollector {
         do {
             try database.writeEventsAndOffset(filteredEvents, offset: newOffset)
         } catch {
-            logger.error("persist failed for \(url.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            logger.error(
+                "persist failed for \(url.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
             return FileResult(didProcess: false, didBootstrap: false, eventsWritten: 0, malformedLines: malformedCount)
         }
 
@@ -377,10 +401,12 @@ public actor ClaudeCodeCollector {
     /// `FileManager.attributesOfItem` (stat syscall, NSFileSystemFileNumber key).
     /// Size + mtime — через URLResourceValues (cheaper, no separate stat).
     private func fileStat(_ url: URL) -> FileStat? {
-        guard let values = try? url.resourceValues(forKeys: [
-            .fileSizeKey,
-            .contentModificationDateKey
-        ]) else { return nil }
+        guard
+            let values = try? url.resourceValues(forKeys: [
+                .fileSizeKey,
+                .contentModificationDateKey,
+            ])
+        else { return nil }
 
         let size = Int64(values.fileSize ?? 0)
         let mtimeMs: Int64 = {

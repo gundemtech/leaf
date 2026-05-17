@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 /// End-to-end проверка encrypted path: Database.openForWrite/Read с EncryptionOptions
@@ -25,7 +26,7 @@ final class SQLCipherIntegrationTests: XCTestCase {
         do {
             let writer = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: key)
             try writer.write(RawEvent(timestamp: ts, signalType: .attention, bundleID: "com.app"))
-            try writer.checkpointWAL()   // форсируем flush в основной файл, иначе DatabasePool может держать .wal
+            try writer.checkpointWAL()  // форсируем flush в основной файл, иначе DatabasePool может держать .wal
         }
 
         let reader = try Database.openForRead(at: dbURL, config: .weakDefaults, encryption: key)
@@ -47,10 +48,11 @@ final class SQLCipherIntegrationTests: XCTestCase {
 
         // Открытие с wrong key может throw либо на open (prepareDatabase execute PRAGMA key),
         // либо на первом реальном read (GRDB может отложить init). Пробуем обе точки.
-        XCTAssertThrowsError(try {
-            let reader = try Database.openForRead(at: dbURL, config: .weakDefaults, encryption: keyB)
-            _ = try reader.events(in: DateInterval(start: .distantPast, duration: 86_400_000))
-        }())
+        XCTAssertThrowsError(
+            try {
+                let reader = try Database.openForRead(at: dbURL, config: .weakDefaults, encryption: keyB)
+                _ = try reader.events(in: DateInterval(start: .distantPast, duration: 86_400_000))
+            }())
     }
 
     func testFileHeaderIsNotPlaintextSQLite() throws {
@@ -65,8 +67,9 @@ final class SQLCipherIntegrationTests: XCTestCase {
         defer { try? handle.close() }
         let header = try handle.read(upToCount: 16) ?? Data()
         XCTAssertEqual(header.count, 16)
-        XCTAssertNotEqual(header, Data("SQLite format 3\0".utf8),
-                          "Encrypted DB must not start with plaintext SQLite magic bytes")
+        XCTAssertNotEqual(
+            header, Data("SQLite format 3\0".utf8),
+            "Encrypted DB must not start with plaintext SQLite magic bytes")
     }
 
     func testNilEncryptionCreatesPlaintextHeader() throws {
@@ -79,7 +82,8 @@ final class SQLCipherIntegrationTests: XCTestCase {
         let handle = try FileHandle(forReadingFrom: dbURL)
         defer { try? handle.close() }
         let header = try handle.read(upToCount: 16) ?? Data()
-        XCTAssertEqual(header, Data("SQLite format 3\0".utf8),
-                       "Plaintext SQLite must start with magic bytes 'SQLite format 3\\0'")
+        XCTAssertEqual(
+            header, Data("SQLite format 3\0".utf8),
+            "Plaintext SQLite must start with magic bytes 'SQLite format 3\\0'")
     }
 }

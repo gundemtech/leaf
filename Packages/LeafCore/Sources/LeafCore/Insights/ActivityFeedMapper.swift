@@ -177,7 +177,8 @@ public enum ActivityFeedMapper {
             // (`testEveryClaudeCodeEventKindKeyMappedOrSkipped`) ensures we
             // never silently land a Claude kind here.
             primary = sanitize(payload["tool_name"]) ?? sanitize(payload["agent"]) ?? "AI activity"
-            secondary = sanitize(payload["file_path"]).map(basename(of:))
+            secondary =
+                sanitize(payload["file_path"]).map(basename(of:))
                 ?? sanitize(payload["cwd"]).map(basename(of:))
         }
 
@@ -398,19 +399,19 @@ public enum ActivityFeedMapper {
 
     private static func formatPR(repo: String?, number: String?, suffix: String) -> String {
         switch (repo, number) {
-        case let (r?, n?): return "\(r) #\(n): \(suffix)"
-        case let (r?, nil): return "\(r): PR \(suffix)"
-        case let (nil, n?): return "PR #\(n): \(suffix)"
-        case (nil, nil):   return "PR: \(suffix)"
+        case (let r?, let n?): return "\(r) #\(n): \(suffix)"
+        case (let r?, nil): return "\(r): PR \(suffix)"
+        case (nil, let n?): return "PR #\(n): \(suffix)"
+        case (nil, nil): return "PR: \(suffix)"
         }
     }
 
     private static func formatIssue(repo: String?, number: String?, suffix: String) -> String {
         switch (repo, number) {
-        case let (r?, n?): return "\(r) #\(n): \(suffix)"
-        case let (r?, nil): return "\(r): \(suffix)"
-        case let (nil, n?): return "#\(n): \(suffix)"
-        case (nil, nil):   return suffix
+        case (let r?, let n?): return "\(r) #\(n): \(suffix)"
+        case (let r?, nil): return "\(r): \(suffix)"
+        case (nil, let n?): return "#\(n): \(suffix)"
+        case (nil, nil): return suffix
         }
     }
 
@@ -506,7 +507,8 @@ public enum ActivityFeedMapper {
             // (structural bucket). NEVER attendee names / emails / URIs.
             var parts: [String] = []
             if let countStr = sanitize(payload["attendees_count"]),
-               let count = Int(countStr), count > 0 {
+                let count = Int(countStr), count > 0
+            {
                 parts.append(count == 1 ? "1 attendee" : "\(count) attendees")
             }
             if sanitize(payload["conference_entry_point_type"]) == "video" {
@@ -536,10 +538,10 @@ public enum ActivityFeedMapper {
             let raw = sanitize(payload["working_location_type"]) ?? "homeOffice"
             let pretty: String = {
                 switch raw {
-                case "homeOffice":     return "home"
+                case "homeOffice": return "home"
                 case "officeLocation": return "office"
                 case "customLocation": return "custom location"
-                default:               return raw
+                default: return raw
                 }
             }()
             primary = "Working from \(pretty)"
@@ -588,7 +590,7 @@ public enum ActivityFeedMapper {
         // Track-6 P6 — debug-only signal. Surfaces only when user customizes
         // `window.title` in a vscode-family IDE such that the parser falls
         // through to fallback. Never renders in chronological feed.
-        "ide_window_title_observed"
+        "ide_window_title_observed",
     ]
 
     /// Track-4 S1+S2+S3 Layer A event_kinds with explicit feed rendering.
@@ -631,7 +633,7 @@ public enum ActivityFeedMapper {
         // intentionally not in this whitelist — debug-only, never renders).
         "vscode_active_doc_changed",
         "vscode_workspace_opened",
-        "jetbrains_recent_project_observed"
+        "jetbrains_recent_project_observed",
     ]
 
     /// Track-6 P1 — Claude Code AI event_kinds with explicit feed rendering.
@@ -651,7 +653,7 @@ public enum ActivityFeedMapper {
         "claude_bash_executed", "claude_file_edited",
         "claude_file_written", "claude_file_read",
         "claude_web_fetched", "claude_subagent_dispatched",
-        "claude_mcp_tool_invoked", "claude_slash_command_invoked"
+        "claude_mcp_tool_invoked", "claude_slash_command_invoked",
     ]
 
     // MARK: - Track-4 Local OS (S1 + S2 + S3)
@@ -679,14 +681,14 @@ public enum ActivityFeedMapper {
         switch kind {
         // S1 — system state
         case "meeting_state_entered": primary = "Meeting started"
-        case "meeting_state_exited":  primary = "Meeting ended"
-        case "focus_mode_enabled":    primary = "Focus on"   // collector emits only "state"=focused
-        case "focus_mode_disabled":   primary = "Focus off"
-        case "system_locked":   primary = "Screen locked"
+        case "meeting_state_exited": primary = "Meeting ended"
+        case "focus_mode_enabled": primary = "Focus on"  // collector emits only "state"=focused
+        case "focus_mode_disabled": primary = "Focus off"
+        case "system_locked": primary = "Screen locked"
         case "system_unlocked": primary = "Screen unlocked"
-        case "system_slept":    primary = "System sleep"
-        case "system_woke":     primary = "System wake"
-        case "space_switched":  primary = "Space switched"
+        case "system_slept": primary = "System sleep"
+        case "system_woke": primary = "System wake"
+        case "space_switched": primary = "Space switched"
 
         // S2 — IDEs (XcodeStateMachine / JetBrainsStateMachine emit "doc_path")
         case "xcode_active_doc_changed":
@@ -821,10 +823,10 @@ public enum ActivityFeedMapper {
         case "audio_route_changed":
             primary = "Audio route: \(sanitize(payload["audio_route"]) ?? "—")"
         case "mic_in_use_entered": primary = "Mic on"
-        case "mic_in_use_exited":  primary = "Mic off"
+        case "mic_in_use_exited": primary = "Mic off"
 
         // S3 — display (DisplayCollector emits only "state" — no count field).
-        case "display_connected":    primary = "Display connected"
+        case "display_connected": primary = "Display connected"
         case "display_disconnected": primary = "Display disconnected"
 
         // S3 — network (VPN/WiFi collectors emit "state"=connected|disconnected)
@@ -842,8 +844,8 @@ public enum ActivityFeedMapper {
             let action = sanitize(payload["action"]) ?? "?"
             switch action {
             case "emptied": primary = "Trash emptied"
-            case "added":   primary = "Trash items added"
-            default:        primary = "Trash: \(action)"
+            case "added": primary = "Trash items added"
+            default: primary = "Trash: \(action)"
             }
 
         // Track-6 P6 — IDE surface cap
@@ -852,14 +854,14 @@ public enum ActivityFeedMapper {
         // ADR-010: only workspace_name and file_basename are allowed — no file path,
         // no editor content, no full workspace path.
         case "vscode_active_doc_changed":
-            let appName  = vscodeAppName(forBundleID: payload["ide_bundle_id"] ?? bundleID)
+            let appName = vscodeAppName(forBundleID: payload["ide_bundle_id"] ?? bundleID)
             let workspace = sanitize(payload["workspace_name"])
-            let file      = sanitize(payload["file_basename"])
+            let file = sanitize(payload["file_basename"])
             switch (workspace, file) {
-            case let (w?, f?): primary = "\(appName): \(w) — \(f)"
-            case let (nil, f?): primary = "\(appName): \(f)"
-            case let (w?, nil): primary = "\(appName): \(w)"
-            case (nil, nil):   primary = "\(appName): —"
+            case (let w?, let f?): primary = "\(appName): \(w) — \(f)"
+            case (nil, let f?): primary = "\(appName): \(f)"
+            case (let w?, nil): primary = "\(appName): \(w)"
+            case (nil, nil): primary = "\(appName): —"
             }
         case "vscode_workspace_opened":
             primary = "Opened workspace: \(sanitize(payload["workspace_name"]) ?? "—")"
@@ -917,8 +919,8 @@ public enum ActivityFeedMapper {
     /// strings, so ADR-010 redaction is preserved (structural cardinality).
     private static func tabsCount(_ raw: String?) -> String? {
         guard let raw,
-              let data = raw.data(using: .utf8),
-              let array = try? JSONSerialization.jsonObject(with: data) as? [Any]
+            let data = raw.data(using: .utf8),
+            let array = try? JSONSerialization.jsonObject(with: data) as? [Any]
         else { return nil }
         return String(array.count)
     }
@@ -934,24 +936,28 @@ public enum ActivityFeedMapper {
     /// Falls back to "VSCode" for any unrecognized vscode-family bundle.
     private static func vscodeAppName(forBundleID bundleID: String?) -> String {
         switch bundleID {
-        case "com.microsoft.VSCode":           return "VSCode"
-        case "com.todesktop.230313mzl4w4u92":  return "Cursor"
-        case "com.microsoft.VSCodeInsiders":   return "VSCode Insiders"
-        case "com.visualstudio.code.oss":      return "VSCodium"
-        default:                                return "VSCode"
+        case "com.microsoft.VSCode": return "VSCode"
+        case "com.todesktop.230313mzl4w4u92": return "Cursor"
+        case "com.microsoft.VSCodeInsiders": return "VSCode Insiders"
+        case "com.visualstudio.code.oss": return "VSCodium"
+        default: return "VSCode"
         }
     }
 
     private static func parsePayload(_ json: String) -> [String: String] {
         guard !json.isEmpty,
-              let data = json.data(using: .utf8),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            let data = json.data(using: .utf8),
+            let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return [:] }
         var result: [String: String] = [:]
         for (key, value) in obj {
-            if let s = value as? String { result[key] = s }
-            else if let n = value as? NSNumber { result[key] = n.stringValue }
-            else if let b = value as? Bool { result[key] = b ? "true" : "false" }
+            if let s = value as? String {
+                result[key] = s
+            } else if let n = value as? NSNumber {
+                result[key] = n.stringValue
+            } else if let b = value as? Bool {
+                result[key] = b ? "true" : "false"
+            }
         }
         return result
     }

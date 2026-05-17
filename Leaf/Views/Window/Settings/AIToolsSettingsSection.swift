@@ -9,8 +9,8 @@
 //  those collectors ship.
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct AIToolsSettingsSection: View {
     @Environment(PermissionsService.self) private var permissions
@@ -18,7 +18,8 @@ struct AIToolsSettingsSection: View {
     var body: some View {
         LeafSection(
             title: "AI Tools",
-            description: "Capture metadata from your AI coding sessions. Tool inputs, prompts, responses — never captured. Default OFF until you opt in."
+            description:
+                "Capture metadata from your AI coding sessions. Tool inputs, prompts, responses — never captured. Default OFF until you opt in."
         ) {
             VStack(alignment: .leading, spacing: LeafSpace.sm) {
                 ClaudeCodeAIRow(permissions: permissions)
@@ -53,27 +54,32 @@ private struct ClaudeCodeAIRow: View {
                     }
                     Spacer(minLength: 0)
                     statusBadge
-                    Toggle("", isOn: Binding(
-                        get: { isEnabled },
-                        set: { newValue in
-                            isEnabled = newValue
-                            permissions.aiToolsStore.setEnabled("claude_code", newValue)
-                            Task { await toggleHooks(enabled: newValue) }
-                        }
-                    ))
+                    Toggle(
+                        "",
+                        isOn: Binding(
+                            get: { isEnabled },
+                            set: { newValue in
+                                isEnabled = newValue
+                                permissions.aiToolsStore.setEnabled("claude_code", newValue)
+                                Task { await toggleHooks(enabled: newValue) }
+                            }
+                        )
+                    )
                     .labelsHidden()
                     .toggleStyle(.switch)
                     .tint(LeafColor.accent.primary)
                 }
 
                 // Token sub-toggle (disabled until master is ON).
-                Toggle(isOn: Binding(
-                    get: { tokensEnabled },
-                    set: { newValue in
-                        tokensEnabled = newValue
-                        permissions.aiToolsStore.setEnabled("claude_code.tokens", newValue)
-                    }
-                )) {
+                Toggle(
+                    isOn: Binding(
+                        get: { tokensEnabled },
+                        set: { newValue in
+                            tokensEnabled = newValue
+                            permissions.aiToolsStore.setEnabled("claude_code.tokens", newValue)
+                        }
+                    )
+                ) {
                     VStack(alignment: .leading, spacing: LeafSpace.xxs) {
                         Text("Token attribution")
                             .font(LeafType.body.small)

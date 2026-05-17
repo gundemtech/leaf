@@ -1,7 +1,7 @@
-import Foundation
 import AppKit
-import os
+import Foundation
 import LeafCore
+import os
 
 /// Phase Track-4 S1 — Layer A catch-up. Subscribes to
 /// `DistributedNotificationCenter` for `com.apple.screenIsLocked` /
@@ -28,47 +28,51 @@ final class SystemStateCollector {
     func start() {
         let writer = self.writer
         let dnc = DistributedNotificationCenter.default()
-        observers.append(dnc.addObserver(
-            forName: Notification.Name("com.apple.screenIsLocked"),
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.isLocked = true
-                self?.emit(eventKind: "system_locked", writer: writer)
-            }
-        })
-        observers.append(dnc.addObserver(
-            forName: Notification.Name("com.apple.screenIsUnlocked"),
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.isLocked = false
-                self?.emit(eventKind: "system_unlocked", writer: writer)
-            }
-        })
+        observers.append(
+            dnc.addObserver(
+                forName: Notification.Name("com.apple.screenIsLocked"),
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.isLocked = true
+                    self?.emit(eventKind: "system_locked", writer: writer)
+                }
+            })
+        observers.append(
+            dnc.addObserver(
+                forName: Notification.Name("com.apple.screenIsUnlocked"),
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.isLocked = false
+                    self?.emit(eventKind: "system_unlocked", writer: writer)
+                }
+            })
         let wsnc = NSWorkspace.shared.notificationCenter
-        workspaceObservers.append(wsnc.addObserver(
-            forName: NSWorkspace.willSleepNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.isSleeping = true
-                self?.emit(eventKind: "system_slept", writer: writer)
-            }
-        })
-        workspaceObservers.append(wsnc.addObserver(
-            forName: NSWorkspace.didWakeNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.isSleeping = false
-                self?.emit(eventKind: "system_woke", writer: writer)
-            }
-        })
+        workspaceObservers.append(
+            wsnc.addObserver(
+                forName: NSWorkspace.willSleepNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.isSleeping = true
+                    self?.emit(eventKind: "system_slept", writer: writer)
+                }
+            })
+        workspaceObservers.append(
+            wsnc.addObserver(
+                forName: NSWorkspace.didWakeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.isSleeping = false
+                    self?.emit(eventKind: "system_woke", writer: writer)
+                }
+            })
         collectorLogger.info("SystemStateCollector started")
     }
 

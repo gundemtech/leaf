@@ -21,7 +21,8 @@ struct LeafIconPreview: View {
                 LeafIcon(systemName: "magnifyingglass", size: .md)
             }
             TokensInlineSpec(
-                spec: "LeafIcon · sm/md/lg/xl (12/16/24/32pt) · tint via LeafColor.* · asset (Figma SVG) | systemName (SF)",
+                spec:
+                    "LeafIcon · sm/md/lg/xl (12/16/24/32pt) · tint via LeafColor.* · asset (Figma SVG) | systemName (SF)",
                 codeSnippet: "LeafIcon(asset: LeafIcons.brand.leafFill, size: .md, tint: LeafColor.accent.primary)"
             )
         }

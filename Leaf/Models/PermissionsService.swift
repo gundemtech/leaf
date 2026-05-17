@@ -9,15 +9,15 @@
 //  4с в normal popover (battery).
 //
 
-import Foundation
-import SwiftUI
 import AppKit
 import ApplicationServices
 import EventKit
-import Intents
+import Foundation
 import IOKit.hid
+import Intents
 import LeafCore
 import OSLog
+import SwiftUI
 
 @MainActor
 @Observable

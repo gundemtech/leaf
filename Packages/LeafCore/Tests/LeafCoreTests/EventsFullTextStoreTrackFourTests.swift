@@ -2,8 +2,9 @@
 // landed by Track-4 S2/S3 (notes title, zoom meeting topic, screenshot/download
 // filenames). Mirrors `EventsFullTextStoreTests` setup pattern.
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class EventsFullTextStoreTrackFourTests: XCTestCase {
@@ -56,11 +57,13 @@ final class EventsFullTextStoreTrackFourTests: XCTestCase {
             ).map { $0["body_kind"] as String? ?? "" }
         }
         let hits: Int = try db.readSQL { rawDB in
-            try Int.fetchOne(rawDB, sql: """
-                SELECT COUNT(*) FROM events_fts
-                JOIN events_fts_meta ON events_fts_meta.fts_rowid = events_fts.rowid
-                WHERE events_fts MATCH ? AND events_fts_meta.event_id = ?
-                """, arguments: [query, eid]) ?? 0
+            try Int.fetchOne(
+                rawDB,
+                sql: """
+                    SELECT COUNT(*) FROM events_fts
+                    JOIN events_fts_meta ON events_fts_meta.fts_rowid = events_fts.rowid
+                    WHERE events_fts MATCH ? AND events_fts_meta.event_id = ?
+                    """, arguments: [query, eid]) ?? 0
         }
         return (bodyKinds, hits)
     }

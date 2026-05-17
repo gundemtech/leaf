@@ -1,6 +1,7 @@
 // Phase Track-1 D1 — pin all 12 payload key string literals.
 
 import XCTest
+
 @testable import LeafCore
 
 final class EventPayloadKeysTests: XCTestCase {
@@ -60,7 +61,7 @@ final class EventPayloadKeysTests: XCTestCase {
             (Schema.EventPayloadKeys.startedAtMs, "started_at_ms"),
             (Schema.EventPayloadKeys.endsAtMs, "ends_at_ms"),
             (Schema.EventPayloadKeys.completedAtMs, "completed_at_ms"),
-            (Schema.EventPayloadKeys.removedAtMs, "removed_at_ms")
+            (Schema.EventPayloadKeys.removedAtMs, "removed_at_ms"),
         ]
         for (key, expected) in pairs {
             XCTAssertEqual(key, expected, "EventPayloadKey \(expected) drifted to \(key)")

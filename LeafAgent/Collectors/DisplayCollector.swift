@@ -1,7 +1,7 @@
-import Foundation
 import CoreGraphics
-import os
+import Foundation
 import LeafCore
+import os
 
 /// Phase Track-4 S3 — CoreGraphics `CGDisplayRegisterReconfigurationCallback`.
 /// Filters `CGDisplayChangeSummaryFlags` — emits ONLY на `.addFlag`
@@ -46,7 +46,8 @@ final class DisplayCollector {
             registered = true
             collectorLogger.info("DisplayCollector started")
         } else {
-            collectorLogger.error("CGDisplayRegisterReconfigurationCallback failed status=\(status.rawValue, privacy: .public)")
+            collectorLogger.error(
+                "CGDisplayRegisterReconfigurationCallback failed status=\(status.rawValue, privacy: .public)")
         }
     }
 
@@ -79,16 +80,21 @@ final class DisplayCollector {
         let eventKind: String
         let state: String
         switch transition {
-        case .connected:    eventKind = "display_connected";    state = "display_connected"
-        case .disconnected: eventKind = "display_disconnected"; state = "display_disconnected"
+        case .connected:
+            eventKind = "display_connected"
+            state = "display_connected"
+        case .disconnected:
+            eventKind = "display_disconnected"
+            state = "display_disconnected"
         }
         let writer = self.writer
         Task {
-            await writer.enqueue(RawEvent(
-                signalType: .context,
-                bundleID: nil,
-                payload: ["event_kind": eventKind, "state": state]
-            ))
+            await writer.enqueue(
+                RawEvent(
+                    signalType: .context,
+                    bundleID: nil,
+                    payload: ["event_kind": eventKind, "state": state]
+                ))
         }
         collectorLogger.info("Display transition -> \(eventKind, privacy: .public)")
     }

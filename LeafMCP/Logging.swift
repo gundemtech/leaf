@@ -19,7 +19,7 @@ enum MCPLog {
     }
 
     nonisolated static func debug(_ message: @autoclosure () -> String) { log(.debug, message()) }
-    nonisolated static func info(_ message: @autoclosure () -> String)  { log(.info,  message()) }
-    nonisolated static func warn(_ message: @autoclosure () -> String)  { log(.warn,  message()) }
+    nonisolated static func info(_ message: @autoclosure () -> String) { log(.info, message()) }
+    nonisolated static func warn(_ message: @autoclosure () -> String) { log(.warn, message()) }
     nonisolated static func error(_ message: @autoclosure () -> String) { log(.error, message()) }
 }

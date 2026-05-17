@@ -33,7 +33,8 @@ struct LeafEmptyStatePreview: View {
             }
 
             TokensInlineSpec(
-                spec: "LeafEmptyState · LeafIconChip xl (64pt squircle, text.tertiary tint @ 0.10 bg) · title + optional desc (maxWidth 360) + optional primary CTA · no mascots",
+                spec:
+                    "LeafEmptyState · LeafIconChip xl (64pt squircle, text.tertiary tint @ 0.10 bg) · title + optional desc (maxWidth 360) + optional primary CTA · no mascots",
                 codeSnippet: "LeafEmptyState(icon: LeafIcons.object.folderEmpty, title: \"No matches\")"
             )
         }

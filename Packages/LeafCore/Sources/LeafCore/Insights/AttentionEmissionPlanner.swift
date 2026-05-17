@@ -76,19 +76,22 @@ public final class AttentionEmissionPlanner {
         var payload: [String: String] = [:]
 
         let level = policy.maxGranularity(for: bundleID)
-        let canReadContext = level.rawValue >= AttentionGranularityLevel.l3.rawValue
+        let canReadContext =
+            level.rawValue >= AttentionGranularityLevel.l3.rawValue
             && trustChecker.isAXTrusted()
 
         if canReadContext {
             if let raw = contextProvider.windowTitle(forPid: pid, bundleID: bundleID),
-               let sanitized = sanitizeTitle(raw) {
+                let sanitized = sanitizeTitle(raw)
+            {
                 payload["window_title"] = sanitized
             }
 
             // Browser URL — только для browse-категории (Safari / Chrome / Arc / ...).
             if classifier.category(for: bundleID) == .browse,
-               let raw = contextProvider.browserURL(forPid: pid, bundleID: bundleID),
-               let sanitized = sanitizeURL(raw) {
+                let raw = contextProvider.browserURL(forPid: pid, bundleID: bundleID),
+                let sanitized = sanitizeURL(raw)
+            {
                 payload["browser_url"] = sanitized
             }
         }
@@ -106,14 +109,15 @@ public final class AttentionEmissionPlanner {
         // On parse failure: emit ide_window_title_observed fallback with
         // path-sanitized raw_title (default OFF in registry — diagnostic signal).
         if canReadContext,
-           let title = payload["window_title"],
-           VSCodeFamilyDispatcher.isVSCodeFamily(bundleID: bundleID) {
+            let title = payload["window_title"],
+            VSCodeFamilyDispatcher.isVSCodeFamily(bundleID: bundleID)
+        {
             if let obs = VSCodeFamilyDispatcher.parse(bundleID: bundleID, title: title) {
                 payload.removeValue(forKey: "window_title")
                 payload["event_kind"] = "vscode_active_doc_changed"
                 payload["ide_bundle_id"] = obs.ideBundleID
                 if let w = obs.workspaceName { payload["workspace_name"] = w }
-                if let f = obs.fileBasename  { payload["file_basename"] = f }
+                if let f = obs.fileBasename { payload["file_basename"] = f }
             } else {
                 payload.removeValue(forKey: "window_title")
                 payload["event_kind"] = "ide_window_title_observed"
@@ -124,8 +128,9 @@ public final class AttentionEmissionPlanner {
 
         // Diff suppression — только для polling tick'ов. App switch всегда emit.
         if reason == .windowPoll,
-           bundleID == lastBundleID,
-           diffKey == lastWindowTitle {
+            bundleID == lastBundleID,
+            diffKey == lastWindowTitle
+        {
             return nil
         }
 

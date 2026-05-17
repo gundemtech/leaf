@@ -38,7 +38,8 @@ public enum D3ToolParams {
             return .error("missing required 'period' object")
         }
         guard let startMs = int64(periodDict["start_ms"]),
-              let endMs = int64(periodDict["end_ms"]) else {
+            let endMs = int64(periodDict["end_ms"])
+        else {
             return .error("period.start_ms and period.end_ms must be integers (ms epoch)")
         }
         let filter = dict["filter"] as? String
@@ -56,7 +57,8 @@ public enum D3ToolParams {
         var period: PeriodSpec? = nil
         if let periodDict = dict["period"] as? [String: Any] {
             guard let startMs = int64(periodDict["start_ms"]),
-                  let endMs = int64(periodDict["end_ms"]) else {
+                let endMs = int64(periodDict["end_ms"])
+            else {
                 return .error("period.start_ms and period.end_ms must be integers (ms epoch)")
             }
             period = PeriodSpec(startMs: startMs, endMs: endMs)

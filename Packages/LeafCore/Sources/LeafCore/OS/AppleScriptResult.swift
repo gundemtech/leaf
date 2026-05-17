@@ -6,9 +6,9 @@ import Foundation
 /// deserialize via `NSKeyedUnarchiver` on receive.
 public enum AppleScriptResult: Sendable, Equatable {
     case success(descriptorData: Data)
-    case denied                                  // TCC denied (osa -1743)
-    case appNotRunning                           // target not running (-600)
-    case timeout                                 // race or osa -1712
+    case denied  // TCC denied (osa -1743)
+    case appNotRunning  // target not running (-600)
+    case timeout  // race or osa -1712
     case scriptError(code: Int, message: String)
-    case unavailable                             // catch-all (e.g. AS-blocking AV / MDM)
+    case unavailable  // catch-all (e.g. AS-blocking AV / MDM)
 }

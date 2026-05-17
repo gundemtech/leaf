@@ -26,8 +26,8 @@ public struct RotationBlob: Sendable, Hashable {
 ///                 shared между всеми team members до rotation)
 public struct RotationBlobHeader: Sendable, Hashable {
     public let version: UInt8
-    public let priorKeyID: Data       // 16B raw UUID bytes
-    public let newKeyID: Data         // 16B raw UUID bytes (== priorKeyID for tombstone)
+    public let priorKeyID: Data  // 16B raw UUID bytes
+    public let newKeyID: Data  // 16B raw UUID bytes (== priorKeyID for tombstone)
     public let recipientPubkey: Data  // 32B X25519 public key
 
     public init(version: UInt8, priorKeyID: Data, newKeyID: Data, recipientPubkey: Data) {
@@ -74,9 +74,10 @@ public struct RotationBlobHeader: Sendable, Hashable {
         let newKeyID = Data(bytes[priorEnd..<newEnd])
         let recipientPubkey = Data(bytes[newEnd..<recipientEnd])
 
-        return RotationBlobHeader(version: version,
-                                  priorKeyID: priorKeyID,
-                                  newKeyID: newKeyID,
-                                  recipientPubkey: recipientPubkey)
+        return RotationBlobHeader(
+            version: version,
+            priorKeyID: priorKeyID,
+            newKeyID: newKeyID,
+            recipientPubkey: recipientPubkey)
     }
 }

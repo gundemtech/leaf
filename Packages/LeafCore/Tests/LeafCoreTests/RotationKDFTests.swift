@@ -2,8 +2,9 @@
 // Verify Unimplemented placeholder discipline (mirror InviteKDF 5.2.A pattern).
 // Real HKDF impl tests живут в LeafCorePrivate `ProdRotationKDFTests` (gitignored moat).
 
-import XCTest
 import CryptoKit
+import XCTest
+
 @testable import LeafCore
 
 final class RotationKDFTests: XCTestCase {

@@ -7,6 +7,6 @@
 import SwiftUI
 
 enum LeafSectionTokens {
-    static let titleFont:       Font = LeafType.title.medium
+    static let titleFont: Font = LeafType.title.medium
     static let descriptionFont: Font = LeafType.body.small
 }

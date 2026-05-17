@@ -21,7 +21,8 @@ struct LeafStatusPillPreview: View {
             }
 
             TokensInlineSpec(
-                spec: "LeafStatusPill · idle/active/sharing/invisible · pulsing halo on active+sharing · reduce-motion-respecting",
+                spec:
+                    "LeafStatusPill · idle/active/sharing/invisible · pulsing halo on active+sharing · reduce-motion-respecting",
                 codeSnippet: "LeafStatusPill(state: .active)"
             )
         }

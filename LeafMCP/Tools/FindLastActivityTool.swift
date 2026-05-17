@@ -16,14 +16,16 @@ struct FindLastActivityTool: ToolExecutor {
             "properties": [
                 "bundle_id": [
                     "type": "string",
-                    "description": "Optional macOS bundle identifier (e.g. com.apple.Xcode). If omitted — return globally last attention event."
+                    "description":
+                        "Optional macOS bundle identifier (e.g. com.apple.Xcode). If omitted — return globally last attention event.",
                 ]
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
         ]
         return ToolDefinition(
             name: "find_last_activity",
-            description: "Return timestamp of last attention event for an app (or globally if bundle_id omitted). Local-only data — never leaves the device.",
+            description:
+                "Return timestamp of last attention event for an app (or globally if bundle_id omitted). Local-only data — never leaves the device.",
             inputSchema: AnyCodable(schema)
         )
     }()
@@ -45,9 +47,13 @@ struct FindLastActivityTool: ToolExecutor {
 
         guard FileManager.default.fileExists(atPath: dbURL.path) else {
             return ToolCallResult(
-                content: [.text(TextContent(
-                    text: "Leaf database not found at \(dbURL.path). Enable 'Background collection' in Settings first."
-                ))],
+                content: [
+                    .text(
+                        TextContent(
+                            text:
+                                "Leaf database not found at \(dbURL.path). Enable 'Background collection' in Settings first."
+                        ))
+                ],
                 isError: true
             )
         }

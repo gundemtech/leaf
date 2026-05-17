@@ -56,7 +56,7 @@ public struct IntensityAggregatesStore: Sendable {
                 keystrokes,
                 mouseMoves,
                 appSwitches,
-                foregroundApp
+                foregroundApp,
             ]
         )
     }

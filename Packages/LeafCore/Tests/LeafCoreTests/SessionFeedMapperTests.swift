@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 /// Phase 4.10.B — SessionFeedMapper aggregation contract.
@@ -97,7 +98,7 @@ final class SessionFeedMapperTests: XCTestCase {
     func testNilBundleIDIgnored() {
         let rows = [
             attention(id: 1, offset: 0, bundle: nil, title: "Foo"),
-            attention(id: 2, offset: 30, bundle: xcode, title: "Bar.swift")
+            attention(id: 2, offset: 30, bundle: xcode, title: "Bar.swift"),
         ]
         let sessions = SessionFeedMapper.map(
             rows: rows,
@@ -110,7 +111,7 @@ final class SessionFeedMapperTests: XCTestCase {
     func testEmptyBundleIDIgnored() {
         let rows = [
             attention(id: 1, offset: 0, bundle: "", title: "Foo"),
-            attention(id: 2, offset: 30, bundle: xcode, title: "Bar.swift")
+            attention(id: 2, offset: 30, bundle: xcode, title: "Bar.swift"),
         ]
         let sessions = SessionFeedMapper.map(
             rows: rows,
@@ -127,7 +128,7 @@ final class SessionFeedMapperTests: XCTestCase {
                 signalType: "aiCollaboration",
                 bundleID: nil, payload: [:]
             ),
-            attention(id: 3, offset: 30, bundle: xcode, title: "Foo.swift")
+            attention(id: 3, offset: 30, bundle: xcode, title: "Foo.swift"),
         ]
         let sessions = SessionFeedMapper.map(
             rows: rows,
@@ -143,7 +144,7 @@ final class SessionFeedMapperTests: XCTestCase {
         let rows = [
             attention(id: 1, offset: 0, bundle: xcode, title: "Foo.swift"),
             attention(id: 2, offset: 30, bundle: xcode, title: "Foo.swift"),
-            attention(id: 3, offset: 60, bundle: xcode, title: "Foo.swift")
+            attention(id: 3, offset: 60, bundle: xcode, title: "Foo.swift"),
         ]
         let sessions = SessionFeedMapper.map(
             rows: rows,
@@ -162,7 +163,7 @@ final class SessionFeedMapperTests: XCTestCase {
         // Single open session for a bundle with no window_title — still aggregates.
         let rows = [
             attention(id: 1, offset: 0, bundle: xcode, title: nil),
-            attention(id: 2, offset: 30, bundle: xcode, title: nil)
+            attention(id: 2, offset: 30, bundle: xcode, title: nil),
         ]
         let sessions = SessionFeedMapper.map(
             rows: rows,
@@ -177,7 +178,7 @@ final class SessionFeedMapperTests: XCTestCase {
         let rows = [
             attention(id: 1, offset: 0, bundle: safari, url: "https://example.com/a"),
             attention(id: 2, offset: 30, bundle: safari, url: "https://example.com/a"),
-            attention(id: 3, offset: 60, bundle: safari, url: "https://example.com/b")
+            attention(id: 3, offset: 60, bundle: safari, url: "https://example.com/b"),
         ]
         let sessions = SessionFeedMapper.map(
             rows: rows,
@@ -195,7 +196,7 @@ final class SessionFeedMapperTests: XCTestCase {
         let rows = [
             attention(id: 1, offset: 0, bundle: xcode, title: "Foo.swift"),
             attention(id: 2, offset: 30, bundle: xcode, title: "Foo.swift"),
-            attention(id: 3, offset: 60, bundle: safari, url: "https://x")
+            attention(id: 3, offset: 60, bundle: safari, url: "https://x"),
         ]
         let sessions = SessionFeedMapper.map(
             rows: rows,
@@ -211,7 +212,7 @@ final class SessionFeedMapperTests: XCTestCase {
     func testSameBundleDifferentTitleProducesTwoSessions() {
         let rows = [
             attention(id: 1, offset: 0, bundle: xcode, title: "Foo.swift"),
-            attention(id: 2, offset: 60, bundle: xcode, title: "Bar.swift")
+            attention(id: 2, offset: 60, bundle: xcode, title: "Bar.swift"),
         ]
         let sessions = SessionFeedMapper.map(
             rows: rows,
@@ -227,7 +228,7 @@ final class SessionFeedMapperTests: XCTestCase {
             attention(id: 1, offset: 0, bundle: xcode, title: "Foo.swift"),
             attention(id: 2, offset: 30, bundle: xcode, title: "Foo.swift"),
             context(id: 3, offset: 45, state: "idle"),
-            attention(id: 4, offset: 60, bundle: xcode, title: "Foo.swift")
+            attention(id: 4, offset: 60, bundle: xcode, title: "Foo.swift"),
         ]
         let sessions = SessionFeedMapper.map(
             rows: rows,
@@ -244,7 +245,7 @@ final class SessionFeedMapperTests: XCTestCase {
         let rows = [
             attention(id: 1, offset: 0, bundle: xcode, title: "Foo.swift"),
             context(id: 2, offset: 30, state: "active"),
-            attention(id: 3, offset: 60, bundle: xcode, title: "Foo.swift")
+            attention(id: 3, offset: 60, bundle: xcode, title: "Foo.swift"),
         ]
         let sessions = SessionFeedMapper.map(
             rows: rows,
@@ -258,7 +259,7 @@ final class SessionFeedMapperTests: XCTestCase {
         // gap = 200s > threshold(90) → first session ends at lastTs + threshold.
         let rows = [
             attention(id: 1, offset: 0, bundle: xcode, title: "Foo.swift"),
-            attention(id: 2, offset: 200, bundle: xcode, title: "Foo.swift")
+            attention(id: 2, offset: 200, bundle: xcode, title: "Foo.swift"),
         ]
         let sessions = SessionFeedMapper.map(
             rows: rows,
@@ -277,7 +278,7 @@ final class SessionFeedMapperTests: XCTestCase {
         let rows = [
             attention(id: 1, offset: 0, bundle: xcode, title: "Foo.swift"),
             attention(id: 2, offset: 3, bundle: safari, url: "https://x"),
-            attention(id: 3, offset: 6, bundle: xcode, title: "Foo.swift")
+            attention(id: 3, offset: 6, bundle: xcode, title: "Foo.swift"),
         ]
         let sessions = SessionFeedMapper.map(
             rows: rows,
@@ -297,7 +298,7 @@ final class SessionFeedMapperTests: XCTestCase {
             attention(id: 2, offset: 30, bundle: xcode, title: "Foo.swift"),
             attention(id: 3, offset: 60, bundle: "com.tinyspeck.slackmacgap", title: "general"),
             attention(id: 4, offset: 62, bundle: xcode, title: "Bar.swift"),
-            attention(id: 5, offset: 90, bundle: xcode, title: "Bar.swift")
+            attention(id: 5, offset: 90, bundle: xcode, title: "Bar.swift"),
         ]
         let sessions = SessionFeedMapper.map(
             rows: rows,
@@ -318,7 +319,7 @@ final class SessionFeedMapperTests: XCTestCase {
         let rows = [
             attention(id: 3, offset: 60, bundle: xcode, title: "Foo.swift"),
             attention(id: 1, offset: 0, bundle: xcode, title: "Foo.swift"),
-            attention(id: 2, offset: 30, bundle: xcode, title: "Foo.swift")
+            attention(id: 2, offset: 30, bundle: xcode, title: "Foo.swift"),
         ]
         let sessions = SessionFeedMapper.map(
             rows: rows,
@@ -334,7 +335,7 @@ final class SessionFeedMapperTests: XCTestCase {
     func testCategoryFromClassifier_unknownBundleIsOther() {
         let rows = [
             attention(id: 1, offset: 0, bundle: unknown, title: "Foo"),
-            attention(id: 2, offset: 30, bundle: unknown, title: "Foo")
+            attention(id: 2, offset: 30, bundle: unknown, title: "Foo"),
         ]
         let sessions = SessionFeedMapper.map(
             rows: rows,
@@ -347,7 +348,7 @@ final class SessionFeedMapperTests: XCTestCase {
     func testCategoryFromClassifier_knownDevBundle() {
         let rows = [
             attention(id: 1, offset: 0, bundle: xcode, title: "Foo"),
-            attention(id: 2, offset: 30, bundle: xcode, title: "Foo")
+            attention(id: 2, offset: 30, bundle: xcode, title: "Foo"),
         ]
         let sessions = SessionFeedMapper.map(
             rows: rows,
@@ -361,7 +362,7 @@ final class SessionFeedMapperTests: XCTestCase {
         // No classifier override → default Empty → everything .other.
         let rows = [
             attention(id: 1, offset: 0, bundle: xcode, title: "Foo"),
-            attention(id: 2, offset: 30, bundle: xcode, title: "Foo")
+            attention(id: 2, offset: 30, bundle: xcode, title: "Foo"),
         ]
         let sessions = SessionFeedMapper.map(
             rows: rows,

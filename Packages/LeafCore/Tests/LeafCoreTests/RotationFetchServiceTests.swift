@@ -1,6 +1,7 @@
-import XCTest
-import Foundation
 import CryptoKit
+import Foundation
+import XCTest
+
 @testable import LeafCore
 
 final class RotationFetchServiceTests: XCTestCase {
@@ -107,30 +108,36 @@ final class RotationFetchServiceTests: XCTestCase {
         let adminPubHex = hexEncode(adminPriv.publicKey.rawRepresentation)
         let peerPubHex = hexEncode(peerPriv.publicKey.rawRepresentation)
 
-        try db.upsertOrg(Org(id: orgID, name: "Test Org",
-                             createdAt: makeDate(1_700_000_000_000),
-                             createdByMemberID: "admin-mem"))
-        try db.insertTeamMember(TeamMember(
-            id: "admin-mem", orgID: orgID, role: .admin,
-            pubkeyHex: adminPubHex, displayName: "Admin",
-            addedAt: makeDate(1_700_000_000_000), removedAt: nil
-        ))
-        try db.insertTeamMember(TeamMember(
-            id: selfMemberID, orgID: orgID, role: .member,
-            pubkeyHex: selfPubHex, displayName: "Self",
-            addedAt: makeDate(1_700_000_000_500), removedAt: nil
-        ))
-        try db.insertTeamMember(TeamMember(
-            id: "peer-other", orgID: orgID, role: .member,
-            pubkeyHex: peerPubHex, displayName: "PeerOther",
-            addedAt: makeDate(1_700_000_000_600), removedAt: nil
-        ))
-        try db.insertTeamKey(TeamKey(
-            id: priorKeyID,
-            generatedAt: makeDate(1_700_000_000_000),
-            deprecatedAt: nil,
-            generatedByMemberID: "admin-mem"
-        ))
+        try db.upsertOrg(
+            Org(
+                id: orgID, name: "Test Org",
+                createdAt: makeDate(1_700_000_000_000),
+                createdByMemberID: "admin-mem"))
+        try db.insertTeamMember(
+            TeamMember(
+                id: "admin-mem", orgID: orgID, role: .admin,
+                pubkeyHex: adminPubHex, displayName: "Admin",
+                addedAt: makeDate(1_700_000_000_000), removedAt: nil
+            ))
+        try db.insertTeamMember(
+            TeamMember(
+                id: selfMemberID, orgID: orgID, role: .member,
+                pubkeyHex: selfPubHex, displayName: "Self",
+                addedAt: makeDate(1_700_000_000_500), removedAt: nil
+            ))
+        try db.insertTeamMember(
+            TeamMember(
+                id: "peer-other", orgID: orgID, role: .member,
+                pubkeyHex: peerPubHex, displayName: "PeerOther",
+                addedAt: makeDate(1_700_000_000_600), removedAt: nil
+            ))
+        try db.insertTeamKey(
+            TeamKey(
+                id: priorKeyID,
+                generatedAt: makeDate(1_700_000_000_000),
+                deprecatedAt: nil,
+                generatedByMemberID: "admin-mem"
+            ))
 
         let priorTeamKey = Data(repeating: 0xFF, count: 32)
         try FileManager.default.createDirectory(
@@ -144,8 +151,9 @@ final class RotationFetchServiceTests: XCTestCase {
     }
 
     fileprivate static func stubRelay200Empty(_ request: URLRequest, _ body: Data) throws -> (HTTPURLResponse, Data?) {
-        let resp = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil,
-                                   headerFields: ["Content-Type": "application/json"])!
+        let resp = HTTPURLResponse(
+            url: request.url!, statusCode: 200, httpVersion: nil,
+            headerFields: ["Content-Type": "application/json"])!
         return (resp, "{\"rotations\":[]}".data(using: .utf8)!)
     }
 
@@ -187,8 +195,9 @@ final class RotationFetchServiceTests: XCTestCase {
             "blob":"\(shortBlob)","expires_at_ms":1700000086400000}]}
             """
         RotationFetchServiceMockURLProtocol.handler = { req, _ in
-            let resp = HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil,
-                                       headerFields: ["Content-Type": "application/json"])!
+            let resp = HTTPURLResponse(
+                url: req.url!, statusCode: 200, httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"])!
             return (resp, body.data(using: .utf8)!)
         }
         let svc = makeService(identityPriv: pubs.selfPriv)
@@ -227,7 +236,9 @@ final class RotationFetchServiceTests: XCTestCase {
     }
 
     /// Mounts a relay handler that returns a single fetched blob on GET and 204 on DELETE.
-    fileprivate static func mountSingleBlobHandler(blobBytes: Data, rotationID: String = "abcdef0123456789abcdef0123456789") {
+    fileprivate static func mountSingleBlobHandler(
+        blobBytes: Data, rotationID: String = "abcdef0123456789abcdef0123456789"
+    ) {
         let blobB64 = blobBytes.base64URLNoPad
         let body = """
             {"rotations":[{"rotation_id":"\(rotationID)",\
@@ -238,8 +249,9 @@ final class RotationFetchServiceTests: XCTestCase {
                 let resp = HTTPURLResponse(url: req.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!
                 return (resp, nil)
             }
-            let resp = HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil,
-                                       headerFields: ["Content-Type": "application/json"])!
+            let resp = HTTPURLResponse(
+                url: req.url!, statusCode: 200, httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"])!
             return (resp, body.data(using: .utf8)!)
         }
     }
@@ -293,8 +305,9 @@ final class RotationFetchServiceTests: XCTestCase {
 
         XCTAssertEqual(outcome.skipped, 1)
         XCTAssertEqual(outcome.tombstoneApplied, 0)
-        XCTAssertEqual(RotationFetchServiceMockURLProtocol.ackCount(), 0,
-                       "Mis-routed tombstone must NOT be acked")
+        XCTAssertEqual(
+            RotationFetchServiceMockURLProtocol.ackCount(), 0,
+            "Mis-routed tombstone must NOT be acked")
 
         let allMembers = try db.readTeamMembers(orgID: "org1", includeRemoved: true)
         let selfMember = allMembers.first(where: { $0.id == "self-mem" })
@@ -346,9 +359,10 @@ final class RotationFetchServiceTests: XCTestCase {
             newKeyID: priorKeyID, priorKeyID: priorKeyID,
             generatedAtMs: 1_700_000_000_500, removedMemberID: "self-mem"
         )
-        let rotationBlob = try codec.encode(plaintext,
-                                            recipientPubkey: pubs.selfPriv.publicKey.rawRepresentation,
-                                            wrapKey: wrapKey)
+        let rotationBlob = try codec.encode(
+            plaintext,
+            recipientPubkey: pubs.selfPriv.publicKey.rawRepresentation,
+            wrapKey: wrapKey)
         Self.mountSingleBlobHandler(blobBytes: rotationBlob.bytes)
 
         let svc = makeService(codec: codec, identityPriv: pubs.selfPriv)
@@ -378,8 +392,9 @@ final class RotationFetchServiceTests: XCTestCase {
             newKeyID: newKeyID, priorKeyID: priorKeyID,
             generatedAtMs: 1_700_000_000_500, removedMemberID: nil
         )
-        let blob = try codec.encode(plaintext, recipientPubkey: recipientPubkey,
-                                    wrapKey: SymmetricKey(size: .bits256))
+        let blob = try codec.encode(
+            plaintext, recipientPubkey: recipientPubkey,
+            wrapKey: SymmetricKey(size: .bits256))
         return (blob.bytes, codec)
     }
 
@@ -457,11 +472,12 @@ final class RotationFetchServiceTests: XCTestCase {
     /// Promotes `peer-other` (member) to `.admin` so iteration sees 2 admin candidates.
     fileprivate func promotePeerOtherToAdmin() throws {
         try db.writeSQL { rawDB in
-            try rawDB.execute(sql: """
-                UPDATE \(Schema.TeamMembers.tableName)
-                SET \(Schema.TeamMembers.role) = 'admin'
-                WHERE \(Schema.TeamMembers.id) = 'peer-other'
-                """)
+            try rawDB.execute(
+                sql: """
+                    UPDATE \(Schema.TeamMembers.tableName)
+                    SET \(Schema.TeamMembers.role) = 'admin'
+                    WHERE \(Schema.TeamMembers.id) = 'peer-other'
+                    """)
         }
     }
 
@@ -492,7 +508,8 @@ final class RotationFetchServiceTests: XCTestCase {
 
         XCTAssertEqual(outcome.installed, 1)
         XCTAssertEqual(outcome.skipped, 0)
-        XCTAssertEqual(kdf.calls.count, 1, "Iteration must break after first admin succeeds; got \(kdf.calls.count) calls")
+        XCTAssertEqual(
+            kdf.calls.count, 1, "Iteration must break after first admin succeeds; got \(kdf.calls.count) calls")
     }
 
     func testRotationHappyPathMultiAdmin_FirstFails_SecondWorks() async throws {
@@ -525,7 +542,9 @@ final class RotationFetchServiceTests: XCTestCase {
 
         XCTAssertEqual(outcome.installed, 1)
         XCTAssertEqual(outcome.skipped, 0)
-        XCTAssertEqual(kdf.calls.count, 2, "Iteration must try both admins (first rejects → second wins); got \(kdf.calls.count) calls")
+        XCTAssertEqual(
+            kdf.calls.count, 2,
+            "Iteration must try both admins (first rejects → second wins); got \(kdf.calls.count) calls")
         XCTAssertEqual(try db.readActiveTeamKey()?.id, newKeyID)
     }
 
@@ -603,8 +622,9 @@ final class RotationFetchServiceTests: XCTestCase {
                 let resp = HTTPURLResponse(url: req.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!
                 return (resp, nil)
             }
-            let resp = HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil,
-                                       headerFields: ["Content-Type": "application/json"])!
+            let resp = HTTPURLResponse(
+                url: req.url!, statusCode: 200, httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"])!
             return (resp, body.data(using: .utf8)!)
         }
 
@@ -615,8 +635,9 @@ final class RotationFetchServiceTests: XCTestCase {
         XCTAssertEqual(outcome.installed, 1)
         XCTAssertEqual(outcome.tombstoneApplied, 1)
         XCTAssertEqual(outcome.skipped, 1)
-        XCTAssertEqual(RotationFetchServiceMockURLProtocol.ackCount(), 2,
-                       "Both happy paths acked; bad blob not acked")
+        XCTAssertEqual(
+            RotationFetchServiceMockURLProtocol.ackCount(), 2,
+            "Both happy paths acked; bad blob not acked")
     }
 }
 
@@ -651,7 +672,8 @@ final class TombstoneRecordingCodec: RotationBlobCodec, @unchecked Sendable {
 
     func decode(_ blob: RotationBlob, wrapKey: SymmetricKey) throws -> RotationPlaintext {
         if let expected = wrapKeyExpected,
-           expected.withUnsafeBytes({ Data($0) }) != wrapKey.withUnsafeBytes({ Data($0) }) {
+            expected.withUnsafeBytes({ Data($0) }) != wrapKey.withUnsafeBytes({ Data($0) })
+        {
             throw LeafError.rotationBlobMalformed
         }
         guard let spec = tombstoneFor else { throw LeafError.rotationBlobMalformed }
@@ -718,7 +740,8 @@ final class RotationRecordingCodec: RotationBlobCodec, @unchecked Sendable {
 
     func decode(_ blob: RotationBlob, wrapKey: SymmetricKey) throws -> RotationPlaintext {
         if let expected = wrapKeyExpected,
-           expected.withUnsafeBytes({ Data($0) }) != wrapKey.withUnsafeBytes({ Data($0) }) {
+            expected.withUnsafeBytes({ Data($0) }) != wrapKey.withUnsafeBytes({ Data($0) })
+        {
             throw LeafError.rotationBlobMalformed
         }
         if let allowed = acceptedWrapKeys {

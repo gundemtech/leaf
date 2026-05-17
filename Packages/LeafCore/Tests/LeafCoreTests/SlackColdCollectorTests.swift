@@ -9,8 +9,10 @@
 //
 
 import XCTest
-import class GRDB.Row
 import os
+
+import class GRDB.Row
+
 @testable import LeafCore
 
 final class SlackColdCollectorTests: XCTestCase {
@@ -54,12 +56,20 @@ final class SlackColdCollectorTests: XCTestCase {
 
         struct StubError: Error {}
 
-        func fetchTick(accessToken: String, userID: String, since: Int64?, now: Date) async throws -> SlackTickResult { .empty }
+        func fetchTick(accessToken: String, userID: String, since: Int64?, now: Date) async throws -> SlackTickResult {
+            .empty
+        }
         func fetchPresence(accessToken: String, userID: String) async throws -> SlackPresenceState { .unknown }
         func fetchDND(accessToken: String, userID: String) async throws -> SlackDNDState { .empty }
-        func fetchMentionsReceived(accessToken: String, userID: String, since: Int64) async throws -> [SlackMentionChannelCount] { [] }
-        func fetchFilesUploaded(accessToken: String, userID: String, since: Int64) async throws -> SlackFileUploadSummary { .empty(periodStartMs: 0, periodEndMs: 0) }
-        func fetchThreadReplies(accessToken: String, channelID: String, threadTs: String, ownerUserID: String, oldest: String?) async throws -> SlackThreadReplyBatch { .empty }
+        func fetchMentionsReceived(
+            accessToken: String, userID: String, since: Int64
+        ) async throws -> [SlackMentionChannelCount] { [] }
+        func fetchFilesUploaded(
+            accessToken: String, userID: String, since: Int64
+        ) async throws -> SlackFileUploadSummary { .empty(periodStartMs: 0, periodEndMs: 0) }
+        func fetchThreadReplies(
+            accessToken: String, channelID: String, threadTs: String, ownerUserID: String, oldest: String?
+        ) async throws -> SlackThreadReplyBatch { .empty }
 
         func fetchWarmState(
             accessToken: String,
@@ -94,17 +104,18 @@ final class SlackColdCollectorTests: XCTestCase {
     // MARK: - Helpers
 
     private func insertSlackIntegration(_ db: Database, teamID: String = "T1", userID: String = "U1") throws {
-        try db.upsertIntegration(IntegrationRecord(
-            provider: .slack,
-            workspaceID: "\(teamID):\(userID)",
-            workspaceName: "Acme",
-            accessToken: "tok",
-            refreshToken: nil,
-            expiresAt: nil,
-            scope: "canvases:read,emoji:read,usergroups:read,channels:read",
-            connectedAt: Date(),
-            updatedAt: Date()
-        ))
+        try db.upsertIntegration(
+            IntegrationRecord(
+                provider: .slack,
+                workspaceID: "\(teamID):\(userID)",
+                workspaceName: "Acme",
+                accessToken: "tok",
+                refreshToken: nil,
+                expiresAt: nil,
+                scope: "canvases:read,emoji:read,usergroups:read,channels:read",
+                connectedAt: Date(),
+                updatedAt: Date()
+            ))
     }
 
     private func makeCollector(
@@ -127,22 +138,25 @@ final class SlackColdCollectorTests: XCTestCase {
 
     private func seedPriorSnapshot(_ db: Database, kind: String, json: String) throws {
         try db.writeSQL { raw in
-            try ProviderSnapshotsStore.upsert(ProviderSnapshot(
-                provider: "slack",
-                snapshotKind: kind,
-                snapshotJSON: json,
-                capturedAtMs: 0
-            ), in: raw)
+            try ProviderSnapshotsStore.upsert(
+                ProviderSnapshot(
+                    provider: "slack",
+                    snapshotKind: kind,
+                    snapshotJSON: json,
+                    capturedAtMs: 0
+                ), in: raw)
         }
     }
 
     private func eventCount(_ db: Database, eventKind: String) throws -> Int {
         var count = 0
         try db.readSQL { raw in
-            let rows = try Row.fetchAll(raw, sql: """
-                SELECT payload_json FROM events
-                WHERE json_extract(payload_json, '$.event_kind') = ?
-                """, arguments: [eventKind])
+            let rows = try Row.fetchAll(
+                raw,
+                sql: """
+                    SELECT payload_json FROM events
+                    WHERE json_extract(payload_json, '$.event_kind') = ?
+                    """, arguments: [eventKind])
             count = rows.count
         }
         return count
@@ -151,10 +165,12 @@ final class SlackColdCollectorTests: XCTestCase {
     private func eventPayload(_ db: Database, eventKind: String) throws -> [String: Any]? {
         var payload: [String: Any]?
         try db.readSQL { raw in
-            let rows = try Row.fetchAll(raw, sql: """
-                SELECT payload_json FROM events
-                WHERE json_extract(payload_json, '$.event_kind') = ?
-                """, arguments: [eventKind])
+            let rows = try Row.fetchAll(
+                raw,
+                sql: """
+                    SELECT payload_json FROM events
+                    WHERE json_extract(payload_json, '$.event_kind') = ?
+                    """, arguments: [eventKind])
             guard let row = rows.first, let json: String = row["payload_json"] else { return }
             let data = Data(json.utf8)
             payload = try JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -186,18 +202,19 @@ final class SlackColdCollectorTests: XCTestCase {
         try seedTopChannels(db, [SlackMemberChannel(id: "C1", name: "general", latestTs: 100)])
 
         let p = SpyProvider()
-        await p.setBatch(SlackColdBatch(
-            canvases: SlackCanvasesSnapshot(canvases: [
-                SlackCanvas(channelID: "C1", canvasID: "K1", title: "Onboarding", lastEditedMs: 50)
-            ]),
-            emoji: SlackEmojiSnapshot(emojiNames: ["party", "tada"]),
-            usergroups: SlackUsergroupsSnapshot(groups: [
-                SlackUsergroup(id: "G1", name: "team", userIDs: ["U1", "U2"])
-            ]),
-            channelsInfo: SlackChannelsInfoSnapshot(channels: [
-                SlackChannelInfo(channelID: "C1", name: "general", isArchived: false)
-            ])
-        ))
+        await p.setBatch(
+            SlackColdBatch(
+                canvases: SlackCanvasesSnapshot(canvases: [
+                    SlackCanvas(channelID: "C1", canvasID: "K1", title: "Onboarding", lastEditedMs: 50)
+                ]),
+                emoji: SlackEmojiSnapshot(emojiNames: ["party", "tada"]),
+                usergroups: SlackUsergroupsSnapshot(groups: [
+                    SlackUsergroup(id: "G1", name: "team", userIDs: ["U1", "U2"])
+                ]),
+                channelsInfo: SlackChannelsInfoSnapshot(channels: [
+                    SlackChannelInfo(channelID: "C1", name: "general", isArchived: false)
+                ])
+            ))
 
         let c = makeCollector(db, p)
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
@@ -209,7 +226,7 @@ final class SlackColdCollectorTests: XCTestCase {
                 Schema.ProviderSnapshotKinds.slackCanvasesPerChannel,
                 Schema.ProviderSnapshotKinds.slackEmojiList,
                 Schema.ProviderSnapshotKinds.slackUsergroups,
-                Schema.ProviderSnapshotKinds.slackChannelsInfo
+                Schema.ProviderSnapshotKinds.slackChannelsInfo,
             ] {
                 XCTAssertNotNil(
                     try ProviderSnapshotsStore.read(provider: "slack", snapshotKind: kind, in: raw),
@@ -230,15 +247,16 @@ final class SlackColdCollectorTests: XCTestCase {
         try seedPriorSnapshot(db, kind: Schema.ProviderSnapshotKinds.slackCanvasesPerChannel, json: priorJSON)
 
         let p = SpyProvider()
-        await p.setBatch(SlackColdBatch(
-            canvases: SlackCanvasesSnapshot(canvases: [
-                SlackCanvas(channelID: "C1", canvasID: "K0", title: "Old", lastEditedMs: 1),
-                SlackCanvas(channelID: "C1", canvasID: "K1", title: "Onboarding", lastEditedMs: 50)
-            ]),
-            emoji: .empty,
-            usergroups: .empty,
-            channelsInfo: .empty
-        ))
+        await p.setBatch(
+            SlackColdBatch(
+                canvases: SlackCanvasesSnapshot(canvases: [
+                    SlackCanvas(channelID: "C1", canvasID: "K0", title: "Old", lastEditedMs: 1),
+                    SlackCanvas(channelID: "C1", canvasID: "K1", title: "Onboarding", lastEditedMs: 50),
+                ]),
+                emoji: .empty,
+                usergroups: .empty,
+                channelsInfo: .empty
+            ))
 
         let c = makeCollector(db, p)
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
@@ -259,14 +277,15 @@ final class SlackColdCollectorTests: XCTestCase {
         try seedPriorSnapshot(db, kind: Schema.ProviderSnapshotKinds.slackCanvasesPerChannel, json: priorJSON)
 
         let p = SpyProvider()
-        await p.setBatch(SlackColdBatch(
-            canvases: SlackCanvasesSnapshot(canvases: [
-                SlackCanvas(channelID: "C1", canvasID: "K1", title: "New", lastEditedMs: 50)
-            ]),
-            emoji: .empty,
-            usergroups: .empty,
-            channelsInfo: .empty
-        ))
+        await p.setBatch(
+            SlackColdBatch(
+                canvases: SlackCanvasesSnapshot(canvases: [
+                    SlackCanvas(channelID: "C1", canvasID: "K1", title: "New", lastEditedMs: 50)
+                ]),
+                emoji: .empty,
+                usergroups: .empty,
+                channelsInfo: .empty
+            ))
 
         let c = makeCollector(db, p)
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
@@ -283,12 +302,13 @@ final class SlackColdCollectorTests: XCTestCase {
         try seedPriorSnapshot(db, kind: Schema.ProviderSnapshotKinds.slackEmojiList, json: priorJSON)
 
         let p = SpyProvider()
-        await p.setBatch(SlackColdBatch(
-            canvases: .empty,
-            emoji: SlackEmojiSnapshot(emojiNames: ["party", "tada"]),
-            usergroups: .empty,
-            channelsInfo: .empty
-        ))
+        await p.setBatch(
+            SlackColdBatch(
+                canvases: .empty,
+                emoji: SlackEmojiSnapshot(emojiNames: ["party", "tada"]),
+                usergroups: .empty,
+                channelsInfo: .empty
+            ))
 
         let c = makeCollector(db, p)
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
@@ -309,14 +329,15 @@ final class SlackColdCollectorTests: XCTestCase {
         try seedPriorSnapshot(db, kind: Schema.ProviderSnapshotKinds.slackUsergroups, json: priorJSON)
 
         let p = SpyProvider()
-        await p.setBatch(SlackColdBatch(
-            canvases: .empty,
-            emoji: .empty,
-            usergroups: SlackUsergroupsSnapshot(groups: [
-                SlackUsergroup(id: "G1", name: "team", userIDs: ["U1", "U2"])
-            ]),
-            channelsInfo: .empty
-        ))
+        await p.setBatch(
+            SlackColdBatch(
+                canvases: .empty,
+                emoji: .empty,
+                usergroups: SlackUsergroupsSnapshot(groups: [
+                    SlackUsergroup(id: "G1", name: "team", userIDs: ["U1", "U2"])
+                ]),
+                channelsInfo: .empty
+            ))
 
         let c = makeCollector(db, p)
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
@@ -339,14 +360,15 @@ final class SlackColdCollectorTests: XCTestCase {
         try seedPriorSnapshot(db, kind: Schema.ProviderSnapshotKinds.slackChannelsInfo, json: priorJSON)
 
         let p = SpyProvider()
-        await p.setBatch(SlackColdBatch(
-            canvases: .empty,
-            emoji: .empty,
-            usergroups: .empty,
-            channelsInfo: SlackChannelsInfoSnapshot(channels: [
-                SlackChannelInfo(channelID: "C1", name: "new", isArchived: false)
-            ])
-        ))
+        await p.setBatch(
+            SlackColdBatch(
+                canvases: .empty,
+                emoji: .empty,
+                usergroups: .empty,
+                channelsInfo: SlackChannelsInfoSnapshot(channels: [
+                    SlackChannelInfo(channelID: "C1", name: "new", isArchived: false)
+                ])
+            ))
 
         let c = makeCollector(db, p)
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
@@ -367,14 +389,15 @@ final class SlackColdCollectorTests: XCTestCase {
         try seedPriorSnapshot(db, kind: Schema.ProviderSnapshotKinds.slackChannelsInfo, json: priorJSON)
 
         let p = SpyProvider()
-        await p.setBatch(SlackColdBatch(
-            canvases: .empty,
-            emoji: .empty,
-            usergroups: .empty,
-            channelsInfo: SlackChannelsInfoSnapshot(channels: [
-                SlackChannelInfo(channelID: "C1", name: "general", isArchived: true)
-            ])
-        ))
+        await p.setBatch(
+            SlackColdBatch(
+                canvases: .empty,
+                emoji: .empty,
+                usergroups: .empty,
+                channelsInfo: SlackChannelsInfoSnapshot(channels: [
+                    SlackChannelInfo(channelID: "C1", name: "general", isArchived: true)
+                ])
+            ))
 
         let c = makeCollector(db, p)
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
@@ -391,13 +414,14 @@ final class SlackColdCollectorTests: XCTestCase {
         try seedPriorSnapshot(db, kind: Schema.ProviderSnapshotKinds.slackCanvasesPerChannel, json: priorJSON)
 
         let p = SpyProvider()
-        await p.setBatch(SlackColdBatch(
-            canvases: SlackCanvasesSnapshot(canvases: [
-                SlackCanvas(channelID: "C1", canvasID: "K0", title: "Old", lastEditedMs: 1),
-                SlackCanvas(channelID: "C1", canvasID: "K1", title: "New", lastEditedMs: 50)
-            ]),
-            emoji: .empty, usergroups: .empty, channelsInfo: .empty
-        ))
+        await p.setBatch(
+            SlackColdBatch(
+                canvases: SlackCanvasesSnapshot(canvases: [
+                    SlackCanvas(channelID: "C1", canvasID: "K0", title: "Old", lastEditedMs: 1),
+                    SlackCanvas(channelID: "C1", canvasID: "K1", title: "New", lastEditedMs: 50),
+                ]),
+                emoji: .empty, usergroups: .empty, channelsInfo: .empty
+            ))
 
         let c = makeCollector(db, p, scopes: ScopesMissing(["canvases:read"]))
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
@@ -414,11 +438,12 @@ final class SlackColdCollectorTests: XCTestCase {
         try seedPriorSnapshot(db, kind: Schema.ProviderSnapshotKinds.slackEmojiList, json: priorJSON)
 
         let p = SpyProvider()
-        await p.setBatch(SlackColdBatch(
-            canvases: .empty,
-            emoji: SlackEmojiSnapshot(emojiNames: ["party", "tada"]),
-            usergroups: .empty, channelsInfo: .empty
-        ))
+        await p.setBatch(
+            SlackColdBatch(
+                canvases: .empty,
+                emoji: SlackEmojiSnapshot(emojiNames: ["party", "tada"]),
+                usergroups: .empty, channelsInfo: .empty
+            ))
 
         let c = makeCollector(db, p, scopes: ScopesMissing(["emoji:read"]))
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
@@ -434,14 +459,15 @@ final class SlackColdCollectorTests: XCTestCase {
         try seedPriorSnapshot(db, kind: Schema.ProviderSnapshotKinds.slackUsergroups, json: priorJSON)
 
         let p = SpyProvider()
-        await p.setBatch(SlackColdBatch(
-            canvases: .empty,
-            emoji: .empty,
-            usergroups: SlackUsergroupsSnapshot(groups: [
-                SlackUsergroup(id: "G1", name: "team", userIDs: ["U1", "U2"])
-            ]),
-            channelsInfo: .empty
-        ))
+        await p.setBatch(
+            SlackColdBatch(
+                canvases: .empty,
+                emoji: .empty,
+                usergroups: SlackUsergroupsSnapshot(groups: [
+                    SlackUsergroup(id: "G1", name: "team", userIDs: ["U1", "U2"])
+                ]),
+                channelsInfo: .empty
+            ))
 
         let c = makeCollector(db, p, scopes: ScopesMissing(["usergroups:read"]))
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
@@ -486,10 +512,12 @@ final class SlackColdCollectorTests: XCTestCase {
     func testProviderReceivesPriorTopChannels() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertSlackIntegration(db)
-        try seedTopChannels(db, [
-            SlackMemberChannel(id: "C1", name: "general", latestTs: 100),
-            SlackMemberChannel(id: "C2", name: "random", latestTs: 200)
-        ])
+        try seedTopChannels(
+            db,
+            [
+                SlackMemberChannel(id: "C1", name: "general", latestTs: 100),
+                SlackMemberChannel(id: "C2", name: "random", latestTs: 200),
+            ])
 
         let p = SpyProvider()
         let c = makeCollector(db, p)

@@ -19,15 +19,17 @@ public struct JetBrainsStateMachine: Sendable, Hashable {
         guard changed else { return [] }
         var payload: [String: String] = [
             "event_kind": "jetbrains_active_doc_changed",
-            "ide_bundle_id": obs.ideBundleID
+            "ide_bundle_id": obs.ideBundleID,
         ]
         if let p = obs.projectName { payload["project"] = p }
         if let d = obs.activeDocPath { payload["doc_path"] = d }
-        return [RawEvent(
-            timestamp: Date(timeIntervalSince1970: Double(nowMs) / 1000.0),
-            signalType: .attention,
-            bundleID: obs.ideBundleID,
-            payload: payload
-        )]
+        return [
+            RawEvent(
+                timestamp: Date(timeIntervalSince1970: Double(nowMs) / 1000.0),
+                signalType: .attention,
+                bundleID: obs.ideBundleID,
+                payload: payload
+            )
+        ]
     }
 }

@@ -1,10 +1,10 @@
-import Foundation
 import AppKit
 import CoreGraphics
+import Foundation
 import IOKit.hid
-import os.lock
-import os
 import LeafCore
+import os
+import os.lock
 
 /// Phase Track-4 S3 — central intensity collector.
 ///
@@ -127,22 +127,21 @@ final class CGEventTapCollector: @unchecked Sendable {
     @MainActor
     private func installTap() {
         let mask: UInt64 =
-            (1 << CGEventType.keyDown.rawValue) |
-            (1 << CGEventType.leftMouseDown.rawValue) |
-            (1 << CGEventType.rightMouseDown.rawValue) |
-            (1 << CGEventType.mouseMoved.rawValue) |
-            (1 << CGEventType.leftMouseDragged.rawValue) |
-            (1 << CGEventType.rightMouseDragged.rawValue) |
-            (1 << CGEventType.scrollWheel.rawValue)
+            (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.leftMouseDown.rawValue)
+            | (1 << CGEventType.rightMouseDown.rawValue) | (1 << CGEventType.mouseMoved.rawValue)
+            | (1 << CGEventType.leftMouseDragged.rawValue) | (1 << CGEventType.rightMouseDragged.rawValue)
+            | (1 << CGEventType.scrollWheel.rawValue)
         let refcon = Unmanaged.passUnretained(self).toOpaque()
-        guard let port = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
-            place: .headInsertEventTap,
-            options: .listenOnly,
-            eventsOfInterest: mask,
-            callback: CGEventTapCollector.tapCallback,
-            userInfo: refcon
-        ) else {
+        guard
+            let port = CGEvent.tapCreate(
+                tap: .cgSessionEventTap,
+                place: .headInsertEventTap,
+                options: .listenOnly,
+                eventsOfInterest: mask,
+                callback: CGEventTapCollector.tapCallback,
+                userInfo: refcon
+            )
+        else {
             collectorLogger.error("CGEvent.tapCreate returned nil — tap not installed")
             return
         }
@@ -219,7 +218,7 @@ final class CGEventTapCollector: @unchecked Sendable {
             case .keyDown:
                 state.keystrokes = state.keystrokes &+ 1
             case .leftMouseDown, .rightMouseDown, .mouseMoved,
-                 .leftMouseDragged, .rightMouseDragged, .scrollWheel:
+                .leftMouseDragged, .rightMouseDragged, .scrollWheel:
                 state.mouseMoves = state.mouseMoves &+ 1
             default:
                 break
@@ -283,8 +282,9 @@ final class CGEventTapCollector: @unchecked Sendable {
             )
 
             // RawEvent emit — skip пустых active buckets (no signal).
-            if snapshot.droppedReason != nil ||
-               snapshot.keystrokes > 0 || snapshot.mouseMoves > 0 || snapshot.appSwitches > 0 {
+            if snapshot.droppedReason != nil || snapshot.keystrokes > 0 || snapshot.mouseMoves > 0
+                || snapshot.appSwitches > 0
+            {
                 let payload = snapshot.toRawEventPayload()
                 let raw = RawEvent(signalType: .context, bundleID: nil, payload: payload)
                 await writer.enqueue(raw)

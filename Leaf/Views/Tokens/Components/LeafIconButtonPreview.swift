@@ -12,9 +12,9 @@ struct LeafIconButtonPreview: View {
             Text("LeafIconButton").font(LeafType.title.medium).foregroundStyle(LeafColor.text.primary)
 
             VStack(alignment: .leading, spacing: LeafSpace.md) {
-                row(.ghost,       label: "ghost")
-                row(.secondary,   label: "secondary")
-                row(.primary,     label: "primary")
+                row(.ghost, label: "ghost")
+                row(.secondary, label: "secondary")
+                row(.primary, label: "primary")
                 row(.destructive, label: "destructive")
             }
 
@@ -35,9 +35,9 @@ struct LeafIconButtonPreview: View {
                 .font(LeafType.mono.small)
                 .foregroundStyle(LeafColor.text.tertiary)
                 .frame(width: 96, alignment: .leading)
-            LeafIconButton(asset: LeafIcons.action.add,          variant: variant, size: .sm) {}
-            LeafIconButton(asset: LeafIcons.action.overflow,     variant: variant, size: .md) {}
-            LeafIconButton(asset: LeafIcons.object.trash,        variant: variant, size: .lg) {}
+            LeafIconButton(asset: LeafIcons.action.add, variant: variant, size: .sm) {}
+            LeafIconButton(asset: LeafIcons.action.overflow, variant: variant, size: .md) {}
+            LeafIconButton(asset: LeafIcons.object.trash, variant: variant, size: .lg) {}
         }
     }
 }

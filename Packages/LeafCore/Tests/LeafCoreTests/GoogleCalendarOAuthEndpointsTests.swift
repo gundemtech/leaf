@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class GoogleCalendarOAuthEndpointsTests: XCTestCase {
@@ -28,8 +29,8 @@ final class GoogleCalendarOAuthEndpointsTests: XCTestCase {
         XCTAssertEqual(components.host, "accounts.google.com")
         XCTAssertEqual(components.path, "/o/oauth2/v2/auth")
 
-        let params = Dictionary(uniqueKeysWithValues:
-            (components.queryItems ?? []).map { ($0.name, $0.value ?? "") }
+        let params = Dictionary(
+            uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") }
         )
         XCTAssertEqual(params["client_id"], "test-client-id.apps.googleusercontent.com")
         XCTAssertEqual(params["redirect_uri"], "http://127.0.0.1:47825/callback")

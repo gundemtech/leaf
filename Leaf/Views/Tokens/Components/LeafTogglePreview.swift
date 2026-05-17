@@ -15,9 +15,9 @@ struct LeafTogglePreview: View {
             Text("LeafToggle").font(LeafType.title.medium).foregroundStyle(LeafColor.text.primary)
 
             VStack(alignment: .leading, spacing: LeafSpace.sm) {
-                LeafToggle(title: "Share with team",     isOn: $on)
+                LeafToggle(title: "Share with team", isOn: $on)
                 LeafToggle(title: "Allow notifications", isOn: $off)
-                LeafToggle(title: "Read-only (disabled, on)",  isOn: .constant(true),  disabled: true)
+                LeafToggle(title: "Read-only (disabled, on)", isOn: .constant(true), disabled: true)
                 LeafToggle(title: "Read-only (disabled, off)", isOn: .constant(false), disabled: true)
             }
 

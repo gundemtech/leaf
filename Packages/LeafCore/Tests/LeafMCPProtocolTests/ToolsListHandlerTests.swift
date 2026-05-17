@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafMCPProtocol
 
 final class ToolsListHandlerTests: XCTestCase {
@@ -8,7 +9,7 @@ final class ToolsListHandlerTests: XCTestCase {
             "properties": [
                 "period": ["type": "string", "enum": ["today", "yesterday", "last_7_days"]]
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
         ]
         let def = ToolDefinition(
             name: "get_timeline",

@@ -7,6 +7,7 @@
 //
 
 import XCTest
+
 @testable import LeafCore
 
 final class SlackScheduledMessagesIDSetDiffTests: XCTestCase {
@@ -26,7 +27,7 @@ final class SlackScheduledMessagesIDSetDiffTests: XCTestCase {
         ])
         let curr = SlackScheduledMessagesSnapshot(messages: [
             SlackScheduledMessage(id: "M1", channelID: "C1", scheduledFor: 1000, sent: false),
-            SlackScheduledMessage(id: "M2", channelID: "C2", scheduledFor: 2000, sent: false)
+            SlackScheduledMessage(id: "M2", channelID: "C2", scheduledFor: 2000, sent: false),
         ])
         let (scheduled, sent) = SlackWarmCollector.scheduledMessagesDiff(prior: prior, current: curr)
         XCTAssertEqual(scheduled.map(\.id), ["M2"])

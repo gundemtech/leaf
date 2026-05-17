@@ -35,7 +35,7 @@ public nonisolated struct LinearTokenRefresher: Sendable {
     public init(
         database: Database,
         clientID: String,
-        earlyRefreshSeconds: TimeInterval = 300 // 5 min, ничтожный относительно 24h TTL Linear
+        earlyRefreshSeconds: TimeInterval = 300  // 5 min, ничтожный относительно 24h TTL Linear
     ) {
         self.database = database
         self.clientID = clientID
@@ -86,7 +86,7 @@ public nonisolated struct LinearTokenRefresher: Sendable {
         request.httpBody = formEncoded([
             "grant_type": "refresh_token",
             "refresh_token": refreshToken,
-            "client_id": clientID
+            "client_id": clientID,
         ])
 
         let (data, response): (Data, URLResponse)

@@ -1,6 +1,6 @@
 import Foundation
-import os
 import LeafCore
+import os
 
 /// Actor-батчер: коллектор зовёт `enqueue(_:)` не блокируя, writer раз в N секунд
 /// или при достижении батча кидает всё в DB одним write.
@@ -52,7 +52,8 @@ actor EventWriter {
             writerLogger.debug("Flushed \(batch.count) events")
         } catch {
             // Для Phase 1 — log and drop. В Phase 2+ можно re-enqueue с лимитом retry.
-            writerLogger.error("Failed to write batch of \(batch.count): \(error.localizedDescription, privacy: .public)")
+            writerLogger.error(
+                "Failed to write batch of \(batch.count): \(error.localizedDescription, privacy: .public)")
         }
     }
 }

@@ -20,35 +20,35 @@ public enum ShareTemplate {
         switch kind {
         case .askToJoin(let orgName):
             return """
-            Привет! Я добавляю тебя в Leaf team "\(orgName)".
+                Привет! Я добавляю тебя в Leaf team "\(orgName)".
 
-            Чтобы присоединиться:
-            1. Скачай Leaf — https://leaf-docs.gundem.tech/install
-            2. Запусти, выбери "Join existing team"
-            3. Скопируй мне Join code который покажет приложение
+                Чтобы присоединиться:
+                1. Скачай Leaf — https://leaf-docs.gundem.tech/install
+                2. Запусти, выбери "Join existing team"
+                3. Скопируй мне Join code который покажет приложение
 
-            Я пришлю invite link сразу как получу.
-            """
+                Я пришлю invite link сразу как получу.
+                """
         case .inviteeShare(let displayName, let joinCode):
             return """
-            Привет! Я \(displayName), готов(а) присоединиться к Leaf team. Мой Join code:
+                Привет! Я \(displayName), готов(а) присоединиться к Leaf team. Мой Join code:
 
-            \(joinCode)
+                \(joinCode)
 
-            Жду от тебя invite link 🌿
-            """
+                Жду от тебя invite link 🌿
+                """
         case .adminShare(let displayName, let inviteURL):
             // Admin-side не всегда знает invitee display name (paste-Join-code flow без preceding
             // inviteeShare exchange). Empty/whitespace → neutral greeting; иначе — personalized.
             let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
             let greeting = trimmed.isEmpty ? "Привет!" : "Привет, \(trimmed)!"
             return """
-            \(greeting) Вот твой Leaf invite link (действует 24 часа):
+                \(greeting) Вот твой Leaf invite link (действует 24 часа):
 
-            \(inviteURL.absoluteString)
+                \(inviteURL.absoluteString)
 
-            Кликни — Leaf откроется и подхватит автоматически.
-            """
+                Кликни — Leaf откроется и подхватит автоматически.
+                """
         }
     }
 
@@ -58,7 +58,7 @@ public enum ShareTemplate {
         components.scheme = "mailto"
         components.queryItems = [
             URLQueryItem(name: "subject", value: subject),
-            URLQueryItem(name: "body", value: body)
+            URLQueryItem(name: "body", value: body),
         ]
         // URLComponents already percent-encodes query values. Force unwrap safe — scheme + queryItems
         // produce a valid mailto: URL deterministically.

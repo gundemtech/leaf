@@ -38,7 +38,7 @@ public actor SlackScopesService {
         "users:read", "users.profile:read", "search:read",
         "channels:read", "groups:read", "im:read", "mpim:read",
         "channels:history", "groups:history", "im:history", "mpim:history",
-        "dnd:read", "files:read"
+        "dnd:read", "files:read",
     ]
 
     /// Scopes которые расширяют D3 покрытие (reactions / pins / bookmarks /
@@ -46,7 +46,7 @@ public actor SlackScopesService {
     /// Banner упоминает, но не блокирует.
     public static let requiredOptional: Set<String> = [
         "reactions:read", "pins:read", "bookmarks:read", "reminders:read",
-        "chat:write", "stars:read", "canvases:read", "emoji:read", "usergroups:read"
+        "chat:write", "stars:read", "canvases:read", "emoji:read", "usergroups:read",
     ]
 
     /// Sorted union — OAuth authorize URL scope param construction.
@@ -136,7 +136,8 @@ public actor SlackScopesService {
     /// commas AND whitespace (multi-space tolerant; trim per token; empty
     /// → empty set) for forward-compat with any format variation.
     public static func parseScopeString(_ raw: String) -> Set<String> {
-        let parts = raw
+        let parts =
+            raw
             .split(whereSeparator: { $0.isWhitespace || $0 == "," })
             .map { String($0) }
             .filter { !$0.isEmpty }

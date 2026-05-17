@@ -16,7 +16,8 @@ struct RemovedFromTeamBanner: View {
         LeafEmptyState(
             icon: LeafIcons.object.userError,
             title: "You've been removed from \(orgName)",
-            description: "Your local data remains on this device, but you can no longer send presence to teammates. To start fresh, wipe local team data via Settings (coming soon)."
+            description:
+                "Your local data remains on this device, but you can no longer send presence to teammates. To start fresh, wipe local team data via Settings (coming soon)."
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(LeafColor.surface.canvas.ignoresSafeArea())

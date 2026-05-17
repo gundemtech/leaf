@@ -15,7 +15,7 @@ struct TokensIconsSection: View {
 
         var displayName: String {
             switch self {
-            case .asset(let n):  return n
+            case .asset(let n): return n
             case .system(let n): return n
             }
         }
@@ -34,56 +34,74 @@ struct TokensIconsSection: View {
     }
 
     private let groups: [IconGroup] = [
-        IconGroup(id: "brand", title: "Brand", items: [
-            IconItem(id: "brand.leaf",      label: "leaf",      source: .asset(LeafIcons.brand.leaf)),
-            IconItem(id: "brand.leaf.fill", label: "leaf.fill", source: .asset(LeafIcons.brand.leafFill)),
-        ]),
-        IconGroup(id: "actions", title: "Actions", items: [
-            IconItem(id: "act.close",            label: "close",              source: .asset(LeafIcons.action.close)),
-            IconItem(id: "act.clear",            label: "clear",              source: .asset(LeafIcons.action.clear)),
-            IconItem(id: "act.add",              label: "add",                source: .asset(LeafIcons.action.add)),
-            IconItem(id: "act.add.fill",         label: "add (filled)",       source: .asset(LeafIcons.action.addFill)),
-            IconItem(id: "act.overflow",         label: "overflow",           source: .asset(LeafIcons.action.overflow)),
-            IconItem(id: "act.overflow.fill",    label: "overflow (filled)",  source: .asset(LeafIcons.action.overflowFill)),
-            IconItem(id: "act.refresh",          label: "refresh",            source: .asset(LeafIcons.action.refresh)),
-            IconItem(id: "act.external",         label: "external link",      source: .asset(LeafIcons.action.external)),
-        ]),
-        IconGroup(id: "nav", title: "Navigation", items: [
-            IconItem(id: "nav.home",         label: "home",         source: .asset(LeafIcons.nav.home)),
-            IconItem(id: "nav.activity",     label: "activity",     source: .asset(LeafIcons.nav.activity)),
-            IconItem(id: "nav.team",         label: "team",         source: .asset(LeafIcons.nav.team)),
-            IconItem(id: "nav.connections",  label: "connections",  source: .asset(LeafIcons.nav.connections)),
-            IconItem(id: "nav.settings",     label: "settings",     source: .asset(LeafIcons.nav.settings)),
-            IconItem(id: "nav.profile",      label: "profile",      source: .asset(LeafIcons.nav.profile)),
-            IconItem(id: "nav.sidebar",      label: "sidebar",      source: .asset(LeafIcons.nav.sidebar)),
-            IconItem(id: "nav.organization", label: "organization (SF)", source: .system(LeafIcons.nav.organizationSF)),
-            IconItem(id: "nav.search",       label: "search (SF)",  source: .system(LeafIcons.nav.searchSF)),
-            IconItem(id: "nav.filter",       label: "filter (SF)",  source: .system(LeafIcons.nav.filterSF)),
-        ]),
-        IconGroup(id: "comm", title: "Communication", items: [
-            IconItem(id: "comm.email",   label: "invite / email",   source: .asset(LeafIcons.comm.email)),
-            IconItem(id: "comm.message", label: "comment / chat",   source: .asset(LeafIcons.comm.message)),
-            IconItem(id: "comm.copy",    label: "copy",             source: .asset(LeafIcons.comm.copy)),
-            IconItem(id: "comm.share",   label: "share",            source: .asset(LeafIcons.comm.share)),
-        ]),
-        IconGroup(id: "status", title: "Status", items: [
-            IconItem(id: "stat.success",      label: "success",            source: .asset(LeafIcons.status.success)),
-            IconItem(id: "stat.success.fill", label: "success (filled)",   source: .asset(LeafIcons.status.successFill)),
-            IconItem(id: "stat.warning",      label: "warning",            source: .asset(LeafIcons.status.warning)),
-            IconItem(id: "stat.warning.fill", label: "warning (filled)",   source: .asset(LeafIcons.status.warningFill)),
-            IconItem(id: "stat.info",         label: "info",               source: .asset(LeafIcons.status.info)),
-        ]),
-        IconGroup(id: "obj", title: "Object", items: [
-            IconItem(id: "obj.trash",     label: "delete / revoke",   source: .asset(LeafIcons.object.trash)),
-            IconItem(id: "obj.app",       label: "app placeholder",   source: .asset(LeafIcons.object.appPlaceholder)),
-            IconItem(id: "obj.folder",    label: "empty folder",      source: .asset(LeafIcons.object.folderEmpty)),
-            IconItem(id: "obj.user.err",  label: "user error",        source: .asset(LeafIcons.object.userError)),
-        ]),
-        IconGroup(id: "metric", title: "Metric arrows", items: [
-            IconItem(id: "m.up",   label: "delta up",    source: .asset(LeafIcons.metric.up)),
-            IconItem(id: "m.down", label: "delta down",  source: .asset(LeafIcons.metric.down)),
-            IconItem(id: "m.flat", label: "delta flat",  source: .asset(LeafIcons.metric.flat)),
-        ]),
+        IconGroup(
+            id: "brand", title: "Brand",
+            items: [
+                IconItem(id: "brand.leaf", label: "leaf", source: .asset(LeafIcons.brand.leaf)),
+                IconItem(id: "brand.leaf.fill", label: "leaf.fill", source: .asset(LeafIcons.brand.leafFill)),
+            ]),
+        IconGroup(
+            id: "actions", title: "Actions",
+            items: [
+                IconItem(id: "act.close", label: "close", source: .asset(LeafIcons.action.close)),
+                IconItem(id: "act.clear", label: "clear", source: .asset(LeafIcons.action.clear)),
+                IconItem(id: "act.add", label: "add", source: .asset(LeafIcons.action.add)),
+                IconItem(id: "act.add.fill", label: "add (filled)", source: .asset(LeafIcons.action.addFill)),
+                IconItem(id: "act.overflow", label: "overflow", source: .asset(LeafIcons.action.overflow)),
+                IconItem(
+                    id: "act.overflow.fill", label: "overflow (filled)", source: .asset(LeafIcons.action.overflowFill)),
+                IconItem(id: "act.refresh", label: "refresh", source: .asset(LeafIcons.action.refresh)),
+                IconItem(id: "act.external", label: "external link", source: .asset(LeafIcons.action.external)),
+            ]),
+        IconGroup(
+            id: "nav", title: "Navigation",
+            items: [
+                IconItem(id: "nav.home", label: "home", source: .asset(LeafIcons.nav.home)),
+                IconItem(id: "nav.activity", label: "activity", source: .asset(LeafIcons.nav.activity)),
+                IconItem(id: "nav.team", label: "team", source: .asset(LeafIcons.nav.team)),
+                IconItem(id: "nav.connections", label: "connections", source: .asset(LeafIcons.nav.connections)),
+                IconItem(id: "nav.settings", label: "settings", source: .asset(LeafIcons.nav.settings)),
+                IconItem(id: "nav.profile", label: "profile", source: .asset(LeafIcons.nav.profile)),
+                IconItem(id: "nav.sidebar", label: "sidebar", source: .asset(LeafIcons.nav.sidebar)),
+                IconItem(
+                    id: "nav.organization", label: "organization (SF)", source: .system(LeafIcons.nav.organizationSF)),
+                IconItem(id: "nav.search", label: "search (SF)", source: .system(LeafIcons.nav.searchSF)),
+                IconItem(id: "nav.filter", label: "filter (SF)", source: .system(LeafIcons.nav.filterSF)),
+            ]),
+        IconGroup(
+            id: "comm", title: "Communication",
+            items: [
+                IconItem(id: "comm.email", label: "invite / email", source: .asset(LeafIcons.comm.email)),
+                IconItem(id: "comm.message", label: "comment / chat", source: .asset(LeafIcons.comm.message)),
+                IconItem(id: "comm.copy", label: "copy", source: .asset(LeafIcons.comm.copy)),
+                IconItem(id: "comm.share", label: "share", source: .asset(LeafIcons.comm.share)),
+            ]),
+        IconGroup(
+            id: "status", title: "Status",
+            items: [
+                IconItem(id: "stat.success", label: "success", source: .asset(LeafIcons.status.success)),
+                IconItem(
+                    id: "stat.success.fill", label: "success (filled)", source: .asset(LeafIcons.status.successFill)),
+                IconItem(id: "stat.warning", label: "warning", source: .asset(LeafIcons.status.warning)),
+                IconItem(
+                    id: "stat.warning.fill", label: "warning (filled)", source: .asset(LeafIcons.status.warningFill)),
+                IconItem(id: "stat.info", label: "info", source: .asset(LeafIcons.status.info)),
+            ]),
+        IconGroup(
+            id: "obj", title: "Object",
+            items: [
+                IconItem(id: "obj.trash", label: "delete / revoke", source: .asset(LeafIcons.object.trash)),
+                IconItem(id: "obj.app", label: "app placeholder", source: .asset(LeafIcons.object.appPlaceholder)),
+                IconItem(id: "obj.folder", label: "empty folder", source: .asset(LeafIcons.object.folderEmpty)),
+                IconItem(id: "obj.user.err", label: "user error", source: .asset(LeafIcons.object.userError)),
+            ]),
+        IconGroup(
+            id: "metric", title: "Metric arrows",
+            items: [
+                IconItem(id: "m.up", label: "delta up", source: .asset(LeafIcons.metric.up)),
+                IconItem(id: "m.down", label: "delta down", source: .asset(LeafIcons.metric.down)),
+                IconItem(id: "m.flat", label: "delta flat", source: .asset(LeafIcons.metric.flat)),
+            ]),
     ]
 
     private var totalCount: Int { groups.reduce(0) { $0 + $1.items.count } }

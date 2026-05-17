@@ -100,7 +100,7 @@ public nonisolated struct SlackTokenRefresher: Sendable {
         request.httpBody = formEncoded([
             "client_id": clientID,
             "grant_type": "refresh_token",
-            "refresh_token": refreshToken
+            "refresh_token": refreshToken,
         ])
 
         let (data, response): (Data, URLResponse)
@@ -129,12 +129,14 @@ public nonisolated struct SlackTokenRefresher: Sendable {
             // Refresh-flow кладёт новый user-token на TOP LEVEL — в отличие от
             // initial exchange (там в `authed_user`). Fallback на authedUser —
             // защита от случая когда Slack однажды поменяет shape (paranoid).
-            let newAccessToken = decoded.accessToken
+            let newAccessToken =
+                decoded.accessToken
                 ?? decoded.authedUser?.accessToken
             guard let accessToken = newAccessToken, !accessToken.isEmpty else {
                 throw SlackTokenRefresherError.decode("Refresh response ok=true but missing access_token")
             }
-            let newRefreshToken = decoded.refreshToken
+            let newRefreshToken =
+                decoded.refreshToken
                 ?? decoded.authedUser?.refreshToken
                 ?? current.refreshToken
             let newExpiresAt: Date? = {
@@ -143,7 +145,8 @@ public nonisolated struct SlackTokenRefresher: Sendable {
                 }
                 return nil
             }()
-            let newScope = decoded.scope
+            let newScope =
+                decoded.scope
                 ?? decoded.authedUser?.scope
                 ?? current.scope
 
@@ -173,7 +176,7 @@ public nonisolated struct SlackTokenRefresher: Sendable {
             "token_expired",
             "account_inactive",
             "not_authed",
-            "no_authed_user"
+            "no_authed_user",
         ]
         if terminalErrors.contains(code) {
             refresherLogger.warning("Slack refresh denied (\(code, privacy: .public)): cleaning integration")

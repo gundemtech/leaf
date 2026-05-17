@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class ZoomMeetingDurationTrackerTests: XCTestCase {
@@ -55,8 +56,10 @@ final class ZoomMeetingDurationTrackerTests: XCTestCase {
         XCTAssertEqual(evt2.count, 0)
         let evt3 = t.observe(ZoomObservation(meetingState: .notInMeeting, ownMeetingTopic: nil), nowMs: 3_000)
         XCTAssertEqual(evt3.count, 0)
-        if case .idle = t.currentState { /* ok */ }
-        else { XCTFail("Expected idle state after false alarm, got \(t.currentState)") }
+        if case .idle = t.currentState { /* ok */
+        } else {
+            XCTFail("Expected idle state after false alarm, got \(t.currentState)")
+        }
     }
 
     // MARK: - GRACE_END
@@ -89,8 +92,10 @@ final class ZoomMeetingDurationTrackerTests: XCTestCase {
         XCTAssertEqual(evt2.count, 0)
         let evt3 = t.observe(ZoomObservation(meetingState: .inMeeting, ownMeetingTopic: nil), nowMs: 3_000)
         XCTAssertEqual(evt3.count, 0)
-        if case .active = t.currentState { /* ok */ }
-        else { XCTFail("Expected active state after revert, got \(t.currentState)") }
+        if case .active = t.currentState { /* ok */
+        } else {
+            XCTFail("Expected active state after revert, got \(t.currentState)")
+        }
     }
 
     func testMultipleFlickersAccumulateDroppedCount() {
@@ -109,8 +114,10 @@ final class ZoomMeetingDurationTrackerTests: XCTestCase {
         _ = t.observe(ZoomObservation(meetingState: .notInMeeting, ownMeetingTopic: nil), nowMs: 6_000)
         let events = t.observe(ZoomObservation(meetingState: .notInMeeting, ownMeetingTopic: nil), nowMs: 40_000)
         XCTAssertEqual(events.count, 1)
-        XCTAssertEqual(events[0].payload["dropped_transitions_count"], "2",
-                       "Expected 2 dropped transitions from flickers; got \(events[0].payload["dropped_transitions_count"] ?? "nil")")
+        XCTAssertEqual(
+            events[0].payload["dropped_transitions_count"], "2",
+            "Expected 2 dropped transitions from flickers; got \(events[0].payload["dropped_transitions_count"] ?? "nil")"
+        )
     }
 
     // MARK: - Calendar linker
