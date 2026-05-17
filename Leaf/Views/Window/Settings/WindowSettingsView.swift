@@ -13,8 +13,9 @@ struct WindowSettingsView: View {
     @Environment(WatchedFoldersService.self) private var watchedFolders
     @Environment(UpdaterController.self) private var updater
     @Environment(RouteCoordinator.self) private var coordinator
-
-    @State private var browserAllowListStore = BrowserAllowListStore()
+    // Track-7 — lifted to LeafApp so Home (SurfacesSection) reads the same
+    // store for the Browsers surface enable-state. Single instance per app.
+    @Environment(BrowserAllowListStore.self) private var browserAllowListStore
 
     var body: some View {
         ScrollViewReader { proxy in

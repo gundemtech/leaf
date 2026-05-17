@@ -1,9 +1,10 @@
 //
 //  SurfacesSection.swift
 //  Track 7 P1 — partitions HomeSurface.allCases into enabled (full
-//  SurfaceCards top) and disabled (compact SurfaceRows below). In P1 only
-//  Claude Code is wired through a real view-model + payload — the other 5
-//  surfaces always render as compact disabled rows (P2-P6 wire them up).
+//  SurfaceCards top) and disabled (compact SurfaceRows below). Claude Code
+//  uses a real view-model + payload; the remaining 5 surfaces use a "Captured ·
+//  Coming soon" placeholder card once their enable-state store says ON
+//  (Payload mapper lands in P2-collapsed).
 //
 
 import SwiftUI
@@ -15,6 +16,16 @@ struct SurfacesSection: View {
     @Environment(PermissionsService.self) private var permissions
     @Environment(RouteCoordinator.self) private var coordinator
     @Environment(WindowState.self) private var windowState
+    // Track-7 — Browsers + Calendar enable-state sources. P2-collapsed will
+    // replace the placeholder cards with real Payload mappers.
+    @Environment(BrowserAllowListStore.self) private var browserAllowList
+    @Environment(GoogleCalendarOAuthService.self) private var calendarOAuth
+
+    /// Canonical bundle identifiers — same strings used by
+    /// LocalAppsSettingsSection so the Home enable-state stays in lockstep
+    /// with the Settings toggle.
+    private static let xcodeBundleID = "com.apple.dt.Xcode"
+    private static let zoomBundleID  = "us.zoom.xos"
 
     var body: some View {
         VStack(alignment: .leading, spacing: LeafSpace.md) {
@@ -32,6 +43,13 @@ struct SurfacesSection: View {
                     disabledRow(for: surface)
                 }
             }
+        }
+        .onAppear {
+            // Browsers needs allow-list emptiness; Calendar OAuth state is
+            // populated lazily from `integrations` on first read. Both calls
+            // are idempotent and cheap.
+            browserAllowList.load()
+            calendarOAuth.reload()
         }
     }
 
@@ -59,8 +77,24 @@ struct SurfacesSection: View {
         switch surface {
         case .claudeCode:
             return permissions.aiToolsStore.isEnabled("claude_code")
-        case .xcode, .ides, .browsers, .zoom, .calendar:
-            // P2-P6 will wire each surface to its enable-state source.
+        case .xcode:
+            return permissions.localAppsStore.isEnabled(Self.xcodeBundleID)
+        case .ides:
+            // Either IDE-storage watcher (VSCode-family workspaceStorage OR
+            // JetBrains recentProjects) opted in promotes the surface.
+            return permissions.localAppsStore.vscodeStorageEnabled
+                || permissions.localAppsStore.jetbrainsStorageEnabled
+        case .browsers:
+            // Any browser engagement opted in: per-domain allow-list non-empty
+            // (covers Safari + Chrome + Arc navigation depth) OR a bookmark
+            // watcher (Chrome / Safari) opted in.
+            return !browserAllowList.entries.isEmpty
+                || permissions.localAppsStore.browserBookmarksChromeEnabled
+                || permissions.localAppsStore.browserBookmarksSafariEnabled
+        case .zoom:
+            return permissions.localAppsStore.isEnabled(Self.zoomBundleID)
+        case .calendar:
+            if case .connected = calendarOAuth.state { return true }
             return false
         }
     }
@@ -77,9 +111,18 @@ struct SurfacesSection: View {
                 onTap: { coordinator.pushHome(.claudeCode) }
             )
         case .xcode, .ides, .browsers, .zoom, .calendar:
-            // Unreachable in P1 — isEnabled returns false for these.
-            // Defensive EmptyView; P2-P6 will replace this with real wrappers.
-            EmptyView()
+            // Track-7 promoted-but-no-payload placeholder. The surface is
+            // capturing (its store / OAuth says ON) but the per-surface
+            // Payload mapper lands in P2-collapsed. Tap routes into the
+            // detail screen which already renders a "coming soon" empty
+            // state today; the card itself signals the same.
+            SurfaceCard(
+                surface: surface,
+                headline: "Captured",
+                subStats: ["Detail coming soon"],
+                spark: { Color.clear },
+                onTap: { coordinator.pushHome(surface) }
+            )
         }
     }
 
