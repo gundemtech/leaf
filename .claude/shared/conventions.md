@@ -3,7 +3,7 @@
 ## Код
 - Язык: Swift
 - Отступы: 4 пробела
-- Стиль: TBD _(дополнять по мере накопления решений)_
+- Стиль: см. [STYLE.md](../../STYLE.md) (root). Configs: `.swift-format` + `.swiftlint.yml`. Локальная проверка: `just check-style`. CI: report-only через `.github/workflows/code-style.yml`.
 
 ## Git — app-репо (`gundemtech/leaf`, ПУБЛИЧНЫЙ)
 - Репо: `git@github.com:gundemtech/leaf.git`
