@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class EnvelopeHeaderTests: XCTestCase {
@@ -9,7 +10,7 @@ final class EnvelopeHeaderTests: XCTestCase {
         let keyID = Data((0..<16).map { UInt8($0) })
         var bytes = Data([EnvelopeHeader.currentVersion])
         bytes.append(keyID)
-        bytes.append(Data(repeating: 0xAA, count: 32))   // arbitrary trailing bytes
+        bytes.append(Data(repeating: 0xAA, count: 32))  // arbitrary trailing bytes
 
         let header = try EnvelopeHeader.peek(from: bytes)
 
@@ -22,10 +23,13 @@ final class EnvelopeHeaderTests: XCTestCase {
     func testPeek_RejectShortBytes() {
         for size in 0..<17 {
             let bytes = Data(repeating: 0x01, count: size)
-            XCTAssertThrowsError(try EnvelopeHeader.peek(from: bytes),
-                                 "size=\(size) must throw") { error in
-                XCTAssertTrue(isCorruptedEnvelope(error),
-                              "size=\(size) wrong error: \(error)")
+            XCTAssertThrowsError(
+                try EnvelopeHeader.peek(from: bytes),
+                "size=\(size) must throw"
+            ) { error in
+                XCTAssertTrue(
+                    isCorruptedEnvelope(error),
+                    "size=\(size) wrong error: \(error)")
             }
         }
     }
@@ -38,10 +42,13 @@ final class EnvelopeHeaderTests: XCTestCase {
         for version: UInt8 in [0, 2, 3, 99, 255] {
             var bytes = Data([version])
             bytes.append(keyID)
-            XCTAssertThrowsError(try EnvelopeHeader.peek(from: bytes),
-                                 "version=\(version) must throw") { error in
-                XCTAssertTrue(isCorruptedEnvelope(error),
-                              "version=\(version) wrong error: \(error)")
+            XCTAssertThrowsError(
+                try EnvelopeHeader.peek(from: bytes),
+                "version=\(version) must throw"
+            ) { error in
+                XCTAssertTrue(
+                    isCorruptedEnvelope(error),
+                    "version=\(version) wrong error: \(error)")
             }
         }
     }
@@ -60,7 +67,7 @@ final class EnvelopeHeaderTests: XCTestCase {
 
         var bytes = Data([EnvelopeHeader.currentVersion])
         bytes.append(keyID)
-        bytes.append(Data(repeating: 0x00, count: 28))   // nonce + min ciphertext + tag stub
+        bytes.append(Data(repeating: 0x00, count: 28))  // nonce + min ciphertext + tag stub
         XCTAssertThrowsError(try codec.decode(bytes, teamKey: teamKey)) { error in
             XCTAssertTrue(isNotImplemented(error), "decode wrong error: \(error)")
         }
@@ -73,7 +80,6 @@ final class EnvelopeHeaderTests: XCTestCase {
         if case .notImplemented = leafErr { return true }
         return false
     }
-
 
     private func isCorruptedEnvelope(_ error: Error) -> Bool {
         guard let leafErr = error as? LeafError else { return false }

@@ -28,19 +28,19 @@ public actor VSCodeWorkspaceWatcher {
     /// Vendor-root subdirectory names under `~/Library/Application Support/`
     /// that this watcher targets.
     public static let vendorRoots: [String] = [
-        "Code",            // VSCode stable
-        "Cursor",          // Cursor (ToDesktop)
-        "Code - Insiders", // VSCode Insiders
-        "VSCodium"
+        "Code",  // VSCode stable
+        "Cursor",  // Cursor (ToDesktop)
+        "Code - Insiders",  // VSCode Insiders
+        "VSCodium",
     ]
 
     public static func inferBundleID(forVendorRoot root: String) -> String? {
         switch root {
-        case "Code":            return VSCodeStableParser.bundleID
-        case "Cursor":          return CursorParser.bundleID
+        case "Code": return VSCodeStableParser.bundleID
+        case "Cursor": return CursorParser.bundleID
         case "Code - Insiders": return VSCodeInsidersParser.bundleID
-        case "VSCodium":        return VSCodiumParser.bundleID
-        default:                return nil
+        case "VSCodium": return VSCodiumParser.bundleID
+        default: return nil
         }
     }
 
@@ -83,14 +83,14 @@ public actor VSCodeWorkspaceWatcher {
     public static func buildEvent(
         bundleID: String,
         workspaceName: String,
-        sanitizedPath: String,        // for caller diagnostics only — NOT emitted
+        sanitizedPath: String,  // for caller diagnostics only — NOT emitted
         watchedFolderID: String?,
         nowMs: Int64
     ) -> RawEvent {
         var payload: [String: String] = [
             "event_kind": "vscode_workspace_opened",
             "ide_bundle_id": bundleID,
-            "workspace_name": workspaceName
+            "workspace_name": workspaceName,
         ]
         if let id = watchedFolderID {
             payload["watched_folder_id"] = id

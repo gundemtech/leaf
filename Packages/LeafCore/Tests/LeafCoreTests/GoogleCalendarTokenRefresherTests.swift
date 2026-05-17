@@ -6,8 +6,9 @@
 // Stub HTTP impl conforms to `GoogleCalendarOAuthHTTP` and returns a canned
 // `Result` — no URLSession / URLProtocol plumbing needed at this layer.
 
-import XCTest
 import Foundation
+import XCTest
+
 @testable import LeafCore
 
 private struct StubGoogleOAuthHTTP: GoogleCalendarOAuthHTTP {
@@ -81,9 +82,10 @@ final class GoogleCalendarTokenRefresherTests: XCTestCase {
     func testProactiveDueWhenWithinWindow() async throws {
         let now: Int64 = 1_700_000_000_000
         let twoMinMs: Int64 = 2 * 60 * 1000
-        let stub = StubGoogleOAuthHTTP(refreshResult: .success(
-            makeTokenResponse(accessToken: "ya29.new", expiresIn: 3920, refreshToken: "1//rotated")
-        ))
+        let stub = StubGoogleOAuthHTTP(
+            refreshResult: .success(
+                makeTokenResponse(accessToken: "ya29.new", expiresIn: 3920, refreshToken: "1//rotated")
+            ))
         let refresher = GoogleCalendarTokenRefresher(
             http: stub,
             clientID: "cid",
@@ -131,9 +133,10 @@ final class GoogleCalendarTokenRefresherTests: XCTestCase {
 
     func testReactive401SuccessReturnsRefreshed() async throws {
         let now: Int64 = 1_700_000_000_000
-        let stub = StubGoogleOAuthHTTP(refreshResult: .success(
-            makeTokenResponse(accessToken: "ya29.fresh", expiresIn: 3600, refreshToken: "1//rt-v2")
-        ))
+        let stub = StubGoogleOAuthHTTP(
+            refreshResult: .success(
+                makeTokenResponse(accessToken: "ya29.fresh", expiresIn: 3600, refreshToken: "1//rt-v2")
+            ))
         let refresher = GoogleCalendarTokenRefresher(
             http: stub,
             clientID: "cid",
@@ -175,9 +178,10 @@ final class GoogleCalendarTokenRefresherTests: XCTestCase {
 
     func testReactive401TransportErrorPropagates() async throws {
         // Transient errors must NOT be swallowed — caller decides retry policy.
-        let stub = StubGoogleOAuthHTTP(refreshResult: .failure(
-            GoogleCalendarOAuthError.transport("network down")
-        ))
+        let stub = StubGoogleOAuthHTTP(
+            refreshResult: .failure(
+                GoogleCalendarOAuthError.transport("network down")
+            ))
         let refresher = GoogleCalendarTokenRefresher(
             http: stub,
             clientID: "cid",
@@ -201,9 +205,10 @@ final class GoogleCalendarTokenRefresherTests: XCTestCase {
         // Google often OMITS refresh_token on refresh; caller preserves prior value.
         // Refresher surfaces `nil` faithfully — does not synthesize a value.
         let now: Int64 = 1_700_000_000_000
-        let stub = StubGoogleOAuthHTTP(refreshResult: .success(
-            makeTokenResponse(accessToken: "ya29.no-rotate", expiresIn: 3599, refreshToken: nil)
-        ))
+        let stub = StubGoogleOAuthHTTP(
+            refreshResult: .success(
+                makeTokenResponse(accessToken: "ya29.no-rotate", expiresIn: 3599, refreshToken: nil)
+            ))
         let refresher = GoogleCalendarTokenRefresher(
             http: stub,
             clientID: "cid",

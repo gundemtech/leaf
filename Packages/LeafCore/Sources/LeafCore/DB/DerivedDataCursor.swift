@@ -35,9 +35,10 @@ public actor ProviderSnapshotsDerivedDataCursor: DerivedDataCursor {
     /// (GRDB → JSONSerialization may pick any depending on the round-trip).
     private static func decode(_ snapshot: ProviderSnapshot?) -> [String: Int64] {
         guard let snapshot,
-              let data = snapshot.snapshotJSON.data(using: .utf8),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let hashes = obj["hashes"] as? [String: Any] else {
+            let data = snapshot.snapshotJSON.data(using: .utf8),
+            let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let hashes = obj["hashes"] as? [String: Any]
+        else {
             return [:]
         }
         return hashes.compactMapValues { value -> Int64? in
@@ -52,10 +53,12 @@ public actor ProviderSnapshotsDerivedDataCursor: DerivedDataCursor {
         let envelope: [String: Any] = [
             "hashes": map.mapValues { Int($0) }
         ]
-        guard let data = try? JSONSerialization.data(
+        guard
+            let data = try? JSONSerialization.data(
                 withJSONObject: envelope,
                 options: [.sortedKeys]),
-              let json = String(data: data, encoding: .utf8) else { return nil }
+            let json = String(data: data, encoding: .utf8)
+        else { return nil }
         return ProviderSnapshot(
             provider: provider,
             snapshotKind: snapshotKind,
@@ -65,13 +68,14 @@ public actor ProviderSnapshotsDerivedDataCursor: DerivedDataCursor {
     }
 
     public func lastSeenMtimeMs(forHash hash: String) async -> Int64? {
-        let snapshot = (try? database.readSQL { raw in
-            try ProviderSnapshotsStore.read(
-                provider: Self.provider,
-                snapshotKind: Self.snapshotKind,
-                in: raw
-            )
-        }) ?? nil
+        let snapshot =
+            (try? database.readSQL { raw in
+                try ProviderSnapshotsStore.read(
+                    provider: Self.provider,
+                    snapshotKind: Self.snapshotKind,
+                    in: raw
+                )
+            }) ?? nil
         return Self.decode(snapshot)[hash]
     }
 
@@ -100,14 +104,14 @@ public actor ProviderSnapshotsDerivedDataCursor: DerivedDataCursor {
     }
 
     public func allKnownHashes() async -> [String] {
-        let snapshot = (try? database.readSQL { raw in
-            try ProviderSnapshotsStore.read(
-                provider: Self.provider,
-                snapshotKind: Self.snapshotKind,
-                in: raw
-            )
-        }) ?? nil
+        let snapshot =
+            (try? database.readSQL { raw in
+                try ProviderSnapshotsStore.read(
+                    provider: Self.provider,
+                    snapshotKind: Self.snapshotKind,
+                    in: raw
+                )
+            }) ?? nil
         return Array(Self.decode(snapshot).keys)
     }
 }
-

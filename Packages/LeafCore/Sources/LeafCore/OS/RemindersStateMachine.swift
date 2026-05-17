@@ -15,14 +15,16 @@ public struct RemindersStateMachine: Sendable, Hashable {
         guard obs.completedCountDelta > 0 else { return [] }
         var payload: [String: String] = [
             "event_kind": "reminder_completed",
-            "completed_count_delta": String(obs.completedCountDelta)
+            "completed_count_delta": String(obs.completedCountDelta),
         ]
         if let name = obs.listName { payload["list_name"] = name }
-        return [RawEvent(
-            timestamp: Date(timeIntervalSince1970: Double(nowMs) / 1000.0),
-            signalType: .action,
-            bundleID: "com.apple.reminders",
-            payload: payload
-        )]
+        return [
+            RawEvent(
+                timestamp: Date(timeIntervalSince1970: Double(nowMs) / 1000.0),
+                signalType: .action,
+                bundleID: "com.apple.reminders",
+                payload: payload
+            )
+        ]
     }
 }

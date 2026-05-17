@@ -1,5 +1,6 @@
-import XCTest
 import CryptoKit
+import XCTest
+
 @testable import LeafCore
 
 final class InviteBlobCodecTests: XCTestCase {

@@ -3,9 +3,10 @@
 // persist syncToken only at terminal page. No transitions (Task 14),
 // no presence_state writes (Task 16).
 
-import XCTest
 import Foundation
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 private struct NoopGoogleOAuthHTTP: GoogleCalendarOAuthHTTP {
@@ -133,10 +134,12 @@ final class GoogleCalendarCollectorTests: XCTestCase {
 
     private func countObservedEvents(_ db: LeafCore.Database) throws -> Int {
         try db.readSQL { rawDB in
-            try Int.fetchOne(rawDB, sql: """
-                SELECT COUNT(*) FROM events
-                 WHERE json_extract(payload_json, '$.event_kind') = 'google_calendar_event_observed'
-                """) ?? 0
+            try Int.fetchOne(
+                rawDB,
+                sql: """
+                    SELECT COUNT(*) FROM events
+                     WHERE json_extract(payload_json, '$.event_kind') = 'google_calendar_event_observed'
+                    """) ?? 0
         }
     }
 
@@ -150,11 +153,12 @@ final class GoogleCalendarCollectorTests: XCTestCase {
         // NOTE: no events sync token row → bootstrap path.
 
         let stub = StubGoogleCalendarAPIClient()
-        await stub.enqueueEventsList(makeEventsListResponse(
-            items: [makeEvent(id: "evt-1")],
-            nextPageToken: nil,
-            nextSyncToken: "sync-1"
-        ))
+        await stub.enqueueEventsList(
+            makeEventsListResponse(
+                items: [makeEvent(id: "evt-1")],
+                nextPageToken: nil,
+                nextSyncToken: "sync-1"
+            ))
 
         let collector = GoogleCalendarCollector(
             apiClient: stub,
@@ -162,26 +166,29 @@ final class GoogleCalendarCollectorTests: XCTestCase {
             database: db,
             clock: { now },
             pollIntervalSec: 300,
-            calendarListEveryNTicks: 100   // suppress calendarList on first tick (1 % 100 == 1 normally; bump high so it would still fire on tickCounter=1; use 100 to ensure 1%100==1 — actually need to suppress; instead enqueue a calendarList response below)
+            calendarListEveryNTicks: 100  // suppress calendarList on first tick (1 % 100 == 1 normally; bump high so it would still fire on tickCounter=1; use 100 to ensure 1%100==1 — actually need to suppress; instead enqueue a calendarList response below)
         )
 
         // calendarList piggy-back fires on first tick (counter=1 % N == 1).
         // Enqueue an empty response so the collector keeps `known_calendars`
         // as we seeded it (empty result + diff drops our seeded calendar!).
         // Simpler: enqueue a calendarList response that re-includes 'primary'.
-        await stub.enqueueCalendarList(GoogleCalendarAPI.CalendarListResponse(
-            items: [GoogleCalendarAPI.CalendarListEntry(
-                id: "primary",
-                summary: "user@example.com",
-                summaryOverride: nil,
-                primary: true,
-                accessRole: "owner",
-                timeZone: "UTC",
-                colorId: nil
-            )],
-            nextPageToken: nil,
-            nextSyncToken: "cal-list-sync-1"
-        ))
+        await stub.enqueueCalendarList(
+            GoogleCalendarAPI.CalendarListResponse(
+                items: [
+                    GoogleCalendarAPI.CalendarListEntry(
+                        id: "primary",
+                        summary: "user@example.com",
+                        summaryOverride: nil,
+                        primary: true,
+                        accessRole: "owner",
+                        timeZone: "UTC",
+                        colorId: nil
+                    )
+                ],
+                nextPageToken: nil,
+                nextSyncToken: "cal-list-sync-1"
+            ))
 
         _ = try await collector.tick()
 
@@ -189,8 +196,9 @@ final class GoogleCalendarCollectorTests: XCTestCase {
         let eventsListCalls = calls.filter { $0.hasPrefix("eventsList") }
         XCTAssertEqual(eventsListCalls.count, 1, "expected exactly one eventsList call")
         // Bootstrap: syncToken=nil
-        XCTAssertTrue(eventsListCalls[0].contains("syncToken=nil"),
-                      "bootstrap path must send syncToken=nil; got: \(eventsListCalls[0])")
+        XCTAssertTrue(
+            eventsListCalls[0].contains("syncToken=nil"),
+            "bootstrap path must send syncToken=nil; got: \(eventsListCalls[0])")
 
         // syncToken persisted post-terminal-page.
         let cursor = try db.readSQL { rawDB in
@@ -210,17 +218,21 @@ final class GoogleCalendarCollectorTests: XCTestCase {
         try seedEventsSyncToken(db, calendarId: "primary", token: "saved-token-XYZ", now: now)
 
         let stub = StubGoogleCalendarAPIClient()
-        await stub.enqueueEventsList(makeEventsListResponse(
-            items: [], nextPageToken: nil, nextSyncToken: "sync-2"
-        ))
-        await stub.enqueueCalendarList(GoogleCalendarAPI.CalendarListResponse(
-            items: [GoogleCalendarAPI.CalendarListEntry(
-                id: "primary", summary: nil, summaryOverride: nil,
-                primary: true, accessRole: "owner", timeZone: nil, colorId: nil
-            )],
-            nextPageToken: nil,
-            nextSyncToken: nil
-        ))
+        await stub.enqueueEventsList(
+            makeEventsListResponse(
+                items: [], nextPageToken: nil, nextSyncToken: "sync-2"
+            ))
+        await stub.enqueueCalendarList(
+            GoogleCalendarAPI.CalendarListResponse(
+                items: [
+                    GoogleCalendarAPI.CalendarListEntry(
+                        id: "primary", summary: nil, summaryOverride: nil,
+                        primary: true, accessRole: "owner", timeZone: nil, colorId: nil
+                    )
+                ],
+                nextPageToken: nil,
+                nextSyncToken: nil
+            ))
 
         let collector = GoogleCalendarCollector(
             apiClient: stub,
@@ -236,8 +248,9 @@ final class GoogleCalendarCollectorTests: XCTestCase {
         let calls = await stub.calls()
         let eventsListCalls = calls.filter { $0.hasPrefix("eventsList") }
         XCTAssertEqual(eventsListCalls.count, 1)
-        XCTAssertTrue(eventsListCalls[0].contains("syncToken=saved-token-XYZ"),
-                      "subsequent tick must send saved sync token; got: \(eventsListCalls[0])")
+        XCTAssertTrue(
+            eventsListCalls[0].contains("syncToken=saved-token-XYZ"),
+            "subsequent tick must send saved sync token; got: \(eventsListCalls[0])")
     }
 
     // MARK: - 3. Pagination — sync token persisted only at terminal page
@@ -251,25 +264,30 @@ final class GoogleCalendarCollectorTests: XCTestCase {
 
         let stub = StubGoogleCalendarAPIClient()
         // Page 1: nextPageToken set, no nextSyncToken yet.
-        await stub.enqueueEventsList(makeEventsListResponse(
-            items: [makeEvent(id: "p1-a"), makeEvent(id: "p1-b")],
-            nextPageToken: "page-2",
-            nextSyncToken: nil
-        ))
+        await stub.enqueueEventsList(
+            makeEventsListResponse(
+                items: [makeEvent(id: "p1-a"), makeEvent(id: "p1-b")],
+                nextPageToken: "page-2",
+                nextSyncToken: nil
+            ))
         // Page 2 (terminal): nextSyncToken arrives here.
-        await stub.enqueueEventsList(makeEventsListResponse(
-            items: [makeEvent(id: "p2-a")],
-            nextPageToken: nil,
-            nextSyncToken: "sync-final"
-        ))
+        await stub.enqueueEventsList(
+            makeEventsListResponse(
+                items: [makeEvent(id: "p2-a")],
+                nextPageToken: nil,
+                nextSyncToken: "sync-final"
+            ))
         // Suppress calendarList (every-1 default on counter=1 ticks).
-        await stub.enqueueCalendarList(GoogleCalendarAPI.CalendarListResponse(
-            items: [GoogleCalendarAPI.CalendarListEntry(
-                id: "primary", summary: nil, summaryOverride: nil,
-                primary: true, accessRole: "owner", timeZone: nil, colorId: nil
-            )],
-            nextPageToken: nil, nextSyncToken: nil
-        ))
+        await stub.enqueueCalendarList(
+            GoogleCalendarAPI.CalendarListResponse(
+                items: [
+                    GoogleCalendarAPI.CalendarListEntry(
+                        id: "primary", summary: nil, summaryOverride: nil,
+                        primary: true, accessRole: "owner", timeZone: nil, colorId: nil
+                    )
+                ],
+                nextPageToken: nil, nextSyncToken: nil
+            ))
 
         let collector = GoogleCalendarCollector(
             apiClient: stub,
@@ -290,8 +308,9 @@ final class GoogleCalendarCollectorTests: XCTestCase {
         let cursor = try db.readSQL { rawDB in
             try GoogleCalendarSyncTokenStore.eventsSyncToken(calendarId: "primary", in: rawDB)
         }
-        XCTAssertEqual(cursor?.token, "sync-final",
-                       "syncToken must be persisted only when terminal page reached")
+        XCTAssertEqual(
+            cursor?.token, "sync-final",
+            "syncToken must be persisted only when terminal page reached")
     }
 
     // MARK: - Task 14 helpers
@@ -300,16 +319,20 @@ final class GoogleCalendarCollectorTests: XCTestCase {
     /// its API steps with no per-tick events, leaving only the transition-scan
     /// phase to exercise. Tracker rows are seeded directly by the test body.
     private func enqueueEmptyAPIResponses(_ stub: StubGoogleCalendarAPIClient) async {
-        await stub.enqueueEventsList(makeEventsListResponse(
-            items: [], nextPageToken: nil, nextSyncToken: "tick-sync"
-        ))
-        await stub.enqueueCalendarList(GoogleCalendarAPI.CalendarListResponse(
-            items: [GoogleCalendarAPI.CalendarListEntry(
-                id: "primary", summary: nil, summaryOverride: nil,
-                primary: true, accessRole: "owner", timeZone: nil, colorId: nil
-            )],
-            nextPageToken: nil, nextSyncToken: nil
-        ))
+        await stub.enqueueEventsList(
+            makeEventsListResponse(
+                items: [], nextPageToken: nil, nextSyncToken: "tick-sync"
+            ))
+        await stub.enqueueCalendarList(
+            GoogleCalendarAPI.CalendarListResponse(
+                items: [
+                    GoogleCalendarAPI.CalendarListEntry(
+                        id: "primary", summary: nil, summaryOverride: nil,
+                        primary: true, accessRole: "owner", timeZone: nil, colorId: nil
+                    )
+                ],
+                nextPageToken: nil, nextSyncToken: nil
+            ))
     }
 
     /// Direct tracker seed bypassing the collector's per-event UPSERT path,
@@ -352,19 +375,23 @@ final class GoogleCalendarCollectorTests: XCTestCase {
 
     private func countTransitionEvents(_ db: LeafCore.Database, kind: String) throws -> Int {
         try db.readSQL { rawDB in
-            try Int.fetchOne(rawDB, sql: """
-                SELECT COUNT(*) FROM events
-                 WHERE json_extract(payload_json, '$.event_kind') = ?
-                """, arguments: [kind]) ?? 0
+            try Int.fetchOne(
+                rawDB,
+                sql: """
+                    SELECT COUNT(*) FROM events
+                     WHERE json_extract(payload_json, '$.event_kind') = ?
+                    """, arguments: [kind]) ?? 0
         }
     }
 
     private func transitionPayloads(_ db: LeafCore.Database, kind: String) throws -> [String] {
         try db.readSQL { rawDB in
-            try String.fetchAll(rawDB, sql: """
-                SELECT payload_json FROM events
-                 WHERE json_extract(payload_json, '$.event_kind') = ?
-                """, arguments: [kind])
+            try String.fetchAll(
+                rawDB,
+                sql: """
+                    SELECT payload_json FROM events
+                     WHERE json_extract(payload_json, '$.event_kind') = ?
+                    """, arguments: [kind])
         }
     }
 
@@ -403,10 +430,12 @@ final class GoogleCalendarCollectorTests: XCTestCase {
         XCTAssertEqual(try countTransitionEvents(db, kind: "google_calendar_focus_block_started"), 1)
         let payloads = try transitionPayloads(db, kind: "google_calendar_focus_block_started")
         XCTAssertTrue(payloads[0].contains("\"event_id\":\"ft-1\""), "payload missing event_id: \(payloads[0])")
-        XCTAssertTrue(payloads[0].contains("declineOnlyNewConflictingInvitations"),
-                      "auto_decline_mode bucket missing on _started: \(payloads[0])")
-        XCTAssertTrue(payloads[0].contains("doNotDisturb"),
-                      "chat_status bucket missing on _started: \(payloads[0])")
+        XCTAssertTrue(
+            payloads[0].contains("declineOnlyNewConflictingInvitations"),
+            "auto_decline_mode bucket missing on _started: \(payloads[0])")
+        XCTAssertTrue(
+            payloads[0].contains("doNotDisturb"),
+            "chat_status bucket missing on _started: \(payloads[0])")
 
         // Tracker flag flipped.
         let flag = try db.readSQL { rawDB in
@@ -455,10 +484,12 @@ final class GoogleCalendarCollectorTests: XCTestCase {
         XCTAssertEqual(try countTransitionEvents(db, kind: "google_calendar_focus_block_ended"), 1)
         let payloads = try transitionPayloads(db, kind: "google_calendar_focus_block_ended")
         XCTAssertTrue(payloads[0].contains("\"event_id\":\"ft-2\""))
-        XCTAssertFalse(payloads[0].contains("auto_decline_mode"),
-                       "auto_decline_mode must NOT appear on _ended: \(payloads[0])")
-        XCTAssertFalse(payloads[0].contains("chat_status"),
-                       "chat_status must NOT appear on _ended: \(payloads[0])")
+        XCTAssertFalse(
+            payloads[0].contains("auto_decline_mode"),
+            "auto_decline_mode must NOT appear on _ended: \(payloads[0])")
+        XCTAssertFalse(
+            payloads[0].contains("chat_status"),
+            "chat_status must NOT appear on _ended: \(payloads[0])")
         // _started must NOT also emit (already marked).
         XCTAssertEqual(try countTransitionEvents(db, kind: "google_calendar_focus_block_started"), 0)
     }
@@ -509,17 +540,20 @@ final class GoogleCalendarCollectorTests: XCTestCase {
         let started = try transitionPayloads(db, kind: "google_calendar_ooo_started")
         XCTAssertEqual(started.count, 1)
         XCTAssertTrue(started[0].contains("\"event_id\":\"ooo-active\""))
-        XCTAssertTrue(started[0].contains("declineAllConflictingInvitations"),
-                      "auto_decline_mode must appear on OOO _started")
-        XCTAssertFalse(started[0].contains("chat_status"),
-                       "chat_status is focusTime-only — must NOT appear on OOO")
+        XCTAssertTrue(
+            started[0].contains("declineAllConflictingInvitations"),
+            "auto_decline_mode must appear on OOO _started")
+        XCTAssertFalse(
+            started[0].contains("chat_status"),
+            "chat_status is focusTime-only — must NOT appear on OOO")
 
         // _ended emitted for ooo-done, without auto_decline_mode.
         let ended = try transitionPayloads(db, kind: "google_calendar_ooo_ended")
         XCTAssertEqual(ended.count, 1)
         XCTAssertTrue(ended[0].contains("\"event_id\":\"ooo-done\""))
-        XCTAssertFalse(ended[0].contains("auto_decline_mode"),
-                       "auto_decline_mode must NOT appear on _ended")
+        XCTAssertFalse(
+            ended[0].contains("auto_decline_mode"),
+            "auto_decline_mode must NOT appear on _ended")
     }
 
     // MARK: - 8. workingLocation single-shot _changed + idempotent on re-tick
@@ -556,8 +590,9 @@ final class GoogleCalendarCollectorTests: XCTestCase {
         _ = try await collector.tick()
         _ = try await collector.tick()  // idempotency re-tick
 
-        XCTAssertEqual(try countTransitionEvents(db, kind: "google_calendar_working_location_changed"), 1,
-                       "workingLocation must emit _changed exactly once across re-ticks")
+        XCTAssertEqual(
+            try countTransitionEvents(db, kind: "google_calendar_working_location_changed"), 1,
+            "workingLocation must emit _changed exactly once across re-ticks")
         let payloads = try transitionPayloads(db, kind: "google_calendar_working_location_changed")
         XCTAssertTrue(payloads[0].contains("\"working_location_type\":\"homeOffice\""))
         // Single-shot — paired _ended must never appear.
@@ -595,16 +630,20 @@ final class GoogleCalendarCollectorTests: XCTestCase {
         let cancelEvent = try JSONDecoder().decode(GoogleCalendarAPI.Event.self, from: data)
 
         let stub = StubGoogleCalendarAPIClient()
-        await stub.enqueueEventsList(makeEventsListResponse(
-            items: [cancelEvent], nextPageToken: nil, nextSyncToken: "sync-after-cancel"
-        ))
-        await stub.enqueueCalendarList(GoogleCalendarAPI.CalendarListResponse(
-            items: [GoogleCalendarAPI.CalendarListEntry(
-                id: "primary", summary: nil, summaryOverride: nil,
-                primary: true, accessRole: "owner", timeZone: nil, colorId: nil
-            )],
-            nextPageToken: nil, nextSyncToken: nil
-        ))
+        await stub.enqueueEventsList(
+            makeEventsListResponse(
+                items: [cancelEvent], nextPageToken: nil, nextSyncToken: "sync-after-cancel"
+            ))
+        await stub.enqueueCalendarList(
+            GoogleCalendarAPI.CalendarListResponse(
+                items: [
+                    GoogleCalendarAPI.CalendarListEntry(
+                        id: "primary", summary: nil, summaryOverride: nil,
+                        primary: true, accessRole: "owner", timeZone: nil, colorId: nil
+                    )
+                ],
+                nextPageToken: nil, nextSyncToken: nil
+            ))
 
         let collector = GoogleCalendarCollector(
             apiClient: stub, tokenRefresher: makeRefresher(),
@@ -616,9 +655,11 @@ final class GoogleCalendarCollectorTests: XCTestCase {
         // No transition emitted; tracker row removed.
         XCTAssertEqual(try countTransitionEvents(db, kind: "google_calendar_focus_block_started"), 0)
         let trackerCount = try db.readSQL { rawDB in
-            try Int.fetchOne(rawDB, sql: """
-                SELECT COUNT(*) FROM google_calendar_typed_event_tracker WHERE event_id = ?
-                """, arguments: ["ft-cancel"]) ?? -1
+            try Int.fetchOne(
+                rawDB,
+                sql: """
+                    SELECT COUNT(*) FROM google_calendar_typed_event_tracker WHERE event_id = ?
+                    """, arguments: ["ft-cancel"]) ?? -1
         }
         XCTAssertEqual(trackerCount, 0, "cancelled event must drop tracker row before transition scan")
     }
@@ -660,10 +701,12 @@ final class GoogleCalendarCollectorTests: XCTestCase {
         _ = try await collector.tick()
 
         // After two ticks: exactly one _started + one _ended per row.
-        XCTAssertEqual(try countTransitionEvents(db, kind: "google_calendar_focus_block_started"), 1,
-                       "re-tick must not re-emit _started")
-        XCTAssertEqual(try countTransitionEvents(db, kind: "google_calendar_focus_block_ended"), 1,
-                       "re-tick must not re-emit _ended")
+        XCTAssertEqual(
+            try countTransitionEvents(db, kind: "google_calendar_focus_block_started"), 1,
+            "re-tick must not re-emit _started")
+        XCTAssertEqual(
+            try countTransitionEvents(db, kind: "google_calendar_focus_block_ended"), 1,
+            "re-tick must not re-emit _ended")
     }
 
     // MARK: - 4. Blocklist eventType filter
@@ -676,23 +719,27 @@ final class GoogleCalendarCollectorTests: XCTestCase {
         try seedEventsSyncToken(db, calendarId: "primary", token: "saved", now: now)
 
         let stub = StubGoogleCalendarAPIClient()
-        await stub.enqueueEventsList(makeEventsListResponse(
-            items: [
-                makeEvent(id: "real-1", eventType: "default"),
-                makeEvent(id: "gmail-1", eventType: "fromGmail"),
-                makeEvent(id: "bday-1", eventType: "birthday"),
-                makeEvent(id: "real-2", eventType: "default")
-            ],
-            nextPageToken: nil,
-            nextSyncToken: "sync-after"
-        ))
-        await stub.enqueueCalendarList(GoogleCalendarAPI.CalendarListResponse(
-            items: [GoogleCalendarAPI.CalendarListEntry(
-                id: "primary", summary: nil, summaryOverride: nil,
-                primary: true, accessRole: "owner", timeZone: nil, colorId: nil
-            )],
-            nextPageToken: nil, nextSyncToken: nil
-        ))
+        await stub.enqueueEventsList(
+            makeEventsListResponse(
+                items: [
+                    makeEvent(id: "real-1", eventType: "default"),
+                    makeEvent(id: "gmail-1", eventType: "fromGmail"),
+                    makeEvent(id: "bday-1", eventType: "birthday"),
+                    makeEvent(id: "real-2", eventType: "default"),
+                ],
+                nextPageToken: nil,
+                nextSyncToken: "sync-after"
+            ))
+        await stub.enqueueCalendarList(
+            GoogleCalendarAPI.CalendarListResponse(
+                items: [
+                    GoogleCalendarAPI.CalendarListEntry(
+                        id: "primary", summary: nil, summaryOverride: nil,
+                        primary: true, accessRole: "owner", timeZone: nil, colorId: nil
+                    )
+                ],
+                nextPageToken: nil, nextSyncToken: nil
+            ))
 
         let collector = GoogleCalendarCollector(
             apiClient: stub,
@@ -747,25 +794,28 @@ final class GoogleCalendarCollectorTests: XCTestCase {
         // Two `eventsList` (one per known calendar) + one `calendarList`
         // (piggy-back fires on tickCounter=1) — re-emit both calendars so
         // the diff doesn't prune them.
-        await stub.enqueueEventsList(makeEventsListResponse(
-            items: [], nextPageToken: nil, nextSyncToken: "tick-sync-p"
-        ))
-        await stub.enqueueEventsList(makeEventsListResponse(
-            items: [], nextPageToken: nil, nextSyncToken: "tick-sync-t"
-        ))
-        await stub.enqueueCalendarList(GoogleCalendarAPI.CalendarListResponse(
-            items: [
-                GoogleCalendarAPI.CalendarListEntry(
-                    id: "primary", summary: nil, summaryOverride: nil,
-                    primary: true, accessRole: "owner", timeZone: nil, colorId: nil
-                ),
-                GoogleCalendarAPI.CalendarListEntry(
-                    id: "team@example.com", summary: nil, summaryOverride: nil,
-                    primary: false, accessRole: "reader", timeZone: nil, colorId: nil
-                ),
-            ],
-            nextPageToken: nil, nextSyncToken: nil
-        ))
+        await stub.enqueueEventsList(
+            makeEventsListResponse(
+                items: [], nextPageToken: nil, nextSyncToken: "tick-sync-p"
+            ))
+        await stub.enqueueEventsList(
+            makeEventsListResponse(
+                items: [], nextPageToken: nil, nextSyncToken: "tick-sync-t"
+            ))
+        await stub.enqueueCalendarList(
+            GoogleCalendarAPI.CalendarListResponse(
+                items: [
+                    GoogleCalendarAPI.CalendarListEntry(
+                        id: "primary", summary: nil, summaryOverride: nil,
+                        primary: true, accessRole: "owner", timeZone: nil, colorId: nil
+                    ),
+                    GoogleCalendarAPI.CalendarListEntry(
+                        id: "team@example.com", summary: nil, summaryOverride: nil,
+                        primary: false, accessRole: "reader", timeZone: nil, colorId: nil
+                    ),
+                ],
+                nextPageToken: nil, nextSyncToken: nil
+            ))
 
         let collector = GoogleCalendarCollector(
             apiClient: stub, tokenRefresher: makeRefresher(),
@@ -774,19 +824,23 @@ final class GoogleCalendarCollectorTests: XCTestCase {
         )
         _ = try await collector.tick()
 
-        let state = try XCTUnwrap(try readGoogleCalendarPresenceState(db),
-                                  "presence_state row must exist after tick")
+        let state = try XCTUnwrap(
+            try readGoogleCalendarPresenceState(db),
+            "presence_state row must exist after tick")
         XCTAssertEqual(state["known_calendar_count"] as? Int, 2)
         XCTAssertEqual(state["focus_block_active"] as? Bool, false)
         XCTAssertEqual(state["ooo_active"] as? Bool, false)
-        XCTAssertTrue(state["working_location"] is NSNull,
-                      "working_location must be JSON null when no active row")
-        XCTAssertTrue(state["next_meeting_start_ms"] is NSNull,
-                      "next_meeting_start_ms must be JSON null when no upcoming meeting")
+        XCTAssertTrue(
+            state["working_location"] is NSNull,
+            "working_location must be JSON null when no active row")
+        XCTAssertTrue(
+            state["next_meeting_start_ms"] is NSNull,
+            "next_meeting_start_ms must be JSON null when no upcoming meeting")
         // last_synced_at_ms always present, equals tick time.
         let nowMs = Int64(now.timeIntervalSince1970 * 1000)
-        XCTAssertEqual(state["last_synced_at_ms"] as? Int64 ?? Int64(state["last_synced_at_ms"] as? Int ?? 0),
-                       nowMs)
+        XCTAssertEqual(
+            state["last_synced_at_ms"] as? Int64 ?? Int64(state["last_synced_at_ms"] as? Int ?? 0),
+            nowMs)
     }
 
     func testTickWritesFocusBlockActiveTrueWhenTrackerHasActiveFocusBlock() async throws {
@@ -834,10 +888,12 @@ final class GoogleCalendarCollectorTests: XCTestCase {
                 arguments: ["google_calendar"]
             ) ?? ""
         }
-        XCTAssertFalse(raw.contains("summary"),
-                       "presence_state must not carry event summaries: \(raw)")
-        XCTAssertFalse(raw.contains("auto_decline_mode"),
-                       "auto_decline_mode is per-transition; must not appear in presence: \(raw)")
+        XCTAssertFalse(
+            raw.contains("summary"),
+            "presence_state must not carry event summaries: \(raw)")
+        XCTAssertFalse(
+            raw.contains("auto_decline_mode"),
+            "auto_decline_mode is per-transition; must not appear in presence: \(raw)")
     }
 
     func testTickWritesWorkingLocationBucketWhenActive() async throws {

@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class VSCodeWorkspaceWatcherTests: XCTestCase {
@@ -19,8 +20,8 @@ final class VSCodeWorkspaceWatcherTests: XCTestCase {
 
     func test_parseWorkspaceJSON_urlDecodesAndSanitizes() {
         let json = #"""
-        {"folder":"file:///Users/alice/Desktop/Project%20Name"}
-        """#
+            {"folder":"file:///Users/alice/Desktop/Project%20Name"}
+            """#
         let parsed = VSCodeWorkspaceWatcher.parseWorkspaceJSON(json, homeDir: "/Users/alice")
         XCTAssertEqual(parsed?.workspaceName, "Project Name")
         XCTAssertEqual(parsed?.sanitizedPath, "~/Desktop/Project Name")
@@ -53,7 +54,8 @@ final class VSCodeWorkspaceWatcherTests: XCTestCase {
         XCTAssertNil(event.payload["watched_folder_id"])
         // Sanitized path must NOT leak into payload when outside watched folder.
         for (_, v) in event.payload {
-            XCTAssertFalse(v.contains("Desktop"),
+            XCTAssertFalse(
+                v.contains("Desktop"),
                 "leaked path component when outside_watched_folder=true: \(v)")
         }
     }
@@ -70,7 +72,8 @@ final class VSCodeWorkspaceWatcherTests: XCTestCase {
         XCTAssertEqual(event.payload["outside_watched_folder"], "false")
         // Even with watched-folder match, full path must NOT appear in payload.
         for (_, v) in event.payload {
-            XCTAssertFalse(v.contains("/Users/"),
+            XCTAssertFalse(
+                v.contains("/Users/"),
                 "absolute path leaked into payload: \(v)")
         }
     }

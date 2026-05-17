@@ -16,8 +16,8 @@
 //  columns.
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct LivePresenceWidget: View {
     let snapshot: PresenceUISnapshot
@@ -34,7 +34,7 @@ struct LivePresenceWidget: View {
                     verticalDivider
                     column(title: "LINEAR", lines: linearLines, connected: snapshot.linear != nil)
                     verticalDivider
-                    column(title: "SLACK",  lines: slackLines,  connected: snapshot.slack  != nil)
+                    column(title: "SLACK", lines: slackLines, connected: snapshot.slack != nil)
                 }
             }
         }
@@ -96,25 +96,28 @@ struct LivePresenceWidget: View {
         guard let g = snapshot.github else { return [] }
         var lines: [PresenceLine] = []
         if g.prsAwaitingMyReview > 0 {
-            lines.append(.init(
-                symbol: "eye",
-                text: "\(g.prsAwaitingMyReview) PR\(g.prsAwaitingMyReview == 1 ? "" : "s") await your review",
-                tint: LeafColor.accent.primary
-            ))
+            lines.append(
+                .init(
+                    symbol: "eye",
+                    text: "\(g.prsAwaitingMyReview) PR\(g.prsAwaitingMyReview == 1 ? "" : "s") await your review",
+                    tint: LeafColor.accent.primary
+                ))
         }
         if g.myOpenPRs > 0 {
-            lines.append(.init(
-                symbol: "arrow.triangle.pull",
-                text: "\(g.myOpenPRs) of mine open",
-                tint: LeafColor.text.tertiary
-            ))
+            lines.append(
+                .init(
+                    symbol: "arrow.triangle.pull",
+                    text: "\(g.myOpenPRs) of mine open",
+                    tint: LeafColor.text.tertiary
+                ))
         }
         if g.notificationsUnread > 0 {
-            lines.append(.init(
-                symbol: "bell",
-                text: "\(g.notificationsUnread) unread",
-                tint: LeafColor.text.tertiary
-            ))
+            lines.append(
+                .init(
+                    symbol: "bell",
+                    text: "\(g.notificationsUnread) unread",
+                    tint: LeafColor.text.tertiary
+                ))
         }
         if let status = g.latestPushCheckStatus {
             let (sym, tint) = checkRunVisuals(status)
@@ -127,11 +130,12 @@ struct LivePresenceWidget: View {
         guard let l = snapshot.linear else { return [] }
         var lines: [PresenceLine] = []
         if l.startedIssuesCount > 0 {
-            lines.append(.init(
-                symbol: "play.circle",
-                text: "\(l.startedIssuesCount) issue\(l.startedIssuesCount == 1 ? "" : "s") started",
-                tint: LeafColor.accent.primary
-            ))
+            lines.append(
+                .init(
+                    symbol: "play.circle",
+                    text: "\(l.startedIssuesCount) issue\(l.startedIssuesCount == 1 ? "" : "s") started",
+                    tint: LeafColor.accent.primary
+                ))
         }
         if l.topPriority != "none" {
             let (sym, tint) = priorityVisuals(l.topPriority)
@@ -139,11 +143,12 @@ struct LivePresenceWidget: View {
         }
         if let cycleName = l.cycleName, let pct = l.cycleCompletedPct {
             let suffix = l.cycleDaysRemaining.map { " · \($0)d left" } ?? ""
-            lines.append(.init(
-                symbol: "circle.lefthalf.filled",
-                text: "\(cycleName) · \(pct)%\(suffix)",
-                tint: LeafColor.text.tertiary
-            ))
+            lines.append(
+                .init(
+                    symbol: "circle.lefthalf.filled",
+                    text: "\(cycleName) · \(pct)%\(suffix)",
+                    tint: LeafColor.text.tertiary
+                ))
         }
         return lines
     }
@@ -158,31 +163,34 @@ struct LivePresenceWidget: View {
             case "active":
                 lines.append(.init(symbol: "circle.fill", text: "Active", tint: LeafColor.accent.primary))
             case "away":
-                lines.append(.init(symbol: "circle.fill", text: "Away",   tint: LeafColor.text.tertiary))
+                lines.append(.init(symbol: "circle.fill", text: "Away", tint: LeafColor.text.tertiary))
             default:
-                lines.append(.init(symbol: "circle.fill", text: "Unknown",tint: LeafColor.text.tertiary))
+                lines.append(.init(symbol: "circle.fill", text: "Unknown", tint: LeafColor.text.tertiary))
             }
         }
         if s.inHuddle {
-            lines.append(.init(
-                symbol: "person.wave.2",
-                text: "In a huddle",
-                tint: LeafColor.accent.primary
-            ))
+            lines.append(
+                .init(
+                    symbol: "person.wave.2",
+                    text: "In a huddle",
+                    tint: LeafColor.accent.primary
+                ))
         }
         if s.mentionsToday > 0 {
-            lines.append(.init(
-                symbol: "at",
-                text: "\(s.mentionsToday) mention\(s.mentionsToday == 1 ? "" : "s") today",
-                tint: LeafColor.text.tertiary
-            ))
+            lines.append(
+                .init(
+                    symbol: "at",
+                    text: "\(s.mentionsToday) mention\(s.mentionsToday == 1 ? "" : "s") today",
+                    tint: LeafColor.text.tertiary
+                ))
         }
         if let emoji = s.statusEmoji {
-            lines.append(.init(
-                symbol: "face.smiling",
-                text: emoji,
-                tint: LeafColor.text.tertiary
-            ))
+            lines.append(
+                .init(
+                    symbol: "face.smiling",
+                    text: emoji,
+                    tint: LeafColor.text.tertiary
+                ))
         }
         return lines
     }
@@ -191,20 +199,20 @@ struct LivePresenceWidget: View {
 
     private func checkRunVisuals(_ status: String) -> (String, Color) {
         switch status.lowercased() {
-        case "success", "passing":   return ("checkmark.circle", LeafColor.status.success)
-        case "failure", "failing":   return ("xmark.octagon",    LeafColor.status.danger)
-        case "in_progress":          return ("clock",            LeafColor.text.tertiary)
-        default:                     return ("questionmark.circle", LeafColor.text.tertiary)
+        case "success", "passing": return ("checkmark.circle", LeafColor.status.success)
+        case "failure", "failing": return ("xmark.octagon", LeafColor.status.danger)
+        case "in_progress": return ("clock", LeafColor.text.tertiary)
+        default: return ("questionmark.circle", LeafColor.text.tertiary)
         }
     }
 
     private func priorityVisuals(_ priority: String) -> (String, Color) {
         switch priority.lowercased() {
         case "urgent": return ("exclamationmark.octagon.fill", LeafColor.status.danger)
-        case "high":   return ("exclamationmark.triangle.fill", LeafColor.status.warning)
-        case "normal": return ("equal.circle",                  LeafColor.text.tertiary)
-        case "low":    return ("arrow.down.circle",             LeafColor.text.tertiary)
-        default:       return ("circle",                        LeafColor.text.tertiary)
+        case "high": return ("exclamationmark.triangle.fill", LeafColor.status.warning)
+        case "normal": return ("equal.circle", LeafColor.text.tertiary)
+        case "low": return ("arrow.down.circle", LeafColor.text.tertiary)
+        default: return ("circle", LeafColor.text.tertiary)
         }
     }
 }

@@ -82,7 +82,8 @@ public enum SlackOAuthEndpoints {
     /// aggregate). Combined re-consent с `dnd:read` (B-10) — юзер проходит
     /// Disconnect → Connect один раз для обоих новых scope'ов.
     @available(*, deprecated, message: "Use SlackScopesService.requested() for live scope set.")
-    public static let userScopes = "users:read,users.profile:read,search:read,channels:history,groups:history,im:history,mpim:history,dnd:read,files:read"
+    public static let userScopes =
+        "users:read,users.profile:read,search:read,channels:history,groups:history,im:history,mpim:history,dnd:read,files:read"
 
     /// Phase Track-3 D3 — canonical comma-separated user_scope parameter built
     /// from `SlackScopesService.requested()` (required core ∪ optional). Slack's

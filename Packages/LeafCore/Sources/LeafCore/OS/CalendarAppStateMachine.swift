@@ -20,13 +20,15 @@ public struct CalendarAppStateMachine: Sendable, Hashable {
         let payload: [String: String] = [
             "event_kind": "calendar_app_view_changed",
             "view_mode": obs.viewMode.rawValue,
-            "visible_date_range_days": String(obs.visibleDateRangeDays)
+            "visible_date_range_days": String(obs.visibleDateRangeDays),
         ]
-        return [RawEvent(
-            timestamp: Date(timeIntervalSince1970: Double(nowMs) / 1000.0),
-            signalType: .attention,
-            bundleID: "com.apple.iCal",
-            payload: payload
-        )]
+        return [
+            RawEvent(
+                timestamp: Date(timeIntervalSince1970: Double(nowMs) / 1000.0),
+                signalType: .attention,
+                bundleID: "com.apple.iCal",
+                payload: payload
+            )
+        ]
     }
 }

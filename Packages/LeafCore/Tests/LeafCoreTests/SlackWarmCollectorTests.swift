@@ -9,8 +9,10 @@
 //
 
 import XCTest
-import class GRDB.Row
 import os
+
+import class GRDB.Row
+
 @testable import LeafCore
 
 final class SlackWarmCollectorTests: XCTestCase {
@@ -60,12 +62,20 @@ final class SlackWarmCollectorTests: XCTestCase {
         struct StubError: Error {}
 
         // Hot-tier no-ops.
-        func fetchTick(accessToken: String, userID: String, since: Int64?, now: Date) async throws -> SlackTickResult { .empty }
+        func fetchTick(accessToken: String, userID: String, since: Int64?, now: Date) async throws -> SlackTickResult {
+            .empty
+        }
         func fetchPresence(accessToken: String, userID: String) async throws -> SlackPresenceState { .unknown }
         func fetchDND(accessToken: String, userID: String) async throws -> SlackDNDState { .empty }
-        func fetchMentionsReceived(accessToken: String, userID: String, since: Int64) async throws -> [SlackMentionChannelCount] { [] }
-        func fetchFilesUploaded(accessToken: String, userID: String, since: Int64) async throws -> SlackFileUploadSummary { .empty(periodStartMs: 0, periodEndMs: 0) }
-        func fetchThreadReplies(accessToken: String, channelID: String, threadTs: String, ownerUserID: String, oldest: String?) async throws -> SlackThreadReplyBatch { .empty }
+        func fetchMentionsReceived(
+            accessToken: String, userID: String, since: Int64
+        ) async throws -> [SlackMentionChannelCount] { [] }
+        func fetchFilesUploaded(
+            accessToken: String, userID: String, since: Int64
+        ) async throws -> SlackFileUploadSummary { .empty(periodStartMs: 0, periodEndMs: 0) }
+        func fetchThreadReplies(
+            accessToken: String, channelID: String, threadTs: String, ownerUserID: String, oldest: String?
+        ) async throws -> SlackThreadReplyBatch { .empty }
 
         // Warm.
         func fetchWarmState(
@@ -90,23 +100,27 @@ final class SlackWarmCollectorTests: XCTestCase {
         }
 
         // Cold — no-op.
-        func fetchColdState(accessToken: String, userID: String, scopes: SlackScopesChecking, topChannels: SlackMemberChannelsTopList, now: Int64) async throws -> SlackColdBatch { .empty }
+        func fetchColdState(
+            accessToken: String, userID: String, scopes: SlackScopesChecking, topChannels: SlackMemberChannelsTopList,
+            now: Int64
+        ) async throws -> SlackColdBatch { .empty }
     }
 
     // MARK: - Helpers
 
     private func insertSlackIntegration(_ db: Database, teamID: String = "T1", userID: String = "U1") throws {
-        try db.upsertIntegration(IntegrationRecord(
-            provider: .slack,
-            workspaceID: "\(teamID):\(userID)",
-            workspaceName: "Acme",
-            accessToken: "tok",
-            refreshToken: nil,
-            expiresAt: nil, // long-lived (no rotation) — refresher no-ops
-            scope: "channels:read,pins:read,bookmarks:read,reminders:read,reactions:read,stars:read",
-            connectedAt: Date(),
-            updatedAt: Date()
-        ))
+        try db.upsertIntegration(
+            IntegrationRecord(
+                provider: .slack,
+                workspaceID: "\(teamID):\(userID)",
+                workspaceName: "Acme",
+                accessToken: "tok",
+                refreshToken: nil,
+                expiresAt: nil,  // long-lived (no rotation) — refresher no-ops
+                scope: "channels:read,pins:read,bookmarks:read,reminders:read,reactions:read,stars:read",
+                connectedAt: Date(),
+                updatedAt: Date()
+            ))
     }
 
     private func makeCollector(
@@ -129,22 +143,25 @@ final class SlackWarmCollectorTests: XCTestCase {
 
     private func seedPriorSnapshot(_ db: Database, kind: String, json: String) throws {
         try db.writeSQL { raw in
-            try ProviderSnapshotsStore.upsert(ProviderSnapshot(
-                provider: "slack",
-                snapshotKind: kind,
-                snapshotJSON: json,
-                capturedAtMs: 0
-            ), in: raw)
+            try ProviderSnapshotsStore.upsert(
+                ProviderSnapshot(
+                    provider: "slack",
+                    snapshotKind: kind,
+                    snapshotJSON: json,
+                    capturedAtMs: 0
+                ), in: raw)
         }
     }
 
     private func eventCount(_ db: Database, eventKind: String) throws -> Int {
         var count = 0
         try db.readSQL { raw in
-            let rows = try Row.fetchAll(raw, sql: """
-                SELECT payload_json FROM events
-                WHERE json_extract(payload_json, '$.event_kind') = ?
-                """, arguments: [eventKind])
+            let rows = try Row.fetchAll(
+                raw,
+                sql: """
+                    SELECT payload_json FROM events
+                    WHERE json_extract(payload_json, '$.event_kind') = ?
+                    """, arguments: [eventKind])
             count = rows.count
         }
         return count
@@ -167,25 +184,31 @@ final class SlackWarmCollectorTests: XCTestCase {
 
         let p = SpyProvider()
         // Provider returns a non-empty batch — bootstrap should still suppress emits.
-        await p.setBatch(SlackWarmBatch(
-            memberChannelsTopList: SlackMemberChannelsTopList(channels: [
-                SlackMemberChannel(id: "C1", name: "general", latestTs: 100)
-            ]),
-            reactions: .empty,
-            pinsPerChannel: [SlackChannelPinsSnapshot(channelID: "C1", pinItemRefs: ["C1:1"])],
-            bookmarksPerChannel: [SlackChannelBookmarksSnapshot(channelID: "C1", bookmarks: [
-                SlackBookmark(channelID: "C1", id: "bm1", title: "Docs", link: "https://example.com", lastEditedMs: 5)
-            ])],
-            reminders: SlackRemindersSnapshot(reminders: [
-                SlackReminder(id: "R1", dueTs: 200, completedTs: nil)
-            ]),
-            scheduledMessages: SlackScheduledMessagesSnapshot(messages: [
-                SlackScheduledMessage(id: "SM1", channelID: "C1", scheduledFor: 300, sent: false)
-            ]),
-            stars: SlackStarsSnapshot(stars: [
-                SlackStarItem(itemRef: "C1:1", savedAtMs: 50)
-            ])
-        ))
+        await p.setBatch(
+            SlackWarmBatch(
+                memberChannelsTopList: SlackMemberChannelsTopList(channels: [
+                    SlackMemberChannel(id: "C1", name: "general", latestTs: 100)
+                ]),
+                reactions: .empty,
+                pinsPerChannel: [SlackChannelPinsSnapshot(channelID: "C1", pinItemRefs: ["C1:1"])],
+                bookmarksPerChannel: [
+                    SlackChannelBookmarksSnapshot(
+                        channelID: "C1",
+                        bookmarks: [
+                            SlackBookmark(
+                                channelID: "C1", id: "bm1", title: "Docs", link: "https://example.com", lastEditedMs: 5)
+                        ])
+                ],
+                reminders: SlackRemindersSnapshot(reminders: [
+                    SlackReminder(id: "R1", dueTs: 200, completedTs: nil)
+                ]),
+                scheduledMessages: SlackScheduledMessagesSnapshot(messages: [
+                    SlackScheduledMessage(id: "SM1", channelID: "C1", scheduledFor: 300, sent: false)
+                ]),
+                stars: SlackStarsSnapshot(stars: [
+                    SlackStarItem(itemRef: "C1:1", savedAtMs: 50)
+                ])
+            ))
 
         let c = makeCollector(db, p)
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
@@ -202,7 +225,7 @@ final class SlackWarmCollectorTests: XCTestCase {
                 Schema.ProviderSnapshotKinds.slackBookmarksPerChannel,
                 Schema.ProviderSnapshotKinds.slackReminders,
                 Schema.ProviderSnapshotKinds.slackScheduledMessages,
-                Schema.ProviderSnapshotKinds.slackStars
+                Schema.ProviderSnapshotKinds.slackStars,
             ] {
                 XCTAssertNotNil(
                     try ProviderSnapshotsStore.read(provider: "slack", snapshotKind: kind, in: raw),
@@ -221,18 +244,19 @@ final class SlackWarmCollectorTests: XCTestCase {
         try seedPriorSnapshot(db, kind: Schema.ProviderSnapshotKinds.slackMemberChannels, json: priorJSON)
 
         let p = SpyProvider()
-        await p.setBatch(SlackWarmBatch(
-            memberChannelsTopList: SlackMemberChannelsTopList(channels: [
-                SlackMemberChannel(id: "C1", name: "general", latestTs: 100),
-                SlackMemberChannel(id: "C2", name: "random", latestTs: 200)
-            ]),
-            reactions: .empty,
-            pinsPerChannel: [],
-            bookmarksPerChannel: [],
-            reminders: .empty,
-            scheduledMessages: .empty,
-            stars: .empty
-        ))
+        await p.setBatch(
+            SlackWarmBatch(
+                memberChannelsTopList: SlackMemberChannelsTopList(channels: [
+                    SlackMemberChannel(id: "C1", name: "general", latestTs: 100),
+                    SlackMemberChannel(id: "C2", name: "random", latestTs: 200),
+                ]),
+                reactions: .empty,
+                pinsPerChannel: [],
+                bookmarksPerChannel: [],
+                reminders: .empty,
+                scheduledMessages: .empty,
+                stars: .empty
+            ))
 
         let c = makeCollector(db, p)
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
@@ -244,21 +268,23 @@ final class SlackWarmCollectorTests: XCTestCase {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertSlackIntegration(db)
 
-        let priorJSON = #"{"channels":[{"id":"C1","name":"general","latestTs":100},{"id":"C2","name":"random","latestTs":200}]}"#
+        let priorJSON =
+            #"{"channels":[{"id":"C1","name":"general","latestTs":100},{"id":"C2","name":"random","latestTs":200}]}"#
         try seedPriorSnapshot(db, kind: Schema.ProviderSnapshotKinds.slackMemberChannels, json: priorJSON)
 
         let p = SpyProvider()
-        await p.setBatch(SlackWarmBatch(
-            memberChannelsTopList: SlackMemberChannelsTopList(channels: [
-                SlackMemberChannel(id: "C1", name: "general", latestTs: 100)
-            ]),
-            reactions: .empty,
-            pinsPerChannel: [],
-            bookmarksPerChannel: [],
-            reminders: .empty,
-            scheduledMessages: .empty,
-            stars: .empty
-        ))
+        await p.setBatch(
+            SlackWarmBatch(
+                memberChannelsTopList: SlackMemberChannelsTopList(channels: [
+                    SlackMemberChannel(id: "C1", name: "general", latestTs: 100)
+                ]),
+                reactions: .empty,
+                pinsPerChannel: [],
+                bookmarksPerChannel: [],
+                reminders: .empty,
+                scheduledMessages: .empty,
+                stars: .empty
+            ))
 
         let c = makeCollector(db, p)
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
@@ -273,17 +299,18 @@ final class SlackWarmCollectorTests: XCTestCase {
         // For reactions, the provider determines new vs old (since cursor). Spy returns
         // a single reaction → collector emits one reaction_added event.
         let p = SpyProvider()
-        await p.setBatch(SlackWarmBatch(
-            memberChannelsTopList: .empty,
-            reactions: SlackReactionsBatch(reactions: [
-                SlackReaction(itemRef: "C1:1.0", emoji: "thumbsup", addedAtMs: 50)
-            ]),
-            pinsPerChannel: [],
-            bookmarksPerChannel: [],
-            reminders: .empty,
-            scheduledMessages: .empty,
-            stars: .empty
-        ))
+        await p.setBatch(
+            SlackWarmBatch(
+                memberChannelsTopList: .empty,
+                reactions: SlackReactionsBatch(reactions: [
+                    SlackReaction(itemRef: "C1:1.0", emoji: "thumbsup", addedAtMs: 50)
+                ]),
+                pinsPerChannel: [],
+                bookmarksPerChannel: [],
+                reminders: .empty,
+                scheduledMessages: .empty,
+                stars: .empty
+            ))
 
         let c = makeCollector(db, p)
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
@@ -300,15 +327,16 @@ final class SlackWarmCollectorTests: XCTestCase {
         try seedPriorSnapshot(db, kind: Schema.ProviderSnapshotKinds.slackPinsPerChannel, json: priorJSON)
 
         let p = SpyProvider()
-        await p.setBatch(SlackWarmBatch(
-            memberChannelsTopList: .empty,
-            reactions: .empty,
-            pinsPerChannel: [SlackChannelPinsSnapshot(channelID: "C1", pinItemRefs: ["C1:1.0"])],
-            bookmarksPerChannel: [],
-            reminders: .empty,
-            scheduledMessages: .empty,
-            stars: .empty
-        ))
+        await p.setBatch(
+            SlackWarmBatch(
+                memberChannelsTopList: .empty,
+                reactions: .empty,
+                pinsPerChannel: [SlackChannelPinsSnapshot(channelID: "C1", pinItemRefs: ["C1:1.0"])],
+                bookmarksPerChannel: [],
+                reminders: .empty,
+                scheduledMessages: .empty,
+                stars: .empty
+            ))
 
         let c = makeCollector(db, p)
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
@@ -324,15 +352,16 @@ final class SlackWarmCollectorTests: XCTestCase {
         try seedPriorSnapshot(db, kind: Schema.ProviderSnapshotKinds.slackPinsPerChannel, json: priorJSON)
 
         let p = SpyProvider()
-        await p.setBatch(SlackWarmBatch(
-            memberChannelsTopList: .empty,
-            reactions: .empty,
-            pinsPerChannel: [SlackChannelPinsSnapshot(channelID: "C1", pinItemRefs: [])],
-            bookmarksPerChannel: [],
-            reminders: .empty,
-            scheduledMessages: .empty,
-            stars: .empty
-        ))
+        await p.setBatch(
+            SlackWarmBatch(
+                memberChannelsTopList: .empty,
+                reactions: .empty,
+                pinsPerChannel: [SlackChannelPinsSnapshot(channelID: "C1", pinItemRefs: [])],
+                bookmarksPerChannel: [],
+                reminders: .empty,
+                scheduledMessages: .empty,
+                stars: .empty
+            ))
 
         let c = makeCollector(db, p)
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
@@ -348,17 +377,23 @@ final class SlackWarmCollectorTests: XCTestCase {
         try seedPriorSnapshot(db, kind: Schema.ProviderSnapshotKinds.slackBookmarksPerChannel, json: priorJSON)
 
         let p = SpyProvider()
-        await p.setBatch(SlackWarmBatch(
-            memberChannelsTopList: .empty,
-            reactions: .empty,
-            pinsPerChannel: [],
-            bookmarksPerChannel: [SlackChannelBookmarksSnapshot(channelID: "C1", bookmarks: [
-                SlackBookmark(channelID: "C1", id: "bm1", title: "Runbook", link: "https://x", lastEditedMs: 50)
-            ])],
-            reminders: .empty,
-            scheduledMessages: .empty,
-            stars: .empty
-        ))
+        await p.setBatch(
+            SlackWarmBatch(
+                memberChannelsTopList: .empty,
+                reactions: .empty,
+                pinsPerChannel: [],
+                bookmarksPerChannel: [
+                    SlackChannelBookmarksSnapshot(
+                        channelID: "C1",
+                        bookmarks: [
+                            SlackBookmark(
+                                channelID: "C1", id: "bm1", title: "Runbook", link: "https://x", lastEditedMs: 50)
+                        ])
+                ],
+                reminders: .empty,
+                scheduledMessages: .empty,
+                stars: .empty
+            ))
 
         let c = makeCollector(db, p)
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
@@ -371,20 +406,21 @@ final class SlackWarmCollectorTests: XCTestCase {
         try insertSlackIntegration(db)
 
         let priorJSON = #"""
-        [{"channelID":"C1","bookmarks":[{"channelID":"C1","id":"bm1","title":"Old","link":"https://x","lastEditedMs":1}]}]
-        """#
+            [{"channelID":"C1","bookmarks":[{"channelID":"C1","id":"bm1","title":"Old","link":"https://x","lastEditedMs":1}]}]
+            """#
         try seedPriorSnapshot(db, kind: Schema.ProviderSnapshotKinds.slackBookmarksPerChannel, json: priorJSON)
 
         let p = SpyProvider()
-        await p.setBatch(SlackWarmBatch(
-            memberChannelsTopList: .empty,
-            reactions: .empty,
-            pinsPerChannel: [],
-            bookmarksPerChannel: [SlackChannelBookmarksSnapshot(channelID: "C1", bookmarks: [])],
-            reminders: .empty,
-            scheduledMessages: .empty,
-            stars: .empty
-        ))
+        await p.setBatch(
+            SlackWarmBatch(
+                memberChannelsTopList: .empty,
+                reactions: .empty,
+                pinsPerChannel: [],
+                bookmarksPerChannel: [SlackChannelBookmarksSnapshot(channelID: "C1", bookmarks: [])],
+                reminders: .empty,
+                scheduledMessages: .empty,
+                stars: .empty
+            ))
 
         let c = makeCollector(db, p)
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
@@ -400,18 +436,19 @@ final class SlackWarmCollectorTests: XCTestCase {
         try seedPriorSnapshot(db, kind: Schema.ProviderSnapshotKinds.slackReminders, json: priorJSON)
 
         let p = SpyProvider()
-        await p.setBatch(SlackWarmBatch(
-            memberChannelsTopList: .empty,
-            reactions: .empty,
-            pinsPerChannel: [],
-            bookmarksPerChannel: [],
-            reminders: SlackRemindersSnapshot(reminders: [
-                SlackReminder(id: "R0", dueTs: 50, completedTs: nil),
-                SlackReminder(id: "R1", dueTs: 200, completedTs: nil)
-            ]),
-            scheduledMessages: .empty,
-            stars: .empty
-        ))
+        await p.setBatch(
+            SlackWarmBatch(
+                memberChannelsTopList: .empty,
+                reactions: .empty,
+                pinsPerChannel: [],
+                bookmarksPerChannel: [],
+                reminders: SlackRemindersSnapshot(reminders: [
+                    SlackReminder(id: "R0", dueTs: 50, completedTs: nil),
+                    SlackReminder(id: "R1", dueTs: 200, completedTs: nil),
+                ]),
+                scheduledMessages: .empty,
+                stars: .empty
+            ))
 
         let c = makeCollector(db, p)
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
@@ -427,17 +464,18 @@ final class SlackWarmCollectorTests: XCTestCase {
         try seedPriorSnapshot(db, kind: Schema.ProviderSnapshotKinds.slackReminders, json: priorJSON)
 
         let p = SpyProvider()
-        await p.setBatch(SlackWarmBatch(
-            memberChannelsTopList: .empty,
-            reactions: .empty,
-            pinsPerChannel: [],
-            bookmarksPerChannel: [],
-            reminders: SlackRemindersSnapshot(reminders: [
-                SlackReminder(id: "R1", dueTs: 50, completedTs: 90)
-            ]),
-            scheduledMessages: .empty,
-            stars: .empty
-        ))
+        await p.setBatch(
+            SlackWarmBatch(
+                memberChannelsTopList: .empty,
+                reactions: .empty,
+                pinsPerChannel: [],
+                bookmarksPerChannel: [],
+                reminders: SlackRemindersSnapshot(reminders: [
+                    SlackReminder(id: "R1", dueTs: 50, completedTs: 90)
+                ]),
+                scheduledMessages: .empty,
+                stars: .empty
+            ))
 
         let c = makeCollector(db, p)
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
@@ -453,18 +491,19 @@ final class SlackWarmCollectorTests: XCTestCase {
         try seedPriorSnapshot(db, kind: Schema.ProviderSnapshotKinds.slackScheduledMessages, json: priorJSON)
 
         let p = SpyProvider()
-        await p.setBatch(SlackWarmBatch(
-            memberChannelsTopList: .empty,
-            reactions: .empty,
-            pinsPerChannel: [],
-            bookmarksPerChannel: [],
-            reminders: .empty,
-            scheduledMessages: SlackScheduledMessagesSnapshot(messages: [
-                SlackScheduledMessage(id: "SM0", channelID: "C1", scheduledFor: 50, sent: false),
-                SlackScheduledMessage(id: "SM1", channelID: "C1", scheduledFor: 200, sent: false)
-            ]),
-            stars: .empty
-        ))
+        await p.setBatch(
+            SlackWarmBatch(
+                memberChannelsTopList: .empty,
+                reactions: .empty,
+                pinsPerChannel: [],
+                bookmarksPerChannel: [],
+                reminders: .empty,
+                scheduledMessages: SlackScheduledMessagesSnapshot(messages: [
+                    SlackScheduledMessage(id: "SM0", channelID: "C1", scheduledFor: 50, sent: false),
+                    SlackScheduledMessage(id: "SM1", channelID: "C1", scheduledFor: 200, sent: false),
+                ]),
+                stars: .empty
+            ))
 
         let c = makeCollector(db, p)
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
@@ -482,15 +521,16 @@ final class SlackWarmCollectorTests: XCTestCase {
         let p = SpyProvider()
         // Two transitions to "sent": SM0 disappears from current (treated as sent);
         // SM1 transitions false→true. Expected = 2 events.
-        await p.setBatch(SlackWarmBatch(
-            memberChannelsTopList: .empty,
-            reactions: .empty,
-            pinsPerChannel: [],
-            bookmarksPerChannel: [],
-            reminders: .empty,
-            scheduledMessages: .empty, // SM0 disappeared from scheduler list
-            stars: .empty
-        ))
+        await p.setBatch(
+            SlackWarmBatch(
+                memberChannelsTopList: .empty,
+                reactions: .empty,
+                pinsPerChannel: [],
+                bookmarksPerChannel: [],
+                reminders: .empty,
+                scheduledMessages: .empty,  // SM0 disappeared from scheduler list
+                stars: .empty
+            ))
 
         let c = makeCollector(db, p)
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
@@ -506,18 +546,19 @@ final class SlackWarmCollectorTests: XCTestCase {
         try seedPriorSnapshot(db, kind: Schema.ProviderSnapshotKinds.slackStars, json: priorJSON)
 
         let p = SpyProvider()
-        await p.setBatch(SlackWarmBatch(
-            memberChannelsTopList: .empty,
-            reactions: .empty,
-            pinsPerChannel: [],
-            bookmarksPerChannel: [],
-            reminders: .empty,
-            scheduledMessages: .empty,
-            stars: SlackStarsSnapshot(stars: [
-                SlackStarItem(itemRef: "C1:1.0", savedAtMs: 10),
-                SlackStarItem(itemRef: "C1:2.0", savedAtMs: 50)
-            ])
-        ))
+        await p.setBatch(
+            SlackWarmBatch(
+                memberChannelsTopList: .empty,
+                reactions: .empty,
+                pinsPerChannel: [],
+                bookmarksPerChannel: [],
+                reminders: .empty,
+                scheduledMessages: .empty,
+                stars: SlackStarsSnapshot(stars: [
+                    SlackStarItem(itemRef: "C1:1.0", savedAtMs: 10),
+                    SlackStarItem(itemRef: "C1:2.0", savedAtMs: 50),
+                ])
+            ))
 
         let c = makeCollector(db, p)
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
@@ -533,15 +574,16 @@ final class SlackWarmCollectorTests: XCTestCase {
         try seedPriorSnapshot(db, kind: Schema.ProviderSnapshotKinds.slackStars, json: priorJSON)
 
         let p = SpyProvider()
-        await p.setBatch(SlackWarmBatch(
-            memberChannelsTopList: .empty,
-            reactions: .empty,
-            pinsPerChannel: [],
-            bookmarksPerChannel: [],
-            reminders: .empty,
-            scheduledMessages: .empty,
-            stars: .empty
-        ))
+        await p.setBatch(
+            SlackWarmBatch(
+                memberChannelsTopList: .empty,
+                reactions: .empty,
+                pinsPerChannel: [],
+                bookmarksPerChannel: [],
+                reminders: .empty,
+                scheduledMessages: .empty,
+                stars: .empty
+            ))
 
         let c = makeCollector(db, p)
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
@@ -553,7 +595,7 @@ final class SlackWarmCollectorTests: XCTestCase {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertSlackIntegration(db)
 
-        let p = SpyProvider() // returns .empty by default
+        let p = SpyProvider()  // returns .empty by default
         let c = makeCollector(db, p)
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
         XCTAssertEqual(r.eventsEmitted, 0)
@@ -569,15 +611,16 @@ final class SlackWarmCollectorTests: XCTestCase {
         try seedPriorSnapshot(db, kind: Schema.ProviderSnapshotKinds.slackPinsPerChannel, json: priorJSON)
 
         let p = SpyProvider()
-        await p.setBatch(SlackWarmBatch(
-            memberChannelsTopList: .empty,
-            reactions: .empty,
-            pinsPerChannel: [SlackChannelPinsSnapshot(channelID: "C1", pinItemRefs: ["C1:1"])],
-            bookmarksPerChannel: [],
-            reminders: .empty,
-            scheduledMessages: .empty,
-            stars: .empty
-        ))
+        await p.setBatch(
+            SlackWarmBatch(
+                memberChannelsTopList: .empty,
+                reactions: .empty,
+                pinsPerChannel: [SlackChannelPinsSnapshot(channelID: "C1", pinItemRefs: ["C1:1"])],
+                bookmarksPerChannel: [],
+                reminders: .empty,
+                scheduledMessages: .empty,
+                stars: .empty
+            ))
 
         let c = makeCollector(db, p, scopes: ScopesMissing(["pins:read"]))
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))
@@ -600,15 +643,16 @@ final class SlackWarmCollectorTests: XCTestCase {
             channels.append(SlackMemberChannel(id: "C\(i)", name: "ch-\(i)", latestTs: Int64(1000 - i)))
         }
         let p = SpyProvider()
-        await p.setBatch(SlackWarmBatch(
-            memberChannelsTopList: SlackMemberChannelsTopList(channels: channels),
-            reactions: .empty,
-            pinsPerChannel: [],
-            bookmarksPerChannel: [],
-            reminders: .empty,
-            scheduledMessages: .empty,
-            stars: .empty
-        ))
+        await p.setBatch(
+            SlackWarmBatch(
+                memberChannelsTopList: SlackMemberChannelsTopList(channels: channels),
+                reactions: .empty,
+                pinsPerChannel: [],
+                bookmarksPerChannel: [],
+                reminders: .empty,
+                scheduledMessages: .empty,
+                stars: .empty
+            ))
 
         let c = makeCollector(db, p)
         _ = await c.performTick(now: Date(timeIntervalSince1970: 100))
@@ -651,15 +695,16 @@ final class SlackWarmCollectorTests: XCTestCase {
             currChannels.append(SlackMemberChannel(id: "C\(i)", name: "ch\(i)", latestTs: Int64((16 - i) * 100)))
         }
         let p = SpyProvider()
-        await p.setBatch(SlackWarmBatch(
-            memberChannelsTopList: SlackMemberChannelsTopList(channels: currChannels),
-            reactions: .empty,
-            pinsPerChannel: [],
-            bookmarksPerChannel: [],
-            reminders: .empty,
-            scheduledMessages: .empty,
-            stars: .empty
-        ))
+        await p.setBatch(
+            SlackWarmBatch(
+                memberChannelsTopList: SlackMemberChannelsTopList(channels: currChannels),
+                reactions: .empty,
+                pinsPerChannel: [],
+                bookmarksPerChannel: [],
+                reminders: .empty,
+                scheduledMessages: .empty,
+                stars: .empty
+            ))
 
         let c = makeCollector(db, p)
         let r = await c.performTick(now: Date(timeIntervalSince1970: 100))

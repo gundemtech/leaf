@@ -59,7 +59,9 @@ public actor MaintenanceScheduler {
                 await self?.runSweepLoop()
             }
         }
-        logger.info("MaintenanceScheduler started (walEvery=\(self.walCheckpointIntervalSec, privacy: .public)s, sweepEvery=\(self.retentionSweepIntervalSec, privacy: .public)s, retentionDays=\(self.retentionDays, privacy: .public))")
+        logger.info(
+            "MaintenanceScheduler started (walEvery=\(self.walCheckpointIntervalSec, privacy: .public)s, sweepEvery=\(self.retentionSweepIntervalSec, privacy: .public)s, retentionDays=\(self.retentionDays, privacy: .public))"
+        )
     }
 
     public func stop() async {
@@ -107,7 +109,9 @@ public actor MaintenanceScheduler {
         } catch {
             logger.error("Intensity aggregates purge failed: \(error.localizedDescription, privacy: .public)")
         }
-        logger.info("Retention sweep: deleted \(total, privacy: .public) event rows older than \(self.retentionDays, privacy: .public)d")
+        logger.info(
+            "Retention sweep: deleted \(total, privacy: .public) event rows older than \(self.retentionDays, privacy: .public)d"
+        )
     }
 
     // MARK: - Loops (integration-tested)

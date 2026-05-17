@@ -14,10 +14,11 @@
 
 import CryptoKit
 import Foundation
-import Observation
-import OSLog
-import SwiftUI
 import LeafCore
+import OSLog
+import Observation
+import SwiftUI
+
 #if LEAF_PROD
 import LeafCorePrivate
 #endif
@@ -92,8 +93,9 @@ final class InviteAcceptReader {
                 self.state = .otpEntry(blob: blob, attempts: 0, prefillOTP: nil)
             } catch {
                 self.logger.error("fetchInvite failed: \(String(describing: error), privacy: .public)")
-                self.state = .error(message: self.userFacingMessage(for: error),
-                                    recoverable: self.isRecoverable(error))
+                self.state = .error(
+                    message: self.userFacingMessage(for: error),
+                    recoverable: self.isRecoverable(error))
             }
         }
     }
@@ -109,8 +111,9 @@ final class InviteAcceptReader {
                 self.state = .otpEntry(blob: result.blob, attempts: 0, prefillOTP: result.otp)
             } catch {
                 self.logger.error("fetchInvite(URL) failed: \(String(describing: error), privacy: .public)")
-                self.state = .error(message: self.userFacingMessage(for: error),
-                                    recoverable: self.isRecoverable(error))
+                self.state = .error(
+                    message: self.userFacingMessage(for: error),
+                    recoverable: self.isRecoverable(error))
             }
         }
     }
@@ -129,12 +132,14 @@ final class InviteAcceptReader {
             guard let self else { return }
             do {
                 let svc = try self.ensureService()
-                let accepted = try await svc.acceptInvite(blob: blob,
-                                                          otp: otp,
-                                                          displayName: resolvedName)
+                let accepted = try await svc.acceptInvite(
+                    blob: blob,
+                    otp: otp,
+                    displayName: resolvedName)
                 let count: Int
                 if let db = self.database,
-                   let members = try? db.readTeamMembers(orgID: accepted.orgID) {
+                    let members = try? db.readTeamMembers(orgID: accepted.orgID)
+                {
                     count = members.count
                 } else {
                     count = 0
@@ -145,8 +150,9 @@ final class InviteAcceptReader {
                 self.state = .otpEntry(blob: blob, attempts: attempts + 1, prefillOTP: nil)
             } catch {
                 self.logger.error("acceptInvite failed: \(String(describing: error), privacy: .public)")
-                self.state = .error(message: self.userFacingMessage(for: error),
-                                    recoverable: self.isRecoverable(error))
+                self.state = .error(
+                    message: self.userFacingMessage(for: error),
+                    recoverable: self.isRecoverable(error))
             }
         }
     }
@@ -216,8 +222,8 @@ final class InviteAcceptReader {
         case .relayUnreachable, .invalidPayload:
             return true
         case .inviteAlreadyAccepted, .inviteNotFound, .inviteBlobMalformed,
-             .keyFileUnavailable, .keyFileCorrupted, .databaseUnavailable, .notImplemented,
-             .inviteAlreadyConsumed, .inviteURLMalformed:
+            .keyFileUnavailable, .keyFileCorrupted, .databaseUnavailable, .notImplemented,
+            .inviteAlreadyConsumed, .inviteURLMalformed:
             return false
         default:
             return false

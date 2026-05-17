@@ -7,6 +7,7 @@
 //
 
 import XCTest
+
 @testable import LeafCore
 
 final class SlackRemindersIDSetDiffTests: XCTestCase {
@@ -27,7 +28,7 @@ final class SlackRemindersIDSetDiffTests: XCTestCase {
         ])
         let curr = SlackRemindersSnapshot(reminders: [
             SlackReminder(id: "R1", dueTs: 100, completedTs: nil),
-            SlackReminder(id: "R2", dueTs: 200, completedTs: nil)
+            SlackReminder(id: "R2", dueTs: 200, completedTs: nil),
         ])
         let (created, completed) = SlackWarmCollector.remindersDiff(prior: prior, current: curr)
         XCTAssertEqual(created.map(\.id), ["R2"])

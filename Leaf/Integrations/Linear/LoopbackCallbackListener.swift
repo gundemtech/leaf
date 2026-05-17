@@ -42,7 +42,8 @@ nonisolated enum LoopbackCallbackListener {
         // port == 0 → ask the kernel for an ephemeral port (NWEndpoint.Port.any).
         // Non-zero non-bindable values fall back to `.any` as well to mirror
         // prior behaviour.
-        let nwPort: NWEndpoint.Port = port == 0
+        let nwPort: NWEndpoint.Port =
+            port == 0
             ? .any
             : (NWEndpoint.Port(rawValue: port) ?? .any)
         let parameters = NWParameters.tcp
@@ -80,7 +81,8 @@ nonisolated enum LoopbackCallbackListener {
                     switch state {
                     case .ready:
                         if portFiredOnce.tryResume(), let onPortAssigned,
-                           let assigned = listener.port?.rawValue {
+                            let assigned = listener.port?.rawValue
+                        {
                             onPortAssigned(assigned)
                         }
                     case .failed(let error):
@@ -95,7 +97,8 @@ nonisolated enum LoopbackCallbackListener {
                     connection.start(queue: queue)
                     connection.receive(minimumIncompleteLength: 1, maximumLength: 4096) { data, _, _, error in
                         if let error {
-                            listenerLogger.error("connection receive error: \(String(describing: error), privacy: .public)")
+                            listenerLogger.error(
+                                "connection receive error: \(String(describing: error), privacy: .public)")
                             connection.cancel()
                             return
                         }
@@ -107,7 +110,8 @@ nonisolated enum LoopbackCallbackListener {
                         // Build URL components from "/callback?<query>" path-and-query.
                         let urlString = "http://\(LinearOAuthEndpoints.redirectHost):\(port)\(line)"
                         guard let components = URLComponents(string: urlString) else {
-                            sendResponse(on: connection, status: "400 Bad Request", body: htmlError("Invalid callback URL"))
+                            sendResponse(
+                                on: connection, status: "400 Bad Request", body: htmlError("Invalid callback URL"))
                             finish(.failure(LoopbackCallbackError.parseFailed))
                             return
                         }
@@ -116,7 +120,9 @@ nonisolated enum LoopbackCallbackListener {
                         // (юзер должен видеть осмысленное сообщение в браузере),
                         // дальше caller (LinearOAuthService) интерпретирует error/state/code.
                         let isError = components.queryItems?.contains(where: { $0.name == "error" }) ?? false
-                        let body = isError ? htmlCancelled(providerLabel: providerLabel) : htmlSuccess(providerLabel: providerLabel)
+                        let body =
+                            isError
+                            ? htmlCancelled(providerLabel: providerLabel) : htmlSuccess(providerLabel: providerLabel)
                         sendResponse(on: connection, status: "200 OK", body: body)
                         finish(.success(components))
                     }
@@ -141,7 +147,7 @@ nonisolated enum LoopbackCallbackListener {
     private static func parseRequestLine(_ data: Data) -> String? {
         // Read up to first \r\n.
         guard let crlf = data.firstRange(of: Data("\r\n".utf8)),
-              let line = String(data: data[..<crlf.lowerBound], encoding: .utf8)
+            let line = String(data: data[..<crlf.lowerBound], encoding: .utf8)
         else { return nil }
 
         let parts = line.split(separator: " ", maxSplits: 2, omittingEmptySubsequences: true)
@@ -155,18 +161,20 @@ nonisolated enum LoopbackCallbackListener {
     private static func sendResponse(on connection: NWConnection, status: String, body: String) {
         let bytes = Data(body.utf8)
         let headers = """
-        HTTP/1.1 \(status)\r
-        Content-Type: text/html; charset=utf-8\r
-        Content-Length: \(bytes.count)\r
-        Connection: close\r
-        \r
+            HTTP/1.1 \(status)\r
+            Content-Type: text/html; charset=utf-8\r
+            Content-Length: \(bytes.count)\r
+            Connection: close\r
+            \r
 
-        """
+            """
         var payload = Data(headers.utf8)
         payload.append(bytes)
-        connection.send(content: payload, completion: .contentProcessed { _ in
-            connection.cancel()
-        })
+        connection.send(
+            content: payload,
+            completion: .contentProcessed { _ in
+                connection.cancel()
+            })
     }
 
     private static func htmlSuccess(providerLabel: String) -> String {
@@ -174,23 +182,23 @@ nonisolated enum LoopbackCallbackListener {
         // если получают full Content-Length response.
         let label = htmlEscape(providerLabel)
         return """
-        <!DOCTYPE html><html><head><meta charset="utf-8"><title>Leaf — \(label) connected</title></head>
-        <body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 4rem; text-align: center;">
-        <h2>Leaf is connected to \(label).</h2>
-        <p style="color: #666;">You can close this window and return to the app.</p>
-        </body></html>
-        """
+            <!DOCTYPE html><html><head><meta charset="utf-8"><title>Leaf — \(label) connected</title></head>
+            <body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 4rem; text-align: center;">
+            <h2>Leaf is connected to \(label).</h2>
+            <p style="color: #666;">You can close this window and return to the app.</p>
+            </body></html>
+            """
     }
 
     private static func htmlCancelled(providerLabel: String) -> String {
         let label = htmlEscape(providerLabel)
         return """
-        <!DOCTYPE html><html><head><meta charset="utf-8"><title>Leaf — \(label) cancelled</title></head>
-        <body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 4rem; text-align: center;">
-        <h2>\(label) connection cancelled.</h2>
-        <p style="color: #666;">You can close this window and try again from Leaf.</p>
-        </body></html>
-        """
+            <!DOCTYPE html><html><head><meta charset="utf-8"><title>Leaf — \(label) cancelled</title></head>
+            <body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 4rem; text-align: center;">
+            <h2>\(label) connection cancelled.</h2>
+            <p style="color: #666;">You can close this window and try again from Leaf.</p>
+            </body></html>
+            """
     }
 
     /// Минимальный HTML-escape для providerLabel (defense in depth — labels у нас
@@ -198,9 +206,9 @@ nonisolated enum LoopbackCallbackListener {
     /// инжектил ломанную страницу при future expansion).
     private static func htmlEscape(_ s: String) -> String {
         s.replacingOccurrences(of: "&", with: "&amp;")
-         .replacingOccurrences(of: "<", with: "&lt;")
-         .replacingOccurrences(of: ">", with: "&gt;")
-         .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
     }
 
     private static func htmlError(_ message: String) -> String {

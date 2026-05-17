@@ -12,8 +12,8 @@
 //
 
 import CryptoKit
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct TeamView: View {
     @Environment(OrgReader.self) private var reader
@@ -55,8 +55,12 @@ struct TeamView: View {
     private var content: some View {
         switch reader.state {
         case .loading:
-            HStack { Spacer(); ProgressView(); Spacer() }
-                .padding(.top, LeafSpace.xxxl)
+            HStack {
+                Spacer()
+                ProgressView()
+                Spacer()
+            }
+            .padding(.top, LeafSpace.xxxl)
 
         case .empty:
             emptyContent
@@ -162,7 +166,7 @@ struct TeamView: View {
             )
         }
         .menuStyle(.borderlessButton)
-        .frame(width: LeafSpace.xxl)   // 32pt — taps space
+        .frame(width: LeafSpace.xxl)  // 32pt — taps space
     }
 
     private func roleBadge(_ role: TeamMemberRole) -> some View {
@@ -195,7 +199,8 @@ struct TeamView: View {
     }
 
     private func avatarInitials(_ displayName: String) -> String {
-        let parts = displayName
+        let parts =
+            displayName
             .split(separator: " ")
             .prefix(2)
             .compactMap { $0.first.map(String.init) }

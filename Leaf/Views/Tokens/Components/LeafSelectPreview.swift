@@ -27,8 +27,8 @@ struct LeafSelectPreview: View {
             Text("LeafSelect").font(LeafType.title.medium).foregroundStyle(LeafColor.text.primary)
 
             VStack(alignment: .leading, spacing: LeafSpace.sm) {
-                LeafSelect(selection: $dropdown,  variant: .dropdown,  options: previewOptions) { Text($0.title) }
-                LeafSelect(selection: $combobox,  variant: .combobox,  options: previewOptions) { Text($0.title) }
+                LeafSelect(selection: $dropdown, variant: .dropdown, options: previewOptions) { Text($0.title) }
+                LeafSelect(selection: $combobox, variant: .combobox, options: previewOptions) { Text($0.title) }
                 LeafSelect(selection: $segmented, variant: .segmented, options: previewOptions) { Text($0.title) }
             }
 

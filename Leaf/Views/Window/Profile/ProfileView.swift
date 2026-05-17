@@ -5,8 +5,8 @@
 //  surface caption — title carries unit semantics).
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct ProfileView: View {
     @Environment(InsightsReader.self) private var reader

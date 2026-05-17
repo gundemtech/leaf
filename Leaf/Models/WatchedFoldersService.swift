@@ -9,9 +9,10 @@
 //
 
 import Foundation
-import SwiftUI
-import OSLog
 import LeafCore
+import OSLog
+import SwiftUI
+
 #if LEAF_PROD
 import LeafCorePrivate
 #endif
@@ -104,7 +105,8 @@ final class WatchedFoldersService {
                 let db = try ensureDatabase()
                 try block(db)
             } catch {
-                logger.error("\(operation, privacy: .public) failed after retry: \(String(describing: error), privacy: .public)")
+                logger.error(
+                    "\(operation, privacy: .public) failed after retry: \(String(describing: error), privacy: .public)")
                 lastErrorMessage = "Operation failed: \(error.localizedDescription)"
                 reload()
                 return

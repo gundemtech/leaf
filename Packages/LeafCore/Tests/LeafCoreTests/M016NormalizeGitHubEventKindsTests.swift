@@ -1,5 +1,7 @@
 import XCTest
+
 import class GRDB.Row
+
 @testable import LeafCore
 
 /// Phase Track-3 D2 — M016 retroactive rename of pre-D2 GitHub event_kinds.
@@ -39,10 +41,11 @@ final class M016NormalizeGitHubEventKindsTests: XCTestCase {
     ) throws {
         var payload: [String: String] = ["event_kind": kind]
         for (k, v) in extraKeys { payload[k] = v }
-        let payloadJSON = try String(
-            data: JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
-            encoding: .utf8
-        ) ?? "{}"
+        let payloadJSON =
+            try String(
+                data: JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+                encoding: .utf8
+            ) ?? "{}"
         try db.writeSQL { raw in
             try raw.execute(
                 sql: """
@@ -84,7 +87,8 @@ final class M016NormalizeGitHubEventKindsTests: XCTestCase {
         let kinds = try eventKinds(db)
         XCTAssertEqual(kinds.count, M016NormalizeGitHubEventKinds.renameMap.count)
         let expected = M016NormalizeGitHubEventKinds.renameMap.map { $0.new }
-        XCTAssertEqual(kinds, expected, "Each old name should be renamed to its mapped gh_* counterpart in insertion order")
+        XCTAssertEqual(
+            kinds, expected, "Each old name should be renamed to its mapped gh_* counterpart in insertion order")
         for k in kinds {
             XCTAssertTrue(k.hasPrefix("gh_"), "Renamed kind \(k) should carry gh_* prefix")
         }
@@ -129,7 +133,8 @@ final class M016NormalizeGitHubEventKindsTests: XCTestCase {
             XCTAssertNotNil(row)
             let payloadJSON = (row?["payload_json"] as String?) ?? ""
             guard let data = payloadJSON.data(using: .utf8),
-                  let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else {
                 XCTFail("payload_json should parse as JSON object")
                 return
             }

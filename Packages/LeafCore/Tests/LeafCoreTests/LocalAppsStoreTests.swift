@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class LocalAppsStoreTests: XCTestCase {
@@ -20,7 +21,6 @@ final class LocalAppsStoreTests: XCTestCase {
         XCTAssertFalse(store.isEnabled("com.apple.Music"))
     }
 
-
     func testSetEnabledPersists() {
         let store = LocalAppsStore(defaults: defaults)
         store.setEnabled("com.apple.Music", true)
@@ -28,7 +28,6 @@ final class LocalAppsStoreTests: XCTestCase {
         let store2 = LocalAppsStore(defaults: defaults)
         XCTAssertTrue(store2.isEnabled("com.apple.Music"))
     }
-
 
     func testEnabledToggleIsIndependentAcrossBundles() {
         let store = LocalAppsStore(defaults: defaults)
@@ -39,12 +38,10 @@ final class LocalAppsStoreTests: XCTestCase {
         XCTAssertFalse(store.isEnabled("com.apple.Music"))
     }
 
-
     func testSubFieldOptedInDefaultFalse() {
         let store = LocalAppsStore(defaults: defaults)
         XCTAssertFalse(store.isSubFieldOptedIn("com.apple.mail", field: "mailboxName"))
     }
-
 
     func testSetSubFieldOptInPersistsAndIsScoped() {
         let store = LocalAppsStore(defaults: defaults)

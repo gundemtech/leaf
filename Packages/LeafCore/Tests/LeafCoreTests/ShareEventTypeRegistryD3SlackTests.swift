@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class ShareEventTypeRegistryD3SlackTests: XCTestCase {
@@ -8,15 +9,19 @@ final class ShareEventTypeRegistryD3SlackTests: XCTestCase {
     // Track-6 P2 grew it 182 → 188 (+6 Xcode Deep).
     // Track-6 P5 grew it 188 → 191 (+3 Zoom Deep).
     func testRegistrySize116AfterD3Slack() {
-        XCTAssertEqual(ShareEventTypeKey.allCases.count, 195,
-                       "97 (post-D2) + 19 (D3 Slack) + 9 (S1) + 14 (S2) + 13 (S3) + 16 (P1) + 8 (P3) + 6 (P4) + 6 (P2) + 3 (P5) = 195")
+        XCTAssertEqual(
+            ShareEventTypeKey.allCases.count, 195,
+            "97 (post-D2) + 19 (D3 Slack) + 9 (S1) + 14 (S2) + 13 (S3) + 16 (P1) + 8 (P3) + 6 (P4) + 6 (P2) + 3 (P5) = 195"
+        )
     }
 
     func testTwoLegacySlackKindsHaveCanonicalRawValues() {
-        XCTAssertEqual(ShareEventTypeKey.slackMessageAuthored.rawValue,
-                       "slack_message_authored_aggregate")
-        XCTAssertEqual(ShareEventTypeKey.slackHuddleStateChange.rawValue,
-                       "slack_huddle_state_change")
+        XCTAssertEqual(
+            ShareEventTypeKey.slackMessageAuthored.rawValue,
+            "slack_message_authored_aggregate")
+        XCTAssertEqual(
+            ShareEventTypeKey.slackHuddleStateChange.rawValue,
+            "slack_huddle_state_change")
     }
 
     func testNineteenNewD3KeysPresent() {
@@ -31,7 +36,7 @@ final class ShareEventTypeRegistryD3SlackTests: XCTestCase {
             "slack_canvas_created", "slack_canvas_edited",
             "slack_custom_emoji_added",
             "slack_usergroup_membership_changed",
-            "slack_channel_renamed", "slack_channel_archived"
+            "slack_channel_renamed", "slack_channel_archived",
         ]
         let allRaws = Set(ShareEventTypeKey.allCases.map(\.rawValue))
         for r in expected {
@@ -51,11 +56,13 @@ final class ShareEventTypeRegistryD3SlackTests: XCTestCase {
             "slack_canvas_created", "slack_canvas_edited",
             "slack_custom_emoji_added",
             "slack_usergroup_membership_changed",
-            "slack_channel_renamed", "slack_channel_archived"
+            "slack_channel_renamed", "slack_channel_archived",
         ]
         for entry in ShareEventTypeDefaults.all where d3New.contains(entry.key.rawValue) {
-            XCTAssertFalse(entry.defaultEnabled,
-                "D3 Slack key \(entry.key.rawValue) should default OFF (per ADR-020 — capture locally, share selectively)")
+            XCTAssertFalse(
+                entry.defaultEnabled,
+                "D3 Slack key \(entry.key.rawValue) should default OFF (per ADR-020 — capture locally, share selectively)"
+            )
         }
     }
 }

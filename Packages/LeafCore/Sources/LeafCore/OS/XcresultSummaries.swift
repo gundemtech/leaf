@@ -9,7 +9,7 @@ public struct XcresultBuildSummary: Sendable, Equatable, Hashable {
     public let errorCount: Int
     public let warningCount: Int
     public let analyzerWarningCount: Int
-    public let targetNames: Set<String>          // ONLY from errors[].targetName, allowlisted
+    public let targetNames: Set<String>  // ONLY from errors[].targetName, allowlisted
     public let destinationBucket: RunDestinationBucket
     public let durationMs: Int64?
     public let scheme: String?

@@ -17,11 +17,13 @@ public struct NotesStateMachine: Sendable, Hashable {
         guard changed else { return [] }
         var payload: [String: String] = ["event_kind": "notes_active_title_changed"]
         if let title = obs.activeNoteTitle { payload["note_title"] = title }
-        return [RawEvent(
-            timestamp: Date(timeIntervalSince1970: Double(nowMs) / 1000.0),
-            signalType: .attention,
-            bundleID: "com.apple.Notes",
-            payload: payload
-        )]
+        return [
+            RawEvent(
+                timestamp: Date(timeIntervalSince1970: Double(nowMs) / 1000.0),
+                signalType: .attention,
+                bundleID: "com.apple.Notes",
+                payload: payload
+            )
+        ]
     }
 }

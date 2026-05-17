@@ -2,8 +2,9 @@
 // Mock URLSession через URLProtocol + ephemeral session — same pattern as
 // SlackTokenRefresherTests / RelayClientTests.
 
-import XCTest
 import Foundation
+import XCTest
+
 @testable import LeafCore
 
 private final class GoogleOAuthMockURLProtocol: URLProtocol {
@@ -73,14 +74,14 @@ final class GoogleCalendarOAuthClientTests: XCTestCase {
 
     func testExchangeCodeSucceedsWithCannedResponse() async throws {
         let canned = #"""
-        {
-          "access_token": "ya29.abc",
-          "expires_in": 3920,
-          "refresh_token": "1//rt-aaa",
-          "scope": "https://www.googleapis.com/auth/calendar.readonly",
-          "token_type": "Bearer"
-        }
-        """#
+            {
+              "access_token": "ya29.abc",
+              "expires_in": 3920,
+              "refresh_token": "1//rt-aaa",
+              "scope": "https://www.googleapis.com/auth/calendar.readonly",
+              "token_type": "Bearer"
+            }
+            """#
         GoogleOAuthMockURLProtocol.handler = { req, body in
             XCTAssertEqual(req.url, GoogleCalendarOAuthEndpoints.tokenURL)
             XCTAssertEqual(req.httpMethod, "POST")
@@ -150,14 +151,14 @@ final class GoogleCalendarOAuthClientTests: XCTestCase {
 
     func testRefreshTokenSuccessWithRotatedRefreshToken() async throws {
         let canned = #"""
-        {
-          "access_token": "ya29.new",
-          "expires_in": 3600,
-          "refresh_token": "1//rt-rotated",
-          "scope": "https://www.googleapis.com/auth/calendar.readonly",
-          "token_type": "Bearer"
-        }
-        """#
+            {
+              "access_token": "ya29.new",
+              "expires_in": 3600,
+              "refresh_token": "1//rt-rotated",
+              "scope": "https://www.googleapis.com/auth/calendar.readonly",
+              "token_type": "Bearer"
+            }
+            """#
         GoogleOAuthMockURLProtocol.handler = { req, body in
             let bodyStr = String(data: body, encoding: .utf8) ?? ""
             XCTAssertTrue(bodyStr.contains("grant_type=refresh_token"), "body=\(bodyStr)")
@@ -183,13 +184,13 @@ final class GoogleCalendarOAuthClientTests: XCTestCase {
         // refresh responses (only rotated occasionally). Caller preserves the
         // old refresh_token; NOT a throw.
         let canned = #"""
-        {
-          "access_token": "ya29.new",
-          "expires_in": 3600,
-          "scope": "https://www.googleapis.com/auth/calendar.readonly",
-          "token_type": "Bearer"
-        }
-        """#
+            {
+              "access_token": "ya29.new",
+              "expires_in": 3600,
+              "scope": "https://www.googleapis.com/auth/calendar.readonly",
+              "token_type": "Bearer"
+            }
+            """#
         GoogleOAuthMockURLProtocol.handler = { _, _ in
             (self.httpResponse(status: 200), canned.data(using: .utf8)!)
         }

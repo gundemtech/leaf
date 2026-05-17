@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 /// Тесты публичного контракта `AppCategoryClassifier`. Полные preset-bundle

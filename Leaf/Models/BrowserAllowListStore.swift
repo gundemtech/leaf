@@ -10,9 +10,10 @@
 //
 
 import Foundation
-import Observation
-import OSLog
 import LeafCore
+import OSLog
+import Observation
+
 #if LEAF_PROD
 import LeafCorePrivate
 #endif
@@ -76,7 +77,8 @@ final class BrowserAllowListStore {
     }
 
     func add(domain: String, granularity: URLGranularity, notes: String?) {
-        let canonical = domain
+        let canonical =
+            domain
             .lowercased()
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !canonical.isEmpty else { return }
@@ -103,7 +105,8 @@ final class BrowserAllowListStore {
                 let db = try ensureDatabase()
                 try block(db)
             } catch {
-                logger.error("\(operation, privacy: .public) failed after retry: \(String(describing: error), privacy: .public)")
+                logger.error(
+                    "\(operation, privacy: .public) failed after retry: \(String(describing: error), privacy: .public)")
                 lastErrorMessage = "Operation failed: \(error.localizedDescription)"
                 load()
                 return

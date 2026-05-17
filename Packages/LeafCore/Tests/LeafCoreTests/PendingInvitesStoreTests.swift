@@ -2,8 +2,9 @@
 // / updateLastPolledAt / delete. Mirror PresenceStateWriter pattern (static methods
 // taking GRDB.Database handle; caller wraps in pool.write block).
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class PendingInvitesStoreTests: XCTestCase {
@@ -68,9 +69,10 @@ final class PendingInvitesStoreTests: XCTestCase {
         try writeInPool(db) { rawDB in
             try PendingInvitesStore.insert(row, in: rawDB)
         }
-        XCTAssertThrowsError(try writeInPool(db) { rawDB in
-            try PendingInvitesStore.insert(row, in: rawDB)
-        })
+        XCTAssertThrowsError(
+            try writeInPool(db) { rawDB in
+                try PendingInvitesStore.insert(row, in: rawDB)
+            })
     }
 
     func testReadAllUnfiltered() throws {

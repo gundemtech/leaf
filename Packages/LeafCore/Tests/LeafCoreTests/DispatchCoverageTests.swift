@@ -14,6 +14,7 @@
 // `GitHubEventKindKey.bodyBearing`.
 
 import XCTest
+
 @testable import LeafCore
 
 final class DispatchCoverageTests: XCTestCase {
@@ -162,7 +163,7 @@ final class DispatchCoverageTests: XCTestCase {
     func testNonBodyBearingGitHubPRKindsReturnNilFromEventLinks() {
         let nonBodyBearing = [
             GitHubEventKindKey.prReviewThreadResolved.rawValue,
-            GitHubEventKindKey.prAwaitingReviewCount.rawValue
+            GitHubEventKindKey.prAwaitingReviewCount.rawValue,
         ]
         for raw in nonBodyBearing {
             XCTAssertNil(
@@ -207,7 +208,7 @@ final class DispatchCoverageTests: XCTestCase {
     func testNonBodyBearingGitHubPRKindsReturnNilFromDetectorPipeline() {
         let nonBodyBearing = [
             GitHubEventKindKey.prReviewThreadResolved.rawValue,
-            GitHubEventKindKey.prAwaitingReviewCount.rawValue
+            GitHubEventKindKey.prAwaitingReviewCount.rawValue,
         ]
         for raw in nonBodyBearing {
             XCTAssertNil(
@@ -223,12 +224,12 @@ final class DispatchCoverageTests: XCTestCase {
     /// accidentally dropping a kind from the whitelist set or the switch arms.
     func testTrackSixP3BrowserKindsHandledByActivityFeedMapper() {
         let p3EventKinds: [(kind: String, payload: [String: String])] = [
-            ("safari_tab_navigated",  ["event_kind": "safari_tab_navigated",  "current_url": "https://example.com"]),
-            ("chrome_tab_navigated",  ["event_kind": "chrome_tab_navigated",  "current_url": "https://example.com"]),
-            ("arc_tab_navigated",     ["event_kind": "arc_tab_navigated",     "current_url": "https://example.com"]),
-            ("safari_tab_activated",  ["event_kind": "safari_tab_activated",  "current_url": "https://example.com"]),
-            ("chrome_tab_activated",  ["event_kind": "chrome_tab_activated",  "current_url": "https://example.com"]),
-            ("arc_tab_activated",     ["event_kind": "arc_tab_activated",     "current_url": "https://example.com"]),
+            ("safari_tab_navigated", ["event_kind": "safari_tab_navigated", "current_url": "https://example.com"]),
+            ("chrome_tab_navigated", ["event_kind": "chrome_tab_navigated", "current_url": "https://example.com"]),
+            ("arc_tab_navigated", ["event_kind": "arc_tab_navigated", "current_url": "https://example.com"]),
+            ("safari_tab_activated", ["event_kind": "safari_tab_activated", "current_url": "https://example.com"]),
+            ("chrome_tab_activated", ["event_kind": "chrome_tab_activated", "current_url": "https://example.com"]),
+            ("arc_tab_activated", ["event_kind": "arc_tab_activated", "current_url": "https://example.com"]),
             ("chrome_bookmark_changed", ["event_kind": "chrome_bookmark_changed", "delta": "1", "total_count": "42"]),
             ("safari_bookmark_changed", ["event_kind": "safari_bookmark_changed", "delta": "-1", "total_count": "10"]),
         ]
@@ -255,7 +256,8 @@ final class DispatchCoverageTests: XCTestCase {
     /// suitable for `ActivityFeedMapper.map(payloadJSON:)`.
     private func encodePayload(_ dict: [String: String]) -> String {
         guard let data = try? JSONSerialization.data(withJSONObject: dict),
-              let s = String(data: data, encoding: .utf8) else { return "{}" }
+            let s = String(data: data, encoding: .utf8)
+        else { return "{}" }
         return s
     }
 
@@ -371,7 +373,7 @@ final class DispatchCoverageTests: XCTestCase {
             "xcode_active_doc_changed", "xcode_build_state_changed",
             "xcode_build_started", "xcode_build_finished",
             "xcode_test_run_started", "xcode_test_run_finished",
-            "xcode_scheme_changed", "xcode_run_destination_changed"
+            "xcode_scheme_changed", "xcode_run_destination_changed",
         ]
         let registry = Set(ShareEventTypeKey.allCases.map { $0.rawValue })
         let whitelist = ActivityFeedMapper.trackFourLocalOSKinds
@@ -381,14 +383,18 @@ final class DispatchCoverageTests: XCTestCase {
             }
         )
         for kind in allXcodeKinds {
-            XCTAssertTrue(registry.contains(kind),
-                          "ShareEventTypeKey missing entry for \(kind)")
-            XCTAssertTrue(whitelist.contains(kind),
-                          "trackFourLocalOSKinds whitelist missing \(kind)")
-            XCTAssertNotNil(EventKindIcon.symbol(for: kind),
-                            "EventKindIcon missing SF Symbol for \(kind)")
-            XCTAssertEqual(defaultsByKey[kind], false,
-                           "\(kind) must default OFF per ADR-020")
+            XCTAssertTrue(
+                registry.contains(kind),
+                "ShareEventTypeKey missing entry for \(kind)")
+            XCTAssertTrue(
+                whitelist.contains(kind),
+                "trackFourLocalOSKinds whitelist missing \(kind)")
+            XCTAssertNotNil(
+                EventKindIcon.symbol(for: kind),
+                "EventKindIcon missing SF Symbol for \(kind)")
+            XCTAssertEqual(
+                defaultsByKey[kind], false,
+                "\(kind) must default OFF per ADR-020")
         }
     }
 
@@ -401,7 +407,7 @@ final class DispatchCoverageTests: XCTestCase {
         let p5Kinds = [
             "zoom_meeting_started",
             "zoom_meeting_ended",
-            "zoom_meeting_calendar_linked"
+            "zoom_meeting_calendar_linked",
         ]
         for kind in p5Kinds {
             XCTAssertTrue(
@@ -409,10 +415,12 @@ final class DispatchCoverageTests: XCTestCase {
                 "Track-6 P5 kind '\(kind)' missing from trackFourLocalOSKinds whitelist"
             )
             let icon = EventKindIcon.symbol(for: kind)
-            XCTAssertNotEqual(icon, "app.dashed",
-                              "Track-6 P5 kind '\(kind)' falls back to generic icon")
-            XCTAssertNotEqual(icon, "questionmark.circle",
-                              "Track-6 P5 kind '\(kind)' has no icon mapping")
+            XCTAssertNotEqual(
+                icon, "app.dashed",
+                "Track-6 P5 kind '\(kind)' falls back to generic icon")
+            XCTAssertNotEqual(
+                icon, "questionmark.circle",
+                "Track-6 P5 kind '\(kind)' has no icon mapping")
             XCTAssertNil(
                 EventsFullTextStore.bodyKindForTesting(eventKind: kind),
                 "Track-6 P5 kind '\(kind)' must NOT route to FTS — carries no body text"

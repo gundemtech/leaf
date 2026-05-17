@@ -7,10 +7,13 @@
 //
 
 import XCTest
+
 @testable import LeafCore
 
 final class SlackBookmarksPerChannelDiffTests: XCTestCase {
-    private func mk(_ channel: String, _ id: String, _ title: String = "t", _ link: String = "https://x", _ ts: Int64 = 1) -> SlackBookmark {
+    private func mk(
+        _ channel: String, _ id: String, _ title: String = "t", _ link: String = "https://x", _ ts: Int64 = 1
+    ) -> SlackBookmark {
         SlackBookmark(channelID: channel, id: id, title: title, link: link, lastEditedMs: ts)
     }
 

@@ -5,8 +5,9 @@
 // Logical FKs to `events.id` only (repo convention — see M013_EventLinks.swift
 // + Schema.swift §74-75, §219). No SQL `FOREIGN KEY` declarations.
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class M014DetectionTablesTests: XCTestCase {
@@ -32,12 +33,16 @@ final class M014DetectionTablesTests: XCTestCase {
     func testMigrationCreatesAllFiveTables() throws {
         let db = try openDB()
         try db.readSQL { rawDB in
-            for table in ["decisions", "open_questions", "blockers",
-                          "where_stopped_log", "detector_offsets"] {
-                let exists = try Bool.fetchOne(rawDB, sql: """
-                    SELECT count(*) > 0 FROM sqlite_master
-                     WHERE type='table' AND name=?
-                """, arguments: [table])
+            for table in [
+                "decisions", "open_questions", "blockers",
+                "where_stopped_log", "detector_offsets",
+            ] {
+                let exists = try Bool.fetchOne(
+                    rawDB,
+                    sql: """
+                            SELECT count(*) > 0 FROM sqlite_master
+                             WHERE type='table' AND name=?
+                        """, arguments: [table])
                 XCTAssertEqual(exists, true, "Missing table \(table)")
             }
         }
@@ -83,30 +88,37 @@ final class M014DetectionTablesTests: XCTestCase {
         let db = try openDB()
         try db.writeSQL { rawDB in
             // Two open blockers same target — second insert must fail
-            try rawDB.execute(sql: """
-                INSERT INTO blockers (target_kind, target_ref, blocker_kind, started_at_ms)
-                VALUES ('linear_issue', 'LEAF-1', 'linear_stuck', 1000)
-            """)
-            XCTAssertThrowsError(try rawDB.execute(sql: """
-                INSERT INTO blockers (target_kind, target_ref, blocker_kind, started_at_ms)
-                VALUES ('linear_issue', 'LEAF-1', 'linear_stuck', 2000)
-            """))
+            try rawDB.execute(
+                sql: """
+                        INSERT INTO blockers (target_kind, target_ref, blocker_kind, started_at_ms)
+                        VALUES ('linear_issue', 'LEAF-1', 'linear_stuck', 1000)
+                    """)
+            XCTAssertThrowsError(
+                try rawDB.execute(
+                    sql: """
+                            INSERT INTO blockers (target_kind, target_ref, blocker_kind, started_at_ms)
+                            VALUES ('linear_issue', 'LEAF-1', 'linear_stuck', 2000)
+                        """))
             // Resolved + open same target — OK
-            try rawDB.execute(sql: """
-                UPDATE blockers SET resolved_at_ms = 1500 WHERE target_ref = 'LEAF-1'
-            """)
-            try rawDB.execute(sql: """
-                INSERT INTO blockers (target_kind, target_ref, blocker_kind, started_at_ms)
-                VALUES ('linear_issue', 'LEAF-1', 'linear_stuck', 2000)
-            """)
+            try rawDB.execute(
+                sql: """
+                        UPDATE blockers SET resolved_at_ms = 1500 WHERE target_ref = 'LEAF-1'
+                    """)
+            try rawDB.execute(
+                sql: """
+                        INSERT INTO blockers (target_kind, target_ref, blocker_kind, started_at_ms)
+                        VALUES ('linear_issue', 'LEAF-1', 'linear_stuck', 2000)
+                    """)
         }
     }
 
     func testDetectorOffsetsPreSeeded() throws {
         let db = try openDB()
         let kinds = try db.readSQL { rawDB -> [String] in
-            try String.fetchAll(rawDB, sql:
-                "SELECT detector_kind FROM detector_offsets ORDER BY detector_kind")
+            try String.fetchAll(
+                rawDB,
+                sql:
+                    "SELECT detector_kind FROM detector_offsets ORDER BY detector_kind")
         }
         XCTAssertEqual(kinds, ["blocker_pattern", "decision", "open_question"])
     }

@@ -6,8 +6,8 @@
 //  Public — public-safe (RFC, не moat).
 //
 
-import Foundation
 import CryptoKit
+import Foundation
 
 nonisolated enum PKCE {
     /// Generates a fresh PKCE pair + state nonce для одного OAuth flow.

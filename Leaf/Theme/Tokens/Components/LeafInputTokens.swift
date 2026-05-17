@@ -18,6 +18,6 @@ enum LeafInputTokens {
         }
 
         var horizontalPadding: CGFloat { LeafSpace.md }
-        var cornerRadius:      CGFloat { LeafRadius.md }
+        var cornerRadius: CGFloat { LeafRadius.md }
     }
 }

@@ -2,8 +2,9 @@
 // Verifies CryptoKit Curve25519 ECDH symmetry + hex decode validation
 // для invitee/admin pubkey exchange (5.2.D/E callers).
 
-import XCTest
 import CryptoKit
+import XCTest
+
 @testable import LeafCore
 
 final class KeyAgreementTests: XCTestCase {

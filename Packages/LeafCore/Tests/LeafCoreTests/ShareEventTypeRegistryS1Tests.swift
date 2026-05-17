@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 /// Phase Track-4 S1 — verifies registry expansion: 9 new event_kind cases all
@@ -12,7 +13,7 @@ final class ShareEventTypeRegistryS1Tests: XCTestCase {
             "meeting_state_entered", "meeting_state_exited",
             "focus_mode_enabled", "focus_mode_disabled",
             "system_locked", "system_unlocked", "system_slept", "system_woke",
-            "space_switched"
+            "space_switched",
         ]
         let allRawValues = Set(ShareEventTypeKey.allCases.map { $0.rawValue })
         for raw in s1RawValues {
@@ -37,7 +38,7 @@ final class ShareEventTypeRegistryS1Tests: XCTestCase {
             "meeting_state_entered", "meeting_state_exited",
             "focus_mode_enabled", "focus_mode_disabled",
             "system_locked", "system_unlocked", "system_slept", "system_woke",
-            "space_switched"
+            "space_switched",
         ]
         for entry in ShareEventTypeDefaults.all where s1RawValues.contains(entry.key.rawValue) {
             XCTAssertFalse(

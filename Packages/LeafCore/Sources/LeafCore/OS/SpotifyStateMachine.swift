@@ -20,15 +20,17 @@ public struct SpotifyStateMachine: Sendable, Hashable {
         guard changed else { return [] }
         var payload: [String: String] = [
             "event_kind": "spotify_track_changed",
-            "player_state": obs.playerState.rawValue
+            "player_state": obs.playerState.rawValue,
         ]
         if let t = obs.trackName { payload["track"] = t }
         if let a = obs.artistName { payload["artist"] = a }
-        return [RawEvent(
-            timestamp: Date(timeIntervalSince1970: Double(nowMs) / 1000.0),
-            signalType: .attention,
-            bundleID: "com.spotify.client",
-            payload: payload
-        )]
+        return [
+            RawEvent(
+                timestamp: Date(timeIntervalSince1970: Double(nowMs) / 1000.0),
+                signalType: .attention,
+                bundleID: "com.spotify.client",
+                payload: payload
+            )
+        ]
     }
 }

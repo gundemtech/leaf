@@ -8,23 +8,23 @@ import SwiftUI
 
 enum LeafType {
     enum display {
-        static let large    = Font.system(size: 64, weight: .semibold, design: .default)
+        static let large = Font.system(size: 64, weight: .semibold, design: .default)
             .leafTracking(-0.02)
-        static let regular  = Font.system(size: 48, weight: .semibold, design: .default)
+        static let regular = Font.system(size: 48, weight: .semibold, design: .default)
             .leafTracking(-0.02)
     }
 
     enum title {
-        static let large   = Font.system(size: 28, weight: .semibold, design: .default)
+        static let large = Font.system(size: 28, weight: .semibold, design: .default)
             .leafTracking(-0.01)
-        static let medium  = Font.system(size: 22, weight: .semibold, design: .default)
-        static let small   = Font.system(size: 17, weight: .semibold, design: .default)
+        static let medium = Font.system(size: 22, weight: .semibold, design: .default)
+        static let small = Font.system(size: 17, weight: .semibold, design: .default)
     }
 
     enum body {
-        static let large   = Font.system(size: 17, weight: .regular,  design: .default)
-        static let regular = Font.system(size: 15, weight: .regular,  design: .default)
-        static let small   = Font.system(size: 13, weight: .regular,  design: .default)
+        static let large = Font.system(size: 17, weight: .regular, design: .default)
+        static let regular = Font.system(size: 15, weight: .regular, design: .default)
+        static let small = Font.system(size: 13, weight: .regular, design: .default)
     }
 
     static let caption = Font.system(size: 12, weight: .regular, design: .default)
@@ -33,23 +33,23 @@ enum LeafType {
     static let label = Font.system(size: 11, weight: .medium, design: .default)
 
     enum mono {
-        static let regular = Font.system(size: 14, weight: .regular,  design: .monospaced)
-        static let small   = Font.system(size: 12, weight: .regular,  design: .monospaced)
+        static let regular = Font.system(size: 14, weight: .regular, design: .monospaced)
+        static let small = Font.system(size: 12, weight: .regular, design: .monospaced)
         /// Track 2 / D3 — large monospaced display for OAuth user codes (GitHub
         /// device flow `.awaitingAuthorization` state). Single consumer in D3;
         /// surface as T2 token so we don't sprinkle raw Font.system(size:28)
         /// across views. No T3 component-token layer — single use-site.
-        static let large   = Font.system(size: 28, weight: .semibold, design: .monospaced)
+        static let large = Font.system(size: 28, weight: .semibold, design: .monospaced)
     }
 }
 
-private extension Font {
+extension Font {
     /// `.tracking(...)` is iOS/macOS 16+. Tracking is in points relative to em-width
     /// (Apple uses points, not em). For label tracking we rely on `Text.tracking()` modifier;
     /// here we keep the Font value and apply tracking at the Text level when needed via
     /// `.tracking(0.04 * fontSize)` rule of thumb. For display/title we leverage
     /// `.tracking(...)` inline at consumer if needed.
-    func leafTracking(_ ems: CGFloat) -> Font {
+    fileprivate func leafTracking(_ ems: CGFloat) -> Font {
         // Font has no native tracking; tracking is applied via Text modifier.
         // Returning self preserves call-site pattern; consumers wrap Text with .tracking() per spec.
         return self

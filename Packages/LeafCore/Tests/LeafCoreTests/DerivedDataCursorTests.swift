@@ -1,6 +1,7 @@
+import Foundation
 // Phase Track-6 P2 — per-DerivedData-hash mtime cursor (provider_snapshots backed).
 import Testing
-import Foundation
+
 @testable import LeafCore
 
 @Suite("DerivedDataCursor / ProviderSnapshots-backed")

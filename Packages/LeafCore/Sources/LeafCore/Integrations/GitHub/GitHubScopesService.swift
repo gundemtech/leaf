@@ -39,14 +39,14 @@ public actor GitHubScopesService {
         "repo",
         "read:user",
         "read:org",
-        "read:project"
+        "read:project",
     ]
 
     /// Scopes которые расширяют покрытие, но MVP без них ship'ится.
     /// Banner упоминает, но не блокирует.
     public static let requiredOptional: Set<String> = [
         "security_events",
-        "read:audit_log"
+        "read:audit_log",
     ]
 
     /// Sorted union — Device Flow scope param construction (Task 14).
@@ -138,7 +138,8 @@ public actor GitHubScopesService {
     /// only → empty set. Without comma support, every token-exchange response
     /// would parse to a single weird token and surface as "all scopes missing".
     static func parseScopeString(_ raw: String) -> Set<String> {
-        let parts = raw
+        let parts =
+            raw
             .split(whereSeparator: { $0.isWhitespace || $0 == "," })
             .map { String($0) }
             .filter { !$0.isEmpty }

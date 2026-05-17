@@ -33,7 +33,7 @@ public struct VPNStateMachine: Sendable, Hashable {
         case .connected: stable = .connected
         case .disconnected, .invalid: stable = .disconnected
         case .connecting, .disconnecting, .reasserting:
-            return nil   // intermediate — никаких state-обновлений
+            return nil  // intermediate — никаких state-обновлений
         }
         defer { lastStable = stable }
         guard let prior = lastStable else { return nil }

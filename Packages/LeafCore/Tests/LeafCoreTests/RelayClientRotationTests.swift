@@ -2,8 +2,9 @@
 // URLProtocol stub harness mirror'ит RelayClientTests pattern (file-local
 // subclass duplicate per spec §5.1 — test isolation, no cross-file static state).
 
-import XCTest
 import Foundation
+import XCTest
+
 @testable import LeafCore
 
 private final class RelayMockURLProtocol: URLProtocol {
@@ -85,9 +86,12 @@ final class RelayClientRotationTests: XCTestCase {
         RelayClient(baseURL: stubBase, urlSession: makeStubSession())
     }
 
-    private func httpResponse(_ status: Int, url: URL? = nil, contentType: String = "application/json") -> HTTPURLResponse {
-        HTTPURLResponse(url: url ?? stubBase, statusCode: status, httpVersion: nil,
-                        headerFields: ["Content-Type": contentType])!
+    private func httpResponse(
+        _ status: Int, url: URL? = nil, contentType: String = "application/json"
+    ) -> HTTPURLResponse {
+        HTTPURLResponse(
+            url: url ?? stubBase, statusCode: status, httpVersion: nil,
+            headerFields: ["Content-Type": contentType])!
     }
 
     private let validPubkeyHex = String(repeating: "a", count: 64)
@@ -101,9 +105,10 @@ final class RelayClientRotationTests: XCTestCase {
             return (self.httpResponse(201, url: req.url), body)
         }
         let client = makeClient()
-        let token = try await client.postRotationBlob(peerPubkeyHex: validPubkeyHex,
-                                                      blob: sampleBlob,
-                                                      expiresAtMs: 1_700_000_000_000)
+        let token = try await client.postRotationBlob(
+            peerPubkeyHex: validPubkeyHex,
+            blob: sampleBlob,
+            expiresAtMs: 1_700_000_000_000)
         XCTAssertEqual(token.value, "rot_abc123")
         XCTAssertEqual(token.expiresAtMs, 1_700_000_000_000)
     }
@@ -116,9 +121,10 @@ final class RelayClientRotationTests: XCTestCase {
         let client = makeClient()
         let blob = Data([0x01, 0x02, 0x03])  // base64url no-pad → "AQID"
         let lowercasedHex = "aabbccdd" + String(repeating: "0", count: 56)
-        _ = try await client.postRotationBlob(peerPubkeyHex: lowercasedHex,
-                                              blob: blob,
-                                              expiresAtMs: 9_999_999_999)
+        _ = try await client.postRotationBlob(
+            peerPubkeyHex: lowercasedHex,
+            blob: blob,
+            expiresAtMs: 9_999_999_999)
         let req = try XCTUnwrap(RelayMockURLProtocol.lastRequest)
         let body = try XCTUnwrap(RelayMockURLProtocol.lastBody)
 
@@ -137,8 +143,9 @@ final class RelayClientRotationTests: XCTestCase {
         RelayMockURLProtocol.handler = { req, _ in (self.httpResponse(400, url: req.url), nil) }
         let client = makeClient()
         do {
-            _ = try await client.postRotationBlob(peerPubkeyHex: validPubkeyHex,
-                                                  blob: sampleBlob, expiresAtMs: 1)
+            _ = try await client.postRotationBlob(
+                peerPubkeyHex: validPubkeyHex,
+                blob: sampleBlob, expiresAtMs: 1)
             XCTFail("expected throw")
         } catch let LeafError.rotationRequestRejected(reason) {
             XCTAssertEqual(reason, "bad-input")
@@ -151,8 +158,9 @@ final class RelayClientRotationTests: XCTestCase {
         RelayMockURLProtocol.handler = { req, _ in (self.httpResponse(413, url: req.url), nil) }
         let client = makeClient()
         do {
-            _ = try await client.postRotationBlob(peerPubkeyHex: validPubkeyHex,
-                                                  blob: sampleBlob, expiresAtMs: 1)
+            _ = try await client.postRotationBlob(
+                peerPubkeyHex: validPubkeyHex,
+                blob: sampleBlob, expiresAtMs: 1)
             XCTFail("expected throw")
         } catch let LeafError.rotationRequestRejected(reason) {
             XCTAssertEqual(reason, "size")
@@ -165,8 +173,9 @@ final class RelayClientRotationTests: XCTestCase {
         RelayMockURLProtocol.handler = { req, _ in (self.httpResponse(415, url: req.url), nil) }
         let client = makeClient()
         do {
-            _ = try await client.postRotationBlob(peerPubkeyHex: validPubkeyHex,
-                                                  blob: sampleBlob, expiresAtMs: 1)
+            _ = try await client.postRotationBlob(
+                peerPubkeyHex: validPubkeyHex,
+                blob: sampleBlob, expiresAtMs: 1)
             XCTFail("expected throw")
         } catch let LeafError.rotationRequestRejected(reason) {
             XCTAssertEqual(reason, "media-type")
@@ -179,8 +188,9 @@ final class RelayClientRotationTests: XCTestCase {
         RelayMockURLProtocol.handler = { req, _ in (self.httpResponse(500, url: req.url), nil) }
         let client = makeClient()
         do {
-            _ = try await client.postRotationBlob(peerPubkeyHex: validPubkeyHex,
-                                                  blob: sampleBlob, expiresAtMs: 1)
+            _ = try await client.postRotationBlob(
+                peerPubkeyHex: validPubkeyHex,
+                blob: sampleBlob, expiresAtMs: 1)
             XCTFail("expected throw")
         } catch let LeafError.relayUnreachable(reason) {
             XCTAssertEqual(reason, "server-error")
@@ -193,8 +203,9 @@ final class RelayClientRotationTests: XCTestCase {
         RelayMockURLProtocol.networkError = URLError(.notConnectedToInternet)
         let client = makeClient()
         do {
-            _ = try await client.postRotationBlob(peerPubkeyHex: validPubkeyHex,
-                                                  blob: sampleBlob, expiresAtMs: 1)
+            _ = try await client.postRotationBlob(
+                peerPubkeyHex: validPubkeyHex,
+                blob: sampleBlob, expiresAtMs: 1)
             XCTFail("expected throw")
         } catch let LeafError.relayUnreachable(reason) {
             XCTAssertEqual(reason, "transport")
@@ -210,8 +221,9 @@ final class RelayClientRotationTests: XCTestCase {
         }
         let client = makeClient()
         do {
-            _ = try await client.postRotationBlob(peerPubkeyHex: validPubkeyHex,
-                                                  blob: sampleBlob, expiresAtMs: 1)
+            _ = try await client.postRotationBlob(
+                peerPubkeyHex: validPubkeyHex,
+                blob: sampleBlob, expiresAtMs: 1)
             XCTFail("expected throw")
         } catch let LeafError.relayUnreachable(reason) {
             XCTAssertEqual(reason, "malformed-response")
@@ -236,11 +248,11 @@ final class RelayClientRotationTests: XCTestCase {
         // Two rotations; "3q2-7w" decodes to [0xDE,0xAD,0xBE,0xEF].
         RelayMockURLProtocol.handler = { req, _ in
             let body = #"""
-            {"rotations":[
-                {"rotation_id":"rot_one","blob":"3q2-7w","expires_at_ms":1700000000000},
-                {"rotation_id":"rot_two","blob":"AQID","expires_at_ms":1700000999999}
-            ]}
-            """#.data(using: .utf8)!
+                {"rotations":[
+                    {"rotation_id":"rot_one","blob":"3q2-7w","expires_at_ms":1700000000000},
+                    {"rotation_id":"rot_two","blob":"AQID","expires_at_ms":1700000999999}
+                ]}
+                """#.data(using: .utf8)!
             return (self.httpResponse(200, url: req.url), body)
         }
         let client = makeClient()

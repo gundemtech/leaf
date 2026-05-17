@@ -1,5 +1,6 @@
 import XCTest
 import os
+
 @testable import LeafCore
 
 final class GitHubWarmSchedulerTests: XCTestCase {
@@ -37,7 +38,7 @@ final class GitHubWarmSchedulerTests: XCTestCase {
         await s.start()
         await s.start()  // second start is no-op
         await s.stop()
-        await s.stop()   // second stop is no-op
+        await s.stop()  // second stop is no-op
     }
 
     func testStopIsPromptEvenWithLongInterval() async throws {

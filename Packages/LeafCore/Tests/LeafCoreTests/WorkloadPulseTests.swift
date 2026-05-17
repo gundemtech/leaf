@@ -14,8 +14,9 @@
 // верифицирует, что `WorkloadPulsePeriod(rawValue:)` returns nil для
 // невалидного raw, и что .today как default produces валидный payload.
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class WorkloadPulseTests: XCTestCase {
@@ -46,7 +47,7 @@ final class WorkloadPulseTests: XCTestCase {
                 "channel": channel,
                 "count": String(count),
                 "period_start_ms": String(atMs - 1000),
-                "period_end_ms": String(atMs)
+                "period_end_ms": String(atMs),
             ]
         )
     }
@@ -65,7 +66,7 @@ final class WorkloadPulseTests: XCTestCase {
                 "doc_count": "0",
                 "other_count": String(count),
                 "period_start_ms": String(atMs - 1000),
-                "period_end_ms": String(atMs)
+                "period_end_ms": String(atMs),
             ]
         )
     }
@@ -83,7 +84,7 @@ final class WorkloadPulseTests: XCTestCase {
                 "workflow_name": "ci.yml",
                 "event": "push",
                 "status": status,
-                "created_at_ms": String(atMs)
+                "created_at_ms": String(atMs),
             ]
         )
     }
@@ -139,7 +140,7 @@ final class WorkloadPulseTests: XCTestCase {
                     "my_open_prs": 5,
                     "notifications_unread": 12,
                     "active_repos_count": 2,
-                    "contributions_today": 7
+                    "contributions_today": 7,
                 ],
                 derivedMode: nil,
                 nowMs: 1_700_000_001_000,
@@ -159,11 +160,11 @@ final class WorkloadPulseTests: XCTestCase {
                         "days_remaining": 3,
                         "scope_count": 10,
                         "starts_at_ms": 1_700_000_000_000,
-                        "ends_at_ms": 1_700_500_000_000
+                        "ends_at_ms": 1_700_500_000_000,
                     ] as [String: Any],
                     "all_team_cycles": [],
                     "last_touched_issue_id": "LEA-1",
-                    "last_touched_ts": 0
+                    "last_touched_ts": 0,
                 ],
                 derivedMode: nil,
                 nowMs: 1_700_000_002_000,
@@ -177,7 +178,7 @@ final class WorkloadPulseTests: XCTestCase {
                         "is_active": false,
                         "snooze_until_ms": 0,
                         "next_dnd_start_ms": 0,
-                        "next_dnd_end_ms": 0
+                        "next_dnd_end_ms": 0,
                     ] as [String: Any],
                     "status_emoji": "",
                     "status_expiration_ts": 0,
@@ -185,7 +186,7 @@ final class WorkloadPulseTests: XCTestCase {
                     "huddle_channel": "",
                     "last_activity_channel": "general",
                     "mention_count_today": 0,
-                    "file_count_today": 0
+                    "file_count_today": 0,
                 ],
                 derivedMode: nil,
                 nowMs: 1_700_000_003_000,
@@ -255,8 +256,9 @@ final class WorkloadPulseTests: XCTestCase {
         // (a) Невалидный raw → nil.
         XCTAssertNil(PresenceInsights.WorkloadPulsePeriod(rawValue: "invalid_period"))
         XCTAssertNil(PresenceInsights.WorkloadPulsePeriod(rawValue: ""))
-        XCTAssertNil(PresenceInsights.WorkloadPulsePeriod(rawValue: "yesterday"),
-                     "yesterday — TimelinePeriod value, не WorkloadPulsePeriod (расходящиеся enum'ы)")
+        XCTAssertNil(
+            PresenceInsights.WorkloadPulsePeriod(rawValue: "yesterday"),
+            "yesterday — TimelinePeriod value, не WorkloadPulsePeriod (расходящиеся enum'ы)")
 
         // (b) Валидный fallback на today produces non-throwing payload даже
         // на пустой DB (mirror к testExecute_NoData_ReturnsZeros, но проверяет

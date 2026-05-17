@@ -16,7 +16,7 @@ struct GetCurrentPresenceTool: ToolExecutor {
         let schema: [String: Any] = [
             "type": "object",
             "properties": [:] as [String: Any],
-            "additionalProperties": false
+            "additionalProperties": false,
         ]
         return ToolDefinition(
             name: "get_current_presence",
@@ -33,9 +33,13 @@ struct GetCurrentPresenceTool: ToolExecutor {
     func execute(arguments: AnyCodable?) async throws -> ToolCallResult {
         guard FileManager.default.fileExists(atPath: dbURL.path) else {
             return ToolCallResult(
-                content: [.text(TextContent(
-                    text: "Leaf database not found at \(dbURL.path). Enable 'Background collection' in Settings first."
-                ))],
+                content: [
+                    .text(
+                        TextContent(
+                            text:
+                                "Leaf database not found at \(dbURL.path). Enable 'Background collection' in Settings first."
+                        ))
+                ],
                 isError: true
             )
         }

@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class RotationPlaintextTests: XCTestCase {
@@ -19,7 +20,7 @@ final class RotationPlaintextTests: XCTestCase {
         return RotationPlaintext(
             kind: .tombstone,
             newTeamKeyBase64: "",
-            newKeyID: priorID,                 // == priorKeyID for tombstone
+            newKeyID: priorID,  // == priorKeyID for tombstone
             priorKeyID: priorID,
             generatedAtMs: 1_730_000_000_000,
             removedMemberID: "99999999-8888-7777-6666-555555555555"

@@ -14,12 +14,13 @@ struct LeafMetricAmbientPreview: View {
 
             HStack(alignment: .top, spacing: LeafSpace.xxl) {
                 LeafMetricAmbient(value: "4h 32m", label: "focus today")
-                LeafMetricAmbient(value: "27",     label: "commits this week")
-                LeafMetricAmbient(value: "8",      label: "context switches / hr")
+                LeafMetricAmbient(value: "27", label: "commits this week")
+                LeafMetricAmbient(value: "8", label: "context switches / hr")
             }
 
             TokensInlineSpec(
-                spec: "LeafMetricAmbient · display.regular monospaced digits · body.small tertiary label · no card chrome",
+                spec:
+                    "LeafMetricAmbient · display.regular monospaced digits · body.small tertiary label · no card chrome",
                 codeSnippet: "LeafMetricAmbient(value: \"4h 32m\", label: \"focus today\")"
             )
         }

@@ -12,7 +12,7 @@ struct LeafDividerPreview: View {
             Text("LeafDivider").font(LeafType.title.medium).foregroundStyle(LeafColor.text.primary)
             VStack(alignment: .leading, spacing: LeafSpace.md) {
                 labelled("hairline") { LeafDivider(style: .hairline) }
-                labelled("soft")     { LeafDivider(style: .soft) }
+                labelled("soft") { LeafDivider(style: .soft) }
             }
             TokensInlineSpec(
                 spec: "LeafDivider · hairline / soft · 1pt LeafColor.border.subtle",
@@ -25,8 +25,10 @@ struct LeafDividerPreview: View {
     }
 
     @ViewBuilder
-    private func labelled<Content: View>(_ label: String,
-                                         @ViewBuilder content: () -> Content) -> some View {
+    private func labelled<Content: View>(
+        _ label: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
         VStack(alignment: .leading, spacing: LeafSpace.xs) {
             Text(label)
                 .font(LeafType.mono.small)

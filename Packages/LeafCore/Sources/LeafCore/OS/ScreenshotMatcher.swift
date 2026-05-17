@@ -11,17 +11,17 @@ public struct ScreenshotMatcher: Sendable {
         "Screenshot",
         "Screen Shot",
         "Снимок экрана",
-        "Bildschirm",          // German — covers Bildschirmfoto / Bildschirmaufnahme
+        "Bildschirm",  // German — covers Bildschirmfoto / Bildschirmaufnahme
         "Capture d'écran",
         "Captura de pantalla",
-        "スクリーンショット",      // Japanese
-        "스크린샷",              // Korean
-        "Cattura schermata",   // Italian
-        "Captura de tela"      // Portuguese (Brazil)
+        "スクリーンショット",  // Japanese
+        "스크린샷",  // Korean
+        "Cattura schermata",  // Italian
+        "Captura de tela",  // Portuguese (Brazil)
     ]
 
     public static let allowedExtensions: Set<String> = [
-        "png", "heic", "jpg", "jpeg", "pdf"
+        "png", "heic", "jpg", "jpeg", "pdf",
     ]
 
     private let prefixes: [String]

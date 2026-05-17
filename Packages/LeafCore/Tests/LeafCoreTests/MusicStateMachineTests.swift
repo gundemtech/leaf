@@ -1,10 +1,12 @@
 import XCTest
+
 @testable import LeafCore
 
 final class MusicStateMachineTests: XCTestCase {
     func testFirstObservationEmits() {
         var sm = MusicStateMachine()
-        let events = sm.observe(MusicTrackObservation(trackName: "A", artistName: "B", playerState: .playing), nowMs: 1000)
+        let events = sm.observe(
+            MusicTrackObservation(trackName: "A", artistName: "B", playerState: .playing), nowMs: 1000)
         XCTAssertEqual(events.count, 1)
         XCTAssertEqual(events[0].payload["event_kind"], "music_track_changed")
         XCTAssertEqual(events[0].payload["track"], "A")
@@ -22,7 +24,8 @@ final class MusicStateMachineTests: XCTestCase {
     func testTrackChangeEmits() {
         var sm = MusicStateMachine()
         _ = sm.observe(MusicTrackObservation(trackName: "A", artistName: "B", playerState: .playing), nowMs: 1000)
-        let events = sm.observe(MusicTrackObservation(trackName: "C", artistName: "B", playerState: .playing), nowMs: 2000)
+        let events = sm.observe(
+            MusicTrackObservation(trackName: "C", artistName: "B", playerState: .playing), nowMs: 2000)
         XCTAssertEqual(events.count, 1)
         XCTAssertEqual(events[0].payload["track"], "C")
     }
@@ -30,7 +33,8 @@ final class MusicStateMachineTests: XCTestCase {
     func testPlayerStateFlipEmits() {
         var sm = MusicStateMachine()
         _ = sm.observe(MusicTrackObservation(trackName: "A", artistName: "B", playerState: .playing), nowMs: 1000)
-        let events = sm.observe(MusicTrackObservation(trackName: "A", artistName: "B", playerState: .paused), nowMs: 2000)
+        let events = sm.observe(
+            MusicTrackObservation(trackName: "A", artistName: "B", playerState: .paused), nowMs: 2000)
         XCTAssertEqual(events.count, 1)
         XCTAssertEqual(events[0].payload["player_state"], "paused")
     }

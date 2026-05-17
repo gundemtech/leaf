@@ -4,6 +4,7 @@
 //   - P5 started/ended/calendar_linked use distinct icons for aggregated session view
 
 import XCTest
+
 @testable import LeafCore
 
 final class EventKindIconZoomP5Tests: XCTestCase {

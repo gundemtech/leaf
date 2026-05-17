@@ -3,8 +3,9 @@
 // X25519 priv to <root>/x25519.priv (0o600); second call reads existing file
 // и returns same key. Mirror OrgServiceTests tempDir setUp/tearDown discipline.
 
-import XCTest
 import CryptoKit
+import XCTest
+
 @testable import LeafCore
 
 final class IdentityServiceTests: XCTestCase {
@@ -96,18 +97,22 @@ final class IdentityServiceTests: XCTestCase {
         let injected = Curve25519.KeyAgreement.PrivateKey()
         let counter = CallCounter()
 
-        let first = try IdentityService.ensureLocalIdentity(at: tempRoot, generate: {
-            counter.increment()
-            return injected
-        })
+        let first = try IdentityService.ensureLocalIdentity(
+            at: tempRoot,
+            generate: {
+                counter.increment()
+                return injected
+            })
         XCTAssertEqual(first.rawRepresentation, injected.rawRepresentation)
         XCTAssertEqual(counter.value, 1)
 
         // Second call — should hit read path, generator must NOT be invoked again.
-        let second = try IdentityService.ensureLocalIdentity(at: tempRoot, generate: {
-            counter.increment()
-            return Curve25519.KeyAgreement.PrivateKey()  // different key — would mismatch если invoked
-        })
+        let second = try IdentityService.ensureLocalIdentity(
+            at: tempRoot,
+            generate: {
+                counter.increment()
+                return Curve25519.KeyAgreement.PrivateKey()  // different key — would mismatch если invoked
+            })
         XCTAssertEqual(second.rawRepresentation, injected.rawRepresentation)
         XCTAssertEqual(counter.value, 1, "generate() must not be called when file exists")
     }
@@ -121,12 +126,14 @@ private final class CallCounter: @unchecked Sendable {
     private var _value = 0
 
     func increment() {
-        lock.lock(); defer { lock.unlock() }
+        lock.lock()
+        defer { lock.unlock() }
         _value += 1
     }
 
     var value: Int {
-        lock.lock(); defer { lock.unlock() }
+        lock.lock()
+        defer { lock.unlock() }
         return _value
     }
 }

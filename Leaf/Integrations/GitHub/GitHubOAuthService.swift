@@ -17,11 +17,12 @@
 //  loopback redirect; client_id публичный).
 //
 
-import Foundation
-import SwiftUI
 import AppKit
+import Foundation
 import LeafCore
+import SwiftUI
 import os
+
 #if LEAF_PROD
 import LeafCorePrivate
 #endif
@@ -40,7 +41,8 @@ private let oauthLogger = Logger(subsystem: "tech.gundem.leaf.app", category: "g
 /// "no scopes granted" → all required core surfaced as missing.
 private func parseScopeString(_ raw: String?) -> Set<String> {
     guard let raw else { return [] }
-    let parts = raw
+    let parts =
+        raw
         .split(whereSeparator: { $0.isWhitespace || $0 == "," })
         .map { String($0) }
         .filter { !$0.isEmpty }
@@ -219,7 +221,7 @@ final class GitHubOAuthService {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.httpBody = Self.formEncoded([
             "client_id": clientID,
-            "scope": scopeParameter
+            "scope": scopeParameter,
         ])
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -231,7 +233,9 @@ final class GitHubOAuthService {
             if let errorPayload = try? JSONDecoder().decode(GitHubTokenError.self, from: data) {
                 throw makeError(errorPayload.errorDescription ?? errorPayload.error)
             }
-            throw makeError("Device code endpoint returned HTTP \(http.statusCode). Verify 'Enable Device Flow' is ON in the GitHub OAuth App.")
+            throw makeError(
+                "Device code endpoint returned HTTP \(http.statusCode). Verify 'Enable Device Flow' is ON in the GitHub OAuth App."
+            )
         }
         return try JSONDecoder().decode(GitHubDeviceCodeResponse.self, from: data)
     }
@@ -309,7 +313,7 @@ final class GitHubOAuthService {
         request.httpBody = Self.formEncoded([
             "client_id": clientID,
             "device_code": deviceCode,
-            "grant_type": "urn:ietf:params:oauth:grant-type:device_code"
+            "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
         ])
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -321,7 +325,8 @@ final class GitHubOAuthService {
         // polling — error code lives in JSON, not status.
         if http.statusCode == 200 {
             if let success = try? JSONDecoder().decode(GitHubTokenResponse.self, from: data),
-               !success.accessToken.isEmpty {
+                !success.accessToken.isEmpty
+            {
                 return .success(success)
             }
             if let errorPayload = try? JSONDecoder().decode(GitHubTokenError.self, from: data) {
@@ -412,8 +417,8 @@ final class GitHubOAuthService {
 
     private func readClientID() -> String? {
         guard let id = Bundle.main.object(forInfoDictionaryKey: "LeafGitHubOAuthClientID") as? String,
-              !id.isEmpty,
-              !id.contains("$(")
+            !id.isEmpty,
+            !id.contains("$(")
         else { return nil }
         return id
     }

@@ -2,6 +2,7 @@
 // in `pending_invites.status` column.
 
 import XCTest
+
 @testable import LeafCore
 
 final class PendingInviteStatusTests: XCTestCase {

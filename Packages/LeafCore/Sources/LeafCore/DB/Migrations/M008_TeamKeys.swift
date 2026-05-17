@@ -13,8 +13,8 @@ import GRDB
 /// зашифрованной под past keys (contract §12). Никакого GC без явного user action.
 ///
 /// Partial index `team_keys_active` — query "current key" дёшево (1 row).
-public extension DatabaseMigrator {
-    mutating func registerMigration008TeamKeys() {
+extension DatabaseMigrator {
+    public mutating func registerMigration008TeamKeys() {
         registerMigration("008_team_keys") { db in
             try db.create(table: Schema.TeamKeys.tableName, ifNotExists: true) { t in
                 t.primaryKey(Schema.TeamKeys.id, .text)

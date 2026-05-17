@@ -53,11 +53,11 @@ public enum LinearAttachmentParser {
         guard !url.isEmpty else { return nil }
         let range = NSRange(url.startIndex..., in: url)
         guard let match = githubPRPattern.firstMatch(in: url, options: [], range: range),
-              match.numberOfRanges == 4,
-              let ownerR = Range(match.range(at: 1), in: url),
-              let repoR = Range(match.range(at: 2), in: url),
-              let numR = Range(match.range(at: 3), in: url),
-              let num = Int(url[numR])
+            match.numberOfRanges == 4,
+            let ownerR = Range(match.range(at: 1), in: url),
+            let repoR = Range(match.range(at: 2), in: url),
+            let numR = Range(match.range(at: 3), in: url),
+            let num = Int(url[numR])
         else { return nil }
         let owner = String(url[ownerR])
         let repo = String(url[repoR])
@@ -73,9 +73,9 @@ public enum LinearAttachmentParser {
         guard !url.isEmpty else { return nil }
         let range = NSRange(url.startIndex..., in: url)
         guard let match = slackPermalinkPattern.firstMatch(in: url, options: [], range: range),
-              match.numberOfRanges == 3,
-              let channelR = Range(match.range(at: 1), in: url),
-              let tsR = Range(match.range(at: 2), in: url)
+            match.numberOfRanges == 3,
+            let channelR = Range(match.range(at: 1), in: url),
+            let tsR = Range(match.range(at: 2), in: url)
         else { return nil }
         let channelID = String(url[channelR])
         let rawTs = String(url[tsR])

@@ -78,7 +78,9 @@ public actor LinearCollector {
             Task { await self?.kickTick() }
         }
         loopTask = Task { [weak self] in await self?.runLoop() }
-        logger.info("LinearCollector started (interval=\(self.intervalSec, privacy: .public)s, backfill=\(self.backfillWindowDays, privacy: .public)d)")
+        logger.info(
+            "LinearCollector started (interval=\(self.intervalSec, privacy: .public)s, backfill=\(self.backfillWindowDays, privacy: .public)d)"
+        )
     }
 
     /// Phase 4.5 — одноразовый wipe Linear events + cursor для перехода на
@@ -91,9 +93,13 @@ public actor LinearCollector {
         do {
             let result = try database.purgeLinearAttributionV2()
             userDefaults.set(true, forKey: Self.attributionV2MigrationFlagKey)
-            logger.info("Linear attribution_v2 migration: events=\(result.eventsDeleted, privacy: .public) wiped, offsets=\(result.offsetsDeleted, privacy: .public) reset")
+            logger.info(
+                "Linear attribution_v2 migration: events=\(result.eventsDeleted, privacy: .public) wiped, offsets=\(result.offsetsDeleted, privacy: .public) reset"
+            )
         } catch {
-            logger.error("Linear attribution_v2 migration failed: \(String(describing: error), privacy: .public) — will retry next start")
+            logger.error(
+                "Linear attribution_v2 migration failed: \(String(describing: error), privacy: .public) — will retry next start"
+            )
         }
     }
 
@@ -293,7 +299,9 @@ public actor LinearCollector {
             return TickResult(skipped: false, issuesProcessed: 0, cursorAdvancedMs: nil)
         }
         if !events.isEmpty {
-            logger.info("tick wrote \(events.count, privacy: .public) events (\(batch.issues.count, privacy: .public) issues + \(batch.transitions.count, privacy: .public) transitions + \(commentEvents.count, privacy: .public) comments + 1 workload pulse + \(cycleEvents.count, privacy: .public) cycle progress), cursor=\(offset.lastModifiedMs, privacy: .public)")
+            logger.info(
+                "tick wrote \(events.count, privacy: .public) events (\(batch.issues.count, privacy: .public) issues + \(batch.transitions.count, privacy: .public) transitions + \(commentEvents.count, privacy: .public) comments + 1 workload pulse + \(cycleEvents.count, privacy: .public) cycle progress), cursor=\(offset.lastModifiedMs, privacy: .public)"
+            )
         }
         return TickResult(
             skipped: false,
@@ -312,7 +320,7 @@ public actor LinearCollector {
             "title": issue.title,
             "status": issue.status,
             "project": issue.project,
-            "team_key": issue.teamKey
+            "team_key": issue.teamKey,
         ]
         // Phase 4.6.A.2 — completion duration. Только non-nil → ключ присутствует;
         // отсутствие ключа в payload отличает "не знаем" от "0 секунд" (instant
@@ -352,7 +360,8 @@ public actor LinearCollector {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
             if let data = try? encoder.encode(issue.comments),
-               let str = String(data: data, encoding: .utf8) {
+                let str = String(data: data, encoding: .utf8)
+            {
                 payload[Schema.EventPayloadKeys.commentBodiesJson] = str
             }
         }
@@ -360,7 +369,8 @@ public actor LinearCollector {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
             if let data = try? encoder.encode(issue.attachments),
-               let str = String(data: data, encoding: .utf8) {
+                let str = String(data: data, encoding: .utf8)
+            {
                 payload[Schema.EventPayloadKeys.attachmentsJson] = str
             }
         }
@@ -386,7 +396,7 @@ public actor LinearCollector {
                 "issue_key": issue.issueKey,
                 "team_key": issue.teamKey,
                 "count_in_window": String(issue.commentCountInWindow),
-                "period_end_ms": String(periodEndMs)
+                "period_end_ms": String(periodEndMs),
             ]
         )
     }
@@ -415,7 +425,7 @@ public actor LinearCollector {
             "source": "linear",
             "event_kind": "linear_assigned_workload_pulse",
             "started_count": String(snapshot.startedCount),
-            "top_priority": Self.priorityString(snapshot.topPriority)
+            "top_priority": Self.priorityString(snapshot.topPriority),
         ]
         if let id = snapshot.lastTouchedIdentifier {
             payload["last_touched_identifier"] = id
@@ -447,7 +457,7 @@ public actor LinearCollector {
                 Schema.EventPayloadKeys.issueId: r.issueId,
                 Schema.EventPayloadKeys.issueIdentifier: r.issueIdentifier,
                 Schema.EventPayloadKeys.emoji: r.emoji,
-                Schema.EventPayloadKeys.reactedAtMs: String(r.createdAtMs)
+                Schema.EventPayloadKeys.reactedAtMs: String(r.createdAtMs),
             ]
         )
     }
@@ -467,7 +477,7 @@ public actor LinearCollector {
                 Schema.EventPayloadKeys.toIssueId: r.toIssueId,
                 Schema.EventPayloadKeys.toIssueIdentifier: r.toIssueIdentifier,
                 Schema.EventPayloadKeys.relationKind: r.relationKind,
-                Schema.EventPayloadKeys.startedAtMs: String(r.transitionedAtMs)
+                Schema.EventPayloadKeys.startedAtMs: String(r.transitionedAtMs),
             ]
         )
     }
@@ -487,7 +497,7 @@ public actor LinearCollector {
                 Schema.EventPayloadKeys.toIssueId: r.toIssueId,
                 Schema.EventPayloadKeys.toIssueIdentifier: r.toIssueIdentifier,
                 Schema.EventPayloadKeys.relationKind: r.relationKind,
-                Schema.EventPayloadKeys.removedAtMs: String(r.transitionedAtMs)
+                Schema.EventPayloadKeys.removedAtMs: String(r.transitionedAtMs),
             ]
         )
     }
@@ -506,7 +516,7 @@ public actor LinearCollector {
                 Schema.EventPayloadKeys.teamId: t.teamId,
                 Schema.EventPayloadKeys.toStateName: t.toStateName,
                 Schema.EventPayloadKeys.toStateType: t.toStateType,
-                Schema.EventPayloadKeys.startedAtMs: String(t.transitionedAtMs)
+                Schema.EventPayloadKeys.startedAtMs: String(t.transitionedAtMs),
             ]
         )
     }
@@ -522,7 +532,7 @@ public actor LinearCollector {
             Schema.EventPayloadKeys.teamId: t.teamId,
             Schema.EventPayloadKeys.toStateName: t.toStateName,
             Schema.EventPayloadKeys.toStateType: t.toStateType,
-            Schema.EventPayloadKeys.completedAtMs: String(t.transitionedAtMs)
+            Schema.EventPayloadKeys.completedAtMs: String(t.transitionedAtMs),
         ]
         if let rk = t.resolutionKind {
             payload[Schema.EventPayloadKeys.resolutionKind] = rk
@@ -567,7 +577,7 @@ public actor LinearCollector {
                 "days_remaining": String(team.daysRemaining),
                 "scope_count": String(team.scopeCount),
                 "starts_at_ms": String(team.startsAtMs),
-                "ends_at_ms": String(team.endsAtMs)
+                "ends_at_ms": String(team.endsAtMs),
             ]
         )
     }
@@ -606,7 +616,7 @@ public actor LinearCollector {
                 "days_remaining": team.daysRemaining,
                 "scope_count": team.scopeCount,
                 "starts_at_ms": team.startsAtMs,
-                "ends_at_ms": team.endsAtMs
+                "ends_at_ms": team.endsAtMs,
             ]
         }
         let firstCycle: [String: Any] = cyclesArray.first ?? [:]
@@ -617,7 +627,7 @@ public actor LinearCollector {
             "current_cycle": firstCycle,
             "all_team_cycles": cyclesArray,
             "last_touched_issue_id": workload.lastTouchedIdentifier ?? "",
-            "last_touched_ts": workload.lastTouchedTs ?? 0
+            "last_touched_ts": workload.lastTouchedTs ?? 0,
         ]
     }
 
@@ -642,7 +652,7 @@ public actor LinearCollector {
             "event_kind": "linear_initiative_observed",
             "initiative_id": i.initiativeId,
             "name": i.name,
-            "observed_at": String(i.observedAtMs)
+            "observed_at": String(i.observedAtMs),
         ]
         if let s = i.status { payload["status"] = s }
         return RawEvent(
@@ -662,7 +672,7 @@ public actor LinearCollector {
             "event_kind": "linear_document_edited",
             "document_id": d.documentId,
             "updated_at": String(d.updatedAtMs),
-            "title": d.title
+            "title": d.title,
         ]
         if let pid = d.projectId { payload["project_id"] = pid }
         if let pname = d.projectName { payload["project_name"] = pname }
@@ -685,7 +695,7 @@ public actor LinearCollector {
             "update_id": pu.updateId,
             "project_id": pu.projectId,
             "project_name": pu.projectName,
-            "created_at": String(pu.createdAtMs)
+            "created_at": String(pu.createdAtMs),
         ]
         if let h = pu.health { payload["health"] = h }
         return RawEvent(
@@ -705,7 +715,7 @@ public actor LinearCollector {
             "event_kind": "linear_estimate_changed",
             "issue_key": t.issueKey,
             "history_id": t.historyId,
-            "transition_at": String(t.transitionAtMs)
+            "transition_at": String(t.transitionAtMs),
         ]
         if let f = t.fromEstimate { payload["from_estimate"] = String(f) }
         if let to = t.toEstimate { payload["to_estimate"] = String(to) }
@@ -727,7 +737,7 @@ public actor LinearCollector {
             "event_kind": "linear_cycle_changed",
             "issue_key": t.issueKey,
             "history_id": t.historyId,
-            "transition_at": String(t.transitionAtMs)
+            "transition_at": String(t.transitionAtMs),
         ]
         if let id = t.fromCycleId { payload["from_cycle_id"] = id }
         if let name = t.fromCycleName { payload["from_cycle_name"] = name }
@@ -755,7 +765,7 @@ public actor LinearCollector {
                 "issue_key": t.issueKey,
                 "history_id": t.historyId,
                 "bucket": t.bucket.rawValue,
-                "transition_at": String(t.transitionAtMs)
+                "transition_at": String(t.transitionAtMs),
             ]
         )
     }
@@ -779,7 +789,7 @@ public actor LinearCollector {
                 "history_id": t.historyId,
                 "label_id": t.labelId,
                 "label_name": t.labelName,
-                "transition_at": String(t.transitionAtMs)
+                "transition_at": String(t.transitionAtMs),
             ]
         )
     }
@@ -801,7 +811,7 @@ public actor LinearCollector {
                 "history_id": t.historyId,
                 "from_priority": String(t.fromPriority),
                 "to_priority": String(t.toPriority),
-                "transition_at": String(t.transitionAtMs)
+                "transition_at": String(t.transitionAtMs),
             ]
         )
     }
@@ -818,7 +828,7 @@ public actor LinearCollector {
             "history_id": t.historyId,
             "to_state_name": t.toStateName,
             "to_state_type": t.toStateType,
-            "transition_at": String(t.transitionAtMs)
+            "transition_at": String(t.transitionAtMs),
         ]
         if let n = t.fromStateName { payload["from_state_name"] = n }
         if let ty = t.fromStateType { payload["from_state_type"] = ty }

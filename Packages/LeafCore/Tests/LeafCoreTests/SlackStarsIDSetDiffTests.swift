@@ -7,6 +7,7 @@
 //
 
 import XCTest
+
 @testable import LeafCore
 
 final class SlackStarsIDSetDiffTests: XCTestCase {
@@ -26,7 +27,7 @@ final class SlackStarsIDSetDiffTests: XCTestCase {
         ])
         let curr = SlackStarsSnapshot(stars: [
             SlackStarItem(itemRef: "C1:100.0", savedAtMs: 500),
-            SlackStarItem(itemRef: "C2:200.0", savedAtMs: 800)
+            SlackStarItem(itemRef: "C2:200.0", savedAtMs: 800),
         ])
         let (saved, unsaved) = SlackWarmCollector.starsDiff(prior: prior, current: curr)
         XCTAssertEqual(saved.map(\.itemRef), ["C2:200.0"])
@@ -36,7 +37,7 @@ final class SlackStarsIDSetDiffTests: XCTestCase {
     func testUnsavedItemDetected() {
         let prior = SlackStarsSnapshot(stars: [
             SlackStarItem(itemRef: "C1:100.0", savedAtMs: 500),
-            SlackStarItem(itemRef: "C2:200.0", savedAtMs: 800)
+            SlackStarItem(itemRef: "C2:200.0", savedAtMs: 800),
         ])
         let curr = SlackStarsSnapshot(stars: [
             SlackStarItem(itemRef: "C1:100.0", savedAtMs: 500)

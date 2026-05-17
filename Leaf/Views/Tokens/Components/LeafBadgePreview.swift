@@ -16,9 +16,9 @@ struct LeafBadgePreview: View {
                     .font(LeafType.mono.small)
                     .foregroundStyle(LeafColor.text.tertiary)
                 HStack(spacing: LeafSpace.sm) {
-                    LeafBadge(text: "NEW",   variant: .neutral)
-                    LeafBadge(text: "BETA",  variant: .accent)
-                    LeafBadge(text: "PRO",   variant: .accent)
+                    LeafBadge(text: "NEW", variant: .neutral)
+                    LeafBadge(text: "BETA", variant: .accent)
+                    LeafBadge(text: "PRO", variant: .accent)
                 }
 
                 Text("numeric (count)")
@@ -34,7 +34,8 @@ struct LeafBadgePreview: View {
             }
 
             TokensInlineSpec(
-                spec: "LeafBadge · neutral / accent / numeric · LeafType.mono.small · numeric enforces 18pt minSize → 1-digit renders as circle, 2+ digits expand to pill",
+                spec:
+                    "LeafBadge · neutral / accent / numeric · LeafType.mono.small · numeric enforces 18pt minSize → 1-digit renders as circle, 2+ digits expand to pill",
                 codeSnippet: "LeafBadge(count: 12)  // or LeafBadge(text: \"NEW\", variant: .accent)"
             )
         }

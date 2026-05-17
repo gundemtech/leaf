@@ -1,5 +1,6 @@
 // Packages/LeafCore/Tests/LeafCoreTests/BrowserAllowListFilterTests.swift
 import XCTest
+
 @testable import LeafCore
 
 final class BrowserAllowListFilterTests: XCTestCase {
@@ -17,18 +18,21 @@ final class BrowserAllowListFilterTests: XCTestCase {
     }
 
     func testApplyGranularityFullUrlPassthrough() {
-        XCTAssertEqual(applyGranularity("https://github.com/foo?q=1", .fullUrl),
-                       "https://github.com/foo?q=1")
+        XCTAssertEqual(
+            applyGranularity("https://github.com/foo?q=1", .fullUrl),
+            "https://github.com/foo?q=1")
     }
 
     func testApplyGranularityPathStrippedDropsQuery() {
-        XCTAssertEqual(applyGranularity("https://github.com/foo?q=1", .pathStripped),
-                       "github.com/foo")
+        XCTAssertEqual(
+            applyGranularity("https://github.com/foo?q=1", .pathStripped),
+            "github.com/foo")
     }
 
     func testApplyGranularityDomainOnly() {
-        XCTAssertEqual(applyGranularity("https://github.com/foo/bar?q=1", .domainOnly),
-                       "github.com")
+        XCTAssertEqual(
+            applyGranularity("https://github.com/foo/bar?q=1", .domainOnly),
+            "github.com")
     }
 
     func testInMemoryReaderDefaultDomainOnly() {
@@ -39,7 +43,8 @@ final class BrowserAllowListFilterTests: XCTestCase {
     func testInMemoryReaderReturnsRegisteredGranularity() {
         let reader = InMemoryDomainAllowListReader(rules: ["github.com": .fullUrl])
         XCTAssertEqual(reader.granularity(for: "github.com"), .fullUrl)
-        XCTAssertEqual(reader.granularity(for: "api.github.com"), .domainOnly,
-                       "subdomain match is exact-only")
+        XCTAssertEqual(
+            reader.granularity(for: "api.github.com"), .domainOnly,
+            "subdomain match is exact-only")
     }
 }

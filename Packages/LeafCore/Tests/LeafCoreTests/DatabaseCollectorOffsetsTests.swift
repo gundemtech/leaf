@@ -2,6 +2,7 @@
 // offset API). Atomic events+offset write — отдельным файлом ниже.
 
 import XCTest
+
 @testable import LeafCore
 
 final class DatabaseCollectorOffsetsTests: XCTestCase {
@@ -104,12 +105,13 @@ final class DatabaseCollectorOffsetsTests: XCTestCase {
     func testMigrationIdempotent() throws {
         // Первый open — создаёт обе таблицы.
         let db1 = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
-        try db1.write(RawEvent(
-            timestamp: Date(timeIntervalSince1970: 1_700_000_000),
-            signalType: .attention,
-            bundleID: "com.apple.Xcode",
-            payload: [:]
-        ))
+        try db1.write(
+            RawEvent(
+                timestamp: Date(timeIntervalSince1970: 1_700_000_000),
+                signalType: .attention,
+                bundleID: "com.apple.Xcode",
+                payload: [:]
+            ))
         try db1.checkpointWAL()
 
         // Второй open — миграции должны быть skip'нуты GRDB по identifier'у "002_collector_offsets".
@@ -129,10 +131,11 @@ final class DatabaseCollectorOffsetsTests: XCTestCase {
         }
 
         // Существующий event цел — M002 не сбросил M001 data.
-        let count = try db2.eventCount(in: DateInterval(
-            start: Date(timeIntervalSince1970: 1_699_000_000),
-            end: Date(timeIntervalSince1970: 1_701_000_000)
-        ))
+        let count = try db2.eventCount(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: 1_699_000_000),
+                end: Date(timeIntervalSince1970: 1_701_000_000)
+            ))
         XCTAssertEqual(count, 1, "events from первое open сохранились")
     }
 }

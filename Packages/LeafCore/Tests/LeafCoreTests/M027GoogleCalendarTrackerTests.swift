@@ -2,8 +2,9 @@
 // coverage. Mirrors IntensityAggregatesStoreTests pattern (real Database open
 // with deterministicTest encryption + writeSQL/readSQL handles).
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class M027GoogleCalendarTrackerTests: XCTestCase {
@@ -28,10 +29,12 @@ final class M027GoogleCalendarTrackerTests: XCTestCase {
     func testTableExistsAfterMigration() throws {
         let db = try openDB()
         try db.readSQL { rawDB in
-            let exists = try Bool.fetchOne(rawDB, sql: """
-                SELECT count(*) > 0 FROM sqlite_master
-                 WHERE type='table' AND name='google_calendar_typed_event_tracker'
-                """)
+            let exists = try Bool.fetchOne(
+                rawDB,
+                sql: """
+                    SELECT count(*) > 0 FROM sqlite_master
+                     WHERE type='table' AND name='google_calendar_typed_event_tracker'
+                    """)
             XCTAssertEqual(exists, true)
         }
     }
@@ -41,14 +44,16 @@ final class M027GoogleCalendarTrackerTests: XCTestCase {
         try db.readSQL { rawDB in
             let rows = try Row.fetchAll(rawDB, sql: "PRAGMA table_info(google_calendar_typed_event_tracker)")
             let names: Set<String> = Set(rows.compactMap { $0["name"] as String? })
-            XCTAssertEqual(names, [
-                "event_id", "calendar_id", "i_cal_uid", "event_type",
-                "start_ms", "end_ms",
-                "started_emitted_at_ms", "ended_emitted_at_ms",
-                "working_location_type",
-                "auto_decline_mode", "chat_status",
-                "upserted_at_ms",
-            ])
+            XCTAssertEqual(
+                names,
+                [
+                    "event_id", "calendar_id", "i_cal_uid", "event_type",
+                    "start_ms", "end_ms",
+                    "started_emitted_at_ms", "ended_emitted_at_ms",
+                    "working_location_type",
+                    "auto_decline_mode", "chat_status",
+                    "upserted_at_ms",
+                ])
             let pkRow = rows.first { ($0["pk"] as Int?) == 1 }
             XCTAssertEqual(pkRow?["name"] as String?, "event_id", "event_id must be the PK")
         }
@@ -58,11 +63,14 @@ final class M027GoogleCalendarTrackerTests: XCTestCase {
         let db = try openDB()
         try db.readSQL { rawDB in
             let indexNames: Set<String> = Set(
-                try Row.fetchAll(rawDB, sql: """
-                    SELECT name FROM sqlite_master
-                     WHERE type='index' AND tbl_name='google_calendar_typed_event_tracker'
-                    """)
-                    .compactMap { $0["name"] as String? }
+                try Row.fetchAll(
+                    rawDB,
+                    sql: """
+                        SELECT name FROM sqlite_master
+                         WHERE type='index' AND tbl_name='google_calendar_typed_event_tracker'
+                        """
+                )
+                .compactMap { $0["name"] as String? }
             )
             XCTAssertTrue(indexNames.contains("idx_gcal_tracker_scan_started"))
             XCTAssertTrue(indexNames.contains("idx_gcal_tracker_scan_ended"))
@@ -73,19 +81,21 @@ final class M027GoogleCalendarTrackerTests: XCTestCase {
     func testUpsertIdempotency() throws {
         let db = try openDB()
         try db.writeSQL { rawDB in
-            try rawDB.execute(sql: """
-                INSERT INTO google_calendar_typed_event_tracker
-                  (event_id, calendar_id, event_type, start_ms, end_ms, upserted_at_ms)
-                VALUES ('evt1', 'primary', 'focusTime', 1000, 2000, 500)
-                """)
-            try rawDB.execute(sql: """
-                INSERT INTO google_calendar_typed_event_tracker
-                  (event_id, calendar_id, event_type, start_ms, end_ms, upserted_at_ms)
-                VALUES ('evt1', 'primary', 'focusTime', 1000, 3000, 600)
-                ON CONFLICT(event_id) DO UPDATE SET
-                    end_ms = excluded.end_ms,
-                    upserted_at_ms = excluded.upserted_at_ms
-                """)
+            try rawDB.execute(
+                sql: """
+                    INSERT INTO google_calendar_typed_event_tracker
+                      (event_id, calendar_id, event_type, start_ms, end_ms, upserted_at_ms)
+                    VALUES ('evt1', 'primary', 'focusTime', 1000, 2000, 500)
+                    """)
+            try rawDB.execute(
+                sql: """
+                    INSERT INTO google_calendar_typed_event_tracker
+                      (event_id, calendar_id, event_type, start_ms, end_ms, upserted_at_ms)
+                    VALUES ('evt1', 'primary', 'focusTime', 1000, 3000, 600)
+                    ON CONFLICT(event_id) DO UPDATE SET
+                        end_ms = excluded.end_ms,
+                        upserted_at_ms = excluded.upserted_at_ms
+                    """)
         }
         try db.readSQL { rawDB in
             let row = try Row.fetchOne(

@@ -1,12 +1,15 @@
 import XCTest
+
 @testable import LeafCore
 
 final class RotationBlobHeaderTests: XCTestCase {
 
-    private func makeFullPrefix(version: UInt8 = RotationBlobHeader.currentVersion,
-                                priorKeyID: Data = Data(repeating: 0xAA, count: 16),
-                                newKeyID: Data = Data(repeating: 0xBB, count: 16),
-                                recipientPubkey: Data = Data(repeating: 0xCC, count: 32)) -> Data {
+    private func makeFullPrefix(
+        version: UInt8 = RotationBlobHeader.currentVersion,
+        priorKeyID: Data = Data(repeating: 0xAA, count: 16),
+        newKeyID: Data = Data(repeating: 0xBB, count: 16),
+        recipientPubkey: Data = Data(repeating: 0xCC, count: 32)
+    ) -> Data {
         var bytes = Data()
         bytes.append(version)
         bytes.append(priorKeyID)
@@ -21,7 +24,7 @@ final class RotationBlobHeaderTests: XCTestCase {
         let recipient = Data(repeating: 0x33, count: 32)
 
         var bytes = makeFullPrefix(priorKeyID: priorID, newKeyID: newID, recipientPubkey: recipient)
-        bytes.append(Data(repeating: 0xFF, count: 40)) // tail (nonce + ct + tag substitute)
+        bytes.append(Data(repeating: 0xFF, count: 40))  // tail (nonce + ct + tag substitute)
 
         let blob = RotationBlob(bytes: bytes)
         let header = try RotationBlobHeader.peek(from: blob)
@@ -33,7 +36,7 @@ final class RotationBlobHeaderTests: XCTestCase {
     }
 
     func testPeek_RejectShortBytes() {
-        let blob = RotationBlob(bytes: Data(repeating: 0x03, count: 64)) // < 65
+        let blob = RotationBlob(bytes: Data(repeating: 0x03, count: 64))  // < 65
         XCTAssertThrowsError(try RotationBlobHeader.peek(from: blob)) { error in
             guard let leafErr = error as? LeafError, case .rotationBlobMalformed = leafErr else {
                 XCTFail("expected .rotationBlobMalformed, got \(error)")
@@ -47,8 +50,10 @@ final class RotationBlobHeaderTests: XCTestCase {
         for badVersion in [UInt8(0x01), 0x02, 0x04, 0xFF] {
             let bytes = makeFullPrefix(version: badVersion)
             let blob = RotationBlob(bytes: bytes)
-            XCTAssertThrowsError(try RotationBlobHeader.peek(from: blob),
-                                 "version=\(String(badVersion, radix: 16)) must reject") { error in
+            XCTAssertThrowsError(
+                try RotationBlobHeader.peek(from: blob),
+                "version=\(String(badVersion, radix: 16)) must reject"
+            ) { error in
                 guard let leafErr = error as? LeafError, case .rotationBlobMalformed = leafErr else {
                     XCTFail("expected .rotationBlobMalformed for version=\(badVersion), got \(error)")
                     return

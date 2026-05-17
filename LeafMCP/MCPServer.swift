@@ -55,11 +55,13 @@ enum MCPMain {
         let linearActivityTool = GetLinearActivityTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
         let githubActivityTool = GetGitHubActivityTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
         let slackActivityTool = GetSlackActivityTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
-        let uninterruptedWindowTool = GetUninterruptedWindowTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
+        let uninterruptedWindowTool = GetUninterruptedWindowTool(
+            dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
         let currentPresenceTool = GetCurrentPresenceTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
         let workloadPulseTool = GetWorkloadPulseTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
         let reviewActivityTool = GetReviewActivityTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
-        let crossProviderThreadTool = GetCrossProviderThreadTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
+        let crossProviderThreadTool = GetCrossProviderThreadTool(
+            dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
         let queryActivityTool = QueryActivityTool(
             dbURL: dbURL, dbConfig: dbConfig,
             dbEncryption: dbEncryption, detectorMoat: detectorMoat
@@ -92,7 +94,7 @@ enum MCPMain {
                 GetCrossProviderThreadTool.definition,
                 QueryActivityTool.definition,
                 GetDecisionTool.definition,
-                CurrentWorkTool.definition
+                CurrentWorkTool.definition,
             ]),
             "tools/call": ToolsCallHandler(registry: [
                 "get_timeline": timelineTool,
@@ -109,8 +111,8 @@ enum MCPMain {
                 "get_cross_provider_thread": crossProviderThreadTool,
                 "leaf_query_activity": queryActivityTool,
                 "leaf_get_decision": getDecisionTool,
-                "leaf_current_work": currentWorkTool
-            ])
+                "leaf_current_work": currentWorkTool,
+            ]),
         ])
 
         let transport = StdioTransport(dispatcher: dispatcher)

@@ -47,12 +47,16 @@ public actor RotationFetchScheduler {
     public func performTick() async {
         let outcome = await fetchService.tick()
         if outcome.fetched > 0 || outcome.installed > 0 || outcome.tombstoneApplied > 0 || outcome.skipped > 0 {
-            logger.info("rotation fetch tick: fetched=\(outcome.fetched, privacy: .public) installed=\(outcome.installed, privacy: .public) tombstoneApplied=\(outcome.tombstoneApplied, privacy: .public) skipped=\(outcome.skipped, privacy: .public)")
+            logger.info(
+                "rotation fetch tick: fetched=\(outcome.fetched, privacy: .public) installed=\(outcome.installed, privacy: .public) tombstoneApplied=\(outcome.tombstoneApplied, privacy: .public) skipped=\(outcome.skipped, privacy: .public)"
+            )
         }
         do {
             let resume = try await keyRotationService.resumePendingPosts()
             if resume.totalCount > 0 {
-                logger.info("rotation outbox resume: posted=\(resume.postedCount, privacy: .public) pending=\(resume.pendingCount, privacy: .public)")
+                logger.info(
+                    "rotation outbox resume: posted=\(resume.postedCount, privacy: .public) pending=\(resume.pendingCount, privacy: .public)"
+                )
             }
         } catch {
             logger.error("rotation outbox resume failed: \(error.localizedDescription, privacy: .public)")

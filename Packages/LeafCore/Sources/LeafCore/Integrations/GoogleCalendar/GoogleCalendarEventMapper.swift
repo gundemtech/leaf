@@ -109,7 +109,8 @@ public struct GoogleCalendarEventMapper: Sendable {
                 selfOptional = a.optional
             }
             if let email = a.email,
-               let at = email.lastIndex(of: "@") {
+                let at = email.lastIndex(of: "@")
+            {
                 let domain = email[email.index(after: at)...].lowercased()
                 if domain != lowerDomain { external += 1 }
             }
@@ -127,11 +128,11 @@ public struct GoogleCalendarEventMapper: Sendable {
             let kv = component.split(separator: "=", maxSplits: 1)
             if kv.count == 2, kv[0] == "FREQ" {
                 switch kv[1] {
-                case "DAILY":   return "daily"
-                case "WEEKLY":  return "weekly"
+                case "DAILY": return "daily"
+                case "WEEKLY": return "weekly"
                 case "MONTHLY": return "monthly"
-                case "YEARLY":  return "yearly"
-                default:        return "other"
+                case "YEARLY": return "yearly"
+                default: return "other"
                 }
             }
         }
@@ -240,10 +241,10 @@ extension GoogleCalendarEventMapper {
         // (eventType, phase) → kind. Exhaustive switch; anything else returns nil.
         let kind: GoogleCalendarEventKind
         switch (eventType, phase) {
-        case ("focusTime", .started):       kind = .focusBlockStarted
-        case ("focusTime", .ended):         kind = .focusBlockEnded
-        case ("outOfOffice", .started):     kind = .oooStarted
-        case ("outOfOffice", .ended):       kind = .oooEnded
+        case ("focusTime", .started): kind = .focusBlockStarted
+        case ("focusTime", .ended): kind = .focusBlockEnded
+        case ("outOfOffice", .started): kind = .oooStarted
+        case ("outOfOffice", .ended): kind = .oooEnded
         case ("workingLocation", .changed): kind = .workingLocationChanged
         default: return nil
         }
@@ -313,10 +314,10 @@ extension GoogleCalendarEventMapper {
     ) -> [String: Any]? {
         let kind: GoogleCalendarEventKind
         switch (row.eventType, phase) {
-        case ("focusTime", .started):       kind = .focusBlockStarted
-        case ("focusTime", .ended):         kind = .focusBlockEnded
-        case ("outOfOffice", .started):     kind = .oooStarted
-        case ("outOfOffice", .ended):       kind = .oooEnded
+        case ("focusTime", .started): kind = .focusBlockStarted
+        case ("focusTime", .ended): kind = .focusBlockEnded
+        case ("outOfOffice", .started): kind = .oooStarted
+        case ("outOfOffice", .ended): kind = .oooEnded
         case ("workingLocation", .changed): kind = .workingLocationChanged
         default: return nil
         }
@@ -347,7 +348,8 @@ extension GoogleCalendarEventMapper {
         }
 
         if phase == .changed, row.eventType == "workingLocation",
-           let wl = row.workingLocationType {
+            let wl = row.workingLocationType
+        {
             payload["working_location_type"] = wl
         }
 

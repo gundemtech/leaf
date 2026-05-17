@@ -1,5 +1,6 @@
 // Packages/LeafCore/Tests/LeafCoreTests/BrowserBookmarksWatcherTests.swift
 import XCTest
+
 @testable import LeafCore
 
 // MARK: - Mocks / helpers

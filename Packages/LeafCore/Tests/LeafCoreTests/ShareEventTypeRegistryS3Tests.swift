@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 /// Phase Track-4 S3 — verifies registry expansion: 13 new event_kind cases all
@@ -16,14 +17,15 @@ final class ShareEventTypeRegistryS3Tests: XCTestCase {
         "clipboard_event_count",
         "screenshot_taken",
         "download_added",
-        "trash_changed"
+        "trash_changed",
     ]
 
     func testS3KeysRegistered() {
         let allRawValues = Set(ShareEventTypeKey.allCases.map { $0.rawValue })
         for raw in s3RawValues {
-            XCTAssertTrue(allRawValues.contains(raw),
-                          "S3 raw value \(raw) must appear in ShareEventTypeKey")
+            XCTAssertTrue(
+                allRawValues.contains(raw),
+                "S3 raw value \(raw) must appear in ShareEventTypeKey")
         }
         XCTAssertEqual(s3RawValues.count, 13, "S3 contract: 13 new keys")
     }
@@ -40,7 +42,8 @@ final class ShareEventTypeRegistryS3Tests: XCTestCase {
 
     func testAllS3KeysDefaultOff() {
         for entry in ShareEventTypeDefaults.all where s3RawValues.contains(entry.key.rawValue) {
-            XCTAssertFalse(entry.defaultEnabled,
+            XCTAssertFalse(
+                entry.defaultEnabled,
                 "S3 key \(entry.key.rawValue) must default to OFF per ADR-020")
         }
     }

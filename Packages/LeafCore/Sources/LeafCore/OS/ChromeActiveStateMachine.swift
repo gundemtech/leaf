@@ -23,14 +23,16 @@ public struct ChromeActiveStateMachine: Sendable {
         }
         guard let p = prevSnap, let wid = windowID else { return [] }
         guard p.windowID != wid || p.tabKey != currentTabKey else { return [] }
-        return [.tabActivated(
-            bundleID: Self.bundleID,
-            previousTabKey: p.tabKey,
-            currentTabKey: currentTabKey,
-            currentURL: currentURL,
-            title: title,
-            activeWindowID: wid,
-            nowMs: nowMs
-        )]
+        return [
+            .tabActivated(
+                bundleID: Self.bundleID,
+                previousTabKey: p.tabKey,
+                currentTabKey: currentTabKey,
+                currentURL: currentURL,
+                title: title,
+                activeWindowID: wid,
+                nowMs: nowMs
+            )
+        ]
     }
 }

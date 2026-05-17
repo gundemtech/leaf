@@ -1,7 +1,7 @@
-import Foundation
 import CoreGraphics
-import os
+import Foundation
 import LeafCore
+import os
 
 /// Polling'ом спрашивает `CGEventSource` когда был последний HID event.
 /// Пишем context events только на транзиции active↔idle — не на каждый tick.

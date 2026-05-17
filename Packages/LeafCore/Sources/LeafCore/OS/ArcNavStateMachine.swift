@@ -24,15 +24,16 @@ public struct ArcNavStateMachine: Sendable {
         var emits: [ProtoBrowserEvent] = []
         for snap in snapshots {
             guard let prevURL = prev[snap.tabKey], prevURL != snap.url else { continue }
-            emits.append(.tabNavigated(
-                bundleID: Self.bundleID,
-                tabKey: snap.tabKey,
-                previousURL: prevURL,
-                currentURL: snap.url,
-                title: snap.title,
-                activeWindowID: windowID,
-                nowMs: nowMs
-            ))
+            emits.append(
+                .tabNavigated(
+                    bundleID: Self.bundleID,
+                    tabKey: snap.tabKey,
+                    previousURL: prevURL,
+                    currentURL: snap.url,
+                    title: snap.title,
+                    activeWindowID: windowID,
+                    nowMs: nowMs
+                ))
         }
         return emits
     }

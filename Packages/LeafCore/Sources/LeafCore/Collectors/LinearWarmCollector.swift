@@ -66,7 +66,8 @@ public actor LinearWarmCollector {
     }
 
     /// Set difference helper exposed for unit tests.
-    public static func subscribedIssuesDiff(prior: [String], current: [String]) -> (added: [String], removed: [String]) {
+    public static func subscribedIssuesDiff(prior: [String], current: [String]) -> (added: [String], removed: [String])
+    {
         let priorSet = Set(prior)
         let currentSet = Set(current)
         let added = Array(currentSet.subtracting(priorSet)).sorted()
@@ -103,8 +104,11 @@ public actor LinearWarmCollector {
         let cyclesSource = "linear:cycles:\(workspaceID)"
 
         // 3. Cursors + snapshot.
-        let notifCursor = (try? database.readOffset(collectorID: CollectorID.linearWarmPolling, sourceID: notifSource))?.lastModifiedMs
-        let cyclesCursor = (try? database.readOffset(collectorID: CollectorID.linearWarmPolling, sourceID: cyclesSource))?.lastModifiedMs
+        let notifCursor = (try? database.readOffset(collectorID: CollectorID.linearWarmPolling, sourceID: notifSource))?
+            .lastModifiedMs
+        let cyclesCursor =
+            (try? database.readOffset(collectorID: CollectorID.linearWarmPolling, sourceID: cyclesSource))?
+            .lastModifiedMs
         let priorSnapshot: ProviderSnapshot? = {
             do {
                 return try database.readSQL { rawDB in
@@ -152,11 +156,13 @@ public actor LinearWarmCollector {
         let nowMs = Int64(now.timeIntervalSince1970 * 1000)
         var subscribedSnapshotChanged = false
         if let prior = priorSnapshot,
-           let parsed = try? JSONDecoder().decode(SubscribedSnapshotJSON.self, from: Data(prior.snapshotJSON.utf8)) {
+            let parsed = try? JSONDecoder().decode(SubscribedSnapshotJSON.self, from: Data(prior.snapshotJSON.utf8))
+        {
             let diff = Self.subscribedIssuesDiff(prior: parsed.ids, current: currentIDs)
             for id in diff.added {
                 let identifier = batch.subscribedIssueIds.first(where: { $0.id == id })?.identifier ?? id
-                events.append(Self.makeSubscriptionAddedEvent(issueId: id, issueIdentifier: identifier, observedAtMs: nowMs))
+                events.append(
+                    Self.makeSubscriptionAddedEvent(issueId: id, issueIdentifier: identifier, observedAtMs: nowMs))
             }
             for id in diff.removed {
                 events.append(Self.makeSubscriptionRemovedEvent(issueId: id, issueIdentifier: id, observedAtMs: nowMs))
@@ -170,26 +176,30 @@ public actor LinearWarmCollector {
         // 6. Build offsets + snapshot.
         var offsets: [CollectorOffset] = []
         if let cur = batch.notificationCursorMs {
-            offsets.append(CollectorOffset(
-                collectorID: CollectorID.linearWarmPolling, sourceID: notifSource,
-                byteOffset: 0, inode: nil, size: 0, lastModifiedMs: cur, updatedMs: nowMs))
+            offsets.append(
+                CollectorOffset(
+                    collectorID: CollectorID.linearWarmPolling, sourceID: notifSource,
+                    byteOffset: 0, inode: nil, size: 0, lastModifiedMs: cur, updatedMs: nowMs))
         }
         if let cur = batch.cyclesCursorMs {
-            offsets.append(CollectorOffset(
-                collectorID: CollectorID.linearWarmPolling, sourceID: cyclesSource,
-                byteOffset: 0, inode: nil, size: 0, lastModifiedMs: cur, updatedMs: nowMs))
+            offsets.append(
+                CollectorOffset(
+                    collectorID: CollectorID.linearWarmPolling, sourceID: cyclesSource,
+                    byteOffset: 0, inode: nil, size: 0, lastModifiedMs: cur, updatedMs: nowMs))
         }
 
         var snapshots: [ProviderSnapshot] = []
         if subscribedSnapshotChanged {
-            let encoded = (try? JSONEncoder().encode(SubscribedSnapshotJSON(ids: currentIDs)))
+            let encoded =
+                (try? JSONEncoder().encode(SubscribedSnapshotJSON(ids: currentIDs)))
                 .flatMap { String(data: $0, encoding: .utf8) } ?? "{\"ids\":[]}"
-            snapshots.append(ProviderSnapshot(
-                provider: "linear",
-                snapshotKind: Schema.ProviderSnapshotKinds.linearSubscribedIssues,
-                snapshotJSON: encoded,
-                capturedAtMs: nowMs
-            ))
+            snapshots.append(
+                ProviderSnapshot(
+                    provider: "linear",
+                    snapshotKind: Schema.ProviderSnapshotKinds.linearSubscribedIssues,
+                    snapshotJSON: encoded,
+                    capturedAtMs: nowMs
+                ))
         }
 
         // 7. Atomic write.
@@ -232,7 +242,7 @@ public actor LinearWarmCollector {
             Schema.EventPayloadKeys.notificationTitle: n.title,
             // Mirror title under canonical `body` key so EventsFullTextStore picks it up.
             Schema.EventPayloadKeys.body: n.title,
-            Schema.EventPayloadKeys.receivedAtMs: String(n.createdAtMs)
+            Schema.EventPayloadKeys.receivedAtMs: String(n.createdAtMs),
         ]
         if let id = n.issueId { payload[Schema.EventPayloadKeys.issueId] = id }
         if let ident = n.issueIdentifier { payload[Schema.EventPayloadKeys.issueIdentifier] = ident }
@@ -250,7 +260,7 @@ public actor LinearWarmCollector {
                 "source": "linear",
                 "event_kind": "linear_notification_read",
                 Schema.EventPayloadKeys.notificationId: n.id,
-                Schema.EventPayloadKeys.readAtMs: String(readMs)
+                Schema.EventPayloadKeys.readAtMs: String(readMs),
             ]
         )
     }
@@ -263,7 +273,7 @@ public actor LinearWarmCollector {
                 "source": "linear",
                 "event_kind": "linear_notification_archived",
                 Schema.EventPayloadKeys.notificationId: n.id,
-                Schema.EventPayloadKeys.archivedAtMs: String(archivedMs)
+                Schema.EventPayloadKeys.archivedAtMs: String(archivedMs),
             ]
         )
     }
@@ -276,7 +286,7 @@ public actor LinearWarmCollector {
             Schema.EventPayloadKeys.cycleNumber: String(c.number),
             Schema.EventPayloadKeys.teamId: c.teamId,
             Schema.EventPayloadKeys.startedAtMs: String(c.startsAtMs),
-            Schema.EventPayloadKeys.endsAtMs: String(c.endsAtMs)
+            Schema.EventPayloadKeys.endsAtMs: String(c.endsAtMs),
         ]
         if let n = c.name { payload[Schema.EventPayloadKeys.cycleName] = n }
         return RawEvent(
@@ -293,7 +303,7 @@ public actor LinearWarmCollector {
             Schema.EventPayloadKeys.cycleId: c.id,
             Schema.EventPayloadKeys.cycleNumber: String(c.number),
             Schema.EventPayloadKeys.teamId: c.teamId,
-            Schema.EventPayloadKeys.completedAtMs: String(completedMs)
+            Schema.EventPayloadKeys.completedAtMs: String(completedMs),
         ]
         if let p = c.progress { payload[Schema.EventPayloadKeys.progress] = String(p) }
         if let ic = c.issuesCompletedCount { payload[Schema.EventPayloadKeys.issuesCompletedCount] = String(ic) }
@@ -312,12 +322,13 @@ public actor LinearWarmCollector {
                 "event_kind": "linear_subscription_added",
                 Schema.EventPayloadKeys.issueId: issueId,
                 Schema.EventPayloadKeys.issueIdentifier: issueIdentifier,
-                Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+                Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
             ]
         )
     }
 
-    static func makeSubscriptionRemovedEvent(issueId: String, issueIdentifier: String, observedAtMs: Int64) -> RawEvent {
+    static func makeSubscriptionRemovedEvent(issueId: String, issueIdentifier: String, observedAtMs: Int64) -> RawEvent
+    {
         RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(observedAtMs) / 1000.0),
             signalType: .context, bundleID: nil,
@@ -326,7 +337,7 @@ public actor LinearWarmCollector {
                 "event_kind": "linear_subscription_removed",
                 Schema.EventPayloadKeys.issueId: issueId,
                 Schema.EventPayloadKeys.issueIdentifier: issueIdentifier,
-                Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+                Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
             ]
         )
     }

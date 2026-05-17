@@ -4,8 +4,9 @@
 // events derived from EventLinksStore reverse lookup, period scoping, and
 // confidence-then-recency ranking.
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class QueryEngineGetDecisionTests: XCTestCase {
@@ -64,9 +65,11 @@ final class QueryEngineGetDecisionTests: XCTestCase {
         )
     }
 
-    private func writeEvent(_ db: LeafCore.Database,
-                            tsMs: Int64,
-                            payload: [String: String]) throws {
+    private func writeEvent(
+        _ db: LeafCore.Database,
+        tsMs: Int64,
+        payload: [String: String]
+    ) throws {
         let event = RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(tsMs) / 1000.0),
             signalType: .action,
@@ -78,17 +81,20 @@ final class QueryEngineGetDecisionTests: XCTestCase {
 
     /// Inserts a synthetic decision row directly so test scenarios can encode
     /// confidence/recency tie-breaks without depending on detector cadence.
-    private func insertDecision(_ db: LeafCore.Database,
-                                eventID: Int64,
-                                excerpt: String,
-                                confidence: Double,
-                                detectedAtMs: Int64) throws {
+    private func insertDecision(
+        _ db: LeafCore.Database,
+        eventID: Int64,
+        excerpt: String,
+        confidence: Double,
+        detectedAtMs: Int64
+    ) throws {
         try db.writeSQL { rawDB in
-            try rawDB.execute(sql: """
-                INSERT INTO decisions
-                    (event_id, topic_keywords_json, reasoning_excerpt, confidence, detected_at_ms)
-                VALUES (?, ?, ?, ?, ?)
-            """, arguments: [eventID, "[\"manual\"]", excerpt, confidence, detectedAtMs])
+            try rawDB.execute(
+                sql: """
+                        INSERT INTO decisions
+                            (event_id, topic_keywords_json, reasoning_excerpt, confidence, detected_at_ms)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, arguments: [eventID, "[\"manual\"]", excerpt, confidence, detectedAtMs])
         }
     }
 
@@ -97,14 +103,18 @@ final class QueryEngineGetDecisionTests: XCTestCase {
     func testTopicMatchUsesFTSOverReasoningExcerpts() throws {
         let db = try openWriter()
         // Two events: only one has the "OAuth" topic in its body.
-        try writeEvent(db, tsMs: 1_000, payload: [
-            "event_kind": "slack_thread_reply_aggregate",
-            Schema.EventPayloadKeys.body: "DECIDE move OAuth refresh server-side"
-        ])
-        try writeEvent(db, tsMs: 2_000, payload: [
-            "event_kind": "slack_thread_reply_aggregate",
-            Schema.EventPayloadKeys.body: "DECIDE rename payments module"
-        ])
+        try writeEvent(
+            db, tsMs: 1_000,
+            payload: [
+                "event_kind": "slack_thread_reply_aggregate",
+                Schema.EventPayloadKeys.body: "DECIDE move OAuth refresh server-side",
+            ])
+        try writeEvent(
+            db, tsMs: 2_000,
+            payload: [
+                "event_kind": "slack_thread_reply_aggregate",
+                Schema.EventPayloadKeys.body: "DECIDE rename payments module",
+            ])
         try DetectorPipeline.runIncremental(moat: sentinelMoat(), in: db)
 
         let response = try makeEngine().getDecision(topic: "OAuth", period: nil)
@@ -119,10 +129,12 @@ final class QueryEngineGetDecisionTests: XCTestCase {
 
     func testReturnsNilWhenNoMatch() throws {
         let db = try openWriter()
-        try writeEvent(db, tsMs: 1_000, payload: [
-            "event_kind": "slack_thread_reply_aggregate",
-            Schema.EventPayloadKeys.body: "DECIDE move OAuth refresh server-side"
-        ])
+        try writeEvent(
+            db, tsMs: 1_000,
+            payload: [
+                "event_kind": "slack_thread_reply_aggregate",
+                Schema.EventPayloadKeys.body: "DECIDE move OAuth refresh server-side",
+            ])
         try DetectorPipeline.runIncremental(moat: sentinelMoat(), in: db)
 
         let response = try makeEngine().getDecision(topic: "kubernetes", period: nil)
@@ -135,15 +147,19 @@ final class QueryEngineGetDecisionTests: XCTestCase {
     func testRelatedEventsViaLinks() throws {
         let db = try openWriter()
         // Event 1 = the decision body, mentions LEAF-100 (auto-linked to linear_issue).
-        try writeEvent(db, tsMs: 1_000, payload: [
-            "event_kind": "slack_thread_reply_aggregate",
-            Schema.EventPayloadKeys.body: "DECIDE LEAF-100 use Postgres"
-        ])
+        try writeEvent(
+            db, tsMs: 1_000,
+            payload: [
+                "event_kind": "slack_thread_reply_aggregate",
+                Schema.EventPayloadKeys.body: "DECIDE LEAF-100 use Postgres",
+            ])
         // Event 2 = subsequent commit also referencing LEAF-100 — should appear in relatedEvents.
-        try writeEvent(db, tsMs: 2_000, payload: [
-            "event_kind": "gh_commit_pushed",
-            Schema.EventPayloadKeys.body: "LEAF-100 wire Postgres adapter"
-        ])
+        try writeEvent(
+            db, tsMs: 2_000,
+            payload: [
+                "event_kind": "gh_commit_pushed",
+                Schema.EventPayloadKeys.body: "LEAF-100 wire Postgres adapter",
+            ])
         try DetectorPipeline.runIncremental(moat: sentinelMoat(), in: db)
 
         let response = try makeEngine().getDecision(topic: "Postgres", period: nil)
@@ -161,14 +177,18 @@ final class QueryEngineGetDecisionTests: XCTestCase {
 
     func testPeriodFilterScoping() throws {
         let db = try openWriter()
-        try writeEvent(db, tsMs: 1_000, payload: [
-            "event_kind": "slack_thread_reply_aggregate",
-            Schema.EventPayloadKeys.body: "DECIDE OAuth migration"
-        ])
-        try writeEvent(db, tsMs: 9_000, payload: [
-            "event_kind": "slack_thread_reply_aggregate",
-            Schema.EventPayloadKeys.body: "DECIDE OAuth follow-up patch"
-        ])
+        try writeEvent(
+            db, tsMs: 1_000,
+            payload: [
+                "event_kind": "slack_thread_reply_aggregate",
+                Schema.EventPayloadKeys.body: "DECIDE OAuth migration",
+            ])
+        try writeEvent(
+            db, tsMs: 9_000,
+            payload: [
+                "event_kind": "slack_thread_reply_aggregate",
+                Schema.EventPayloadKeys.body: "DECIDE OAuth follow-up patch",
+            ])
         try DetectorPipeline.runIncremental(moat: sentinelMoat(), in: db)
 
         // Narrow period: only the second decision should be reachable.
@@ -187,20 +207,25 @@ final class QueryEngineGetDecisionTests: XCTestCase {
     func testRanksByConfidenceTieBrokenByRecency() throws {
         let db = try openWriter()
         // Two events whose body contains the topic word so both candidate via FTS.
-        try writeEvent(db, tsMs: 1_000, payload: [
-            "event_kind": "slack_thread_reply_aggregate",
-            Schema.EventPayloadKeys.body: "DECIDE choose Postgres for billing"
-        ])
-        try writeEvent(db, tsMs: 2_000, payload: [
-            "event_kind": "slack_thread_reply_aggregate",
-            Schema.EventPayloadKeys.body: "DECIDE switch to Postgres for analytics"
-        ])
+        try writeEvent(
+            db, tsMs: 1_000,
+            payload: [
+                "event_kind": "slack_thread_reply_aggregate",
+                Schema.EventPayloadKeys.body: "DECIDE choose Postgres for billing",
+            ])
+        try writeEvent(
+            db, tsMs: 2_000,
+            payload: [
+                "event_kind": "slack_thread_reply_aggregate",
+                Schema.EventPayloadKeys.body: "DECIDE switch to Postgres for analytics",
+            ])
         // Manually insert decisions with different confidences so ranking is deterministic.
         try insertDecision(db, eventID: 1, excerpt: "lower confidence", confidence: 0.4, detectedAtMs: 9_999)
         try insertDecision(db, eventID: 2, excerpt: "higher confidence", confidence: 0.9, detectedAtMs: 1_000)
 
         let response = try makeEngine().getDecision(topic: "Postgres", period: nil)
-        XCTAssertEqual(response.decision?.decision.reasoningExcerpt, "higher confidence",
-                       "Higher confidence must win regardless of recency")
+        XCTAssertEqual(
+            response.decision?.decision.reasoningExcerpt, "higher confidence",
+            "Higher confidence must win regardless of recency")
     }
 }

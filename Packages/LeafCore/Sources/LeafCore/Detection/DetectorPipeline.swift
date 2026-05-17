@@ -31,16 +31,19 @@ public enum DetectorPipeline {
         in db: Database
     ) throws {
         try db.writeSQL { rawDB in
-            try processDetector(kind: Schema.DetectorKinds.decision,
-                                moat: moat, nowMs: nowMs, in: rawDB)
+            try processDetector(
+                kind: Schema.DetectorKinds.decision,
+                moat: moat, nowMs: nowMs, in: rawDB)
         }
         try db.writeSQL { rawDB in
-            try processDetector(kind: Schema.DetectorKinds.openQuestion,
-                                moat: moat, nowMs: nowMs, in: rawDB)
+            try processDetector(
+                kind: Schema.DetectorKinds.openQuestion,
+                moat: moat, nowMs: nowMs, in: rawDB)
         }
         try db.writeSQL { rawDB in
-            try processDetector(kind: Schema.DetectorKinds.blockerPattern,
-                                moat: moat, nowMs: nowMs, in: rawDB)
+            try processDetector(
+                kind: Schema.DetectorKinds.blockerPattern,
+                moat: moat, nowMs: nowMs, in: rawDB)
         }
     }
 
@@ -77,21 +80,26 @@ public enum DetectorPipeline {
                     in: rawDB
                 )
             }
-            try autoResolveLinearStuck(currentlyStuck: stuckRefs,
-                                       nowMs: nowMs,
-                                       in: rawDB)
+            try autoResolveLinearStuck(
+                currentlyStuck: stuckRefs,
+                nowMs: nowMs,
+                in: rawDB)
 
             // 2. WhereStopped: append if deriver emits.
             // sinceMs = last snapshot time (0 on first run); deriver decides
             // whether the elapsed idle window crosses its threshold.
-            let sinceMs: Int64 = (try Int64.fetchOne(rawDB, sql:
-                "SELECT MAX(generated_at_ms) FROM where_stopped_log")) ?? 0
+            let sinceMs: Int64 =
+                (try Int64.fetchOne(
+                    rawDB,
+                    sql:
+                        "SELECT MAX(generated_at_ms) FROM where_stopped_log")) ?? 0
             if let out = try moat.whereStopped.derive(
                 in: rawDB, sinceMs: sinceMs, untilMs: nowMs)
             {
-                try WhereStoppedLogStore.append(out,
-                                                generatedAtMs: nowMs,
-                                                in: rawDB)
+                try WhereStoppedLogStore.append(
+                    out,
+                    generatedAtMs: nowMs,
+                    in: rawDB)
             }
         }
     }
@@ -104,20 +112,26 @@ public enum DetectorPipeline {
     ///
     /// Linear collector emits `payload.event_kind = "status_transition"` with
     /// `payload.issue_key = <REF>` (см. LinearCollector.makeTransitionEvent).
-    private static func autoResolveLinearStuck(currentlyStuck: Set<String>,
-                                               nowMs: Int64,
-                                               in db: GRDB.Database) throws {
-        let openRefs: [String] = try String.fetchAll(db, sql: """
-            SELECT target_ref FROM blockers
-             WHERE blocker_kind = ? AND resolved_at_ms IS NULL
-        """, arguments: [Schema.BlockerKinds.linearStuck])
+    private static func autoResolveLinearStuck(
+        currentlyStuck: Set<String>,
+        nowMs: Int64,
+        in db: GRDB.Database
+    ) throws {
+        let openRefs: [String] = try String.fetchAll(
+            db,
+            sql: """
+                    SELECT target_ref FROM blockers
+                     WHERE blocker_kind = ? AND resolved_at_ms IS NULL
+                """, arguments: [Schema.BlockerKinds.linearStuck])
         for ref in openRefs where !currentlyStuck.contains(ref) {
-            let row = try Row.fetchOne(db, sql: """
-                SELECT id, ts FROM events
-                 WHERE json_extract(payload_json, '$.event_kind') = 'status_transition'
-                   AND json_extract(payload_json, '$.issue_key') = ?
-                 ORDER BY ts DESC LIMIT 1
-            """, arguments: [ref])
+            let row = try Row.fetchOne(
+                db,
+                sql: """
+                        SELECT id, ts FROM events
+                         WHERE json_extract(payload_json, '$.event_kind') = 'status_transition'
+                           AND json_extract(payload_json, '$.issue_key') = ?
+                         ORDER BY ts DESC LIMIT 1
+                    """, arguments: [ref])
             if let row {
                 try BlockersStore.resolve(
                     targetKind: Schema.TargetKinds.linearIssue,
@@ -132,15 +146,19 @@ public enum DetectorPipeline {
 
     // MARK: - Per-kind pass
 
-    private static func processDetector(kind: String,
-                                        moat: DetectorMoat,
-                                        nowMs: Int64,
-                                        in db: GRDB.Database) throws {
+    private static func processDetector(
+        kind: String,
+        moat: DetectorMoat,
+        nowMs: Int64,
+        in db: GRDB.Database
+    ) throws {
         let cursor = try DetectorOffsetsStore.cursor(detectorKind: kind, in: db)
-        let rows = try Row.fetchAll(db, sql: """
-            SELECT id, ts, signal_type, payload_json
-              FROM events WHERE id > ? ORDER BY id ASC
-            """, arguments: [cursor])
+        let rows = try Row.fetchAll(
+            db,
+            sql: """
+                SELECT id, ts, signal_type, payload_json
+                  FROM events WHERE id > ? ORDER BY id ASC
+                """, arguments: [cursor])
 
         var lastID: Int64 = cursor
         for row in rows {
@@ -149,38 +167,44 @@ public enum DetectorPipeline {
             let signalType: String = row["signal_type"]
             let payloadJSON: String = (row["payload_json"] as String?) ?? "{}"
             do {
-                try dispatch(eventID: eventID,
-                             tsMs: tsMs,
-                             signalType: signalType,
-                             payloadJSON: payloadJSON,
-                             detectorKind: kind,
-                             moat: moat,
-                             in: db)
+                try dispatch(
+                    eventID: eventID,
+                    tsMs: tsMs,
+                    signalType: signalType,
+                    payloadJSON: payloadJSON,
+                    detectorKind: kind,
+                    moat: moat,
+                    in: db)
             } catch {
                 // Detector failure must not break the write path — moat-impl bugs
                 // are isolated; cursor still advances past the offending event.
-                log.error("detector \(kind, privacy: .public) failed on event \(eventID): \(String(describing: error), privacy: .public)")
+                log.error(
+                    "detector \(kind, privacy: .public) failed on event \(eventID): \(String(describing: error), privacy: .public)"
+                )
             }
             lastID = eventID
         }
 
-        try DetectorOffsetsStore.advance(detectorKind: kind,
-                                         toEventID: lastID,
-                                         nowMs: nowMs,
-                                         in: db)
+        try DetectorOffsetsStore.advance(
+            detectorKind: kind,
+            toEventID: lastID,
+            nowMs: nowMs,
+            in: db)
     }
 
     // MARK: - Body dispatch
 
-    private static func dispatch(eventID: Int64,
-                                 tsMs: Int64,
-                                 signalType: String,
-                                 payloadJSON: String,
-                                 detectorKind: String,
-                                 moat: DetectorMoat,
-                                 in db: GRDB.Database) throws {
+    private static func dispatch(
+        eventID: Int64,
+        tsMs: Int64,
+        signalType: String,
+        payloadJSON: String,
+        detectorKind: String,
+        moat: DetectorMoat,
+        in db: GRDB.Database
+    ) throws {
         guard let data = payloadJSON.data(using: .utf8),
-              let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return }
 
         let eventKind = (dict["event_kind"] as? String) ?? ""
@@ -195,9 +219,10 @@ public enum DetectorPipeline {
                         eventID: eventID, hit: hit, detectedAtMs: tsMs, in: db)
                     if inserted {
                         // Same transaction as the INSERT — failure rolls back both.
-                        let contexts = try resolutionContexts(eventID: eventID,
-                                                              payload: dict,
-                                                              in: db)
+                        let contexts = try resolutionContexts(
+                            eventID: eventID,
+                            payload: dict,
+                            in: db)
                         _ = try OpenQuestionsStore.markResolved(
                             matchingContexts: contexts,
                             resolvedByEventID: eventID,
@@ -244,13 +269,16 @@ public enum DetectorPipeline {
 
     /// Extracts `(body, kind)` pairs from a payload dict, in dispatch order.
     /// Top-level body first (per event_kind), then JSON-array fan-outs.
-    private static func extractBodies(eventKind: String,
-                                      payload: [String: Any]) -> [(String, BodyKind)] {
+    private static func extractBodies(
+        eventKind: String,
+        payload: [String: Any]
+    ) -> [(String, BodyKind)] {
         var out: [(String, BodyKind)] = []
 
         if let raw = payload[Schema.EventPayloadKeys.body] as? String,
-           !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           let kind = topLevelBodyKind(forEventKind: eventKind) {
+            !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            let kind = topLevelBodyKind(forEventKind: eventKind)
+        {
             out.append((raw, kind))
         }
 
@@ -289,14 +317,16 @@ public enum DetectorPipeline {
         // Track-3 D4 — gh_issue_* body dispatch (mirrors FTS lines 119-122).
         // Issue body indexed under same body_kind as issue comments.
         if eventKind == GitHubEventKindKey.issueOpened.rawValue
-            || eventKind == GitHubEventKindKey.issueClosed.rawValue {
+            || eventKind == GitHubEventKindKey.issueClosed.rawValue
+        {
             return .ghIssueComment
         }
         // Track-3 D4 — gist description / release body / deployment description
         // dispatch (mirrors FTS lines 126-135). Detectors fire on these like
         // any other user-authored text body.
         if eventKind == GitHubEventKindKey.gistCreated.rawValue
-            || eventKind == GitHubEventKindKey.gistUpdated.rawValue {
+            || eventKind == GitHubEventKindKey.gistUpdated.rawValue
+        {
             return .ghGistDescription
         }
         if eventKind == GitHubEventKindKey.releasePublished.rawValue {
@@ -312,7 +342,8 @@ public enum DetectorPipeline {
         // EventLinksStore D4 fix.
         if eventKind == GitHubEventKindKey.prOpened.rawValue
             || eventKind == GitHubEventKindKey.prMerged.rawValue
-            || eventKind == GitHubEventKindKey.prClosed.rawValue {
+            || eventKind == GitHubEventKindKey.prClosed.rawValue
+        {
             return .ghPR
         }
         // Phase Track-3 D3 — Slack canvas + bookmark titles. Mirrors
@@ -320,11 +351,13 @@ public enum DetectorPipeline {
         // (or coverage fences asserting parity between FTS + detector dispatch
         // tables) find a typed entry here.
         if eventKind == SlackEventKindKey.slackCanvasCreated.rawValue
-            || eventKind == SlackEventKindKey.slackCanvasEdited.rawValue {
+            || eventKind == SlackEventKindKey.slackCanvasEdited.rawValue
+        {
             return .slackCanvasTitle
         }
         if eventKind == SlackEventKindKey.slackBookmarkAdded.rawValue
-            || eventKind == SlackEventKindKey.slackBookmarkRemoved.rawValue {
+            || eventKind == SlackEventKindKey.slackBookmarkRemoved.rawValue
+        {
             return .slackBookmarkTitle
         }
         return nil
@@ -341,7 +374,7 @@ public enum DetectorPipeline {
 
     private static func decodeStringArray(_ raw: String, key: String) -> [String] {
         guard let data = raw.data(using: .utf8),
-              let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+            let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
         else { return [] }
         return arr.compactMap { $0[key] as? String }
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -369,9 +402,11 @@ public enum DetectorPipeline {
     /// keys (`thread_ts` / `linked_linear_id` / `linked_github_pr`) with the
     /// D2 link graph so cross-source decisions (e.g. Slack DECIDE that links
     /// back to a Linear issue or GitHub PR via event_links) still resolve.
-    private static func resolutionContexts(eventID: Int64,
-                                           payload: [String: Any],
-                                           in db: GRDB.Database) throws -> ResolutionContexts {
+    private static func resolutionContexts(
+        eventID: Int64,
+        payload: [String: Any],
+        in db: GRDB.Database
+    ) throws -> ResolutionContexts {
         let threadTS = payload["thread_ts"] as? String
 
         var linearRefs = Set<String>()
@@ -404,9 +439,11 @@ public enum DetectorPipeline {
     /// Picks `(target_kind, target_ref)` for blocker writes.
     /// Linear-attributed events → linear_issue; GitHub-attributed → github_pr.
     /// No target → caller skips the insert (we do not fabricate one).
-    private static func blockerTarget(eventKind: String,
-                                      payload: [String: Any],
-                                      body: String) -> (String, String)? {
+    private static func blockerTarget(
+        eventKind: String,
+        payload: [String: Any],
+        body: String
+    ) -> (String, String)? {
         if let linRef = derivedLinearRef(payload: payload, body: body) {
             return (Schema.TargetKinds.linearIssue, linRef)
         }

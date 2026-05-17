@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 /// Phase 5.3.D — `RotationOutboxRow` value type.

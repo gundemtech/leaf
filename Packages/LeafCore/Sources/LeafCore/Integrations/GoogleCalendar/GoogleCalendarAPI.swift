@@ -39,7 +39,7 @@ public enum GoogleCalendarAPI {
         public let summary: String?
         public let summaryOverride: String?
         public let primary: Bool?
-        public let accessRole: String      // owner | writer | reader | freeBusyReader
+        public let accessRole: String  // owner | writer | reader | freeBusyReader
         public let timeZone: String?
         public let colorId: String?
     }
@@ -49,10 +49,10 @@ public enum GoogleCalendarAPI {
     public struct Event: Codable, Sendable {
         public let id: String?
         public let iCalUID: String?
-        public let status: String?                 // confirmed | tentative | cancelled
+        public let status: String?  // confirmed | tentative | cancelled
         public let summary: String?
-        public let description: String?            // decoded; Mapper drops (ADR-010).
-        public let location: String?               // decoded; Mapper drops (ADR-010).
+        public let description: String?  // decoded; Mapper drops (ADR-010).
+        public let location: String?  // decoded; Mapper drops (ADR-010).
         public let start: TimePoint?
         public let end: TimePoint?
         public let recurrence: [String]?
@@ -61,7 +61,7 @@ public enum GoogleCalendarAPI {
         public let attendees: [Attendee]?
         public let organizer: Person?
         public let creator: Person?
-        public let eventType: String?              // default | focusTime | outOfOffice | workingLocation | birthday | fromGmail
+        public let eventType: String?  // default | focusTime | outOfOffice | workingLocation | birthday | fromGmail
         public let transparency: String?
         public let visibility: String?
         public let conferenceData: ConferenceData?
@@ -70,7 +70,7 @@ public enum GoogleCalendarAPI {
         public let workingLocationProperties: WorkingLocationProperties?
         public let created: String?
         public let updated: String?
-        public let htmlLink: String?               // decoded; Mapper drops (ADR-010).
+        public let htmlLink: String?  // decoded; Mapper drops (ADR-010).
     }
 
     public struct TimePoint: Codable, Sendable {
@@ -121,14 +121,14 @@ public enum GoogleCalendarAPI {
         /// are INTENTIONALLY NOT DECODED — we never want these values in
         /// memory (can leak via debug-print, crash logs, etc.).
         public struct EntryPoint: Codable, Sendable {
-            public let entryPointType: String?     // video | phone | sip | more
+            public let entryPointType: String?  // video | phone | sip | more
         }
 
         public struct ConferenceSolution: Codable, Sendable {
             public let key: Key?
 
             public struct Key: Codable, Sendable {
-                public let type: String?           // hangoutsMeet | addOn | etc.
+                public let type: String?  // hangoutsMeet | addOn | etc.
             }
         }
     }
@@ -137,13 +137,13 @@ public enum GoogleCalendarAPI {
 
     public struct FocusTimeProperties: Codable, Sendable {
         public let autoDeclineMode: String?
-        public let declineMessage: String?         // decoded; Mapper drops (ADR-010).
+        public let declineMessage: String?  // decoded; Mapper drops (ADR-010).
         public let chatStatus: String?
     }
 
     public struct OutOfOfficeProperties: Codable, Sendable {
         public let autoDeclineMode: String?
-        public let declineMessage: String?         // decoded; Mapper drops (ADR-010).
+        public let declineMessage: String?  // decoded; Mapper drops (ADR-010).
     }
 
     /// Privacy posture: only `type` enum is decoded.
@@ -151,7 +151,7 @@ public enum GoogleCalendarAPI {
     /// `customLocation.label` are INTENTIONALLY NOT DECODED — physical
     /// location specifics never enter the in-memory model.
     public struct WorkingLocationProperties: Codable, Sendable {
-        public let type: String?                   // homeOffice | officeLocation | customLocation
+        public let type: String?  // homeOffice | officeLocation | customLocation
     }
 
     // MARK: - OAuth

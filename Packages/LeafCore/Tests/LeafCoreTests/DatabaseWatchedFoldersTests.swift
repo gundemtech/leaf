@@ -2,6 +2,7 @@
 // 4 CRUD методов Database. FSEventsCollector + router — отдельные файлы.
 
 import XCTest
+
 @testable import LeafCore
 
 final class DatabaseWatchedFoldersTests: XCTestCase {
@@ -128,14 +129,16 @@ final class DatabaseWatchedFoldersTests: XCTestCase {
     func testRemoveDeletesRow() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
-        try db.addWatchedFolder(WatchedFolder(
-            id: "id-1", path: "/a", maxGranularity: .L4,
-            enabled: true, addedAt: Date(), updatedAt: Date()
-        ))
-        try db.addWatchedFolder(WatchedFolder(
-            id: "id-2", path: "/b", maxGranularity: .L4,
-            enabled: true, addedAt: Date(), updatedAt: Date()
-        ))
+        try db.addWatchedFolder(
+            WatchedFolder(
+                id: "id-1", path: "/a", maxGranularity: .L4,
+                enabled: true, addedAt: Date(), updatedAt: Date()
+            ))
+        try db.addWatchedFolder(
+            WatchedFolder(
+                id: "id-2", path: "/b", maxGranularity: .L4,
+                enabled: true, addedAt: Date(), updatedAt: Date()
+            ))
 
         try db.removeWatchedFolder(id: "id-1")
         let listed = try db.listWatchedFolders()
@@ -156,10 +159,11 @@ final class DatabaseWatchedFoldersTests: XCTestCase {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
         let now = Date(timeIntervalSince1970: 1_700_000_000)
-        try db.addWatchedFolder(WatchedFolder(
-            id: "id-1", path: "/a", maxGranularity: .L4,
-            enabled: true, addedAt: now, updatedAt: now
-        ))
+        try db.addWatchedFolder(
+            WatchedFolder(
+                id: "id-1", path: "/a", maxGranularity: .L4,
+                enabled: true, addedAt: now, updatedAt: now
+            ))
 
         // Update только granularity → enabled остаётся true.
         try db.updateWatchedFolder(id: "id-1", maxGranularity: .L5)
@@ -167,8 +171,9 @@ final class DatabaseWatchedFoldersTests: XCTestCase {
         XCTAssertEqual(listed[0].maxGranularity, .L5)
         XCTAssertTrue(listed[0].enabled)
         XCTAssertEqual(listed[0].path, "/a")
-        XCTAssertGreaterThan(listed[0].updatedAt.timeIntervalSince1970, now.timeIntervalSince1970,
-                             "updated_ms должен подняться")
+        XCTAssertGreaterThan(
+            listed[0].updatedAt.timeIntervalSince1970, now.timeIntervalSince1970,
+            "updated_ms должен подняться")
 
         // Update только enabled → granularity остаётся L5.
         try db.updateWatchedFolder(id: "id-1", enabled: false)

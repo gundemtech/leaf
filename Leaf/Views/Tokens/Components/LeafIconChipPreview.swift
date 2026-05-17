@@ -22,15 +22,16 @@ struct LeafIconChipPreview: View {
 
             // Tones — info / success / warning / danger / neutral.
             HStack(alignment: .center, spacing: LeafSpace.md) {
-                LeafIconChip(asset: LeafIcons.status.info,         tint: LeafColor.status.info)
-                LeafIconChip(asset: LeafIcons.status.successFill,  tint: LeafColor.status.success)
-                LeafIconChip(asset: LeafIcons.status.warningFill,  tint: LeafColor.status.warning)
-                LeafIconChip(asset: LeafIcons.status.warningFill,  tint: LeafColor.status.danger)
-                LeafIconChip(asset: LeafIcons.action.close,        tint: LeafColor.text.tertiary)
+                LeafIconChip(asset: LeafIcons.status.info, tint: LeafColor.status.info)
+                LeafIconChip(asset: LeafIcons.status.successFill, tint: LeafColor.status.success)
+                LeafIconChip(asset: LeafIcons.status.warningFill, tint: LeafColor.status.warning)
+                LeafIconChip(asset: LeafIcons.status.warningFill, tint: LeafColor.status.danger)
+                LeafIconChip(asset: LeafIcons.action.close, tint: LeafColor.text.tertiary)
             }
 
             TokensInlineSpec(
-                spec: "LeafIconChip · sm 24 / md 32 / lg 40 / xl 64 squircle · tint glyph + tint @ 0.15 background · LeafRadius.sm/md/lg/xl corners",
+                spec:
+                    "LeafIconChip · sm 24 / md 32 / lg 40 / xl 64 squircle · tint glyph + tint @ 0.15 background · LeafRadius.sm/md/lg/xl corners",
                 codeSnippet: "LeafIconChip(asset: LeafIcons.status.info, tint: LeafColor.status.info)"
             )
         }

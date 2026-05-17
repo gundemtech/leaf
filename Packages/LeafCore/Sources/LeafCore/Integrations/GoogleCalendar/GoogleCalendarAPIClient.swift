@@ -107,7 +107,7 @@ public struct ProdGoogleCalendarAPIClient: GoogleCalendarAPIClient {
         components.path = "/calendar/v3/calendars/\(calendarID)/events"
 
         var items: [URLQueryItem] = [
-            URLQueryItem(name: "maxResults", value: "2500"),
+            URLQueryItem(name: "maxResults", value: "2500")
         ]
         if let syncToken {
             // Subsequent: server enforces "no other params" — singleEvents /

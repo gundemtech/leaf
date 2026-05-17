@@ -9,7 +9,7 @@ public enum VSCodeFamilyDispatcher {
         VSCodeStableParser.bundleID,
         CursorParser.bundleID,
         VSCodeInsidersParser.bundleID,
-        VSCodiumParser.bundleID
+        VSCodiumParser.bundleID,
     ]
 
     public static func isVSCodeFamily(bundleID: String) -> Bool {
@@ -21,11 +21,11 @@ public enum VSCodeFamilyDispatcher {
     /// emits `ide_window_title_observed` fallback).
     public static func parse(bundleID: String, title: String) -> VSCodeObservation? {
         switch bundleID {
-        case VSCodeStableParser.bundleID:    return VSCodeStableParser.parse(title)
-        case CursorParser.bundleID:          return CursorParser.parse(title)
-        case VSCodeInsidersParser.bundleID:  return VSCodeInsidersParser.parse(title)
-        case VSCodiumParser.bundleID:        return VSCodiumParser.parse(title)
-        default:                             return nil
+        case VSCodeStableParser.bundleID: return VSCodeStableParser.parse(title)
+        case CursorParser.bundleID: return CursorParser.parse(title)
+        case VSCodeInsidersParser.bundleID: return VSCodeInsidersParser.parse(title)
+        case VSCodiumParser.bundleID: return VSCodiumParser.parse(title)
+        default: return nil
         }
     }
 }

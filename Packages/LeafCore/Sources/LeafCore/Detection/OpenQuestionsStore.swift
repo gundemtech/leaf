@@ -10,12 +10,14 @@ public struct OpenQuestionRow: Sendable {
     public let githubPRRef: String?
     public let openedAtMs: Int64
 
-    public init(eventID: Int64,
-                hit: OpenQuestionHit,
-                slackThreadTS: String?,
-                linearIssueRef: String?,
-                githubPRRef: String?,
-                openedAtMs: Int64) {
+    public init(
+        eventID: Int64,
+        hit: OpenQuestionHit,
+        slackThreadTS: String?,
+        linearIssueRef: String?,
+        githubPRRef: String?,
+        openedAtMs: Int64
+    ) {
         self.eventID = eventID
         self.hit = hit
         self.slackThreadTS = slackThreadTS
@@ -33,9 +35,11 @@ public struct ResolutionContexts: Sendable {
     public let linearIssueRefs: [String]
     public let githubPRRefs: [String]
 
-    public init(slackThreadTS: String?,
-                linearIssueRefs: [String],
-                githubPRRefs: [String]) {
+    public init(
+        slackThreadTS: String?,
+        linearIssueRefs: [String],
+        githubPRRefs: [String]
+    ) {
         self.slackThreadTS = slackThreadTS
         self.linearIssueRefs = linearIssueRefs
         self.githubPRRefs = githubPRRefs
@@ -43,25 +47,32 @@ public struct ResolutionContexts: Sendable {
 }
 
 public enum OpenQuestionsStore {
-    public static func insertOrIgnore(_ row: OpenQuestionRow,
-                                      in db: GRDB.Database) throws -> Bool {
+    public static func insertOrIgnore(
+        _ row: OpenQuestionRow,
+        in db: GRDB.Database
+    ) throws -> Bool {
         let altsJSON: String?
         if let alts = row.hit.alternatives,
-           let data = try? JSONEncoder().encode(alts),
-           let s = String(data: data, encoding: .utf8) {
+            let data = try? JSONEncoder().encode(alts),
+            let s = String(data: data, encoding: .utf8)
+        {
             altsJSON = s
         } else {
             altsJSON = nil
         }
-        try db.execute(sql: """
-            INSERT OR IGNORE INTO open_questions
-                (event_id, question_excerpt, alternatives_json,
-                 slack_thread_ts, linear_issue_ref, github_pr_ref,
-                 opened_at_ms)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, arguments: [row.eventID, row.hit.questionExcerpt, altsJSON,
-                         row.slackThreadTS, row.linearIssueRef, row.githubPRRef,
-                         row.openedAtMs])
+        try db.execute(
+            sql: """
+                    INSERT OR IGNORE INTO open_questions
+                        (event_id, question_excerpt, alternatives_json,
+                         slack_thread_ts, linear_issue_ref, github_pr_ref,
+                         opened_at_ms)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+            arguments: [
+                row.eventID, row.hit.questionExcerpt, altsJSON,
+                row.slackThreadTS, row.linearIssueRef, row.githubPRRef,
+                row.openedAtMs,
+            ])
         return db.changesCount > 0
     }
 
@@ -69,10 +80,12 @@ public enum OpenQuestionsStore {
     /// Builds the WHERE OR-clauses dynamically so that empty context fields
     /// don't degrade to a full-table scan via NULL = NULL semantics. Returns
     /// rows affected.
-    public static func markResolved(matchingContexts contexts: ResolutionContexts,
-                                    resolvedByEventID: Int64,
-                                    resolvedAtMs: Int64,
-                                    in db: GRDB.Database) throws -> Int {
+    public static func markResolved(
+        matchingContexts contexts: ResolutionContexts,
+        resolvedByEventID: Int64,
+        resolvedAtMs: Int64,
+        in db: GRDB.Database
+    ) throws -> Int {
         var clauses: [String] = []
         var args: [DatabaseValueConvertible?] = []
         if let ts = contexts.slackThreadTS {
@@ -92,10 +105,10 @@ public enum OpenQuestionsStore {
         guard !clauses.isEmpty else { return 0 }
 
         let sql = """
-            UPDATE open_questions
-               SET resolved_by_event_id = ?, resolved_at_ms = ?
-             WHERE resolved_at_ms IS NULL AND (\(clauses.joined(separator: " OR ")))
-        """
+                UPDATE open_questions
+                   SET resolved_by_event_id = ?, resolved_at_ms = ?
+                 WHERE resolved_at_ms IS NULL AND (\(clauses.joined(separator: " OR ")))
+            """
         let head: [DatabaseValueConvertible?] = [resolvedByEventID, resolvedAtMs]
         try db.execute(sql: sql, arguments: StatementArguments(head + args))
         return db.changesCount

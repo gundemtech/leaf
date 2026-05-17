@@ -146,79 +146,79 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     // MARK: - Phase Track-3 D3 — Slack deep sweep (19 new kinds, all default OFF per ADR-020)
 
     // Warm tier (13)
-    case slackReactionAdded               = "slack_reaction_added"
-    case slackPinAdded                    = "slack_pin_added"
-    case slackPinRemoved                  = "slack_pin_removed"
-    case slackBookmarkAdded               = "slack_bookmark_added"
-    case slackBookmarkRemoved             = "slack_bookmark_removed"
-    case slackReminderCreated             = "slack_reminder_created"
-    case slackReminderCompleted           = "slack_reminder_completed"
-    case slackMessageScheduled            = "slack_message_scheduled"
-    case slackMessageSentScheduled        = "slack_message_sent_scheduled"
-    case slackItemSaved                   = "slack_item_saved"
-    case slackItemUnsaved                 = "slack_item_unsaved"
-    case slackChannelJoined               = "slack_channel_joined"
-    case slackChannelLeft                 = "slack_channel_left"
+    case slackReactionAdded = "slack_reaction_added"
+    case slackPinAdded = "slack_pin_added"
+    case slackPinRemoved = "slack_pin_removed"
+    case slackBookmarkAdded = "slack_bookmark_added"
+    case slackBookmarkRemoved = "slack_bookmark_removed"
+    case slackReminderCreated = "slack_reminder_created"
+    case slackReminderCompleted = "slack_reminder_completed"
+    case slackMessageScheduled = "slack_message_scheduled"
+    case slackMessageSentScheduled = "slack_message_sent_scheduled"
+    case slackItemSaved = "slack_item_saved"
+    case slackItemUnsaved = "slack_item_unsaved"
+    case slackChannelJoined = "slack_channel_joined"
+    case slackChannelLeft = "slack_channel_left"
 
     // Cold tier (6)
-    case slackCanvasCreated               = "slack_canvas_created"
-    case slackCanvasEdited                = "slack_canvas_edited"
-    case slackCustomEmojiAdded            = "slack_custom_emoji_added"
-    case slackUsergroupMembershipChanged  = "slack_usergroup_membership_changed"
-    case slackChannelRenamed              = "slack_channel_renamed"
-    case slackChannelArchived             = "slack_channel_archived"
+    case slackCanvasCreated = "slack_canvas_created"
+    case slackCanvasEdited = "slack_canvas_edited"
+    case slackCustomEmojiAdded = "slack_custom_emoji_added"
+    case slackUsergroupMembershipChanged = "slack_usergroup_membership_changed"
+    case slackChannelRenamed = "slack_channel_renamed"
+    case slackChannelArchived = "slack_channel_archived"
 
     // MARK: - Phase Track-4 S1 — Architecture catch-up (9 new kinds, all default OFF per ADR-020)
-    case meetingStateEntered              = "meeting_state_entered"
-    case meetingStateExited               = "meeting_state_exited"
-    case focusModeEnabled                 = "focus_mode_enabled"
-    case focusModeDisabled                = "focus_mode_disabled"
-    case systemLocked                     = "system_locked"
-    case systemUnlocked                   = "system_unlocked"
-    case systemSlept                      = "system_slept"
-    case systemWoke                       = "system_woke"
-    case spaceSwitched                    = "space_switched"
+    case meetingStateEntered = "meeting_state_entered"
+    case meetingStateExited = "meeting_state_exited"
+    case focusModeEnabled = "focus_mode_enabled"
+    case focusModeDisabled = "focus_mode_disabled"
+    case systemLocked = "system_locked"
+    case systemUnlocked = "system_unlocked"
+    case systemSlept = "system_slept"
+    case systemWoke = "system_woke"
+    case spaceSwitched = "space_switched"
 
     // MARK: - Phase Track-4 S2 — AppleScript surface (14 new kinds, all default OFF per ADR-020)
-    case xcodeActiveDocChanged            = "xcode_active_doc_changed"
-    case xcodeBuildStateChanged           = "xcode_build_state_changed"
-    case jetbrainsActiveDocChanged        = "jetbrains_active_doc_changed"
-    case musicTrackChanged                = "music_track_changed"
-    case spotifyTrackChanged              = "spotify_track_changed"
-    case notesActiveTitleChanged          = "notes_active_title_changed"
-    case reminderCompleted                = "reminder_completed"
-    case calendarAppViewChanged           = "calendar_app_view_changed"
-    case mailActiveMailboxChanged         = "mail_active_mailbox_changed"
-    case zoomMeetingStateChanged          = "zoom_meeting_state_changed"
-    case zoomMeetingNameObserved          = "zoom_meeting_name_observed"
-    case safariTabsChanged                = "safari_tabs_changed"
-    case chromeTabsChanged                = "chrome_tabs_changed"
-    case arcTabsChanged                   = "arc_tabs_changed"
+    case xcodeActiveDocChanged = "xcode_active_doc_changed"
+    case xcodeBuildStateChanged = "xcode_build_state_changed"
+    case jetbrainsActiveDocChanged = "jetbrains_active_doc_changed"
+    case musicTrackChanged = "music_track_changed"
+    case spotifyTrackChanged = "spotify_track_changed"
+    case notesActiveTitleChanged = "notes_active_title_changed"
+    case reminderCompleted = "reminder_completed"
+    case calendarAppViewChanged = "calendar_app_view_changed"
+    case mailActiveMailboxChanged = "mail_active_mailbox_changed"
+    case zoomMeetingStateChanged = "zoom_meeting_state_changed"
+    case zoomMeetingNameObserved = "zoom_meeting_name_observed"
+    case safariTabsChanged = "safari_tabs_changed"
+    case chromeTabsChanged = "chrome_tabs_changed"
+    case arcTabsChanged = "arc_tabs_changed"
 
     // MARK: - Phase Track-6 P3 (Browsers Deep)
-    case safariTabNavigated               = "safari_tab_navigated"
-    case chromeTabNavigated               = "chrome_tab_navigated"
-    case arcTabNavigated                  = "arc_tab_navigated"
-    case safariTabActivated               = "safari_tab_activated"
-    case chromeTabActivated               = "chrome_tab_activated"
-    case arcTabActivated                  = "arc_tab_activated"
-    case chromeBookmarkChanged            = "chrome_bookmark_changed"
-    case safariBookmarkChanged            = "safari_bookmark_changed"
+    case safariTabNavigated = "safari_tab_navigated"
+    case chromeTabNavigated = "chrome_tab_navigated"
+    case arcTabNavigated = "arc_tab_navigated"
+    case safariTabActivated = "safari_tab_activated"
+    case chromeTabActivated = "chrome_tab_activated"
+    case arcTabActivated = "arc_tab_activated"
+    case chromeBookmarkChanged = "chrome_bookmark_changed"
+    case safariBookmarkChanged = "safari_bookmark_changed"
 
     // MARK: - Phase Track-4 S3 — system observers + intensity
-    case intensitySnapshot                = "intensity_snapshot"
-    case intensityBucketDropped           = "intensity_bucket_dropped"
-    case audioRouteChanged                = "audio_route_changed"
-    case micInUseEntered                  = "mic_in_use_entered"
-    case micInUseExited                   = "mic_in_use_exited"
-    case displayConnected                 = "display_connected"
-    case displayDisconnected              = "display_disconnected"
-    case vpnStateChanged                  = "vpn_state_changed"
-    case wifiStateChanged                 = "wifi_state_changed"
-    case clipboardEventCount              = "clipboard_event_count"
-    case screenshotTaken                  = "screenshot_taken"
-    case downloadAdded                    = "download_added"
-    case trashChanged                     = "trash_changed"
+    case intensitySnapshot = "intensity_snapshot"
+    case intensityBucketDropped = "intensity_bucket_dropped"
+    case audioRouteChanged = "audio_route_changed"
+    case micInUseEntered = "mic_in_use_entered"
+    case micInUseExited = "mic_in_use_exited"
+    case displayConnected = "display_connected"
+    case displayDisconnected = "display_disconnected"
+    case vpnStateChanged = "vpn_state_changed"
+    case wifiStateChanged = "wifi_state_changed"
+    case clipboardEventCount = "clipboard_event_count"
+    case screenshotTaken = "screenshot_taken"
+    case downloadAdded = "download_added"
+    case trashChanged = "trash_changed"
 
     // MARK: - Phase Track-6 P1 — Claude Code Deep (16 new kinds, all default OFF per ADR-020)
     // Retroactive (existed pre-P1; share-key control surface lands now)
@@ -226,55 +226,55 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     // `user_prompt`) lack the `claude_` provider prefix the rest of the block
     // has — guards against future collisions if other AI providers (Cursor /
     // Continue.dev) land their own generic kinds.
-    case claudeCodeToolUse                = "tool_use"
-    case claudeCodeUserPrompt             = "user_prompt"
+    case claudeCodeToolUse = "tool_use"
+    case claudeCodeUserPrompt = "user_prompt"
     // Session lifecycle
-    case claudeSessionStarted             = "claude_session_started"
-    case claudeSessionEnded               = "claude_session_ended"
-    case claudeSessionCompacted           = "claude_session_compacted"
-    case claudePromptSubmitted            = "claude_prompt_submitted"
-    case claudeTurnEnded                  = "claude_turn_ended"
+    case claudeSessionStarted = "claude_session_started"
+    case claudeSessionEnded = "claude_session_ended"
+    case claudeSessionCompacted = "claude_session_compacted"
+    case claudePromptSubmitted = "claude_prompt_submitted"
+    case claudeTurnEnded = "claude_turn_ended"
     // Token attribution
-    case claudeTokensUsed                 = "claude_tokens_used"
+    case claudeTokensUsed = "claude_tokens_used"
     // Per-tool
-    case claudeBashExecuted               = "claude_bash_executed"
-    case claudeFileEdited                 = "claude_file_edited"
-    case claudeFileWritten                = "claude_file_written"
-    case claudeFileRead                   = "claude_file_read"
-    case claudeWebFetched                 = "claude_web_fetched"
-    case claudeSubagentDispatched         = "claude_subagent_dispatched"
-    case claudeMcpToolInvoked             = "claude_mcp_tool_invoked"
-    case claudeSlashCommandInvoked        = "claude_slash_command_invoked"
+    case claudeBashExecuted = "claude_bash_executed"
+    case claudeFileEdited = "claude_file_edited"
+    case claudeFileWritten = "claude_file_written"
+    case claudeFileRead = "claude_file_read"
+    case claudeWebFetched = "claude_web_fetched"
+    case claudeSubagentDispatched = "claude_subagent_dispatched"
+    case claudeMcpToolInvoked = "claude_mcp_tool_invoked"
+    case claudeSlashCommandInvoked = "claude_slash_command_invoked"
 
     // MARK: - Track-6 P4 — Google Calendar Deep (default OFF per ADR-020).
-    case googleCalendarEventObserved          = "google_calendar_event_observed"
-    case googleCalendarFocusBlockStarted      = "google_calendar_focus_block_started"
-    case googleCalendarFocusBlockEnded        = "google_calendar_focus_block_ended"
-    case googleCalendarOOOStarted             = "google_calendar_ooo_started"
-    case googleCalendarOOOEnded               = "google_calendar_ooo_ended"
+    case googleCalendarEventObserved = "google_calendar_event_observed"
+    case googleCalendarFocusBlockStarted = "google_calendar_focus_block_started"
+    case googleCalendarFocusBlockEnded = "google_calendar_focus_block_ended"
+    case googleCalendarOOOStarted = "google_calendar_ooo_started"
+    case googleCalendarOOOEnded = "google_calendar_ooo_ended"
     case googleCalendarWorkingLocationChanged = "google_calendar_working_location_changed"
 
     // MARK: - Phase Track-6 P2 — Xcode Deep (6 new kinds, all default OFF per ADR-020)
-    case xcodeBuildStarted                = "xcode_build_started"
-    case xcodeBuildFinished               = "xcode_build_finished"
-    case xcodeTestRunStarted              = "xcode_test_run_started"
-    case xcodeTestRunFinished             = "xcode_test_run_finished"
-    case xcodeSchemeChanged               = "xcode_scheme_changed"
-    case xcodeRunDestinationChanged       = "xcode_run_destination_changed"
+    case xcodeBuildStarted = "xcode_build_started"
+    case xcodeBuildFinished = "xcode_build_finished"
+    case xcodeTestRunStarted = "xcode_test_run_started"
+    case xcodeTestRunFinished = "xcode_test_run_finished"
+    case xcodeSchemeChanged = "xcode_scheme_changed"
+    case xcodeRunDestinationChanged = "xcode_run_destination_changed"
 
     // MARK: - Phase Track-6 P5 — Zoom Deep
     // Duration-tracking pair + EventKit-driven calendar cross-link.
     // PMI redaction applied at parser boundary (LeafCorePrivate ProdZoomMeetingTopicRedactor).
     // No new TCC prompt — coalesces over existing 30s polling of zoom.us.app.
-    case zoomMeetingStarted               = "zoom_meeting_started"
-    case zoomMeetingEnded                 = "zoom_meeting_ended"
-    case zoomMeetingCalendarLinked        = "zoom_meeting_calendar_linked"
+    case zoomMeetingStarted = "zoom_meeting_started"
+    case zoomMeetingEnded = "zoom_meeting_ended"
+    case zoomMeetingCalendarLinked = "zoom_meeting_calendar_linked"
 
     // MARK: - Phase Track-6 P6 — IDEs surface cap (default OFF per ADR-020).
-    case vscodeActiveDocChanged           = "vscode_active_doc_changed"
-    case vscodeWorkspaceOpened            = "vscode_workspace_opened"
-    case jetbrainsRecentProjectObserved   = "jetbrains_recent_project_observed"
-    case ideWindowTitleObserved           = "ide_window_title_observed"
+    case vscodeActiveDocChanged = "vscode_active_doc_changed"
+    case vscodeWorkspaceOpened = "vscode_workspace_opened"
+    case jetbrainsRecentProjectObserved = "jetbrains_recent_project_observed"
+    case ideWindowTitleObserved = "ide_window_title_observed"
 }
 
 /// Phase 4.7.A — onboarding default enabled-state per event_kind.
@@ -475,15 +475,15 @@ public enum ShareEventTypeDefaults {
         .init(key: .zoomMeetingNameObserved, defaultEnabled: false),
         .init(key: .safariTabsChanged, defaultEnabled: false),
         .init(key: .chromeTabsChanged, defaultEnabled: false),
-        .init(key: .arcTabsChanged,            defaultEnabled: false),
-        .init(key: .safariTabNavigated,        defaultEnabled: false),
-        .init(key: .chromeTabNavigated,        defaultEnabled: false),
-        .init(key: .arcTabNavigated,           defaultEnabled: false),
-        .init(key: .safariTabActivated,        defaultEnabled: false),
-        .init(key: .chromeTabActivated,        defaultEnabled: false),
-        .init(key: .arcTabActivated,           defaultEnabled: false),
-        .init(key: .chromeBookmarkChanged,     defaultEnabled: false),
-        .init(key: .safariBookmarkChanged,     defaultEnabled: false),
+        .init(key: .arcTabsChanged, defaultEnabled: false),
+        .init(key: .safariTabNavigated, defaultEnabled: false),
+        .init(key: .chromeTabNavigated, defaultEnabled: false),
+        .init(key: .arcTabNavigated, defaultEnabled: false),
+        .init(key: .safariTabActivated, defaultEnabled: false),
+        .init(key: .chromeTabActivated, defaultEnabled: false),
+        .init(key: .arcTabActivated, defaultEnabled: false),
+        .init(key: .chromeBookmarkChanged, defaultEnabled: false),
+        .init(key: .safariBookmarkChanged, defaultEnabled: false),
 
         // Phase Track-4 S3 — system observers + intensity. All default OFF per
         // ADR-020 (capture-everything locally, share-selectively).
@@ -545,6 +545,6 @@ public enum ShareEventTypeDefaults {
         .init(key: .vscodeActiveDocChanged, defaultEnabled: false),
         .init(key: .vscodeWorkspaceOpened, defaultEnabled: false),
         .init(key: .jetbrainsRecentProjectObserved, defaultEnabled: false),
-        .init(key: .ideWindowTitleObserved, defaultEnabled: false)
+        .init(key: .ideWindowTitleObserved, defaultEnabled: false),
     ]
 }

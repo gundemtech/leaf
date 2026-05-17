@@ -3,8 +3,9 @@
 // `UnimplementedEnvelopeCodec` 5.1.C pattern). Real HKDF impl tests
 // живут в LeafCorePrivate `ProdInviteKDFTests` (gitignored moat).
 
-import XCTest
 import CryptoKit
+import XCTest
+
 @testable import LeafCore
 
 final class InviteKDFTests: XCTestCase {

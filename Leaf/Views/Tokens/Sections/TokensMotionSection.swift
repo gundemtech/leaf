@@ -13,10 +13,10 @@ struct TokensMotionSection: View {
         VStack(alignment: .leading, spacing: LeafSpace.lg) {
             Text("Motion").font(LeafType.title.large).foregroundStyle(LeafColor.text.primary)
             VStack(alignment: .leading, spacing: LeafSpace.md) {
-                row("spring.snappy",     LeafMotion.spring.snappy)
-                row("spring.gentle",     LeafMotion.spring.gentle)
-                row("spring.bouncy",     LeafMotion.spring.bouncy)
-                row("easing.standard",   LeafMotion.easing.standard)
+                row("spring.snappy", LeafMotion.spring.snappy)
+                row("spring.gentle", LeafMotion.spring.gentle)
+                row("spring.bouncy", LeafMotion.spring.bouncy)
+                row("easing.standard", LeafMotion.easing.standard)
                 row("easing.emphasized", LeafMotion.easing.emphasized)
             }
             Button("Nudge") { nudge.toggle() }

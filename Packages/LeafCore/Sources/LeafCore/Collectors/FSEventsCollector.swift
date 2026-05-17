@@ -71,7 +71,9 @@ public actor FSEventsCollector {
             await self.runPollLoop()
         }
 
-        logger.info("FSEventsCollector started (watching=\(self.currentPaths.count, privacy: .public), poll=\(self.reconfigPollSec, privacy: .public)s)")
+        logger.info(
+            "FSEventsCollector started (watching=\(self.currentPaths.count, privacy: .public), poll=\(self.reconfigPollSec, privacy: .public)s)"
+        )
     }
 
     public func stop() async {
@@ -104,7 +106,8 @@ public actor FSEventsCollector {
     /// Идемпотентен — повторный вызов с same paths = no-op (cheap path compare).
     private func rebuildStream() async {
         let folders = (try? database.listWatchedFolders(includingDisabled: false)) ?? []
-        let paths = folders
+        let paths =
+            folders
             .map { URL(fileURLWithPath: $0.path).resolvingSymlinksInPath().path }
             .sorted()
 

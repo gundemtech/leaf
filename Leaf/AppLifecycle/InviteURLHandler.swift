@@ -10,11 +10,11 @@
 //  Не interval-poll'ит pasteboard — только реактивные триггеры (URL open / app foreground / explicit sheet open).
 //
 
-import Foundation
 import AppKit
+import Foundation
+import LeafCore
 import OSLog
 import Observation
-import LeafCore
 
 @MainActor
 @Observable
@@ -57,15 +57,16 @@ final class InviteURLHandler {
     @discardableResult
     func probeClipboard() -> ClipboardMatcher.Match {
         guard let raw = NSPasteboard.general.string(forType: .string),
-              !raw.isEmpty else {
+            !raw.isEmpty
+        else {
             lastDetectedKind = .none
             return .none
         }
         let result = ClipboardMatcher.match(raw)
         switch result {
         case .inviteURL: lastDetectedKind = .inviteURL
-        case .joinCode:  lastDetectedKind = .joinCode
-        case .none:      lastDetectedKind = .none
+        case .joinCode: lastDetectedKind = .joinCode
+        case .none: lastDetectedKind = .none
         }
         return result
     }

@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class InvitePlaintextTests: XCTestCase {
@@ -41,15 +42,15 @@ final class InvitePlaintextTests: XCTestCase {
     func testCodable_RejectsMissingField() throws {
         // org_id missing
         let json = """
-        {
-          "team_key": "AAAA",
-          "team_key_id": "11111111-2222-3333-4444-555555555555",
-          "org_name": "Leaf",
-          "admin_member_id": "99999999-8888-7777-6666-555555555555",
-          "admin_display_name": "Dmitrii",
-          "issued_at_ms": 1730000000000
-        }
-        """.data(using: .utf8)!
+            {
+              "team_key": "AAAA",
+              "team_key_id": "11111111-2222-3333-4444-555555555555",
+              "org_name": "Leaf",
+              "admin_member_id": "99999999-8888-7777-6666-555555555555",
+              "admin_display_name": "Dmitrii",
+              "issued_at_ms": 1730000000000
+            }
+            """.data(using: .utf8)!
         XCTAssertThrowsError(try JSONDecoder().decode(InvitePlaintext.self, from: json) as InvitePlaintext)
     }
 
@@ -58,7 +59,7 @@ final class InvitePlaintextTests: XCTestCase {
         let b = InvitePlaintext(
             teamKeyBase64: a.teamKeyBase64,
             teamKeyID: a.teamKeyID,
-            orgID: "00000000-0000-0000-0000-000000000000", // different
+            orgID: "00000000-0000-0000-0000-000000000000",  // different
             orgName: a.orgName,
             adminMemberID: a.adminMemberID,
             adminDisplayName: a.adminDisplayName,

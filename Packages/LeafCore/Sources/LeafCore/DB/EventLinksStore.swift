@@ -39,58 +39,64 @@ public enum EventLinksStore {
         if !knownLinearPrefixes.isEmpty {
             for (_, body) in bodies {
                 for id in LinearIDExtractor.extractAll(text: body, knownPrefixes: knownLinearPrefixes) {
-                    try insert(eventID: eventID,
-                               linkKind: Schema.LinkKinds.linearIDInText,
-                               targetKind: Schema.TargetKinds.linearIssue,
-                               targetRef: id,
-                               confidence: derivers.confidence.linearIDInText,
-                               createdAtMs: ts, in: db)
+                    try insert(
+                        eventID: eventID,
+                        linkKind: Schema.LinkKinds.linearIDInText,
+                        targetKind: Schema.TargetKinds.linearIssue,
+                        targetRef: id,
+                        confidence: derivers.confidence.linearIDInText,
+                        createdAtMs: ts, in: db)
                 }
             }
         }
 
         // 2) Branch name → Linear (gh_commit_pushed only). Moat extractor via derivers.
         if eventKind == GitHubEventKindKey.commitPushed.rawValue,
-           let branch = payload["branch"],
-           !knownLinearPrefixes.isEmpty,
-           let id = derivers.extractBranchLinearID(branch, knownLinearPrefixes) {
-            try insert(eventID: eventID,
-                       linkKind: Schema.LinkKinds.branchNameLinearRef,
-                       targetKind: Schema.TargetKinds.linearIssue,
-                       targetRef: id,
-                       confidence: derivers.confidence.branchNameLinearRef,
-                       createdAtMs: ts, in: db)
+            let branch = payload["branch"],
+            !knownLinearPrefixes.isEmpty,
+            let id = derivers.extractBranchLinearID(branch, knownLinearPrefixes)
+        {
+            try insert(
+                eventID: eventID,
+                linkKind: Schema.LinkKinds.branchNameLinearRef,
+                targetKind: Schema.TargetKinds.linearIssue,
+                targetRef: id,
+                confidence: derivers.confidence.branchNameLinearRef,
+                createdAtMs: ts, in: db)
         }
 
         // 3) PR URL + hash-ref in Slack bodies. Moat extractors via derivers.
         for (kind, body) in bodies where isSlackBody(kind) {
             for ref in derivers.extractPRURLs(body) {
-                try insert(eventID: eventID,
-                           linkKind: Schema.LinkKinds.prURLInSlack,
-                           targetKind: Schema.TargetKinds.githubPR,
-                           targetRef: ref,
-                           confidence: derivers.confidence.prURLInSlack,
-                           createdAtMs: ts, in: db)
+                try insert(
+                    eventID: eventID,
+                    linkKind: Schema.LinkKinds.prURLInSlack,
+                    targetKind: Schema.TargetKinds.githubPR,
+                    targetRef: ref,
+                    confidence: derivers.confidence.prURLInSlack,
+                    createdAtMs: ts, in: db)
             }
             for ref in derivers.extractPRHashRefs(body) {
-                try insert(eventID: eventID,
-                           linkKind: Schema.LinkKinds.prNumberHashRef,
-                           targetKind: Schema.TargetKinds.githubPR,
-                           targetRef: ref,
-                           confidence: derivers.confidence.prNumberHashRef,
-                           createdAtMs: ts, in: db)
+                try insert(
+                    eventID: eventID,
+                    linkKind: Schema.LinkKinds.prNumberHashRef,
+                    targetKind: Schema.TargetKinds.githubPR,
+                    targetRef: ref,
+                    confidence: derivers.confidence.prNumberHashRef,
+                    createdAtMs: ts, in: db)
             }
         }
 
         // 4) Requested reviewers — structured fan-out, direct (no extractor).
         if let raw = payload[Schema.EventPayloadKeys.requestedReviewersJson] {
             for login in decodeStringList(raw) {
-                try insert(eventID: eventID,
-                           linkKind: Schema.LinkKinds.reviewerAssigned,
-                           targetKind: Schema.TargetKinds.githubUser,
-                           targetRef: login,
-                           confidence: derivers.confidence.reviewerAssigned,
-                           createdAtMs: ts, in: db)
+                try insert(
+                    eventID: eventID,
+                    linkKind: Schema.LinkKinds.reviewerAssigned,
+                    targetKind: Schema.TargetKinds.githubUser,
+                    targetRef: login,
+                    confidence: derivers.confidence.reviewerAssigned,
+                    createdAtMs: ts, in: db)
             }
         }
 
@@ -98,14 +104,16 @@ public enum EventLinksStore {
         //    hash via ZoomCalendarLinker and writes it to the started-event payload;
         //    deriveLinks reads the structured field and inserts the link row.
         if eventKind == "zoom_meeting_started",
-           let linkedID = payload[Schema.EventPayloadKeys.linkedCalendarEventID],
-           !linkedID.isEmpty {
-            try insert(eventID: eventID,
-                       linkKind: Schema.LinkKinds.zoomToCalendarMeeting,
-                       targetKind: Schema.TargetKinds.calendarEvent,
-                       targetRef: linkedID,
-                       confidence: derivers.confidence.zoomToCalendarMeeting,
-                       createdAtMs: ts, in: db)
+            let linkedID = payload[Schema.EventPayloadKeys.linkedCalendarEventID],
+            !linkedID.isEmpty
+        {
+            try insert(
+                eventID: eventID,
+                linkKind: Schema.LinkKinds.zoomToCalendarMeeting,
+                targetKind: Schema.TargetKinds.calendarEvent,
+                targetRef: linkedID,
+                confidence: derivers.confidence.zoomToCalendarMeeting,
+                createdAtMs: ts, in: db)
         }
     }
 
@@ -193,8 +201,9 @@ public enum EventLinksStore {
         let eventKind = payload["event_kind"] ?? ""
 
         if let raw = payload[Schema.EventPayloadKeys.body],
-           !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           let kind = topLevelBodyKind(forEventKind: eventKind) {
+            !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            let kind = topLevelBodyKind(forEventKind: eventKind)
+        {
             out.append((kind, raw))
         }
 
@@ -225,18 +234,22 @@ public enum EventLinksStore {
         if eventKind == "linear_notification_received" { return Schema.BodyKinds.linearNotificationTitle }
         if eventKind == GitHubEventKindKey.commitPushed.rawValue { return Schema.BodyKinds.commitMsg }
         if eventKind == GitHubEventKindKey.issueCommentAuthored.rawValue { return Schema.BodyKinds.ghIssueComment }
-        if eventKind == GitHubEventKindKey.prReviewCommentAuthored.rawValue { return Schema.BodyKinds.ghPRReviewComment }
+        if eventKind == GitHubEventKindKey.prReviewCommentAuthored.rawValue {
+            return Schema.BodyKinds.ghPRReviewComment
+        }
         if eventKind == "slack_thread_reply_aggregate" { return Schema.BodyKinds.slackThreadParent }
         // Track-3 D4 — gh_issue_* body dispatch. Issue body indexed under the
         // same body_kind as issue comments (mirrors FTS lines 119-122).
         if eventKind == GitHubEventKindKey.issueOpened.rawValue
-            || eventKind == GitHubEventKindKey.issueClosed.rawValue {
+            || eventKind == GitHubEventKindKey.issueClosed.rawValue
+        {
             return Schema.BodyKinds.ghIssueComment
         }
         // Track-3 D4 — gist description / release body / deployment description
         // dispatch (mirrors FTS lines 126-135). Missed in D2 — closed here.
         if eventKind == GitHubEventKindKey.gistCreated.rawValue
-            || eventKind == GitHubEventKindKey.gistUpdated.rawValue {
+            || eventKind == GitHubEventKindKey.gistUpdated.rawValue
+        {
             return Schema.BodyKinds.ghGistDescription
         }
         if eventKind == GitHubEventKindKey.releasePublished.rawValue {
@@ -251,11 +264,13 @@ public enum EventLinksStore {
         // cross-source link derivation (e.g. LEAF-NN refs inside canvas titles).
         // Mirrors FTS lines 139-149.
         if eventKind == SlackEventKindKey.slackCanvasCreated.rawValue
-            || eventKind == SlackEventKindKey.slackCanvasEdited.rawValue {
+            || eventKind == SlackEventKindKey.slackCanvasEdited.rawValue
+        {
             return Schema.BodyKinds.slackCanvasTitle
         }
         if eventKind == SlackEventKindKey.slackBookmarkAdded.rawValue
-            || eventKind == SlackEventKindKey.slackBookmarkRemoved.rawValue {
+            || eventKind == SlackEventKindKey.slackBookmarkRemoved.rawValue
+        {
             return Schema.BodyKinds.slackBookmarkTitle
         }
         // Track-3 D4 — explicit gh_pr_* cases instead of `hasPrefix("gh_pr_")`
@@ -264,7 +279,8 @@ public enum EventLinksStore {
         // indexing on empty fields). Mirrors FTS lines 114-118.
         if eventKind == GitHubEventKindKey.prOpened.rawValue
             || eventKind == GitHubEventKindKey.prMerged.rawValue
-            || eventKind == GitHubEventKindKey.prClosed.rawValue {
+            || eventKind == GitHubEventKindKey.prClosed.rawValue
+        {
             return Schema.BodyKinds.ghPR
         }
         return nil
@@ -292,7 +308,9 @@ public enum EventLinksStore {
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
         } catch {
-            log.error("EventLinksStore JSON decode failure (BodyOnly/TextOnly): \(String(describing: error), privacy: .public)")
+            log.error(
+                "EventLinksStore JSON decode failure (BodyOnly/TextOnly): \(String(describing: error), privacy: .public)"
+            )
             return []
         }
     }
@@ -302,7 +320,8 @@ public enum EventLinksStore {
         guard let data = raw.data(using: .utf8) else { return [] }
         do {
             let decoded = try JSONDecoder().decode([String].self, from: data)
-            return decoded
+            return
+                decoded
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
         } catch {
@@ -314,10 +333,10 @@ public enum EventLinksStore {
     private static func mapRow(_ row: Row) -> EventLink? {
         guard
             let fromEventID = row["from_event_id"] as Int64?,
-            let linkKind    = row["link_kind"] as String?,
-            let targetKind  = row["target_kind"] as String?,
-            let targetRef   = row["target_ref"] as String?,
-            let confidence  = row["confidence"] as Double?,
+            let linkKind = row["link_kind"] as String?,
+            let targetKind = row["target_kind"] as String?,
+            let targetRef = row["target_ref"] as String?,
+            let confidence = row["confidence"] as Double?,
             let createdAtMs = row["created_at_ms"] as Int64?
         else { return nil }
         return EventLink(

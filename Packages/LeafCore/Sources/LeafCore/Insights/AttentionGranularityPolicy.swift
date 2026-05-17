@@ -15,11 +15,11 @@ import Foundation
 /// Granularity ceiling per ADR-013. См. `architecture.md` раздел "Granularity
 /// levels и маппинг на источники". L6 (content) запрещён всегда.
 public enum AttentionGranularityLevel: Int, Sendable {
-    case l1 = 1   // app only (bundle ID)
-    case l2 = 2   // app + intensity (idle ratio)
-    case l3 = 3   // app + window title (или browser URL для browse-категории)
-    case l4 = 4   // app + folder/module
-    case l5 = 5   // app + file name (opt-in per folder)
+    case l1 = 1  // app only (bundle ID)
+    case l2 = 2  // app + intensity (idle ratio)
+    case l3 = 3  // app + window title (или browser URL для browse-категории)
+    case l4 = 4  // app + folder/module
+    case l5 = 5  // app + file name (opt-in per folder)
 }
 
 public protocol AttentionGranularityPolicy: Sendable {

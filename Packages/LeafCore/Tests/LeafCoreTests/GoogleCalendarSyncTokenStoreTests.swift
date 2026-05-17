@@ -1,5 +1,6 @@
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 /// Phase Track-6 P4 — `GoogleCalendarSyncTokenStore` ride atop existing

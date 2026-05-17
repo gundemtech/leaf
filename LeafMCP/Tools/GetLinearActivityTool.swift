@@ -39,14 +39,15 @@ struct GetLinearActivityTool: ToolExecutor {
                 "period": [
                     "type": "string",
                     "enum": ["today", "yesterday", "last_7_days"],
-                    "description": "Time window (default: today)"
+                    "description": "Time window (default: today)",
                 ]
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
         ]
         return ToolDefinition(
             name: "get_linear_activity",
-            description: "Return Linear issue activity (distinct issues touched, breakdown by project and status, plus completion duration stats for issues closed in the period) for the given period. Metadata only — issue bodies and comments never leave the device.",
+            description:
+                "Return Linear issue activity (distinct issues touched, breakdown by project and status, plus completion duration stats for issues closed in the period) for the given period. Metadata only — issue bodies and comments never leave the device.",
             inputSchema: AnyCodable(schema)
         )
     }()
@@ -54,7 +55,8 @@ struct GetLinearActivityTool: ToolExecutor {
     func execute(arguments: AnyCodable?) async throws -> ToolCallResult {
         let period: TimelinePeriod
         if let dict = arguments?.value as? [String: Any],
-           let raw = dict["period"] as? String {
+            let raw = dict["period"] as? String
+        {
             guard let p = TimelinePeriod(rawValue: raw) else {
                 throw MCPProtocolError.invalidParams(
                     "period must be one of: today, yesterday, last_7_days"
@@ -67,9 +69,13 @@ struct GetLinearActivityTool: ToolExecutor {
 
         guard FileManager.default.fileExists(atPath: dbURL.path) else {
             return ToolCallResult(
-                content: [.text(TextContent(
-                    text: "Leaf database not found at \(dbURL.path). Enable 'Background collection' in Settings first."
-                ))],
+                content: [
+                    .text(
+                        TextContent(
+                            text:
+                                "Leaf database not found at \(dbURL.path). Enable 'Background collection' in Settings first."
+                        ))
+                ],
                 isError: true
             )
         }
@@ -90,14 +96,14 @@ struct GetLinearActivityTool: ToolExecutor {
             },
             "byStatus": breakdown.byStatus.map { entry -> [String: Any] in
                 ["status": entry.status, "count": entry.count]
-            }
+            },
         ]
         if let dur = breakdown.completionDurationStats {
             payload["completionDurationStats"] = [
                 "medianSeconds": dur.medianSeconds,
                 "avgSeconds": dur.avgSeconds,
                 "maxSeconds": dur.maxSeconds,
-                "sampleCount": dur.sampleCount
+                "sampleCount": dur.sampleCount,
             ]
         }
         // Phase 4.6.C.1 — global week-over-week activity delta (additive optional;
@@ -121,7 +127,7 @@ struct GetLinearActivityTool: ToolExecutor {
                 "completed": tx.completed,
                 "canceled": tx.canceled,
                 "reopened": tx.reopened,
-                "total": tx.total
+                "total": tx.total,
             ]
         }
         // Phase 4.6.B — soft follow-through ratio. Absent если completed=0

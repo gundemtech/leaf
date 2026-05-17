@@ -8,6 +8,6 @@
 import CoreGraphics
 
 enum LeafNavRowTokens {
-    static let height:       CGFloat = 36
+    static let height: CGFloat = 36
     static let cornerRadius: CGFloat = LeafRadius.md
 }

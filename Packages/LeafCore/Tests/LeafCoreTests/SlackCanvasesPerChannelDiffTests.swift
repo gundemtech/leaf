@@ -7,6 +7,7 @@
 //
 
 import XCTest
+
 @testable import LeafCore
 
 final class SlackCanvasesPerChannelDiffTests: XCTestCase {
@@ -26,7 +27,7 @@ final class SlackCanvasesPerChannelDiffTests: XCTestCase {
         ])
         let curr = SlackCanvasesSnapshot(canvases: [
             SlackCanvas(channelID: "C1", canvasID: "K1", title: "Spec", lastEditedMs: 1000),
-            SlackCanvas(channelID: "C2", canvasID: "K2", title: "Roadmap", lastEditedMs: 2000)
+            SlackCanvas(channelID: "C2", canvasID: "K2", title: "Roadmap", lastEditedMs: 2000),
         ])
         let (created, edited) = SlackColdCollector.canvasesPerChannelDiff(prior: prior, current: curr)
         XCTAssertEqual(created.map(\.canvasID), ["K2"])

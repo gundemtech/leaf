@@ -13,6 +13,7 @@
 //
 
 import XCTest
+
 @testable import LeafCore
 
 final class GitHubProjectsV2DiffTests: XCTestCase {
@@ -96,7 +97,7 @@ final class GitHubProjectsV2DiffTests: XCTestCase {
     func testIdenticalInput_emitsNothing() {
         let snap = [
             item(id: "I1", status: "todo", iteration: "sprint-12", fields: ["priority": "P0", "size": "M"]),
-            item(id: "I2", status: "in_progress", iteration: "sprint-12", fields: ["priority": "P1"])
+            item(id: "I2", status: "in_progress", iteration: "sprint-12", fields: ["priority": "P1"]),
         ]
 
         let (cardMoved, iter, fields) = GitHubWarmCollector.projectsV2Diff(prior: snap, current: snap)
@@ -112,7 +113,7 @@ final class GitHubProjectsV2DiffTests: XCTestCase {
         let prior: [GitHubProjectV2ItemSnapshot] = []
         let current = [
             item(id: "I1", status: "todo", iteration: "sprint-12", fields: ["priority": "P0"]),
-            item(id: "I2", status: "in_progress")
+            item(id: "I2", status: "in_progress"),
         ]
 
         let (cardMoved, iter, fields) = GitHubWarmCollector.projectsV2Diff(prior: prior, current: current)
@@ -181,12 +182,12 @@ final class GitHubProjectsV2DiffTests: XCTestCase {
         let prior = [
             item(id: "I3", status: "todo"),
             item(id: "I1", status: "todo"),
-            item(id: "I2", status: "todo")
+            item(id: "I2", status: "todo"),
         ]
         let current = [
             item(id: "I3", status: "done"),
             item(id: "I1", status: "in_progress"),
-            item(id: "I2", status: "in_review")
+            item(id: "I2", status: "in_review"),
         ]
 
         let (cardMoved, _, _) = GitHubWarmCollector.projectsV2Diff(prior: prior, current: current)
@@ -197,19 +198,23 @@ final class GitHubProjectsV2DiffTests: XCTestCase {
     func testFieldsSortedByItemThenName() {
         let prior = [
             item(id: "I2", fields: ["zeta": "1", "alpha": "1"]),
-            item(id: "I1", fields: ["zeta": "1", "alpha": "1"])
+            item(id: "I1", fields: ["zeta": "1", "alpha": "1"]),
         ]
         let current = [
             item(id: "I2", fields: ["zeta": "2", "alpha": "2"]),
-            item(id: "I1", fields: ["zeta": "2", "alpha": "2"])
+            item(id: "I1", fields: ["zeta": "2", "alpha": "2"]),
         ]
 
         let (_, _, fields) = GitHubWarmCollector.projectsV2Diff(prior: prior, current: current)
 
         XCTAssertEqual(fields.count, 4)
-        XCTAssertEqual(fields[0].0, "I1"); XCTAssertEqual(fields[0].2, "alpha")
-        XCTAssertEqual(fields[1].0, "I1"); XCTAssertEqual(fields[1].2, "zeta")
-        XCTAssertEqual(fields[2].0, "I2"); XCTAssertEqual(fields[2].2, "alpha")
-        XCTAssertEqual(fields[3].0, "I2"); XCTAssertEqual(fields[3].2, "zeta")
+        XCTAssertEqual(fields[0].0, "I1")
+        XCTAssertEqual(fields[0].2, "alpha")
+        XCTAssertEqual(fields[1].0, "I1")
+        XCTAssertEqual(fields[1].2, "zeta")
+        XCTAssertEqual(fields[2].0, "I2")
+        XCTAssertEqual(fields[2].2, "alpha")
+        XCTAssertEqual(fields[3].0, "I2")
+        XCTAssertEqual(fields[3].2, "zeta")
     }
 }

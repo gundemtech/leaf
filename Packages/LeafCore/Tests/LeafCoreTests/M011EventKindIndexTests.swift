@@ -1,7 +1,8 @@
 // Phase Track-1 D1 — M011 expression index on events.payload_json->>'event_kind'.
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class M011EventKindIndexTests: XCTestCase {

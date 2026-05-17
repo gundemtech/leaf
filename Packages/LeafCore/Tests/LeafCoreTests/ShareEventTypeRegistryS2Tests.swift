@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class ShareEventTypeRegistryS2Tests: XCTestCase {
@@ -22,9 +23,10 @@ final class ShareEventTypeRegistryS2Tests: XCTestCase {
             .calendarAppViewChanged,
             .mailActiveMailboxChanged,
             .zoomMeetingStateChanged, .zoomMeetingNameObserved,
-            .safariTabsChanged, .chromeTabsChanged, .arcTabsChanged
+            .safariTabsChanged, .chromeTabsChanged, .arcTabsChanged,
         ]
-        let defaultsByKey = Dictionary(uniqueKeysWithValues: ShareEventTypeDefaults.all.map { ($0.key, $0.defaultEnabled) })
+        let defaultsByKey = Dictionary(
+            uniqueKeysWithValues: ShareEventTypeDefaults.all.map { ($0.key, $0.defaultEnabled) })
         for k in newKeys {
             XCTAssertEqual(defaultsByKey[k], false, "expected \(k) default OFF")
         }

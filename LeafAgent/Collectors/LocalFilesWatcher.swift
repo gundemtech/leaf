@@ -1,8 +1,8 @@
-import Foundation
-import CoreServices
 import AppKit
-import os
+import CoreServices
+import Foundation
 import LeafCore
+import os
 
 /// Phase Track-4 S3 — single FSEventStream поверх 3 path watcher'ов
 /// (screenshot dir / ~/Downloads / ~/.Trash). Routes batch events по
@@ -106,31 +106,35 @@ final class LocalFilesWatcher {
         guard screenshotMatcher.matches(filename: filename) else { return }
         let writer = self.writer
         Task {
-            await writer.enqueue(RawEvent(
-                signalType: .content,
-                bundleID: nil,
-                payload: [
-                    "event_kind": "screenshot_taken",
-                    "filename": filename
-                ]
-            ))
+            await writer.enqueue(
+                RawEvent(
+                    signalType: .content,
+                    bundleID: nil,
+                    payload: [
+                        "event_kind": "screenshot_taken",
+                        "filename": filename,
+                    ]
+                ))
         }
         collectorLogger.info("Screenshot taken: \(filename, privacy: .public)")
     }
 
     private func handleDownload(flag: UInt32, filename: String, isDirectory: Bool) {
         guard observersStore.isEnabled("downloads_watcher") else { return }
-        guard downloadsMatcher.shouldEmit(eventFlags: flag, isDirectory: isDirectory, filename: filename) else { return }
+        guard downloadsMatcher.shouldEmit(eventFlags: flag, isDirectory: isDirectory, filename: filename) else {
+            return
+        }
         let writer = self.writer
         Task {
-            await writer.enqueue(RawEvent(
-                signalType: .content,
-                bundleID: nil,
-                payload: [
-                    "event_kind": "download_added",
-                    "filename": filename
-                ]
-            ))
+            await writer.enqueue(
+                RawEvent(
+                    signalType: .content,
+                    bundleID: nil,
+                    payload: [
+                        "event_kind": "download_added",
+                        "filename": filename,
+                    ]
+                ))
         }
         collectorLogger.info("Download added: \(filename, privacy: .public)")
     }
@@ -138,26 +142,29 @@ final class LocalFilesWatcher {
     private func handleTrashBatch(addedCount: Int, removedCount: Int) {
         guard observersStore.isEnabled("trash_watcher") else { return }
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
-        guard let emission = trashMatcher.observe(
-            addedCount: addedCount,
-            removedCount: removedCount,
-            nowMs: nowMs
-        ) else { return }
+        guard
+            let emission = trashMatcher.observe(
+                addedCount: addedCount,
+                removedCount: removedCount,
+                nowMs: nowMs
+            )
+        else { return }
         let action: String
         switch emission {
-        case .added:   action = "added"
+        case .added: action = "added"
         case .emptied: action = "emptied"
         }
         let writer = self.writer
         Task {
-            await writer.enqueue(RawEvent(
-                signalType: .context,
-                bundleID: nil,
-                payload: [
-                    "event_kind": "trash_changed",
-                    "action": action
-                ]
-            ))
+            await writer.enqueue(
+                RawEvent(
+                    signalType: .context,
+                    bundleID: nil,
+                    payload: [
+                        "event_kind": "trash_changed",
+                        "action": action,
+                    ]
+                ))
         }
         collectorLogger.info("Trash changed: \(action, privacy: .public)")
     }
@@ -167,7 +174,9 @@ final class LocalFilesWatcher {
             return URL(fileURLWithPath: screenshotDirectoryOverride).resolvingSymlinksInPath()
         }
         // Read from com.apple.screencapture defaults (CFPreferences).
-        if let raw = CFPreferencesCopyAppValue("location" as CFString, "com.apple.screencapture" as CFString) as? String, !raw.isEmpty {
+        if let raw = CFPreferencesCopyAppValue("location" as CFString, "com.apple.screencapture" as CFString)
+            as? String, !raw.isEmpty
+        {
             return URL(fileURLWithPath: (raw as NSString).expandingTildeInPath).resolvingSymlinksInPath()
         }
         return URL(fileURLWithPath: NSHomeDirectory() + "/Desktop").resolvingSymlinksInPath()
@@ -205,19 +214,19 @@ private final nonisolated class AgentFSEventStream: @unchecked Sendable {
             copyDescription: nil
         )
         let flags = UInt32(
-            kFSEventStreamCreateFlagFileEvents |
-            kFSEventStreamCreateFlagNoDefer |
-            kFSEventStreamCreateFlagUseCFTypes
+            kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagNoDefer | kFSEventStreamCreateFlagUseCFTypes
         )
-        guard let ref = FSEventStreamCreate(
-            kCFAllocatorDefault,
-            AgentFSEventStream.callback,
-            &context,
-            cfPaths,
-            FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-            latency,
-            flags
-        ) else {
+        guard
+            let ref = FSEventStreamCreate(
+                kCFAllocatorDefault,
+                AgentFSEventStream.callback,
+                &context,
+                cfPaths,
+                FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
+                latency,
+                flags
+            )
+        else {
             throw AgentFSEventStreamError.createFailed
         }
         self.stream = ref

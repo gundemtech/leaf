@@ -3,8 +3,8 @@ import GRDB
 
 /// Registers migration 001 — создаёт таблицу events и 2 индекса.
 /// Schema structure публична (уже в architecture.md). SQL DDL — не moat.
-public extension DatabaseMigrator {
-    mutating func registerMigration001Events() {
+extension DatabaseMigrator {
+    public mutating func registerMigration001Events() {
         registerMigration("001_events") { db in
             try db.create(table: Schema.Events.tableName) { t in
                 t.autoIncrementedPrimaryKey(Schema.Events.id)

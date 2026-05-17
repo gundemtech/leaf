@@ -8,9 +8,10 @@
 //
 
 import Foundation
-import Observation
-import OSLog
 import LeafCore
+import OSLog
+import Observation
+
 #if LEAF_PROD
 import LeafCorePrivate
 #endif
@@ -147,12 +148,10 @@ final class PendingInvitesReader {
             return "Couldn’t reach the relay. Try again later."
         }
         if outcome.networkErrors > 0 {
-            return "Checked \(total) invites — \(outcome.consumed) consumed, " +
-                   "\(outcome.stillPending) still awaiting, " +
-                   "\(outcome.networkErrors) couldn’t be checked."
+            return "Checked \(total) invites — \(outcome.consumed) consumed, "
+                + "\(outcome.stillPending) still awaiting, " + "\(outcome.networkErrors) couldn’t be checked."
         }
-        return "Checked \(total) invites — \(outcome.consumed) consumed, " +
-               "\(outcome.stillPending) still awaiting."
+        return "Checked \(total) invites — \(outcome.consumed) consumed, " + "\(outcome.stillPending) still awaiting."
     }
 
     private func userFacingMessage(for error: Error) -> String {

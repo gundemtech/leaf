@@ -3,6 +3,7 @@
 // либо ни одной (Agent crash посреди flush → no duplicates + no lost-but-marked).
 
 import XCTest
+
 @testable import LeafCore
 
 final class DatabaseAtomicEventsAndOffsetTests: XCTestCase {
@@ -34,7 +35,7 @@ final class DatabaseAtomicEventsAndOffsetTests: XCTestCase {
                 payload: [
                     "event_kind": "tool_use",
                     "tool_name": "Read",
-                    "session_id": "session-A"
+                    "session_id": "session-A",
                 ]
             )
         }
@@ -94,10 +95,11 @@ final class DatabaseAtomicEventsAndOffsetTests: XCTestCase {
         XCTAssertEqual(stored?.byteOffset, 50_000)
 
         // Никаких events не записалось.
-        let allEvents = try db.events(in: DateInterval(
-            start: .distantPast,
-            end: .distantFuture
-        ))
+        let allEvents = try db.events(
+            in: DateInterval(
+                start: .distantPast,
+                end: .distantFuture
+            ))
         XCTAssertTrue(allEvents.isEmpty)
     }
 }

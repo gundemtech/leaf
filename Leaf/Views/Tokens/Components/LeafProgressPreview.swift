@@ -40,7 +40,8 @@ struct LeafProgressPreview: View {
             }
 
             TokensInlineSpec(
-                spec: "LeafProgress · linear (h 4pt) | circular sm/md/lg (16/24/36pt) · determinate Double 0…1 | indeterminate nil",
+                spec:
+                    "LeafProgress · linear (h 4pt) | circular sm/md/lg (16/24/36pt) · determinate Double 0…1 | indeterminate nil",
                 codeSnippet: "LeafProgress(style: .linear, value: 0.35)"
             )
         }

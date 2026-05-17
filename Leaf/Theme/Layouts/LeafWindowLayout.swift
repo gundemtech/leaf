@@ -22,9 +22,9 @@ struct LeafWindowLayout<Sidebar: View, Detail: View>: View {
                 .padding(.horizontal, LeafSpace.sm)
                 .padding(.vertical, LeafSpace.md)
                 .navigationSplitViewColumnWidth(
-                    min:   LeafWindowLayoutTokens.sidebarMinWidth,
+                    min: LeafWindowLayoutTokens.sidebarMinWidth,
                     ideal: LeafWindowLayoutTokens.sidebarIdealWidth,
-                    max:   LeafWindowLayoutTokens.sidebarMaxWidth
+                    max: LeafWindowLayoutTokens.sidebarMaxWidth
                 )
         } detail: {
             detail()

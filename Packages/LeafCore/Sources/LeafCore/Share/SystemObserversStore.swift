@@ -1,4 +1,5 @@
 import Foundation
+
 #if canImport(Combine)
 import Combine
 #endif
@@ -35,7 +36,7 @@ public final class SystemObserversStore: ObservableObject, @unchecked Sendable {
         "display",
         "screenshot_watcher",
         "downloads_watcher",
-        "trash_watcher"
+        "trash_watcher",
     ]
 
     private let defaults: UserDefaults
@@ -47,7 +48,8 @@ public final class SystemObserversStore: ObservableObject, @unchecked Sendable {
     }
 
     public func isEnabled(_ observer: String) -> Bool {
-        lock.lock(); defer { lock.unlock() }
+        lock.lock()
+        defer { lock.unlock() }
         if let cached = cache[observer] { return cached }
         let key = Self.key(observer)
         let value: Bool

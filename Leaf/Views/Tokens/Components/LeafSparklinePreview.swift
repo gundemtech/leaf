@@ -13,15 +13,20 @@ struct LeafSparklinePreview: View {
                 .foregroundStyle(LeafColor.text.primary)
 
             VStack(alignment: .leading, spacing: LeafSpace.md) {
-                row(label: "rising",
+                row(
+                    label: "rising",
                     values: [3, 4, 6, 5, 7, 9, 11, 12])
-                row(label: "falling",
+                row(
+                    label: "falling",
                     values: [12, 10, 11, 7, 6, 5, 4, 2])
-                row(label: "spiky",
+                row(
+                    label: "spiky",
                     values: [4, 4, 12, 4, 9, 4, 11, 4])
-                row(label: "flat",
+                row(
+                    label: "flat",
                     values: [6, 6, 6, 6, 6, 6, 6, 6])
-                row(label: "single (degenerate)",
+                row(
+                    label: "single (degenerate)",
                     values: [5])
             }
 
@@ -33,7 +38,8 @@ struct LeafSparklinePreview: View {
             }
 
             TokensInlineSpec(
-                spec: "LeafSparkline · Catmull-Rom smoothed · accent.primary stroke 1.5pt + 0.18→0 gradient area fill + 4pt terminal dot · static path · minHeight 24",
+                spec:
+                    "LeafSparkline · Catmull-Rom smoothed · accent.primary stroke 1.5pt + 0.18→0 gradient area fill + 4pt terminal dot · static path · minHeight 24",
                 codeSnippet: "LeafSparkline(values: [1, 3, 2, 5, 4, 7, 6, 9])"
             )
         }

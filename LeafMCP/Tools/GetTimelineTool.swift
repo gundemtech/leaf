@@ -17,14 +17,15 @@ struct GetTimelineTool: ToolExecutor {
                 "period": [
                     "type": "string",
                     "enum": ["today", "yesterday", "last_7_days"],
-                    "description": "Time window (default: today)"
+                    "description": "Time window (default: today)",
                 ]
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
         ]
         return ToolDefinition(
             name: "get_timeline",
-            description: "Return top applications by active time for the given period. Data comes from the local Leaf agent — raw metadata never leaves the device.",
+            description:
+                "Return top applications by active time for the given period. Data comes from the local Leaf agent — raw metadata never leaves the device.",
             inputSchema: AnyCodable(schema)
         )
     }()
@@ -32,7 +33,8 @@ struct GetTimelineTool: ToolExecutor {
     func execute(arguments: AnyCodable?) async throws -> ToolCallResult {
         let period: TimelinePeriod
         if let dict = arguments?.value as? [String: Any],
-           let raw = dict["period"] as? String {
+            let raw = dict["period"] as? String
+        {
             guard let p = TimelinePeriod(rawValue: raw) else {
                 throw MCPProtocolError.invalidParams(
                     "period must be one of: today, yesterday, last_7_days"
@@ -45,9 +47,13 @@ struct GetTimelineTool: ToolExecutor {
 
         guard FileManager.default.fileExists(atPath: dbURL.path) else {
             return ToolCallResult(
-                content: [.text(TextContent(
-                    text: "Leaf database not found at \(dbURL.path). Enable 'Background collection' in Settings first."
-                ))],
+                content: [
+                    .text(
+                        TextContent(
+                            text:
+                                "Leaf database not found at \(dbURL.path). Enable 'Background collection' in Settings first."
+                        ))
+                ],
                 isError: true
             )
         }
@@ -67,9 +73,9 @@ struct GetTimelineTool: ToolExecutor {
                     "bundleID": entry.bundleID,
                     "durationSec": Int(entry.duration),
                     "firstSeen": iso.string(from: entry.firstSeen),
-                    "lastSeen": iso.string(from: entry.lastSeen)
+                    "lastSeen": iso.string(from: entry.lastSeen),
                 ]
-            }
+            },
         ]
         return try ToolResponseBuilder.versionedJSONResult(payload)
     }

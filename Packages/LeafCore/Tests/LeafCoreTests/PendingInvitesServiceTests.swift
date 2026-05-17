@@ -1,8 +1,9 @@
 // Phase 5.5.C — PendingInvitesService unit tests. RelayClient stubbed via
 // URLProtocol injection (mirror RelayClientTests pattern).
 
-import XCTest
 import Foundation
+import XCTest
+
 @testable import LeafCore
 
 private final class PendingMockURLProtocol: URLProtocol {
@@ -97,18 +98,21 @@ final class PendingInvitesServiceTests: XCTestCase {
     func testLoadVisibleFiltersConsumedAndSweepsExpired() throws {
         let db = try makeDatabase()
         let nowMs: Int64 = 1_700_000_000_000
-        try db.insertPendingInvite(samplePending(
-            token: "tlive______________________________",
-            createdAtMs: nowMs
-        ))
-        try db.insertPendingInvite(samplePending(
-            token: "texpired___________________________",
-            createdAtMs: nowMs - 48 * 60 * 60 * 1000
-        ))
-        try db.insertPendingInvite(samplePending(
-            token: "tconsumed__________________________",
-            createdAtMs: nowMs
-        ))
+        try db.insertPendingInvite(
+            samplePending(
+                token: "tlive______________________________",
+                createdAtMs: nowMs
+            ))
+        try db.insertPendingInvite(
+            samplePending(
+                token: "texpired___________________________",
+                createdAtMs: nowMs - 48 * 60 * 60 * 1000
+            ))
+        try db.insertPendingInvite(
+            samplePending(
+                token: "tconsumed__________________________",
+                createdAtMs: nowMs
+            ))
         try db.updatePendingInviteStatus(
             token: "tconsumed__________________________",
             status: .consumed
@@ -130,20 +134,23 @@ final class PendingInvitesServiceTests: XCTestCase {
     func testPollPending200KeepsPendingAndStampsLastPolledAt() async throws {
         let db = try makeDatabase()
         let nowMs: Int64 = 1_700_000_000_000
-        try db.insertPendingInvite(samplePending(
-            token: "tk1________________________________",
-            createdAtMs: nowMs
-        ))
+        try db.insertPendingInvite(
+            samplePending(
+                token: "tk1________________________________",
+                createdAtMs: nowMs
+            ))
 
         PendingMockURLProtocol.handler = { req in
             // Response body matches RelayClient.parseInviteFetched: { blob: <base64url>, expires_at_ms: Int64 }
             let body = #"{"blob":"AQID","expires_at_ms":1700000099999}"#.data(using: .utf8)!
-            return (HTTPURLResponse(
-                url: req.url ?? URL(string: "https://stub.example")!,
-                statusCode: 200,
-                httpVersion: nil,
-                headerFields: ["Content-Type": "application/json"]
-            )!, body)
+            return (
+                HTTPURLResponse(
+                    url: req.url ?? URL(string: "https://stub.example")!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"]
+                )!, body
+            )
         }
 
         let svc = makeService(database: db, nowMs: nowMs + 5_000)
@@ -166,8 +173,9 @@ final class PendingInvitesServiceTests: XCTestCase {
         XCTAssertEqual(outcome, PollOutcome(consumed: 1, stillPending: 0, networkErrors: 0))
 
         XCTAssertTrue(try db.readAllPendingInvitesByStatus(.pending).isEmpty)
-        XCTAssertEqual(try db.readAllPendingInvitesByStatus(.consumed).first?.token,
-                       "tk2________________________________")
+        XCTAssertEqual(
+            try db.readAllPendingInvitesByStatus(.consumed).first?.token,
+            "tk2________________________________")
     }
 
     func testPollPendingMixedOutcomes() async throws {
@@ -181,17 +189,26 @@ final class PendingInvitesServiceTests: XCTestCase {
             switch last {
             case "tkkeep_____________________________":
                 let body = #"{"blob":"AQID","expires_at_ms":1700000099999}"#.data(using: .utf8)!
-                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil,
-                                        headerFields: ["Content-Type": "application/json"])!, body)
+                return (
+                    HTTPURLResponse(
+                        url: req.url!, statusCode: 200, httpVersion: nil,
+                        headerFields: ["Content-Type": "application/json"])!, body
+                )
             case "tkconsume__________________________":
-                return (HTTPURLResponse(url: req.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!,
-                        Data())
+                return (
+                    HTTPURLResponse(url: req.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!,
+                    Data()
+                )
             case "tkneterr___________________________":
-                return (HTTPURLResponse(url: req.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!,
-                        Data())
+                return (
+                    HTTPURLResponse(url: req.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!,
+                    Data()
+                )
             default:
-                return (HTTPURLResponse(url: req.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!,
-                        Data())
+                return (
+                    HTTPURLResponse(url: req.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!,
+                    Data()
+                )
             }
         }
 
@@ -212,9 +229,10 @@ final class PendingInvitesServiceTests: XCTestCase {
         let svc = makeService(database: db)
         try await svc.revoke(token: "trev1______________________________")
 
-        let row = try XCTUnwrap(try db.readAllPendingInvites().first {
-            $0.token == "trev1______________________________"
-        })
+        let row = try XCTUnwrap(
+            try db.readAllPendingInvites().first {
+                $0.token == "trev1______________________________"
+            })
         XCTAssertEqual(row.status, .revoked)
     }
 
@@ -242,9 +260,10 @@ final class PendingInvitesServiceTests: XCTestCase {
         let svc = makeService(database: db)
         try svc.revokeLocal(token: "tlocal_____________________________")
 
-        let row = try XCTUnwrap(try db.readAllPendingInvites().first {
-            $0.token == "tlocal_____________________________"
-        })
+        let row = try XCTUnwrap(
+            try db.readAllPendingInvites().first {
+                $0.token == "tlocal_____________________________"
+            })
         XCTAssertEqual(row.status, .revoked)
     }
 

@@ -139,9 +139,10 @@ public actor GoogleCalendarCollector {
 
         // 5. Per-calendar events.list sync.
         let userDomain = Self.extractDomain(from: activeRecord.workspaceID) ?? ""
-        let knownCalendars = (try? database.readSQL { db in
-            try GoogleCalendarSyncTokenStore.knownCalendars(in: db)
-        }) ?? []
+        let knownCalendars =
+            (try? database.readSQL { db in
+                try GoogleCalendarSyncTokenStore.knownCalendars(in: db)
+            }) ?? []
 
         var workingToken = activeRecord.accessToken
         for calendar in knownCalendars {
@@ -165,7 +166,9 @@ public actor GoogleCalendarCollector {
             } catch {
                 // Transient — log and continue with next calendar. Cursor
                 // not advanced for this calendar, so next tick retries.
-                logger.warning("calendar \(calendar.id, privacy: .public) sync failed: \(String(describing: error), privacy: .public)")
+                logger.warning(
+                    "calendar \(calendar.id, privacy: .public) sync failed: \(String(describing: error), privacy: .public)"
+                )
             }
         }
 
@@ -206,16 +209,19 @@ public actor GoogleCalendarCollector {
         // Started / changed scan. `rowsNeedingStartedEmit` surfaces every row
         // whose `start_ms <= now` AND `started_emitted_at_ms IS NULL`,
         // including workingLocation rows (which we re-route to `.changed`).
-        let startedRows: [GoogleCalendarTrackerStore.Row] = (try? database.readSQL { db in
-            try GoogleCalendarTrackerStore.rowsNeedingStartedEmit(now: nowMs, in: db)
-        }) ?? []
+        let startedRows: [GoogleCalendarTrackerStore.Row] =
+            (try? database.readSQL { db in
+                try GoogleCalendarTrackerStore.rowsNeedingStartedEmit(now: nowMs, in: db)
+            }) ?? []
 
         for row in startedRows {
             let phase: GoogleCalendarEventMapper.TransitionPhase =
                 (row.eventType == "workingLocation") ? .changed : .started
-            guard let payload = GoogleCalendarEventMapper.makeTransitionPayload(
-                fromTrackerRow: row, phase: phase
-            ) else { continue }
+            guard
+                let payload = GoogleCalendarEventMapper.makeTransitionPayload(
+                    fromTrackerRow: row, phase: phase
+                )
+            else { continue }
             try emitTransitionEvent(payload: payload, nowMs: nowMs)
             try database.writeSQL { db in
                 try GoogleCalendarTrackerStore.markStartedEmitted(
@@ -225,14 +231,17 @@ public actor GoogleCalendarCollector {
         }
 
         // Ended scan. Excludes workingLocation by SQL contract (single-shot).
-        let endedRows: [GoogleCalendarTrackerStore.Row] = (try? database.readSQL { db in
-            try GoogleCalendarTrackerStore.rowsNeedingEndedEmit(now: nowMs, in: db)
-        }) ?? []
+        let endedRows: [GoogleCalendarTrackerStore.Row] =
+            (try? database.readSQL { db in
+                try GoogleCalendarTrackerStore.rowsNeedingEndedEmit(now: nowMs, in: db)
+            }) ?? []
 
         for row in endedRows {
-            guard let payload = GoogleCalendarEventMapper.makeTransitionPayload(
-                fromTrackerRow: row, phase: .ended
-            ) else { continue }
+            guard
+                let payload = GoogleCalendarEventMapper.makeTransitionPayload(
+                    fromTrackerRow: row, phase: .ended
+                )
+            else { continue }
             try emitTransitionEvent(payload: payload, nowMs: nowMs)
             try database.writeSQL { db in
                 try GoogleCalendarTrackerStore.markEndedEmitted(
@@ -280,18 +289,21 @@ public actor GoogleCalendarCollector {
     /// defer until the UI consumer lands. The presence timing scalar is
     /// enough for "you have a meeting in N minutes" UI cues.
     private func writePresenceState(nowMs: Int64) throws {
-        let snapshot: (calendarCount: Int,
-                       focusActive: Bool,
-                       oooActive: Bool,
-                       workingLocation: String?,
-                       nextMeetingStartMs: Int64?) = try database.readSQL { db in
-            let count = try GoogleCalendarSyncTokenStore.knownCalendars(in: db).count
-            let focus = try GoogleCalendarTrackerStore.hasActiveFocusBlock(now: nowMs, in: db)
-            let ooo = try GoogleCalendarTrackerStore.hasActiveOOO(now: nowMs, in: db)
-            let loc = try GoogleCalendarTrackerStore.currentWorkingLocation(now: nowMs, in: db)
-            let next = try Self.fetchNextMeetingStartMs(now: nowMs, in: db)
-            return (count, focus, ooo, loc, next)
-        }
+        let snapshot:
+            (
+                calendarCount: Int,
+                focusActive: Bool,
+                oooActive: Bool,
+                workingLocation: String?,
+                nextMeetingStartMs: Int64?
+            ) = try database.readSQL { db in
+                let count = try GoogleCalendarSyncTokenStore.knownCalendars(in: db).count
+                let focus = try GoogleCalendarTrackerStore.hasActiveFocusBlock(now: nowMs, in: db)
+                let ooo = try GoogleCalendarTrackerStore.hasActiveOOO(now: nowMs, in: db)
+                let loc = try GoogleCalendarTrackerStore.currentWorkingLocation(now: nowMs, in: db)
+                let next = try Self.fetchNextMeetingStartMs(now: nowMs, in: db)
+                return (count, focus, ooo, loc, next)
+            }
 
         var state: [String: Any] = [
             "known_calendar_count": snapshot.calendarCount,
@@ -505,7 +517,8 @@ public actor GoogleCalendarCollector {
         } while nextPage != nil
 
         // Filter to actually-syncable roles.
-        let newKnown = allItems
+        let newKnown =
+            allItems
             .filter { Self.syncableAccessRoles.contains($0.accessRole) }
             .map { entry in
                 GoogleCalendarSyncTokenStore.KnownCalendar(
@@ -523,9 +536,10 @@ public actor GoogleCalendarCollector {
 
         // Diff vs old known — prune cursors + tracker rows for any removed
         // calendar id.
-        let oldKnown = (try? database.readSQL { db in
-            try GoogleCalendarSyncTokenStore.knownCalendars(in: db)
-        }) ?? []
+        let oldKnown =
+            (try? database.readSQL { db in
+                try GoogleCalendarSyncTokenStore.knownCalendars(in: db)
+            }) ?? []
         let removedIDs = Set(oldKnown.map(\.id)).subtracting(Set(newKnown.map(\.id)))
 
         try database.writeSQL { db in
@@ -572,7 +586,8 @@ public actor GoogleCalendarCollector {
         }
 
         let initialSyncToken: String? = bootstrap ? nil : savedToken
-        let bootstrapTimeMin: Date? = bootstrap
+        let bootstrapTimeMin: Date? =
+            bootstrap
             ? clock().addingTimeInterval(-Self.bootstrapWindowSec)
             : nil
 
@@ -617,7 +632,7 @@ public actor GoogleCalendarCollector {
                 }
                 let refreshed = try await reactiveRefresh(record: record)
                 accessToken = refreshed.accessToken
-                nextPageToken = nil   // restart this calendar's pagination.
+                nextPageToken = nil  // restart this calendar's pagination.
                 continue pageLoop
             }
 
@@ -693,9 +708,11 @@ public actor GoogleCalendarCollector {
             }
 
             // Build observed payload via the privacy-clipping mapper.
-            guard let dict = GoogleCalendarEventMapper.makeObservedPayload(
-                event, calendar: calendar, userDomain: userDomain
-            ) else {
+            guard
+                let dict = GoogleCalendarEventMapper.makeObservedPayload(
+                    event, calendar: calendar, userDomain: userDomain
+                )
+            else {
                 continue
             }
             let payload = Self.flatten(dict)
@@ -713,44 +730,49 @@ public actor GoogleCalendarCollector {
                 return Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0)
             }()
 
-            rawEvents.append(RawEvent(
-                timestamp: timestamp,
-                signalType: .context,
-                bundleID: nil,
-                payload: payload
-            ))
+            rawEvents.append(
+                RawEvent(
+                    timestamp: timestamp,
+                    signalType: .context,
+                    bundleID: nil,
+                    payload: payload
+                ))
 
             // Tracker UPSERT for typed events. Use mapper's parser so the
             // collector and mapper agree on time semantics.
             if ["focusTime", "outOfOffice", "workingLocation"].contains(rawType),
-               let eventId = event.id,
-               let startMs = GoogleCalendarEventMapper.parseTimePointMs(event.start),
-               let endMs = GoogleCalendarEventMapper.parseTimePointMs(event.end) {
+                let eventId = event.id,
+                let startMs = GoogleCalendarEventMapper.parseTimePointMs(event.start),
+                let endMs = GoogleCalendarEventMapper.parseTimePointMs(event.end)
+            {
                 // Source autoDeclineMode / chatStatus from the API Event's
                 // typed-properties blocks. Per Google contract: chatStatus
                 // exists only on focusTimeProperties (OOO has none); both
                 // hold enum buckets, never freeform user text. Persisting on
                 // the tracker lets the Task 14 transition scan rebuild
                 // `_started` payloads without re-fetching the Event.
-                let autoDecline = (rawType == "focusTime")
+                let autoDecline =
+                    (rawType == "focusTime")
                     ? event.focusTimeProperties?.autoDeclineMode
                     : ((rawType == "outOfOffice")
-                       ? event.outOfOfficeProperties?.autoDeclineMode
-                       : nil)
-                let chatStatus = (rawType == "focusTime")
+                        ? event.outOfOfficeProperties?.autoDeclineMode
+                        : nil)
+                let chatStatus =
+                    (rawType == "focusTime")
                     ? event.focusTimeProperties?.chatStatus
                     : nil
-                upserts.append(TrackerUpsert(
-                    eventID: eventId,
-                    calendarID: calendar.id,
-                    iCalUID: event.iCalUID,
-                    eventType: rawType,
-                    startMs: startMs,
-                    endMs: endMs,
-                    workingLocationType: event.workingLocationProperties?.type,
-                    autoDeclineMode: autoDecline,
-                    chatStatus: chatStatus
-                ))
+                upserts.append(
+                    TrackerUpsert(
+                        eventID: eventId,
+                        calendarID: calendar.id,
+                        iCalUID: event.iCalUID,
+                        eventType: rawType,
+                        startMs: startMs,
+                        endMs: endMs,
+                        workingLocationType: event.workingLocationProperties?.type,
+                        autoDeclineMode: autoDecline,
+                        chatStatus: chatStatus
+                    ))
             }
         }
 

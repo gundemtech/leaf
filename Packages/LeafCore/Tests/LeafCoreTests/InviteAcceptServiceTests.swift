@@ -2,9 +2,10 @@
 // fetchInvite: 3 cases via real RelayClient + URLProtocol stub (mirror
 // InviteServiceTests harness). acceptInvite: full crypto chain in C3.
 
-import XCTest
 import CryptoKit
 import Foundation
+import XCTest
+
 @testable import LeafCore
 
 private final class AcceptServiceMockURLProtocol: URLProtocol {
@@ -74,11 +75,11 @@ private final class RecordingAcceptCodec: InviteBlobCodec, @unchecked Sendable {
 /// our RecordingAcceptCodec doesn't actually decrypt, just returns stub.
 private func makeStubBlob(adminPubkey: Data) -> InviteBlob {
     var bytes = Data()
-    bytes.append(0x02)                                  // version
-    bytes.append(adminPubkey)                           // 32B
-    bytes.append(Data(repeating: 0xCC, count: 12))      // nonce
-    bytes.append(Data(repeating: 0xDD, count: 80))      // ciphertext
-    bytes.append(Data(repeating: 0xEE, count: 16))      // tag
+    bytes.append(0x02)  // version
+    bytes.append(adminPubkey)  // 32B
+    bytes.append(Data(repeating: 0xCC, count: 12))  // nonce
+    bytes.append(Data(repeating: 0xDD, count: 80))  // ciphertext
+    bytes.append(Data(repeating: 0xEE, count: 16))  // tag
     return InviteBlob(bytes: bytes)
 }
 
@@ -108,8 +109,9 @@ final class InviteAcceptServiceTests: XCTestCase {
     private func makeRelayClient() -> RelayClient {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [AcceptServiceMockURLProtocol.self]
-        return RelayClient(baseURL: URL(string: "https://stub.example")!,
-                           urlSession: URLSession(configuration: config))
+        return RelayClient(
+            baseURL: URL(string: "https://stub.example")!,
+            urlSession: URLSession(configuration: config))
     }
 
     private func makeService() -> InviteAcceptService {
@@ -142,8 +144,10 @@ final class InviteAcceptServiceTests: XCTestCase {
         )
     }
 
-    private func sampleInvitePlaintext(orgID: String, teamKeyID: String, adminID: String,
-                                       teamKeyBase64: String) -> InvitePlaintext {
+    private func sampleInvitePlaintext(
+        orgID: String, teamKeyID: String, adminID: String,
+        teamKeyBase64: String
+    ) -> InvitePlaintext {
         InvitePlaintext(
             teamKeyBase64: teamKeyBase64,
             teamKeyID: teamKeyID,
@@ -164,10 +168,11 @@ final class InviteAcceptServiceTests: XCTestCase {
             XCTAssertEqual(req.httpMethod, "GET")
             XCTAssertTrue(req.url!.path.hasSuffix("/v1/invite/tok_abc123"))
             let body = """
-            {"blob":"\(b64url)","expires_at_ms":1700086400000}
-            """.data(using: .utf8)!
-            let resp = HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil,
-                                       headerFields: ["Content-Type": "application/json"])!
+                {"blob":"\(b64url)","expires_at_ms":1700086400000}
+                """.data(using: .utf8)!
+            let resp = HTTPURLResponse(
+                url: req.url!, statusCode: 200, httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"])!
             return (resp, body)
         }
 
@@ -178,8 +183,9 @@ final class InviteAcceptServiceTests: XCTestCase {
 
     func testFetchInvite_404_MapsToInviteNotFound() async throws {
         AcceptServiceMockURLProtocol.handler = { req in
-            let resp = HTTPURLResponse(url: req.url!, statusCode: 404, httpVersion: nil,
-                                       headerFields: nil)!
+            let resp = HTTPURLResponse(
+                url: req.url!, statusCode: 404, httpVersion: nil,
+                headerFields: nil)!
             return (resp, nil)
         }
         let svc = makeService()
@@ -227,9 +233,10 @@ final class InviteAcceptServiceTests: XCTestCase {
         let teamKeyID = "00000000-0000-4000-8000-0000000000bb"
         let adminID = "00000000-0000-4000-8000-0000000000cc"
         let codec = RecordingAcceptCodec()
-        codec.stubPlaintext = sampleInvitePlaintext(orgID: orgID, teamKeyID: teamKeyID,
-                                                    adminID: adminID,
-                                                    teamKeyBase64: teamKeyBytes.base64EncodedString())
+        codec.stubPlaintext = sampleInvitePlaintext(
+            orgID: orgID, teamKeyID: teamKeyID,
+            adminID: adminID,
+            teamKeyBase64: teamKeyBytes.base64EncodedString())
 
         let svc = makeAcceptService(codec: codec, identity: { inviteePriv })
         let accepted = try await svc.acceptInvite(blob: blob, otp: "123456", displayName: "  Bob  ")
@@ -250,13 +257,15 @@ final class InviteAcceptServiceTests: XCTestCase {
         let admin = try XCTUnwrap(members.first(where: { $0.id == adminID }))
         XCTAssertEqual(admin.role, .admin)
         XCTAssertEqual(admin.displayName, "Admin")
-        XCTAssertEqual(admin.pubkeyHex,
-                       adminPub.map { String(format: "%02x", $0) }.joined())
+        XCTAssertEqual(
+            admin.pubkeyHex,
+            adminPub.map { String(format: "%02x", $0) }.joined())
         let me = try XCTUnwrap(members.first(where: { $0.id == accepted.selfMemberID }))
         XCTAssertEqual(me.role, .member)
         XCTAssertEqual(me.displayName, "Bob")
-        XCTAssertEqual(me.pubkeyHex,
-                       inviteePriv.publicKey.rawRepresentation.map { String(format: "%02x", $0) }.joined())
+        XCTAssertEqual(
+            me.pubkeyHex,
+            inviteePriv.publicKey.rawRepresentation.map { String(format: "%02x", $0) }.joined())
 
         let activeKey = try XCTUnwrap(db.readActiveTeamKey())
         XCTAssertEqual(activeKey.id, teamKeyID)
@@ -288,23 +297,27 @@ final class InviteAcceptServiceTests: XCTestCase {
         XCTAssertNil(try db.readOrg())
         // No keystore file written.
         let dir = try? FileManager.default.contentsOfDirectory(atPath: keystoreRoot.path)
-        XCTAssertTrue(dir == nil || dir!.isEmpty,
-                      "keystore root should be empty when decode fails before write")
+        XCTAssertTrue(
+            dir == nil || dir!.isEmpty,
+            "keystore root should be empty when decode fails before write")
     }
 
     func testAcceptInvite_OrgAlreadyExists_RefusedBeforeCrypto() async throws {
         // Pre-seed an org row.
         let existingOrgID = UUID().uuidString.lowercased()
         let existingMemberID = UUID().uuidString.lowercased()
-        try db.upsertOrg(Org(id: existingOrgID, name: "Existing",
-                              createdAt: Date(timeIntervalSince1970: 1_699_000_000),
-                              createdByMemberID: existingMemberID))
+        try db.upsertOrg(
+            Org(
+                id: existingOrgID, name: "Existing",
+                createdAt: Date(timeIntervalSince1970: 1_699_000_000),
+                createdByMemberID: existingMemberID))
 
         let adminPriv = Curve25519.KeyAgreement.PrivateKey()
         let blob = makeStubBlob(adminPubkey: adminPriv.publicKey.rawRepresentation)
         let codec = RecordingAcceptCodec()
-        codec.stubPlaintext = sampleInvitePlaintext(orgID: "x", teamKeyID: "y", adminID: "z",
-                                                    teamKeyBase64: Data(repeating: 0, count: 32).base64EncodedString())
+        codec.stubPlaintext = sampleInvitePlaintext(
+            orgID: "x", teamKeyID: "y", adminID: "z",
+            teamKeyBase64: Data(repeating: 0, count: 32).base64EncodedString())
 
         let svc = makeAcceptService(codec: codec, identity: { Curve25519.KeyAgreement.PrivateKey() })
         do {
@@ -385,10 +398,11 @@ final class InviteAcceptServiceTests: XCTestCase {
             XCTAssertEqual(req.httpMethod, "GET")
             XCTAssertTrue(req.url!.path.hasSuffix("/v1/invite/aBc012XyZ_KJI98hgFEdcBA5678901ab"))
             let body = """
-            {"blob":"\(b64url)","expires_at_ms":1700086400000}
-            """.data(using: .utf8)!
-            let resp = HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil,
-                                       headerFields: ["Content-Type": "application/json"])!
+                {"blob":"\(b64url)","expires_at_ms":1700086400000}
+                """.data(using: .utf8)!
+            let resp = HTTPURLResponse(
+                url: req.url!, statusCode: 200, httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"])!
             return (resp, body)
         }
         let svc = makeService()
@@ -410,8 +424,9 @@ final class InviteAcceptServiceTests: XCTestCase {
 
     func testFetchInvite_URL_ConsumedRelayMapsToInviteAlreadyConsumed() async throws {
         AcceptServiceMockURLProtocol.handler = { req in
-            let resp = HTTPURLResponse(url: req.url!, statusCode: 404, httpVersion: nil,
-                                       headerFields: nil)!
+            let resp = HTTPURLResponse(
+                url: req.url!, statusCode: 404, httpVersion: nil,
+                headerFields: nil)!
             return (resp, nil)
         }
         let svc = makeService()

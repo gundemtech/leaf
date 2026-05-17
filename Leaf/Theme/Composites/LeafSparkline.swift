@@ -30,7 +30,7 @@ struct LeafSparkline: View {
                             LinearGradient(
                                 colors: [
                                     tint.opacity(LeafMetricTokens.Sparkline.gradientTopOpacity),
-                                    tint.opacity(LeafMetricTokens.Sparkline.gradientBottomOpacity)
+                                    tint.opacity(LeafMetricTokens.Sparkline.gradientBottomOpacity),
                                 ],
                                 startPoint: .top,
                                 endPoint: .bottom
@@ -43,7 +43,7 @@ struct LeafSparkline: View {
                             tint,
                             style: StrokeStyle(
                                 lineWidth: LeafMetricTokens.Sparkline.strokeWidth,
-                                lineCap:  .round,
+                                lineCap: .round,
                                 lineJoin: .round
                             )
                         )
@@ -52,8 +52,10 @@ struct LeafSparkline: View {
                     if let last = points.last {
                         Circle()
                             .fill(tint)
-                            .frame(width: LeafMetricTokens.Sparkline.terminalDotSize,
-                                   height: LeafMetricTokens.Sparkline.terminalDotSize)
+                            .frame(
+                                width: LeafMetricTokens.Sparkline.terminalDotSize,
+                                height: LeafMetricTokens.Sparkline.terminalDotSize
+                            )
                             .position(x: last.x, y: last.y)
                     }
                 }

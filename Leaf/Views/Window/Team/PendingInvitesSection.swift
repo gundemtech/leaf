@@ -6,8 +6,8 @@
 //  PendingInvitesReader.poll()). Per-row actions delegated to PendingInviteRow.
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct PendingInvitesSection: View {
     @Environment(PendingInvitesReader.self) private var reader

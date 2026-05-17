@@ -14,8 +14,8 @@ struct LeafMetricDeltaPreview: View {
 
             HStack(spacing: LeafSpace.md) {
                 LeafMetricDelta(value: "+12%", direction: .up)
-                LeafMetricDelta(value: "−4%",  direction: .down)
-                LeafMetricDelta(value: "0%",   direction: .flat)
+                LeafMetricDelta(value: "−4%", direction: .down)
+                LeafMetricDelta(value: "0%", direction: .flat)
             }
 
             HStack(alignment: .firstTextBaseline, spacing: LeafSpace.md) {
@@ -24,7 +24,8 @@ struct LeafMetricDeltaPreview: View {
             }
 
             TokensInlineSpec(
-                spec: "LeafMetricDelta · pill chrome · status.success/danger/text.tertiary fg · same colour at 0.12 bg · arrow 10pt · body.small monospaced",
+                spec:
+                    "LeafMetricDelta · pill chrome · status.success/danger/text.tertiary fg · same colour at 0.12 bg · arrow 10pt · body.small monospaced",
                 codeSnippet: "LeafMetricDelta(value: \"+12%\", direction: .up)"
             )
         }

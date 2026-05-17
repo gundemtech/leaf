@@ -29,7 +29,7 @@ public struct PendingInvitesStore: Sendable {
                 row.createdAtMs,
                 row.expiresAtMs,
                 row.status.rawValue,
-                row.lastPolledAtMs
+                row.lastPolledAtMs,
             ]
         )
     }
@@ -182,7 +182,7 @@ public struct PendingInvitesStore: Sendable {
             arguments: [
                 PendingInviteStatus.expired.rawValue,
                 PendingInviteStatus.pending.rawValue,
-                nowMs
+                nowMs,
             ]
         )
         return db.changesCount

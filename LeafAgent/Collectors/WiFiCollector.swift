@@ -1,7 +1,7 @@
-import Foundation
 import CoreWLAN
-import os
+import Foundation
 import LeafCore
+import os
 
 /// Phase Track-4 S3 — `CWWiFiClient.shared().interface()` polling, state only.
 ///
@@ -58,7 +58,7 @@ final class WiFiCollector {
         let eventKind = "wifi_state_changed"
         let state: String
         switch transition {
-        case .connected:    state = "connected"
+        case .connected: state = "connected"
         case .disconnected: state = "disconnected"
         }
         let raw = RawEvent(
@@ -83,10 +83,10 @@ final class WiFiCollector {
 
     static func mapMode(_ raw: CWInterfaceMode) -> WiFiMode {
         switch raw {
-        case .none:    return .none
+        case .none: return .none
         case .station: return .station
-        case .IBSS:    return .ibss
-        case .hostAP:  return .hostAP
+        case .IBSS: return .ibss
+        case .hostAP: return .hostAP
         @unknown default: return .none
         }
     }

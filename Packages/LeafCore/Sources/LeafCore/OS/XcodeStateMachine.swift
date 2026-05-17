@@ -49,7 +49,7 @@ public struct XcodeStateMachine: Sendable, Hashable {
     private static func makeBuildStateChangedEvent(_ obs: XcodeObservation, nowMs: Int64) -> RawEvent {
         let payload: [String: String] = [
             "event_kind": "xcode_build_state_changed",
-            "build_state": obs.buildState.rawValue
+            "build_state": obs.buildState.rawValue,
         ]
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: Double(nowMs) / 1000.0),

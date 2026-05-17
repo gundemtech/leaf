@@ -6,8 +6,8 @@ import GRDB
 /// `minute_bucket_ms` (minute-truncated epoch ms). UPSERT semantics — re-flush
 /// on restart replaces existing row idempotently. Counter columns counter-only;
 /// keycode/characters/modifierFlags никогда не пишутся (ADR-010 Won't-list).
-public extension DatabaseMigrator {
-    mutating func registerMigration018IntensityAggregates() {
+extension DatabaseMigrator {
+    public mutating func registerMigration018IntensityAggregates() {
         registerMigration("018_intensity_aggregates") { db in
             // PK on minute_bucket_ms — SQLite auto-creates a B-tree index on
             // the PK column, no explicit `CREATE INDEX` needed for range scans

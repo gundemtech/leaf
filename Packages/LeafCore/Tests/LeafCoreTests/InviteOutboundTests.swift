@@ -1,6 +1,7 @@
 // Phase 5.2.D — InviteOutbound value type tests.
 
 import XCTest
+
 @testable import LeafCore
 
 final class InviteOutboundTests: XCTestCase {
@@ -22,12 +23,15 @@ final class InviteOutboundTests: XCTestCase {
     func testHashable_DistinctFieldsProduceDistinctValues() {
         let pubkey = String(repeating: "a", count: 64)
 
-        let a = InviteOutbound(token: "t1", otp: "111111",
-                               expiresAtMs: 100, inviteePubkeyHex: pubkey)
-        let b = InviteOutbound(token: "t1", otp: "111111",
-                               expiresAtMs: 100, inviteePubkeyHex: pubkey)
-        let c = InviteOutbound(token: "t2", otp: "111111",
-                               expiresAtMs: 100, inviteePubkeyHex: pubkey)
+        let a = InviteOutbound(
+            token: "t1", otp: "111111",
+            expiresAtMs: 100, inviteePubkeyHex: pubkey)
+        let b = InviteOutbound(
+            token: "t1", otp: "111111",
+            expiresAtMs: 100, inviteePubkeyHex: pubkey)
+        let c = InviteOutbound(
+            token: "t2", otp: "111111",
+            expiresAtMs: 100, inviteePubkeyHex: pubkey)
 
         XCTAssertEqual(a, b)
         XCTAssertEqual(a.hashValue, b.hashValue)

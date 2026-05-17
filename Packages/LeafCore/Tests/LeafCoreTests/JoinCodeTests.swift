@@ -2,6 +2,7 @@
 // with CRC32 checksum + lenient legacy-hex fallback).
 
 import XCTest
+
 @testable import LeafCore
 
 final class JoinCodeTests: XCTestCase {
@@ -80,8 +81,12 @@ final class JoinCodeTests: XCTestCase {
             // Indices 72..75 are the 4-char checksum group — leave untouched.
             if idx < 72 {
                 switch ch {
-                case "0" where !didOSwap: typoed.append("O"); didOSwap = true
-                case "1" where !didISwap: typoed.append("L"); didISwap = true
+                case "0" where !didOSwap:
+                    typoed.append("O")
+                    didOSwap = true
+                case "1" where !didISwap:
+                    typoed.append("L")
+                    didISwap = true
                 default: typoed.append(ch)
                 }
             } else {
@@ -143,9 +148,10 @@ final class JoinCodeTests: XCTestCase {
     func testDecode_LegacyHexAccepted() throws {
         // Mixed case hex form (legacy alpha.9-11 invitee paste path).
         let hexUpper = samplePubkey.map { String(format: "%02X", $0) }.joined()
-        let mixed = String(hexUpper.enumerated().map { idx, ch in
-            idx % 2 == 0 ? Character(ch.lowercased()) : ch
-        })
+        let mixed = String(
+            hexUpper.enumerated().map { idx, ch in
+                idx % 2 == 0 ? Character(ch.lowercased()) : ch
+            })
         let decoded = try JoinCode.decode(mixed).get()
         XCTAssertEqual(decoded, samplePubkey)
     }

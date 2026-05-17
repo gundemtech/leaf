@@ -13,18 +13,18 @@ enum LeafStatusPillState {
 
     var dotTone: LeafDotTone {
         switch self {
-        case .idle:      .muted
-        case .active:    .accent
-        case .sharing:   .info
+        case .idle: .muted
+        case .active: .accent
+        case .sharing: .info
         case .invisible: .muted
         }
     }
 
     var label: String {
         switch self {
-        case .idle:      "Idle"
-        case .active:    "Active"
-        case .sharing:   "Sharing"
+        case .idle: "Idle"
+        case .active: "Active"
+        case .sharing: "Sharing"
         case .invisible: "Invisible"
         }
     }
@@ -36,7 +36,7 @@ struct LeafStatusPill: View {
     let state: LeafStatusPillState
 
     @Environment(\.accessibilityReduceMotion) private var systemReduce
-    @Environment(\.leafReduceMotionOverride)  private var debugReduce
+    @Environment(\.leafReduceMotionOverride) private var debugReduce
     @State private var pulse = false
 
     var body: some View {

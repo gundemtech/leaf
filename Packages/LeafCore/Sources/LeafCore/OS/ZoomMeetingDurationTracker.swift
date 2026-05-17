@@ -27,7 +27,8 @@ public struct ZoomMeetingDurationTracker: Sendable {
         case idle
         case pendingStart(observedAt: Int64)
         case active(startedAt: Int64, coldStart: Bool, linkedCalEventID: String?, droppedTransitionsSoFar: Int)
-        case pendingEnd(startedAt: Int64, observedAt: Int64, coldStart: Bool, linkedCalEventID: String?, droppedTransitions: Int)
+        case pendingEnd(
+            startedAt: Int64, observedAt: Int64, coldStart: Bool, linkedCalEventID: String?, droppedTransitions: Int)
     }
 
     private let thresholds: Thresholds
@@ -73,7 +74,7 @@ public struct ZoomMeetingDurationTracker: Sendable {
                     state = .pendingStart(observedAt: nowMs)
                 }
             }
-            // else: idle stays idle.
+        // else: idle stays idle.
 
         case .pendingStart(let observedAt):
             if meetingActive {
@@ -85,7 +86,8 @@ public struct ZoomMeetingDurationTracker: Sendable {
                         linkedCalEventID: linkedID,
                         droppedTransitionsSoFar: 0
                     )
-                    events.append(makeStartedEvent(startedAtMs: observedAt, coldStart: false, linkedCalEventID: linkedID))
+                    events.append(
+                        makeStartedEvent(startedAtMs: observedAt, coldStart: false, linkedCalEventID: linkedID))
                     if let id = linkedID {
                         events.append(makeCalendarLinkedEvent(startedAtMs: observedAt, linkedCalEventID: id))
                     }
@@ -106,7 +108,7 @@ public struct ZoomMeetingDurationTracker: Sendable {
                     droppedTransitions: droppedSoFar
                 )
             }
-            // else: still active.
+        // else: still active.
 
         case .pendingEnd(let startedAt, let observedAt, let coldStart, let linkedCalEventID, let dropped):
             if meetingActive {
@@ -120,14 +122,15 @@ public struct ZoomMeetingDurationTracker: Sendable {
             } else {
                 if nowMs - observedAt >= thresholds.graceEndMs {
                     let durationSec = (observedAt - startedAt) / 1000
-                    events.append(makeEndedEvent(
-                        startedAtMs: startedAt,
-                        endedAtMs: observedAt,
-                        durationSeconds: durationSec,
-                        coldStartOrigin: coldStart,
-                        droppedTransitionsCount: dropped,
-                        linkedCalEventID: linkedCalEventID
-                    ))
+                    events.append(
+                        makeEndedEvent(
+                            startedAtMs: startedAt,
+                            endedAtMs: observedAt,
+                            durationSeconds: durationSec,
+                            coldStartOrigin: coldStart,
+                            droppedTransitionsCount: dropped,
+                            linkedCalEventID: linkedCalEventID
+                        ))
                     state = .idle
                 }
                 // else: still in pendingEnd.
@@ -147,7 +150,7 @@ public struct ZoomMeetingDurationTracker: Sendable {
             "event_kind": "zoom_meeting_started",
             "started_at_ms": String(startedAtMs),
             "cold_start": coldStart ? "true" : "false",
-            "linked_calendar_event_id": linkedCalEventID ?? ""
+            "linked_calendar_event_id": linkedCalEventID ?? "",
         ]
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: Double(startedAtMs) / 1000.0),
@@ -173,7 +176,7 @@ public struct ZoomMeetingDurationTracker: Sendable {
             "duration_seconds": String(durationSeconds),
             "cold_start_origin": coldStartOrigin ? "true" : "false",
             "dropped_transitions_count": String(droppedTransitionsCount),
-            "linked_calendar_event_id": linkedCalEventID ?? ""
+            "linked_calendar_event_id": linkedCalEventID ?? "",
         ]
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: Double(endedAtMs) / 1000.0),
@@ -191,7 +194,7 @@ public struct ZoomMeetingDurationTracker: Sendable {
             "linked_calendar_event_id": linkedCalEventID,
             "calendar_source": "eventkit",
             "match_method": "url_regex_eventkit",
-            "confidence": "0.95"
+            "confidence": "0.95",
         ]
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: Double(startedAtMs) / 1000.0),

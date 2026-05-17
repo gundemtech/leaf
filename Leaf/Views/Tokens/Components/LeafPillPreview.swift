@@ -17,29 +17,29 @@ struct LeafPillPreview: View {
                     .foregroundStyle(LeafColor.text.tertiary)
                 HStack(spacing: LeafSpace.sm) {
                     LeafPill(title: "neutral", tone: .neutral)
-                    LeafPill(title: "accent",  tone: .accent)
+                    LeafPill(title: "accent", tone: .accent)
                     LeafPill(title: "success", tone: .success)
                     LeafPill(title: "warning", tone: .warning)
-                    LeafPill(title: "danger",  tone: .danger)
+                    LeafPill(title: "danger", tone: .danger)
                 }
 
                 Text("with leading dot")
                     .font(LeafType.mono.small)
                     .foregroundStyle(LeafColor.text.tertiary)
                 HStack(spacing: LeafSpace.sm) {
-                    LeafPill(title: "online",      tone: .success, showsDot: true)
-                    LeafPill(title: "in meeting",  tone: .warning, showsDot: true)
-                    LeafPill(title: "deep focus",  tone: .accent,  showsDot: true)
-                    LeafPill(title: "offline",     tone: .neutral, showsDot: true)
+                    LeafPill(title: "online", tone: .success, showsDot: true)
+                    LeafPill(title: "in meeting", tone: .warning, showsDot: true)
+                    LeafPill(title: "deep focus", tone: .accent, showsDot: true)
+                    LeafPill(title: "offline", tone: .neutral, showsDot: true)
                 }
 
                 Text("with icon")
                     .font(LeafType.mono.small)
                     .foregroundStyle(LeafColor.text.tertiary)
                 HStack(spacing: LeafSpace.sm) {
-                    LeafPill(title: "Email",   tone: .neutral, icon: .asset(LeafIcons.comm.email))
-                    LeafPill(title: "Comment", tone: .accent,  icon: .asset(LeafIcons.comm.message))
-                    LeafPill(title: "Share",   tone: .success, icon: .asset(LeafIcons.comm.share))
+                    LeafPill(title: "Email", tone: .neutral, icon: .asset(LeafIcons.comm.email))
+                    LeafPill(title: "Comment", tone: .accent, icon: .asset(LeafIcons.comm.message))
+                    LeafPill(title: "Share", tone: .success, icon: .asset(LeafIcons.comm.share))
                 }
             }
 

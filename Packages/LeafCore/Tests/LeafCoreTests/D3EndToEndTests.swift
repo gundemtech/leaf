@@ -10,8 +10,9 @@
 // Asserts the full D3 chain end-to-end: events written → detector pass →
 // detector tables populated → QueryEngine.queryActivity composes the response.
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class D3EndToEndTests: XCTestCase {
@@ -34,8 +35,9 @@ final class D3EndToEndTests: XCTestCase {
     private struct SentinelDecisionDetector: DecisionDetectorProtocol {
         func detect(body: String, kind: BodyKind, eventTsMs: Int64) -> DecisionHit? {
             guard body.contains("DECIDE-SENTINEL") else { return nil }
-            return DecisionHit(topicKeywords: ["sentinel"],
-                               reasoningExcerpt: body, confidence: 0.9)
+            return DecisionHit(
+                topicKeywords: ["sentinel"],
+                reasoningExcerpt: body, confidence: 0.9)
         }
     }
     private struct SentinelOpenQuestionDetector: OpenQuestionDetectorProtocol {
@@ -62,9 +64,11 @@ final class D3EndToEndTests: XCTestCase {
     private struct SentinelWhereStoppedDeriver: WhereStoppedDeriverProtocol {
         var idleSeconds: Int { 60 }
         let output: WhereStoppedOutput?
-        func derive(in db: GRDB.Database,
-                    sinceMs: Int64,
-                    untilMs: Int64) throws -> WhereStoppedOutput? { output }
+        func derive(
+            in db: GRDB.Database,
+            sinceMs: Int64,
+            untilMs: Int64
+        ) throws -> WhereStoppedOutput? { output }
     }
 
     private func incrementalMoat() -> DetectorMoat {
@@ -78,8 +82,10 @@ final class D3EndToEndTests: XCTestCase {
         )
     }
 
-    private func scheduledMoat(stuckHits: [LinearStuckHit],
-                               whereStoppedOutput: WhereStoppedOutput?) -> DetectorMoat {
+    private func scheduledMoat(
+        stuckHits: [LinearStuckHit],
+        whereStoppedOutput: WhereStoppedOutput?
+    ) -> DetectorMoat {
         DetectorMoat(
             decision: NoOpDecisionDetector(),
             openQuestion: NoOpOpenQuestionDetector(),
@@ -93,15 +99,18 @@ final class D3EndToEndTests: XCTestCase {
     // MARK: - Helpers
 
     private func openDB() throws -> LeafCore.Database {
-        try LeafCore.Database.openForWrite(at: dbURL,
-                                           config: .weakDefaults,
-                                           encryption: .deterministicTest)
+        try LeafCore.Database.openForWrite(
+            at: dbURL,
+            config: .weakDefaults,
+            encryption: .deterministicTest)
     }
 
-    private func writeEvent(_ db: LeafCore.Database,
-                            tsMs: Int64,
-                            signalType: SignalType = .action,
-                            payload: [String: String]) throws {
+    private func writeEvent(
+        _ db: LeafCore.Database,
+        tsMs: Int64,
+        signalType: SignalType = .action,
+        payload: [String: String]
+    ) throws {
         let event = RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(tsMs) / 1000.0),
             signalType: signalType,
@@ -118,15 +127,18 @@ final class D3EndToEndTests: XCTestCase {
     /// `decisions` row for any body matching the sentinel.
     func testCollectorFlushTriggersDetectorPipeline_DecisionEmitted() throws {
         let db = try openDB()
-        try writeEvent(db, tsMs: 1_000, payload: [
-            "event_kind": "issue_updated",
-            "body": "We DECIDE-SENTINEL to ship D3"
-        ])
+        try writeEvent(
+            db, tsMs: 1_000,
+            payload: [
+                "event_kind": "issue_updated",
+                "body": "We DECIDE-SENTINEL to ship D3",
+            ])
 
         // Emulates what Agent's periodic detector timer will call.
-        try DetectorPipeline.runIncremental(moat: incrementalMoat(),
-                                            nowMs: 9_999,
-                                            in: db)
+        try DetectorPipeline.runIncremental(
+            moat: incrementalMoat(),
+            nowMs: 9_999,
+            in: db)
 
         let count = try db.readSQL { rawDB in
             try Int.fetchOne(rawDB, sql: "SELECT COUNT(*) FROM decisions") ?? 0
@@ -141,8 +153,9 @@ final class D3EndToEndTests: XCTestCase {
     /// appends one `where_stopped_log` row when the deriver emits.
     func testIdleSchedulerEmitsLinearStuckAndWhereStopped() throws {
         let db = try openDB()
-        let stuckHit = LinearStuckHit(issueRef: "LEAF-99",
-                                      lastStatusTransitionAtMs: 1_000)
+        let stuckHit = LinearStuckHit(
+            issueRef: "LEAF-99",
+            lastStatusTransitionAtMs: 1_000)
         let wsOutput = WhereStoppedOutput(
             excerpt: "Working on LeafAgent.swift",
             wipSignals: WipSignals(commitWip: false, ciFailing: false, midEdit: true),
@@ -154,8 +167,10 @@ final class D3EndToEndTests: XCTestCase {
             nowMs: 9_999, in: db)
 
         let blockerCount = try db.readSQL { rawDB in
-            try Int.fetchOne(rawDB, sql:
-                "SELECT COUNT(*) FROM blockers WHERE blocker_kind = ?",
+            try Int.fetchOne(
+                rawDB,
+                sql:
+                    "SELECT COUNT(*) FROM blockers WHERE blocker_kind = ?",
                 arguments: [Schema.BlockerKinds.linearStuck]) ?? 0
         }
         XCTAssertEqual(blockerCount, 1)
@@ -177,25 +192,32 @@ final class D3EndToEndTests: XCTestCase {
 
         // Seed: 1 plain noise + 3 detector hits + 1 more noise.
         try writeEvent(db, tsMs: 1_000, payload: ["event_kind": "issue_updated"])
-        try writeEvent(db, tsMs: 2_000, payload: [
-            "event_kind": "issue_updated",
-            "body": "We DECIDE-SENTINEL to use SQLCipher"
-        ])
-        try writeEvent(db, tsMs: 3_000, payload: [
-            "event_kind": "slack_thread_reply_aggregate",
-            "body": "Open QUESTION-SENTINEL: which encryption?",
-            "thread_ts": "1700000000.001"
-        ])
-        try writeEvent(db, tsMs: 4_000, payload: [
-            "event_kind": "issue_updated",
-            "body": "BLOCKED-SENTINEL waiting on infra",
-            "linked_linear_id": "LEAF-7"
-        ])
+        try writeEvent(
+            db, tsMs: 2_000,
+            payload: [
+                "event_kind": "issue_updated",
+                "body": "We DECIDE-SENTINEL to use SQLCipher",
+            ])
+        try writeEvent(
+            db, tsMs: 3_000,
+            payload: [
+                "event_kind": "slack_thread_reply_aggregate",
+                "body": "Open QUESTION-SENTINEL: which encryption?",
+                "thread_ts": "1700000000.001",
+            ])
+        try writeEvent(
+            db, tsMs: 4_000,
+            payload: [
+                "event_kind": "issue_updated",
+                "body": "BLOCKED-SENTINEL waiting on infra",
+                "linked_linear_id": "LEAF-7",
+            ])
         try writeEvent(db, tsMs: 5_000, payload: ["event_kind": "issue_updated"])
 
-        try DetectorPipeline.runIncremental(moat: incrementalMoat(),
-                                            nowMs: 9_999,
-                                            in: db)
+        try DetectorPipeline.runIncremental(
+            moat: incrementalMoat(),
+            nowMs: 9_999,
+            in: db)
 
         let engine = QueryEngine(
             dbURL: dbURL,
@@ -208,14 +230,18 @@ final class D3EndToEndTests: XCTestCase {
             filter: nil
         )
 
-        XCTAssertFalse(response.events.isEmpty,
-                       "events[] must be populated for the seed period")
-        XCTAssertEqual(response.decisionsInPeriod.count, 1,
-                       "DECIDE body → 1 decision row composed into response")
-        XCTAssertEqual(response.openQuestions.count, 1,
-                       "QUESTION body → 1 open_question row composed into response")
-        XCTAssertEqual(response.blockers.count, 1,
-                       "BLOCKED body → 1 blocker row composed into response")
+        XCTAssertFalse(
+            response.events.isEmpty,
+            "events[] must be populated for the seed period")
+        XCTAssertEqual(
+            response.decisionsInPeriod.count, 1,
+            "DECIDE body → 1 decision row composed into response")
+        XCTAssertEqual(
+            response.openQuestions.count, 1,
+            "QUESTION body → 1 open_question row composed into response")
+        XCTAssertEqual(
+            response.blockers.count, 1,
+            "BLOCKED body → 1 blocker row composed into response")
         // links may be empty (no extractor moat in publicSubstrate write path);
         // assert non-nil to confirm the composition shape is wired.
         XCTAssertNotNil(response.links)

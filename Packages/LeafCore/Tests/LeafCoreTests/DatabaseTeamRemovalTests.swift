@@ -2,8 +2,9 @@
 // (markTeamMemberRemoved / deprecateTeamKey / readTeamKey(byID:)) поверх
 // 5.1.B helpers. Pure DB I/O round-trip + idempotency + invariant guards.
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class DatabaseTeamRemovalTests: XCTestCase {
@@ -55,7 +56,8 @@ final class DatabaseTeamRemovalTests: XCTestCase {
 
         let all = try db.readTeamMembers(orgID: "org-aaaa", includeRemoved: true)
         let removed = all.first { $0.id == "member-2" }
-        XCTAssertEqual(removed?.removedAt, firstRemovedAt,
+        XCTAssertEqual(
+            removed?.removedAt, firstRemovedAt,
             "повторный mark не должен bump'ить timestamp")
     }
 
@@ -112,12 +114,13 @@ final class DatabaseTeamRemovalTests: XCTestCase {
     /// row remains active (sole-active guard kept intact).
     func testDeprecateTeamKey_SoleActiveGuardThrows() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
-        try db.insertTeamKey(TeamKey(
-            id: "key-rotation-1",
-            generatedAt: Date(timeIntervalSince1970: 1_700_000_000),
-            deprecatedAt: nil,
-            generatedByMemberID: "member-self"
-        ))
+        try db.insertTeamKey(
+            TeamKey(
+                id: "key-rotation-1",
+                generatedAt: Date(timeIntervalSince1970: 1_700_000_000),
+                deprecatedAt: nil,
+                generatedByMemberID: "member-self"
+            ))
 
         XCTAssertThrowsError(
             try db.deprecateTeamKey(keyID: "key-rotation-1", at: Date(timeIntervalSince1970: 1_700_002_000))
@@ -148,7 +151,8 @@ final class DatabaseTeamRemovalTests: XCTestCase {
         try db.deprecateTeamKey(keyID: "key-rotation-1", at: secondDeprecatedAt)
 
         let row = try db.readTeamKey(byID: "key-rotation-1")
-        XCTAssertEqual(row?.deprecatedAt, firstDeprecatedAt,
+        XCTAssertEqual(
+            row?.deprecatedAt, firstDeprecatedAt,
             "повторный deprecate не должен bump'ить timestamp")
 
         // Sanity — key-rotation-2 всё ещё active.
@@ -169,11 +173,13 @@ final class DatabaseTeamRemovalTests: XCTestCase {
 
         // Sanity — both sample keys остаются active.
         let activeCount = try db.writeSQL { rawDB in
-            try Int.fetchOne(rawDB, sql: """
-                SELECT count(*)
-                FROM \(Schema.TeamKeys.tableName)
-                WHERE \(Schema.TeamKeys.deprecatedAtMs) IS NULL
-                """) ?? -1
+            try Int.fetchOne(
+                rawDB,
+                sql: """
+                    SELECT count(*)
+                    FROM \(Schema.TeamKeys.tableName)
+                    WHERE \(Schema.TeamKeys.deprecatedAtMs) IS NULL
+                    """) ?? -1
         }
         XCTAssertEqual(activeCount, 2)
     }
@@ -202,7 +208,8 @@ final class DatabaseTeamRemovalTests: XCTestCase {
         try db.deprecateTeamKey(keyID: "key-rotation-2", at: Date(timeIntervalSince1970: 1_700_002_000))
 
         let active = try db.readActiveTeamKey()
-        XCTAssertEqual(active?.id, "key-rotation-1",
+        XCTAssertEqual(
+            active?.id, "key-rotation-1",
             "после deprecate latest active — readActive возвращает older active")
     }
 
@@ -212,12 +219,13 @@ final class DatabaseTeamRemovalTests: XCTestCase {
     func testReadTeamKey_ByIDReturnsActiveRow() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         let generatedAt = Date(timeIntervalSince1970: 1_700_000_000)
-        try db.insertTeamKey(TeamKey(
-            id: "key-rotation-1",
-            generatedAt: generatedAt,
-            deprecatedAt: nil,
-            generatedByMemberID: "member-self"
-        ))
+        try db.insertTeamKey(
+            TeamKey(
+                id: "key-rotation-1",
+                generatedAt: generatedAt,
+                deprecatedAt: nil,
+                generatedByMemberID: "member-self"
+            ))
 
         let row = try db.readTeamKey(byID: "key-rotation-1")
         XCTAssertNotNil(row)
@@ -267,38 +275,42 @@ final class DatabaseTeamRemovalTests: XCTestCase {
     // MARK: - Helpers
 
     private func insertSampleKeys(_ db: LeafCore.Database) throws {
-        try db.insertTeamKey(TeamKey(
-            id: "key-rotation-1",
-            generatedAt: Date(timeIntervalSince1970: 1_700_000_000),
-            deprecatedAt: nil,
-            generatedByMemberID: "member-self"
-        ))
-        try db.insertTeamKey(TeamKey(
-            id: "key-rotation-2",
-            generatedAt: Date(timeIntervalSince1970: 1_700_001_000),
-            deprecatedAt: nil,
-            generatedByMemberID: "member-self"
-        ))
+        try db.insertTeamKey(
+            TeamKey(
+                id: "key-rotation-1",
+                generatedAt: Date(timeIntervalSince1970: 1_700_000_000),
+                deprecatedAt: nil,
+                generatedByMemberID: "member-self"
+            ))
+        try db.insertTeamKey(
+            TeamKey(
+                id: "key-rotation-2",
+                generatedAt: Date(timeIntervalSince1970: 1_700_001_000),
+                deprecatedAt: nil,
+                generatedByMemberID: "member-self"
+            ))
     }
 
     private func insertSampleMembers(_ db: LeafCore.Database, orgID: String) throws {
-        try db.insertTeamMember(TeamMember(
-            id: "member-self",
-            orgID: orgID,
-            role: .admin,
-            pubkeyHex: String(repeating: "ab", count: 32),
-            displayName: "Dmitrii",
-            addedAt: Date(timeIntervalSince1970: 1_700_000_000),
-            removedAt: nil
-        ))
-        try db.insertTeamMember(TeamMember(
-            id: "member-2",
-            orgID: orgID,
-            role: .member,
-            pubkeyHex: String(repeating: "cd", count: 32),
-            displayName: "Anton",
-            addedAt: Date(timeIntervalSince1970: 1_700_001_000),
-            removedAt: nil
-        ))
+        try db.insertTeamMember(
+            TeamMember(
+                id: "member-self",
+                orgID: orgID,
+                role: .admin,
+                pubkeyHex: String(repeating: "ab", count: 32),
+                displayName: "Dmitrii",
+                addedAt: Date(timeIntervalSince1970: 1_700_000_000),
+                removedAt: nil
+            ))
+        try db.insertTeamMember(
+            TeamMember(
+                id: "member-2",
+                orgID: orgID,
+                role: .member,
+                pubkeyHex: String(repeating: "cd", count: 32),
+                displayName: "Anton",
+                addedAt: Date(timeIntervalSince1970: 1_700_001_000),
+                removedAt: nil
+            ))
     }
 }

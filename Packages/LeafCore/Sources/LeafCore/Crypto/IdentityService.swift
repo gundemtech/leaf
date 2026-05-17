@@ -24,9 +24,11 @@ public enum IdentityService {
     public static func ensureLocalIdentity(
         at root: URL = TeamKeystore.defaultRoot()
     ) throws -> Curve25519.KeyAgreement.PrivateKey {
-        return try ensureLocalIdentity(at: root, generate: {
-            Curve25519.KeyAgreement.PrivateKey()
-        })
+        return try ensureLocalIdentity(
+            at: root,
+            generate: {
+                Curve25519.KeyAgreement.PrivateKey()
+            })
     }
 
     /// Test/dev overload — inject deterministic keypair generator. Используется

@@ -11,8 +11,9 @@
 //     state не должна оставить partial state (нет events, нет offset, нет
 //     presence row).
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class PresenceStateWriterTests: XCTestCase {
@@ -62,11 +63,12 @@ final class PresenceStateWriterTests: XCTestCase {
             )
             XCTAssertEqual(count, 1)
 
-            let row = try XCTUnwrap(try Row.fetchOne(
-                rawDB,
-                sql: "SELECT * FROM \(Schema.PresenceState.tableName) WHERE \(Schema.PresenceState.provider) = ?",
-                arguments: ["github"]
-            ))
+            let row = try XCTUnwrap(
+                try Row.fetchOne(
+                    rawDB,
+                    sql: "SELECT * FROM \(Schema.PresenceState.tableName) WHERE \(Schema.PresenceState.provider) = ?",
+                    arguments: ["github"]
+                ))
             XCTAssertEqual(row[Schema.PresenceState.provider] as String?, "github")
             XCTAssertEqual(row[Schema.PresenceState.updatedAtMs] as Int64?, nowMs)
             XCTAssertNil(row[Schema.PresenceState.derivedMode] as String?)
@@ -110,10 +112,11 @@ final class PresenceStateWriterTests: XCTestCase {
             )
             XCTAssertEqual(count, 1, "PK conflict должен схлопнуть в один row")
 
-            let row = try XCTUnwrap(try Row.fetchOne(
-                rawDB,
-                sql: "SELECT * FROM \(Schema.PresenceState.tableName)"
-            ))
+            let row = try XCTUnwrap(
+                try Row.fetchOne(
+                    rawDB,
+                    sql: "SELECT * FROM \(Schema.PresenceState.tableName)"
+                ))
             XCTAssertEqual(row[Schema.PresenceState.updatedAtMs] as Int64?, secondWrite)
             XCTAssertEqual(
                 row[Schema.PresenceState.stateJSON] as String?,
@@ -133,7 +136,7 @@ final class PresenceStateWriterTests: XCTestCase {
                 state: [
                     "assigned_count": 7,
                     "active_cycle": "Cycle 23",
-                    "is_in_focus": true
+                    "is_in_focus": true,
                 ],
                 derivedMode: nil,
                 nowMs: 1_700_000_000_000,
@@ -307,18 +310,20 @@ final class PresenceStateWriterTests: XCTestCase {
             updatedMs: 1_700_000_500_000
         )
 
-        XCTAssertThrowsError(try db.writeEventsOffsetAndPresence(
-            events,
-            offset: offset,
-            presence: (
-                provider: .github,
-                // Date — не JSON-serializable через JSONSerialization →
-                // upsert бросит .jsonEncodingFailed до db.execute.
-                state: ["bad": Date()],
-                derivedMode: nil
-            ),
-            nowMs: 1_700_000_500_000
-        )) { error in
+        XCTAssertThrowsError(
+            try db.writeEventsOffsetAndPresence(
+                events,
+                offset: offset,
+                presence: (
+                    provider: .github,
+                    // Date — не JSON-serializable через JSONSerialization →
+                    // upsert бросит .jsonEncodingFailed до db.execute.
+                    state: ["bad": Date()],
+                    derivedMode: nil
+                ),
+                nowMs: 1_700_000_500_000
+            )
+        ) { error in
             guard case LeafError.jsonEncodingFailed = error else {
                 XCTFail("Expected .jsonEncodingFailed, got \(error)")
                 return
@@ -326,10 +331,11 @@ final class PresenceStateWriterTests: XCTestCase {
         }
 
         // Полный rollback: ни events, ни offset, ни presence row.
-        let allEvents = try db.events(in: DateInterval(
-            start: .distantPast,
-            end: .distantFuture
-        ))
+        let allEvents = try db.events(
+            in: DateInterval(
+                start: .distantPast,
+                end: .distantFuture
+            ))
         XCTAssertTrue(allEvents.isEmpty, "events не должны просочиться при failed presence write")
 
         let storedOffset = try db.readOffset(
@@ -379,10 +385,11 @@ final class PresenceStateWriterTests: XCTestCase {
             nowMs: 1_700_000_500_000
         )
 
-        let allEvents = try db.events(in: DateInterval(
-            start: base.addingTimeInterval(-10),
-            end: base.addingTimeInterval(86_400)
-        ))
+        let allEvents = try db.events(
+            in: DateInterval(
+                start: base.addingTimeInterval(-10),
+                end: base.addingTimeInterval(86_400)
+            ))
         XCTAssertEqual(allEvents.count, 1)
 
         let storedOffset = try db.readOffset(

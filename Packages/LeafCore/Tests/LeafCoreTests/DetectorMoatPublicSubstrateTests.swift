@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class DetectorMoatPublicSubstrateTests: XCTestCase {
@@ -23,18 +24,21 @@ final class DetectorMoatPublicSubstrateTests: XCTestCase {
     }
 
     func testPublicSubstrate_DecisionReturnsNil() {
-        XCTAssertNil(DetectorMoat.publicSubstrate.decision
-            .detect(body: "решено: уходим на сервер", kind: .slackMsg, eventTsMs: 0))
+        XCTAssertNil(
+            DetectorMoat.publicSubstrate.decision
+                .detect(body: "решено: уходим на сервер", kind: .slackMsg, eventTsMs: 0))
     }
 
     func testPublicSubstrate_OpenQuestionReturnsNil() {
-        XCTAssertNil(DetectorMoat.publicSubstrate.openQuestion
-            .detect(body: "should we use X or Y?", kind: .slackMsg))
+        XCTAssertNil(
+            DetectorMoat.publicSubstrate.openQuestion
+                .detect(body: "should we use X or Y?", kind: .slackMsg))
     }
 
     func testPublicSubstrate_BlockerPatternReturnsNil() {
-        XCTAssertNil(DetectorMoat.publicSubstrate.blockerPattern
-            .detect(body: "I'm blocked on the API key", kind: .slackMsg))
+        XCTAssertNil(
+            DetectorMoat.publicSubstrate.blockerPattern
+                .detect(body: "I'm blocked on the API key", kind: .slackMsg))
     }
 
     func testPublicSubstrate_LinearStuckReturnsEmpty() throws {
@@ -61,10 +65,12 @@ final class DetectorMoatPublicSubstrateTests: XCTestCase {
         let m = DetectorMoat.publicSubstrate.absence
         let ids = [
             SlackIdentifier(userID: "alice", displayName: "Alice", realName: nil),
-            SlackIdentifier(userID: "demoffsrmain", displayName: nil, realName: nil)
+            SlackIdentifier(userID: "demoffsrmain", displayName: nil, realName: nil),
         ]
-        XCTAssertEqual(m.match(githubLogin: "demoffsrmain",
-                               slackIdentifiers: ids)?.userID, "demoffsrmain")
+        XCTAssertEqual(
+            m.match(
+                githubLogin: "demoffsrmain",
+                slackIdentifiers: ids)?.userID, "demoffsrmain")
         XCTAssertNil(m.match(githubLogin: "ddemidov", slackIdentifiers: ids))
     }
 }

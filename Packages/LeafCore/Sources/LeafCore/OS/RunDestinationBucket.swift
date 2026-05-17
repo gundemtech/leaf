@@ -10,16 +10,16 @@ import Foundation
 /// and surfaced in `payload.run_destination_bucket`. Renaming any case is a
 /// breaking change to the on-wire event schema — bump a migration if needed.
 public enum RunDestinationBucket: String, Sendable, Hashable {
-    case macos              = "macos"
-    case iosSimulator       = "ios_simulator"
-    case iosDevice          = "ios_device"
-    case tvSimulator        = "tv_simulator"
-    case tvDevice           = "tv_device"
-    case watchSimulator     = "watch_simulator"
-    case watchDevice        = "watch_device"
-    case visionSimulator    = "vision_simulator"
-    case visionDevice       = "vision_device"
-    case unknown            = "unknown"
+    case macos = "macos"
+    case iosSimulator = "ios_simulator"
+    case iosDevice = "ios_device"
+    case tvSimulator = "tv_simulator"
+    case tvDevice = "tv_device"
+    case watchSimulator = "watch_simulator"
+    case watchDevice = "watch_device"
+    case visionSimulator = "vision_simulator"
+    case visionDevice = "vision_device"
+    case unknown = "unknown"
 
     /// Heuristic mapper from AppleScript `active run destination.name` raw value
     /// to a bucket. Ordered most-specific-first: the `(Simulator)` suffix must
@@ -31,8 +31,9 @@ public enum RunDestinationBucket: String, Sendable, Hashable {
     /// must drop the raw value.
     public static func bucket(rawName: String?) -> RunDestinationBucket {
         guard let raw = rawName?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !raw.isEmpty,
-              raw != "(none)" else { return .unknown }
+            !raw.isEmpty,
+            raw != "(none)"
+        else { return .unknown }
 
         let isSim = raw.contains("(Simulator)") || raw.hasSuffix("Simulator")
 

@@ -1,5 +1,6 @@
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class M015ProviderSnapshotsTests: XCTestCase {
@@ -20,7 +21,8 @@ final class M015ProviderSnapshotsTests: XCTestCase {
     func testTableExistsAfterMigration() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try db.readSQL { rawDB in
-            let row = try Row.fetchOne(rawDB, sql: "SELECT name FROM sqlite_master WHERE type='table' AND name='provider_snapshots'")
+            let row = try Row.fetchOne(
+                rawDB, sql: "SELECT name FROM sqlite_master WHERE type='table' AND name='provider_snapshots'")
             XCTAssertNotNil(row, "provider_snapshots table must exist after migration")
         }
     }
@@ -29,12 +31,15 @@ final class M015ProviderSnapshotsTests: XCTestCase {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try db.writeSQL { rawDB in
             try rawDB.execute(
-                sql: "INSERT INTO provider_snapshots (provider, snapshot_kind, snapshot_json, captured_at_ms) VALUES (?, ?, ?, ?)",
+                sql:
+                    "INSERT INTO provider_snapshots (provider, snapshot_kind, snapshot_json, captured_at_ms) VALUES (?, ?, ?, ?)",
                 arguments: ["linear", "linear_subscribed_issues", "{}", 1])
             // Second insert with same PK should fail
-            XCTAssertThrowsError(try rawDB.execute(
-                sql: "INSERT INTO provider_snapshots (provider, snapshot_kind, snapshot_json, captured_at_ms) VALUES (?, ?, ?, ?)",
-                arguments: ["linear", "linear_subscribed_issues", "{}", 2]))
+            XCTAssertThrowsError(
+                try rawDB.execute(
+                    sql:
+                        "INSERT INTO provider_snapshots (provider, snapshot_kind, snapshot_json, captured_at_ms) VALUES (?, ?, ?, ?)",
+                    arguments: ["linear", "linear_subscribed_issues", "{}", 2]))
         }
     }
 
@@ -42,12 +47,18 @@ final class M015ProviderSnapshotsTests: XCTestCase {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try db.writeSQL { rawDB in
             try rawDB.execute(
-                sql: "INSERT INTO provider_snapshots (provider, snapshot_kind, snapshot_json, captured_at_ms) VALUES (?, ?, ?, ?) ON CONFLICT(provider, snapshot_kind) DO UPDATE SET snapshot_json=excluded.snapshot_json, captured_at_ms=excluded.captured_at_ms",
+                sql:
+                    "INSERT INTO provider_snapshots (provider, snapshot_kind, snapshot_json, captured_at_ms) VALUES (?, ?, ?, ?) ON CONFLICT(provider, snapshot_kind) DO UPDATE SET snapshot_json=excluded.snapshot_json, captured_at_ms=excluded.captured_at_ms",
                 arguments: ["linear", "linear_custom_views", "{\"v\":1}", 1])
             try rawDB.execute(
-                sql: "INSERT INTO provider_snapshots (provider, snapshot_kind, snapshot_json, captured_at_ms) VALUES (?, ?, ?, ?) ON CONFLICT(provider, snapshot_kind) DO UPDATE SET snapshot_json=excluded.snapshot_json, captured_at_ms=excluded.captured_at_ms",
+                sql:
+                    "INSERT INTO provider_snapshots (provider, snapshot_kind, snapshot_json, captured_at_ms) VALUES (?, ?, ?, ?) ON CONFLICT(provider, snapshot_kind) DO UPDATE SET snapshot_json=excluded.snapshot_json, captured_at_ms=excluded.captured_at_ms",
                 arguments: ["linear", "linear_custom_views", "{\"v\":2}", 2])
-            let row = try Row.fetchOne(rawDB, sql: "SELECT snapshot_json, captured_at_ms FROM provider_snapshots WHERE provider='linear' AND snapshot_kind='linear_custom_views'")
+            let row = try Row.fetchOne(
+                rawDB,
+                sql:
+                    "SELECT snapshot_json, captured_at_ms FROM provider_snapshots WHERE provider='linear' AND snapshot_kind='linear_custom_views'"
+            )
             XCTAssertEqual(row?["snapshot_json"] as String?, "{\"v\":2}")
             XCTAssertEqual(row?["captured_at_ms"] as Int64?, 2)
         }

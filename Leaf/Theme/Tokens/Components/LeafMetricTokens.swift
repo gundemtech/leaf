@@ -26,9 +26,9 @@ enum LeafMetricTokens {
     /// Directional delta — pill chrome with direction-tinted background.
     /// Foreground colour follows direction (success / danger / tertiary).
     enum Delta {
-        static let upColor:   Color   = LeafColor.status.success
-        static let downColor: Color   = LeafColor.status.danger
-        static let flatColor: Color   = LeafColor.text.tertiary
+        static let upColor: Color = LeafColor.status.success
+        static let downColor: Color = LeafColor.status.danger
+        static let flatColor: Color = LeafColor.text.tertiary
         static let arrowSize: CGFloat = 10
         /// Capsule background = direction colour at this opacity. Matches
         /// LeafPillTokens.Tone.success/danger conventions (0.12).
@@ -43,10 +43,10 @@ enum LeafMetricTokens {
     /// value" — useful when the chart sits next to a delta pill.
     enum Sparkline {
         static let strokeWidth: CGFloat = 1.5
-        static let color:       Color   = LeafColor.accent.primary
-        static let minHeight:   CGFloat = 24
+        static let color: Color = LeafColor.accent.primary
+        static let minHeight: CGFloat = 24
         /// Gradient stops for the area fill below the stroke.
-        static let gradientTopOpacity:    CGFloat = 0.18
+        static let gradientTopOpacity: CGFloat = 0.18
         static let gradientBottomOpacity: CGFloat = 0.0
         /// Diameter of the filled circle marker at the last data point.
         static let terminalDotSize: CGFloat = 4
@@ -55,9 +55,9 @@ enum LeafMetricTokens {
     /// Card chrome composed by LeafMetricCard. Background = surface.raised,
     /// corner radius LeafRadius.lg, raised elevation.
     enum Card {
-        static let padding:         CGFloat = LeafSpace.lg
-        static let titleValueGap:   CGFloat = LeafSpace.md
-        static let valueDeltaGap:   CGFloat = LeafSpace.sm
+        static let padding: CGFloat = LeafSpace.lg
+        static let titleValueGap: CGFloat = LeafSpace.md
+        static let valueDeltaGap: CGFloat = LeafSpace.sm
         static let sparklineHeight: CGFloat = 40
     }
 }

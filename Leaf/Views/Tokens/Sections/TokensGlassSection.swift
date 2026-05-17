@@ -19,9 +19,9 @@ struct TokensGlassSection: View {
                     .foregroundStyle(LeafColor.text.secondary)
             }
             HStack(spacing: LeafSpace.lg) {
-                tile("thin",         .thin)
-                tile("regular",      .regular)
-                tile("thick",        .thick)
+                tile("thin", .thin)
+                tile("regular", .regular)
+                tile("thick", .thick)
                 tile("accentTinted", .accentTinted)
             }
             Text(versionBanner).font(LeafType.mono.small).foregroundStyle(LeafColor.text.tertiary)
@@ -40,9 +40,11 @@ struct TokensGlassSection: View {
     private func tile(_ name: String, _ variant: LeafGlass) -> some View {
         VStack(spacing: LeafSpace.sm) {
             ZStack {
-                LinearGradient(colors: [LeafColor.accent.primary, LeafColor.status.info],
-                               startPoint: .topLeading, endPoint: .bottomTrailing)
-                    .clipShape(RoundedRectangle(cornerRadius: LeafRadius.lg, style: .continuous))
+                LinearGradient(
+                    colors: [LeafColor.accent.primary, LeafColor.status.info],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                )
+                .clipShape(RoundedRectangle(cornerRadius: LeafRadius.lg, style: .continuous))
                 Text("Glass").font(LeafType.title.medium).foregroundStyle(LeafColor.text.inverse)
             }
             .frame(width: 160, height: 100)

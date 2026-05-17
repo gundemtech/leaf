@@ -2,8 +2,9 @@
 // 5.5.A/5.5.B wrapper test pattern: open writer Database, exercise wrapper, verify
 // state via existing PendingInvitesStore raw API or other wrappers.
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class DatabasePendingInvites5_5_C_Tests: XCTestCase {
@@ -64,11 +65,13 @@ final class DatabasePendingInvites5_5_C_Tests: XCTestCase {
         try db.insertPendingInvite(sample(token: "t3aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", createdAtMs: 2_000))
 
         let rows = try db.readAllPendingInvites()
-        XCTAssertEqual(rows.map(\.token), [
-            "t2aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "t3aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "t1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-        ])
+        XCTAssertEqual(
+            rows.map(\.token),
+            [
+                "t2aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "t3aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "t1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            ])
     }
 
     // MARK: - readAllPendingInvitesByStatus
@@ -80,10 +83,12 @@ final class DatabasePendingInvites5_5_C_Tests: XCTestCase {
         try db.insertPendingInvite(sample(token: "t3aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", status: .pending))
 
         let pending = try db.readAllPendingInvitesByStatus(.pending)
-        XCTAssertEqual(Set(pending.map(\.token)), [
-            "t1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "t3aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-        ])
+        XCTAssertEqual(
+            Set(pending.map(\.token)),
+            [
+                "t1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "t3aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            ])
         XCTAssertEqual(try db.readAllPendingInvitesByStatus(.revoked).count, 1)
         XCTAssertEqual(try db.readAllPendingInvitesByStatus(.expired).count, 0)
     }
@@ -94,10 +99,11 @@ final class DatabasePendingInvites5_5_C_Tests: XCTestCase {
         let db = try openWriter()
         let nowMs: Int64 = 1_700_000_000_000
         try db.insertPendingInvite(sample(token: "t1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", createdAtMs: nowMs))
-        try db.insertPendingInvite(sample(
-            token: "t2aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            createdAtMs: nowMs - 48 * 60 * 60 * 1000
-        ))
+        try db.insertPendingInvite(
+            sample(
+                token: "t2aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                createdAtMs: nowMs - 48 * 60 * 60 * 1000
+            ))
 
         XCTAssertEqual(try db.sweepExpiredPendingInvites(nowMs: nowMs), 1)
         XCTAssertEqual(try db.sweepExpiredPendingInvites(nowMs: nowMs), 0, "idempotent re-run")

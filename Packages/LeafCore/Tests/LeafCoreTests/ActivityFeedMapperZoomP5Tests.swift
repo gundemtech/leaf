@@ -5,6 +5,7 @@
 //   3. formatDurationCompact helper handles boundary cases
 
 import XCTest
+
 @testable import LeafCore
 
 final class ActivityFeedMapperZoomP5Tests: XCTestCase {
@@ -87,12 +88,14 @@ final class ActivityFeedMapperZoomP5Tests: XCTestCase {
 
     func testStartedIgnoresForbiddenPayloadFields() {
         // Inject forbidden field — mapper must NOT include it in any field.
-        let entry = map(kind: "zoom_meeting_started", extras: [
-            "cold_start": "false",
-            "meeting_topic": "SECRET-TOPIC-DO-NOT-LEAK",
-            "attendees": "evil@example.com",
-            "meeting_join_url": "https://zoom.us/j/9999"
-        ])
+        let entry = map(
+            kind: "zoom_meeting_started",
+            extras: [
+                "cold_start": "false",
+                "meeting_topic": "SECRET-TOPIC-DO-NOT-LEAK",
+                "attendees": "evil@example.com",
+                "meeting_join_url": "https://zoom.us/j/9999",
+            ])
         // primaryText must not contain any forbidden value.
         let primary = entry?.primaryText ?? ""
         XCTAssertFalse(primary.contains("SECRET-TOPIC-DO-NOT-LEAK"))
@@ -102,12 +105,14 @@ final class ActivityFeedMapperZoomP5Tests: XCTestCase {
     }
 
     func testEndedIgnoresForbiddenPayloadFields() {
-        let entry = map(kind: "zoom_meeting_ended", extras: [
-            "duration_seconds": "60",
-            "meeting_topic": "SECRET-TOPIC",
-            "participant_count": "10",
-            "recording_state": "true"
-        ])
+        let entry = map(
+            kind: "zoom_meeting_ended",
+            extras: [
+                "duration_seconds": "60",
+                "meeting_topic": "SECRET-TOPIC",
+                "participant_count": "10",
+                "recording_state": "true",
+            ])
         let combined = (entry?.primaryText ?? "") + (entry?.secondaryText ?? "")
         XCTAssertFalse(combined.contains("SECRET-TOPIC"))
         XCTAssertFalse(combined.contains("10"))
@@ -124,7 +129,8 @@ final class ActivityFeedMapperZoomP5Tests: XCTestCase {
         XCTAssertEqual(ActivityFeedMapper.formatDurationCompact(3600), "1h")
         XCTAssertEqual(ActivityFeedMapper.formatDurationCompact(3660), "1h 1m")
         XCTAssertEqual(ActivityFeedMapper.formatDurationCompact(7320), "2h 2m")
-        XCTAssertEqual(ActivityFeedMapper.formatDurationCompact(-100), "0s",
-                       "Negative seconds should clamp to 0")
+        XCTAssertEqual(
+            ActivityFeedMapper.formatDurationCompact(-100), "0s",
+            "Negative seconds should clamp to 0")
     }
 }

@@ -1,7 +1,7 @@
-import Foundation
 import EventKit
-import os
+import Foundation
 import LeafCore
+import os
 
 /// Phase Track-4 S1 — Layer A catch-up. Translates the current `EKEventStore`
 /// view of the user's calendars into a single `MeetingObservation` boolean
@@ -30,7 +30,9 @@ final class CalendarCollector: @unchecked Sendable {
             do {
                 granted = try await store.requestFullAccessToEvents()
             } catch {
-                collectorLogger.error("CalendarCollector requestFullAccessToEvents failed: \(error.localizedDescription, privacy: .public)")
+                collectorLogger.error(
+                    "CalendarCollector requestFullAccessToEvents failed: \(error.localizedDescription, privacy: .public)"
+                )
                 granted = false
             }
         } else {

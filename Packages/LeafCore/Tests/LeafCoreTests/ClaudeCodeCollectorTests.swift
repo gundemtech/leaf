@@ -4,6 +4,7 @@
 
 import XCTest
 import os
+
 @testable import LeafCore
 
 final class ClaudeCodeCollectorTests: XCTestCase {
@@ -279,7 +280,7 @@ private struct MockOneEventParser: ClaudeCodeJSONLParsing {
             bundleID: "com.anthropic.claude-code",
             payload: [
                 "event_kind": "user_prompt",
-                "source": source
+                "source": source,
             ]
         )
         return .events([event])
@@ -295,8 +296,9 @@ private struct MockOneEventParser: ClaudeCodeJSONLParsing {
 private struct ToolUseIDInjectingParser: ClaudeCodeJSONLParsing {
     func parse(line: String, source: String, now: Date) -> ClaudeCodeParseResult {
         guard let data = line.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let toolUseID = json["tool_use_id"] as? String else {
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let toolUseID = json["tool_use_id"] as? String
+        else {
             return .irrelevant
         }
         let event = RawEvent(
@@ -306,7 +308,7 @@ private struct ToolUseIDInjectingParser: ClaudeCodeJSONLParsing {
             payload: [
                 "event_kind": "claude_bash_executed",
                 "tool_use_id": toolUseID,
-                "source": "jsonl"
+                "source": "jsonl",
             ]
         )
         return .events([event])
@@ -346,7 +348,7 @@ extension ClaudeCodeCollectorTests {
                 "tool_use_id": "DUP_TOOL_ID",
                 "source": "hook",
                 "duration_ms": "50",
-                "permission_mode": "default"
+                "permission_mode": "default",
             ]
         )
         await collector.ingestHookEvents([hookEvent])
@@ -379,7 +381,8 @@ extension ClaudeCodeCollectorTests {
             sourceID: sessionFile.resolvingSymlinksInPath().path
         )
         XCTAssertNotNil(offset, "offset row written even when all events deduped")
-        let fileSize = (try FileManager.default
+        let fileSize =
+            (try FileManager.default
             .attributesOfItem(atPath: sessionFile.path)[.size] as? NSNumber)?.int64Value ?? 0
         XCTAssertEqual(offset?.byteOffset, fileSize, "tail-read consumed full line despite filter")
     }

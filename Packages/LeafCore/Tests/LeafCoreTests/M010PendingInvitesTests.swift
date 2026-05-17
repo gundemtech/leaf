@@ -1,7 +1,8 @@
 // Phase 5.5.A — M010 `pending_invites` table + idx_pending_invites_status index.
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class M010PendingInvitesTests: XCTestCase {
@@ -35,10 +36,11 @@ final class M010PendingInvitesTests: XCTestCase {
                 rawDB,
                 sql: "PRAGMA table_info(\(Schema.PendingInvites.tableName))"
             )
-            let byName = Dictionary(uniqueKeysWithValues: columns.compactMap { row -> (String, Row)? in
-                guard let name = row["name"] as String? else { return nil }
-                return (name, row)
-            })
+            let byName = Dictionary(
+                uniqueKeysWithValues: columns.compactMap { row -> (String, Row)? in
+                    guard let name = row["name"] as String? else { return nil }
+                    return (name, row)
+                })
 
             XCTAssertEqual(
                 Set(byName.keys),
@@ -50,7 +52,7 @@ final class M010PendingInvitesTests: XCTestCase {
                     Schema.PendingInvites.createdAtMs,
                     Schema.PendingInvites.expiresAtMs,
                     Schema.PendingInvites.status,
-                    Schema.PendingInvites.lastPolledAtMs
+                    Schema.PendingInvites.lastPolledAtMs,
                 ])
             )
 
@@ -63,14 +65,14 @@ final class M010PendingInvitesTests: XCTestCase {
                 Schema.PendingInvites.inviteePubkeyHex,
                 Schema.PendingInvites.createdAtMs,
                 Schema.PendingInvites.expiresAtMs,
-                Schema.PendingInvites.status
+                Schema.PendingInvites.status,
             ] {
                 let row = try XCTUnwrap(byName[col])
                 XCTAssertEqual(row["notnull"] as Int?, 1, "column \(col) should be NOT NULL")
             }
             for col in [
                 Schema.PendingInvites.inviteeDisplayNameHint,
-                Schema.PendingInvites.lastPolledAtMs
+                Schema.PendingInvites.lastPolledAtMs,
             ] {
                 let row = try XCTUnwrap(byName[col])
                 XCTAssertEqual(row["notnull"] as Int?, 0, "column \(col) should be nullable")

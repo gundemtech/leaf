@@ -19,11 +19,12 @@ struct GetCurrentSessionTool: ToolExecutor {
         let schema: [String: Any] = [
             "type": "object",
             "properties": [:],
-            "additionalProperties": false
+            "additionalProperties": false,
         ]
         return ToolDefinition(
             name: "get_current_session",
-            description: "Return user's currently-active session (if any) plus the most recent completed session for context. Both nullable — single unified response shape.",
+            description:
+                "Return user's currently-active session (if any) plus the most recent completed session for context. Both nullable — single unified response shape.",
             inputSchema: AnyCodable(schema)
         )
     }()
@@ -31,9 +32,13 @@ struct GetCurrentSessionTool: ToolExecutor {
     func execute(arguments _: AnyCodable?) async throws -> ToolCallResult {
         guard FileManager.default.fileExists(atPath: dbURL.path) else {
             return ToolCallResult(
-                content: [.text(TextContent(
-                    text: "Leaf database not found at \(dbURL.path). Enable 'Background collection' in Settings first."
-                ))],
+                content: [
+                    .text(
+                        TextContent(
+                            text:
+                                "Leaf database not found at \(dbURL.path). Enable 'Background collection' in Settings first."
+                        ))
+                ],
                 isError: true
             )
         }
@@ -68,7 +73,7 @@ struct GetCurrentSessionTool: ToolExecutor {
         var payload: [String: Any] = [
             "active": isActive,
             "currentSession": NSNull(),
-            "lastSession": NSNull()
+            "lastSession": NSNull(),
         ]
 
         if isActive, let s = mostRecent {
@@ -89,7 +94,7 @@ struct GetCurrentSessionTool: ToolExecutor {
             "displayName": AppNameResolver.shared.displayName(for: s.bundleID),
             "start": iso.string(from: s.start),
             "durationSec": Int(s.duration),
-            "appCount": s.appCount
+            "appCount": s.appCount,
         ]
         if includeEnd {
             p["end"] = iso.string(from: s.end)

@@ -1,6 +1,7 @@
 // Phase 5.3.C — RotationToken value type tests.
 
 import XCTest
+
 @testable import LeafCore
 
 final class RotationTokenTests: XCTestCase {

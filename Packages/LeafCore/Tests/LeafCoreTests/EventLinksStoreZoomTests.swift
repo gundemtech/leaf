@@ -2,8 +2,9 @@
 // payloads carrying linked_calendar_event_id. Independent test file to keep P5
 // changes localized; pattern follows EventLinksStoreTests.swift verbatim.
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class EventLinksStoreZoomTests: XCTestCase {
@@ -29,7 +30,8 @@ final class EventLinksStoreZoomTests: XCTestCase {
         let tsMs = ts ?? Int64(Date().timeIntervalSince1970 * 1000)
         return try db.writeSQL { rawDB in
             try rawDB.execute(
-                sql: "INSERT INTO events (ts, signal_type, bundle_id, payload_json) VALUES (?, 'context', 'us.zoom.xos', '{}')",
+                sql:
+                    "INSERT INTO events (ts, signal_type, bundle_id, payload_json) VALUES (?, 'context', 'us.zoom.xos', '{}')",
                 arguments: [tsMs]
             )
             return rawDB.lastInsertedRowID
@@ -56,9 +58,12 @@ final class EventLinksStoreZoomTests: XCTestCase {
     func testZoomStartedWithLinkedIDWritesRow() throws {
         let db = try makeDB()
         let eid = try insertRawEventRow(db)
-        try derive(db, eventID: eid, ts: 1_000_000,
-                   payload: ["event_kind": "zoom_meeting_started",
-                             Schema.EventPayloadKeys.linkedCalendarEventID: "deadbeefcafef00d"])
+        try derive(
+            db, eventID: eid, ts: 1_000_000,
+            payload: [
+                "event_kind": "zoom_meeting_started",
+                Schema.EventPayloadKeys.linkedCalendarEventID: "deadbeefcafef00d",
+            ])
         let rows = try linksForEvent(db, eventID: eid)
         XCTAssertEqual(rows.count, 1)
         XCTAssertEqual(rows[0].linkKind, Schema.LinkKinds.zoomToCalendarMeeting)
@@ -70,9 +75,12 @@ final class EventLinksStoreZoomTests: XCTestCase {
     func testZoomStartedWithEmptyLinkedIDNoRow() throws {
         let db = try makeDB()
         let eid = try insertRawEventRow(db)
-        try derive(db, eventID: eid, ts: 1_000_000,
-                   payload: ["event_kind": "zoom_meeting_started",
-                             Schema.EventPayloadKeys.linkedCalendarEventID: ""])
+        try derive(
+            db, eventID: eid, ts: 1_000_000,
+            payload: [
+                "event_kind": "zoom_meeting_started",
+                Schema.EventPayloadKeys.linkedCalendarEventID: "",
+            ])
         let rows = try linksForEvent(db, eventID: eid)
         XCTAssertEqual(rows.count, 0)
     }
@@ -80,8 +88,9 @@ final class EventLinksStoreZoomTests: XCTestCase {
     func testZoomStartedWithoutLinkedIDFieldNoRow() throws {
         let db = try makeDB()
         let eid = try insertRawEventRow(db)
-        try derive(db, eventID: eid, ts: 1_000_000,
-                   payload: ["event_kind": "zoom_meeting_started"])
+        try derive(
+            db, eventID: eid, ts: 1_000_000,
+            payload: ["event_kind": "zoom_meeting_started"])
         let rows = try linksForEvent(db, eventID: eid)
         XCTAssertEqual(rows.count, 0)
     }
@@ -90,9 +99,12 @@ final class EventLinksStoreZoomTests: XCTestCase {
         // Defense: only zoom_meeting_started consumes the linked_calendar_event_id field.
         let db = try makeDB()
         let eid = try insertRawEventRow(db)
-        try derive(db, eventID: eid, ts: 1_000_000,
-                   payload: ["event_kind": "zoom_meeting_ended",  // wrong kind
-                             Schema.EventPayloadKeys.linkedCalendarEventID: "ababababcdcdcdcd"])
+        try derive(
+            db, eventID: eid, ts: 1_000_000,
+            payload: [
+                "event_kind": "zoom_meeting_ended",  // wrong kind
+                Schema.EventPayloadKeys.linkedCalendarEventID: "ababababcdcdcdcd",
+            ])
         let rows = try linksForEvent(db, eventID: eid)
         XCTAssertEqual(rows.count, 0)
     }
@@ -100,8 +112,10 @@ final class EventLinksStoreZoomTests: XCTestCase {
     func testDeriveIdempotentOnRepeat() throws {
         let db = try makeDB()
         let eid = try insertRawEventRow(db)
-        let payload: [String: String] = ["event_kind": "zoom_meeting_started",
-                                          Schema.EventPayloadKeys.linkedCalendarEventID: "abc123def456"]
+        let payload: [String: String] = [
+            "event_kind": "zoom_meeting_started",
+            Schema.EventPayloadKeys.linkedCalendarEventID: "abc123def456",
+        ]
         for _ in 0..<3 {
             try derive(db, eventID: eid, ts: 1_000_000, payload: payload)
         }
@@ -112,9 +126,12 @@ final class EventLinksStoreZoomTests: XCTestCase {
     func testReverseLookupReturnsZoomEvent() throws {
         let db = try makeDB()
         let eid = try insertRawEventRow(db)
-        try derive(db, eventID: eid, ts: 1_000_000,
-                   payload: ["event_kind": "zoom_meeting_started",
-                             Schema.EventPayloadKeys.linkedCalendarEventID: "lookuphash000000"])
+        try derive(
+            db, eventID: eid, ts: 1_000_000,
+            payload: [
+                "event_kind": "zoom_meeting_started",
+                Schema.EventPayloadKeys.linkedCalendarEventID: "lookuphash000000",
+            ])
         let found = try db.readSQL { rawDB in
             try EventLinksStore.eventsLinkingTo(
                 targetKind: Schema.TargetKinds.calendarEvent,

@@ -4,8 +4,8 @@ import GRDB
 /// Registers migration 002 — добавляет таблицу `collector_offsets` для tail-read
 /// collector'ов (Phase 2.3 Claude Code jsonl, Phase 2.4 FSEvents).
 /// Schema namespace в `Schema.CollectorOffsets`. Composite PK (collector_id, source_id).
-public extension DatabaseMigrator {
-    mutating func registerMigration002CollectorOffsets() {
+extension DatabaseMigrator {
+    public mutating func registerMigration002CollectorOffsets() {
         registerMigration("002_collector_offsets") { db in
             try db.create(table: Schema.CollectorOffsets.tableName, ifNotExists: true) { t in
                 t.column(Schema.CollectorOffsets.collectorID, .text).notNull()
@@ -17,7 +17,7 @@ public extension DatabaseMigrator {
                 t.column(Schema.CollectorOffsets.updatedMs, .integer).notNull()
                 t.primaryKey([
                     Schema.CollectorOffsets.collectorID,
-                    Schema.CollectorOffsets.sourceID
+                    Schema.CollectorOffsets.sourceID,
                 ])
             }
         }

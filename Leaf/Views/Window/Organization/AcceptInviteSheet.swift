@@ -12,9 +12,9 @@
 //  + 3 input paths preserved 1:1.
 //
 
-import SwiftUI
 import AppKit
 import LeafCore
+import SwiftUI
 
 struct AcceptInviteSheet: View {
     @Environment(InviteAcceptReader.self) private var reader
@@ -53,12 +53,20 @@ struct AcceptInviteSheet: View {
             pasteCard(disabled: false)
         case .fetching:
             pasteCard(disabled: true)
-            HStack { Spacer(); ProgressView(); Spacer() }
+            HStack {
+                Spacer()
+                ProgressView()
+                Spacer()
+            }
         case .otpEntry(_, let attempts, _):
             otpCard(attempts: attempts, disabled: false)
         case .accepting:
             otpCard(attempts: 0, disabled: true)
-            HStack { Spacer(); ProgressView(); Spacer() }
+            HStack {
+                Spacer()
+                ProgressView()
+                Spacer()
+            }
         case .success(let orgName, let memberCount):
             successCard(orgName: orgName, memberCount: memberCount)
         case .error(let message, let recoverable):
@@ -67,11 +75,12 @@ struct AcceptInviteSheet: View {
                 title: "Couldn't accept invite",
                 description: message,
                 ctaTitle: recoverable ? "Try again" : nil,
-                onCTA: recoverable ? {
-                    reader.discardAndReset()
-                    pasteInput = ""
-                    otpInput = ""
-                } : nil
+                onCTA: recoverable
+                    ? {
+                        reader.discardAndReset()
+                        pasteInput = ""
+                        otpInput = ""
+                    } : nil
             )
         }
     }
@@ -134,11 +143,13 @@ struct AcceptInviteSheet: View {
                 }
 
                 if attempts > 0 {
-                    Text(attempts >= 5
-                         ? "Too many wrong codes. Discard and ask admin to send a new link."
-                         : "Code didn't match — try again (\(attempts)/5).")
-                        .font(LeafType.body.small)
-                        .foregroundStyle(LeafColor.status.danger)
+                    Text(
+                        attempts >= 5
+                            ? "Too many wrong codes. Discard and ask admin to send a new link."
+                            : "Code didn't match — try again (\(attempts)/5)."
+                    )
+                    .font(LeafType.body.small)
+                    .foregroundStyle(LeafColor.status.danger)
                 }
 
                 HStack {
@@ -153,7 +164,10 @@ struct AcceptInviteSheet: View {
                             reader.submitOTP(otp: otp, displayName: dn)
                         }
                     )
-                    .disabled(disabled || !isValidOTP || displayNameInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || attempts >= 5)
+                    .disabled(
+                        disabled || !isValidOTP
+                            || displayNameInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || attempts >= 5
+                    )
                 }
             }
         }

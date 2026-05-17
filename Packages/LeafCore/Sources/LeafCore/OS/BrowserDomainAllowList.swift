@@ -26,9 +26,10 @@ private let _allowedSchemes: Set<String> = ["http", "https"]
 /// non-standard or invalid URLs (non-http/https schemes).
 public func extractDomain(_ urlString: String) -> String {
     guard let comps = URLComponents(string: urlString),
-          let scheme = comps.scheme?.lowercased(),
-          _allowedSchemes.contains(scheme),
-          let host = comps.host?.lowercased() else { return "" }
+        let scheme = comps.scheme?.lowercased(),
+        _allowedSchemes.contains(scheme),
+        let host = comps.host?.lowercased()
+    else { return "" }
     return host
 }
 
@@ -39,7 +40,8 @@ public func applyGranularity(_ urlString: String, _ granularity: URLGranularity)
         return urlString
     case .pathStripped:
         guard let comps = URLComponents(string: urlString),
-              let host = comps.host?.lowercased() else { return "" }
+            let host = comps.host?.lowercased()
+        else { return "" }
         let path = comps.path
         return path.isEmpty ? host : host + path
     case .domainOnly:

@@ -2,8 +2,9 @@
 // Mirrors IntensityAggregatesStoreTests pattern (real Database open with
 // deterministicTest encryption + writeSQL/readSQL handles).
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class GoogleCalendarTrackerStoreTests: XCTestCase {
@@ -209,8 +210,9 @@ final class GoogleCalendarTrackerStoreTests: XCTestCase {
         }
         try db.readSQL { rawDB in
             let rows = try GoogleCalendarTrackerStore.rowsNeedingEndedEmit(now: 1_000, in: rawDB)
-            XCTAssertEqual(rows.map { $0.eventID }, ["ft"],
-                           "workingLocation rows are single-shot — never need _ended emission")
+            XCTAssertEqual(
+                rows.map { $0.eventID }, ["ft"],
+                "workingLocation rows are single-shot — never need _ended emission")
         }
     }
 
@@ -336,8 +338,9 @@ final class GoogleCalendarTrackerStoreTests: XCTestCase {
         }
         try db.readSQL { rawDB in
             XCTAssertTrue(try GoogleCalendarTrackerStore.hasActiveFocusBlock(now: 1_500, in: rawDB))
-            XCTAssertFalse(try GoogleCalendarTrackerStore.hasActiveFocusBlock(now: 2_500, in: rawDB),
-                           "after end_ms boundary, no longer active")
+            XCTAssertFalse(
+                try GoogleCalendarTrackerStore.hasActiveFocusBlock(now: 2_500, in: rawDB),
+                "after end_ms boundary, no longer active")
             XCTAssertTrue(try GoogleCalendarTrackerStore.hasActiveOOO(now: 1_500, in: rawDB))
             XCTAssertFalse(try GoogleCalendarTrackerStore.hasActiveOOO(now: 100, in: rawDB))
             XCTAssertEqual(

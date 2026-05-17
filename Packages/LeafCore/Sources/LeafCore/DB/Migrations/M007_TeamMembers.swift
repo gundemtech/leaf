@@ -13,8 +13,8 @@ import GRDB
 ///
 /// Partial index `team_members_org_active` — под frequent query
 /// "active members этой org" в Team UI.
-public extension DatabaseMigrator {
-    mutating func registerMigration007TeamMembers() {
+extension DatabaseMigrator {
+    public mutating func registerMigration007TeamMembers() {
         registerMigration("007_team_members") { db in
             try db.create(table: Schema.TeamMembers.tableName, ifNotExists: true) { t in
                 t.primaryKey(Schema.TeamMembers.id, .text)

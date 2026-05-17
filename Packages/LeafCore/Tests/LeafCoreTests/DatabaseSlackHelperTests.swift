@@ -3,6 +3,7 @@
 // Filters: action-events, не-slack source, отсутствие huddle event_kind — все skipped.
 
 import XCTest
+
 @testable import LeafCore
 
 final class DatabaseSlackHelperTests: XCTestCase {
@@ -32,7 +33,7 @@ final class DatabaseSlackHelperTests: XCTestCase {
             payload: [
                 "source": "slack",
                 "event_kind": "slack_huddle_state_change",
-                "state": state
+                "state": state,
             ]
         )
     }
@@ -48,7 +49,7 @@ final class DatabaseSlackHelperTests: XCTestCase {
         let newer: Int64 = 1_700_000_300_000
         try db.write([
             huddleEvent(state: "default_unset", atMs: older),
-            huddleEvent(state: "in_a_huddle", atMs: newer)
+            huddleEvent(state: "in_a_huddle", atMs: newer),
         ])
 
         let summary = try db.readLatestSlackHuddleEvent()
@@ -72,9 +73,9 @@ final class DatabaseSlackHelperTests: XCTestCase {
                     "source": "slack",
                     "event_kind": "slack_message_authored_aggregate",
                     "channel_name": "engineering",
-                    "count": "3"
+                    "count": "3",
                 ]
-            )
+            ),
         ])
 
         let summary = try db.readLatestSlackHuddleEvent()
@@ -97,9 +98,9 @@ final class DatabaseSlackHelperTests: XCTestCase {
                 payload: [
                     "source": "linear",
                     "event_kind": "slack_huddle_state_change",  // даже если другой провайдер случайно использует тот же event_kind
-                    "state": "default_unset"
+                    "state": "default_unset",
                 ]
-            )
+            ),
         ])
 
         let summary = try db.readLatestSlackHuddleEvent()

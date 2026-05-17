@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class AppleScriptBridgeTests: XCTestCase {
@@ -33,14 +34,14 @@ final class AppleScriptBridgeTests: XCTestCase {
     func testDeniedSurfaces() async {
         let bridge = AppleScriptBridge(executor: { _ in .denied })
         let result = await bridge.executeScript("(*ignored*)", timeoutSec: 1.0)
-        if case .denied = result { /* PASS */ } else { XCTFail("expected .denied") }
+        if case .denied = result { /* PASS */  } else { XCTFail("expected .denied") }
     }
 
     @MainActor
     func testAppNotRunningSurfaces() async {
         let bridge = AppleScriptBridge(executor: { _ in .appNotRunning })
         let result = await bridge.executeScript("(*ignored*)", timeoutSec: 1.0)
-        if case .appNotRunning = result { /* PASS */ } else { XCTFail("expected .appNotRunning") }
+        if case .appNotRunning = result { /* PASS */  } else { XCTFail("expected .appNotRunning") }
     }
 
     @MainActor
@@ -62,7 +63,8 @@ final class AppleScriptBridgeTests: XCTestCase {
         enum Mock: Error { case x }
         let bridge = AppleScriptBridge(executor: { _ in throw Mock.x })
         let result = await bridge.executeScript("(*ignored*)", timeoutSec: 1.0)
-        if case .unavailable = result { /* PASS */ } else {
+        if case .unavailable = result { /* PASS */
+        } else {
             XCTFail("expected .unavailable, got \(result)")
         }
     }
@@ -76,7 +78,8 @@ final class AppleScriptBridgeTests: XCTestCase {
         async let a = bridge.executeScript("(*1*)", timeoutSec: 1.0)
         async let b = bridge.executeScript("(*2*)", timeoutSec: 1.0)
         let (ra, rb) = await (a, b)
-        if case .success = ra, case .success = rb { /* PASS */ } else {
+        if case .success = ra, case .success = rb { /* PASS */
+        } else {
             XCTFail("expected both .success, got \(ra) / \(rb)")
         }
     }

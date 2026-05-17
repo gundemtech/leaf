@@ -11,10 +11,10 @@ struct TokensElevationSection: View {
         VStack(alignment: .leading, spacing: LeafSpace.lg) {
             Text("Elevation").font(LeafType.title.large).foregroundStyle(LeafColor.text.primary)
             HStack(spacing: LeafSpace.xl) {
-                tile("flat",     LeafElevation.flat)
-                tile("raised",   LeafElevation.raised)
+                tile("flat", LeafElevation.flat)
+                tile("raised", LeafElevation.raised)
                 tile("floating", LeafElevation.floating)
-                tile("modal",    LeafElevation.modal)
+                tile("modal", LeafElevation.modal)
             }
         }
     }

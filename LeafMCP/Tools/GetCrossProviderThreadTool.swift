@@ -24,11 +24,11 @@ struct GetCrossProviderThreadTool: ToolExecutor {
             "properties": [
                 "linear_issue_id": [
                     "type": "string",
-                    "description": "Linear issue ID (e.g. 'LEAF-456'). Required."
+                    "description": "Linear issue ID (e.g. 'LEAF-456'). Required.",
                 ]
             ],
             "required": ["linear_issue_id"],
-            "additionalProperties": false
+            "additionalProperties": false,
         ]
         return ToolDefinition(
             name: "get_cross_provider_thread",
@@ -52,18 +52,25 @@ struct GetCrossProviderThreadTool: ToolExecutor {
             !issueID.isEmpty
         else {
             return ToolCallResult(
-                content: [.text(TextContent(
-                    text: "Missing required argument 'linear_issue_id' (string, e.g. 'LEAF-456')."
-                ))],
+                content: [
+                    .text(
+                        TextContent(
+                            text: "Missing required argument 'linear_issue_id' (string, e.g. 'LEAF-456')."
+                        ))
+                ],
                 isError: true
             )
         }
 
         guard FileManager.default.fileExists(atPath: dbURL.path) else {
             return ToolCallResult(
-                content: [.text(TextContent(
-                    text: "Leaf database not found at \(dbURL.path). Enable 'Background collection' in Settings first."
-                ))],
+                content: [
+                    .text(
+                        TextContent(
+                            text:
+                                "Leaf database not found at \(dbURL.path). Enable 'Background collection' in Settings first."
+                        ))
+                ],
                 isError: true
             )
         }

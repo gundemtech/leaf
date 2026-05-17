@@ -182,7 +182,9 @@ public actor GitHubWarmCollector {
                 )
                 ingestIssueReactions(snap, nowMs: nowMs, events: &events, snapshots: &snapshots)
             } catch {
-                logger.error("fetchIssueReactions \(ref, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+                logger.error(
+                    "fetchIssueReactions \(ref, privacy: .public) failed: \(String(describing: error), privacy: .public)"
+                )
             }
         }
 
@@ -235,22 +237,25 @@ public actor GitHubWarmCollector {
                     prior: prior, current: project.items
                 )
                 for row in cardMoved {
-                    events.append(Self.makeProjectCardMovedEvent(
-                        itemID: row.0, projectID: row.1, oldStatus: row.2, newStatus: row.3,
-                        observedAtMs: nowMs
-                    ))
+                    events.append(
+                        Self.makeProjectCardMovedEvent(
+                            itemID: row.0, projectID: row.1, oldStatus: row.2, newStatus: row.3,
+                            observedAtMs: nowMs
+                        ))
                 }
                 for row in iter {
-                    events.append(Self.makeProjectIterationChangedEvent(
-                        itemID: row.0, projectID: row.1, oldIteration: row.2, newIteration: row.3,
-                        observedAtMs: nowMs
-                    ))
+                    events.append(
+                        Self.makeProjectIterationChangedEvent(
+                            itemID: row.0, projectID: row.1, oldIteration: row.2, newIteration: row.3,
+                            observedAtMs: nowMs
+                        ))
                 }
                 for row in fields {
-                    events.append(Self.makeProjectFieldUpdatedEvent(
-                        itemID: row.0, projectID: row.1, fieldName: row.2,
-                        oldValue: row.3, newValue: row.4, observedAtMs: nowMs
-                    ))
+                    events.append(
+                        Self.makeProjectFieldUpdatedEvent(
+                            itemID: row.0, projectID: row.1, fieldName: row.2,
+                            oldValue: row.3, newValue: row.4, observedAtMs: nowMs
+                        ))
                 }
             }
             // Always write the current snapshot (bootstrap discipline: first
@@ -286,12 +291,14 @@ public actor GitHubWarmCollector {
         let prior: [GitHubRepoInvitationSnapshot] = readSnapshotArray(kind: kind)
         if snapshotRowPresent(kind: kind) {
             let (received, accepted) = Self.invitationsDiff(prior: prior, current: current)
-            events.append(contentsOf: received.map {
-                Self.makeRepoInvitationReceivedEvent($0, observedAtMs: nowMs)
-            })
-            events.append(contentsOf: accepted.map {
-                Self.makeRepoInvitationAcceptedEvent($0, observedAtMs: nowMs)
-            })
+            events.append(
+                contentsOf: received.map {
+                    Self.makeRepoInvitationReceivedEvent($0, observedAtMs: nowMs)
+                })
+            events.append(
+                contentsOf: accepted.map {
+                    Self.makeRepoInvitationAcceptedEvent($0, observedAtMs: nowMs)
+                })
         }
         snapshots.append(makeSnapshot(kind: kind, encoding: current, nowMs: nowMs))
     }
@@ -306,18 +313,22 @@ public actor GitHubWarmCollector {
         let prior: [GitHubCodespaceSnapshot] = readSnapshotArray(kind: kind)
         if snapshotRowPresent(kind: kind) {
             let (created, started, stopped, deleted) = Self.codespacesDiff(prior: prior, current: current)
-            events.append(contentsOf: created.map {
-                Self.makeCodespaceCreatedEvent($0, observedAtMs: nowMs)
-            })
-            events.append(contentsOf: started.map {
-                Self.makeCodespaceStartedEvent($0, observedAtMs: nowMs)
-            })
-            events.append(contentsOf: stopped.map {
-                Self.makeCodespaceStoppedEvent($0, observedAtMs: nowMs)
-            })
-            events.append(contentsOf: deleted.map {
-                Self.makeCodespaceDeletedEvent($0, observedAtMs: nowMs)
-            })
+            events.append(
+                contentsOf: created.map {
+                    Self.makeCodespaceCreatedEvent($0, observedAtMs: nowMs)
+                })
+            events.append(
+                contentsOf: started.map {
+                    Self.makeCodespaceStartedEvent($0, observedAtMs: nowMs)
+                })
+            events.append(
+                contentsOf: stopped.map {
+                    Self.makeCodespaceStoppedEvent($0, observedAtMs: nowMs)
+                })
+            events.append(
+                contentsOf: deleted.map {
+                    Self.makeCodespaceDeletedEvent($0, observedAtMs: nowMs)
+                })
         }
         snapshots.append(makeSnapshot(kind: kind, encoding: current, nowMs: nowMs))
     }
@@ -328,19 +339,23 @@ public actor GitHubWarmCollector {
         events: inout [RawEvent],
         snapshots: inout [ProviderSnapshot]
     ) {
-        let kind = Schema.ProviderSnapshotKinds.githubIssueReactionsPrefix
+        let kind =
+            Schema.ProviderSnapshotKinds.githubIssueReactionsPrefix
             + "\(current.owner)/\(current.repo)#\(current.issueNumber)"
-        let prior: GitHubIssueReactionsSnapshot = readSnapshotValue(kind: kind)
-            ?? .empty(owner: current.owner, repo: current.repo,
-                      issueNumber: current.issueNumber, nowMs: 0)
+        let prior: GitHubIssueReactionsSnapshot =
+            readSnapshotValue(kind: kind)
+            ?? .empty(
+                owner: current.owner, repo: current.repo,
+                issueNumber: current.issueNumber, nowMs: 0)
         if snapshotRowPresent(kind: kind) {
             let deltas = Self.reactionsDiff(prior: prior, current: current)
             for delta in deltas where delta.newCount > delta.oldCount {
-                events.append(Self.makeIssueReactionReceivedEvent(
-                    current, emoji: delta.emoji,
-                    delta: delta.newCount - delta.oldCount,
-                    observedAtMs: nowMs
-                ))
+                events.append(
+                    Self.makeIssueReactionReceivedEvent(
+                        current, emoji: delta.emoji,
+                        delta: delta.newCount - delta.oldCount,
+                        observedAtMs: nowMs
+                    ))
             }
         }
         snapshots.append(makeSnapshot(kind: kind, encoding: current, nowMs: nowMs))
@@ -383,7 +398,8 @@ public actor GitHubWarmCollector {
     private func makeSnapshot<T: Encodable>(kind: String, encoding value: T, nowMs: Int64) -> ProviderSnapshot {
         let json: String
         if let data = try? JSONEncoder().encode(value),
-           let s = String(data: data, encoding: .utf8) {
+            let s = String(data: data, encoding: .utf8)
+        {
             json = s
         } else {
             json = "[]"
@@ -415,9 +431,11 @@ public actor GitHubWarmCollector {
     public static func projectsV2Diff(
         prior: [GitHubProjectV2ItemSnapshot],
         current: [GitHubProjectV2ItemSnapshot]
-    ) -> (cardMoved: [(String, String, String?, String?)],
-          iterationChanged: [(String, String, String?, String?)],
-          fieldUpdated: [(String, String, String, String?, String?)]) {
+    ) -> (
+        cardMoved: [(String, String, String?, String?)],
+        iterationChanged: [(String, String, String?, String?)],
+        fieldUpdated: [(String, String, String, String?, String?)]
+    ) {
         let priorByID = Dictionary(uniqueKeysWithValues: prior.map { ($0.itemID, $0) })
         var cardMoved: [(String, String, String?, String?)] = []
         var iter: [(String, String, String?, String?)] = []
@@ -439,9 +457,11 @@ public actor GitHubWarmCollector {
                 }
             }
         }
-        return (cardMoved.sorted(by: { $0.0 < $1.0 }),
-                iter.sorted(by: { $0.0 < $1.0 }),
-                fields.sorted(by: { $0.0 == $1.0 ? $0.2 < $1.2 : $0.0 < $1.0 }))
+        return (
+            cardMoved.sorted(by: { $0.0 < $1.0 }),
+            iter.sorted(by: { $0.0 < $1.0 }),
+            fields.sorted(by: { $0.0 == $1.0 ? $0.2 < $1.2 : $0.0 < $1.0 })
+        )
     }
 
     /// Gist diff partitions current snapshot vs prior into create / update /
@@ -485,10 +505,12 @@ public actor GitHubWarmCollector {
     ) -> (received: [GitHubRepoInvitationSnapshot], accepted: [GitHubRepoInvitationSnapshot]) {
         let priorByID = Dictionary(uniqueKeysWithValues: prior.map { ($0.invitationID, $0) })
         let currentByID = Dictionary(uniqueKeysWithValues: current.map { ($0.invitationID, $0) })
-        let received = current
+        let received =
+            current
             .filter { priorByID[$0.invitationID] == nil }
             .sorted(by: { $0.invitationID < $1.invitationID })
-        let accepted = prior
+        let accepted =
+            prior
             .filter { currentByID[$0.invitationID] == nil }
             .sorted(by: { $0.invitationID < $1.invitationID })
         return (received, accepted)
@@ -501,10 +523,12 @@ public actor GitHubWarmCollector {
     public static func codespacesDiff(
         prior: [GitHubCodespaceSnapshot],
         current: [GitHubCodespaceSnapshot]
-    ) -> (created: [GitHubCodespaceSnapshot],
-          started: [GitHubCodespaceSnapshot],
-          stopped: [GitHubCodespaceSnapshot],
-          deleted: [GitHubCodespaceSnapshot]) {
+    ) -> (
+        created: [GitHubCodespaceSnapshot],
+        started: [GitHubCodespaceSnapshot],
+        stopped: [GitHubCodespaceSnapshot],
+        deleted: [GitHubCodespaceSnapshot]
+    ) {
         let priorByName = Dictionary(uniqueKeysWithValues: prior.map { ($0.codespaceName, $0) })
         let currentByName = Dictionary(uniqueKeysWithValues: current.map { ($0.codespaceName, $0) })
         var created: [GitHubCodespaceSnapshot] = []
@@ -565,7 +589,7 @@ public actor GitHubWarmCollector {
             "event_kind": GitHubEventKindKey.projectCardMoved.rawValue,
             Schema.EventPayloadKeys.projectV2CardId: itemID,
             Schema.EventPayloadKeys.projectV2Id: projectID,
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         if let s = oldStatus { payload[Schema.EventPayloadKeys.projectV2OldValue] = s }
         if let s = newStatus { payload[Schema.EventPayloadKeys.projectV2NewValue] = s }
@@ -584,7 +608,7 @@ public actor GitHubWarmCollector {
             "event_kind": GitHubEventKindKey.projectIterationChanged.rawValue,
             Schema.EventPayloadKeys.projectV2CardId: itemID,
             Schema.EventPayloadKeys.projectV2Id: projectID,
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         if let s = oldIteration { payload[Schema.EventPayloadKeys.projectV2OldValue] = s }
         if let s = newIteration { payload[Schema.EventPayloadKeys.projectV2NewValue] = s }
@@ -605,7 +629,7 @@ public actor GitHubWarmCollector {
             Schema.EventPayloadKeys.projectV2CardId: itemID,
             Schema.EventPayloadKeys.projectV2Id: projectID,
             Schema.EventPayloadKeys.projectV2FieldName: fieldName,
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         if let s = oldValue { payload[Schema.EventPayloadKeys.projectV2OldValue] = s }
         if let s = newValue { payload[Schema.EventPayloadKeys.projectV2NewValue] = s }
@@ -624,7 +648,7 @@ public actor GitHubWarmCollector {
             // Mirror description under canonical `body` key so EventsFullTextStore
             // picks it up (body_kind `gh_gist_description`, Task 25 wiring).
             Schema.EventPayloadKeys.body: g.description,
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(observedAtMs) / 1000.0),
@@ -639,7 +663,7 @@ public actor GitHubWarmCollector {
             Schema.EventPayloadKeys.gistId: g.gistID,
             Schema.EventPayloadKeys.gistDescription: g.description,
             Schema.EventPayloadKeys.body: g.description,
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(observedAtMs) / 1000.0),
@@ -655,7 +679,7 @@ public actor GitHubWarmCollector {
             "source": "github",
             "event_kind": GitHubEventKindKey.gistDeleted.rawValue,
             Schema.EventPayloadKeys.gistId: g.gistID,
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(observedAtMs) / 1000.0),
@@ -673,7 +697,7 @@ public actor GitHubWarmCollector {
             Schema.EventPayloadKeys.repoFullName: inv.repoFullName,
             Schema.EventPayloadKeys.repoInvitationFromLogin: inv.inviterLogin,
             Schema.EventPayloadKeys.receivedAtMs: String(inv.invitedAtMs),
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(observedAtMs) / 1000.0),
@@ -689,7 +713,7 @@ public actor GitHubWarmCollector {
             "event_kind": GitHubEventKindKey.repoInvitationAccepted.rawValue,
             Schema.EventPayloadKeys.repoInvitationId: inv.invitationID,
             Schema.EventPayloadKeys.repoFullName: inv.repoFullName,
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(observedAtMs) / 1000.0),
@@ -704,7 +728,7 @@ public actor GitHubWarmCollector {
             Schema.EventPayloadKeys.codespaceName: c.codespaceName,
             Schema.EventPayloadKeys.repoFullName: c.repoFullName,
             Schema.EventPayloadKeys.codespaceState: c.state,
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(observedAtMs) / 1000.0),
@@ -719,7 +743,7 @@ public actor GitHubWarmCollector {
             Schema.EventPayloadKeys.codespaceName: c.codespaceName,
             Schema.EventPayloadKeys.repoFullName: c.repoFullName,
             Schema.EventPayloadKeys.codespaceState: c.state,
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(observedAtMs) / 1000.0),
@@ -734,7 +758,7 @@ public actor GitHubWarmCollector {
             Schema.EventPayloadKeys.codespaceName: c.codespaceName,
             Schema.EventPayloadKeys.repoFullName: c.repoFullName,
             Schema.EventPayloadKeys.codespaceState: c.state,
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(observedAtMs) / 1000.0),
@@ -748,7 +772,7 @@ public actor GitHubWarmCollector {
             "event_kind": GitHubEventKindKey.codespaceDeleted.rawValue,
             Schema.EventPayloadKeys.codespaceName: c.codespaceName,
             Schema.EventPayloadKeys.repoFullName: c.repoFullName,
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(observedAtMs) / 1000.0),
@@ -767,7 +791,7 @@ public actor GitHubWarmCollector {
             Schema.EventPayloadKeys.reactionEmoji: emoji,
             Schema.EventPayloadKeys.reactionCount: String(snap.byEmoji[emoji] ?? 0),
             Schema.EventPayloadKeys.reactionDelta: String(delta),
-            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs)
+            Schema.EventPayloadKeys.observedAtMs: String(observedAtMs),
         ]
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(observedAtMs) / 1000.0),

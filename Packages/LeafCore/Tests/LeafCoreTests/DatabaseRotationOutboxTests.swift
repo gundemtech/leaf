@@ -1,6 +1,7 @@
-import XCTest
 import Foundation
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 /// Phase 5.3.D — `rotation_outbox` write-ahead journal helpers
@@ -35,27 +36,30 @@ final class DatabaseRotationOutboxTests: XCTestCase {
         selfMemberID: String = "self-mem",
         priorKeyID: String = "key0"
     ) throws {
-        try db.upsertOrg(Org(
-            id: orgID,
-            name: "Test Org",
-            createdAt: makeDate(1_700_000_000_000),
-            createdByMemberID: selfMemberID
-        ))
-        try db.insertTeamMember(TeamMember(
-            id: selfMemberID,
-            orgID: orgID,
-            role: .admin,
-            pubkeyHex: String(repeating: "aa", count: 32),
-            displayName: "Self",
-            addedAt: makeDate(1_700_000_000_000),
-            removedAt: nil
-        ))
-        try db.insertTeamKey(TeamKey(
-            id: priorKeyID,
-            generatedAt: makeDate(1_700_000_000_000),
-            deprecatedAt: nil,
-            generatedByMemberID: selfMemberID
-        ))
+        try db.upsertOrg(
+            Org(
+                id: orgID,
+                name: "Test Org",
+                createdAt: makeDate(1_700_000_000_000),
+                createdByMemberID: selfMemberID
+            ))
+        try db.insertTeamMember(
+            TeamMember(
+                id: selfMemberID,
+                orgID: orgID,
+                role: .admin,
+                pubkeyHex: String(repeating: "aa", count: 32),
+                displayName: "Self",
+                addedAt: makeDate(1_700_000_000_000),
+                removedAt: nil
+            ))
+        try db.insertTeamKey(
+            TeamKey(
+                id: priorKeyID,
+                generatedAt: makeDate(1_700_000_000_000),
+                deprecatedAt: nil,
+                generatedByMemberID: selfMemberID
+            ))
     }
 
     private func sampleOutboxRow(
@@ -94,7 +98,8 @@ final class DatabaseRotationOutboxTests: XCTestCase {
 
     func testCommitRotation_HappyPath_NewActiveOldDeprecated() throws {
         try insertOrgFixture()
-        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        let newKey = TeamKey(
+            id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
         let row = sampleOutboxRow()
 
         try db.commitRotation(
@@ -116,12 +121,14 @@ final class DatabaseRotationOutboxTests: XCTestCase {
 
     func testCommitRotation_WithRemovedMember_UpdatesAllThreeTables() throws {
         try insertOrgFixture()
-        try db.insertTeamMember(TeamMember(
-            id: "peer-mem", orgID: "org1", role: .member,
-            pubkeyHex: String(repeating: "bb", count: 32), displayName: "Peer",
-            addedAt: makeDate(1_700_000_000_500), removedAt: nil
-        ))
-        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        try db.insertTeamMember(
+            TeamMember(
+                id: "peer-mem", orgID: "org1", role: .member,
+                pubkeyHex: String(repeating: "bb", count: 32), displayName: "Peer",
+                addedAt: makeDate(1_700_000_000_500), removedAt: nil
+            ))
+        let newKey = TeamKey(
+            id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
         let tombstone = sampleOutboxRow(newKeyID: "key0", priorKeyID: "key0", kind: .tombstone)
 
         try db.commitRotation(
@@ -141,7 +148,8 @@ final class DatabaseRotationOutboxTests: XCTestCase {
 
     func testCommitRotation_NilNonNilMismatchThrows() throws {
         try insertOrgFixture()
-        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        let newKey = TeamKey(
+            id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
 
         XCTAssertThrowsError(
             try db.commitRotation(
@@ -159,7 +167,8 @@ final class DatabaseRotationOutboxTests: XCTestCase {
 
     func testCommitRotation_FailsWhenPriorTeamKeyMissing() throws {
         try insertOrgFixture()
-        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        let newKey = TeamKey(
+            id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
 
         XCTAssertThrowsError(
             try db.commitRotation(
@@ -178,15 +187,17 @@ final class DatabaseRotationOutboxTests: XCTestCase {
     func testCommitRotation_FailsWhenPriorAlreadyDeprecated() throws {
         try insertOrgFixture()
         // Insert a second active key so we can deprecate "key0" without sole-active throw.
-        try db.insertTeamKey(TeamKey(
-            id: "key0b",
-            generatedAt: makeDate(1_700_000_000_500),
-            deprecatedAt: nil,
-            generatedByMemberID: "self-mem"
-        ))
+        try db.insertTeamKey(
+            TeamKey(
+                id: "key0b",
+                generatedAt: makeDate(1_700_000_000_500),
+                deprecatedAt: nil,
+                generatedByMemberID: "self-mem"
+            ))
         try db.deprecateTeamKey(keyID: "key0", at: makeDate(1_700_000_000_750))
 
-        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        let newKey = TeamKey(
+            id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
         XCTAssertThrowsError(
             try db.commitRotation(
                 newTeamKey: newKey,
@@ -201,7 +212,8 @@ final class DatabaseRotationOutboxTests: XCTestCase {
 
     func testCommitRotation_FailsWhenRemovedMemberMissing() throws {
         try insertOrgFixture()
-        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        let newKey = TeamKey(
+            id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
         XCTAssertThrowsError(
             try db.commitRotation(
                 newTeamKey: newKey,
@@ -216,14 +228,16 @@ final class DatabaseRotationOutboxTests: XCTestCase {
 
     func testCommitRotation_FailsWhenRemovedMemberAlreadyRemoved() throws {
         try insertOrgFixture()
-        try db.insertTeamMember(TeamMember(
-            id: "peer-mem", orgID: "org1", role: .member,
-            pubkeyHex: String(repeating: "bb", count: 32), displayName: "Peer",
-            addedAt: makeDate(1_700_000_000_500), removedAt: nil
-        ))
+        try db.insertTeamMember(
+            TeamMember(
+                id: "peer-mem", orgID: "org1", role: .member,
+                pubkeyHex: String(repeating: "bb", count: 32), displayName: "Peer",
+                addedAt: makeDate(1_700_000_000_500), removedAt: nil
+            ))
         try db.markTeamMemberRemoved(memberID: "peer-mem", at: makeDate(1_700_000_000_750))
 
-        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        let newKey = TeamKey(
+            id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
         XCTAssertThrowsError(
             try db.commitRotation(
                 newTeamKey: newKey,
@@ -238,7 +252,8 @@ final class DatabaseRotationOutboxTests: XCTestCase {
 
     func testCommitRotation_FailsOnDuplicateOutboxRow() throws {
         try insertOrgFixture()
-        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        let newKey = TeamKey(
+            id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
         let row = sampleOutboxRow()
 
         // First commit succeeds
@@ -253,7 +268,8 @@ final class DatabaseRotationOutboxTests: XCTestCase {
 
         // Second commit reuses outbox row with composite PK (peer, "key1") — collision.
         // newTeamKey="key2" / priorTeamKey="key1" (currently active after first commit).
-        let newKey2 = TeamKey(id: "key2", generatedAt: makeDate(1_700_000_002_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        let newKey2 = TeamKey(
+            id: "key2", generatedAt: makeDate(1_700_000_002_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
         XCTAssertThrowsError(
             try db.commitRotation(
                 newTeamKey: newKey2,
@@ -271,7 +287,8 @@ final class DatabaseRotationOutboxTests: XCTestCase {
     func testMarkRotationOutboxPosted_HappyPath() throws {
         try insertOrgFixture()
         let row = sampleOutboxRow()
-        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        let newKey = TeamKey(
+            id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
         try db.commitRotation(
             newTeamKey: newKey, priorTeamKeyID: "key0",
             deprecatedAt: makeDate(1_700_000_001_000),
@@ -291,7 +308,8 @@ final class DatabaseRotationOutboxTests: XCTestCase {
     func testMarkRotationOutboxPosted_IsIdempotentOnAlreadyPosted() throws {
         try insertOrgFixture()
         let row = sampleOutboxRow()
-        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        let newKey = TeamKey(
+            id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
         try db.commitRotation(
             newTeamKey: newKey, priorTeamKeyID: "key0",
             deprecatedAt: makeDate(1_700_000_001_000),
@@ -299,9 +317,11 @@ final class DatabaseRotationOutboxTests: XCTestCase {
             outboxRows: [row]
         )
 
-        try db.markRotationOutboxPosted(peerPubkeyHex: row.peerPubkeyHex, newKeyID: row.newKeyID, at: makeDate(1_700_000_002_000))
+        try db.markRotationOutboxPosted(
+            peerPubkeyHex: row.peerPubkeyHex, newKeyID: row.newKeyID, at: makeDate(1_700_000_002_000))
         // Second mark — silent no-op (already posted, no throw).
-        try db.markRotationOutboxPosted(peerPubkeyHex: row.peerPubkeyHex, newKeyID: row.newKeyID, at: makeDate(1_700_000_003_000))
+        try db.markRotationOutboxPosted(
+            peerPubkeyHex: row.peerPubkeyHex, newKeyID: row.newKeyID, at: makeDate(1_700_000_003_000))
 
         XCTAssertTrue(try db.readUnpostedRotationOutboxRows().isEmpty)
     }
@@ -319,7 +339,8 @@ final class DatabaseRotationOutboxTests: XCTestCase {
 
     func testMarkRotationOutboxPosted_ReaderModeThrowsDatabaseUnavailable() throws {
         try insertOrgFixture()
-        let readerDB = try LeafCore.Database.openForRead(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let readerDB = try LeafCore.Database.openForRead(
+            at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         XCTAssertThrowsError(
             try readerDB.markRotationOutboxPosted(peerPubkeyHex: "aa", newKeyID: "k1", at: makeDate(1_700_000_002_000))
         ) { XCTAssertTrue(matches($0, .databaseUnavailable)) }
@@ -338,7 +359,8 @@ final class DatabaseRotationOutboxTests: XCTestCase {
             createdAtMs: 1_700_000_005_000
         )
 
-        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        let newKey = TeamKey(
+            id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
         try db.commitRotation(
             newTeamKey: newKey, priorTeamKeyID: "key0",
             deprecatedAt: makeDate(1_700_000_001_000),
@@ -364,7 +386,8 @@ final class DatabaseRotationOutboxTests: XCTestCase {
         let row2 = sampleOutboxRow(peer: String(repeating: "bb", count: 32), createdAtMs: 1_700_000_001_000)
         let row3 = sampleOutboxRow(peer: String(repeating: "cc", count: 32), createdAtMs: 1_700_000_003_000)
 
-        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        let newKey = TeamKey(
+            id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
         try db.commitRotation(
             newTeamKey: newKey, priorTeamKeyID: "key0",
             deprecatedAt: makeDate(1_700_000_001_000),
@@ -382,7 +405,8 @@ final class DatabaseRotationOutboxTests: XCTestCase {
     func testCommitRotation_ReaderModeThrowsDatabaseUnavailable() throws {
         try insertOrgFixture()
         let readerDB = try Database.openForRead(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
-        let newKey = TeamKey(id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
+        let newKey = TeamKey(
+            id: "key1", generatedAt: makeDate(1_700_000_001_000), deprecatedAt: nil, generatedByMemberID: "self-mem")
         XCTAssertThrowsError(
             try readerDB.commitRotation(
                 newTeamKey: newKey,
@@ -402,7 +426,7 @@ private func matches(_ error: Error, _ expected: LeafError) -> Bool {
     guard let lerr = error as? LeafError else { return false }
     switch (lerr, expected) {
     case (.invalidPayload, .invalidPayload),
-         (.databaseUnavailable, .databaseUnavailable):
+        (.databaseUnavailable, .databaseUnavailable):
         return true
     default:
         return false

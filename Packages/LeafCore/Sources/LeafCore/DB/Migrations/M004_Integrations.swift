@@ -4,8 +4,8 @@ import GRDB
 /// Phase 4.1 — таблица `integrations` для OAuth credentials Layer B providers.
 /// PK на `provider` фиксирует single-row-per-provider (single-workspace MVP);
 /// multi-workspace потребует M005 lift PK → composite (provider, workspace_id).
-public extension DatabaseMigrator {
-    mutating func registerMigration004Integrations() {
+extension DatabaseMigrator {
+    public mutating func registerMigration004Integrations() {
         registerMigration("004_integrations") { db in
             try db.create(table: Schema.Integrations.tableName, ifNotExists: true) { t in
                 t.primaryKey(Schema.Integrations.provider, .text)

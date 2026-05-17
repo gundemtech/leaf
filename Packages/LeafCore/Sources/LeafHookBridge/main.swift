@@ -15,6 +15,7 @@
 // applies the ADR-010 allowlist before any field reaches the events table.
 
 import Foundation
+
 #if canImport(Darwin)
 import Darwin
 #endif
@@ -42,7 +43,7 @@ let payloadString = String(data: stdinData, encoding: .utf8) ?? ""
 let envelope: [String: Any] = [
     "event_name": eventName,
     "payload_json": payloadString,
-    "ts_ms": tsMs
+    "ts_ms": tsMs,
 ]
 guard let envelopeData = try? JSONSerialization.data(withJSONObject: envelope) else {
     FileHandle.standardError.write(Data("leaf-hook-bridge: envelope encode failed\n".utf8))

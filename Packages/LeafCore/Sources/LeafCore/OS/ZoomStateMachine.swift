@@ -27,14 +27,15 @@ public struct ZoomStateMachine: Sendable, Hashable {
         if stateChanged {
             let payload: [String: String] = [
                 "event_kind": "zoom_meeting_state_changed",
-                "meeting_state": obs.meetingState.rawValue
+                "meeting_state": obs.meetingState.rawValue,
             ]
-            events.append(RawEvent(
-                timestamp: Date(timeIntervalSince1970: Double(nowMs) / 1000.0),
-                signalType: .context,
-                bundleID: "us.zoom.xos",
-                payload: payload
-            ))
+            events.append(
+                RawEvent(
+                    timestamp: Date(timeIntervalSince1970: Double(nowMs) / 1000.0),
+                    signalType: .context,
+                    bundleID: "us.zoom.xos",
+                    payload: payload
+                ))
         }
         let topicChanged: Bool = {
             guard let p = prev else { return obs.ownMeetingTopic != nil }
@@ -43,14 +44,15 @@ public struct ZoomStateMachine: Sendable, Hashable {
         if topicChanged, meetingTopicOptedIn, let topic = obs.ownMeetingTopic {
             let payload: [String: String] = [
                 "event_kind": "zoom_meeting_name_observed",
-                "meeting_topic": topic
+                "meeting_topic": topic,
             ]
-            events.append(RawEvent(
-                timestamp: Date(timeIntervalSince1970: Double(nowMs) / 1000.0),
-                signalType: .context,
-                bundleID: "us.zoom.xos",
-                payload: payload
-            ))
+            events.append(
+                RawEvent(
+                    timestamp: Date(timeIntervalSince1970: Double(nowMs) / 1000.0),
+                    signalType: .context,
+                    bundleID: "us.zoom.xos",
+                    payload: payload
+                ))
         }
         return events
     }

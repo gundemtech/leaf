@@ -41,9 +41,10 @@ struct LeafButton<Label: View>: View {
             .frame(height: size.height)
             .background(
                 RoundedRectangle(cornerRadius: size.cornerRadius, style: .continuous)
-                    .fill(isHovering
-                          ? LeafButtonTokens.Background.hover(variant)
-                          : LeafButtonTokens.Background.resting(variant))
+                    .fill(
+                        isHovering
+                            ? LeafButtonTokens.Background.hover(variant)
+                            : LeafButtonTokens.Background.resting(variant))
             )
         }
         .buttonStyle(.plain)
@@ -73,12 +74,14 @@ struct LeafButton<Label: View>: View {
 }
 
 extension LeafButton where Label == Text {
-    init(_ title: String,
-         variant: LeafButtonTokens.Variant = .primary,
-         size: LeafButtonTokens.Size = .md,
-         icon: IconRef? = nil,
-         isLoading: Bool = false,
-         action: @escaping () -> Void) {
+    init(
+        _ title: String,
+        variant: LeafButtonTokens.Variant = .primary,
+        size: LeafButtonTokens.Size = .md,
+        icon: IconRef? = nil,
+        isLoading: Bool = false,
+        action: @escaping () -> Void
+    ) {
         self.variant = variant
         self.size = size
         self.icon = icon

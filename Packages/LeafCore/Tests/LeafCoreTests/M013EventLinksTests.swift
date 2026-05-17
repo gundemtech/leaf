@@ -1,7 +1,8 @@
 // Phase Track-1 D2 — M013 event_links table + reverse-lookup index.
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class M013EventLinksTests: XCTestCase {

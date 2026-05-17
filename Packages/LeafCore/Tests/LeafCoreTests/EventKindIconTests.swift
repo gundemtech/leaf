@@ -5,6 +5,7 @@
 // 4) Set size guard catches silent additions / removals to the whitelist.
 
 import XCTest
+
 @testable import LeafCore
 
 final class EventKindIconTests: XCTestCase {
@@ -102,14 +103,14 @@ final class EventKindIconTests: XCTestCase {
 
     func testGoogleCalendarFocusBlockPairSharesSymbol() {
         let started = EventKindIcon.symbol(for: "google_calendar_focus_block_started")
-        let ended   = EventKindIcon.symbol(for: "google_calendar_focus_block_ended")
+        let ended = EventKindIcon.symbol(for: "google_calendar_focus_block_ended")
         XCTAssertEqual(started, "moon.fill")
         XCTAssertEqual(started, ended)
     }
 
     func testGoogleCalendarOOOPairSharesSymbol() {
         let started = EventKindIcon.symbol(for: "google_calendar_ooo_started")
-        let ended   = EventKindIcon.symbol(for: "google_calendar_ooo_ended")
+        let ended = EventKindIcon.symbol(for: "google_calendar_ooo_ended")
         XCTAssertEqual(started, "airplane")
         XCTAssertEqual(started, ended)
     }
@@ -143,12 +144,15 @@ final class EventKindIconTests: XCTestCase {
 
     // Track-6 P6 — IDE surface cap
     func test_p6_vscodeKindsHaveIcons() {
-        XCTAssertEqual(EventKindIcon.symbol(for: "vscode_active_doc_changed"),
-                       "chevron.left.forwardslash.chevron.right")
-        XCTAssertEqual(EventKindIcon.symbol(for: "vscode_workspace_opened"),
-                       "folder.fill.badge.plus")
-        XCTAssertEqual(EventKindIcon.symbol(for: "jetbrains_recent_project_observed"),
-                       "chevron.left.forwardslash.chevron.right")
+        XCTAssertEqual(
+            EventKindIcon.symbol(for: "vscode_active_doc_changed"),
+            "chevron.left.forwardslash.chevron.right")
+        XCTAssertEqual(
+            EventKindIcon.symbol(for: "vscode_workspace_opened"),
+            "folder.fill.badge.plus")
+        XCTAssertEqual(
+            EventKindIcon.symbol(for: "jetbrains_recent_project_observed"),
+            "chevron.left.forwardslash.chevron.right")
     }
 
     func test_p6_ideWindowTitleObservedHasNoIcon() {

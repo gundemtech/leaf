@@ -26,11 +26,13 @@ public enum DatabasePath {
     public static let applicationSupportSubdir = "Leaf"
 
     public static func defaultURL() -> URL {
-        let support = FileManager.default.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        ).first ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        return support
+        let support =
+            FileManager.default.urls(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask
+            ).first ?? URL(fileURLWithPath: NSTemporaryDirectory())
+        return
+            support
             .appendingPathComponent(applicationSupportSubdir, isDirectory: true)
             .appendingPathComponent(filename, isDirectory: false)
     }

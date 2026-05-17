@@ -116,11 +116,13 @@ public enum GoogleCalendarSyncTokenStore {
         calendarId: String,
         in db: GRDB.Database
     ) throws -> EventsSyncCursor? {
-        guard let snap = try ProviderSnapshotsStore.read(
-            provider: providerName,
-            snapshotKind: eventsSyncKind(forCalendarId: calendarId),
-            in: db
-        ) else { return nil }
+        guard
+            let snap = try ProviderSnapshotsStore.read(
+                provider: providerName,
+                snapshotKind: eventsSyncKind(forCalendarId: calendarId),
+                in: db
+            )
+        else { return nil }
         return try decodeJSON(EventsSyncCursor.self, from: snap.snapshotJSON)
     }
 
@@ -182,11 +184,13 @@ public enum GoogleCalendarSyncTokenStore {
     }
 
     public static func calendarListSyncToken(in db: GRDB.Database) throws -> CalendarListSyncCursor? {
-        guard let snap = try ProviderSnapshotsStore.read(
-            provider: providerName,
-            snapshotKind: calendarListSyncKind,
-            in: db
-        ) else { return nil }
+        guard
+            let snap = try ProviderSnapshotsStore.read(
+                provider: providerName,
+                snapshotKind: calendarListSyncKind,
+                in: db
+            )
+        else { return nil }
         return try decodeJSON(CalendarListSyncCursor.self, from: snap.snapshotJSON)
     }
 
@@ -214,11 +218,13 @@ public enum GoogleCalendarSyncTokenStore {
     }
 
     public static func knownCalendars(in db: GRDB.Database) throws -> [KnownCalendar] {
-        guard let snap = try ProviderSnapshotsStore.read(
-            provider: providerName,
-            snapshotKind: knownCalendarsKind,
-            in: db
-        ) else { return [] }
+        guard
+            let snap = try ProviderSnapshotsStore.read(
+                provider: providerName,
+                snapshotKind: knownCalendarsKind,
+                in: db
+            )
+        else { return [] }
         let env = try decodeJSON(KnownCalendarsEnvelope.self, from: snap.snapshotJSON)
         return env.calendars
     }

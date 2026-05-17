@@ -1,15 +1,17 @@
 // Phase 5.3.C — RotationFetched value type tests.
 
 import XCTest
+
 @testable import LeafCore
 
 final class RotationFetchedTests: XCTestCase {
 
     func testInit_PreservesFields() {
         let blob = Data([0xDE, 0xAD, 0xBE, 0xEF])
-        let fetched = RotationFetched(rotationID: "rot_xyz",
-                                      blob: blob,
-                                      expiresAtMs: 1_700_000_000_000)
+        let fetched = RotationFetched(
+            rotationID: "rot_xyz",
+            blob: blob,
+            expiresAtMs: 1_700_000_000_000)
         XCTAssertEqual(fetched.rotationID, "rot_xyz")
         XCTAssertEqual(fetched.blob, blob)
         XCTAssertEqual(fetched.expiresAtMs, 1_700_000_000_000)

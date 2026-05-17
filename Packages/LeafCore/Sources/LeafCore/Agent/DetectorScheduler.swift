@@ -58,7 +58,9 @@ public actor DetectorScheduler {
                 await self?.runScheduledLoop()
             }
         }
-        logger.info("DetectorScheduler started (incremental=\(self.incrementalIntervalSec, privacy: .public)s scheduled=\(self.scheduledIntervalSec, privacy: .public)s)")
+        logger.info(
+            "DetectorScheduler started (incremental=\(self.incrementalIntervalSec, privacy: .public)s scheduled=\(self.scheduledIntervalSec, privacy: .public)s)"
+        )
     }
 
     public func stop() async {

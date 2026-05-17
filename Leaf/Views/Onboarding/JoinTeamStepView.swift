@@ -6,9 +6,9 @@
 //  Track 2 / D4 — migrated to D1 atoms.
 //
 
-import SwiftUI
 import AppKit
 import LeafCore
+import SwiftUI
 
 struct JoinTeamStepView: View {
     @Environment(InviteAcceptReader.self) private var acceptReader
@@ -52,10 +52,11 @@ struct JoinTeamStepView: View {
 
             if !joinCode.isEmpty && !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 ShareTemplateButton(
-                    templateBody: ShareTemplate.compose(.inviteeShare(
-                        displayName: displayName.trimmingCharacters(in: .whitespacesAndNewlines),
-                        joinCode: joinCode
-                    )),
+                    templateBody: ShareTemplate.compose(
+                        .inviteeShare(
+                            displayName: displayName.trimmingCharacters(in: .whitespacesAndNewlines),
+                            joinCode: joinCode
+                        )),
                     mailSubject: "Leaf invite — Join code"
                 )
             }

@@ -8,8 +8,8 @@ import GRDB
 /// the user's namespace. Two partial indexes narrow the tick-scan to rows that
 /// still need transition emission (started_emitted_at_ms / ended_emitted_at_ms
 /// null sentinels), with the third index supporting per-calendar pruning.
-public extension DatabaseMigrator {
-    mutating func registerMigration027GoogleCalendarTracker() {
+extension DatabaseMigrator {
+    public mutating func registerMigration027GoogleCalendarTracker() {
         registerMigration("027_google_calendar_typed_event_tracker") { db in
             try db.create(table: Schema.GoogleCalendarTracker.tableName, ifNotExists: true) { t in
                 t.column(Schema.GoogleCalendarTracker.eventID, .text).primaryKey().notNull()
@@ -33,21 +33,24 @@ public extension DatabaseMigrator {
                 t.column(Schema.GoogleCalendarTracker.chatStatus, .text)
                 t.column(Schema.GoogleCalendarTracker.upsertedAtMs, .integer).notNull()
             }
-            try db.execute(sql: """
-                CREATE INDEX IF NOT EXISTS idx_gcal_tracker_scan_started
-                  ON \(Schema.GoogleCalendarTracker.tableName)(\(Schema.GoogleCalendarTracker.startMs))
-                  WHERE \(Schema.GoogleCalendarTracker.startedEmittedAtMs) IS NULL
-                """)
-            try db.execute(sql: """
-                CREATE INDEX IF NOT EXISTS idx_gcal_tracker_scan_ended
-                  ON \(Schema.GoogleCalendarTracker.tableName)(\(Schema.GoogleCalendarTracker.endMs))
-                  WHERE \(Schema.GoogleCalendarTracker.startedEmittedAtMs) IS NOT NULL
-                    AND \(Schema.GoogleCalendarTracker.endedEmittedAtMs) IS NULL
-                """)
-            try db.execute(sql: """
-                CREATE INDEX IF NOT EXISTS idx_gcal_tracker_by_calendar
-                  ON \(Schema.GoogleCalendarTracker.tableName)(\(Schema.GoogleCalendarTracker.calendarID))
-                """)
+            try db.execute(
+                sql: """
+                    CREATE INDEX IF NOT EXISTS idx_gcal_tracker_scan_started
+                      ON \(Schema.GoogleCalendarTracker.tableName)(\(Schema.GoogleCalendarTracker.startMs))
+                      WHERE \(Schema.GoogleCalendarTracker.startedEmittedAtMs) IS NULL
+                    """)
+            try db.execute(
+                sql: """
+                    CREATE INDEX IF NOT EXISTS idx_gcal_tracker_scan_ended
+                      ON \(Schema.GoogleCalendarTracker.tableName)(\(Schema.GoogleCalendarTracker.endMs))
+                      WHERE \(Schema.GoogleCalendarTracker.startedEmittedAtMs) IS NOT NULL
+                        AND \(Schema.GoogleCalendarTracker.endedEmittedAtMs) IS NULL
+                    """)
+            try db.execute(
+                sql: """
+                    CREATE INDEX IF NOT EXISTS idx_gcal_tracker_by_calendar
+                      ON \(Schema.GoogleCalendarTracker.tableName)(\(Schema.GoogleCalendarTracker.calendarID))
+                    """)
         }
     }
 }

@@ -8,9 +8,9 @@
 //  Quit preserved (macOS conventional pattern).
 //
 
-import SwiftUI
 import AppKit
 import LeafCore
+import SwiftUI
 
 struct MenuBarContent: View {
     @Environment(LaunchAgentService.self) private var launchAgent
@@ -104,7 +104,11 @@ struct MenuBarContent: View {
     private var content: some View {
         switch reader.state {
         case .loading:
-            HStack { Spacer(); ProgressView().controlSize(.small); Spacer() }
+            HStack {
+                Spacer()
+                ProgressView().controlSize(.small)
+                Spacer()
+            }
         case .notConfigured(let msg), .empty(let msg), .error(let msg):
             Text(msg)
                 .font(LeafType.body.small)
@@ -167,12 +171,15 @@ struct MenuBarContent: View {
         if snapshot.linearIssuesTouched > 0 {
             let closed = snapshot.linearTransitions?.completed ?? 0
             let suffix = closed > 0 ? " · \(closed) closed" : ""
-            lines.append("Linear · \(snapshot.linearIssuesTouched) issue\(snapshot.linearIssuesTouched == 1 ? "" : "s")\(suffix)")
+            lines.append(
+                "Linear · \(snapshot.linearIssuesTouched) issue\(snapshot.linearIssuesTouched == 1 ? "" : "s")\(suffix)"
+            )
         }
         if snapshot.githubEventsCount > 0 {
             let repos = snapshot.githubByRepo.count
             let suffix = repos > 0 ? " · \(repos) repo\(repos == 1 ? "" : "s")" : ""
-            lines.append("GitHub · \(snapshot.githubEventsCount) event\(snapshot.githubEventsCount == 1 ? "" : "s")\(suffix)")
+            lines.append(
+                "GitHub · \(snapshot.githubEventsCount) event\(snapshot.githubEventsCount == 1 ? "" : "s")\(suffix)")
         }
         if snapshot.slackMessagesCount > 0 || snapshot.slackHuddleMinutes > 0 {
             var parts: [String] = []

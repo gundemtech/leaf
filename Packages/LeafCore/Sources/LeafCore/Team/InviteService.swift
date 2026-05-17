@@ -49,7 +49,8 @@ public struct InviteService: Sendable {
     public func generateInvite(inviteePubkeyHex: String) async throws -> InviteOutbound {
         // 1. Validate hex (64 chars, [0-9a-fA-F]).
         guard inviteePubkeyHex.count == 64,
-              inviteePubkeyHex.allSatisfy({ $0.isHexDigit }) else {
+            inviteePubkeyHex.allSatisfy({ $0.isHexDigit })
+        else {
             throw LeafError.invalidPayload
         }
         let lowercased = inviteePubkeyHex.lowercased()
@@ -74,8 +75,9 @@ public struct InviteService: Sendable {
         let otp = try randomOTP()
 
         // 7. ECDH.
-        let shared = try KeyAgreement.sharedSecret(privateKey: priv,
-                                                   peerPublicKeyHex: lowercased)
+        let shared = try KeyAgreement.sharedSecret(
+            privateKey: priv,
+            peerPublicKeyHex: lowercased)
 
         // 8. Wrap key.
         let wrapKey = try inviteKDF.deriveWrapKey(sharedSecret: shared, otp: otp)
@@ -93,9 +95,10 @@ public struct InviteService: Sendable {
         )
 
         // 10. Encode blob.
-        let blob = try inviteBlobCodec.encode(plaintext,
-                                               adminPubkey: priv.publicKey.rawRepresentation,
-                                               wrapKey: wrapKey)
+        let blob = try inviteBlobCodec.encode(
+            plaintext,
+            adminPubkey: priv.publicKey.rawRepresentation,
+            wrapKey: wrapKey)
 
         // 11. Expiry = now + 24h.
         let expiresAtMs = nowMs + 24 * 60 * 60 * 1000
@@ -107,10 +110,11 @@ public struct InviteService: Sendable {
             expiresAtMs: expiresAtMs
         )
 
-        return InviteOutbound(token: token.value,
-                              otp: otp,
-                              expiresAtMs: token.expiresAtMs,
-                              inviteePubkeyHex: lowercased)
+        return InviteOutbound(
+            token: token.value,
+            otp: otp,
+            expiresAtMs: token.expiresAtMs,
+            inviteePubkeyHex: lowercased)
     }
 
     /// Phase 5.5.B — admin pastes invitee Join code (formatted base32-Crockford OR legacy hex).
@@ -143,8 +147,9 @@ public struct InviteService: Sendable {
         guard status == errSecSuccess else {
             throw LeafError.keychainUnavailable(status)
         }
-        let n = (UInt32(bytes[0]) << 24) | (UInt32(bytes[1]) << 16)
-              | (UInt32(bytes[2]) << 8)  |  UInt32(bytes[3])
+        let n =
+            (UInt32(bytes[0]) << 24) | (UInt32(bytes[1]) << 16)
+            | (UInt32(bytes[2]) << 8) | UInt32(bytes[3])
         return String(format: "%06d", n % 1_000_000)
     }
 }

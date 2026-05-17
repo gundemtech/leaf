@@ -8,7 +8,7 @@
 import CoreGraphics
 
 enum LeafTabTokens {
-    static let tabSpacing:        CGFloat = LeafSpace.lg
-    static let labelToIndicator:  CGFloat = LeafSpace.xs
-    static let indicatorHeight:   CGFloat = 2
+    static let tabSpacing: CGFloat = LeafSpace.lg
+    static let labelToIndicator: CGFloat = LeafSpace.xs
+    static let indicatorHeight: CGFloat = 2
 }

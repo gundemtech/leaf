@@ -1,5 +1,6 @@
 import XCTest
 import os
+
 @testable import LeafCore
 
 final class RotationFetchSchedulerTests: XCTestCase {

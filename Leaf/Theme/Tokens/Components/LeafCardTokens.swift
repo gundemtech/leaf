@@ -20,9 +20,9 @@ enum LeafCardTokens {
         /// Glass uses raised since the material itself carries depth.
         var elevation: LeafElevation.Shadow {
             switch self {
-            case .rest:    LeafElevation.flat
-            case .raised:  LeafElevation.floating
-            case .glass:   LeafElevation.raised
+            case .rest: LeafElevation.flat
+            case .raised: LeafElevation.floating
+            case .glass: LeafElevation.raised
             }
         }
     }
@@ -32,16 +32,16 @@ enum LeafCardTokens {
 
         var pt: CGFloat {
             switch self {
-            case .tight:    LeafSpace.md
-            case .regular:  LeafSpace.lg
+            case .tight: LeafSpace.md
+            case .regular: LeafSpace.lg
             case .generous: LeafSpace.xl
             }
         }
     }
 
     static let cornerRadius: CGFloat = LeafRadius.lg
-    static let borderColor:  Color   = LeafColor.border.subtle
-    static let borderWidth:  CGFloat = 1
+    static let borderColor: Color = LeafColor.border.subtle
+    static let borderWidth: CGFloat = 1
 
     /// Vertical gap between header slot and content slot.
     static let headerContentGap: CGFloat = LeafSpace.sm

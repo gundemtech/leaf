@@ -4,6 +4,7 @@
 // event_kind=commit_pushed + ts >= sinceMs + repo IS NOT NULL.
 
 import XCTest
+
 @testable import LeafCore
 
 final class DatabaseGitHubQueriesTests: XCTestCase {
@@ -35,7 +36,7 @@ final class DatabaseGitHubQueriesTests: XCTestCase {
                 "event_kind": "gh_commit_pushed",
                 "repo": repo,
                 "title": "test",
-                "sha": "abc"
+                "sha": "abc",
             ]
         )
     }
@@ -80,7 +81,7 @@ final class DatabaseGitHubQueriesTests: XCTestCase {
         try db.write([
             pushEvent(repo: "octocat/old", atMs: oldMs),
             pushEvent(repo: "octocat/old", atMs: oldMs + 1),
-            pushEvent(repo: "octocat/new", atMs: newMs)
+            pushEvent(repo: "octocat/new", atMs: newMs),
         ])
         // sinceMs между old и new → только octocat/new.
         let repos = try db.queryActiveGitHubRepos(sinceMs: newMs - 100, limit: 10)
@@ -102,7 +103,7 @@ final class DatabaseGitHubQueriesTests: XCTestCase {
                 payload: [
                     "source": "linear",
                     "event_kind": "issue_updated",
-                    "repo": "octocat/B"
+                    "repo": "octocat/B",
                 ]
             ),
             // github pr_opened — should NOT count (event_kind != commit_pushed).
@@ -113,9 +114,9 @@ final class DatabaseGitHubQueriesTests: XCTestCase {
                 payload: [
                     "source": "github",
                     "event_kind": "gh_pr_opened",
-                    "repo": "octocat/C"
+                    "repo": "octocat/C",
                 ]
-            )
+            ),
         ])
 
         let repos = try db.queryActiveGitHubRepos(sinceMs: baseMs - 1000, limit: 10)

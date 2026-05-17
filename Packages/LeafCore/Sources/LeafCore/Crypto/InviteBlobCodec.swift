@@ -14,9 +14,11 @@ public protocol InviteBlobCodec: Sendable {
     ///   - wrapKey: 32-byte AES key из `InviteKDF.deriveWrapKey`.
     /// - Returns: `InviteBlob` `[ver:1B|adminPubkey:32B|nonce:12B|ct|tag:16B]`.
     /// - Throws: `LeafError.inviteBlobMalformed` на bad input sizes / encoding failure.
-    func encode(_ plaintext: InvitePlaintext,
-                adminPubkey: Data,
-                wrapKey: SymmetricKey) throws -> InviteBlob
+    func encode(
+        _ plaintext: InvitePlaintext,
+        adminPubkey: Data,
+        wrapKey: SymmetricKey
+    ) throws -> InviteBlob
 
     /// Расшифровывает blob под `wrapKey`. Caller обязан ДО вызова peek'нуть header
     /// (`InviteBlobHeader.peek(from:)`), извлечь `adminPubkey`, выполнить
@@ -30,9 +32,11 @@ public protocol InviteBlobCodec: Sendable {
 /// в `LeafCorePrivate/Prod/Crypto/` (Phase 5.2.B moat).
 public struct UnimplementedInviteBlobCodec: InviteBlobCodec {
     public init() {}
-    public func encode(_ plaintext: InvitePlaintext,
-                       adminPubkey: Data,
-                       wrapKey: SymmetricKey) throws -> InviteBlob {
+    public func encode(
+        _ plaintext: InvitePlaintext,
+        adminPubkey: Data,
+        wrapKey: SymmetricKey
+    ) throws -> InviteBlob {
         throw LeafError.notImplemented
     }
     public func decode(_ blob: InviteBlob, wrapKey: SymmetricKey) throws -> InvitePlaintext {

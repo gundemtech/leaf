@@ -1,7 +1,7 @@
-import Foundation
 import AppKit
-import os
+import Foundation
 import LeafCore
+import os
 
 /// Phase Track-4 S3 — `NSPasteboard.general.changeCount` delta polling.
 /// Emits ONE `clipboard_event_count` per tick if `delta > 0`.
@@ -61,7 +61,7 @@ final class ClipboardCollector {
             bundleID: nil,
             payload: [
                 "event_kind": "clipboard_event_count",
-                "count": String(delta)
+                "count": String(delta),
             ]
         )
         await writer.enqueue(raw)

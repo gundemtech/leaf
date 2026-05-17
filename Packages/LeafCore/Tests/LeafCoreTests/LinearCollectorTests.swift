@@ -4,12 +4,14 @@
 
 import XCTest
 import os
-@testable import LeafCore
+
 // Track-3 D1 — selective GRDB import to avoid `Database` symbol collision
 // with `LeafCore.Database` in test helpers (e.g. `insertFreshIntegration(db: Database)`).
 // Importing only `Row` keeps `Row.fetchOne/fetchAll` available without bringing
 // in GRDB.Database as an ambiguous candidate at type-position.
 import class GRDB.Row
+
+@testable import LeafCore
 
 final class LinearCollectorTests: XCTestCase {
     private var tempDir: URL!
@@ -112,19 +114,20 @@ final class LinearCollectorTests: XCTestCase {
 
         let provider = MockLinearGraphQLProvider()
         let cursorMs: Int64 = 1_700_000_000_000
-        await provider.setBatch(LinearIssueBatch(
-            issues: [
-                LinearIssueSnapshot(
-                    issueKey: "LEA-1", title: "First", status: "Done",
-                    project: "Leaf", teamKey: "LEA", updatedAtMs: cursorMs - 1000
-                ),
-                LinearIssueSnapshot(
-                    issueKey: "LEA-2", title: "Second", status: "In Progress",
-                    project: "Leaf", teamKey: "LEA", updatedAtMs: cursorMs
-                )
-            ],
-            cursorMs: cursorMs
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [
+                    LinearIssueSnapshot(
+                        issueKey: "LEA-1", title: "First", status: "Done",
+                        project: "Leaf", teamKey: "LEA", updatedAtMs: cursorMs - 1000
+                    ),
+                    LinearIssueSnapshot(
+                        issueKey: "LEA-2", title: "Second", status: "In Progress",
+                        project: "Leaf", teamKey: "LEA", updatedAtMs: cursorMs
+                    ),
+                ],
+                cursorMs: cursorMs
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -169,29 +172,30 @@ final class LinearCollectorTests: XCTestCase {
 
         let provider = MockLinearGraphQLProvider()
         let baseMs: Int64 = 1_700_000_000_000
-        await provider.setBatch(LinearIssueBatch(
-            issues: [
-                LinearIssueSnapshot(
-                    issueKey: "LEA-100", title: "completed", status: "Done",
-                    project: "Leaf", teamKey: "LEA",
-                    updatedAtMs: baseMs,
-                    completionSeconds: 7200
-                ),
-                LinearIssueSnapshot(
-                    issueKey: "LEA-101", title: "in flight", status: "In Progress",
-                    project: "Leaf", teamKey: "LEA",
-                    updatedAtMs: baseMs + 1000,
-                    completionSeconds: nil
-                ),
-                LinearIssueSnapshot(
-                    issueKey: "LEA-102", title: "instant", status: "Done",
-                    project: "Leaf", teamKey: "LEA",
-                    updatedAtMs: baseMs + 2000,
-                    completionSeconds: 0
-                )
-            ],
-            cursorMs: baseMs + 2000
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [
+                    LinearIssueSnapshot(
+                        issueKey: "LEA-100", title: "completed", status: "Done",
+                        project: "Leaf", teamKey: "LEA",
+                        updatedAtMs: baseMs,
+                        completionSeconds: 7200
+                    ),
+                    LinearIssueSnapshot(
+                        issueKey: "LEA-101", title: "in flight", status: "In Progress",
+                        project: "Leaf", teamKey: "LEA",
+                        updatedAtMs: baseMs + 1000,
+                        completionSeconds: nil
+                    ),
+                    LinearIssueSnapshot(
+                        issueKey: "LEA-102", title: "instant", status: "Done",
+                        project: "Leaf", teamKey: "LEA",
+                        updatedAtMs: baseMs + 2000,
+                        completionSeconds: 0
+                    ),
+                ],
+                cursorMs: baseMs + 2000
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -204,19 +208,23 @@ final class LinearCollectorTests: XCTestCase {
         // 3 issue_updated + 1 workload pulse (Phase 4.7.B).
         XCTAssertEqual(result.issuesProcessed, 4)
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1000) / 1000),
-            end: Date(timeIntervalSince1970: TimeInterval(baseMs + 5000) / 1000)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1000) / 1000),
+                end: Date(timeIntervalSince1970: TimeInterval(baseMs + 5000) / 1000)
+            ))
 
         let completed = try XCTUnwrap(stored.first { $0.payload["issue_key"] == "LEA-100" })
         XCTAssertEqual(completed.payload["completion_seconds"], "7200")
 
         let inFlight = try XCTUnwrap(stored.first { $0.payload["issue_key"] == "LEA-101" })
-        XCTAssertNil(inFlight.payload["completion_seconds"], "snapshot.completionSeconds=nil → key отсутствует, не \"\"")
+        XCTAssertNil(
+            inFlight.payload["completion_seconds"], "snapshot.completionSeconds=nil → key отсутствует, не \"\"")
 
         let instant = try XCTUnwrap(stored.first { $0.payload["issue_key"] == "LEA-102" })
-        XCTAssertEqual(instant.payload["completion_seconds"], "0", "instant completion (0s) — legitimate sample, key present с value \"0\"")
+        XCTAssertEqual(
+            instant.payload["completion_seconds"], "0",
+            "instant completion (0s) — legitimate sample, key present с value \"0\"")
     }
 
     /// Второй tick передаёт сохранённый cursor как `since`.
@@ -226,13 +234,16 @@ final class LinearCollectorTests: XCTestCase {
 
         let provider = MockLinearGraphQLProvider()
         let cursorMs: Int64 = 1_700_000_000_000
-        await provider.setBatch(LinearIssueBatch(
-            issues: [LinearIssueSnapshot(
-                issueKey: "LEA-1", title: "x", status: "Done",
-                project: "", teamKey: "LEA", updatedAtMs: cursorMs
-            )],
-            cursorMs: cursorMs
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [
+                    LinearIssueSnapshot(
+                        issueKey: "LEA-1", title: "x", status: "Done",
+                        project: "", teamKey: "LEA", updatedAtMs: cursorMs
+                    )
+                ],
+                cursorMs: cursorMs
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -266,7 +277,7 @@ final class LinearCollectorTests: XCTestCase {
                 "title": "x",
                 "status": "Done",
                 "project": "",
-                "team_key": "LEA"
+                "team_key": "LEA",
             ]
         )
     }
@@ -279,7 +290,7 @@ final class LinearCollectorTests: XCTestCase {
             payload: [
                 "source": "github",
                 "event_kind": "push",
-                "repo": "test/repo"
+                "repo": "test/repo",
             ]
         )
     }
@@ -297,7 +308,7 @@ final class LinearCollectorTests: XCTestCase {
                 makeLinearActionEvent(issueKey: "LEA-1", updatedAtMs: 1_700_000_000_000),
                 makeLinearActionEvent(issueKey: "LEA-2", updatedAtMs: 1_700_000_001_000),
                 makeLinearActionEvent(issueKey: "LEA-3", updatedAtMs: 1_700_000_002_000),
-                makeGitHubControlEvent(updatedAtMs: 1_700_000_003_000)
+                makeGitHubControlEvent(updatedAtMs: 1_700_000_003_000),
             ],
             offset: CollectorOffset(
                 collectorID: CollectorID.linearPolling,
@@ -402,16 +413,17 @@ final class LinearCollectorTests: XCTestCase {
         // с periodEndMs = now (а не cursorMs), а issue_updated с cursorMs.
         // Range query должен покрыть оба.
         let cursorMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000) - 60_000
-        await provider.setBatch(LinearIssueBatch(
-            issues: [
-                LinearIssueSnapshot(
-                    issueKey: "LEA-1", title: "Topic", status: "In Progress",
-                    project: "Leaf", teamKey: "LEA", updatedAtMs: cursorMs,
-                    completionSeconds: nil, commentCountInWindow: 4
-                )
-            ],
-            cursorMs: cursorMs
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [
+                    LinearIssueSnapshot(
+                        issueKey: "LEA-1", title: "Topic", status: "In Progress",
+                        project: "Leaf", teamKey: "LEA", updatedAtMs: cursorMs,
+                        completionSeconds: nil, commentCountInWindow: 4
+                    )
+                ],
+                cursorMs: cursorMs
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -423,10 +435,11 @@ final class LinearCollectorTests: XCTestCase {
         let result = await collector.performTick()
         XCTAssertEqual(result.commentEventsEmitted, 1)
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSinceNow: -3600),
-            end: Date(timeIntervalSinceNow: 3600)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSinceNow: -3600),
+                end: Date(timeIntervalSinceNow: 3600)
+            ))
         let issueEvent = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "issue_updated" })
         XCTAssertEqual(issueEvent.payload["issue_key"], "LEA-1")
 
@@ -443,16 +456,17 @@ final class LinearCollectorTests: XCTestCase {
 
         let provider = MockLinearGraphQLProvider()
         let cursorMs: Int64 = 1_700_000_000_000
-        await provider.setBatch(LinearIssueBatch(
-            issues: [
-                LinearIssueSnapshot(
-                    issueKey: "LEA-1", title: "Topic", status: "In Progress",
-                    project: "", teamKey: "LEA", updatedAtMs: cursorMs,
-                    commentCountInWindow: 0
-                )
-            ],
-            cursorMs: cursorMs
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [
+                    LinearIssueSnapshot(
+                        issueKey: "LEA-1", title: "Topic", status: "In Progress",
+                        project: "", teamKey: "LEA", updatedAtMs: cursorMs,
+                        commentCountInWindow: 0
+                    )
+                ],
+                cursorMs: cursorMs
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -464,10 +478,11 @@ final class LinearCollectorTests: XCTestCase {
         let result = await collector.performTick()
         XCTAssertEqual(result.commentEventsEmitted, 0)
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSinceNow: -3600),
-            end: Date(timeIntervalSinceNow: 3600)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSinceNow: -3600),
+                end: Date(timeIntervalSinceNow: 3600)
+            ))
         XCTAssertNil(stored.first { $0.payload["event_kind"] == "linear_comment_authored" })
     }
 
@@ -482,17 +497,18 @@ final class LinearCollectorTests: XCTestCase {
         let provider = MockLinearGraphQLProvider()
         let cursorMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000) - 60_000
         let lastTouchedTs: Int64 = cursorMs - 1_000
-        await provider.setBatch(LinearIssueBatch(
-            issues: [],
-            cursorMs: nil,
-            transitions: [],
-            workload: LinearAssignedWorkloadSnapshot(
-                startedCount: 3,
-                topPriority: 1,  // urgent
-                lastTouchedIdentifier: "LEA-201",
-                lastTouchedTs: lastTouchedTs
-            )
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [],
+                cursorMs: nil,
+                transitions: [],
+                workload: LinearAssignedWorkloadSnapshot(
+                    startedCount: 3,
+                    topPriority: 1,  // urgent
+                    lastTouchedIdentifier: "LEA-201",
+                    lastTouchedTs: lastTouchedTs
+                )
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -503,10 +519,11 @@ final class LinearCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSinceNow: -3600),
-            end: Date(timeIntervalSinceNow: 3600)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSinceNow: -3600),
+                end: Date(timeIntervalSinceNow: 3600)
+            ))
         let pulse = try XCTUnwrap(
             stored.first { $0.payload["event_kind"] == "linear_assigned_workload_pulse" },
             "expected one pulse event with populated workload"
@@ -542,21 +559,25 @@ final class LinearCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSinceNow: -3600),
-            end: Date(timeIntervalSinceNow: 3600)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSinceNow: -3600),
+                end: Date(timeIntervalSinceNow: 3600)
+            ))
         let pulse = try XCTUnwrap(
             stored.first { $0.payload["event_kind"] == "linear_assigned_workload_pulse" },
             "pulse должен emit'иться даже на empty workload"
         )
         XCTAssertEqual(pulse.payload["started_count"], "0")
-        XCTAssertEqual(pulse.payload["top_priority"], "none",
-                       "empty workload → top_priority=\"none\" (всегда present, не omitted)")
-        XCTAssertNil(pulse.payload["last_touched_identifier"],
-                     "nil identifier → key omitted")
-        XCTAssertNil(pulse.payload["last_touched_ts_ms"],
-                     "nil ts → key omitted")
+        XCTAssertEqual(
+            pulse.payload["top_priority"], "none",
+            "empty workload → top_priority=\"none\" (всегда present, не omitted)")
+        XCTAssertNil(
+            pulse.payload["last_touched_identifier"],
+            "nil identifier → key omitted")
+        XCTAssertNil(
+            pulse.payload["last_touched_ts_ms"],
+            "nil ts → key omitted")
     }
 
     // MARK: - Phase 4.7.B (B-7) — linear_cycle_progress
@@ -568,7 +589,7 @@ final class LinearCollectorTests: XCTestCase {
         cycleID: String = "cycle-1",
         cycleName: String = "Sprint 42",
         startsAtMs: Int64 = 1_777_180_800_000,  // 2026-04-26 ~ начало
-        endsAtMs: Int64 = 1_780_000_000_000,    // в будущем
+        endsAtMs: Int64 = 1_780_000_000_000,  // в будущем
         completedPct: Double = 60.0,
         daysRemaining: Int = 5,
         scopeCount: Int = 15
@@ -603,13 +624,14 @@ final class LinearCollectorTests: XCTestCase {
             cycleID: "cycle-2", cycleName: "Iteration 7",
             completedPct: 50.0, daysRemaining: 7, scopeCount: 8
         )
-        await provider.setBatch(LinearIssueBatch(
-            issues: [],
-            cursorMs: nil,
-            transitions: [],
-            workload: .empty,
-            cycles: LinearCycleSnapshot(teams: [teamA, teamB], observedAtMs: nowMs)
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [],
+                cursorMs: nil,
+                transitions: [],
+                workload: .empty,
+                cycles: LinearCycleSnapshot(teams: [teamA, teamB], observedAtMs: nowMs)
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -621,10 +643,11 @@ final class LinearCollectorTests: XCTestCase {
         let result = await collector.performTick()
         XCTAssertEqual(result.cycleEventsEmitted, 2, "2 teams с cycles → 2 events")
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSinceNow: -3600),
-            end: Date(timeIntervalSinceNow: 3600)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSinceNow: -3600),
+                end: Date(timeIntervalSinceNow: 3600)
+            ))
         let cycleEvents = stored.filter { $0.payload["event_kind"] == "linear_cycle_progress" }
         XCTAssertEqual(cycleEvents.count, 2)
         let teamIDs = Set(cycleEvents.compactMap { $0.payload["team_id"] })
@@ -650,13 +673,14 @@ final class LinearCollectorTests: XCTestCase {
 
         let provider = MockLinearGraphQLProvider()
         // Empty cycles snapshot — no team in-cycle.
-        await provider.setBatch(LinearIssueBatch(
-            issues: [],
-            cursorMs: nil,
-            transitions: [],
-            workload: .empty,
-            cycles: .empty
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [],
+                cursorMs: nil,
+                transitions: [],
+                workload: .empty,
+                cycles: .empty
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -668,10 +692,11 @@ final class LinearCollectorTests: XCTestCase {
         let result = await collector.performTick()
         XCTAssertEqual(result.cycleEventsEmitted, 0)
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSinceNow: -3600),
-            end: Date(timeIntervalSinceNow: 3600)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSinceNow: -3600),
+                end: Date(timeIntervalSinceNow: 3600)
+            ))
         XCTAssertNil(stored.first { $0.payload["event_kind"] == "linear_cycle_progress" })
     }
 
@@ -701,13 +726,14 @@ final class LinearCollectorTests: XCTestCase {
             cycleID: "cycle-2", cycleName: "Iteration 7",
             completedPct: 50.0, daysRemaining: 7, scopeCount: 8
         )
-        await provider.setBatch(LinearIssueBatch(
-            issues: [],
-            cursorMs: nil,
-            transitions: [],
-            workload: workload,
-            cycles: LinearCycleSnapshot(teams: [teamA, teamB], observedAtMs: nowMs)
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [],
+                cursorMs: nil,
+                transitions: [],
+                workload: workload,
+                cycles: LinearCycleSnapshot(teams: [teamA, teamB], observedAtMs: nowMs)
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -764,13 +790,14 @@ final class LinearCollectorTests: XCTestCase {
         )
         let provider = MockLinearGraphQLProvider()
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
-        await provider.setBatch(LinearIssueBatch(
-            issues: [issue],
-            cursorMs: 1_700_000_000_000,
-            transitions: [],
-            workload: .empty,
-            cycles: .empty
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [issue],
+                cursorMs: 1_700_000_000_000,
+                transitions: [],
+                workload: .empty,
+                cycles: .empty
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -785,18 +812,22 @@ final class LinearCollectorTests: XCTestCase {
         }
         let row = try XCTUnwrap(presence)
         let topLevelKeys = Set(row.state.keys)
-        XCTAssertFalse(topLevelKeys.contains("title"),
-                       "presence_state.linear не должен содержать 'title' top-level key")
-        XCTAssertFalse(topLevelKeys.contains("description"),
-                       "presence_state.linear не должен содержать 'description' top-level key")
-        XCTAssertFalse(topLevelKeys.contains("body"),
-                       "presence_state.linear не должен содержать 'body' top-level key")
+        XCTAssertFalse(
+            topLevelKeys.contains("title"),
+            "presence_state.linear не должен содержать 'title' top-level key")
+        XCTAssertFalse(
+            topLevelKeys.contains("description"),
+            "presence_state.linear не должен содержать 'description' top-level key")
+        XCTAssertFalse(
+            topLevelKeys.contains("body"),
+            "presence_state.linear не должен содержать 'body' top-level key")
 
         // Sentinel title из issue не должна leak'ать в state JSON (paranoid check).
         let serialized = try JSONSerialization.data(withJSONObject: row.state, options: [])
         let serializedStr = String(data: serialized, encoding: .utf8) ?? ""
-        XCTAssertFalse(serializedStr.contains(sentinelTitle),
-                       "title issue не должен попасть в presence_state.linear JSON")
+        XCTAssertFalse(
+            serializedStr.contains(sentinelTitle),
+            "title issue не должен попасть в presence_state.linear JSON")
         // Используется значение nowMs из суток сегодня — не должно совпадать с
         // sentinel нигде; fallback assertion: snapshot present.
         _ = nowMs  // sanity hold
@@ -824,13 +855,14 @@ final class LinearCollectorTests: XCTestCase {
             startedCount: 1, topPriority: 1,
             lastTouchedIdentifier: "LEA-200", lastTouchedTs: cursorMs
         )
-        await provider.setBatch(LinearIssueBatch(
-            issues: [issue],
-            cursorMs: cursorMs,
-            transitions: [],
-            workload: workload,
-            cycles: .empty
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [issue],
+                cursorMs: cursorMs,
+                transitions: [],
+                workload: workload,
+                cycles: .empty
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -841,10 +873,11 @@ final class LinearCollectorTests: XCTestCase {
         _ = await collector.performTick()
 
         // 1) event landed.
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSince1970: 1_700_000_000),
-            end: Date(timeIntervalSince1970: 1_800_000_000)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: 1_700_000_000),
+                end: Date(timeIntervalSince1970: 1_800_000_000)
+            ))
         let issueEvents = stored.filter { $0.payload["issue_key"] == "LEA-200" }
         XCTAssertGreaterThanOrEqual(issueEvents.count, 1, "issue event должен быть persisted")
 
@@ -878,16 +911,17 @@ final class LinearCollectorTests: XCTestCase {
             project: "Leaf",
             teamKey: "LEA",
             updatedAtMs: 1_750_000_000_000
-            // linkedGitHubPRCount / linkedSlackMessageCount / linkedAttachmentCount = 0 (defaults)
-            // linkedGitHubTopRepo = nil (default)
+                // linkedGitHubPRCount / linkedSlackMessageCount / linkedAttachmentCount = 0 (defaults)
+                // linkedGitHubTopRepo = nil (default)
         )
-        await provider.setBatch(LinearIssueBatch(
-            issues: [issue],
-            cursorMs: 1_750_000_000_000,
-            transitions: [],
-            workload: .empty,
-            cycles: .empty
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [issue],
+                cursorMs: 1_750_000_000_000,
+                transitions: [],
+                workload: .empty,
+                cycles: .empty
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -897,21 +931,27 @@ final class LinearCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSince1970: 1_700_000_000),
-            end: Date(timeIntervalSince1970: 1_800_000_000)
-        ))
-        let issueEvent = try XCTUnwrap(stored.first {
-            $0.payload["issue_key"] == "LEA-300" && $0.payload["event_kind"] == "issue_updated"
-        })
-        XCTAssertNil(issueEvent.payload["linked_github_pr_count"],
-                     "0 PRs → ключ должен отсутствовать")
-        XCTAssertNil(issueEvent.payload["linked_github_top_repo"],
-                     "nil topRepo → ключ должен отсутствовать")
-        XCTAssertNil(issueEvent.payload["linked_slack_message_count"],
-                     "0 Slack → ключ должен отсутствовать")
-        XCTAssertNil(issueEvent.payload["linked_attachment_count"],
-                     "0 attachments → ключ должен отсутствовать")
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: 1_700_000_000),
+                end: Date(timeIntervalSince1970: 1_800_000_000)
+            ))
+        let issueEvent = try XCTUnwrap(
+            stored.first {
+                $0.payload["issue_key"] == "LEA-300" && $0.payload["event_kind"] == "issue_updated"
+            })
+        XCTAssertNil(
+            issueEvent.payload["linked_github_pr_count"],
+            "0 PRs → ключ должен отсутствовать")
+        XCTAssertNil(
+            issueEvent.payload["linked_github_top_repo"],
+            "nil topRepo → ключ должен отсутствовать")
+        XCTAssertNil(
+            issueEvent.payload["linked_slack_message_count"],
+            "0 Slack → ключ должен отсутствовать")
+        XCTAssertNil(
+            issueEvent.payload["linked_attachment_count"],
+            "0 attachments → ключ должен отсутствовать")
     }
 
     /// Plan-required: makeEvent injects linked_* keys when issue has populated counts.
@@ -932,13 +972,14 @@ final class LinearCollectorTests: XCTestCase {
             linkedSlackMessageCount: 1,
             linkedAttachmentCount: 4
         )
-        await provider.setBatch(LinearIssueBatch(
-            issues: [issue],
-            cursorMs: 1_750_000_000_000,
-            transitions: [],
-            workload: .empty,
-            cycles: .empty
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [issue],
+                cursorMs: 1_750_000_000_000,
+                transitions: [],
+                workload: .empty,
+                cycles: .empty
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -948,13 +989,15 @@ final class LinearCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSince1970: 1_700_000_000),
-            end: Date(timeIntervalSince1970: 1_800_000_000)
-        ))
-        let issueEvent = try XCTUnwrap(stored.first {
-            $0.payload["issue_key"] == "LEA-301" && $0.payload["event_kind"] == "issue_updated"
-        })
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: 1_700_000_000),
+                end: Date(timeIntervalSince1970: 1_800_000_000)
+            ))
+        let issueEvent = try XCTUnwrap(
+            stored.first {
+                $0.payload["issue_key"] == "LEA-301" && $0.payload["event_kind"] == "issue_updated"
+            })
         XCTAssertEqual(issueEvent.payload["linked_github_pr_count"], "2")
         XCTAssertEqual(issueEvent.payload["linked_github_top_repo"], "octocat/leaf")
         XCTAssertEqual(issueEvent.payload["linked_slack_message_count"], "1")
@@ -1001,16 +1044,17 @@ final class LinearCollectorTests: XCTestCase {
             fromPriority: 3,
             toPriority: 1
         )
-        await provider.setBatch(LinearIssueBatch(
-            issues: [
-                LinearIssueSnapshot(
-                    issueKey: "LEA-1", title: "Topic", status: "In Progress",
-                    project: "", teamKey: "LEA", updatedAtMs: cursorMs
-                )
-            ],
-            cursorMs: cursorMs,
-            priorityTransitions: [prioritySnap]
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [
+                    LinearIssueSnapshot(
+                        issueKey: "LEA-1", title: "Topic", status: "In Progress",
+                        project: "", teamKey: "LEA", updatedAtMs: cursorMs
+                    )
+                ],
+                cursorMs: cursorMs,
+                priorityTransitions: [prioritySnap]
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -1021,10 +1065,11 @@ final class LinearCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSinceNow: -3600),
-            end: Date(timeIntervalSinceNow: 3600)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSinceNow: -3600),
+                end: Date(timeIntervalSinceNow: 3600)
+            ))
         let priorityEvent = try XCTUnwrap(
             stored.first { $0.payload["event_kind"] == "linear_priority_changed" }
         )
@@ -1058,18 +1103,19 @@ final class LinearCollectorTests: XCTestCase {
                 issueKey: "LEA-200", historyId: "hist-lbl-1",
                 transitionAtMs: cursorMs, kind: .removed,
                 labelId: "lbl-3", labelName: "wontfix"
-            )
+            ),
         ]
-        await provider.setBatch(LinearIssueBatch(
-            issues: [
-                LinearIssueSnapshot(
-                    issueKey: "LEA-200", title: "Topic", status: "In Progress",
-                    project: "", teamKey: "LEA", updatedAtMs: cursorMs
-                )
-            ],
-            cursorMs: cursorMs,
-            labelTransitions: snaps
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [
+                    LinearIssueSnapshot(
+                        issueKey: "LEA-200", title: "Topic", status: "In Progress",
+                        project: "", teamKey: "LEA", updatedAtMs: cursorMs
+                    )
+                ],
+                cursorMs: cursorMs,
+                labelTransitions: snaps
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -1080,10 +1126,11 @@ final class LinearCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSinceNow: -3600),
-            end: Date(timeIntervalSinceNow: 3600)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSinceNow: -3600),
+                end: Date(timeIntervalSinceNow: 3600)
+            ))
         let added = stored.filter { $0.payload["event_kind"] == "linear_label_added" }
         let removed = stored.filter { $0.payload["event_kind"] == "linear_label_removed" }
         XCTAssertEqual(added.count, 2)
@@ -1106,16 +1153,17 @@ final class LinearCollectorTests: XCTestCase {
             transitionAtMs: cursorMs,
             bucket: .reassignedSelfToOther
         )
-        await provider.setBatch(LinearIssueBatch(
-            issues: [
-                LinearIssueSnapshot(
-                    issueKey: "LEA-300", title: "Topic", status: "In Progress",
-                    project: "", teamKey: "LEA", updatedAtMs: cursorMs
-                )
-            ],
-            cursorMs: cursorMs,
-            assigneeTransitions: [snap]
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [
+                    LinearIssueSnapshot(
+                        issueKey: "LEA-300", title: "Topic", status: "In Progress",
+                        project: "", teamKey: "LEA", updatedAtMs: cursorMs
+                    )
+                ],
+                cursorMs: cursorMs,
+                assigneeTransitions: [snap]
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -1126,10 +1174,11 @@ final class LinearCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSinceNow: -3600),
-            end: Date(timeIntervalSinceNow: 3600)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSinceNow: -3600),
+                end: Date(timeIntervalSinceNow: 3600)
+            ))
         let asgn = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "linear_assignee_changed" })
         XCTAssertEqual(asgn.payload["issue_key"], "LEA-300")
         XCTAssertEqual(asgn.payload["history_id"], "hist-asg-1")
@@ -1152,16 +1201,17 @@ final class LinearCollectorTests: XCTestCase {
             fromCycleId: "cyc-1", fromCycleName: "Sprint 41",
             toCycleId: "cyc-2", toCycleName: "Sprint 42"
         )
-        await provider.setBatch(LinearIssueBatch(
-            issues: [
-                LinearIssueSnapshot(
-                    issueKey: "LEA-400", title: "Topic", status: "In Progress",
-                    project: "", teamKey: "LEA", updatedAtMs: cursorMs
-                )
-            ],
-            cursorMs: cursorMs,
-            cycleTransitions: [snap]
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [
+                    LinearIssueSnapshot(
+                        issueKey: "LEA-400", title: "Topic", status: "In Progress",
+                        project: "", teamKey: "LEA", updatedAtMs: cursorMs
+                    )
+                ],
+                cursorMs: cursorMs,
+                cycleTransitions: [snap]
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -1172,10 +1222,11 @@ final class LinearCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSinceNow: -3600),
-            end: Date(timeIntervalSinceNow: 3600)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSinceNow: -3600),
+                end: Date(timeIntervalSinceNow: 3600)
+            ))
         let cyc = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "linear_cycle_changed" })
         XCTAssertEqual(cyc.payload["issue_key"], "LEA-400")
         XCTAssertEqual(cyc.payload["from_cycle_id"], "cyc-1")
@@ -1198,16 +1249,17 @@ final class LinearCollectorTests: XCTestCase {
             fromCycleId: nil, fromCycleName: nil,
             toCycleId: "cyc-X", toCycleName: "Sprint X"
         )
-        await provider.setBatch(LinearIssueBatch(
-            issues: [
-                LinearIssueSnapshot(
-                    issueKey: "LEA-401", title: "Topic", status: "In Progress",
-                    project: "", teamKey: "LEA", updatedAtMs: cursorMs
-                )
-            ],
-            cursorMs: cursorMs,
-            cycleTransitions: [snap]
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [
+                    LinearIssueSnapshot(
+                        issueKey: "LEA-401", title: "Topic", status: "In Progress",
+                        project: "", teamKey: "LEA", updatedAtMs: cursorMs
+                    )
+                ],
+                cursorMs: cursorMs,
+                cycleTransitions: [snap]
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -1218,10 +1270,11 @@ final class LinearCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSinceNow: -3600),
-            end: Date(timeIntervalSinceNow: 3600)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSinceNow: -3600),
+                end: Date(timeIntervalSinceNow: 3600)
+            ))
         let cyc = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "linear_cycle_changed" })
         XCTAssertNil(cyc.payload["from_cycle_id"], "nil from → ключ omitted")
         XCTAssertNil(cyc.payload["from_cycle_name"])
@@ -1241,16 +1294,17 @@ final class LinearCollectorTests: XCTestCase {
             transitionAtMs: cursorMs,
             fromEstimate: 3.0, toEstimate: 5.0
         )
-        await provider.setBatch(LinearIssueBatch(
-            issues: [
-                LinearIssueSnapshot(
-                    issueKey: "LEA-500", title: "Topic", status: "In Progress",
-                    project: "", teamKey: "LEA", updatedAtMs: cursorMs
-                )
-            ],
-            cursorMs: cursorMs,
-            estimateTransitions: [snap]
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [
+                    LinearIssueSnapshot(
+                        issueKey: "LEA-500", title: "Topic", status: "In Progress",
+                        project: "", teamKey: "LEA", updatedAtMs: cursorMs
+                    )
+                ],
+                cursorMs: cursorMs,
+                estimateTransitions: [snap]
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -1261,10 +1315,11 @@ final class LinearCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSinceNow: -3600),
-            end: Date(timeIntervalSinceNow: 3600)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSinceNow: -3600),
+                end: Date(timeIntervalSinceNow: 3600)
+            ))
         let est = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "linear_estimate_changed" })
         XCTAssertEqual(est.payload["issue_key"], "LEA-500")
         XCTAssertEqual(est.payload["history_id"], "hist-est-1")
@@ -1284,16 +1339,17 @@ final class LinearCollectorTests: XCTestCase {
             transitionAtMs: cursorMs,
             fromEstimate: nil, toEstimate: 8.0
         )
-        await provider.setBatch(LinearIssueBatch(
-            issues: [
-                LinearIssueSnapshot(
-                    issueKey: "LEA-501", title: "Topic", status: "In Progress",
-                    project: "", teamKey: "LEA", updatedAtMs: cursorMs
-                )
-            ],
-            cursorMs: cursorMs,
-            estimateTransitions: [snap]
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [
+                    LinearIssueSnapshot(
+                        issueKey: "LEA-501", title: "Topic", status: "In Progress",
+                        project: "", teamKey: "LEA", updatedAtMs: cursorMs
+                    )
+                ],
+                cursorMs: cursorMs,
+                estimateTransitions: [snap]
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -1304,10 +1360,11 @@ final class LinearCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSinceNow: -3600),
-            end: Date(timeIntervalSinceNow: 3600)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSinceNow: -3600),
+                end: Date(timeIntervalSinceNow: 3600)
+            ))
         let est = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "linear_estimate_changed" })
         XCTAssertNil(est.payload["from_estimate"], "nil from → omit ключа")
         XCTAssertEqual(est.payload["to_estimate"], "8.0")
@@ -1326,11 +1383,12 @@ final class LinearCollectorTests: XCTestCase {
             projectId: "proj-A", projectName: "Leaf",
             health: "onTrack"
         )
-        await provider.setBatch(LinearIssueBatch(
-            issues: [],
-            cursorMs: cursorMs,
-            projectUpdates: [pu]
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [],
+                cursorMs: cursorMs,
+                projectUpdates: [pu]
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -1341,10 +1399,11 @@ final class LinearCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSinceNow: -3600),
-            end: Date(timeIntervalSinceNow: 3600)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSinceNow: -3600),
+                end: Date(timeIntervalSinceNow: 3600)
+            ))
         let pu2 = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "linear_project_update_authored" })
         XCTAssertEqual(pu2.payload["update_id"], "pu-1")
         XCTAssertEqual(pu2.payload["project_id"], "proj-A")
@@ -1370,10 +1429,11 @@ final class LinearCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSinceNow: -3600),
-            end: Date(timeIntervalSinceNow: 3600)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSinceNow: -3600),
+                end: Date(timeIntervalSinceNow: 3600)
+            ))
         XCTAssertNil(
             stored.first { $0.payload["event_kind"] == "linear_project_update_authored" }
         )
@@ -1392,10 +1452,11 @@ final class LinearCollectorTests: XCTestCase {
             projectId: "proj-A", projectName: "Leaf",
             title: "Q4 Roadmap"
         )
-        await provider.setBatch(LinearIssueBatch(
-            issues: [], cursorMs: nowMs,
-            documents: [doc]
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [], cursorMs: nowMs,
+                documents: [doc]
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -1406,10 +1467,11 @@ final class LinearCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSinceNow: -3600),
-            end: Date(timeIntervalSinceNow: 3600)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSinceNow: -3600),
+                end: Date(timeIntervalSinceNow: 3600)
+            ))
         let de = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "linear_document_edited" })
         XCTAssertEqual(de.payload["document_id"], "doc-1")
         XCTAssertEqual(de.payload["title"], "Q4 Roadmap")
@@ -1430,10 +1492,11 @@ final class LinearCollectorTests: XCTestCase {
             projectId: nil, projectName: nil,
             title: "Standalone"
         )
-        await provider.setBatch(LinearIssueBatch(
-            issues: [], cursorMs: nowMs,
-            documents: [doc]
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [], cursorMs: nowMs,
+                documents: [doc]
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -1444,10 +1507,11 @@ final class LinearCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSinceNow: -3600),
-            end: Date(timeIntervalSinceNow: 3600)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSinceNow: -3600),
+                end: Date(timeIntervalSinceNow: 3600)
+            ))
         let de = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "linear_document_edited" })
         XCTAssertEqual(de.payload["document_id"], "doc-2")
         XCTAssertEqual(de.payload["title"], "Standalone")
@@ -1468,10 +1532,11 @@ final class LinearCollectorTests: XCTestCase {
             status: "Active",
             observedAtMs: nowMs
         )
-        await provider.setBatch(LinearIssueBatch(
-            issues: [], cursorMs: nowMs,
-            initiatives: [init1]
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [], cursorMs: nowMs,
+                initiatives: [init1]
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -1482,10 +1547,11 @@ final class LinearCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSinceNow: -3600),
-            end: Date(timeIntervalSinceNow: 3600)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSinceNow: -3600),
+                end: Date(timeIntervalSinceNow: 3600)
+            ))
         let init2 = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "linear_initiative_observed" })
         XCTAssertEqual(init2.payload["initiative_id"], "init-1")
         XCTAssertEqual(init2.payload["name"], "Q4 Goals")
@@ -1503,10 +1569,11 @@ final class LinearCollectorTests: XCTestCase {
         let snap = LinearInitiativeSnapshot(
             initiativeId: "init-2", name: "Beta", status: nil, observedAtMs: nowMs
         )
-        await provider.setBatch(LinearIssueBatch(
-            issues: [], cursorMs: nowMs,
-            initiatives: [snap]
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [], cursorMs: nowMs,
+                initiatives: [snap]
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -1517,10 +1584,11 @@ final class LinearCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSinceNow: -3600),
-            end: Date(timeIntervalSinceNow: 3600)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSinceNow: -3600),
+                end: Date(timeIntervalSinceNow: 3600)
+            ))
         let i = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "linear_initiative_observed" })
         XCTAssertEqual(i.payload["initiative_id"], "init-2")
         XCTAssertNil(i.payload["status"])
@@ -1592,19 +1660,20 @@ final class LinearCollectorTests: XCTestCase {
             status: "Active", observedAtMs: nowMs
         )
 
-        await provider.setBatch(LinearIssueBatch(
-            issues: [issue],
-            cursorMs: nowMs,
-            transitions: [stateTransition],
-            priorityTransitions: [priority],
-            labelTransitions: [labelAdded, labelRemoved],
-            assigneeTransitions: [assignee],
-            cycleTransitions: [cycle],
-            estimateTransitions: [estimate],
-            projectUpdates: [projectUpdate],
-            documents: [document],
-            initiatives: [initiative]
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [issue],
+                cursorMs: nowMs,
+                transitions: [stateTransition],
+                priorityTransitions: [priority],
+                labelTransitions: [labelAdded, labelRemoved],
+                assigneeTransitions: [assignee],
+                cycleTransitions: [cycle],
+                estimateTransitions: [estimate],
+                projectUpdates: [projectUpdate],
+                documents: [document],
+                initiatives: [initiative]
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -1615,10 +1684,11 @@ final class LinearCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSinceNow: -3600),
-            end: Date(timeIntervalSinceNow: 3600)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSinceNow: -3600),
+                end: Date(timeIntervalSinceNow: 3600)
+            ))
 
         // Expected breakdown (per LinearCollector.performTick emission order):
         //   1× issue_updated, 1× status_transition, 1× linear_priority_changed,
@@ -1642,8 +1712,9 @@ final class LinearCollectorTests: XCTestCase {
         XCTAssertEqual(kinds["linear_document_edited"], 1)
         XCTAssertEqual(kinds["linear_initiative_observed"], 1)
         XCTAssertEqual(kinds["linear_assigned_workload_pulse"], 1)
-        XCTAssertEqual(stored.count, 12,
-                       "Phase 4.7.C full batch → 12 events; got: \(kinds)")
+        XCTAssertEqual(
+            stored.count, 12,
+            "Phase 4.7.C full batch → 12 events; got: \(kinds)")
 
         // Signal type sanity: actions vs context.
         let actionKinds: Set<String> = [
@@ -1651,19 +1722,21 @@ final class LinearCollectorTests: XCTestCase {
             "linear_label_added", "linear_label_removed",
             "linear_assignee_changed", "linear_cycle_changed",
             "linear_estimate_changed", "linear_project_update_authored",
-            "linear_document_edited"
+            "linear_document_edited",
         ]
         let contextKinds: Set<String> = [
-            "linear_initiative_observed", "linear_assigned_workload_pulse"
+            "linear_initiative_observed", "linear_assigned_workload_pulse",
         ]
         for ev in stored {
             let kind = ev.payload["event_kind"] ?? ""
             if actionKinds.contains(kind) {
-                XCTAssertEqual(ev.signalType, .action,
-                               "\(kind) must be .action signal")
+                XCTAssertEqual(
+                    ev.signalType, .action,
+                    "\(kind) must be .action signal")
             } else if contextKinds.contains(kind) {
-                XCTAssertEqual(ev.signalType, .context,
-                               "\(kind) must be .context signal")
+                XCTAssertEqual(
+                    ev.signalType, .context,
+                    "\(kind) must be .context signal")
             }
         }
 
@@ -1672,8 +1745,9 @@ final class LinearCollectorTests: XCTestCase {
         // contamination — но sanity assert для regression catch'ей.)
         for ev in stored {
             for (k, v) in ev.payload {
-                XCTAssertFalse(v.contains(sentinel),
-                               "ADR-010: payload[\(k)]=\"\(v)\" не должен содержать sentinel")
+                XCTAssertFalse(
+                    v.contains(sentinel),
+                    "ADR-010: payload[\(k)]=\"\(v)\" не должен содержать sentinel")
             }
         }
     }
@@ -1688,16 +1762,17 @@ final class LinearCollectorTests: XCTestCase {
 
         let provider = MockLinearGraphQLProvider()
         let baseMs: Int64 = 1_700_000_000_000
-        await provider.setBatch(LinearIssueBatch(
-            issues: [
-                LinearIssueSnapshot(
-                    issueKey: "LEA-D1", title: "OAuth refactor", status: "In Progress",
-                    project: "Leaf", teamKey: "LEA", updatedAtMs: baseMs,
-                    description: "Refactor OAuth refresh"
-                )
-            ],
-            cursorMs: baseMs
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [
+                    LinearIssueSnapshot(
+                        issueKey: "LEA-D1", title: "OAuth refactor", status: "In Progress",
+                        project: "Leaf", teamKey: "LEA", updatedAtMs: baseMs,
+                        description: "Refactor OAuth refresh"
+                    )
+                ],
+                cursorMs: baseMs
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -1708,20 +1783,23 @@ final class LinearCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1000) / 1000),
-            end: Date(timeIntervalSince1970: TimeInterval(baseMs + 5000) / 1000)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1000) / 1000),
+                end: Date(timeIntervalSince1970: TimeInterval(baseMs + 5000) / 1000)
+            ))
 
         // Filter to issue_updated event (not workload_pulse)
         let issueEvent = try XCTUnwrap(
             stored.first { $0.payload["event_kind"] == "issue_updated" && $0.payload["issue_key"] == "LEA-D1" },
             "Expected an issue_updated event for LEA-D1"
         )
-        XCTAssertEqual(issueEvent.payload[Schema.EventPayloadKeys.body], "Refactor OAuth refresh",
-                       "Track-1 D1: description should appear as 'body' payload key")
-        XCTAssertNil(issueEvent.payload[Schema.EventPayloadKeys.bodyTruncated],
-                     "Short body — body_truncated should not be set")
+        XCTAssertEqual(
+            issueEvent.payload[Schema.EventPayloadKeys.body], "Refactor OAuth refresh",
+            "Track-1 D1: description should appear as 'body' payload key")
+        XCTAssertNil(
+            issueEvent.payload[Schema.EventPayloadKeys.bodyTruncated],
+            "Short body — body_truncated should not be set")
     }
 
     /// Track-1 D1: snapshot.attachments encode as JSON in payload["attachments_json"].
@@ -1733,18 +1811,19 @@ final class LinearCollectorTests: XCTestCase {
         let baseMs: Int64 = 1_700_000_001_000
         let attachments = [
             AttachmentMeta(name: "Design Spec", mime: "image/png", sizeBytes: 204800),
-            AttachmentMeta(name: "PR Draft", mime: nil, sizeBytes: nil)
+            AttachmentMeta(name: "PR Draft", mime: nil, sizeBytes: nil),
         ]
-        await provider.setBatch(LinearIssueBatch(
-            issues: [
-                LinearIssueSnapshot(
-                    issueKey: "LEA-D1-att", title: "With attachments", status: "In Progress",
-                    project: "Leaf", teamKey: "LEA", updatedAtMs: baseMs,
-                    attachments: attachments
-                )
-            ],
-            cursorMs: baseMs
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [
+                    LinearIssueSnapshot(
+                        issueKey: "LEA-D1-att", title: "With attachments", status: "In Progress",
+                        project: "Leaf", teamKey: "LEA", updatedAtMs: baseMs,
+                        attachments: attachments
+                    )
+                ],
+                cursorMs: baseMs
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -1755,10 +1834,11 @@ final class LinearCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1000) / 1000),
-            end: Date(timeIntervalSince1970: TimeInterval(baseMs + 5000) / 1000)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1000) / 1000),
+                end: Date(timeIntervalSince1970: TimeInterval(baseMs + 5000) / 1000)
+            ))
 
         let issueEvent = try XCTUnwrap(
             stored.first { $0.payload["event_kind"] == "issue_updated" && $0.payload["issue_key"] == "LEA-D1-att" }
@@ -1789,17 +1869,18 @@ final class LinearCollectorTests: XCTestCase {
         // provider. The actual capped length is irrelevant for this test — we
         // only verify that descriptionTruncated=true flows to body_truncated payload.
         let cappedBody = "x...content elided\n…[truncated:70000]"
-        await provider.setBatch(LinearIssueBatch(
-            issues: [
-                LinearIssueSnapshot(
-                    issueKey: "LEA-D1-cap", title: "Big description", status: "In Progress",
-                    project: "Leaf", teamKey: "LEA", updatedAtMs: baseMs,
-                    description: cappedBody,
-                    descriptionTruncated: true
-                )
-            ],
-            cursorMs: baseMs
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [
+                    LinearIssueSnapshot(
+                        issueKey: "LEA-D1-cap", title: "Big description", status: "In Progress",
+                        project: "Leaf", teamKey: "LEA", updatedAtMs: baseMs,
+                        description: cappedBody,
+                        descriptionTruncated: true
+                    )
+                ],
+                cursorMs: baseMs
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -1810,19 +1891,22 @@ final class LinearCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1000) / 1000),
-            end: Date(timeIntervalSince1970: TimeInterval(baseMs + 5000) / 1000)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: TimeInterval(baseMs - 1000) / 1000),
+                end: Date(timeIntervalSince1970: TimeInterval(baseMs + 5000) / 1000)
+            ))
 
         let issueEvent = try XCTUnwrap(
             stored.first { $0.payload["event_kind"] == "issue_updated" && $0.payload["issue_key"] == "LEA-D1-cap" }
         )
-        XCTAssertEqual(issueEvent.payload[Schema.EventPayloadKeys.bodyTruncated], "true",
-                       "Track-1 D1: descriptionTruncated=true → body_truncated payload key present")
+        XCTAssertEqual(
+            issueEvent.payload[Schema.EventPayloadKeys.bodyTruncated], "true",
+            "Track-1 D1: descriptionTruncated=true → body_truncated payload key present")
         let body = try XCTUnwrap(issueEvent.payload[Schema.EventPayloadKeys.body])
-        XCTAssertTrue(body.contains("[truncated:70000]"),
-                      "Track-1 D1: payload body contains truncation sentinel; got: \(body.suffix(50))")
+        XCTAssertTrue(
+            body.contains("[truncated:70000]"),
+            "Track-1 D1: payload body contains truncation sentinel; got: \(body.suffix(50))")
     }
 
     /// Empty priorityTransitions → no priority event emitted.
@@ -1832,15 +1916,16 @@ final class LinearCollectorTests: XCTestCase {
 
         let provider = MockLinearGraphQLProvider()
         let cursorMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000) - 60_000
-        await provider.setBatch(LinearIssueBatch(
-            issues: [
-                LinearIssueSnapshot(
-                    issueKey: "LEA-1", title: "Topic", status: "In Progress",
-                    project: "", teamKey: "LEA", updatedAtMs: cursorMs
-                )
-            ],
-            cursorMs: cursorMs
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [
+                    LinearIssueSnapshot(
+                        issueKey: "LEA-1", title: "Topic", status: "In Progress",
+                        project: "", teamKey: "LEA", updatedAtMs: cursorMs
+                    )
+                ],
+                cursorMs: cursorMs
+            ))
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
@@ -1851,10 +1936,11 @@ final class LinearCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        let stored = try db.events(in: DateInterval(
-            start: Date(timeIntervalSinceNow: -3600),
-            end: Date(timeIntervalSinceNow: 3600)
-        ))
+        let stored = try db.events(
+            in: DateInterval(
+                start: Date(timeIntervalSinceNow: -3600),
+                end: Date(timeIntervalSinceNow: 3600)
+            ))
         XCTAssertNil(
             stored.first { $0.payload["event_kind"] == "linear_priority_changed" },
             "no priority transitions in batch → no event emitted"
@@ -1870,16 +1956,17 @@ final class LinearCollectorTests: XCTestCase {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
         let provider = MockLinearGraphQLProvider()
-        await provider.setBatch(LinearIssueBatch(
-            issues: [], cursorMs: nil,
-            commentReactions: [
-                LinearCommentReactionSnapshot(
-                    id: "rxn-1", commentId: "c-1", issueId: "i-1",
-                    issueIdentifier: "LEAF-7", emoji: "thumbsup",
-                    createdAtMs: 1_700_000_100_000
-                )
-            ]
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [], cursorMs: nil,
+                commentReactions: [
+                    LinearCommentReactionSnapshot(
+                        id: "rxn-1", commentId: "c-1", issueId: "i-1",
+                        issueIdentifier: "LEAF-7", emoji: "thumbsup",
+                        createdAtMs: 1_700_000_100_000
+                    )
+                ]
+            ))
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
             database: db, provider: provider, refresher: refresher,
@@ -1890,8 +1977,11 @@ final class LinearCollectorTests: XCTestCase {
         // Filter out always-emitted workload pulse — plan-tests originally asserted
         // total count but workload pulse fires every tick regardless of inputs.
         try db.readSQL { rawDB in
-            let rows = try Row.fetchAll(rawDB,
-                sql: "SELECT payload_json FROM events WHERE payload_json LIKE '%\"event_kind\":\"linear_comment_reaction_added\"%' ORDER BY id ASC")
+            let rows = try Row.fetchAll(
+                rawDB,
+                sql:
+                    "SELECT payload_json FROM events WHERE payload_json LIKE '%\"event_kind\":\"linear_comment_reaction_added\"%' ORDER BY id ASC"
+            )
             XCTAssertEqual(rows.count, 1, "Expected exactly one reaction event in DB")
             let raw = (rows.first?["payload_json"] as String?) ?? ""
             XCTAssertTrue(raw.contains("\"event_kind\":\"linear_comment_reaction_added\""))
@@ -1907,23 +1997,24 @@ final class LinearCollectorTests: XCTestCase {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
         let provider = MockLinearGraphQLProvider()
-        await provider.setBatch(LinearIssueBatch(
-            issues: [], cursorMs: nil,
-            relationAdditions: [
-                LinearRelationSnapshot(
-                    id: "rel-a", fromIssueId: "i-1", fromIssueIdentifier: "LEAF-1",
-                    toIssueId: "i-2", toIssueIdentifier: "LEAF-2",
-                    relationKind: "blocks", transitionedAtMs: 1_700_000_200_000
-                )
-            ],
-            relationRemovals: [
-                LinearRelationSnapshot(
-                    id: "rel-b", fromIssueId: "i-3", fromIssueIdentifier: "LEAF-3",
-                    toIssueId: "i-4", toIssueIdentifier: "LEAF-4",
-                    relationKind: "blocked_by", transitionedAtMs: 1_700_000_300_000
-                )
-            ]
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [], cursorMs: nil,
+                relationAdditions: [
+                    LinearRelationSnapshot(
+                        id: "rel-a", fromIssueId: "i-1", fromIssueIdentifier: "LEAF-1",
+                        toIssueId: "i-2", toIssueIdentifier: "LEAF-2",
+                        relationKind: "blocks", transitionedAtMs: 1_700_000_200_000
+                    )
+                ],
+                relationRemovals: [
+                    LinearRelationSnapshot(
+                        id: "rel-b", fromIssueId: "i-3", fromIssueIdentifier: "LEAF-3",
+                        toIssueId: "i-4", toIssueIdentifier: "LEAF-4",
+                        relationKind: "blocked_by", transitionedAtMs: 1_700_000_300_000
+                    )
+                ]
+            ))
         let collector = LinearCollector(
             database: db, provider: provider,
             refresher: LinearTokenRefresher(database: db, clientID: "test-client"),
@@ -1933,8 +2024,11 @@ final class LinearCollectorTests: XCTestCase {
         _ = await collector.performTick()
         try db.readSQL { rawDB in
             // Filter to relation events — workload pulse fires every tick regardless.
-            let rows = try Row.fetchAll(rawDB,
-                sql: "SELECT payload_json FROM events WHERE payload_json LIKE '%\"event_kind\":\"linear_relation_%' ORDER BY id ASC")
+            let rows = try Row.fetchAll(
+                rawDB,
+                sql:
+                    "SELECT payload_json FROM events WHERE payload_json LIKE '%\"event_kind\":\"linear_relation_%' ORDER BY id ASC"
+            )
             XCTAssertEqual(rows.count, 2)
             let texts = rows.compactMap { $0["payload_json"] as String? }
             XCTAssertTrue(texts.contains(where: { $0.contains("\"event_kind\":\"linear_relation_added\"") }))
@@ -1949,23 +2043,24 @@ final class LinearCollectorTests: XCTestCase {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
         let provider = MockLinearGraphQLProvider()
-        await provider.setBatch(LinearIssueBatch(
-            issues: [], cursorMs: nil,
-            triagePickedUp: [
-                LinearTriageTransitionSnapshot(
-                    issueId: "i-1", issueIdentifier: "LEAF-5", teamId: "t-1",
-                    toStateName: "Todo", toStateType: "unstarted",
-                    transitionedAtMs: 1_700_000_400_000, resolutionKind: nil
-                )
-            ],
-            triageResolved: [
-                LinearTriageTransitionSnapshot(
-                    issueId: "i-2", issueIdentifier: "LEAF-6", teamId: "t-1",
-                    toStateName: "Cancelled", toStateType: "canceled",
-                    transitionedAtMs: 1_700_000_500_000, resolutionKind: "canceled"
-                )
-            ]
-        ))
+        await provider.setBatch(
+            LinearIssueBatch(
+                issues: [], cursorMs: nil,
+                triagePickedUp: [
+                    LinearTriageTransitionSnapshot(
+                        issueId: "i-1", issueIdentifier: "LEAF-5", teamId: "t-1",
+                        toStateName: "Todo", toStateType: "unstarted",
+                        transitionedAtMs: 1_700_000_400_000, resolutionKind: nil
+                    )
+                ],
+                triageResolved: [
+                    LinearTriageTransitionSnapshot(
+                        issueId: "i-2", issueIdentifier: "LEAF-6", teamId: "t-1",
+                        toStateName: "Cancelled", toStateType: "canceled",
+                        transitionedAtMs: 1_700_000_500_000, resolutionKind: "canceled"
+                    )
+                ]
+            ))
         let collector = LinearCollector(
             database: db, provider: provider,
             refresher: LinearTokenRefresher(database: db, clientID: "test-client"),
@@ -1975,12 +2070,19 @@ final class LinearCollectorTests: XCTestCase {
         _ = await collector.performTick()
         try db.readSQL { rawDB in
             // Filter to triage events — workload pulse fires every tick regardless.
-            let rows = try Row.fetchAll(rawDB,
-                sql: "SELECT payload_json FROM events WHERE payload_json LIKE '%\"event_kind\":\"linear_triage_item_%' ORDER BY id ASC")
+            let rows = try Row.fetchAll(
+                rawDB,
+                sql:
+                    "SELECT payload_json FROM events WHERE payload_json LIKE '%\"event_kind\":\"linear_triage_item_%' ORDER BY id ASC"
+            )
             XCTAssertEqual(rows.count, 2)
             let texts = rows.compactMap { $0["payload_json"] as String? }
             XCTAssertTrue(texts.contains(where: { $0.contains("\"event_kind\":\"linear_triage_item_picked_up\"") }))
-            XCTAssertTrue(texts.contains(where: { $0.contains("\"event_kind\":\"linear_triage_item_resolved\"") && $0.contains("\"resolution_kind\":\"canceled\"") }))
+            XCTAssertTrue(
+                texts.contains(where: {
+                    $0.contains("\"event_kind\":\"linear_triage_item_resolved\"")
+                        && $0.contains("\"resolution_kind\":\"canceled\"")
+                }))
         }
     }
 }

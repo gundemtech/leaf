@@ -5,8 +5,9 @@
 //   3. Round-trip through upsert/read preserves JSON shape
 //   4. ADR-010 walkback: no raw URLs / titles / participants in stored state
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class PresenceStateWriterZoomTests: XCTestCase {
@@ -165,11 +166,12 @@ final class PresenceStateWriterZoomTests: XCTestCase {
             "meeting_started_at_ms",
             "cold_start",
             "linked_calendar_event_id",
-            "last_observed_at_ms"
+            "last_observed_at_ms",
         ]
         XCTAssertEqual(Set(state.keys), allowedKeys.intersection(state.keys))
         let unexpectedKeys = Set(state.keys).subtracting(allowedKeys)
-        XCTAssertTrue(unexpectedKeys.isEmpty,
-                      "buildZoomState emitted unexpected keys: \(unexpectedKeys)")
+        XCTAssertTrue(
+            unexpectedKeys.isEmpty,
+            "buildZoomState emitted unexpected keys: \(unexpectedKeys)")
     }
 }

@@ -7,6 +7,7 @@
 //
 
 import XCTest
+
 @testable import LeafCore
 
 final class SlackUserConversationsDiffTests: XCTestCase {
@@ -25,7 +26,7 @@ final class SlackUserConversationsDiffTests: XCTestCase {
         ])
         let curr = SlackMemberChannelsTopList(channels: [
             SlackMemberChannel(id: "C1", name: "general", latestTs: 1000),
-            SlackMemberChannel(id: "C2", name: "random", latestTs: 1500)
+            SlackMemberChannel(id: "C2", name: "random", latestTs: 1500),
         ])
         let events = SlackWarmCollector.userConversationsDiff(prior: prior, current: curr)
         XCTAssertEqual(events.joined.map(\.id), ["C2"])
@@ -35,7 +36,7 @@ final class SlackUserConversationsDiffTests: XCTestCase {
     func testLeftChannelDetected() {
         let prior = SlackMemberChannelsTopList(channels: [
             SlackMemberChannel(id: "C1", name: "general", latestTs: 1000),
-            SlackMemberChannel(id: "C2", name: "random", latestTs: 1500)
+            SlackMemberChannel(id: "C2", name: "random", latestTs: 1500),
         ])
         let curr = SlackMemberChannelsTopList(channels: [
             SlackMemberChannel(id: "C1", name: "general", latestTs: 1000)
@@ -50,7 +51,7 @@ final class SlackUserConversationsDiffTests: XCTestCase {
             SlackMemberChannel(id: "C1", name: "general", latestTs: 1000),
             SlackMemberChannel(id: "C2", name: "random", latestTs: 3000),
             SlackMemberChannel(id: "C3", name: "alerts", latestTs: 2000),
-            SlackMemberChannel(id: "C4", name: "empty", latestTs: nil)
+            SlackMemberChannel(id: "C4", name: "empty", latestTs: nil),
         ]
         let top10 = SlackWarmCollector.rankTop10ByLatestTs(from: raw)
         XCTAssertEqual(top10.channels.map(\.id), ["C2", "C3", "C1", "C4"])

@@ -8,6 +8,7 @@
 // a LeafCorePrivate dependency.
 
 import XCTest
+
 #if canImport(Darwin)
 import Darwin
 #endif
@@ -18,8 +19,9 @@ final class HookBridgeTests: XCTestCase {
 
     override func setUp() async throws {
         // /tmp/ to stay well under sun_path 104-char limit on macOS.
-        tempDir = URL(fileURLWithPath: "/tmp/leaf-bridge-test-\(UUID().uuidString.prefix(8))",
-                      isDirectory: true)
+        tempDir = URL(
+            fileURLWithPath: "/tmp/leaf-bridge-test-\(UUID().uuidString.prefix(8))",
+            isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         socketPath = tempDir.appendingPathComponent("hooks.sock").path
     }
@@ -73,8 +75,9 @@ final class HookBridgeTests: XCTestCase {
         )
         XCTAssertEqual(result.exitCode, 0, "fail-soft: exit 0 even when socket missing")
         // stderr should mention "connect failed" — observable signal for debug.
-        XCTAssertTrue(result.stderr.contains("connect"),
-                      "expected stderr to mention connect failure; got: \(result.stderr)")
+        XCTAssertTrue(
+            result.stderr.contains("connect"),
+            "expected stderr to mention connect failure; got: \(result.stderr)")
     }
 
     /// Bridge handles empty stdin gracefully (no envelope sent, exit 0).
@@ -108,8 +111,9 @@ final class HookBridgeTests: XCTestCase {
             socketOverride: socketPath
         )
         let elapsed = Date().timeIntervalSince(start)
-        XCTAssertLessThan(elapsed, 0.5,
-                          "bridge invocation should complete in well under 500ms (target <50ms p99)")
+        XCTAssertLessThan(
+            elapsed, 0.5,
+            "bridge invocation should complete in well under 500ms (target <50ms p99)")
     }
 
     // MARK: - Helpers
@@ -158,16 +162,19 @@ final class HookBridgeTests: XCTestCase {
         let candidates = [
             buildDir.appendingPathComponent("leaf-hook-bridge"),
             buildDir.appendingPathComponent("leaf-hook-bridge.product")
-                .appendingPathComponent("leaf-hook-bridge")
+                .appendingPathComponent("leaf-hook-bridge"),
         ]
         for path in candidates {
             if FileManager.default.isExecutableFile(atPath: path.path) {
                 return path.path
             }
         }
-        throw NSError(domain: "HookBridgeTests", code: 1, userInfo: [
-            NSLocalizedDescriptionKey: "leaf-hook-bridge binary not found near \(buildDir.path); tried: \(candidates.map(\.path))"
-        ])
+        throw NSError(
+            domain: "HookBridgeTests", code: 1,
+            userInfo: [
+                NSLocalizedDescriptionKey:
+                    "leaf-hook-bridge binary not found near \(buildDir.path); tried: \(candidates.map(\.path))"
+            ])
     }
 
     private func waitForListenerToReceive(_ listener: TestListener, count: Int, timeout: TimeInterval) throws {
@@ -175,8 +182,9 @@ final class HookBridgeTests: XCTestCase {
         while listener.snapshot().count < count && Date() < deadline {
             Thread.sleep(forTimeInterval: 0.02)
         }
-        XCTAssertGreaterThanOrEqual(listener.snapshot().count, count,
-                                    "timeout waiting for \(count) lines")
+        XCTAssertGreaterThanOrEqual(
+            listener.snapshot().count, count,
+            "timeout waiting for \(count) lines")
     }
 }
 
@@ -209,7 +217,10 @@ private final class TestListener: @unchecked Sendable {
         withUnsafeMutableBytes(of: &addr.sun_path) { raw in
             let buf = raw.bindMemory(to: CChar.self)
             var i = 0
-            for b in pathBytes { buf[i] = CChar(bitPattern: b); i += 1 }
+            for b in pathBytes {
+                buf[i] = CChar(bitPattern: b)
+                i += 1
+            }
             buf[i] = 0
         }
         let addrSize = socklen_t(MemoryLayout<sockaddr_un>.size)
@@ -249,7 +260,8 @@ private final class TestListener: @unchecked Sendable {
     }
 
     func snapshot() -> [String] {
-        lock.lock(); defer { lock.unlock() }
+        lock.lock()
+        defer { lock.unlock() }
         return lines
     }
 

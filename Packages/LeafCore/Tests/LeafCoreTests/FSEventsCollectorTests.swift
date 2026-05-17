@@ -2,8 +2,9 @@
 // Не тестируем actual filesystem events (это integration smoke в Day 3) —
 // только actor lifecycle: start/stop, reload diff, no-op без watched folders.
 
-import XCTest
 import OSLog
+import XCTest
+
 @testable import LeafCore
 
 private let testLogger = Logger(subsystem: "tech.gundem.leaf.test", category: "fsec")
@@ -76,14 +77,15 @@ final class FSEventsCollectorTests: XCTestCase {
         let watchedDir = tempDir.appendingPathComponent("watched-1", isDirectory: true)
         try FileManager.default.createDirectory(at: watchedDir, withIntermediateDirectories: true)
 
-        try db.addWatchedFolder(WatchedFolder(
-            id: "test-id-1",
-            path: watchedDir.resolvingSymlinksInPath().path,
-            maxGranularity: .L4,
-            enabled: true,
-            addedAt: Date(),
-            updatedAt: Date()
-        ))
+        try db.addWatchedFolder(
+            WatchedFolder(
+                id: "test-id-1",
+                path: watchedDir.resolvingSymlinksInPath().path,
+                maxGranularity: .L4,
+                enabled: true,
+                addedAt: Date(),
+                updatedAt: Date()
+            ))
 
         let collector = FSEventsCollector(
             database: db,
@@ -111,14 +113,15 @@ final class FSEventsCollectorTests: XCTestCase {
         try FileManager.default.createDirectory(at: folderA, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: folderB, withIntermediateDirectories: true)
 
-        try db.addWatchedFolder(WatchedFolder(
-            id: "id-A",
-            path: folderA.resolvingSymlinksInPath().path,
-            maxGranularity: .L4,
-            enabled: true,
-            addedAt: Date(),
-            updatedAt: Date()
-        ))
+        try db.addWatchedFolder(
+            WatchedFolder(
+                id: "id-A",
+                path: folderA.resolvingSymlinksInPath().path,
+                maxGranularity: .L4,
+                enabled: true,
+                addedAt: Date(),
+                updatedAt: Date()
+            ))
 
         let collector = FSEventsCollector(
             database: db,
@@ -135,14 +138,15 @@ final class FSEventsCollectorTests: XCTestCase {
         await collector.reload()
 
         // Add second folder + reload → diff, stream restarts.
-        try db.addWatchedFolder(WatchedFolder(
-            id: "id-B",
-            path: folderB.resolvingSymlinksInPath().path,
-            maxGranularity: .L5,
-            enabled: true,
-            addedAt: Date().addingTimeInterval(1),
-            updatedAt: Date()
-        ))
+        try db.addWatchedFolder(
+            WatchedFolder(
+                id: "id-B",
+                path: folderB.resolvingSymlinksInPath().path,
+                maxGranularity: .L5,
+                enabled: true,
+                addedAt: Date().addingTimeInterval(1),
+                updatedAt: Date()
+            ))
         await collector.reload()
 
         // Disable A → reload → stream rebuilds with только B.

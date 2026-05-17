@@ -1,5 +1,5 @@
-import Foundation
 import CryptoKit
+import Foundation
 
 /// Phase 5.3.E — peer-side counterpart to 5.3.D `KeyRotationService`. Drains
 /// pending key-rotation blobs from relay (peer-pubkey-keyed mailbox), unwraps
@@ -87,13 +87,15 @@ public struct RotationFetchService: Sendable {
 
             let applied: Bool
             if isTombstone {
-                applied = await processTombstone(blob: rotationBlob, header: header,
-                                                 orgID: org.id, selfPubHex: selfPubHex)
+                applied = await processTombstone(
+                    blob: rotationBlob, header: header,
+                    orgID: org.id, selfPubHex: selfPubHex)
                 if applied { tombstoneApplied += 1 }
             } else {
-                applied = await processRotation(blob: rotationBlob, header: header,
-                                                orgID: org.id, selfPriv: selfPriv,
-                                                selfPubHex: selfPubHex)
+                applied = await processRotation(
+                    blob: rotationBlob, header: header,
+                    orgID: org.id, selfPriv: selfPriv,
+                    selfPubHex: selfPubHex)
                 if applied { installed += 1 }
             }
 
@@ -114,8 +116,10 @@ public struct RotationFetchService: Sendable {
 
     // MARK: - Internals
 
-    private func processTombstone(blob: RotationBlob, header: RotationBlobHeader,
-                                  orgID: String, selfPubHex: String) async -> Bool {
+    private func processTombstone(
+        blob: RotationBlob, header: RotationBlobHeader,
+        orgID: String, selfPubHex: String
+    ) async -> Bool {
         // 1. Convert priorKeyID Data 16B → UUID lowercase string.
         guard let priorKeyUUID = uuidFromBytes(header.priorKeyID) else { return false }
         let priorKeyID = priorKeyUUID.uuidString.lowercased()
@@ -165,13 +169,16 @@ public struct RotationFetchService: Sendable {
         return UUID(uuid: bytes)
     }
 
-    private func processRotation(blob: RotationBlob, header: RotationBlobHeader,
-                                 orgID: String,
-                                 selfPriv: Curve25519.KeyAgreement.PrivateKey,
-                                 selfPubHex: String) async -> Bool {
+    private func processRotation(
+        blob: RotationBlob, header: RotationBlobHeader,
+        orgID: String,
+        selfPriv: Curve25519.KeyAgreement.PrivateKey,
+        selfPubHex: String
+    ) async -> Bool {
         // 1. Convert newKeyID + priorKeyID Data 16B → UUID lowercase strings.
         guard let newKeyUUID = uuidFromBytes(header.newKeyID),
-              let priorKeyUUID = uuidFromBytes(header.priorKeyID) else { return false }
+            let priorKeyUUID = uuidFromBytes(header.priorKeyID)
+        else { return false }
         let newKeyID = newKeyUUID.uuidString.lowercased()
         let priorKeyID = priorKeyUUID.uuidString.lowercased()
 
@@ -206,7 +213,8 @@ public struct RotationFetchService: Sendable {
         guard plaintext.kind == .rotation else { return false }
         guard plaintext.newKeyID == newKeyID, plaintext.priorKeyID == priorKeyID else { return false }
         guard let newTeamKeyBytes = Data(base64Encoded: plaintext.newTeamKeyBase64),
-              newTeamKeyBytes.count == 32 else { return false }
+            newTeamKeyBytes.count == 32
+        else { return false }
 
         // 5. Keystore-first: write newTeamKey bytes to disk (orphan file < orphan rows).
         do {
@@ -218,12 +226,13 @@ public struct RotationFetchService: Sendable {
         // 6. DB: insertTeamKeyIfAbsent (idempotent on duplicate id) + deprecateTeamKey.
         let nowDate = now()
         do {
-            try database.insertTeamKeyIfAbsent(TeamKey(
-                id: newKeyID,
-                generatedAt: nowDate,
-                deprecatedAt: nil,
-                generatedByMemberID: adminID
-            ))
+            try database.insertTeamKeyIfAbsent(
+                TeamKey(
+                    id: newKeyID,
+                    generatedAt: nowDate,
+                    deprecatedAt: nil,
+                    generatedByMemberID: adminID
+                ))
         } catch {
             return false
         }

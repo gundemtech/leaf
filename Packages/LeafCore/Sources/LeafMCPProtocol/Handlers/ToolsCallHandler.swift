@@ -14,7 +14,8 @@ public struct ToolsCallHandler: MethodHandler {
 
     public func handle(params: AnyCodable?) async throws -> AnyCodable {
         guard let raw = params?.value as? [String: Any],
-              let name = raw["name"] as? String else {
+            let name = raw["name"] as? String
+        else {
             throw MCPProtocolError.invalidParams(
                 "tools/call requires {name: string, arguments?: object}"
             )

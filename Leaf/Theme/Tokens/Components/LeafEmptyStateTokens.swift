@@ -11,24 +11,24 @@
 import SwiftUI
 
 enum LeafEmptyStateTokens {
-    static let chipSize:            LeafIconChipTokens.Size = .xl
-    static let chipBackgroundOpacity: Double  = 0.10
+    static let chipSize: LeafIconChipTokens.Size = .xl
+    static let chipBackgroundOpacity: Double = 0.10
     static let descriptionMaxWidth: CGFloat = 360
-    static let verticalPadding:     CGFloat = LeafSpace.xxl
+    static let verticalPadding: CGFloat = LeafSpace.xxl
 
     /// Vertical gap between chip and title — tight so they read as one block.
-    static let chipTitleGap:         CGFloat = LeafSpace.lg
+    static let chipTitleGap: CGFloat = LeafSpace.lg
     /// Title→description gap — title.medium has its own line spacing, so we
     /// only want a small breath here.
-    static let titleDescriptionGap:  CGFloat = LeafSpace.xxs
+    static let titleDescriptionGap: CGFloat = LeafSpace.xxs
     /// Description→CTA gap — slightly larger so the CTA reads as a separate
     /// affordance, not a continuation of body copy.
-    static let descriptionCTAGap:    CGFloat = LeafSpace.lg
+    static let descriptionCTAGap: CGFloat = LeafSpace.lg
 
     /// Track 2 / D2 — minimum vertical region for full-page centered
     /// placement (HomeView .notConfigured / .empty fallbacks render the
     /// state as Spacer + LeafEmptyState + Spacer inside this min height).
     /// Keeps the empty surface from collapsing into a tight band when the
     /// scroll view's intrinsic height is small.
-    static let centeredMinHeight:    CGFloat = 480
+    static let centeredMinHeight: CGFloat = 480
 }

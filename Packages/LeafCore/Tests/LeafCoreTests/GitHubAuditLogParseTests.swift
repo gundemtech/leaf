@@ -11,6 +11,7 @@
 //
 
 import XCTest
+
 @testable import LeafCore
 
 final class GitHubAuditLogParseTests: XCTestCase {

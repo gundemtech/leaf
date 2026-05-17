@@ -15,8 +15,9 @@
 //     Тест верифицирует, что helper детерминирован и не зависит ни от
 //     каких аргументов, и что schema действительно пустая в definition.)
 
-import XCTest
 import GRDB
+import XCTest
+
 @testable import LeafCore
 
 final class PresenceInsightsTests: XCTestCase {

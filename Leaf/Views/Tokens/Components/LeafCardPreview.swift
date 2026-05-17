@@ -64,7 +64,8 @@ struct LeafCardPreview: View {
             )
 
             TokensInlineSpec(
-                spec: "LeafCard · rest/raised/glass · padding tight/regular/generous · LeafColor.border.subtle hairline · raised → floating elevation · header→content sm gap · content→footer lg gap",
+                spec:
+                    "LeafCard · rest/raised/glass · padding tight/regular/generous · LeafColor.border.subtle hairline · raised → floating elevation · header→content sm gap · content→footer lg gap",
                 codeSnippet: "LeafCard(variant: .raised, padding: .regular) { Text(\"…\") }"
             )
         }

@@ -1,5 +1,6 @@
 import XCTest
 import os
+
 @testable import LeafCore
 
 final class MaintenanceSchedulerTests: XCTestCase {
@@ -39,7 +40,7 @@ final class MaintenanceSchedulerTests: XCTestCase {
             database: db,
             walCheckpointIntervalSec: 999,  // не триггерится в этом тесте
             retentionSweepIntervalSec: 999,
-            retentionDays: 0,               // cutoff == nowMs
+            retentionDays: 0,  // cutoff == nowMs
             chunkLimit: 5_000,
             logger: logger
         )
@@ -47,10 +48,11 @@ final class MaintenanceSchedulerTests: XCTestCase {
         await scheduler.performRetentionSweep(nowMs: Int64(Date().timeIntervalSince1970 * 1000))
 
         // All events must be gone (retentionDays=0 → cutoff == now → всё прошлое удалено).
-        let remaining = try db.eventCount(in: DateInterval(
-            start: Date(timeIntervalSince1970: -10),
-            end: Date(timeIntervalSince1970: 10_000_000_000)
-        ))
+        let remaining = try db.eventCount(
+            in: DateInterval(
+                start: Date(timeIntervalSince1970: -10),
+                end: Date(timeIntervalSince1970: 10_000_000_000)
+            ))
         XCTAssertEqual(remaining, 0)
     }
 
@@ -93,10 +95,12 @@ final class MaintenanceSchedulerTests: XCTestCase {
         let dayMs = Int64(86_400_000)
 
         // 5 days old → outside 3d retention.
-        try db.upsertIntensityAggregate(minuteBucketMs: nowMs - 5 * dayMs,
+        try db.upsertIntensityAggregate(
+            minuteBucketMs: nowMs - 5 * dayMs,
             keystrokes: 1, mouseMoves: 1, appSwitches: 0, foregroundApp: nil)
         // 1 day old → inside 3d retention.
-        try db.upsertIntensityAggregate(minuteBucketMs: nowMs - 1 * dayMs,
+        try db.upsertIntensityAggregate(
+            minuteBucketMs: nowMs - 1 * dayMs,
             keystrokes: 2, mouseMoves: 2, appSwitches: 0, foregroundApp: nil)
 
         let scheduler = MaintenanceScheduler(
@@ -139,8 +143,8 @@ final class MaintenanceSchedulerTests: XCTestCase {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         let scheduler = MaintenanceScheduler(
             database: db,
-            walCheckpointIntervalSec: 3_600,       // час — не должен сработать
-            retentionSweepIntervalSec: 3_600,      // час — половина = 30 мин first tick
+            walCheckpointIntervalSec: 3_600,  // час — не должен сработать
+            retentionSweepIntervalSec: 3_600,  // час — половина = 30 мин first tick
             retentionDays: 180,
             chunkLimit: 5_000,
             logger: logger
@@ -169,7 +173,7 @@ final class MaintenanceSchedulerTests: XCTestCase {
         await scheduler.start()
         await scheduler.start()  // повторный start — no-op, не создаёт второй Task
         await scheduler.stop()
-        await scheduler.stop()   // повторный stop — no-op
+        await scheduler.stop()  // повторный stop — no-op
         // No crash → test passes.
     }
 }

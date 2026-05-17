@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class XcodeStateMachineTests: XCTestCase {
@@ -21,8 +22,10 @@ final class XcodeStateMachineTests: XCTestCase {
 
     func testDocChangeEmitsDocOnly() {
         var sm = XcodeStateMachine()
-        _ = sm.observe(XcodeObservation(activeDocPath: "/a", projectName: "P", schemeName: "S", buildState: .idle), nowMs: 1000)
-        let events = sm.observe(XcodeObservation(activeDocPath: "/b", projectName: "P", schemeName: "S", buildState: .idle), nowMs: 2000)
+        _ = sm.observe(
+            XcodeObservation(activeDocPath: "/a", projectName: "P", schemeName: "S", buildState: .idle), nowMs: 1000)
+        let events = sm.observe(
+            XcodeObservation(activeDocPath: "/b", projectName: "P", schemeName: "S", buildState: .idle), nowMs: 2000)
         XCTAssertEqual(events.count, 1)
         XCTAssertEqual(events[0].payload["event_kind"], "xcode_active_doc_changed")
         XCTAssertEqual(events[0].payload["doc_path"], "/b")
@@ -30,8 +33,10 @@ final class XcodeStateMachineTests: XCTestCase {
 
     func testBuildStateChangeEmitsBuildOnly() {
         var sm = XcodeStateMachine()
-        _ = sm.observe(XcodeObservation(activeDocPath: "/p", projectName: "P", schemeName: "S", buildState: .idle), nowMs: 1000)
-        let events = sm.observe(XcodeObservation(activeDocPath: "/p", projectName: "P", schemeName: "S", buildState: .running), nowMs: 2000)
+        _ = sm.observe(
+            XcodeObservation(activeDocPath: "/p", projectName: "P", schemeName: "S", buildState: .idle), nowMs: 1000)
+        let events = sm.observe(
+            XcodeObservation(activeDocPath: "/p", projectName: "P", schemeName: "S", buildState: .running), nowMs: 2000)
         XCTAssertEqual(events.count, 1)
         XCTAssertEqual(events[0].payload["event_kind"], "xcode_build_state_changed")
         XCTAssertEqual(events[0].payload["build_state"], "running")
@@ -39,9 +44,14 @@ final class XcodeStateMachineTests: XCTestCase {
 
     func testBothChangeEmitsBoth() {
         var sm = XcodeStateMachine()
-        _ = sm.observe(XcodeObservation(activeDocPath: "/p", projectName: "P", schemeName: "S", buildState: .idle), nowMs: 1000)
-        let events = sm.observe(XcodeObservation(activeDocPath: "/q", projectName: "Q", schemeName: "S2", buildState: .succeeded), nowMs: 2000)
+        _ = sm.observe(
+            XcodeObservation(activeDocPath: "/p", projectName: "P", schemeName: "S", buildState: .idle), nowMs: 1000)
+        let events = sm.observe(
+            XcodeObservation(activeDocPath: "/q", projectName: "Q", schemeName: "S2", buildState: .succeeded),
+            nowMs: 2000)
         XCTAssertEqual(events.count, 2)
-        XCTAssertEqual(Set(events.compactMap { $0.payload["event_kind"] }), ["xcode_active_doc_changed", "xcode_build_state_changed"])
+        XCTAssertEqual(
+            Set(events.compactMap { $0.payload["event_kind"] }),
+            ["xcode_active_doc_changed", "xcode_build_state_changed"])
     }
 }

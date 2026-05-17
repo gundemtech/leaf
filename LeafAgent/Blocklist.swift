@@ -14,6 +14,6 @@ enum Blocklist {
         "com.apple.loginwindow",
         "com.apple.ScreenSaver.Engine",
         "com.apple.dock",
-        "com.apple.WindowManager"
+        "com.apple.WindowManager",
     ]
 }

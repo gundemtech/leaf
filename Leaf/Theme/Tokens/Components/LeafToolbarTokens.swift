@@ -9,6 +9,6 @@ import CoreGraphics
 
 enum LeafToolbarTokens {
     static let horizontalPadding: CGFloat = LeafSpace.lg
-    static let verticalPadding:   CGFloat = LeafSpace.md
-    static let slotSpacing:       CGFloat = LeafSpace.md
+    static let verticalPadding: CGFloat = LeafSpace.md
+    static let slotSpacing: CGFloat = LeafSpace.md
 }

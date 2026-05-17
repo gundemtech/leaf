@@ -8,8 +8,8 @@
 //  Track 2 / D4 — migrated to LeafSheetLayout + LeafCard.raised + LeafBanner.
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct RemoveMemberSheet: View {
     @Environment(MemberRemovalReader.self) private var reader
@@ -43,7 +43,11 @@ struct RemoveMemberSheet: View {
             confirmCard
         case .removing:
             confirmCard
-            HStack { Spacer(); ProgressView("Rotating team key…"); Spacer() }
+            HStack {
+                Spacer()
+                ProgressView("Rotating team key…")
+                Spacer()
+            }
         case .success(let outcome, let dn):
             successCard(displayName: dn, outcome: outcome)
         case .error(let message):
@@ -53,9 +57,11 @@ struct RemoveMemberSheet: View {
 
     private var confirmCard: some View {
         LeafCard(variant: .raised, padding: .regular) {
-            Text("This rotates the team key. \(displayName) won't be able to send presence under the previous key. They'll see a 'You've been removed' message in their app on next sync.")
-                .font(LeafType.body.regular)
-                .foregroundStyle(LeafColor.text.primary)
+            Text(
+                "This rotates the team key. \(displayName) won't be able to send presence under the previous key. They'll see a 'You've been removed' message in their app on next sync."
+            )
+            .font(LeafType.body.regular)
+            .foregroundStyle(LeafColor.text.primary)
         }
     }
 
@@ -77,7 +83,8 @@ struct RemoveMemberSheet: View {
 
     private func successSummary(outcome: RotationOutcome) -> String {
         if outcome.pendingCount > 0 {
-            return "\(outcome.postedCount) of \(outcome.totalCount) peers notified. \(outcome.pendingCount) will sync when online."
+            return
+                "\(outcome.postedCount) of \(outcome.totalCount) peers notified. \(outcome.pendingCount) will sync when online."
         } else if outcome.postedCount > 0 {
             return "All \(outcome.postedCount) peer\(outcome.postedCount == 1 ? "" : "s") notified."
         } else {

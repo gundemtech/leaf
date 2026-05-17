@@ -3,9 +3,10 @@
 // signature locks `RelayClient` as concrete actor, not protocol).
 // Recording doubles for InviteKDF / InviteBlobCodec capture chain args.
 
-import XCTest
 import CryptoKit
 import Foundation
+import XCTest
+
 @testable import LeafCore
 
 private final class InviteServiceMockURLProtocol: URLProtocol {
@@ -112,12 +113,14 @@ final class InviteServiceTests: XCTestCase {
         adminPriv = Curve25519.KeyAgreement.PrivateKey()
 
         let pubkeyHex = adminPriv.publicKey.rawRepresentation.map { String(format: "%02x", $0) }.joined()
-        let member = TeamMember(id: memberID, orgID: orgID, role: .admin,
-                                pubkeyHex: pubkeyHex, displayName: "Admin User",
-                                addedAt: fixedNow, removedAt: nil)
+        let member = TeamMember(
+            id: memberID, orgID: orgID, role: .admin,
+            pubkeyHex: pubkeyHex, displayName: "Admin User",
+            addedAt: fixedNow, removedAt: nil)
         let org = Org(id: orgID, name: "Test Org", createdAt: fixedNow, createdByMemberID: memberID)
-        let teamKey = TeamKey(id: teamKeyID, generatedAt: fixedNow, deprecatedAt: nil,
-                              generatedByMemberID: memberID)
+        let teamKey = TeamKey(
+            id: teamKeyID, generatedAt: fixedNow, deprecatedAt: nil,
+            generatedByMemberID: memberID)
         try db.upsertOrg(org)
         try db.insertTeamMember(member)
         try db.insertTeamKey(teamKey)
@@ -139,17 +142,19 @@ final class InviteServiceTests: XCTestCase {
     private func makeRelayClient() -> RelayClient {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [InviteServiceMockURLProtocol.self]
-        return RelayClient(baseURL: URL(string: "https://stub.example")!,
-                           urlSession: URLSession(configuration: config))
+        return RelayClient(
+            baseURL: URL(string: "https://stub.example")!,
+            urlSession: URLSession(configuration: config))
     }
 
     private func stub201(token: String, expiresAtMs: Int64) {
         InviteServiceMockURLProtocol.handler = { req, _ in
             let body = """
-            {"token":"\(token)","expires_at_ms":\(expiresAtMs)}
-            """.data(using: .utf8)!
-            let resp = HTTPURLResponse(url: req.url!, statusCode: 201, httpVersion: nil,
-                                       headerFields: ["Content-Type": "application/json"])!
+                {"token":"\(token)","expires_at_ms":\(expiresAtMs)}
+                """.data(using: .utf8)!
+            let resp = HTTPURLResponse(
+                url: req.url!, statusCode: 201, httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"])!
             return (resp, body)
         }
     }
@@ -226,8 +231,9 @@ final class InviteServiceTests: XCTestCase {
 
         let body = try XCTUnwrap(InviteServiceMockURLProtocol.lastBody)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
-        XCTAssertEqual(json["member_pubkey_hex"] as? String,
-                       "aabbccdd" + String(repeating: "e", count: 56))
+        XCTAssertEqual(
+            json["member_pubkey_hex"] as? String,
+            "aabbccdd" + String(repeating: "e", count: 56))
     }
 
     // MARK: - 5
@@ -275,8 +281,9 @@ final class InviteServiceTests: XCTestCase {
         // wipe DB.
         let emptyDir = tempDir.appendingPathComponent("empty", isDirectory: true)
         try FileManager.default.createDirectory(at: emptyDir, withIntermediateDirectories: true)
-        let emptyDB = try Database.openForWrite(at: emptyDir.appendingPathComponent("events.sqlite"),
-                                                config: .weakDefaults, encryption: .deterministicTest)
+        let emptyDB = try Database.openForWrite(
+            at: emptyDir.appendingPathComponent("events.sqlite"),
+            config: .weakDefaults, encryption: .deterministicTest)
         let nowLocal = fixedNow!
         let privLocal = adminPriv!
         let svc = InviteService(
@@ -306,13 +313,16 @@ final class InviteServiceTests: XCTestCase {
         // create new DB with org+member but no team_keys row.
         let dir = tempDir.appendingPathComponent("noteamkey", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let db2 = try Database.openForWrite(at: dir.appendingPathComponent("events.sqlite"),
-                                            config: .weakDefaults, encryption: .deterministicTest)
+        let db2 = try Database.openForWrite(
+            at: dir.appendingPathComponent("events.sqlite"),
+            config: .weakDefaults, encryption: .deterministicTest)
         let pub = adminPriv.publicKey.rawRepresentation.map { String(format: "%02x", $0) }.joined()
         try db2.upsertOrg(Org(id: orgID, name: "X", createdAt: fixedNow, createdByMemberID: memberID))
-        try db2.insertTeamMember(TeamMember(id: memberID, orgID: orgID, role: .admin,
-                                            pubkeyHex: pub, displayName: "U",
-                                            addedAt: fixedNow, removedAt: nil))
+        try db2.insertTeamMember(
+            TeamMember(
+                id: memberID, orgID: orgID, role: .admin,
+                pubkeyHex: pub, displayName: "U",
+                addedAt: fixedNow, removedAt: nil))
         let nowLocal = fixedNow!
         let privLocal = adminPriv!
         let svc = InviteService(
@@ -356,8 +366,9 @@ final class InviteServiceTests: XCTestCase {
 
     func testGenerateInvite_RelayFails_PropagatesRelayUnreachable() async {
         InviteServiceMockURLProtocol.handler = { req, _ in
-            let resp = HTTPURLResponse(url: req.url!, statusCode: 500, httpVersion: nil,
-                                       headerFields: ["Content-Type": "application/json"])!
+            let resp = HTTPURLResponse(
+                url: req.url!, statusCode: 500, httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"])!
             return (resp, nil)
         }
         let svc = makeService()
@@ -375,8 +386,9 @@ final class InviteServiceTests: XCTestCase {
 
     func testRevokeInvite_CallsRelayDelete() async throws {
         InviteServiceMockURLProtocol.handler = { req, _ in
-            let resp = HTTPURLResponse(url: req.url!, statusCode: 204, httpVersion: nil,
-                                       headerFields: nil)!
+            let resp = HTTPURLResponse(
+                url: req.url!, statusCode: 204, httpVersion: nil,
+                headerFields: nil)!
             return (resp, nil)
         }
         let svc = makeService()

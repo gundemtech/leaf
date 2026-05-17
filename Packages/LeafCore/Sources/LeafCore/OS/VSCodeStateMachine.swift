@@ -15,21 +15,24 @@ public struct VSCodeStateMachine: Sendable, Hashable {
         let last = prev[obs.ideBundleID]
         defer { prev[obs.ideBundleID] = obs }
         if let l = last,
-           l.workspaceName == obs.workspaceName,
-           l.fileBasename == obs.fileBasename {
+            l.workspaceName == obs.workspaceName,
+            l.fileBasename == obs.fileBasename
+        {
             return []
         }
         var payload: [String: String] = [
             "event_kind": "vscode_active_doc_changed",
-            "ide_bundle_id": obs.ideBundleID
+            "ide_bundle_id": obs.ideBundleID,
         ]
         if let w = obs.workspaceName { payload["workspace_name"] = w }
         if let f = obs.fileBasename { payload["file_basename"] = f }
-        return [RawEvent(
-            timestamp: Date(timeIntervalSince1970: Double(nowMs) / 1000.0),
-            signalType: .attention,
-            bundleID: obs.ideBundleID,
-            payload: payload
-        )]
+        return [
+            RawEvent(
+                timestamp: Date(timeIntervalSince1970: Double(nowMs) / 1000.0),
+                signalType: .attention,
+                bundleID: obs.ideBundleID,
+                payload: payload
+            )
+        ]
     }
 }

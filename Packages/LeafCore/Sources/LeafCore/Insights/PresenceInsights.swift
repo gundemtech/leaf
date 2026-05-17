@@ -76,13 +76,13 @@ public enum PresenceInsights {
                     // не увидят shape "derived_mode: null". Phase 4.9 начнёт
                     // populate'ить string-значениями.
                     "derived_mode": entry.derivedMode as Any? ?? NSNull(),
-                    "updated_at_ms": entry.updatedAtMs
+                    "updated_at_ms": entry.updatedAtMs,
                 ]
             }
         }
         return [
             "providers": providers,
-            "observed_at_ms": Int64(Date().timeIntervalSince1970 * 1000)
+            "observed_at_ms": Int64(Date().timeIntervalSince1970 * 1000),
         ]
     }
 
@@ -138,18 +138,18 @@ public enum PresenceInsights {
             "prs_awaiting_my_review": 0,
             "my_open_prs": 0,
             "notifications_unread": 0,
-            "actions_runs_in_progress": 0
+            "actions_runs_in_progress": 0,
         ]
         var linear: [String: Any] = [
             "started_count": 0,
             "top_priority": "none",
-            "current_cycle": [:] as [String: Any]
+            "current_cycle": [:] as [String: Any],
         ]
         var slack: [String: Any] = [
             "mentions_received_today": 0,
             "files_uploaded_today": 0,
             "dnd_active": false,
-            "native_presence": "unknown"
+            "native_presence": "unknown",
         ]
 
         try database.readSQL { rawDB in
@@ -182,7 +182,8 @@ public enum PresenceInsights {
             // 3. presence_state.slack → dnd_active + native_presence.
             if let entry = try PresenceStateWriter.read(provider: .slack, in: rawDB) {
                 if let dnd = entry.state["dnd"] as? [String: Any],
-                   let isActive = dnd["is_active"] as? Bool {
+                    let isActive = dnd["is_active"] as? Bool
+                {
                     slack["dnd_active"] = isActive
                 }
                 if let v = entry.state["native_presence"] as? String {
@@ -224,7 +225,7 @@ public enum PresenceInsights {
             "linear": linear,
             "slack": slack,
             "period": period.rawValue,
-            "observed_at_ms": Int64(now.timeIntervalSince1970 * 1000)
+            "observed_at_ms": Int64(now.timeIntervalSince1970 * 1000),
         ]
     }
 

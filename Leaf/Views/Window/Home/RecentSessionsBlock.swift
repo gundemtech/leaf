@@ -8,8 +8,8 @@
 //  of bare text — gives the panel actual mass on a fresh install.
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct RecentSessionsBlock: View {
     let sessions: [ActivitySession]

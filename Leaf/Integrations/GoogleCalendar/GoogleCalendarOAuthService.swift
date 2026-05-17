@@ -24,11 +24,12 @@
 //  namespace — same Swift module (`Leaf`).
 //
 
-import Foundation
 import AppKit
+import Foundation
 import LeafCore
 import Observation
 import os
+
 #if LEAF_PROD
 import LeafCorePrivate
 #endif
@@ -44,12 +45,14 @@ private final class AssignedPortBox: @unchecked Sendable {
     nonisolated(unsafe) private var port: UInt16?
 
     nonisolated func set(_ p: UInt16) {
-        lock.lock(); defer { lock.unlock() }
+        lock.lock()
+        defer { lock.unlock() }
         port = p
     }
 
     nonisolated func value() -> UInt16? {
-        lock.lock(); defer { lock.unlock() }
+        lock.lock()
+        defer { lock.unlock() }
         return port
     }
 }
@@ -139,11 +142,17 @@ final class GoogleCalendarOAuthService {
     /// Drive the full PKCE flow. Caller — UI "Connect Google Calendar" button.
     func connect() async {
         guard let clientID = readBundleString(GoogleCalendarOAuthEndpoints.infoPlistClientIDKey) else {
-            state = .error(message: "\(GoogleCalendarOAuthEndpoints.infoPlistClientIDKey) is not configured. See Config/Local.xcconfig.example.")
+            state = .error(
+                message:
+                    "\(GoogleCalendarOAuthEndpoints.infoPlistClientIDKey) is not configured. See Config/Local.xcconfig.example."
+            )
             return
         }
         guard let clientSecret = readBundleString(GoogleCalendarOAuthEndpoints.infoPlistClientSecretKey) else {
-            state = .error(message: "\(GoogleCalendarOAuthEndpoints.infoPlistClientSecretKey) is not configured. See Config/Local.xcconfig.example.")
+            state = .error(
+                message:
+                    "\(GoogleCalendarOAuthEndpoints.infoPlistClientSecretKey) is not configured. See Config/Local.xcconfig.example."
+            )
             return
         }
 
@@ -167,7 +176,10 @@ final class GoogleCalendarOAuthService {
         // 100 × 10ms is a generous ceiling that errs on the safe side.
         var assignedPortOpt: UInt16? = nil
         for _ in 0..<100 {
-            if let p = portBox.value() { assignedPortOpt = p; break }
+            if let p = portBox.value() {
+                assignedPortOpt = p
+                break
+            }
             try? await Task.sleep(for: .milliseconds(10))
         }
         guard let assignedPort = assignedPortOpt else {
@@ -177,7 +189,8 @@ final class GoogleCalendarOAuthService {
         }
         state = .waitingForCallback(port: assignedPort)
 
-        let redirectURI = "http://\(GoogleCalendarOAuthEndpoints.redirectHost):\(assignedPort)\(GoogleCalendarOAuthEndpoints.redirectPath)"
+        let redirectURI =
+            "http://\(GoogleCalendarOAuthEndpoints.redirectHost):\(assignedPort)\(GoogleCalendarOAuthEndpoints.redirectPath)"
         let authorizeURL = GoogleCalendarOAuthEndpoints.authorizeURL(
             clientID: clientID,
             challenge: challenge.challenge,
@@ -227,7 +240,8 @@ final class GoogleCalendarOAuthService {
             // throws above) — double-check here so the persistence step can
             // pass a non-optional refresh_token down.
             guard let refreshToken = tokenResponse.refreshToken else {
-                state = .error(message: "Google did not return a refresh_token. Sign out of any prior Leaf grant and retry.")
+                state = .error(
+                    message: "Google did not return a refresh_token. Sign out of any prior Leaf grant and retry.")
                 return
             }
 
@@ -246,7 +260,8 @@ final class GoogleCalendarOAuthService {
 
             // Workspace name: prefer user-set override, fall back to system
             // summary, finally fall back to the calendar id (the email).
-            let workspaceName = primaryEntry.summaryOverride
+            let workspaceName =
+                primaryEntry.summaryOverride
                 ?? primaryEntry.summary
                 ?? primaryEntry.id
 
@@ -312,9 +327,9 @@ final class GoogleCalendarOAuthService {
 
     private func readBundleString(_ key: String) -> String? {
         guard let value = Bundle.main.object(forInfoDictionaryKey: key) as? String,
-              !value.isEmpty,
-              // Reject unsubstituted xcconfig placeholders ("$(LEAF_GCAL_…)").
-              !value.contains("$(")
+            !value.isEmpty,
+            // Reject unsubstituted xcconfig placeholders ("$(LEAF_GCAL_…)").
+            !value.contains("$(")
         else { return nil }
         return value
     }

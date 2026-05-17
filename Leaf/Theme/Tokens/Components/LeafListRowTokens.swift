@@ -9,6 +9,6 @@ import CoreGraphics
 
 enum LeafListRowTokens {
     static let horizontalPadding: CGFloat = LeafSpace.md
-    static let verticalPadding:   CGFloat = LeafSpace.sm
-    static let cornerRadius:      CGFloat = LeafRadius.md
+    static let verticalPadding: CGFloat = LeafSpace.sm
+    static let cornerRadius: CGFloat = LeafRadius.md
 }

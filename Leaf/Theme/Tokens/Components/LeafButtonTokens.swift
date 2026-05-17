@@ -43,9 +43,9 @@ enum LeafButtonTokens {
         /// same visual weight as the surrounding label text.
         var iconPt: CGFloat {
             switch self {
-            case .sm: 13   // body.small
-            case .md: 15   // body.regular
-            case .lg: 17   // body.large
+            case .sm: 13  // body.small
+            case .md: 15  // body.regular
+            case .lg: 17  // body.large
             }
         }
     }
@@ -53,18 +53,18 @@ enum LeafButtonTokens {
     enum Background {
         static func resting(_ variant: Variant) -> Color {
             switch variant {
-            case .primary:     LeafColor.accent.primary
-            case .secondary:   LeafColor.surface.raised
-            case .ghost:       Color.clear
+            case .primary: LeafColor.accent.primary
+            case .secondary: LeafColor.surface.raised
+            case .ghost: Color.clear
             case .destructive: LeafColor.status.danger
             }
         }
 
         static func hover(_ variant: Variant) -> Color {
             switch variant {
-            case .primary:     LeafColor.accent.emphasis
-            case .secondary:   LeafColor.surface.inset
-            case .ghost:       LeafColor.surface.raised
+            case .primary: LeafColor.accent.emphasis
+            case .secondary: LeafColor.surface.inset
+            case .ghost: LeafColor.surface.raised
             case .destructive: LeafColor.status.danger.opacity(0.85)
             }
         }
@@ -73,9 +73,9 @@ enum LeafButtonTokens {
     enum Foreground {
         static func resting(_ variant: Variant) -> Color {
             switch variant {
-            case .primary:     LeafColor.text.inverse
-            case .secondary:   LeafColor.text.primary
-            case .ghost:       LeafColor.text.primary
+            case .primary: LeafColor.text.inverse
+            case .secondary: LeafColor.text.primary
+            case .ghost: LeafColor.text.primary
             case .destructive: LeafColor.text.inverse
             }
         }

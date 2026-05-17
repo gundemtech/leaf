@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class InputMonitoringPermissionStoreTests: XCTestCase {
@@ -25,8 +26,9 @@ final class InputMonitoringPermissionStoreTests: XCTestCase {
         let store = InputMonitoringPermissionStore(defaults: defaults)
         store.record(.granted, nowMs: 1_000)
         XCTAssertEqual(store.cachedState(), .granted)
-        XCTAssertTrue(store.shouldProbe(nowMs: 2_000),
-                      "granted re-probes (revoke detection)")
+        XCTAssertTrue(
+            store.shouldProbe(nowMs: 2_000),
+            "granted re-probes (revoke detection)")
     }
 
     func testDeniedRoundTripPreservesTimestamp() {
@@ -38,17 +40,20 @@ final class InputMonitoringPermissionStoreTests: XCTestCase {
     func testDenialBackoff24h() {
         let store = InputMonitoringPermissionStore(defaults: defaults)
         store.record(.denied(0), nowMs: 0)
-        XCTAssertFalse(store.shouldProbe(nowMs: 24 * 3600 * 1000 - 1),
-                       "within 24h must not re-probe")
-        XCTAssertTrue(store.shouldProbe(nowMs: 24 * 3600 * 1000 + 1),
-                      "past 24h must re-probe")
+        XCTAssertFalse(
+            store.shouldProbe(nowMs: 24 * 3600 * 1000 - 1),
+            "within 24h must not re-probe")
+        XCTAssertTrue(
+            store.shouldProbe(nowMs: 24 * 3600 * 1000 + 1),
+            "past 24h must re-probe")
     }
 
     func testUnavailableTerminal() {
         let store = InputMonitoringPermissionStore(defaults: defaults)
         store.record(.unavailable, nowMs: 0)
         XCTAssertEqual(store.cachedState(), .unavailable)
-        XCTAssertFalse(store.shouldProbe(nowMs: 1_000_000),
-                       "unavailable terminal — never re-probes")
+        XCTAssertFalse(
+            store.shouldProbe(nowMs: 1_000_000),
+            "unavailable terminal — never re-probes")
     }
 }
