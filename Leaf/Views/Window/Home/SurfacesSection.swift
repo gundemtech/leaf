@@ -110,18 +110,36 @@ struct SurfacesSection: View {
                 toolsStore: permissions.aiToolsStore,
                 onTap: { coordinator.pushHome(.claudeCode) }
             )
-        case .xcode, .ides, .browsers, .zoom, .calendar:
-            // Track-7 promoted-but-no-payload placeholder. The surface is
-            // capturing (its store / OAuth says ON) but the per-surface
-            // Payload mapper lands in P2-collapsed. Tap routes into the
-            // detail screen which already renders a "coming soon" empty
-            // state today; the card itself signals the same.
-            SurfaceCard(
-                surface: surface,
-                headline: "Captured",
-                subStats: ["Detail coming soon"],
-                spark: { Color.clear },
-                onTap: { coordinator.pushHome(surface) }
+        case .xcode:
+            XcodeCardWrapper(
+                snapshot: snapshot,
+                localAppsStore: permissions.localAppsStore,
+                onTap: { coordinator.pushHome(.xcode) }
+            )
+        case .ides:
+            IDEsCardWrapper(
+                snapshot: snapshot,
+                localAppsStore: permissions.localAppsStore,
+                onTap: { coordinator.pushHome(.ides) }
+            )
+        case .browsers:
+            BrowsersCardWrapper(
+                snapshot: snapshot,
+                localAppsStore: permissions.localAppsStore,
+                browserAllowList: browserAllowList,
+                onTap: { coordinator.pushHome(.browsers) }
+            )
+        case .zoom:
+            ZoomCardWrapper(
+                snapshot: snapshot,
+                localAppsStore: permissions.localAppsStore,
+                onTap: { coordinator.pushHome(.zoom) }
+            )
+        case .calendar:
+            GoogleCalendarCardWrapper(
+                snapshot: snapshot,
+                calendarOAuth: calendarOAuth,
+                onTap: { coordinator.pushHome(.calendar) }
             )
         }
     }
@@ -214,6 +232,329 @@ private struct ClaudeCodeCardWrapper: View {
         }
         if payload.sessionCount > 0 {
             out.append("\(payload.sessionCount) session\(payload.sessionCount == 1 ? "" : "s")")
+        }
+        return out
+    }
+}
+
+// MARK: - Surface duration helper
+
+/// Shared formatter for surfaces that surface a total-time headline (Zoom,
+/// Google Calendar focus duration). Hours when >= 1h, otherwise minutes.
+private func formatHours(_ seconds: TimeInterval) -> String {
+    let hours = seconds / 3600.0
+    if hours >= 1 { return String(format: "%.1fh", hours) }
+    let minutes = Int(seconds / 60.0)
+    return "\(minutes)m"
+}
+
+// MARK: - Xcode card wrapper
+
+private struct XcodeCardWrapper: View {
+    let snapshot: InsightsSnapshot?
+    let localAppsStore: LocalAppsStore
+    let onTap: () -> Void
+
+    var body: some View {
+        switch XcodeSurfaceCardViewModel.state(localAppsStore: localAppsStore, snapshot: snapshot) {
+        case .disabled:
+            EmptyView()
+        case .enabledLoading:
+            SurfaceCard(
+                surface: .xcode,
+                headline: "Loading…",
+                subStats: [],
+                spark: { Color.clear },
+                onTap: onTap
+            )
+        case .enabledZeroToday, .enabledEmpty:
+            SurfaceCard(
+                surface: .xcode,
+                headline: "Open for details",
+                subStats: ["Daily activity in the detail screen"],
+                spark: { Color.clear },
+                onTap: onTap
+            )
+        case .enabledPopulated(let payload):
+            SurfaceCard(
+                surface: .xcode,
+                headline: "\(payload.buildCount) build\(payload.buildCount == 1 ? "" : "s") · \(payload.testRunCount) test\(payload.testRunCount == 1 ? "" : "s")",
+                subStats: subStats(for: payload),
+                spark: { LeafSparkline(values: payload.dailyBuilds) },
+                onTap: onTap
+            )
+        case .error(let message):
+            SurfaceCard(
+                surface: .xcode,
+                headline: "Couldn't load",
+                subStats: [message],
+                spark: { Color.clear },
+                onTap: onTap
+            )
+        }
+    }
+
+    private func subStats(for payload: XcodeCardPayload) -> [String] {
+        var out: [String] = []
+        if payload.buildSuccessCount > 0 {
+            out.append("\(payload.buildSuccessCount) passed")
+        }
+        if payload.buildFailureCount > 0 {
+            out.append("\(payload.buildFailureCount) failed")
+        }
+        if payload.schemesTouchedCount > 0 {
+            out.append("\(payload.schemesTouchedCount) scheme\(payload.schemesTouchedCount == 1 ? "" : "s") touched")
+        }
+        return out
+    }
+}
+
+// MARK: - IDEs card wrapper
+
+private struct IDEsCardWrapper: View {
+    let snapshot: InsightsSnapshot?
+    let localAppsStore: LocalAppsStore
+    let onTap: () -> Void
+
+    var body: some View {
+        switch IDEsSurfaceCardViewModel.state(localAppsStore: localAppsStore, snapshot: snapshot) {
+        case .disabled:
+            EmptyView()
+        case .enabledLoading:
+            SurfaceCard(
+                surface: .ides,
+                headline: "Loading…",
+                subStats: [],
+                spark: { Color.clear },
+                onTap: onTap
+            )
+        case .enabledZeroToday, .enabledEmpty:
+            SurfaceCard(
+                surface: .ides,
+                headline: "Open for details",
+                subStats: ["Daily activity in the detail screen"],
+                spark: { Color.clear },
+                onTap: onTap
+            )
+        case .enabledPopulated(let payload):
+            SurfaceCard(
+                surface: .ides,
+                headline: "\(payload.fileEventCount) file\(payload.fileEventCount == 1 ? "" : "s") in \(payload.workspaceCount) workspace\(payload.workspaceCount == 1 ? "" : "s")",
+                subStats: subStats(for: payload),
+                spark: { LeafSparkline(values: payload.dailyEvents) },
+                onTap: onTap
+            )
+        case .error(let message):
+            SurfaceCard(
+                surface: .ides,
+                headline: "Couldn't load",
+                subStats: [message],
+                spark: { Color.clear },
+                onTap: onTap
+            )
+        }
+    }
+
+    private func subStats(for payload: IDEsCardPayload) -> [String] {
+        var out: [String] = []
+        if payload.vscodeFamilyEventCount > 0 {
+            out.append("VSCode-family: \(payload.vscodeFamilyEventCount)")
+        }
+        if payload.jetbrainsEventCount > 0 {
+            out.append("JetBrains: \(payload.jetbrainsEventCount)")
+        }
+        if payload.fallbackTitleCount > 0 {
+            out.append("\(payload.fallbackTitleCount) fallback titles")
+        }
+        return out
+    }
+}
+
+// MARK: - Browsers card wrapper
+
+private struct BrowsersCardWrapper: View {
+    let snapshot: InsightsSnapshot?
+    let localAppsStore: LocalAppsStore
+    let browserAllowList: BrowserAllowListStore
+    let onTap: () -> Void
+
+    var body: some View {
+        switch BrowsersSurfaceCardViewModel.state(
+            localAppsStore: localAppsStore,
+            browserAllowList: browserAllowList,
+            snapshot: snapshot
+        ) {
+        case .disabled:
+            EmptyView()
+        case .enabledLoading:
+            SurfaceCard(
+                surface: .browsers,
+                headline: "Loading…",
+                subStats: [],
+                spark: { Color.clear },
+                onTap: onTap
+            )
+        case .enabledZeroToday, .enabledEmpty:
+            SurfaceCard(
+                surface: .browsers,
+                headline: "Open for details",
+                subStats: ["Daily activity in the detail screen"],
+                spark: { Color.clear },
+                onTap: onTap
+            )
+        case .enabledPopulated(let payload):
+            SurfaceCard(
+                surface: .browsers,
+                headline: "\(payload.pageCount) page\(payload.pageCount == 1 ? "" : "s") on \(payload.domainCount) domain\(payload.domainCount == 1 ? "" : "s")",
+                subStats: subStats(for: payload),
+                spark: { LeafSparkline(values: payload.dailyNavigations) },
+                onTap: onTap
+            )
+        case .error(let message):
+            SurfaceCard(
+                surface: .browsers,
+                headline: "Couldn't load",
+                subStats: [message],
+                spark: { Color.clear },
+                onTap: onTap
+            )
+        }
+    }
+
+    private func subStats(for payload: BrowsersCardPayload) -> [String] {
+        var out: [String] = []
+        if payload.safariCount > 0 {
+            out.append("Safari: \(payload.safariCount)")
+        }
+        if payload.chromeCount > 0 {
+            out.append("Chrome: \(payload.chromeCount)")
+        }
+        if payload.arcCount > 0 {
+            out.append("Arc: \(payload.arcCount)")
+        }
+        if payload.bookmarksAddedCount > 0 {
+            out.append("\(payload.bookmarksAddedCount) bookmarks added")
+        }
+        return out
+    }
+}
+
+// MARK: - Zoom card wrapper
+
+private struct ZoomCardWrapper: View {
+    let snapshot: InsightsSnapshot?
+    let localAppsStore: LocalAppsStore
+    let onTap: () -> Void
+
+    var body: some View {
+        switch ZoomSurfaceCardViewModel.state(localAppsStore: localAppsStore, snapshot: snapshot) {
+        case .disabled:
+            EmptyView()
+        case .enabledLoading:
+            SurfaceCard(
+                surface: .zoom,
+                headline: "Loading…",
+                subStats: [],
+                spark: { Color.clear },
+                onTap: onTap
+            )
+        case .enabledZeroToday, .enabledEmpty:
+            SurfaceCard(
+                surface: .zoom,
+                headline: "Open for details",
+                subStats: ["Daily activity in the detail screen"],
+                spark: { Color.clear },
+                onTap: onTap
+            )
+        case .enabledPopulated(let payload):
+            SurfaceCard(
+                surface: .zoom,
+                headline: "\(formatHours(payload.totalDurationSeconds)) meeting time",
+                subStats: subStats(for: payload),
+                spark: { LeafSparkline(values: payload.dailyMinutes) },
+                onTap: onTap
+            )
+        case .error(let message):
+            SurfaceCard(
+                surface: .zoom,
+                headline: "Couldn't load",
+                subStats: [message],
+                spark: { Color.clear },
+                onTap: onTap
+            )
+        }
+    }
+
+    private func subStats(for payload: ZoomCardPayload) -> [String] {
+        var out: [String] = []
+        out.append("\(payload.meetingCount) meeting\(payload.meetingCount == 1 ? "" : "s")")
+        if payload.calendarLinkedCount > 0 {
+            out.append("\(payload.calendarLinkedCount) calendar-linked")
+        }
+        if payload.adHocCount > 0 {
+            out.append("\(payload.adHocCount) ad-hoc")
+        }
+        return out
+    }
+}
+
+// MARK: - Google Calendar card wrapper
+
+/// Calendar carve-out per spec §3.5: zero-today renders `"Captured · Waiting
+/// for events"` (not the generic "Open for details"), because the surface is
+/// gated on GCP acceptance and we want to differentiate between
+/// "captured-but-quiet today" and "captured-but-not-yet-aggregated".
+private struct GoogleCalendarCardWrapper: View {
+    let snapshot: InsightsSnapshot?
+    let calendarOAuth: GoogleCalendarOAuthService
+    let onTap: () -> Void
+
+    var body: some View {
+        switch GoogleCalendarSurfaceCardViewModel.state(calendarOAuth: calendarOAuth, snapshot: snapshot) {
+        case .disabled:
+            EmptyView()
+        case .enabledLoading:
+            SurfaceCard(
+                surface: .calendar,
+                headline: "Loading…",
+                subStats: [],
+                spark: { Color.clear },
+                onTap: onTap
+            )
+        case .enabledZeroToday, .enabledEmpty:
+            SurfaceCard(
+                surface: .calendar,
+                headline: "Captured · Waiting for events",
+                subStats: ["Detail aggregates after GCP gate clears"],
+                spark: { Color.clear },
+                onTap: onTap
+            )
+        case .enabledPopulated(let payload):
+            SurfaceCard(
+                surface: .calendar,
+                headline: "\(payload.focusBlockCount) focus block\(payload.focusBlockCount == 1 ? "" : "s") · \(formatHours(payload.focusDurationSeconds))",
+                subStats: subStats(for: payload),
+                spark: { LeafSparkline(values: payload.dailyFocusMinutes) },
+                onTap: onTap
+            )
+        case .error(let message):
+            SurfaceCard(
+                surface: .calendar,
+                headline: "Couldn't load",
+                subStats: [message],
+                spark: { Color.clear },
+                onTap: onTap
+            )
+        }
+    }
+
+    private func subStats(for payload: GoogleCalendarCardPayload) -> [String] {
+        var out: [String] = []
+        if payload.oooBlockCount > 0 {
+            out.append("\(payload.oooBlockCount) OOO blocks")
+        }
+        if payload.workingLocationCount > 0 {
+            out.append("\(payload.workingLocationCount) working location entries")
         }
         return out
     }
