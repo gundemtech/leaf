@@ -217,14 +217,16 @@ final class InsightsReader {
         }
     }
 
-    nonisolated private static func todayInterval() -> DateInterval {
+    // Track-7 — exposed to internal callers (ClaudeCodeDetailViewModel) so they can
+    // reuse the same path/key resolution without duplicating it.
+    nonisolated static func todayInterval() -> DateInterval {
         let cal = Calendar.current
         let start = cal.startOfDay(for: Date())
         let end = cal.date(byAdding: .day, value: 1, to: start) ?? Date().addingTimeInterval(86_400)
         return DateInterval(start: start, end: end)
     }
 
-    nonisolated private static func defaultConfig() -> DatabaseConfig {
+    nonisolated static func defaultConfig() -> DatabaseConfig {
         #if LEAF_PROD
         return ProdConfigs.database
         #else
@@ -232,7 +234,7 @@ final class InsightsReader {
         #endif
     }
 
-    nonisolated private static func defaultEncryption() -> EncryptionOptions? {
+    nonisolated static func defaultEncryption() -> EncryptionOptions? {
         #if LEAF_PROD
         return EncryptionOptions(
             keyProvider: .callback { @Sendable in

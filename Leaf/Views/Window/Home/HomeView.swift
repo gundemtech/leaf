@@ -84,19 +84,14 @@ struct HomeView: View {
     /// independent of GitHub banner; dismissing one must not silence the other.
     @State private var slackReauthBannerDismissed = false
 
-    private static let reauthBannerDismissKey = "github.reauth.bannerDismissedSessionID"
-    private static let slackReauthBannerDismissKey = "slack.reauth.bannerDismissedSessionID"
-
     private var shouldShowReauthBanner: Bool {
         guard !reauthBannerDismissed else { return false }
-        let saved = UserDefaults.standard.string(forKey: Self.reauthBannerDismissKey)
-        return saved != AppSessionID.current
+        return !ReauthBannerKeys.isDismissed(ReauthBannerKeys.github)
     }
 
     private var shouldShowSlackReauthBanner: Bool {
         guard !slackReauthBannerDismissed else { return false }
-        let saved = UserDefaults.standard.string(forKey: Self.slackReauthBannerDismissKey)
-        return saved != AppSessionID.current
+        return !ReauthBannerKeys.isDismissed(ReauthBannerKeys.slack)
     }
 
     var body: some View {
@@ -150,8 +145,7 @@ struct HomeView: View {
                 Task { await githubOAuth.connect(scopes: GitHubScopesService.requested()) }
             },
             onDismiss: {
-                UserDefaults.standard.set(AppSessionID.current,
-                                          forKey: Self.reauthBannerDismissKey)
+                ReauthBannerKeys.markDismissed(ReauthBannerKeys.github)
                 reauthBannerDismissed = true
             }
         )
@@ -173,8 +167,7 @@ struct HomeView: View {
                 Task { await slackOAuth.connect() }
             },
             onDismiss: {
-                UserDefaults.standard.set(AppSessionID.current,
-                                          forKey: Self.slackReauthBannerDismissKey)
+                ReauthBannerKeys.markDismissed(ReauthBannerKeys.slack)
                 slackReauthBannerDismissed = true
             }
         )
@@ -256,22 +249,78 @@ private struct LoadingScaffold: View {
 
 private struct HomeContent: View {
     let snapshot: InsightsSnapshot
+    @Environment(RouteCoordinator.self) private var coordinator
 
     var body: some View {
-        VStack(alignment: .leading, spacing: LeafSpace.xl) {
-            HeroBlock(snapshot: snapshot)
+        @Bindable var coord = coordinator
+        NavigationStack(path: $coord.homePath) {
+            VStack(alignment: .leading, spacing: LeafSpace.xl) {
+                HeroBlock(snapshot: snapshot)
 
-            if !snapshot.presenceState.isEmpty {
-                LivePresenceWidget(snapshot: snapshot.presenceState)
-            }
+                if !snapshot.presenceState.isEmpty {
+                    LivePresenceWidget(snapshot: snapshot.presenceState) { provider in
+                        coordinator.pushHomeLayerBProvider(provider)
+                    }
+                }
 
-            if hasTodayContent {
-                TodaySection(snapshot: snapshot)
-            }
+                if hasTodayContent {
+                    TodaySection(snapshot: snapshot)
+                }
 
-            if !snapshot.recentSessions.isEmpty || hasTodayContent || !snapshot.presenceState.isEmpty {
-                RecentSessionsBlock(sessions: snapshot.recentSessions)
+                // Track-7 P3 — Work State card. Always visible (D3 detection
+                // is scheduled, always-on substrate). Headline collapses to
+                // "All clear" when openQuestions + openBlockers are both 0.
+                WorkStateCardWrapper(snapshot: snapshot)
+
+                // Track-7 P1 — Surfaces section is always rendered so disabled
+                // compact rows are visible from first launch (the "discovery"
+                // pattern per spec §3, §8). Other sections gate on data; this
+                // one never collapses.
+                SurfacesSection(snapshot: snapshot)
+
+                if !snapshot.recentSessions.isEmpty || hasTodayContent || !snapshot.presenceState.isEmpty {
+                    RecentSessionsBlock(sessions: snapshot.recentSessions)
+                }
             }
+            .navigationDestination(for: HomeSurface.self) { surface in
+                detail(for: surface)
+            }
+            .navigationDestination(for: WorkStateRoute.self) { _ in
+                WorkStateDetailScreen()
+            }
+            .navigationDestination(for: LayerBProvider.self) { provider in
+                layerBDetail(for: provider)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func detail(for surface: HomeSurface) -> some View {
+        switch surface {
+        case .claudeCode:
+            ClaudeCodeDetailScreen()
+        case .xcode:
+            XcodeDetailScreen()
+        case .ides:
+            IDEsDetailScreen()
+        case .browsers:
+            BrowsersDetailScreen()
+        case .zoom:
+            ZoomDetailScreen()
+        case .calendar:
+            GoogleCalendarDetailScreen()
+        }
+    }
+
+    @ViewBuilder
+    private func layerBDetail(for provider: LayerBProvider) -> some View {
+        switch provider {
+        case .linear:
+            LinearDetailScreen()
+        case .github:
+            GitHubDetailScreen()
+        case .slack:
+            SlackDetailScreen()
         }
     }
 
@@ -280,6 +329,7 @@ private struct HomeContent: View {
             || snapshot.linearIssuesTouched > 0
             || snapshot.githubEventsCount > 0
             || snapshot.slackMessagesCount > 0
+            || !snapshot.filesTouched.isEmpty   // Track-7 P1 — surface filesTouched
     }
 }
 
@@ -512,6 +562,11 @@ private struct TodaySection: View {
             let pct = Int((max(0, min(1, snapshot.aiRatio)) * 100).rounded())
             out.append("\(pct)% with AI")
         }
+        // Track-7 P1 — filesTouched wire-up (spec §1 P1 scope).
+        let fileCount = snapshot.filesTouched.count
+        if fileCount > 0 {
+            out.append("\(fileCount) file\(fileCount == 1 ? "" : "s")")
+        }
         return out
     }
 
@@ -599,4 +654,22 @@ private func activeSession(_ snapshot: InsightsSnapshot) -> ActivitySession? {
     guard let recent = snapshot.recentSessions.first else { return nil }
     let age = Date().timeIntervalSince(recent.end)
     return age <= LeafStatusPillTokens.activeThresholdSeconds ? recent : nil
+}
+
+// MARK: - Work State card wrapper (Track-7 P3)
+
+private struct WorkStateCardWrapper: View {
+    let snapshot: InsightsSnapshot
+    @Environment(RouteCoordinator.self) private var coordinator
+
+    var body: some View {
+        let summary = WorkStateCardViewModel.state(snapshot: snapshot)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        WorkStateCard(
+            headline: WorkStateHeadlineFormatter.headline(summary),
+            subLineExcerpt: WorkStateHeadlineFormatter.subLine(summary, nowMs: nowMs),
+            subLineIsStale: WorkStateHeadlineFormatter.subLineIsStale(summary, nowMs: nowMs),
+            onTap: { coordinator.pushHomeWorkState() }
+        )
+    }
 }

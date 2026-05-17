@@ -196,7 +196,7 @@ struct ConnectionsView: View {
             providerSectionSymbol(
                 systemSymbol: "calendar.circle.fill",
                 logoTileColor: .white,
-                symbolTint: Color(red: 0.18, green: 0.41, blue: 0.92),
+                symbolTint: Color("BrandGoogleBlue"),
                 title: "Google Calendar",
                 description: "Read-only access — meeting metadata (titles, times, attendee counts) into your local timeline. Attendee identities and event bodies stay on Google."
             ) {

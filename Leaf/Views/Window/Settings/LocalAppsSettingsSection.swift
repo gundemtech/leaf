@@ -20,12 +20,24 @@ struct LocalAppsSettingsSection: View {
         ) {
             VStack(alignment: .leading, spacing: LeafSpace.sm) {
                 ForEach(Self.adapters, id: \.bundleID) { app in
-                    LocalAppRow(
-                        app: app,
-                        permissions: permissions
-                    )
+                    rowFor(app)
                 }
             }
+        }
+    }
+
+    /// Attach a `SettingsSubsection` anchor ID to the rows we deep-link into
+    /// (Track-7 P2 chained sub-scroll). All other rows render without an ID.
+    @ViewBuilder
+    private func rowFor(_ app: LocalAppDescriptor) -> some View {
+        let row = LocalAppRow(app: app, permissions: permissions)
+        switch app.bundleID {
+        case "com.apple.dt.Xcode":
+            row.id(SettingsSubsection.xcode)
+        case "us.zoom.xos":
+            row.id(SettingsSubsection.zoom)
+        default:
+            row
         }
     }
 

@@ -21,6 +21,7 @@ import SwiftUI
 
 struct LivePresenceWidget: View {
     let snapshot: PresenceUISnapshot
+    let onProviderTap: (LayerBProvider) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: LeafSpace.md) {
@@ -30,11 +31,14 @@ struct LivePresenceWidget: View {
 
             LeafCard(padding: .regular) {
                 HStack(alignment: .top, spacing: LeafSpace.xl) {
-                    column(title: "GITHUB", lines: githubLines, connected: snapshot.github != nil)
+                    column(title: "GITHUB", provider: .github,
+                           lines: githubLines, connected: snapshot.github != nil)
                     verticalDivider
-                    column(title: "LINEAR", lines: linearLines, connected: snapshot.linear != nil)
+                    column(title: "LINEAR", provider: .linear,
+                           lines: linearLines, connected: snapshot.linear != nil)
                     verticalDivider
-                    column(title: "SLACK", lines: slackLines, connected: snapshot.slack != nil)
+                    column(title: "SLACK", provider: .slack,
+                           lines: slackLines, connected: snapshot.slack != nil)
                 }
             }
         }
@@ -56,32 +60,62 @@ struct LivePresenceWidget: View {
     // MARK: - Column
 
     @ViewBuilder
-    private func column(title: String, lines: [PresenceLine], connected: Bool) -> some View {
-        VStack(alignment: .leading, spacing: LeafSpace.xs) {
-            Text(title)
-                .leafSectionLabel()
-                .foregroundStyle(LeafColor.accent.primary.opacity(0.6))
-
-            if !connected {
-                Text("Not connected")
-                    .font(LeafType.body.small)
-                    .foregroundStyle(LeafColor.text.tertiary)
-            } else if lines.isEmpty {
-                Text("All quiet")
-                    .font(LeafType.body.small)
-                    .foregroundStyle(LeafColor.text.tertiary)
-            } else {
-                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                    LeafIconLabel(
-                        icon: .system(line.symbol),
-                        title: line.text,
-                        iconTint: line.tint,
-                        titleStyle: LeafType.body.small
+    private func column(
+        title: String,
+        provider: LayerBProvider,
+        lines: [PresenceLine],
+        connected: Bool
+    ) -> some View {
+        Button(action: { onProviderTap(provider) }) {
+            VStack(alignment: .leading, spacing: LeafSpace.xs) {
+                HStack(spacing: LeafSpace.xs) {
+                    Text(title)
+                        .leafSectionLabel()
+                        .foregroundStyle(LeafColor.accent.primary.opacity(0.6))
+                    Spacer(minLength: 0)
+                    LeafIcon(
+                        systemName: "chevron.right",
+                        size: .sm,
+                        tint: LeafColor.text.tertiary
                     )
                 }
+
+                if !connected {
+                    Text("Not connected")
+                        .font(LeafType.body.small)
+                        .foregroundStyle(LeafColor.text.tertiary)
+                } else if lines.isEmpty {
+                    Text("All quiet")
+                        .font(LeafType.body.small)
+                        .foregroundStyle(LeafColor.text.tertiary)
+                } else {
+                    ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                        LeafIconLabel(
+                            icon: .system(line.symbol),
+                            title: line.text,
+                            iconTint: line.tint,
+                            titleStyle: LeafType.body.small
+                        )
+                    }
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel(title: title, connected: connected, lineCount: lines.count))
+        .accessibilityAddTraits(.isButton)
+    }
+
+    private func accessibilityLabel(title: String, connected: Bool, lineCount: Int) -> String {
+        if !connected {
+            return "\(title): Not connected"
+        }
+        if lineCount == 0 {
+            return "\(title): All quiet"
+        }
+        return "\(title): \(lineCount) item\(lineCount == 1 ? "" : "s")"
     }
 
     // MARK: - Lines
