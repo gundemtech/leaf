@@ -81,6 +81,11 @@ final class ClaudeCodeDetailViewModel {
                 }.value
 
             guard let self else { return }
+            // Outer task was cancelled by a later reload() while we were
+            // awaiting the detached inner Task (which is unstructured and
+            // doesn't propagate cancellation). Drop the stale result so it
+            // can't overwrite the .loading set by the more-recent reload().
+            if Task.isCancelled { return }
 
             switch result {
             case .success(let breakdown):
