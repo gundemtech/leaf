@@ -17,6 +17,8 @@ final class ClipboardMatcherTests: XCTestCase {
     func testMatch_FallsBackToJoinCode() {
         // 76-char formatted JoinCode (no leaf:// URL anywhere).
         let pubkey = Data(repeating: 0xAB, count: 32)
+        // Test fixture; 32-byte pubkey is valid input by construction.
+        // swiftlint:disable:next force_try
         let joinCode = try! JoinCode.encode(pubkey: pubkey)
         let s = "My Join code:\n\(joinCode)\nHit me up"
         let result = ClipboardMatcher.match(s)

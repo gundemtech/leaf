@@ -28,7 +28,7 @@ struct LeafApp: App {
     /// ProdConfigs + FileKeyStore encryption). On failure (e.g. FileKeyStore
     /// race at first launch) we pass `nil` — reader degrades to `.notConfigured`.
     @State private var githubScopes = GitHubScopesReader(
-        service: LeafApp.makeGitHubScopesService()
+        service: Self.makeGitHubScopesService()
     )
     @State private var slackOAuth = SlackOAuthService()
     /// Track-6 P4 — Google Calendar OAuth service for Connections row binding.
@@ -43,7 +43,7 @@ struct LeafApp: App {
     /// state needed. `nil` on DB open failure → reader degrades to
     /// `.notConfigured`.
     @State private var slackScopes = SlackScopesReader(
-        service: LeafApp.makeSlackScopesService()
+        service: Self.makeSlackScopesService()
     )
     @State private var permissions = PermissionsService()
     @State private var updater: UpdaterController

@@ -51,7 +51,7 @@ struct ConnectionsView: View {
     // OAuth time; there's no incremental-scope drift to surface like GitHub/Slack.
     @Environment(GoogleCalendarOAuthService.self) private var googleCalendarOAuth
 
-    @State private var nowTick: Date = Date()
+    @State private var nowTick = Date()
     private let countdownTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     /// Cached parse of `integrations.scope` for `provider = github`. Used by
@@ -735,7 +735,7 @@ struct ConnectionsView: View {
                             LeafBanner(
                                 tone: .warning,
                                 title: scope,
-                                description: ConnectionsView.scopeExplainer[scope]
+                                description: Self.scopeExplainer[scope]
                                     ?? "Required for GitHub integration."
                             )
                         }
@@ -916,7 +916,7 @@ struct ConnectionsView: View {
                             LeafBanner(
                                 tone: .warning,
                                 title: scope,
-                                description: ConnectionsView.slackScopeExplainer[scope]
+                                description: Self.slackScopeExplainer[scope]
                                     ?? "Required for Slack integration."
                             )
                         }

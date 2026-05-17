@@ -85,7 +85,7 @@ final class InsightsReader {
                     do {
                         let db = try cachedDB ?? LeafCore.Database.openForRead(at: url, config: cfg, encryption: enc)
                         let insights = DerivedInsightsFactory.make(database: db)
-                        let today = InsightsReader.todayInterval()
+                        let today = Self.todayInterval()
                         // Sequential calls — async overhead неоправдан, SQL-reads <50ms.
                         let topApps = try insights.timeInApp(period: today)
                         try Task.checkCancellation()

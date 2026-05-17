@@ -51,8 +51,11 @@ private func makeTokenResponse(
     if let refreshToken { dict["refresh_token"] = refreshToken }
     if let scope { dict["scope"] = scope }
     if let tokenType { dict["token_type"] = tokenType }
+    // Test fixture; dict is hand-built JSON-compatible payload.
+    // swiftlint:disable force_try
     let data = try! JSONSerialization.data(withJSONObject: dict)
     return try! JSONDecoder().decode(GoogleCalendarAPI.TokenResponse.self, from: data)
+    // swiftlint:enable force_try
 }
 
 final class GoogleCalendarTokenRefresherTests: XCTestCase {
