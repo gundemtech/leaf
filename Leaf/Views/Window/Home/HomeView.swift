@@ -265,7 +265,9 @@ private struct HomeContent: View {
                 HeroBlock(snapshot: snapshot)
 
                 if !snapshot.presenceState.isEmpty {
-                    LivePresenceWidget(snapshot: snapshot.presenceState)
+                    LivePresenceWidget(snapshot: snapshot.presenceState) { provider in
+                        coordinator.pushHomeLayerBProvider(provider)
+                    }
                 }
 
                 if hasTodayContent {
