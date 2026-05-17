@@ -316,8 +316,10 @@ private struct HomeContent: View {
     @ViewBuilder
     private func layerBDetail(for provider: LayerBProvider) -> some View {
         switch provider {
-        case .linear, .github, .slack:
-            // Placeholder pre-Task 6/7/8 — real screens land in subsequent tasks.
+        case .linear:
+            LinearDetailScreen()
+        case .github, .slack:
+            // Placeholder — real screens land in Tasks 7/8 within Track-7 P4.
             VStack {
                 Spacer()
                 LeafEmptyState(
