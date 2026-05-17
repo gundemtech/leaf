@@ -1,0 +1,135 @@
+# Leaf — SwiftLint configuration.
+# Phase 1 — code style foundation. См. STYLE.md для rationale per rule.
+# Каждое opt_in правило ниже должно либо ловить класс багов в codebase, либо
+# предотвращать known incident class. Default-enabled правила фильтруются
+# через disabled_rules с explicit обоснованием.
+#
+# Pool split (conceptual, mechanically через один `opt_in_rules:` key):
+#   strict NN     — violations NN ≤ 5 на origin/main HEAD 60bf38e9.
+#   aspirat. NN   — violations > 5; baseline grandfather'ит existing hits.
+#                   Phase 3 promote к strict через cleanup PRs.
+# Числа фиксируют срез на baseline gen (Task 5). Регенерация baseline после
+# Track-7 / Track-6 merge — отдельный chore commit.
+
+excluded:
+  - .build
+  - .swiftpm
+  - build
+  - DerivedData
+  - Packages/LeafCorePrivate/Sources  # moat, gitignored, lint manually if needed
+  - Packages/LeafCore/.build
+  - Packages/LeafCore/.swiftpm
+  - Resources
+
+baseline: .swiftlint-baseline.json
+
+reporter: "github-actions-logging"
+
+# Default-disabled rules. Каждый — strict (NN ≤ 5) или aspirat. (NN > 5).
+opt_in_rules:
+  # === Crash / runtime safety ===
+  - fatal_error_message                        # strict 0 — require message в fatalError()
+  - force_unwrapping                           # aspirat. 248 — crash class; baseline grandfather, P3 fix
+  - identical_operands                         # strict 0 — `x == x` bugs
+  - overridden_super_call                      # strict 0 — missing super calls
+  # === Style consistency (где swift-format не покрывает) ===
+  - empty_collection_literal                   # strict 0 — `== []` smell
+  - empty_count                                # strict 2 — use `isEmpty`
+  - empty_string                               # strict 0 — use `isEmpty`
+  - implicit_return                            # aspirat. 11 — Swift 5.1+ shorthand
+  - modifier_order                             # aspirat. 29 — `public final` consistent
+  - prefer_self_in_static_references           # aspirat. 89 — `Self.x` inside type
+  - redundant_nil_coalescing                   # strict 4 — `?? nil`
+  - redundant_type_annotation                  # aspirat. 21 — `let x: Int = 5` redundant
+  - shorthand_optional_binding                 # strict 3 — `if let foo` shorthand
+  - toggle_bool                                # strict 0 — `.toggle()` over `= !`
+  - unused_optional_binding                    # strict 0 — `if let _ = ...` smell
+  - vertical_whitespace_closing_braces         # strict 1 — trailing blank pre-`}`
+  - yoda_condition                             # strict 0 — `42 == x`
+  # === Idiomatic collection / API usage ===
+  - contains_over_filter_count                 # strict 0
+  - contains_over_filter_is_empty              # strict 0
+  - contains_over_first_not_nil                # strict 0
+  - contains_over_range_nil_comparison         # strict 0
+  - convenience_type                           # strict 1 — static-only types → enum
+  - explicit_init                              # strict 0 — `Foo.init(...)` style
+  - first_where                                # strict 0 — `.first(where:)` over filter+first
+  - flatmap_over_map_reduce                    # strict 0
+  - joined_default_parameter                   # strict 0 — `joined(separator: "")` redundant
+  - last_where                                 # strict 0 — `.last(where:)`
+  - sorted_first_last                          # strict 0 — `.sorted().first` → `.min()`
+  - unneeded_parentheses_in_closure_argument   # strict 0 — `{ (x) in ... }` smell
+  # === Naming / API hygiene ===
+  - file_name_no_space                         # strict 0 — files без spaces
+  - lower_acl_than_parent                      # strict 0 — leaky access control
+  - no_extension_access_modifier               # aspirat. 26 — `public extension Foo` smell
+  # === Modernization ===
+  - legacy_multiple                            # strict 3 — `% 2 == 0` → `.isMultiple(of: 2)`
+  - prefer_self_type_over_type_of_self         # strict 0
+  - prefer_zero_over_explicit_init             # strict 0 — `CGFloat()` → `.zero`
+  - static_operator                            # strict 0
+  # === SwiftUI / legacy IB guards ===
+  - private_action                             # strict 0 — IBAction privacy
+  - private_outlet                             # strict 0 — IBOutlet privacy
+  - strong_iboutlet                            # strict 0 — weak IBOutlet
+  # === Test hygiene ===
+  - test_case_accessibility                    # strict 0 — internal test methods
+  - xctfail_message                            # strict 4 — XCTFail with message
+
+disabled_rules:
+  # === Owner = swift-format (formatter) ===
+  - line_length                                # 437 — swift-format `lineLength: 120` владелец
+  - colon                                      # 117 — swift-format `colon` rule владелец
+  - comma                                      # 223 — swift-format `comma` rule владелец
+  - trailing_comma                             # 46 — swift-format `trailing_comma` owner
+  - opening_brace                              # 6 — swift-format `opening_brace` owner
+  - statement_position                         # 5 — swift-format owner
+  - vertical_whitespace                        # 5 — swift-format `MaximumBlankLines` owner
+  - sorted_imports                             # 343 — swift-format `OrderedImports` owner
+  - operator_usage_whitespace                  # 128 — swift-format owner
+  - trailing_newline                           # 2 — .editorconfig `insert_final_newline = true` owner
+  - redundant_self                             # 63 — swift-format `UseSynthesizedInitializer` related
+  # === Project-specific exceptions ===
+  - identifier_name                            # 2217 — legit short names: id, ts, ms, db, fs, ws, dt, to, from, qs
+  - type_name                                  # 33 — acronyms: URL, AI, IDE, MCP, IDE, OAuth
+  - todo                                       # 4 — TODO разрешён; /pre-push-leaf фильтрует internal-context TODO
+  # === SwiftUI legitimate patterns ===
+  - multiple_closures_with_trailing_closure    # 5 — SwiftUI .onAppear { }.onDisappear { }
+  - trailing_closure                           # 165 — SwiftUI conventional `.task { }`, `.onAppear { }`
+  # === Other ===
+  - inclusive_language                         # 5 — false positives на 'master' (git default-branch context)
+  - non_optional_string_data_conversion        # 27 — flags safe `Data(string.utf8)` pattern; suppress noise. Sibling `optional_data_string_conversion` stays active (default-on, 2 force-unwrap hits grandfathered → Phase 2 cleanup candidates).
+  - implicit_optional_initialization           # 40 — `var x: Int? = nil` allowed для explicitness
+  - static_over_final_class                    # 20 — `final class` widely used by design
+
+# Aspirational pool threshold overrides (warning severity, baseline filter existing).
+# Phase 3 promote к strict через cleanup.
+force_cast: warning                            # 1 hit — crash class
+force_try: warning                             # 12 hits — crash class
+force_unwrapping:
+  severity: warning                            # 248 hits — crash class
+file_length:
+  warning: 600
+  error: 1500                                  # 46 hits — long parser/mapper files
+function_body_length:
+  warning: 80
+  error: 200                                   # 67 hits — state-machine observe() methods
+type_body_length:
+  warning: 400
+  error: 800                                   # 51 hits — QueryEngine ~700, MenuBarContent ~230
+cyclomatic_complexity:
+  warning: 12
+  error: 25                                    # 35 hits — switch-heavy 33-kind mappers
+function_parameter_count:
+  warning: 6
+  error: 8                                     # 23 hits — collectors с config injection
+nesting:
+  type_level:
+    warning: 2
+    error: 5                                   # 20 hits — generic constraints в LeafCore
+  function_level:
+    warning: 4
+    error: 6
+large_tuple:
+  warning: 3
+  error: 4                                     # 41 hits — body-kind dispatcher tuples
