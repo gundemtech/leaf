@@ -36,6 +36,13 @@ final class RouteCoordinator {
         homePath.append(surface)
     }
 
+    /// Track 7 P3 — push the Work State detail destination onto the Home
+    /// NavigationStack. Separate from `pushHome(_:HomeSurface)` because
+    /// Work State is not a HomeSurface (no enable toggle, always on).
+    func pushHomeWorkState() {
+        homePath.append(WorkStateRoute())
+    }
+
     func popHome() {
         guard !homePath.isEmpty else { return }
         homePath.removeLast()
