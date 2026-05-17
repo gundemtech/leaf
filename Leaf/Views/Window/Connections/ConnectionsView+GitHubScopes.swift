@@ -7,6 +7,9 @@
 
 import SwiftUI
 import LeafCore
+#if LEAF_PROD
+import LeafCorePrivate
+#endif
 
 extension ConnectionsView {
 
