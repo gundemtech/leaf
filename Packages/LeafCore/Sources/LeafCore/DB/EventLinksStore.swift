@@ -35,41 +35,72 @@ public enum EventLinksStore {
         let bodies = enumerateBodies(payload: payload)
         let eventKind = payload["event_kind"] ?? ""
 
-        // 1) Linear ID in any body — LeafCore-public extractor, no derivers needed.
-        if !knownLinearPrefixes.isEmpty {
-            for (_, body) in bodies {
-                for id in LinearIDExtractor.extractAll(text: body, knownPrefixes: knownLinearPrefixes) {
-                    try insert(
-                        InsertRow(
-                            eventID: eventID,
-                            linkKind: Schema.LinkKinds.linearIDInText,
-                            targetKind: Schema.TargetKinds.linearIssue,
-                            targetRef: id,
-                            confidence: derivers.confidence.linearIDInText,
-                            createdAtMs: ts
-                        ), in: db)
-                }
+        try deriveLinearIDInText(
+            eventID: eventID, ts: ts, bodies: bodies,
+            knownLinearPrefixes: knownLinearPrefixes, derivers: derivers, in: db)
+        try deriveBranchNameLinearRef(
+            eventID: eventID, ts: ts, payload: payload, eventKind: eventKind,
+            knownLinearPrefixes: knownLinearPrefixes, derivers: derivers, in: db)
+        try derivePRRefsInSlackBodies(
+            eventID: eventID, ts: ts, bodies: bodies, derivers: derivers, in: db)
+        try deriveReviewerAssignments(
+            eventID: eventID, ts: ts, payload: payload, derivers: derivers, in: db)
+        try deriveZoomToCalendarLink(
+            eventID: eventID, ts: ts, payload: payload, eventKind: eventKind,
+            derivers: derivers, in: db)
+    }
+
+    /// 1) Linear ID in any body — LeafCore-public extractor, no derivers needed.
+    private static func deriveLinearIDInText(
+        eventID: Int64, ts: Int64, bodies: [(String, String)],
+        knownLinearPrefixes: Set<String>, derivers: LinkDerivers, in db: GRDB.Database
+    ) throws {
+        guard !knownLinearPrefixes.isEmpty else { return }
+        for (_, body) in bodies {
+            for id in LinearIDExtractor.extractAll(text: body, knownPrefixes: knownLinearPrefixes) {
+                try insert(
+                    InsertRow(
+                        eventID: eventID,
+                        linkKind: Schema.LinkKinds.linearIDInText,
+                        targetKind: Schema.TargetKinds.linearIssue,
+                        targetRef: id,
+                        confidence: derivers.confidence.linearIDInText,
+                        createdAtMs: ts
+                    ), in: db)
             }
         }
+    }
 
-        // 2) Branch name → Linear (gh_commit_pushed only). Moat extractor via derivers.
-        if eventKind == GitHubEventKindKey.commitPushed.rawValue,
+    // 2) Branch name → Linear (gh_commit_pushed only). Moat extractor via derivers.
+    // Extracted from `deriveLinks` to keep dispatcher readable; 7-param signature is
+    // a direct passthrough of dispatch context, not a logical group worth structifying.
+    // swiftlint:disable:next function_parameter_count
+    private static func deriveBranchNameLinearRef(
+        eventID: Int64, ts: Int64, payload: [String: String], eventKind: String,
+        knownLinearPrefixes: Set<String>, derivers: LinkDerivers, in db: GRDB.Database
+    ) throws {
+        guard
+            eventKind == GitHubEventKindKey.commitPushed.rawValue,
             let branch = payload["branch"],
             !knownLinearPrefixes.isEmpty,
             let id = derivers.extractBranchLinearID(branch, knownLinearPrefixes)
-        {
-            try insert(
-                InsertRow(
-                    eventID: eventID,
-                    linkKind: Schema.LinkKinds.branchNameLinearRef,
-                    targetKind: Schema.TargetKinds.linearIssue,
-                    targetRef: id,
-                    confidence: derivers.confidence.branchNameLinearRef,
-                    createdAtMs: ts
-                ), in: db)
-        }
+        else { return }
+        try insert(
+            InsertRow(
+                eventID: eventID,
+                linkKind: Schema.LinkKinds.branchNameLinearRef,
+                targetKind: Schema.TargetKinds.linearIssue,
+                targetRef: id,
+                confidence: derivers.confidence.branchNameLinearRef,
+                createdAtMs: ts
+            ), in: db)
+    }
 
-        // 3) PR URL + hash-ref in Slack bodies. Moat extractors via derivers.
+    /// 3) PR URL + hash-ref in Slack bodies. Moat extractors via derivers.
+    private static func derivePRRefsInSlackBodies(
+        eventID: Int64, ts: Int64, bodies: [(String, String)],
+        derivers: LinkDerivers, in db: GRDB.Database
+    ) throws {
         for (kind, body) in bodies where isSlackBody(kind) {
             for ref in derivers.extractPRURLs(body) {
                 try insert(
@@ -94,39 +125,49 @@ public enum EventLinksStore {
                     ), in: db)
             }
         }
+    }
 
-        // 4) Requested reviewers — structured fan-out, direct (no extractor).
-        if let raw = payload[Schema.EventPayloadKeys.requestedReviewersJson] {
-            for login in decodeStringList(raw) {
-                try insert(
-                    InsertRow(
-                        eventID: eventID,
-                        linkKind: Schema.LinkKinds.reviewerAssigned,
-                        targetKind: Schema.TargetKinds.githubUser,
-                        targetRef: login,
-                        confidence: derivers.confidence.reviewerAssigned,
-                        createdAtMs: ts
-                    ), in: db)
-            }
-        }
-
-        // 5) Track-6 P5 — Zoom → Calendar link. Collector pre-computes SHA256(EKEvent.id)
-        //    hash via ZoomCalendarLinker and writes it to the started-event payload;
-        //    deriveLinks reads the structured field and inserts the link row.
-        if eventKind == "zoom_meeting_started",
-            let linkedID = payload[Schema.EventPayloadKeys.linkedCalendarEventID],
-            !linkedID.isEmpty
-        {
+    /// 4) Requested reviewers — structured fan-out, direct (no extractor).
+    private static func deriveReviewerAssignments(
+        eventID: Int64, ts: Int64, payload: [String: String],
+        derivers: LinkDerivers, in db: GRDB.Database
+    ) throws {
+        guard let raw = payload[Schema.EventPayloadKeys.requestedReviewersJson] else { return }
+        for login in decodeStringList(raw) {
             try insert(
                 InsertRow(
                     eventID: eventID,
-                    linkKind: Schema.LinkKinds.zoomToCalendarMeeting,
-                    targetKind: Schema.TargetKinds.calendarEvent,
-                    targetRef: linkedID,
-                    confidence: derivers.confidence.zoomToCalendarMeeting,
+                    linkKind: Schema.LinkKinds.reviewerAssigned,
+                    targetKind: Schema.TargetKinds.githubUser,
+                    targetRef: login,
+                    confidence: derivers.confidence.reviewerAssigned,
                     createdAtMs: ts
                 ), in: db)
         }
+    }
+
+    /// 5) Track-6 P5 — Zoom → Calendar link. Collector pre-computes
+    /// SHA256(EKEvent.id) hash via ZoomCalendarLinker and writes it to the
+    /// started-event payload; deriveLinks reads the structured field and
+    /// inserts the link row.
+    private static func deriveZoomToCalendarLink(
+        eventID: Int64, ts: Int64, payload: [String: String], eventKind: String,
+        derivers: LinkDerivers, in db: GRDB.Database
+    ) throws {
+        guard
+            eventKind == "zoom_meeting_started",
+            let linkedID = payload[Schema.EventPayloadKeys.linkedCalendarEventID],
+            !linkedID.isEmpty
+        else { return }
+        try insert(
+            InsertRow(
+                eventID: eventID,
+                linkKind: Schema.LinkKinds.zoomToCalendarMeeting,
+                targetKind: Schema.TargetKinds.calendarEvent,
+                targetRef: linkedID,
+                confidence: derivers.confidence.zoomToCalendarMeeting,
+                createdAtMs: ts
+            ), in: db)
     }
 
     /// Reverse lookup — returns DISTINCT event IDs that link to the given target,
@@ -248,65 +289,44 @@ public enum EventLinksStore {
         return out
     }
 
+    /// Static `event_kind → body_kind` dispatch table. Table-driven so adding a
+    /// new mapping is a single dict entry (mirrors `EventsFullTextStore`
+    /// dispatcher — the parity fence in `DispatchCoverageTests` enforces both
+    /// sides stay in sync).
+    ///
+    /// Track-1 D2 carry-over fix (Track-3 D1): LinearCollector emits
+    /// "issue_updated" (no "linear_" prefix) — parallel of the FTS dispatcher
+    /// fix. Track-3 D4 closes gh_issue_* / gist / release / deployment /
+    /// slack_canvas_* / slack_bookmark_* / explicit gh_pr_* cases (instead of
+    /// `hasPrefix("gh_pr_")` catch-all which would spuriously match body-less
+    /// kinds like `gh_pr_review_thread_resolved`).
+    private static let bodyKindDispatch: [String: String] = {
+        var m: [String: String] = [
+            "issue_updated": Schema.BodyKinds.linearDesc,
+            "linear_notification_received": Schema.BodyKinds.linearNotificationTitle,
+            GitHubEventKindKey.commitPushed.rawValue: Schema.BodyKinds.commitMsg,
+            GitHubEventKindKey.issueCommentAuthored.rawValue: Schema.BodyKinds.ghIssueComment,
+            GitHubEventKindKey.prReviewCommentAuthored.rawValue: Schema.BodyKinds.ghPRReviewComment,
+            "slack_thread_reply_aggregate": Schema.BodyKinds.slackThreadParent,
+            GitHubEventKindKey.issueOpened.rawValue: Schema.BodyKinds.ghIssueComment,
+            GitHubEventKindKey.issueClosed.rawValue: Schema.BodyKinds.ghIssueComment,
+            GitHubEventKindKey.gistCreated.rawValue: Schema.BodyKinds.ghGistDescription,
+            GitHubEventKindKey.gistUpdated.rawValue: Schema.BodyKinds.ghGistDescription,
+            GitHubEventKindKey.releasePublished.rawValue: Schema.BodyKinds.ghReleaseBody,
+            GitHubEventKindKey.deploymentCreated.rawValue: Schema.BodyKinds.ghDeploymentDescription,
+            SlackEventKindKey.slackCanvasCreated.rawValue: Schema.BodyKinds.slackCanvasTitle,
+            SlackEventKindKey.slackCanvasEdited.rawValue: Schema.BodyKinds.slackCanvasTitle,
+            SlackEventKindKey.slackBookmarkAdded.rawValue: Schema.BodyKinds.slackBookmarkTitle,
+            SlackEventKindKey.slackBookmarkRemoved.rawValue: Schema.BodyKinds.slackBookmarkTitle,
+            GitHubEventKindKey.prOpened.rawValue: Schema.BodyKinds.ghPR,
+            GitHubEventKindKey.prMerged.rawValue: Schema.BodyKinds.ghPR,
+            GitHubEventKindKey.prClosed.rawValue: Schema.BodyKinds.ghPR,
+        ]
+        return m
+    }()
+
     private static func topLevelBodyKind(forEventKind eventKind: String) -> String? {
-        // Track-1 D2 carry-over fix (Track-3 D1): LinearCollector emits
-        // "issue_updated" (no "linear_" prefix) — parallel of the FTS dispatcher
-        // fix in EventsFullTextStore. Also adds linear_notification_received
-        // dispatch ahead of Task 8.
-        if eventKind == "issue_updated" { return Schema.BodyKinds.linearDesc }
-        if eventKind == "linear_notification_received" { return Schema.BodyKinds.linearNotificationTitle }
-        if eventKind == GitHubEventKindKey.commitPushed.rawValue { return Schema.BodyKinds.commitMsg }
-        if eventKind == GitHubEventKindKey.issueCommentAuthored.rawValue { return Schema.BodyKinds.ghIssueComment }
-        if eventKind == GitHubEventKindKey.prReviewCommentAuthored.rawValue {
-            return Schema.BodyKinds.ghPRReviewComment
-        }
-        if eventKind == "slack_thread_reply_aggregate" { return Schema.BodyKinds.slackThreadParent }
-        // Track-3 D4 — gh_issue_* body dispatch. Issue body indexed under the
-        // same body_kind as issue comments (mirrors FTS lines 119-122).
-        if eventKind == GitHubEventKindKey.issueOpened.rawValue
-            || eventKind == GitHubEventKindKey.issueClosed.rawValue
-        {
-            return Schema.BodyKinds.ghIssueComment
-        }
-        // Track-3 D4 — gist description / release body / deployment description
-        // dispatch (mirrors FTS lines 126-135). Missed in D2 — closed here.
-        if eventKind == GitHubEventKindKey.gistCreated.rawValue
-            || eventKind == GitHubEventKindKey.gistUpdated.rawValue
-        {
-            return Schema.BodyKinds.ghGistDescription
-        }
-        if eventKind == GitHubEventKindKey.releasePublished.rawValue {
-            return Schema.BodyKinds.ghReleaseBody
-        }
-        if eventKind == GitHubEventKindKey.deploymentCreated.rawValue {
-            return Schema.BodyKinds.ghDeploymentDescription
-        }
-        // Track-3 D4 — Slack canvas + bookmark titles (D3 §4.3). Per ADR-010 §6,
-        // canvas/bookmark titles are user-named structured resources (not
-        // message bodies); body field is FTS-indexed AND a target for
-        // cross-source link derivation (e.g. LEAF-NN refs inside canvas titles).
-        // Mirrors FTS lines 139-149.
-        if eventKind == SlackEventKindKey.slackCanvasCreated.rawValue
-            || eventKind == SlackEventKindKey.slackCanvasEdited.rawValue
-        {
-            return Schema.BodyKinds.slackCanvasTitle
-        }
-        if eventKind == SlackEventKindKey.slackBookmarkAdded.rawValue
-            || eventKind == SlackEventKindKey.slackBookmarkRemoved.rawValue
-        {
-            return Schema.BodyKinds.slackBookmarkTitle
-        }
-        // Track-3 D4 — explicit gh_pr_* cases instead of `hasPrefix("gh_pr_")`
-        // catch-all (which would spuriously match `gh_pr_review_thread_resolved`
-        // and `gh_pr_awaiting_review_count` — both body-less — and attempt body
-        // indexing on empty fields). Mirrors FTS lines 114-118.
-        if eventKind == GitHubEventKindKey.prOpened.rawValue
-            || eventKind == GitHubEventKindKey.prMerged.rawValue
-            || eventKind == GitHubEventKindKey.prClosed.rawValue
-        {
-            return Schema.BodyKinds.ghPR
-        }
-        return nil
+        bodyKindDispatch[eventKind]
     }
 
     /// Test-only accessor for `topLevelBodyKind`. Used by `DispatchCoverageTests`

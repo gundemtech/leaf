@@ -55,89 +55,114 @@ public struct ZoomMeetingDurationTracker: Sendable {
 
         switch state {
         case .idle:
-            if meetingActive {
-                if prev == nil {
-                    // Cold-start path — emit immediately with cold_start=true.
-                    let linkedID = calendarLinker.match(atMs: nowMs)
-                    state = .active(
-                        startedAt: nowMs,
-                        coldStart: true,
-                        linkedCalEventID: linkedID,
-                        droppedTransitionsSoFar: 0
-                    )
-                    events.append(makeStartedEvent(startedAtMs: nowMs, coldStart: true, linkedCalEventID: linkedID))
-                    if let id = linkedID {
-                        events.append(makeCalendarLinkedEvent(startedAtMs: nowMs, linkedCalEventID: id))
-                    }
-                } else {
-                    // Warm-start path — enter pendingStart.
-                    state = .pendingStart(observedAt: nowMs)
-                }
-            }
-        // else: idle stays idle.
-
+            handleIdle(meetingActive: meetingActive, nowMs: nowMs, events: &events)
         case .pendingStart(let observedAt):
-            if meetingActive {
-                if nowMs - observedAt >= thresholds.graceStartMs {
-                    let linkedID = calendarLinker.match(atMs: observedAt)
-                    state = .active(
-                        startedAt: observedAt,
-                        coldStart: false,
-                        linkedCalEventID: linkedID,
-                        droppedTransitionsSoFar: 0
-                    )
-                    events.append(
-                        makeStartedEvent(startedAtMs: observedAt, coldStart: false, linkedCalEventID: linkedID))
-                    if let id = linkedID {
-                        events.append(makeCalendarLinkedEvent(startedAtMs: observedAt, linkedCalEventID: id))
-                    }
-                }
-                // else: still in pendingStart.
-            } else {
-                // False alarm — revert to idle, no emit.
-                state = .idle
-            }
-
+            handlePendingStart(
+                meetingActive: meetingActive, observedAt: observedAt, nowMs: nowMs, events: &events)
         case .active(let startedAt, let coldStart, let linkedCalEventID, let droppedSoFar):
-            if !meetingActive {
-                state = .pendingEnd(
-                    startedAt: startedAt,
-                    observedAt: nowMs,
-                    coldStart: coldStart,
-                    linkedCalEventID: linkedCalEventID,
-                    droppedTransitions: droppedSoFar
-                )
-            }
-        // else: still active.
-
+            handleActive(
+                meetingActive: meetingActive, startedAt: startedAt, coldStart: coldStart,
+                linkedCalEventID: linkedCalEventID, droppedSoFar: droppedSoFar, nowMs: nowMs)
         case .pendingEnd(let startedAt, let observedAt, let coldStart, let linkedCalEventID, let dropped):
-            if meetingActive {
-                // Revert to active. Increment dropped counter, preserved for next pendingEnd cycle.
-                state = .active(
-                    startedAt: startedAt,
-                    coldStart: coldStart,
-                    linkedCalEventID: linkedCalEventID,
-                    droppedTransitionsSoFar: dropped + 1
-                )
-            } else {
-                if nowMs - observedAt >= thresholds.graceEndMs {
-                    let durationSec = (observedAt - startedAt) / 1000
-                    events.append(
-                        makeEndedEvent(
-                            startedAtMs: startedAt,
-                            endedAtMs: observedAt,
-                            durationSeconds: durationSec,
-                            coldStartOrigin: coldStart,
-                            droppedTransitionsCount: dropped,
-                            linkedCalEventID: linkedCalEventID
-                        ))
-                    state = .idle
-                }
-                // else: still in pendingEnd.
-            }
+            handlePendingEnd(
+                meetingActive: meetingActive, startedAt: startedAt, observedAt: observedAt,
+                coldStart: coldStart, linkedCalEventID: linkedCalEventID, dropped: dropped,
+                nowMs: nowMs, events: &events)
         }
 
         return events
+    }
+
+    // MARK: - Per-state handlers
+
+    private mutating func handleIdle(meetingActive: Bool, nowMs: Int64, events: inout [RawEvent]) {
+        guard meetingActive else { return }
+        if prev == nil {
+            // Cold-start path — emit immediately with cold_start=true.
+            let linkedID = calendarLinker.match(atMs: nowMs)
+            state = .active(
+                startedAt: nowMs,
+                coldStart: true,
+                linkedCalEventID: linkedID,
+                droppedTransitionsSoFar: 0
+            )
+            events.append(makeStartedEvent(startedAtMs: nowMs, coldStart: true, linkedCalEventID: linkedID))
+            if let id = linkedID {
+                events.append(makeCalendarLinkedEvent(startedAtMs: nowMs, linkedCalEventID: id))
+            }
+        } else {
+            // Warm-start path — enter pendingStart.
+            state = .pendingStart(observedAt: nowMs)
+        }
+    }
+
+    private mutating func handlePendingStart(
+        meetingActive: Bool, observedAt: Int64, nowMs: Int64, events: inout [RawEvent]
+    ) {
+        guard meetingActive else {
+            // False alarm — revert to idle, no emit.
+            state = .idle
+            return
+        }
+        guard nowMs - observedAt >= thresholds.graceStartMs else { return }
+        let linkedID = calendarLinker.match(atMs: observedAt)
+        state = .active(
+            startedAt: observedAt,
+            coldStart: false,
+            linkedCalEventID: linkedID,
+            droppedTransitionsSoFar: 0
+        )
+        events.append(
+            makeStartedEvent(startedAtMs: observedAt, coldStart: false, linkedCalEventID: linkedID))
+        if let id = linkedID {
+            events.append(makeCalendarLinkedEvent(startedAtMs: observedAt, linkedCalEventID: id))
+        }
+    }
+
+    private mutating func handleActive(
+        meetingActive: Bool, startedAt: Int64, coldStart: Bool,
+        linkedCalEventID: String?, droppedSoFar: Int, nowMs: Int64
+    ) {
+        guard !meetingActive else { return }
+        state = .pendingEnd(
+            startedAt: startedAt,
+            observedAt: nowMs,
+            coldStart: coldStart,
+            linkedCalEventID: linkedCalEventID,
+            droppedTransitions: droppedSoFar
+        )
+    }
+
+    // 8-param signature destructures the `.pendingEnd` associated values
+    // directly — grouping into struct would re-pack same data with no gain.
+    // swiftlint:disable:next function_parameter_count
+    private mutating func handlePendingEnd(
+        meetingActive: Bool, startedAt: Int64, observedAt: Int64,
+        coldStart: Bool, linkedCalEventID: String?, dropped: Int,
+        nowMs: Int64, events: inout [RawEvent]
+    ) {
+        if meetingActive {
+            // Revert to active. Increment dropped counter, preserved for next pendingEnd cycle.
+            state = .active(
+                startedAt: startedAt,
+                coldStart: coldStart,
+                linkedCalEventID: linkedCalEventID,
+                droppedTransitionsSoFar: dropped + 1
+            )
+            return
+        }
+        guard nowMs - observedAt >= thresholds.graceEndMs else { return }
+        let durationSec = (observedAt - startedAt) / 1000
+        events.append(
+            makeEndedEvent(
+                startedAtMs: startedAt,
+                endedAtMs: observedAt,
+                durationSeconds: durationSec,
+                coldStartOrigin: coldStart,
+                droppedTransitionsCount: dropped,
+                linkedCalEventID: linkedCalEventID
+            ))
+        state = .idle
     }
 
     public var currentState: State { state }

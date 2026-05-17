@@ -258,17 +258,7 @@ extension GoogleCalendarEventMapper {
         calendarId: String
     ) -> [String: Any]? {
         guard let eventId = event.id, let eventType = event.eventType else { return nil }
-
-        // (eventType, phase) → kind. Exhaustive switch; anything else returns nil.
-        let kind: GoogleCalendarEventKind
-        switch (eventType, phase) {
-        case ("focusTime", .started): kind = .focusBlockStarted
-        case ("focusTime", .ended): kind = .focusBlockEnded
-        case ("outOfOffice", .started): kind = .oooStarted
-        case ("outOfOffice", .ended): kind = .oooEnded
-        case ("workingLocation", .changed): kind = .workingLocationChanged
-        default: return nil
-        }
+        guard let kind = transitionKind(eventType: eventType, phase: phase) else { return nil }
 
         var payload: [String: Any] = [
             "source": "google_calendar",
@@ -280,38 +270,57 @@ extension GoogleCalendarEventMapper {
         if let startMs = parseTimePointMs(event.start) { payload["start_ms"] = startMs }
         if let endMs = parseTimePointMs(event.end) { payload["end_ms"] = endMs }
 
-        // Active-phase-only fields. autoDeclineMode / chatStatus describe how
-        // the block is configured during its life; on `_ended` we surface only
-        // the boundary itself (operational state has ceased to be meaningful).
         if phase == .started {
-            switch eventType {
-            case "focusTime":
-                if let mode = event.focusTimeProperties?.autoDeclineMode {
-                    payload["auto_decline_mode"] = mode
-                }
-                if let chat = event.focusTimeProperties?.chatStatus {
-                    payload["chat_status"] = chat
-                }
-            case "outOfOffice":
-                // OOO has only autoDeclineMode (no chatStatus per Google API).
-                if let mode = event.outOfOfficeProperties?.autoDeclineMode {
-                    payload["auto_decline_mode"] = mode
-                }
-            default:
-                break
-            }
+            applyStartedFieldsFromEvent(event: event, eventType: eventType, payload: &payload)
         }
-
-        // workingLocation: single-shot `.changed`. Surface only the type
-        // bucket (homeOffice / officeLocation / customLocation). NEVER
-        // building / floor / desk / label — those aren't even decoded.
-        if phase == .changed, eventType == "workingLocation" {
-            if let wlType = event.workingLocationProperties?.type {
-                payload["working_location_type"] = wlType
-            }
+        if phase == .changed, eventType == "workingLocation",
+            let wlType = event.workingLocationProperties?.type
+        {
+            payload["working_location_type"] = wlType
         }
 
         return payload
+    }
+
+    /// (eventType, phase) → kind. Exhaustive map; anything else returns nil.
+    /// Shared between the Event-based and tracker-row-based variants — Task
+    /// 6/7 sentinel-walkback tests cover both paths.
+    private static func transitionKind(
+        eventType: String, phase: TransitionPhase
+    ) -> GoogleCalendarEventKind? {
+        switch (eventType, phase) {
+        case ("focusTime", .started): return .focusBlockStarted
+        case ("focusTime", .ended): return .focusBlockEnded
+        case ("outOfOffice", .started): return .oooStarted
+        case ("outOfOffice", .ended): return .oooEnded
+        case ("workingLocation", .changed): return .workingLocationChanged
+        default: return nil
+        }
+    }
+
+    /// Active-phase-only fields from the API Event. autoDeclineMode /
+    /// chatStatus describe how the block is configured during its life; on
+    /// `_ended` we surface only the boundary itself (operational state has
+    /// ceased to be meaningful). OOO has only autoDeclineMode (no chatStatus
+    /// per Google API).
+    private static func applyStartedFieldsFromEvent(
+        event: GoogleCalendarAPI.Event, eventType: String, payload: inout [String: Any]
+    ) {
+        switch eventType {
+        case "focusTime":
+            if let mode = event.focusTimeProperties?.autoDeclineMode {
+                payload["auto_decline_mode"] = mode
+            }
+            if let chat = event.focusTimeProperties?.chatStatus {
+                payload["chat_status"] = chat
+            }
+        case "outOfOffice":
+            if let mode = event.outOfOfficeProperties?.autoDeclineMode {
+                payload["auto_decline_mode"] = mode
+            }
+        default:
+            break
+        }
     }
 
     /// Track-6 P4 Task 14 — build a transition payload directly from a tracker
@@ -333,14 +342,8 @@ extension GoogleCalendarEventMapper {
         fromTrackerRow row: GoogleCalendarTrackerStore.Row,
         phase: TransitionPhase
     ) -> [String: Any]? {
-        let kind: GoogleCalendarEventKind
-        switch (row.eventType, phase) {
-        case ("focusTime", .started): kind = .focusBlockStarted
-        case ("focusTime", .ended): kind = .focusBlockEnded
-        case ("outOfOffice", .started): kind = .oooStarted
-        case ("outOfOffice", .ended): kind = .oooEnded
-        case ("workingLocation", .changed): kind = .workingLocationChanged
-        default: return nil
+        guard let kind = transitionKind(eventType: row.eventType, phase: phase) else {
+            return nil
         }
 
         var payload: [String: Any] = [
@@ -353,21 +356,9 @@ extension GoogleCalendarEventMapper {
         ]
         if let iCalUID = row.iCalUID { payload["i_cal_uid"] = iCalUID }
 
-        // Active-phase-only fields. Mirrors the Event-based variant — on
-        // `_ended` we surface only the boundary itself; operational state
-        // (`auto_decline_mode` / `chat_status`) is no longer meaningful.
         if phase == .started {
-            switch row.eventType {
-            case "focusTime":
-                if let mode = row.autoDeclineMode { payload["auto_decline_mode"] = mode }
-                if let chat = row.chatStatus { payload["chat_status"] = chat }
-            case "outOfOffice":
-                if let mode = row.autoDeclineMode { payload["auto_decline_mode"] = mode }
-            default:
-                break
-            }
+            applyStartedFieldsFromTracker(row: row, payload: &payload)
         }
-
         if phase == .changed, row.eventType == "workingLocation",
             let wl = row.workingLocationType
         {
@@ -375,5 +366,22 @@ extension GoogleCalendarEventMapper {
         }
 
         return payload
+    }
+
+    /// Active-phase-only fields from the tracker row. Mirrors the Event-based
+    /// variant — on `_ended` we surface only the boundary itself; operational
+    /// state (`auto_decline_mode` / `chat_status`) is no longer meaningful.
+    private static func applyStartedFieldsFromTracker(
+        row: GoogleCalendarTrackerStore.Row, payload: inout [String: Any]
+    ) {
+        switch row.eventType {
+        case "focusTime":
+            if let mode = row.autoDeclineMode { payload["auto_decline_mode"] = mode }
+            if let chat = row.chatStatus { payload["chat_status"] = chat }
+        case "outOfOffice":
+            if let mode = row.autoDeclineMode { payload["auto_decline_mode"] = mode }
+        default:
+            break
+        }
     }
 }

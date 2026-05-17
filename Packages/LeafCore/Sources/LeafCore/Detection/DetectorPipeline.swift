@@ -217,11 +217,7 @@ public enum DetectorPipeline {
         moat: DetectorMoat,
         in db: GRDB.Database
     ) throws {
-        let eventID = ctx.eventID
-        let tsMs = ctx.tsMs
-        let payloadJSON = ctx.payloadJSON
-        let detectorKind = ctx.detectorKind
-        guard let data = payloadJSON.data(using: .utf8),
+        guard let data = ctx.payloadJSON.data(using: .utf8),
             let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return }
 
@@ -230,59 +226,87 @@ public enum DetectorPipeline {
         guard !bodies.isEmpty else { return }
 
         for (body, bodyKind) in bodies {
-            switch detectorKind {
+            let stop: Bool
+            switch ctx.detectorKind {
             case Schema.DetectorKinds.decision:
-                if let hit = moat.decision.detect(body: body, kind: bodyKind, eventTsMs: tsMs) {
-                    let inserted = try DecisionsStore.insertOrIgnore(
-                        eventID: eventID, hit: hit, detectedAtMs: tsMs, in: db)
-                    if inserted {
-                        // Same transaction as the INSERT — failure rolls back both.
-                        let contexts = try resolutionContexts(
-                            eventID: eventID,
-                            payload: dict,
-                            in: db)
-                        _ = try OpenQuestionsStore.markResolved(
-                            matchingContexts: contexts,
-                            resolvedByEventID: eventID,
-                            resolvedAtMs: tsMs,
-                            in: db)
-                        return
-                    }
-                }
+                stop = try dispatchDecision(
+                    body: body, bodyKind: bodyKind, ctx: ctx, dict: dict, moat: moat, in: db)
             case Schema.DetectorKinds.openQuestion:
-                if let hit = moat.openQuestion.detect(body: body, kind: bodyKind) {
-                    let row = OpenQuestionRow(
-                        eventID: eventID,
-                        hit: hit,
-                        slackThreadTS: dict["thread_ts"] as? String,
-                        linearIssueRef: derivedLinearRef(payload: dict, body: body),
-                        githubPRRef: dict["linked_github_pr"] as? String,
-                        openedAtMs: tsMs
-                    )
-                    let inserted = try OpenQuestionsStore.insertOrIgnore(row, in: db)
-                    if inserted { return }
-                }
+                stop = try dispatchOpenQuestion(
+                    body: body, bodyKind: bodyKind, ctx: ctx, dict: dict, moat: moat, in: db)
             case Schema.DetectorKinds.blockerPattern:
-                if let hit = moat.blockerPattern.detect(body: body, kind: bodyKind) {
-                    guard let (tk, tr) = blockerTarget(eventKind: eventKind, payload: dict, body: body)
-                    else { continue }
-                    let inserted = try BlockersStore.insertOpenIfAbsent(
-                        BlockersStore.OpenBlockerInput(
-                            targetKind: tk,
-                            targetRef: tr,
-                            blockerKind: Schema.BlockerKinds.patternBlockedOn,
-                            excerpt: hit.blockerExcerpt,
-                            detectedByEventID: eventID,
-                            startedAtMs: tsMs
-                        ),
-                        in: db
-                    )
-                    if inserted { return }
-                }
+                stop = try dispatchBlockerPattern(
+                    body: body, bodyKind: bodyKind, ctx: ctx, dict: dict,
+                    eventKind: eventKind, moat: moat, in: db)
             default:
                 return
             }
+            if stop { return }
         }
+    }
+
+    /// Decision detector — on hit + insert, also mark matching OpenQuestions
+    /// resolved in the same transaction. Returns `true` if the dispatch loop
+    /// should stop (insert succeeded), `false` to continue searching bodies.
+    private static func dispatchDecision(
+        body: String, bodyKind: BodyKind,
+        ctx: DispatchContext, dict: [String: Any], moat: DetectorMoat,
+        in db: GRDB.Database
+    ) throws -> Bool {
+        guard let hit = moat.decision.detect(body: body, kind: bodyKind, eventTsMs: ctx.tsMs)
+        else { return false }
+        let inserted = try DecisionsStore.insertOrIgnore(
+            eventID: ctx.eventID, hit: hit, detectedAtMs: ctx.tsMs, in: db)
+        guard inserted else { return false }
+        // Same transaction as the INSERT — failure rolls back both.
+        let contexts = try resolutionContexts(eventID: ctx.eventID, payload: dict, in: db)
+        _ = try OpenQuestionsStore.markResolved(
+            matchingContexts: contexts,
+            resolvedByEventID: ctx.eventID,
+            resolvedAtMs: ctx.tsMs,
+            in: db)
+        return true
+    }
+
+    private static func dispatchOpenQuestion(
+        body: String, bodyKind: BodyKind,
+        ctx: DispatchContext, dict: [String: Any], moat: DetectorMoat,
+        in db: GRDB.Database
+    ) throws -> Bool {
+        guard let hit = moat.openQuestion.detect(body: body, kind: bodyKind) else { return false }
+        let row = OpenQuestionRow(
+            eventID: ctx.eventID,
+            hit: hit,
+            slackThreadTS: dict["thread_ts"] as? String,
+            linearIssueRef: derivedLinearRef(payload: dict, body: body),
+            githubPRRef: dict["linked_github_pr"] as? String,
+            openedAtMs: ctx.tsMs
+        )
+        return try OpenQuestionsStore.insertOrIgnore(row, in: db)
+    }
+
+    // 7-param signature carries the per-body dispatch context — grouping
+    // into struct would re-pack same data with no readability gain.
+    // swiftlint:disable:next function_parameter_count
+    private static func dispatchBlockerPattern(
+        body: String, bodyKind: BodyKind,
+        ctx: DispatchContext, dict: [String: Any], eventKind: String,
+        moat: DetectorMoat, in db: GRDB.Database
+    ) throws -> Bool {
+        guard let hit = moat.blockerPattern.detect(body: body, kind: bodyKind) else { return false }
+        guard let (tk, tr) = blockerTarget(eventKind: eventKind, payload: dict, body: body)
+        else { return false }
+        return try BlockersStore.insertOpenIfAbsent(
+            BlockersStore.OpenBlockerInput(
+                targetKind: tk,
+                targetRef: tr,
+                blockerKind: Schema.BlockerKinds.patternBlockedOn,
+                excerpt: hit.blockerExcerpt,
+                detectedByEventID: ctx.eventID,
+                startedAtMs: ctx.tsMs
+            ),
+            in: db
+        )
     }
 
     // MARK: - Body extraction (mirrors EventsFullTextStore.indexEvent)

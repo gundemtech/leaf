@@ -92,7 +92,18 @@ nonisolated public struct SlackTokenRefresher: Sendable {
         guard let refreshToken = current.refreshToken, !refreshToken.isEmpty else {
             throw SlackTokenRefresherError.missingRefreshToken
         }
+        let decoded = try await fetchRefreshResponse(refreshToken: refreshToken)
+        if decoded.ok {
+            return try await persistRefreshedTokens(decoded: decoded, current: current, now: now)
+        }
+        try handleRefreshError(decoded: decoded)
+        // handleRefreshError always throws; this line is unreachable but
+        // required for the type checker.
+        throw SlackTokenRefresherError.network("Slack refresh failed: unreachable")
+    }
 
+    /// HTTP round-trip: build POST → execute → enforce 200 → JSON decode.
+    private func fetchRefreshResponse(refreshToken: String) async throws -> SlackOAuthV2Response {
         var request = URLRequest(url: SlackOAuthEndpoints.token)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
@@ -109,7 +120,6 @@ nonisolated public struct SlackTokenRefresher: Sendable {
         } catch {
             throw SlackTokenRefresherError.network(String(describing: error))
         }
-
         guard let http = response as? HTTPURLResponse else {
             throw SlackTokenRefresherError.network("non-HTTP response")
         }
@@ -117,57 +127,59 @@ nonisolated public struct SlackTokenRefresher: Sendable {
             // Slack 99% возвращает 200 с ok=false; не-200 = транспорт/инфра.
             throw SlackTokenRefresherError.network("HTTP \(http.statusCode)")
         }
-
-        let decoded: SlackOAuthV2Response
         do {
-            decoded = try JSONDecoder().decode(SlackOAuthV2Response.self, from: data)
+            return try JSONDecoder().decode(SlackOAuthV2Response.self, from: data)
         } catch {
             throw SlackTokenRefresherError.decode(String(describing: error))
         }
+    }
 
-        if decoded.ok {
-            // Refresh-flow кладёт новый user-token на TOP LEVEL — в отличие от
-            // initial exchange (там в `authed_user`). Fallback на authedUser —
-            // защита от случая когда Slack однажды поменяет shape (paranoid).
-            let newAccessToken =
-                decoded.accessToken
-                ?? decoded.authedUser?.accessToken
-            guard let accessToken = newAccessToken, !accessToken.isEmpty else {
-                throw SlackTokenRefresherError.decode("Refresh response ok=true but missing access_token")
-            }
-            let newRefreshToken =
-                decoded.refreshToken
-                ?? decoded.authedUser?.refreshToken
-                ?? current.refreshToken
-            let newExpiresAt: Date? = {
-                if let seconds = decoded.expiresIn ?? decoded.authedUser?.expiresIn, seconds > 0 {
-                    return now.addingTimeInterval(TimeInterval(seconds))
-                }
-                return nil
-            }()
-            let newScope =
-                decoded.scope
-                ?? decoded.authedUser?.scope
-                ?? current.scope
-
-            let updated = IntegrationRecord(
-                provider: .slack,
-                workspaceID: current.workspaceID,
-                workspaceName: current.workspaceName,
-                accessToken: accessToken,
-                refreshToken: newRefreshToken,
-                expiresAt: newExpiresAt,
-                scope: newScope,
-                connectedAt: current.connectedAt,
-                updatedAt: now
-            )
-            try database.upsertIntegration(updated)
-            return updated
+    /// Refresh-flow кладёт новый user-token на TOP LEVEL — в отличие от
+    /// initial exchange (там в `authed_user`). Fallback на authedUser —
+    /// защита от случая когда Slack однажды поменяет shape (paranoid).
+    private func persistRefreshedTokens(
+        decoded: SlackOAuthV2Response, current: IntegrationRecord, now: Date
+    ) async throws -> IntegrationRecord {
+        let newAccessToken =
+            decoded.accessToken
+            ?? decoded.authedUser?.accessToken
+        guard let accessToken = newAccessToken, !accessToken.isEmpty else {
+            throw SlackTokenRefresherError.decode("Refresh response ok=true but missing access_token")
         }
+        let newRefreshToken =
+            decoded.refreshToken
+            ?? decoded.authedUser?.refreshToken
+            ?? current.refreshToken
+        let newExpiresAt: Date? = {
+            if let seconds = decoded.expiresIn ?? decoded.authedUser?.expiresIn, seconds > 0 {
+                return now.addingTimeInterval(TimeInterval(seconds))
+            }
+            return nil
+        }()
+        let newScope =
+            decoded.scope
+            ?? decoded.authedUser?.scope
+            ?? current.scope
 
-        // ok=false — провайдерская ошибка. Категоризируем: terminal (refresh-token
-        // мёртв навсегда → Reconnect needed) vs transient (network-ish, retry на
-        // следующем tick'е).
+        let updated = IntegrationRecord(
+            provider: .slack,
+            workspaceID: current.workspaceID,
+            workspaceName: current.workspaceName,
+            accessToken: accessToken,
+            refreshToken: newRefreshToken,
+            expiresAt: newExpiresAt,
+            scope: newScope,
+            connectedAt: current.connectedAt,
+            updatedAt: now
+        )
+        try database.upsertIntegration(updated)
+        return updated
+    }
+
+    /// ok=false — провайдерская ошибка. Категоризируем: terminal (refresh-token
+    /// мёртв навсегда → Reconnect needed) vs transient (network-ish, retry на
+    /// следующем tick'е). Always throws.
+    private func handleRefreshError(decoded: SlackOAuthV2Response) throws {
         let code = decoded.error ?? "unknown_error"
         let terminalErrors: Set<String> = [
             "invalid_grant",

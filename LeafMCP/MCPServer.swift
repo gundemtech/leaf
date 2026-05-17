@@ -8,48 +8,85 @@ import LeafCorePrivate
 
 @main
 enum MCPMain {
+
+    private struct RuntimeConfig {
+        let dbConfig: DatabaseConfig
+        let dbEncryption: EncryptionOptions?
+        let focusSessionGapSec: TimeInterval
+        let prodMode: Bool
+        let detectorMoat: DetectorMoat
+    }
+
     static func main() async {
+        let cfg = resolveRuntimeConfig()
+        MCPLog.info("leaf-mcp v\(MCPConstants.serverVersion) starting (prod=\(cfg.prodMode))")
+
+        let dispatcher = buildDispatcher(cfg: cfg, dbURL: DatabasePath.defaultURL())
+        let transport = StdioTransport(dispatcher: dispatcher)
+
+        // Shutdown: Claude Code закрывает stdin перед SIGTERM (см. MCP spec
+        // lifecycle). В async main() без RunLoop.main.run() DispatchSource
+        // signal handlers на .main queue ненадёжны (cooperative concurrency
+        // runtime vs explicit runloop pumping) → полагаемся на stdin EOF для
+        // graceful shutdown и default SIGTERM action для forced kill.
+        do {
+            try await transport.serve()
+            MCPLog.info("transport returned normally — exit(0)")
+            exit(0)
+        } catch {
+            MCPLog.error("transport failed: \(error.localizedDescription)")
+            exit(1)
+        }
+    }
+
+    /// Resolve prod vs substrate runtime config. Prod build registers
+    /// `ProdInsights` factory + wires file-keystore encryption + Phase
+    /// Track-1 D3 prodDetectorMoat (pattern catalogues + thresholds +
+    /// Levenshtein fuzz match). Substrate build keeps `.publicSubstrate`
+    /// no-op detectors — `leaf_query_activity` still works via FTS+links,
+    /// `leaf_get_decision` / `leaf_current_work` gracefully return empty.
+    private static func resolveRuntimeConfig() -> RuntimeConfig {
         #if LEAF_PROD
-        let dbConfig = ProdConfigs.database
         DerivedInsightsFactory.register { LeafCorePrivate.ProdInsights(database: $0) }
-        let prodMode = true
-        let dbEncryption: EncryptionOptions? = EncryptionOptions(
-            keyProvider: .callback { @Sendable in
-                try FileKeyStore.fetchOrCreate()
-            },
-            preKeyPragmas: ProdConfigs.sqlcipherPragmasPreKey,
-            postKeyPragmas: ProdConfigs.sqlcipherPragmasPostKey
+        return RuntimeConfig(
+            dbConfig: ProdConfigs.database,
+            dbEncryption: EncryptionOptions(
+                keyProvider: .callback { @Sendable in
+                    try FileKeyStore.fetchOrCreate()
+                },
+                preKeyPragmas: ProdConfigs.sqlcipherPragmasPreKey,
+                postKeyPragmas: ProdConfigs.sqlcipherPragmasPostKey
+            ),
+            focusSessionGapSec: ProdConfigs.agent.focusSessionGapSec,
+            prodMode: true,
+            detectorMoat: prodDetectorMoat()
         )
-        let focusSessionGapSec: TimeInterval = ProdConfigs.agent.focusSessionGapSec
         #else
-        let dbConfig = DatabaseConfig.weakDefaults
-        let prodMode = false
-        let dbEncryption: EncryptionOptions? = nil
-        let focusSessionGapSec: TimeInterval = AgentThresholds.weakDefaults.focusSessionGapSec
+        return RuntimeConfig(
+            dbConfig: DatabaseConfig.weakDefaults,
+            dbEncryption: nil,
+            focusSessionGapSec: AgentThresholds.weakDefaults.focusSessionGapSec,
+            prodMode: false,
+            detectorMoat: .publicSubstrate
+        )
         #endif
+    }
 
-        MCPLog.info("leaf-mcp v\(MCPConstants.serverVersion) starting (prod=\(prodMode))")
+    /// Build the full 15-tool dispatcher. Notifications (`notifications/*`)
+    /// обрабатываются Dispatcher'ом через id == nil short-circuit — отдельный
+    /// handler регистрировать не нужно.
+    private static func buildDispatcher(cfg: RuntimeConfig, dbURL: URL) -> Dispatcher {
+        let dbConfig = cfg.dbConfig
+        let dbEncryption = cfg.dbEncryption
+        let detectorMoat = cfg.detectorMoat
 
-        // Phase Track-1 D3 — DetectorMoat injection point. Prod build wires
-        // `prodDetectorMoat()` (LeafCorePrivate moat: pattern catalogues +
-        // threshold constants + Levenshtein fuzz match). Substrate build keeps
-        // `.publicSubstrate` (no-op detectors — `leaf_query_activity` still
-        // works через FTS+links, `leaf_get_decision` / `leaf_current_work`
-        // gracefully return empty results).
-        #if LEAF_PROD
-        let detectorMoat: DetectorMoat = prodDetectorMoat()
-        #else
-        let detectorMoat: DetectorMoat = .publicSubstrate
-        #endif
-
-        let dbURL = DatabasePath.defaultURL()
         let timelineTool = GetTimelineTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
         let findLastActivityTool = FindLastActivityTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
         let currentSessionTool = GetCurrentSessionTool(
             dbURL: dbURL,
             dbConfig: dbConfig,
             dbEncryption: dbEncryption,
-            focusSessionGapSec: focusSessionGapSec
+            focusSessionGapSec: cfg.focusSessionGapSec
         )
         let aiActivityTool = GetAiActivityTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
         let linearActivityTool = GetLinearActivityTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
@@ -75,9 +112,7 @@ enum MCPMain {
             dbEncryption: dbEncryption, detectorMoat: detectorMoat
         )
 
-        // Notifications (`notifications/*`) обрабатываются Dispatcher'ом через
-        // id == nil short-circuit — отдельный handler регистрировать не нужно.
-        let dispatcher = Dispatcher(handlers: [
+        return Dispatcher(handlers: [
             "initialize": InitializeHandler(),
             "tools/list": ToolsListHandler(tools: [
                 GetTimelineTool.definition,
@@ -114,21 +149,5 @@ enum MCPMain {
                 "leaf_current_work": currentWorkTool,
             ]),
         ])
-
-        let transport = StdioTransport(dispatcher: dispatcher)
-
-        // Shutdown: Claude Code закрывает stdin перед SIGTERM (см. MCP spec
-        // lifecycle). В async main() без RunLoop.main.run() DispatchSource
-        // signal handlers на .main queue ненадёжны (cooperative concurrency
-        // runtime vs explicit runloop pumping) → полагаемся на stdin EOF для
-        // graceful shutdown и default SIGTERM action для forced kill.
-        do {
-            try await transport.serve()
-            MCPLog.info("transport returned normally — exit(0)")
-            exit(0)
-        } catch {
-            MCPLog.error("transport failed: \(error.localizedDescription)")
-            exit(1)
-        }
     }
 }
