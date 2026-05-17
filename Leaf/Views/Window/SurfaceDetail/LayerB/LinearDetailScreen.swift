@@ -121,9 +121,6 @@ struct LinearDetailScreen: View {
                     if let streak = breakdown.issueCloseStreak, streak > 0 {
                         statRow(label: "Close streak", value: "\(streak)-day")
                     }
-                    if let rate = breakdown.completionRate {
-                        statRow(label: "Completion rate", value: formatPct(rate))
-                    }
                 }
             }
         }
@@ -220,11 +217,6 @@ struct LinearDetailScreen: View {
     private func formatWow(_ delta: Double) -> String {
         let pct = Int((delta * 100).rounded())
         return pct >= 0 ? "+\(pct)%" : "−\(abs(pct))%"
-    }
-
-    private func formatPct(_ value: Double) -> String {
-        let pct = Int((value * 100).rounded())
-        return "\(pct)%"
     }
 
     private func formatDuration(_ seconds: Double) -> String {
