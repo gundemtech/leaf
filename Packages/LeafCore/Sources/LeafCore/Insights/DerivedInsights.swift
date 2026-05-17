@@ -101,6 +101,30 @@ public protocol DerivedInsights: Sendable {
     /// (start desc). Default extension returns `[]` so StubInsights / iOS-future
     /// stay no-op without override.
     func recentSessions(period: DateInterval, limit: Int) throws -> [ActivitySession]
+
+    // MARK: - Work State (Track 7 P3 / Track-1 D3 surface)
+
+    /// Phase Track-7 P3 — Decisions detected by Track-1 D3 `DecisionDetector`.
+    /// Source: M014 `decisions` table, filtered by `detected_at_ms` in `period`,
+    /// sorted DESC, capped client-side by view-model (`limit` is an upstream
+    /// hint, not a hard contract). Default `[]` for stubs / iOS-future.
+    func recentDecisions(period: DateInterval, limit: Int) throws -> [Decision]
+
+    /// Phase Track-7 P3 — Questions captured by `OpenQuestionDetector`. Returns
+    /// ALL questions touching `period` (both `opened_at_ms` in period and
+    /// `resolved_at_ms` in period for resolved ones). View-model partitions
+    /// open vs resolved client-side. Default `[]` for stubs / iOS-future.
+    func openQuestions(period: DateInterval) throws -> [OpenQuestion]
+
+    /// Phase Track-7 P3 — Currently open blockers (`resolved_at_ms IS NULL`).
+    /// Life-of-blocker semantics — no period filter; an old blocker that's
+    /// still open is still returned. Default `[]` for stubs / iOS-future.
+    func openBlockers() throws -> [Blocker]
+
+    /// Phase Track-7 P3 — Most recent "where you stopped" snapshots from
+    /// `WhereStoppedDeriver`. Sorted DESC by `generated_at_ms`, capped
+    /// client-side. Default `[]` for stubs / iOS-future.
+    func recentWhereStopped(limit: Int) throws -> [WhereStoppedSnapshot]
 }
 
 /// Default implementations — конформер'ы могут override'ить, но без явного
@@ -123,6 +147,18 @@ public extension DerivedInsights {
 
     /// Phase 4.10.B — default empty list для StubInsights / iOS-future.
     func recentSessions(period: DateInterval, limit: Int) throws -> [ActivitySession] { [] }
+
+    /// Phase Track-7 P3 — default `[]` for stubs / iOS-future.
+    func recentDecisions(period: DateInterval, limit: Int) throws -> [Decision] { [] }
+
+    /// Phase Track-7 P3 — default `[]` for stubs / iOS-future.
+    func openQuestions(period: DateInterval) throws -> [OpenQuestion] { [] }
+
+    /// Phase Track-7 P3 — default `[]` for stubs / iOS-future.
+    func openBlockers() throws -> [Blocker] { [] }
+
+    /// Phase Track-7 P3 — default `[]` for stubs / iOS-future.
+    func recentWhereStopped(limit: Int) throws -> [WhereStoppedSnapshot] { [] }
 }
 
 /// Phase 1.1 / CI fallback. Все методы бросают .notImplemented.
