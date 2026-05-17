@@ -318,13 +318,14 @@ private struct HomeContent: View {
         switch provider {
         case .linear:
             LinearDetailScreen()
-        case .github, .slack:
-            // Placeholder — real screens land in Tasks 7/8 within Track-7 P4.
+        case .github:
+            GitHubDetailScreen()
+        case .slack:
             VStack {
                 Spacer()
                 LeafEmptyState(
                     icon: LeafIcons.brand.leaf,
-                    title: "\(provider.displayName) detail coming soon",
+                    title: "Slack detail coming soon",
                     description: "This Layer B drill-down lands in a follow-up task within Track-7 P4."
                 )
                 Spacer()
