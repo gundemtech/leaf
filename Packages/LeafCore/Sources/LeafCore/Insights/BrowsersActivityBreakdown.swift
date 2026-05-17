@@ -1,6 +1,6 @@
 import Foundation
 
-public struct BrowsersActivityBreakdown: Equatable, Sendable {
+public struct BrowsersActivityBreakdown: Sendable, Hashable {
     public let pageCount: Int
     public let domainCount: Int
     public let safariPageCount: Int
@@ -58,7 +58,7 @@ public struct BrowsersActivityBreakdown: Equatable, Sendable {
     )
 }
 
-public struct DomainCountEntry: Equatable, Sendable, Codable {
+public struct DomainCountEntry: Sendable, Hashable, Codable {
     public let domain: String
     public let count: Int
 

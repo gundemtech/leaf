@@ -1,6 +1,6 @@
 import Foundation
 
-public struct GoogleCalendarActivityBreakdown: Equatable, Sendable {
+public struct GoogleCalendarActivityBreakdown: Sendable, Hashable {
     public let focusBlockCount: Int
     public let focusDurationSeconds: TimeInterval
     public let oooBlockCount: Int

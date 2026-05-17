@@ -1,6 +1,6 @@
 import Foundation
 
-public struct ZoomActivityBreakdown: Equatable, Sendable {
+public struct ZoomActivityBreakdown: Sendable, Hashable {
     public let meetingCount: Int
     public let totalDurationSeconds: TimeInterval
     public let calendarLinkedCount: Int

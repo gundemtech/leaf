@@ -1,6 +1,6 @@
 import Foundation
 
-public struct IDEsActivityBreakdown: Equatable, Sendable {
+public struct IDEsActivityBreakdown: Sendable, Hashable {
     public let totalEventCount: Int
     public let vscodeFamilyEventCount: Int
     public let jetbrainsEventCount: Int

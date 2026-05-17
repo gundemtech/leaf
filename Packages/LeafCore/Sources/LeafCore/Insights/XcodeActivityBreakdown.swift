@@ -1,6 +1,6 @@
 import Foundation
 
-public struct XcodeActivityBreakdown: Equatable, Sendable {
+public struct XcodeActivityBreakdown: Sendable, Hashable {
     public let buildCount: Int
     public let testRunCount: Int
     public let buildSuccessCount: Int
