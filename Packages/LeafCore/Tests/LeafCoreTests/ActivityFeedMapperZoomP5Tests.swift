@@ -11,7 +11,8 @@ import XCTest
 final class ActivityFeedMapperZoomP5Tests: XCTestCase {
 
     private func payloadJSON(_ dict: [String: String]) -> String {
-        // swiftlint:disable:next force_try -- test fixture; [String: String] always JSON-serializable
+        // Test fixture; [String: String] always JSON-serializable.
+        // swiftlint:disable:next force_try
         let data = try! JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys])
         return String(data: data, encoding: .utf8)!
     }

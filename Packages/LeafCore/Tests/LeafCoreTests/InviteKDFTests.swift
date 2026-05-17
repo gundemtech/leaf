@@ -45,7 +45,8 @@ final class InviteKDFTests: XCTestCase {
     private func makeDummySharedSecret() -> SharedSecret {
         let alice = Curve25519.KeyAgreement.PrivateKey()
         let bob = Curve25519.KeyAgreement.PrivateKey()
-        // swiftlint:disable:next force_try -- test fixture; both keys constructed in-line, ECDH cannot fail
+        // Test fixture; both keys constructed in-line, ECDH cannot fail.
+        // swiftlint:disable:next force_try
         return try! alice.sharedSecretFromKeyAgreement(with: bob.publicKey)
     }
 }

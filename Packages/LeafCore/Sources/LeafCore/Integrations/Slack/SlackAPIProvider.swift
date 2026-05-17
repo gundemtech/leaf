@@ -328,9 +328,9 @@ public struct SlackChannelMessageCount: Sendable, Hashable {
         self.messages = messages
     }
 
-    /// Snapshot represents zero authored messages в окне tick. Equivalent к
-    /// `count == 0`; exists so callers идиоматически фильтруют `!isEmpty` (also
-    /// resolves SwiftLint `empty_count`).
+    // Snapshot represents zero authored messages в окне tick. Equivalent к
+    // `count == 0`; exists so callers идиоматически фильтруют `!isEmpty`.
+    // swiftlint:disable:next empty_count
     public var isEmpty: Bool { count == 0 }
 }
 
@@ -411,9 +411,9 @@ public struct SlackMentionChannelCount: Sendable, Hashable {
         self.periodEndMs = periodEndMs
     }
 
-    /// Snapshot represents zero mentions received в окне tick. Equivalent к
-    /// `count == 0`; exists so callers идиоматически фильтруют `!isEmpty` (also
-    /// resolves SwiftLint `empty_count`).
+    // Snapshot represents zero mentions received в окне tick. Equivalent к
+    // `count == 0`; exists so callers идиоматически фильтруют `!isEmpty`.
+    // swiftlint:disable:next empty_count
     public var isEmpty: Bool { count == 0 }
 }
 

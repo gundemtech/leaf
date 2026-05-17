@@ -29,7 +29,8 @@ public enum LinearAttachmentParser {
         // ^https://github\.com/(<owner>)/(<repo>)/pull/(<num>)
         // Trailing chars (slash, query string, fragment) разрешены за счёт отсутствия
         // anchor `$`; capture groups строго берут owner / repo / num.
-        // swiftlint:disable:next force_try -- compile-time constant pattern; failure impossible
+        // Compile-time constant pattern; NSRegularExpression init failure impossible.
+        // swiftlint:disable:next force_try
         try! NSRegularExpression(
             pattern: #"^https://github\.com/([^/?#]+)/([^/?#]+)/pull/(\d+)"#,
             options: []
@@ -41,7 +42,8 @@ public enum LinearAttachmentParser {
         // ^https://<workspace>.slack.com/archives/<channel>/p<digits>
         // Channel ID — alphanumeric (Slack uses `C12345...` / `D...` / `G...`).
         // ts — digits (>=10 чтобы UNIX seconds part разумно валидным был).
-        // swiftlint:disable:next force_try -- compile-time constant pattern; failure impossible
+        // Compile-time constant pattern; NSRegularExpression init failure impossible.
+        // swiftlint:disable:next force_try
         try! NSRegularExpression(
             pattern: #"^https://[^./?#]+\.slack\.com/archives/([A-Z0-9]+)/p(\d{10,})"#,
             options: []
