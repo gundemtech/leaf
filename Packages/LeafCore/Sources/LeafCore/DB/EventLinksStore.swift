@@ -71,7 +71,10 @@ public enum EventLinksStore {
         }
     }
 
-    /// 2) Branch name → Linear (gh_commit_pushed only). Moat extractor via derivers.
+    // 2) Branch name → Linear (gh_commit_pushed only). Moat extractor via derivers.
+    // Extracted from `deriveLinks` to keep dispatcher readable; 7-param signature is
+    // a direct passthrough of dispatch context, not a logical group worth structifying.
+    // swiftlint:disable:next function_parameter_count
     private static func deriveBranchNameLinearRef(
         eventID: Int64, ts: Int64, payload: [String: String], eventKind: String,
         knownLinearPrefixes: Set<String>, derivers: LinkDerivers, in db: GRDB.Database

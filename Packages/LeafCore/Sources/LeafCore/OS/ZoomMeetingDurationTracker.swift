@@ -133,6 +133,9 @@ public struct ZoomMeetingDurationTracker: Sendable {
         )
     }
 
+    // 8-param signature destructures the `.pendingEnd` associated values
+    // directly — grouping into struct would re-pack same data with no gain.
+    // swiftlint:disable:next function_parameter_count
     private mutating func handlePendingEnd(
         meetingActive: Bool, startedAt: Int64, observedAt: Int64,
         coldStart: Bool, linkedCalEventID: String?, dropped: Int,

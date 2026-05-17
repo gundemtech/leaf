@@ -285,6 +285,9 @@ public enum DetectorPipeline {
         return try OpenQuestionsStore.insertOrIgnore(row, in: db)
     }
 
+    // 7-param signature carries the per-body dispatch context — grouping
+    // into struct would re-pack same data with no readability gain.
+    // swiftlint:disable:next function_parameter_count
     private static func dispatchBlockerPattern(
         body: String, bodyKind: BodyKind,
         ctx: DispatchContext, dict: [String: Any], eventKind: String,
