@@ -239,22 +239,24 @@ public actor GitHubWarmCollector {
                 for row in cardMoved {
                     events.append(
                         Self.makeProjectCardMovedEvent(
-                            itemID: row.0, projectID: row.1, oldStatus: row.2, newStatus: row.3,
+                            itemID: row.itemID, projectID: row.projectID,
+                            oldStatus: row.oldStatus, newStatus: row.newStatus,
                             observedAtMs: nowMs
                         ))
                 }
                 for row in iter {
                     events.append(
                         Self.makeProjectIterationChangedEvent(
-                            itemID: row.0, projectID: row.1, oldIteration: row.2, newIteration: row.3,
+                            itemID: row.itemID, projectID: row.projectID,
+                            oldIteration: row.oldIteration, newIteration: row.newIteration,
                             observedAtMs: nowMs
                         ))
                 }
                 for row in fields {
                     events.append(
                         Self.makeProjectFieldUpdatedEvent(
-                            itemID: row.0, projectID: row.1, fieldName: row.2,
-                            oldValue: row.3, newValue: row.4, observedAtMs: nowMs
+                            itemID: row.itemID, projectID: row.projectID, fieldName: row.fieldName,
+                            oldValue: row.oldValue, newValue: row.newValue, observedAtMs: nowMs
                         ))
                 }
             }
@@ -312,21 +314,21 @@ public actor GitHubWarmCollector {
         let kind = Schema.ProviderSnapshotKinds.githubCodespaces
         let prior: [GitHubCodespaceSnapshot] = readSnapshotArray(kind: kind)
         if snapshotRowPresent(kind: kind) {
-            let (created, started, stopped, deleted) = Self.codespacesDiff(prior: prior, current: current)
+            let diff = Self.codespacesDiff(prior: prior, current: current)
             events.append(
-                contentsOf: created.map {
+                contentsOf: diff.created.map {
                     Self.makeCodespaceCreatedEvent($0, observedAtMs: nowMs)
                 })
             events.append(
-                contentsOf: started.map {
+                contentsOf: diff.started.map {
                     Self.makeCodespaceStartedEvent($0, observedAtMs: nowMs)
                 })
             events.append(
-                contentsOf: stopped.map {
+                contentsOf: diff.stopped.map {
                     Self.makeCodespaceStoppedEvent($0, observedAtMs: nowMs)
                 })
             events.append(
-                contentsOf: deleted.map {
+                contentsOf: diff.deleted.map {
                     Self.makeCodespaceDeletedEvent($0, observedAtMs: nowMs)
                 })
         }
@@ -428,39 +430,78 @@ public actor GitHubWarmCollector {
     /// pure helper consumed by performTick). The doc comment + impl remain
     /// untouched — they document the bootstrap discipline + sort order
     /// contract that tests exercise.
+    /// Card moved between status columns. `itemID` + `projectID` identify the
+    /// project-v2 item; `oldStatus` / `newStatus` capture the column transition
+    /// (either side may be nil — backlog/done columns commonly have no value).
+    public struct ProjectV2CardMoved: Sendable, Equatable {
+        public let itemID: String
+        public let projectID: String
+        public let oldStatus: String?
+        public let newStatus: String?
+    }
+
+    /// Card iteration assignment changed. `itemID` + `projectID` identify the
+    /// item; `oldIteration` / `newIteration` capture the iteration ref shift.
+    public struct ProjectV2IterationChanged: Sendable, Equatable {
+        public let itemID: String
+        public let projectID: String
+        public let oldIteration: String?
+        public let newIteration: String?
+    }
+
+    /// Per-field value change on a project-v2 item. `fieldName` is the
+    /// project-v2 custom-field title; `oldValue` / `newValue` are the prior
+    /// / current opaque value (either side may be nil for adds/clears).
+    public struct ProjectV2FieldUpdated: Sendable, Equatable {
+        public let itemID: String
+        public let projectID: String
+        public let fieldName: String
+        public let oldValue: String?
+        public let newValue: String?
+    }
+
     public static func projectsV2Diff(
         prior: [GitHubProjectV2ItemSnapshot],
         current: [GitHubProjectV2ItemSnapshot]
     ) -> (
-        cardMoved: [(String, String, String?, String?)],
-        iterationChanged: [(String, String, String?, String?)],
-        fieldUpdated: [(String, String, String, String?, String?)]
+        cardMoved: [ProjectV2CardMoved],
+        iterationChanged: [ProjectV2IterationChanged],
+        fieldUpdated: [ProjectV2FieldUpdated]
     ) {
         let priorByID = Dictionary(uniqueKeysWithValues: prior.map { ($0.itemID, $0) })
-        var cardMoved: [(String, String, String?, String?)] = []
-        var iter: [(String, String, String?, String?)] = []
-        var fields: [(String, String, String, String?, String?)] = []
+        var cardMoved: [ProjectV2CardMoved] = []
+        var iter: [ProjectV2IterationChanged] = []
+        var fields: [ProjectV2FieldUpdated] = []
         for curr in current {
             guard let p = priorByID[curr.itemID] else { continue }
             if p.status != curr.status {
-                cardMoved.append((curr.itemID, curr.projectID, p.status, curr.status))
+                cardMoved.append(ProjectV2CardMoved(
+                    itemID: curr.itemID, projectID: curr.projectID,
+                    oldStatus: p.status, newStatus: curr.status
+                ))
             }
             if p.iterationID != curr.iterationID {
-                iter.append((curr.itemID, curr.projectID, p.iterationID, curr.iterationID))
+                iter.append(ProjectV2IterationChanged(
+                    itemID: curr.itemID, projectID: curr.projectID,
+                    oldIteration: p.iterationID, newIteration: curr.iterationID
+                ))
             }
             let allFieldNames = Set(p.fieldValues.keys).union(curr.fieldValues.keys)
             for name in allFieldNames.sorted() {
                 let oldV = p.fieldValues[name]
                 let newV = curr.fieldValues[name]
                 if oldV != newV {
-                    fields.append((curr.itemID, curr.projectID, name, oldV, newV))
+                    fields.append(ProjectV2FieldUpdated(
+                        itemID: curr.itemID, projectID: curr.projectID,
+                        fieldName: name, oldValue: oldV, newValue: newV
+                    ))
                 }
             }
         }
         return (
-            cardMoved.sorted(by: { $0.0 < $1.0 }),
-            iter.sorted(by: { $0.0 < $1.0 }),
-            fields.sorted(by: { $0.0 == $1.0 ? $0.2 < $1.2 : $0.0 < $1.0 })
+            cardMoved.sorted(by: { $0.itemID < $1.itemID }),
+            iter.sorted(by: { $0.itemID < $1.itemID }),
+            fields.sorted(by: { $0.itemID == $1.itemID ? $0.fieldName < $1.fieldName : $0.itemID < $1.itemID })
         )
     }
 
@@ -516,6 +557,19 @@ public actor GitHubWarmCollector {
         return (received, accepted)
     }
 
+    /// Result of ``codespacesDiff(prior:current:)`` partitioned into four
+    /// mutually-exclusive buckets. `created` = new codespace name; `started`
+    /// = state transitioned to `Available`; `stopped` = transitioned to
+    /// `Shutdown`; `deleted` = name absent from current. Transient states
+    /// (Provisioning / Queued / Building / Starting / etc) leave all buckets
+    /// untouched.
+    public struct CodespacesDiff: Sendable, Equatable {
+        public let created: [GitHubCodespaceSnapshot]
+        public let started: [GitHubCodespaceSnapshot]
+        public let stopped: [GitHubCodespaceSnapshot]
+        public let deleted: [GitHubCodespaceSnapshot]
+    }
+
     /// Codespace diff: created = new codespace name; started = state
     /// transitioned to `Available`; stopped = transitioned to `Shutdown`;
     /// deleted = name absent from current. Transient states (Provisioning /
@@ -523,12 +577,7 @@ public actor GitHubWarmCollector {
     public static func codespacesDiff(
         prior: [GitHubCodespaceSnapshot],
         current: [GitHubCodespaceSnapshot]
-    ) -> (
-        created: [GitHubCodespaceSnapshot],
-        started: [GitHubCodespaceSnapshot],
-        stopped: [GitHubCodespaceSnapshot],
-        deleted: [GitHubCodespaceSnapshot]
-    ) {
+    ) -> CodespacesDiff {
         let priorByName = Dictionary(uniqueKeysWithValues: prior.map { ($0.codespaceName, $0) })
         let currentByName = Dictionary(uniqueKeysWithValues: current.map { ($0.codespaceName, $0) })
         var created: [GitHubCodespaceSnapshot] = []
@@ -551,11 +600,11 @@ public actor GitHubWarmCollector {
         for p in prior where currentByName[p.codespaceName] == nil {
             deleted.append(p)
         }
-        return (
-            created.sorted(by: { $0.codespaceName < $1.codespaceName }),
-            started.sorted(by: { $0.codespaceName < $1.codespaceName }),
-            stopped.sorted(by: { $0.codespaceName < $1.codespaceName }),
-            deleted.sorted(by: { $0.codespaceName < $1.codespaceName })
+        return CodespacesDiff(
+            created: created.sorted(by: { $0.codespaceName < $1.codespaceName }),
+            started: started.sorted(by: { $0.codespaceName < $1.codespaceName }),
+            stopped: stopped.sorted(by: { $0.codespaceName < $1.codespaceName }),
+            deleted: deleted.sorted(by: { $0.codespaceName < $1.codespaceName })
         )
     }
 

@@ -13,13 +13,38 @@ import GRDB
 /// scheduled-detector commit (LinearStuck auto-resolve) but is shipped here
 /// so the store surface is whole.
 public enum BlockersStore {
+    /// Per-row input for ``insertOpenIfAbsent(_:in:)``. The 6 columns mirror
+    /// the writable subset of the `blockers` schema (resolution columns are
+    /// untouched by insert — they live on `resolve(...)`). Grouped struct
+    /// keeps the call signature digestible and matches the detector-pipeline
+    /// callsite shape (1 instance per detector hit).
+    public struct OpenBlockerInput: Sendable {
+        public let targetKind: String
+        public let targetRef: String
+        public let blockerKind: String
+        public let excerpt: String?
+        public let detectedByEventID: Int64?
+        public let startedAtMs: Int64
+
+        public init(
+            targetKind: String,
+            targetRef: String,
+            blockerKind: String,
+            excerpt: String?,
+            detectedByEventID: Int64?,
+            startedAtMs: Int64
+        ) {
+            self.targetKind = targetKind
+            self.targetRef = targetRef
+            self.blockerKind = blockerKind
+            self.excerpt = excerpt
+            self.detectedByEventID = detectedByEventID
+            self.startedAtMs = startedAtMs
+        }
+    }
+
     public static func insertOpenIfAbsent(
-        targetKind: String,
-        targetRef: String,
-        blockerKind: String,
-        excerpt: String?,
-        detectedByEventID: Int64?,
-        startedAtMs: Int64,
+        _ input: OpenBlockerInput,
         in db: GRDB.Database
     ) throws -> Bool {
         try db.execute(
@@ -30,8 +55,8 @@ public enum BlockersStore {
                     VALUES (?, ?, ?, ?, ?, ?)
                 """,
             arguments: [
-                targetKind, targetRef, blockerKind, excerpt,
-                detectedByEventID, startedAtMs,
+                input.targetKind, input.targetRef, input.blockerKind, input.excerpt,
+                input.detectedByEventID, input.startedAtMs,
             ])
         return db.changesCount > 0
     }

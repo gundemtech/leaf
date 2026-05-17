@@ -585,10 +585,26 @@ public final class Database: @unchecked Sendable {
 
     // MARK: - Browser Domain Allow-list (Phase Track-6 P3)
 
+    /// One row of `browser_domain_allow` as returned by
+    /// ``listBrowserDomainAllow()``. Promoted from a 4-tuple to a named
+    /// struct so callers iterate by field rather than positional sugar; the
+    /// app-target `BrowserDomainAllowEntry` wraps this for `Identifiable`.
+    public struct BrowserDomainAllowRow: Sendable, Equatable {
+        public let domain: String
+        public let granularity: URLGranularity
+        public let addedAtMs: Int64
+        public let notes: String?
+
+        public init(domain: String, granularity: URLGranularity, addedAtMs: Int64, notes: String?) {
+            self.domain = domain
+            self.granularity = granularity
+            self.addedAtMs = addedAtMs
+            self.notes = notes
+        }
+    }
+
     /// Returns all rows ordered by `added_at_ms` ASC (stable UI order).
-    public func listBrowserDomainAllow() throws -> [(
-        domain: String, granularity: URLGranularity, addedAtMs: Int64, notes: String?
-    )] {
+    public func listBrowserDomainAllow() throws -> [BrowserDomainAllowRow] {
         try pool.read { db in
             let rows = try Row.fetchAll(
                 db,
@@ -600,15 +616,16 @@ public final class Database: @unchecked Sendable {
                         FROM \(Schema.BrowserDomainAllow.tableName)
                         ORDER BY \(Schema.BrowserDomainAllow.addedAtMs) ASC
                     """)
-            return rows.compactMap {
-                row -> (domain: String, granularity: URLGranularity, addedAtMs: Int64, notes: String?)? in
+            return rows.compactMap { row -> BrowserDomainAllowRow? in
                 guard let domain = row[Schema.BrowserDomainAllow.domain] as String?,
                     let granStr = row[Schema.BrowserDomainAllow.granularity] as String?,
                     let gran = URLGranularity(rawValue: granStr)
                 else { return nil }
                 let addedAtMs = (row[Schema.BrowserDomainAllow.addedAtMs] as Int64?) ?? 0
                 let notes = row[Schema.BrowserDomainAllow.notes] as String?
-                return (domain: domain, granularity: gran, addedAtMs: addedAtMs, notes: notes)
+                return BrowserDomainAllowRow(
+                    domain: domain, granularity: gran, addedAtMs: addedAtMs, notes: notes
+                )
             }
         }
     }

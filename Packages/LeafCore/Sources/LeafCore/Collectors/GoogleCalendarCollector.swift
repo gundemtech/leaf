@@ -288,22 +288,33 @@ public actor GoogleCalendarCollector {
     /// meeting title here requires a ShareEventTypeKey gate path that we
     /// defer until the UI consumer lands. The presence timing scalar is
     /// enough for "you have a meeting in N minutes" UI cues.
+    /// Composite snapshot read inside ``writePresenceState(nowMs:)`` — collected
+    /// in a single `readSQL` block so the tracker-store calls share one read
+    /// transaction. Promoted from an inline 5-tuple to a named struct (kept
+    /// file-private; consumed only by this writer).
+    private struct PresenceStateSnapshot {
+        let calendarCount: Int
+        let focusActive: Bool
+        let oooActive: Bool
+        let workingLocation: String?
+        let nextMeetingStartMs: Int64?
+    }
+
     private func writePresenceState(nowMs: Int64) throws {
-        let snapshot:
-            (
-                calendarCount: Int,
-                focusActive: Bool,
-                oooActive: Bool,
-                workingLocation: String?,
-                nextMeetingStartMs: Int64?
-            ) = try database.readSQL { db in
-                let count = try GoogleCalendarSyncTokenStore.knownCalendars(in: db).count
-                let focus = try GoogleCalendarTrackerStore.hasActiveFocusBlock(now: nowMs, in: db)
-                let ooo = try GoogleCalendarTrackerStore.hasActiveOOO(now: nowMs, in: db)
-                let loc = try GoogleCalendarTrackerStore.currentWorkingLocation(now: nowMs, in: db)
-                let next = try Self.fetchNextMeetingStartMs(now: nowMs, in: db)
-                return (count, focus, ooo, loc, next)
-            }
+        let snapshot: PresenceStateSnapshot = try database.readSQL { db in
+            let count = try GoogleCalendarSyncTokenStore.knownCalendars(in: db).count
+            let focus = try GoogleCalendarTrackerStore.hasActiveFocusBlock(now: nowMs, in: db)
+            let ooo = try GoogleCalendarTrackerStore.hasActiveOOO(now: nowMs, in: db)
+            let loc = try GoogleCalendarTrackerStore.currentWorkingLocation(now: nowMs, in: db)
+            let next = try Self.fetchNextMeetingStartMs(now: nowMs, in: db)
+            return PresenceStateSnapshot(
+                calendarCount: count,
+                focusActive: focus,
+                oooActive: ooo,
+                workingLocation: loc,
+                nextMeetingStartMs: next
+            )
+        }
 
         var state: [String: Any] = [
             "known_calendar_count": snapshot.calendarCount,
@@ -786,16 +797,18 @@ public actor GoogleCalendarCollector {
         try database.writeSQL { db in
             for u in upserts {
                 try GoogleCalendarTrackerStore.upsert(
-                    eventID: u.eventID,
-                    calendarID: u.calendarID,
-                    iCalUID: u.iCalUID,
-                    eventType: u.eventType,
-                    startMs: u.startMs,
-                    endMs: u.endMs,
-                    workingLocationType: u.workingLocationType,
-                    autoDeclineMode: u.autoDeclineMode,
-                    chatStatus: u.chatStatus,
-                    upsertedAtMs: nowMs,
+                    GoogleCalendarTrackerStore.UpsertParams(
+                        eventID: u.eventID,
+                        calendarID: u.calendarID,
+                        iCalUID: u.iCalUID,
+                        eventType: u.eventType,
+                        startMs: u.startMs,
+                        endMs: u.endMs,
+                        workingLocationType: u.workingLocationType,
+                        autoDeclineMode: u.autoDeclineMode,
+                        chatStatus: u.chatStatus,
+                        upsertedAtMs: nowMs
+                    ),
                     in: db
                 )
             }

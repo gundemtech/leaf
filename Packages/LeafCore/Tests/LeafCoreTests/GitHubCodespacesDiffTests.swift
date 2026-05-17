@@ -38,7 +38,11 @@ final class GitHubCodespacesDiffTests: XCTestCase {
 
     func testIdenticalInput_emitsNothing() {
         let snap = [cs(name: "musical-octo", state: "Available")]
-        let (c, st, sp, d) = GitHubWarmCollector.codespacesDiff(prior: snap, current: snap)
+        let diff = GitHubWarmCollector.codespacesDiff(prior: snap, current: snap)
+        let c = diff.created
+        let st = diff.started
+        let sp = diff.stopped
+        let d = diff.deleted
         XCTAssertTrue(c.isEmpty)
         XCTAssertTrue(st.isEmpty)
         XCTAssertTrue(sp.isEmpty)
@@ -48,7 +52,11 @@ final class GitHubCodespacesDiffTests: XCTestCase {
     func testNewCodespace_emitsCreatedRow() {
         let prior: [GitHubCodespaceSnapshot] = []
         let current = [cs(name: "musical-octo", state: "Shutdown")]
-        let (c, st, sp, d) = GitHubWarmCollector.codespacesDiff(prior: prior, current: current)
+        let diff = GitHubWarmCollector.codespacesDiff(prior: prior, current: current)
+        let c = diff.created
+        let st = diff.started
+        let sp = diff.stopped
+        let d = diff.deleted
         XCTAssertEqual(c.map(\.codespaceName), ["musical-octo"])
         XCTAssertTrue(st.isEmpty)
         XCTAssertTrue(sp.isEmpty)
@@ -58,7 +66,11 @@ final class GitHubCodespacesDiffTests: XCTestCase {
     func testStateTransitionToAvailable_emitsStartedRow() {
         let prior = [cs(name: "musical-octo", state: "Shutdown")]
         let current = [cs(name: "musical-octo", state: "Available")]
-        let (c, st, sp, d) = GitHubWarmCollector.codespacesDiff(prior: prior, current: current)
+        let diff = GitHubWarmCollector.codespacesDiff(prior: prior, current: current)
+        let c = diff.created
+        let st = diff.started
+        let sp = diff.stopped
+        let d = diff.deleted
         XCTAssertTrue(c.isEmpty)
         XCTAssertEqual(st.map(\.codespaceName), ["musical-octo"])
         XCTAssertTrue(sp.isEmpty)
@@ -68,7 +80,11 @@ final class GitHubCodespacesDiffTests: XCTestCase {
     func testStateTransitionToShutdown_emitsStoppedRow() {
         let prior = [cs(name: "musical-octo", state: "Available")]
         let current = [cs(name: "musical-octo", state: "Shutdown")]
-        let (c, st, sp, d) = GitHubWarmCollector.codespacesDiff(prior: prior, current: current)
+        let diff = GitHubWarmCollector.codespacesDiff(prior: prior, current: current)
+        let c = diff.created
+        let st = diff.started
+        let sp = diff.stopped
+        let d = diff.deleted
         XCTAssertTrue(c.isEmpty)
         XCTAssertTrue(st.isEmpty)
         XCTAssertEqual(sp.map(\.codespaceName), ["musical-octo"])
@@ -78,7 +94,11 @@ final class GitHubCodespacesDiffTests: XCTestCase {
     func testRemovedCodespace_emitsDeletedRow() {
         let prior = [cs(name: "musical-octo", state: "Available")]
         let current: [GitHubCodespaceSnapshot] = []
-        let (c, st, sp, d) = GitHubWarmCollector.codespacesDiff(prior: prior, current: current)
+        let diff = GitHubWarmCollector.codespacesDiff(prior: prior, current: current)
+        let c = diff.created
+        let st = diff.started
+        let sp = diff.stopped
+        let d = diff.deleted
         XCTAssertTrue(c.isEmpty)
         XCTAssertTrue(st.isEmpty)
         XCTAssertTrue(sp.isEmpty)
@@ -90,7 +110,11 @@ final class GitHubCodespacesDiffTests: XCTestCase {
         // count as started or stopped — only terminal Available / Shutdown.
         let prior = [cs(name: "x", state: "Provisioning")]
         let current = [cs(name: "x", state: "Building")]
-        let (c, st, sp, d) = GitHubWarmCollector.codespacesDiff(prior: prior, current: current)
+        let diff = GitHubWarmCollector.codespacesDiff(prior: prior, current: current)
+        let c = diff.created
+        let st = diff.started
+        let sp = diff.stopped
+        let d = diff.deleted
         XCTAssertTrue(c.isEmpty)
         XCTAssertTrue(st.isEmpty)
         XCTAssertTrue(sp.isEmpty)
@@ -100,7 +124,8 @@ final class GitHubCodespacesDiffTests: XCTestCase {
     func testOutputSortedByName() {
         let prior: [GitHubCodespaceSnapshot] = []
         let current = [cs(name: "zebra"), cs(name: "alpha"), cs(name: "mango")]
-        let (c, _, _, _) = GitHubWarmCollector.codespacesDiff(prior: prior, current: current)
+        let diff = GitHubWarmCollector.codespacesDiff(prior: prior, current: current)
+        let c = diff.created
         XCTAssertEqual(c.map(\.codespaceName), ["alpha", "mango", "zebra"])
     }
 }

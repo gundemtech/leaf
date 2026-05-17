@@ -90,14 +90,30 @@ public struct GoogleCalendarEventMapper: Sendable {
         return nil
     }
 
+    /// Summary returned by ``summarizeAttendees(_:userDomain:)``. Promoted
+    /// from a 4-tuple to a named struct: the mapper consumes `count`,
+    /// `externalCount`, `selfResponseStatus` directly into the payload, and
+    /// `selfOptional` is retained for future ShareEventTypeKey gating.
+    fileprivate struct AttendeeSummary {
+        let count: Int
+        let externalCount: Int
+        let selfResponseStatus: String?
+        let selfOptional: Bool?
+
+        static let empty = Self(
+            count: 0, externalCount: 0,
+            selfResponseStatus: nil, selfOptional: nil
+        )
+    }
+
     /// Walk attendees array. Self-identification via `isSelf == true`.
     /// External counted by case-insensitive domain mismatch with `userDomain`.
     fileprivate static func summarizeAttendees(
         _ attendees: [GoogleCalendarAPI.Attendee]?,
         userDomain: String
-    ) -> (count: Int, externalCount: Int, selfResponseStatus: String?, selfOptional: Bool?) {
+    ) -> AttendeeSummary {
         guard let attendees, !attendees.isEmpty else {
-            return (0, 0, nil, nil)
+            return .empty
         }
         let lowerDomain = userDomain.lowercased()
         var external = 0
@@ -115,7 +131,12 @@ public struct GoogleCalendarEventMapper: Sendable {
                 if domain != lowerDomain { external += 1 }
             }
         }
-        return (attendees.count, external, selfStatus, selfOptional)
+        return AttendeeSummary(
+            count: attendees.count,
+            externalCount: external,
+            selfResponseStatus: selfStatus,
+            selfOptional: selfOptional
+        )
     }
 
     /// First `RRULE:` line in `recurrence`; extract `FREQ=` segment.

@@ -71,12 +71,14 @@ public enum DetectorPipeline {
             let stuckRefs = Set(stuckHits.map(\.issueRef))
             for hit in stuckHits {
                 _ = try BlockersStore.insertOpenIfAbsent(
-                    targetKind: Schema.TargetKinds.linearIssue,
-                    targetRef: hit.issueRef,
-                    blockerKind: Schema.BlockerKinds.linearStuck,
-                    excerpt: nil,
-                    detectedByEventID: nil,
-                    startedAtMs: hit.lastStatusTransitionAtMs,
+                    BlockersStore.OpenBlockerInput(
+                        targetKind: Schema.TargetKinds.linearIssue,
+                        targetRef: hit.issueRef,
+                        blockerKind: Schema.BlockerKinds.linearStuck,
+                        excerpt: nil,
+                        detectedByEventID: nil,
+                        startedAtMs: hit.lastStatusTransitionAtMs
+                    ),
                     in: rawDB
                 )
             }
@@ -168,11 +170,13 @@ public enum DetectorPipeline {
             let payloadJSON: String = (row["payload_json"] as String?) ?? "{}"
             do {
                 try dispatch(
-                    eventID: eventID,
-                    tsMs: tsMs,
-                    signalType: signalType,
-                    payloadJSON: payloadJSON,
-                    detectorKind: kind,
+                    DispatchContext(
+                        eventID: eventID,
+                        tsMs: tsMs,
+                        signalType: signalType,
+                        payloadJSON: payloadJSON,
+                        detectorKind: kind
+                    ),
                     moat: moat,
                     in: db)
             } catch {
@@ -194,15 +198,29 @@ public enum DetectorPipeline {
 
     // MARK: - Body dispatch
 
+    /// Per-event input bundle for ``dispatch(_:moat:in:)``. Grouped to keep
+    /// the dispatcher signature digestible; constructed from one `events` row
+    /// at the per-detector loop callsite above. `detectorKind` belongs here
+    /// (not on `DetectorMoat`) because dispatch routes by kind. `signalType`
+    /// is carried for parity with the row shape even though the current
+    /// body never inspects it (gated route by `event_kind` instead).
+    private struct DispatchContext {
+        let eventID: Int64
+        let tsMs: Int64
+        let signalType: String
+        let payloadJSON: String
+        let detectorKind: String
+    }
+
     private static func dispatch(
-        eventID: Int64,
-        tsMs: Int64,
-        signalType: String,
-        payloadJSON: String,
-        detectorKind: String,
+        _ ctx: DispatchContext,
         moat: DetectorMoat,
         in db: GRDB.Database
     ) throws {
+        let eventID = ctx.eventID
+        let tsMs = ctx.tsMs
+        let payloadJSON = ctx.payloadJSON
+        let detectorKind = ctx.detectorKind
         guard let data = payloadJSON.data(using: .utf8),
             let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return }
@@ -249,12 +267,14 @@ public enum DetectorPipeline {
                     guard let (tk, tr) = blockerTarget(eventKind: eventKind, payload: dict, body: body)
                     else { continue }
                     let inserted = try BlockersStore.insertOpenIfAbsent(
-                        targetKind: tk,
-                        targetRef: tr,
-                        blockerKind: Schema.BlockerKinds.patternBlockedOn,
-                        excerpt: hit.blockerExcerpt,
-                        detectedByEventID: eventID,
-                        startedAtMs: tsMs,
+                        BlockersStore.OpenBlockerInput(
+                            targetKind: tk,
+                            targetRef: tr,
+                            blockerKind: Schema.BlockerKinds.patternBlockedOn,
+                            excerpt: hit.blockerExcerpt,
+                            detectedByEventID: eventID,
+                            startedAtMs: tsMs
+                        ),
                         in: db
                     )
                     if inserted { return }

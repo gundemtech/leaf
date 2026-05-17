@@ -170,9 +170,11 @@ public actor GitHubColdCollector {
             for repoFullName in activeRepos {
                 guard let parsed = Self.parseRepoFullName(repoFullName) else { continue }
                 await ingestRepoAlerts(
-                    repoFullName: repoFullName,
-                    owner: parsed.owner, repo: parsed.repo,
-                    accessToken: refreshed.accessToken, nowMs: nowMs,
+                    RepoAlertsRequest(
+                        repoFullName: repoFullName,
+                        owner: parsed.owner, repo: parsed.repo,
+                        accessToken: refreshed.accessToken, nowMs: nowMs
+                    ),
                     events: &events, snapshots: &snapshots
                 )
             }
@@ -299,25 +301,43 @@ public actor GitHubColdCollector {
         snapshots.append(makeWatchedSnapshot(currentRepos, capturedAtMs: nowMs))
     }
 
+    /// Per-repo input bundle for ``ingestRepoAlerts(_:events:snapshots:)``.
+    /// Groups the repo identifier, owner/repo split, auth token, and tick
+    /// timestamp so the alert-fetch fan-out signature stays digestible.
+    /// `events` / `snapshots` are passed as `inout` arrays at the boundary —
+    /// can't live on the value type.
+    private struct RepoAlertsRequest {
+        let repoFullName: String
+        let owner: String
+        let repo: String
+        let accessToken: String
+        let nowMs: Int64
+    }
+
     private func ingestRepoAlerts(
-        repoFullName: String,
-        owner: String, repo: String,
-        accessToken: String,
-        nowMs: Int64,
+        _ req: RepoAlertsRequest,
         events: inout [RawEvent],
         snapshots: inout [ProviderSnapshot]
     ) async {
+        let repoFullName = req.repoFullName
+        let owner = req.owner
+        let repo = req.repo
+        let accessToken = req.accessToken
+        let nowMs = req.nowMs
         // Secret.
         do {
             let current = try await provider.fetchSecretScanningAlerts(
                 accessToken: accessToken, owner: owner, repo: repo
             )
             ingestAlertSet(
-                kind: .secret,
-                snapshotPrefix: Schema.ProviderSnapshotKinds.githubSecretAlertsPrefix,
-                repoFullName: repoFullName, current: current,
-                observedKind: .secretAlertObserved, resolvedKind: .secretAlertResolved,
-                nowMs: nowMs, events: &events, snapshots: &snapshots
+                AlertSetRequest(
+                    kind: .secret,
+                    snapshotPrefix: Schema.ProviderSnapshotKinds.githubSecretAlertsPrefix,
+                    repoFullName: repoFullName, current: current,
+                    observedKind: .secretAlertObserved, resolvedKind: .secretAlertResolved,
+                    nowMs: nowMs
+                ),
+                events: &events, snapshots: &snapshots
             )
         } catch {
             logger.error(
@@ -330,11 +350,14 @@ public actor GitHubColdCollector {
                 accessToken: accessToken, owner: owner, repo: repo
             )
             ingestAlertSet(
-                kind: .code,
-                snapshotPrefix: Schema.ProviderSnapshotKinds.githubCodeAlertsPrefix,
-                repoFullName: repoFullName, current: current,
-                observedKind: .codeAlertObserved, resolvedKind: .codeAlertResolved,
-                nowMs: nowMs, events: &events, snapshots: &snapshots
+                AlertSetRequest(
+                    kind: .code,
+                    snapshotPrefix: Schema.ProviderSnapshotKinds.githubCodeAlertsPrefix,
+                    repoFullName: repoFullName, current: current,
+                    observedKind: .codeAlertObserved, resolvedKind: .codeAlertResolved,
+                    nowMs: nowMs
+                ),
+                events: &events, snapshots: &snapshots
             )
         } catch {
             logger.error(
@@ -347,11 +370,14 @@ public actor GitHubColdCollector {
                 accessToken: accessToken, owner: owner, repo: repo
             )
             ingestAlertSet(
-                kind: .dependabot,
-                snapshotPrefix: Schema.ProviderSnapshotKinds.githubDependabotAlertsPrefix,
-                repoFullName: repoFullName, current: current,
-                observedKind: .dependabotAlertObserved, resolvedKind: .dependabotAlertResolved,
-                nowMs: nowMs, events: &events, snapshots: &snapshots
+                AlertSetRequest(
+                    kind: .dependabot,
+                    snapshotPrefix: Schema.ProviderSnapshotKinds.githubDependabotAlertsPrefix,
+                    repoFullName: repoFullName, current: current,
+                    observedKind: .dependabotAlertObserved, resolvedKind: .dependabotAlertResolved,
+                    nowMs: nowMs
+                ),
+                events: &events, snapshots: &snapshots
             )
         } catch {
             logger.error(
@@ -360,30 +386,39 @@ public actor GitHubColdCollector {
         }
     }
 
+    /// Per-alert-kind ingestion request for ``ingestAlertSet(_:events:snapshots:)``.
+    /// Groups the alert-kind identifier (snapshot key prefix + diff-target
+    /// flavour), the freshly fetched alert list, and the started/resolved
+    /// event-kind discriminators emitted on the diff. `events` / `snapshots`
+    /// stay as `inout` arrays at the boundary.
+    private struct AlertSetRequest {
+        let kind: GitHubSecurityAlertSnapshot.Kind
+        let snapshotPrefix: String
+        let repoFullName: String
+        let current: [GitHubSecurityAlertSnapshot]
+        let observedKind: GitHubEventKindKey
+        let resolvedKind: GitHubEventKindKey
+        let nowMs: Int64
+    }
+
     private func ingestAlertSet(
-        kind: GitHubSecurityAlertSnapshot.Kind,
-        snapshotPrefix: String,
-        repoFullName: String,
-        current: [GitHubSecurityAlertSnapshot],
-        observedKind: GitHubEventKindKey,
-        resolvedKind: GitHubEventKindKey,
-        nowMs: Int64,
+        _ req: AlertSetRequest,
         events: inout [RawEvent],
         snapshots: inout [ProviderSnapshot]
     ) {
-        let snapshotKind = snapshotPrefix + repoFullName
+        let snapshotKind = req.snapshotPrefix + req.repoFullName
         let priorPresent = snapshotRowPresent(kind: snapshotKind)
         let prior: [GitHubSecurityAlertSnapshot] = readAlertsSnapshot(kind: snapshotKind)
         if priorPresent {
-            let d = Self.securityAlertsDiff(prior: prior, current: current)
+            let d = Self.securityAlertsDiff(prior: prior, current: req.current)
             for a in d.observed {
-                events.append(Self.makeSecurityAlertEvent(eventKind: observedKind, alert: a, observedAtMs: nowMs))
+                events.append(Self.makeSecurityAlertEvent(eventKind: req.observedKind, alert: a, observedAtMs: req.nowMs))
             }
             for a in d.resolved {
-                events.append(Self.makeSecurityAlertEvent(eventKind: resolvedKind, alert: a, observedAtMs: nowMs))
+                events.append(Self.makeSecurityAlertEvent(eventKind: req.resolvedKind, alert: a, observedAtMs: req.nowMs))
             }
         }
-        snapshots.append(makeAlertsSnapshot(snapshotKind: snapshotKind, alerts: current, capturedAtMs: nowMs))
+        snapshots.append(makeAlertsSnapshot(snapshotKind: snapshotKind, alerts: req.current, capturedAtMs: req.nowMs))
     }
 
     // MARK: - Snapshot read / encode helpers

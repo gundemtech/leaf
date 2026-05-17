@@ -238,13 +238,15 @@ final class CGEventTapCollector: @unchecked Sendable {
             let wasSleeping = await MainActor.run { self.systemStateCollector.isSleeping }
 
             let snapshot = accumulator.flushTo(
-                bucketMs: bucketMs,
-                keystrokes: counters.keystrokes,
-                mouseMoves: counters.mouseMoves,
-                appSwitches: counters.appSwitches,
-                foregroundApp: frontApp,
-                wasLocked: wasLocked,
-                wasSleeping: wasSleeping
+                IntensityBucketAccumulator.MinuteBucket(
+                    bucketMs: bucketMs,
+                    keystrokes: counters.keystrokes,
+                    mouseMoves: counters.mouseMoves,
+                    appSwitches: counters.appSwitches,
+                    foregroundApp: frontApp,
+                    wasLocked: wasLocked,
+                    wasSleeping: wasSleeping
+                )
             )
 
             // UPSERT into intensity_aggregates — idempotent on PK

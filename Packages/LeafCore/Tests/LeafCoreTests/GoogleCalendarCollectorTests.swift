@@ -356,16 +356,18 @@ final class GoogleCalendarCollectorTests: XCTestCase {
         let nowMs = Int64(now.timeIntervalSince1970 * 1000)
         try db.writeSQL { rawDB in
             try GoogleCalendarTrackerStore.upsert(
-                eventID: eventID,
-                calendarID: "primary",
-                iCalUID: "ical-\(eventID)",
-                eventType: eventType,
-                startMs: startMs,
-                endMs: endMs,
-                workingLocationType: workingLocationType,
-                autoDeclineMode: autoDeclineMode,
-                chatStatus: chatStatus,
-                upsertedAtMs: nowMs,
+                GoogleCalendarTrackerStore.UpsertParams(
+                    eventID: eventID,
+                    calendarID: "primary",
+                    iCalUID: "ical-\(eventID)",
+                    eventType: eventType,
+                    startMs: startMs,
+                    endMs: endMs,
+                    workingLocationType: workingLocationType,
+                    autoDeclineMode: autoDeclineMode,
+                    chatStatus: chatStatus,
+                    upsertedAtMs: nowMs
+                ),
                 in: rawDB
             )
             if let mark = startedEmittedAtMs {

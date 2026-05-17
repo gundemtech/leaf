@@ -91,6 +91,16 @@ final class RotationFetchServiceTests: XCTestCase {
         Date(timeIntervalSince1970: TimeInterval(epochMs) / 1000.0)
     }
 
+    /// Bundle of cryptographic material returned by ``insertTeamFixture(orgID:selfMemberID:priorKeyID:)``.
+    /// Holds the self/admin/peer X25519 keypairs and the prior team key so callers can drive
+    /// rotation-fetch verification paths without re-deriving them.
+    fileprivate struct TeamFixturePubs {
+        let selfPriv: Curve25519.KeyAgreement.PrivateKey
+        let adminPriv: Curve25519.KeyAgreement.PrivateKey
+        let peerPriv: Curve25519.KeyAgreement.PrivateKey
+        let priorTeamKey: Data
+    }
+
     /// Inserts org + admin (other peer) + self (member running tick) + 3rd peer +
     /// active teamKey + keystore (identity x25519 priv + prior teamKey).
     /// Returns identity priv (so makeService can use it deterministically).
@@ -99,12 +109,7 @@ final class RotationFetchServiceTests: XCTestCase {
         orgID: String = "org1",
         selfMemberID: String = "self-mem",
         priorKeyID: String = "00000000-0000-0000-0000-000000000000"
-    ) throws -> (
-        selfPriv: Curve25519.KeyAgreement.PrivateKey,
-        adminPriv: Curve25519.KeyAgreement.PrivateKey,
-        peerPriv: Curve25519.KeyAgreement.PrivateKey,
-        priorTeamKey: Data
-    ) {
+    ) throws -> TeamFixturePubs {
         let selfPriv = Curve25519.KeyAgreement.PrivateKey()
         let adminPriv = Curve25519.KeyAgreement.PrivateKey()
         let peerPriv = Curve25519.KeyAgreement.PrivateKey()
@@ -152,7 +157,12 @@ final class RotationFetchServiceTests: XCTestCase {
         try TeamKeystore.writeX25519Private(selfPriv.rawRepresentation, at: keystoreRoot)
         try TeamKeystore.writeTeamKey(priorTeamKey, id: priorKeyID, at: keystoreRoot)
 
-        return (selfPriv, adminPriv, peerPriv, priorTeamKey)
+        return TeamFixturePubs(
+            selfPriv: selfPriv,
+            adminPriv: adminPriv,
+            peerPriv: peerPriv,
+            priorTeamKey: priorTeamKey
+        )
     }
 
     fileprivate static func stubRelay200Empty(_ request: URLRequest, _ body: Data) throws -> (HTTPURLResponse, Data?) {
