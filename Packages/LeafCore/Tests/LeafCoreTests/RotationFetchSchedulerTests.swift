@@ -3,6 +3,11 @@ import os
 
 @testable import LeafCore
 
+// swiftlint:disable force_unwrapping
+// Reason: test fixtures rely on force-unwrap for setup convenience —
+// URL literals, HTTPURLResponse construction, decoded JSON, post-`try`
+// DB reads where nil ⇒ broken test, not production semantic.
+
 final class RotationFetchSchedulerTests: XCTestCase {
 
     private var tempDir: URL!
@@ -87,3 +92,4 @@ final class RotationFetchSchedulerTests: XCTestCase {
         XCTAssertLessThan(elapsed, 1.0, "Stop must return promptly via Task cancellation, took \(elapsed)s")
     }
 }
+// swiftlint:enable force_unwrapping

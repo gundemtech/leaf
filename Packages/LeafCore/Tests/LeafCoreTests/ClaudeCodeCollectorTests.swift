@@ -7,6 +7,11 @@ import os
 
 @testable import LeafCore
 
+// swiftlint:disable force_unwrapping
+// Reason: test fixtures rely on force-unwrap for setup convenience —
+// URL literals, HTTPURLResponse construction, decoded JSON, post-`try`
+// DB reads where nil ⇒ broken test, not production semantic.
+
 final class ClaudeCodeCollectorTests: XCTestCase {
     private var tempDir: URL!
     private var dbURL: URL!
@@ -387,3 +392,4 @@ extension ClaudeCodeCollectorTests {
         XCTAssertEqual(offset?.byteOffset, fileSize, "tail-read consumed full line despite filter")
     }
 }
+// swiftlint:enable force_unwrapping

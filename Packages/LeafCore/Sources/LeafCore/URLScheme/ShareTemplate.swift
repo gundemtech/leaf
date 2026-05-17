@@ -60,8 +60,9 @@ public enum ShareTemplate {
             URLQueryItem(name: "subject", value: subject),
             URLQueryItem(name: "body", value: body),
         ]
-        // URLComponents already percent-encodes query values. Force unwrap safe — scheme + queryItems
-        // produce a valid mailto: URL deterministically.
+        // Reason: `URLComponents` with scheme + queryItems produces a well-formed
+        // mailto: URL deterministically — query values are percent-encoded automatically.
+        // swiftlint:disable:next force_unwrapping
         return components.url!
     }
 
@@ -70,6 +71,8 @@ public enum ShareTemplate {
         var components = URLComponents()
         components.scheme = "sms"
         components.queryItems = [URLQueryItem(name: "body", value: body)]
+        // Reason: same as `mailtoURL` — scheme + queryItems produce a valid sms: URL.
+        // swiftlint:disable:next force_unwrapping
         return components.url!
     }
 }

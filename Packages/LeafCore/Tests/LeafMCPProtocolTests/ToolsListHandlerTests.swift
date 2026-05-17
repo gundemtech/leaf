@@ -2,6 +2,11 @@ import XCTest
 
 @testable import LeafMCPProtocol
 
+// swiftlint:disable force_unwrapping
+// Reason: test fixtures rely on force-unwrap for setup convenience —
+// URL literals, HTTPURLResponse construction, decoded JSON, post-`try`
+// DB reads where nil ⇒ broken test, not production semantic.
+
 final class ToolsListHandlerTests: XCTestCase {
     func testReturnsRegisteredToolsAsToolsListResult() async throws {
         let schema: [String: Any] = [
@@ -26,3 +31,4 @@ final class ToolsListHandlerTests: XCTestCase {
         XCTAssertTrue(s.contains(#""additionalProperties":false"#), s)
     }
 }
+// swiftlint:enable force_unwrapping

@@ -2,6 +2,11 @@ import XCTest
 
 @testable import LeafCore
 
+// swiftlint:disable force_unwrapping
+// Reason: test fixtures rely on force-unwrap for setup convenience —
+// URL literals, HTTPURLResponse construction, decoded JSON, post-`try`
+// DB reads where nil ⇒ broken test, not production semantic.
+
 final class ShareTemplateTests: XCTestCase {
     func testAskToJoin_BodyContainsOrgName() {
         let body = ShareTemplate.compose(.askToJoin(orgName: "Acme"))
@@ -49,3 +54,4 @@ final class ShareTemplateTests: XCTestCase {
         XCTAssertTrue(mailto.absoluteString.contains("body="))
     }
 }
+// swiftlint:enable force_unwrapping

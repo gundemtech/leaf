@@ -2,6 +2,11 @@ import XCTest
 
 @testable import LeafMCPProtocol
 
+// swiftlint:disable force_unwrapping
+// Reason: test fixtures rely on force-unwrap for setup convenience —
+// URL literals, HTTPURLResponse construction, decoded JSON, post-`try`
+// DB reads where nil ⇒ broken test, not production semantic.
+
 final class JSONRPCRoundTripTests: XCTestCase {
     func testRequestRoundTripPreservesMethodAndId() throws {
         let json = #"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}}"#
@@ -35,3 +40,4 @@ final class JSONRPCRoundTripTests: XCTestCase {
         XCTAssertTrue(s.contains(#""message":"Method not found""#), s)
     }
 }
+// swiftlint:enable force_unwrapping

@@ -712,7 +712,7 @@ public enum ActivityFeedMapper {
             primary = "Xcode: build \(status)"
             let scheme = sanitize(payload["scheme"])
             let errors = sanitize(payload["error_count"]).flatMap(Int.init)
-            let errStr = (errors ?? 0) > 0 ? "\(errors!) errors" : nil
+            let errStr: String? = if let errors, errors > 0 { "\(errors) errors" } else { nil }
             let parts = [scheme, errStr].compactMap { $0 }
             if !parts.isEmpty { secondary = parts.joined(separator: " · ") }
         case "xcode_test_run_started":

@@ -12,6 +12,10 @@
 
 import Foundation
 
+// swiftlint:disable force_unwrapping
+// Reason: compile-time-constant `URL(string:)` literals + `URLComponents().url`
+// with statically-set `scheme`/`host`/`path` (RFC 3986 well-formed) — never nil.
+
 public struct GoogleCalendarOAuthEndpoints {
     // OAuth 2.0 endpoints (Google Identity Platform).
     public static let authorizationHost = "accounts.google.com"
@@ -69,3 +73,4 @@ public struct GoogleCalendarOAuthEndpoints {
         return components.url!
     }
 }
+// swiftlint:enable force_unwrapping

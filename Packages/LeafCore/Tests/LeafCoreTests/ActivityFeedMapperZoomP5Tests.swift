@@ -8,6 +8,11 @@ import XCTest
 
 @testable import LeafCore
 
+// swiftlint:disable force_unwrapping
+// Reason: test fixtures rely on force-unwrap for setup convenience —
+// URL literals, HTTPURLResponse construction, decoded JSON, post-`try`
+// DB reads where nil ⇒ broken test, not production semantic.
+
 final class ActivityFeedMapperZoomP5Tests: XCTestCase {
 
     private func payloadJSON(_ dict: [String: String]) -> String {
@@ -136,3 +141,4 @@ final class ActivityFeedMapperZoomP5Tests: XCTestCase {
             "Negative seconds should clamp to 0")
     }
 }
+// swiftlint:enable force_unwrapping

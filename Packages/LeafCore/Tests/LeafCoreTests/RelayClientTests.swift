@@ -7,6 +7,11 @@ import XCTest
 
 @testable import LeafCore
 
+// swiftlint:disable force_unwrapping
+// Reason: test fixtures rely on force-unwrap for setup convenience —
+// URL literals, HTTPURLResponse construction, decoded JSON, post-`try`
+// DB reads where nil ⇒ broken test, not production semantic.
+
 private final class RelayMockURLProtocol: URLProtocol {
     nonisolated(unsafe) static var handler: ((URLRequest, Data) throws -> (HTTPURLResponse, Data?))?
     nonisolated(unsafe) static var networkError: Error?
@@ -283,3 +288,4 @@ final class RelayClientTests: XCTestCase {
         XCTAssertEqual(baseURL.absoluteString, "https://oauth.gundem.tech")
     }
 }
+// swiftlint:enable force_unwrapping

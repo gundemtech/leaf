@@ -13,6 +13,10 @@
 
 import Foundation
 
+// swiftlint:disable force_unwrapping
+// Reason: compile-time-constant URL literals (`URL(string: "https://...")`) never
+// fail to parse — `!` is a static guarantee, not a runtime risk.
+
 public enum SlackOAuthEndpoints {
     /// Authorize URL — browser flow начинается здесь.
     public static let authorize = URL(string: "https://slack.com/oauth/v2/authorize")!
@@ -103,3 +107,4 @@ public enum SlackOAuthEndpoints {
     public static let userDefaultsSuite = "tech.gundem.leaf"
     public static let refreshDeniedFlagKey = "slack.refreshDenied"
 }
+// swiftlint:enable force_unwrapping

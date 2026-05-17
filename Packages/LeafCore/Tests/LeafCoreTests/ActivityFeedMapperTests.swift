@@ -2,6 +2,11 @@ import XCTest
 
 @testable import LeafCore
 
+// swiftlint:disable force_unwrapping
+// Reason: test fixtures rely on force-unwrap for setup convenience —
+// URL literals, HTTPURLResponse construction, decoded JSON, post-`try`
+// DB reads where nil ⇒ broken test, not production semantic.
+
 /// Phase 4.10.A — pure mapper from raw event rows to ActivityFeedEntry.
 ///
 /// Three responsibilities under test:
@@ -484,3 +489,4 @@ final class ActivityFeedEntryCoalesceTests: XCTestCase {
         XCTAssertEqual(result.first?.mergedCount, 3)
     }
 }
+// swiftlint:enable force_unwrapping

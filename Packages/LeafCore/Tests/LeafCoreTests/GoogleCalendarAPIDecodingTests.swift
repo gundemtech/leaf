@@ -2,6 +2,11 @@ import XCTest
 
 @testable import LeafCore
 
+// swiftlint:disable force_unwrapping
+// Reason: test fixtures rely on force-unwrap for setup convenience —
+// URL literals, HTTPURLResponse construction, decoded JSON, post-`try`
+// DB reads where nil ⇒ broken test, not production semantic.
+
 /// Track-6 P4 Task 3 — Codable decoding tests for Google Calendar API v3 shapes.
 ///
 /// Coverage:
@@ -150,3 +155,4 @@ final class GoogleCalendarAPIDecodingTests: XCTestCase {
         XCTAssertEqual(err.error.errors?.first?.reason, "fullSyncRequired")
     }
 }
+// swiftlint:enable force_unwrapping

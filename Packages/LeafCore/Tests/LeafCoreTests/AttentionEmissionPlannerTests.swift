@@ -2,6 +2,11 @@ import XCTest
 
 @testable import LeafCore
 
+// swiftlint:disable force_unwrapping
+// Reason: test fixtures rely on force-unwrap for setup convenience —
+// URL literals, HTTPURLResponse construction, decoded JSON, post-`try`
+// DB reads where nil ⇒ broken test, not production semantic.
+
 final class AttentionEmissionPlannerTests: XCTestCase {
 
     // MARK: - Stubs
@@ -373,3 +378,4 @@ final class AttentionEmissionPlannerTests: XCTestCase {
         XCTAssertNil(event?.payload["window_title"])
     }
 }
+// swiftlint:enable force_unwrapping

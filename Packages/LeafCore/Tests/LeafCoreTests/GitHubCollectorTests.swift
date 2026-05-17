@@ -7,6 +7,11 @@ import os
 
 @testable import LeafCore
 
+// swiftlint:disable force_unwrapping
+// Reason: test fixtures rely on force-unwrap for setup convenience —
+// URL literals, HTTPURLResponse construction, decoded JSON, post-`try`
+// DB reads where nil ⇒ broken test, not production semantic.
+
 final class GitHubCollectorTests: XCTestCase {
     private var tempDir: URL!
     private var dbURL: URL!
@@ -1352,3 +1357,4 @@ final class GitHubCollectorTests: XCTestCase {
             "metadata additions shadow не должен перезаписать реальное значение")
     }
 }
+// swiftlint:enable force_unwrapping

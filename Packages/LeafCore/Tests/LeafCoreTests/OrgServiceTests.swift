@@ -10,6 +10,11 @@ import XCTest
 
 @testable import LeafCore
 
+// swiftlint:disable force_unwrapping
+// Reason: test fixtures rely on force-unwrap for setup convenience —
+// URL literals, HTTPURLResponse construction, decoded JSON, post-`try`
+// DB reads where nil ⇒ broken test, not production semantic.
+
 final class OrgServiceTests: XCTestCase {
 
     private var tempDir: URL!
@@ -354,3 +359,4 @@ private final class UUIDCounter: @unchecked Sendable {
         return "fixed-uuid-\(counter)"
     }
 }
+// swiftlint:enable force_unwrapping
