@@ -1,0 +1,24 @@
+# Leaf — SwiftLint configuration.
+# Phase 1 — code style foundation. См. STYLE.md для rationale per rule.
+# Каждое opt_in правило ниже должно либо ловить класс багов в codebase, либо
+# предотвращать known incident class. Default-enabled правила фильтруются
+# через disabled_rules с explicit обоснованием.
+
+excluded:
+  - .build
+  - .swiftpm
+  - build
+  - DerivedData
+  - Packages/LeafCorePrivate/Sources  # moat, gitignored, lint manually if needed
+  - Packages/LeafCore/.build
+  - Packages/LeafCore/.swiftpm
+  - Resources
+
+# Aspirational pool grandfather. Generated in Task 5; rule list locked в Task 6.
+baseline: .swiftlint-baseline.json
+
+reporter: "github-actions-logging"
+
+# Initial scaffold — rules locked after Task 6 iteration.
+opt_in_rules: []
+disabled_rules: []
