@@ -55,6 +55,7 @@ struct LeafApp: App {
     @State private var pendingInvitesReader = PendingInvitesReader()  // Phase 5.5.C
     @State private var inviteURLHandler = InviteURLHandler()  // Phase 5.5.B
     @State private var windowState = WindowState()
+    @State private var routeCoordinator = RouteCoordinator()
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -123,6 +124,7 @@ struct LeafApp: App {
                 .environment(pendingInvitesReader)  // Phase 5.5.C
                 .environment(inviteURLHandler)  // Phase 5.5.B
                 .environment(windowState)
+                .environment(routeCoordinator)
                 .onAppear {
                     inviteURLHandler.wire(acceptReader: inviteAcceptReader,
                                           outboxReader: inviteOutboxReader)
@@ -171,6 +173,7 @@ struct LeafApp: App {
                 .environment(inviteAcceptReader)
                 .environment(inviteURLHandler)  // Phase 5.5.B
                 .environment(windowState)
+                .environment(routeCoordinator)
         }
         .menuBarExtraStyle(.window)
     }
