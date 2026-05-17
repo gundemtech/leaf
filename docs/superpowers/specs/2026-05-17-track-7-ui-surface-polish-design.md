@@ -516,43 +516,53 @@ Each `[Enable]` / `[Connect]` button in compact disabled rows deep-links to the 
 
 ## 12. Phasing breakdown
 
-11 phases. Each is one Claude session per CLAUDE.md "Одна phase = одна сессия". Each phase ends with collective merge-pending state (does NOT merge to main until Track 7 acceptance gate clears in P11).
+!!! note "Изменение v0.2 — 2026-05-18"
+    **Раньше (v0.1, 2026-05-17):** 11 phase'ов (P1 / P2 Xcode / P3 IDEs / P4 Browsers / P5 Zoom / P6 Calendar / P7 Work State / P8 Linear / P9 GitHub / P10 Slack / P11 Polish), каждая — отдельная Claude-сессия. **Теперь (v0.2, 2026-05-18):** 5 phase'ов — P1 (done) / **P2-collapsed** (Xcode + IDEs + Browsers + Zoom + Calendar объединены) / P7 (unchanged) / **P8-collapsed** (Linear + GitHub + Slack объединены) / P11 (unchanged). **Причина:** после landing P1 (template ClaudeCodeSurfaceCardViewModel + ClaudeCodeDetailScreen установлен) обзор оригинального плана показал — P2-P6 это **один и тот же template × 5 разных data sources**, и аналогично P8-P10 это **тот же template × 3 Layer B sources**. 8 одинаковых session'ов раздуют ceremony overhead без quality benefit, sequential discipline сохраняется внутри collapsed phase'а через TDD per data-source step.
 
-### P1 — Foundation + Claude Code (largest phase, sets templates)
+5 phase'ов. Каждая — одна Claude-сессия по CLAUDE.md "Одна phase = одна сессия". Каждая заканчивается merge-pending state (НЕ мержим в main до Track 7 acceptance gate в P11).
+
+### P1 — Foundation + Claude Code (done, 2026-05-17)
 
 **Scope:**
-- New types: `HomeSurface` enum, `SurfaceCatalog` static array, `SurfaceCardState` enum.
+- New types: `HomeSurface` enum, `SurfaceCatalog` static array, `SurfaceCardState` generic enum, `DetailRange` + interval derivation, `ClaudeCodeCardPayload`, `ClaudeCodeHeadlineFormatter`.
 - New components: `SurfaceCard<Spark>`, `SurfaceRow`, `SurfaceDetailLayout<Aggregates>`.
 - New section on Home: `SurfacesSection` (renders enabled cards + disabled rows, partitioned).
 - `filesTouched` wire-up into existing `TodayBlock`.
-- AppRoute extension for Settings deep-linking; coordinator plumbing.
+- `AppRoute` + `RouteCoordinator` + Settings deep-link plumbing (ScrollViewReader + pendingSettingsTarget).
 - NavigationStack scaffolding on Home detail-pane root.
-- Claude Code: `ClaudeCodeSurfaceCardViewModel` + `ClaudeCodeDetailScreen` + `ClaudeCodeDetailViewModel` (full vertical slice — template established).
-- Token additions: 0 (use existing D1 only).
+- Claude Code vertical slice: `ClaudeCodeSurfaceCardViewModel` (namespace enum, stateless mapper) + `ClaudeCodeDetailScreen` + `ClaudeCodeDetailViewModel`.
 
-**Acceptance per P1 spec §13:** A. compact rows render when AI Tools toggle OFF; B. enabling AI Tools causes Claude Code to promote to full card within 5s; C. Click Claude Code card → detail screen, back → Home with scroll preserved; D. Today/Week/Month tabs re-query and animate; E. `[Enable]` button deep-links to Settings → AI Tools.
+**Landed:** 21 LeafCore tests, 5/5 xcodebuild schemes green, ветка `feature/track-7-P1-foundation-claude-code` (20 commits, pushed 2026-05-18). **Template precedent для P2-collapsed surfaces:** stateless namespace enum mapper + `SurfaceCardState<Payload>` + `SurfaceDetailLayout` reuse.
 
-### P2 — Xcode card + detail
+### P2-collapsed — Capture surfaces (Xcode + IDEs + Browsers + Zoom + Calendar)
 
-**Scope:** `XcodeSurfaceCardViewModel`, `XcodeDetailScreen`, `XcodeDetailViewModel`, `XcodeDetailMetrics` SQL helper, `Xcode` entry in SurfaceCatalog. Reuses P1 scaffolds. Adds Settings → Local Apps → Xcode deep-link route. No new component types.
+**Why collapsed:** все 5 surfaces используют идентичный P1 template — отличаются только (a) per-surface `Payload` struct shape, (b) DerivedInsights SQL helper, (c) Settings deep-link target, (d) per-surface enable-state lookup store. Никаких новых scaffolds / components / навигационных паттернов — только data wiring.
 
-### P3 — IDEs card + detail
+**Scope (per surface, 5 раз):**
+- View-model namespace enum mapping `(EnableStateStore, InsightsSnapshot?) → SurfaceCardState<XxxCardPayload>`.
+- `XxxCardPayload` struct в LeafCore (headline source + sub-stats + 7-day spark).
+- `XxxDetailViewModel` (range-aware reload via DerivedInsights helper).
+- `XxxDetailScreen` reusing `SurfaceDetailLayout`, aggregates section per §5.2.
+- Per-surface DerivedInsights helper method (signature in LeafCore protocol, prod impl в `LeafCorePrivate`).
+- Settings deep-link wire-up (Local Apps / System Observers / Connections target).
 
-**Scope:** IDEs view-model + screen + SQL helper. Per-fork breakdown logic (group VSCode-family parsers + JetBrains rows; aggregate workspace count across forks). System Observers → IDEs deep-link route.
+**Per-surface enable-state sources** (locked in Step 2 tactical fix before P2-collapsed kickoff):
 
-### P4 — Browsers card + detail
+| Surface | Store | Lookup |
+|---------|-------|--------|
+| Xcode | `LocalAppsStore` | `isEnabled("xcode")` |
+| IDEs | `SystemObserversStore` | IDE storage gate (per LocalAppsStore IDE toggles) |
+| Browsers | `BrowserAllowListStore` / `SystemObserversStore` | per-domain allow-list non-empty OR browser bookmark toggle ON |
+| Zoom | `LocalAppsStore` | `isEnabled("zoom")` |
+| Calendar | `GoogleCalendarOAuthService` | `.connected` state |
 
-**Scope:** Browsers view-model + screen + SQL helper. Per-domain allow-list awareness — detail screen aggregates respect granularity rule (L4 vs L3 vs domain-only) per per-domain config. Cross-link to Privacy → Browser Allow-list section.
+**Calendar carve-out:** P2-collapsed wires Calendar card to compact-row + `[Connect]` route only (OAuth flow live but GCP gate blocks production use). Calendar detail screen scaffolded + renders LeafEmptyState until P11 (after GCP clears). Headline/aggregates на Calendar **OFF в P2-collapsed scope**, добавляются в P11 cleanup tail.
 
-### P5 — Zoom card + detail
+**Implementation order inside session:** TDD per surface, sequential — Xcode → IDEs → Browsers → Zoom → Calendar. Каждый commit atomic (LeafCore types first, then VM, then Screen, then wire-up). Между surfaces: build + tests green.
 
-**Scope:** Zoom view-model + screen + SQL helper. Aggregate `duration_ms` for "in calls" headline. Joined-vs-ad-hoc count via `zoom_meeting_calendar_linked` event presence. Settings → Local Apps → Zoom deep-link.
+**Acceptance per surface:** A–G (compact row default → toggle ON → full card promote → tap → detail → range tabs → back). Manual smoke на real data (Xcode build / VSCode workspace switch / Safari 3 tabs / Zoom meeting join+leave / OAuth connect).
 
-### P6 — Calendar card placeholder (no detail until GCP)
-
-**Scope:** Calendar compact-row only. `[Connect]` button → OAuth flow (existing). Detail screen view-model + screen scaffolded but currently empty (renders LeafEmptyState until events flow). When GCP clears, P6.B (deferred) wires aggregates.
-
-### P7 — Work State card + detail (Track-1 D3 surface)
+### P7 — Work State card + detail (Track-1 D3 surface, unchanged)
 
 **Scope:**
 - 4 new `DerivedInsights` protocol methods (per §9.1) + stub extensions + private prod impls.
@@ -562,29 +572,34 @@ Each `[Enable]` / `[Connect]` button in compact disabled rows deep-links to the 
 - Per-sub-tab list view (re-uses LeafListRow base, custom row shape per sub-tab).
 - Empty state per sub-tab.
 
-### P8 — Linear detail (via LivePresenceWidget click)
+**Why standalone:** unique scaffold — second LeafTab inside detail (not range-tabs but sub-tabs), 4 row shape types, no P1/P2 template reuse beyond `SurfaceDetailLayout`. Один session, one brainstorm + spec.
 
-**Scope:** Make LivePresenceWidget Linear column tappable. New `LinearDetailScreen` reusing SurfaceDetailLayout. Aggregates section consumes `linearActivity(period:)` + `linearTransitions(period:)` + `linearCompletionRate(period:)`.
+### P8-collapsed — Layer B drill-downs (Linear + GitHub + Slack)
 
-### P9 — GitHub detail (via LivePresenceWidget click)
+**Why collapsed:** symmetric to P2-collapsed reasoning. LivePresenceWidget делает 3 column'a tappable, каждая ведёт в `XxxDetailScreen` reusing `SurfaceDetailLayout`. Aggregates секции дёргают existing `linearActivity` / `githubActivity` / `slackActivity` + per-provider extras (transitions / ReviewActivityInsights / scope drift banner).
 
-**Scope:** GitHub column tappable. New `GitHubDetailScreen`. Aggregates from `githubActivity(period:)` + `ReviewActivityInsights`. Reauth banner on scope drift (per §7.3).
+**Scope (per provider, 3 раза):**
+- LivePresenceWidget column → tappable button → `coordinator.pushHome(.linear/.github/.slack)` (need to add `HomeRoute` enum cases for Layer B, parallel to existing capture surface cases).
+- `XxxDetailScreen` reusing `SurfaceDetailLayout`, aggregates per §7.2.
+- `XxxDetailViewModel` (range-aware reload).
+- Scope drift banner (GitHub + Slack — when reauth needed per §7.3).
 
-### P10 — Slack detail (via LivePresenceWidget click)
+**Linear-specific:** no scope-drift banner (Linear OAuth scope is fixed). GitHub-specific: reauth banner triggers via existing `LayerBHealth` reader. Slack-specific: same banner pattern + canvas/bookmark FTS link disclosed but not surfaced.
 
-**Scope:** Slack column tappable. New `SlackDetailScreen`. Aggregates from `slackActivity(period:)`. Reauth banner on scope drift.
+**Implementation order inside session:** Linear → GitHub → Slack (simplest scope-drift logic to richest). TDD per provider.
 
 ### P11 — Polish & acceptance gate
 
 **Scope:**
 - HIG checklist sweep (§11) per all 9 detail screens + Home.
-- Manual smoke A–G per surface (per §13).
+- Manual smoke per phase (table §13.1) re-run as integration on author's Mac.
 - Animation tuning — range tab transitions, card promote/demote animations, spark redraw smoothing.
 - Empty state copy review (final localization pass).
 - `just check-tokens` 3-tier verification.
 - Performance sanity: ensure SurfacesSection re-renders are scoped (no whole-Home re-layout on single-card update).
+- **Calendar P2-collapsed tail:** wire aggregates + detail screen content (deferred from P2-collapsed pending GCP gate clearance — if gate still blocked, P11 ships без real Calendar data, just placeholder).
 - Track 7 acceptance gate: smoke matrix from §13 clears on author's Mac.
-- Collective merge of P1-P10 stack into main + whitepaper sync per public-safe framing (§14.2).
+- Collective merge of P1 + P2-collapsed + P7 + P8-collapsed stack into main + whitepaper sync per public-safe framing (§14.2).
 
 ---
 
@@ -596,16 +611,10 @@ Each phase's smoke is verified before its merge-pending state. All gates run at 
 
 | Phase | Smoke checks |
 |-------|--------------|
-| P1 | A. Default Home renders 6 compact rows (none enabled). B. Enable Claude Code via Settings → Home updates within 5s. C. Click Claude Code card → detail. D. Range tabs Today/Week/Month re-query. E. `[Enable]` deep-links to Settings → AI Tools. F. Today section shows files touched count. G. Back from detail preserves Home scroll. |
-| P2 | Same A–G with Xcode (Local Apps → Xcode deep-link). Build a project → card headline updates within 1 tick. |
-| P3 | Same A–G with IDEs. Open VSCode workspace → card workspace count increments. |
-| P4 | Same A–G with Browsers. Browse 3 tabs on allow-listed domain → card page count increments. Detail screen respects per-domain granularity. |
-| P5 | Same A–G with Zoom. Join+leave a Zoom meeting → card "in calls" updates. |
-| P6 | Only A + E + (no detail tap). Compact row always shows, `[Connect]` deep-links to OAuth (which is dormant — verify CTA disabled visually + tooltip explains GCP gate). |
+| P1 (done) | A. Default Home renders 6 compact rows (none enabled). B. Enable Claude Code via Settings → Home updates within 5s. C. Click Claude Code card → detail. D. Range tabs Today/Week/Month re-query. E. `[Enable]` deep-links to Settings → AI Tools. F. Today section shows files touched count. G. Back from detail preserves Home scroll. |
+| P2-collapsed | Per surface (Xcode / IDEs / Browsers / Zoom / Calendar) re-run A–G as in P1: compact row default → enable toggle → full card promote → tap → detail (range tabs) → back. Real-data signals: Xcode build a project → headline updates ≤1 tick. VSCode open workspace → IDEs workspace count +1. Browse 3 tabs on allow-listed domain → Browsers page count +1, granularity respected. Zoom join+leave → "in calls" updates. Calendar `[Connect]` deep-links OAuth (GCP-blocked CTA visually). |
 | P7 | A. Work State card visible (no toggle). B. With test fixtures: 3 open Qs + 1 blocker → headline renders. C. Click → detail. D. Sub-tab switching works. E. Zero-state shows "All clear". F. Resolved questions appear below open. G. ContextRef text "→ {ref}" rendered. |
-| P8 | A. Linear column in LivePresenceWidget shows chevron on hover. B. Click → LinearDetailScreen. C. Range tabs work. D. Aggregates section shows by-project / by-status. E. Back returns to Home with scroll preserved. |
-| P9 | Same A–E with GitHub. F. Trigger scope drift → warning banner appears in detail header. |
-| P10 | Same A–E with Slack. F. Same scope drift → banner. |
+| P8-collapsed | Per provider (Linear / GitHub / Slack) re-run A–E: column shows chevron on hover → click → detail → range tabs → back preserves Home scroll. Aggregates section по spec §7.2. GitHub+Slack F: trigger scope drift → reauth warning banner. Linear: no scope drift case. |
 | P11 | Full integration: all 9 surfaces visible, all detail screens reachable, all range tabs work, HIG checklist passes, `just check-tokens` clean, `xcodebuild` 5/5 schemes green. |
 
 ### 13.2 Track-wide smoke (P11 integration only)
