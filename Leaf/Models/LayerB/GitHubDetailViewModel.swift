@@ -35,28 +35,19 @@ final class GitHubDetailViewModel {
         }
     }
 
-    /// Per-launch dismiss state. Shared с HomeView через UserDefaults key
-    /// "github.reauth.bannerDismissedSessionID" + AppSessionID.current.
-    /// HomeView dismiss → also hides banner here, vice versa.
+    /// Per-launch dismiss state. Shared с HomeView через `ReauthBannerKeys.github`
+    /// UserDefaults key + AppSessionID.current pattern. HomeView dismiss → also
+    /// hides banner here, vice versa.
     var scopeBannerDismissed: Bool {
-        get {
-            guard let saved = UserDefaults.standard.string(forKey: Self.reauthBannerDismissKey) else {
-                return false
-            }
-            return saved == AppSessionID.current
-        }
+        get { ReauthBannerKeys.isDismissed(ReauthBannerKeys.github) }
         set {
             if newValue {
-                UserDefaults.standard.set(AppSessionID.current, forKey: Self.reauthBannerDismissKey)
+                ReauthBannerKeys.markDismissed(ReauthBannerKeys.github)
             } else {
-                UserDefaults.standard.removeObject(forKey: Self.reauthBannerDismissKey)
+                ReauthBannerKeys.clearDismissed(ReauthBannerKeys.github)
             }
         }
     }
-
-    /// Mirror HomeView's reauthBannerDismissKey — see HomeView.swift line ~88.
-    /// Hardcoded string (not hoisted to shared constants) — P11 carry-over.
-    private static let reauthBannerDismissKey = "github.reauth.bannerDismissedSessionID"
 
     private let databaseURL: URL
     private let databaseConfig: DatabaseConfig

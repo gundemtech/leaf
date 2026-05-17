@@ -30,26 +30,18 @@ final class SlackDetailViewModel {
         }
     }
 
-    /// Per-launch dismiss state. Shared с HomeView через UserDefaults key
-    /// "slack.reauth.bannerDismissedSessionID" + AppSessionID.current.
+    /// Per-launch dismiss state. Shared с HomeView через `ReauthBannerKeys.slack`
+    /// UserDefaults key + AppSessionID.current pattern.
     var scopeBannerDismissed: Bool {
-        get {
-            guard let saved = UserDefaults.standard.string(forKey: Self.reauthBannerDismissKey) else {
-                return false
-            }
-            return saved == AppSessionID.current
-        }
+        get { ReauthBannerKeys.isDismissed(ReauthBannerKeys.slack) }
         set {
             if newValue {
-                UserDefaults.standard.set(AppSessionID.current, forKey: Self.reauthBannerDismissKey)
+                ReauthBannerKeys.markDismissed(ReauthBannerKeys.slack)
             } else {
-                UserDefaults.standard.removeObject(forKey: Self.reauthBannerDismissKey)
+                ReauthBannerKeys.clearDismissed(ReauthBannerKeys.slack)
             }
         }
     }
-
-    /// Mirror HomeView's slackReauthBannerDismissKey — see HomeView.swift line ~88-89.
-    private static let reauthBannerDismissKey = "slack.reauth.bannerDismissedSessionID"
 
     private let databaseURL: URL
     private let databaseConfig: DatabaseConfig

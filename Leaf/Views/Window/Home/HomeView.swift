@@ -84,19 +84,14 @@ struct HomeView: View {
     /// independent of GitHub banner; dismissing one must not silence the other.
     @State private var slackReauthBannerDismissed = false
 
-    private static let reauthBannerDismissKey = "github.reauth.bannerDismissedSessionID"
-    private static let slackReauthBannerDismissKey = "slack.reauth.bannerDismissedSessionID"
-
     private var shouldShowReauthBanner: Bool {
         guard !reauthBannerDismissed else { return false }
-        let saved = UserDefaults.standard.string(forKey: Self.reauthBannerDismissKey)
-        return saved != AppSessionID.current
+        return !ReauthBannerKeys.isDismissed(ReauthBannerKeys.github)
     }
 
     private var shouldShowSlackReauthBanner: Bool {
         guard !slackReauthBannerDismissed else { return false }
-        let saved = UserDefaults.standard.string(forKey: Self.slackReauthBannerDismissKey)
-        return saved != AppSessionID.current
+        return !ReauthBannerKeys.isDismissed(ReauthBannerKeys.slack)
     }
 
     var body: some View {
@@ -150,8 +145,7 @@ struct HomeView: View {
                 Task { await githubOAuth.connect(scopes: GitHubScopesService.requested()) }
             },
             onDismiss: {
-                UserDefaults.standard.set(AppSessionID.current,
-                                          forKey: Self.reauthBannerDismissKey)
+                ReauthBannerKeys.markDismissed(ReauthBannerKeys.github)
                 reauthBannerDismissed = true
             }
         )
@@ -173,8 +167,7 @@ struct HomeView: View {
                 Task { await slackOAuth.connect() }
             },
             onDismiss: {
-                UserDefaults.standard.set(AppSessionID.current,
-                                          forKey: Self.slackReauthBannerDismissKey)
+                ReauthBannerKeys.markDismissed(ReauthBannerKeys.slack)
                 slackReauthBannerDismissed = true
             }
         )
