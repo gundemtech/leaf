@@ -5,6 +5,11 @@
 // sidecar `events_fts_meta(fts_rowid, event_id, body_kind)` populated atomically
 // by `EventsFullTextStore.indexEvent`. Body content is verified indirectly via
 // `MATCH` queries (token presence implies indexing).
+//
+// Per-provider body-kind dispatch tests live in:
+//   - EventsFullTextStoreLinearSlackTests.swift
+//   - EventsFullTextStoreGitHubTests.swift
+// This file retains the no-op + search ranking + period filter regression suite.
 
 import GRDB
 import XCTest
@@ -42,8 +47,6 @@ final class EventsFullTextStoreTests: XCTestCase {
         }
     }
 
-    /// Reads sidecar rows associated with an event_id. Body content not retrievable
-    /// from contentless FTS5 — verify body presence via separate MATCH assertions.
     private func ftsMetaRowsForEvent(
         _ db: LeafCore.Database, eventID: Int64
     ) throws -> [(bodyKind: String, ftsRowID: Int64)] {
@@ -54,251 +57,6 @@ final class EventsFullTextStoreTests: XCTestCase {
                 arguments: [eventID]
             ).map { ($0["body_kind"] as String? ?? "", $0["fts_rowid"] as Int64? ?? 0) }
         }
-    }
-
-    /// Asserts MATCH-search hits at least one FTS row associated with the given event.
-    private func ftsContains(_ db: LeafCore.Database, eventID: Int64, query: String) throws -> Bool {
-        try db.readSQL { rawDB in
-            try Bool.fetchOne(
-                rawDB,
-                sql: """
-                    SELECT EXISTS (
-                        SELECT 1
-                        FROM events_fts
-                        JOIN events_fts_meta ON events_fts_meta.fts_rowid = events_fts.rowid
-                        WHERE events_fts MATCH ? AND events_fts_meta.event_id = ?
-                    )
-                    """, arguments: [query, eventID]) ?? false
-        }
-    }
-
-    func testIndexEvent_LinearIssueDescription() throws {
-        let db = try makeDB()
-        let eid = try insertRawEventRow(db)
-        let payload = [
-            "event_kind": "issue_updated",
-            Schema.EventPayloadKeys.body: "OAuth refactor",
-        ]
-        try db.writeSQL { rawDB in
-            try EventsFullTextStore.indexEvent(
-                eventID: eid, signalType: "action", bundleID: "linear", payload: payload, in: rawDB
-            )
-        }
-        let rows = try ftsMetaRowsForEvent(db, eventID: eid)
-        XCTAssertEqual(rows.count, 1)
-        XCTAssertEqual(rows[0].bodyKind, Schema.BodyKinds.linearDesc)
-        XCTAssertTrue(try ftsContains(db, eventID: eid, query: "OAuth"))
-        XCTAssertTrue(try ftsContains(db, eventID: eid, query: "refactor"))
-    }
-
-    func testIndexEvent_LinearCommentBodies_FanOut() throws {
-        let db = try makeDB()
-        let eid = try insertRawEventRow(db)
-        let comments = #"[{"body":"first"},{"body":"second"},{"body":"third"}]"#
-        let payload = [
-            "event_kind": "issue_updated",
-            Schema.EventPayloadKeys.body: "Description here",
-            Schema.EventPayloadKeys.commentBodiesJson: comments,
-        ]
-        try db.writeSQL { rawDB in
-            try EventsFullTextStore.indexEvent(
-                eventID: eid, signalType: "action", bundleID: "linear", payload: payload, in: rawDB
-            )
-        }
-        let rows = try ftsMetaRowsForEvent(db, eventID: eid)
-        XCTAssertEqual(rows.count, 4)
-        XCTAssertEqual(rows.filter { $0.bodyKind == Schema.BodyKinds.linearDesc }.count, 1)
-        XCTAssertEqual(rows.filter { $0.bodyKind == Schema.BodyKinds.linearComment }.count, 3)
-        XCTAssertTrue(try ftsContains(db, eventID: eid, query: "first"))
-        XCTAssertTrue(try ftsContains(db, eventID: eid, query: "second"))
-        XCTAssertTrue(try ftsContains(db, eventID: eid, query: "third"))
-    }
-
-    func testIndexEvent_SlackMessagesAggregate_FanOut() throws {
-        let db = try makeDB()
-        let eid = try insertRawEventRow(db)
-        let msgs = #"[{"text":"alpha"},{"text":"bravo"},{"text":"charlie"},{"text":"delta"},{"text":"echo"}]"#
-        let payload = [
-            "event_kind": "slack_message_aggregate",
-            Schema.EventPayloadKeys.messagesJson: msgs,
-        ]
-        try db.writeSQL { rawDB in
-            try EventsFullTextStore.indexEvent(
-                eventID: eid, signalType: "action", bundleID: "slack", payload: payload, in: rawDB
-            )
-        }
-        let rows = try ftsMetaRowsForEvent(db, eventID: eid)
-        XCTAssertEqual(rows.count, 5)
-        XCTAssertTrue(rows.allSatisfy { $0.bodyKind == Schema.BodyKinds.slackMsg })
-        for word in ["alpha", "bravo", "charlie", "delta", "echo"] {
-            XCTAssertTrue(try ftsContains(db, eventID: eid, query: word))
-        }
-    }
-
-    func testIndexEvent_SlackThreadReply_ParentPlusReplies() throws {
-        let db = try makeDB()
-        let eid = try insertRawEventRow(db)
-        let replies = #"[{"text":"reply alpha"},{"text":"reply bravo"}]"#
-        let payload = [
-            "event_kind": "slack_thread_reply_aggregate",
-            Schema.EventPayloadKeys.body: "parent message",
-            Schema.EventPayloadKeys.threadRepliesJson: replies,
-        ]
-        try db.writeSQL { rawDB in
-            try EventsFullTextStore.indexEvent(
-                eventID: eid, signalType: "action", bundleID: "slack", payload: payload, in: rawDB
-            )
-        }
-        let rows = try ftsMetaRowsForEvent(db, eventID: eid)
-        XCTAssertEqual(rows.count, 3)
-        XCTAssertEqual(rows.filter { $0.bodyKind == Schema.BodyKinds.slackThreadParent }.count, 1)
-        XCTAssertEqual(rows.filter { $0.bodyKind == Schema.BodyKinds.slackThreadReply }.count, 2)
-        XCTAssertTrue(try ftsContains(db, eventID: eid, query: "parent"))
-        XCTAssertTrue(try ftsContains(db, eventID: eid, query: "alpha"))
-        XCTAssertTrue(try ftsContains(db, eventID: eid, query: "bravo"))
-    }
-
-    func testIndexEvent_GitHubPRBody() throws {
-        let db = try makeDB()
-        let eid = try insertRawEventRow(db)
-        let payload = [
-            "event_kind": "gh_pr_opened",
-            Schema.EventPayloadKeys.body: "Summary fix the auth bug",
-        ]
-        try db.writeSQL { rawDB in
-            try EventsFullTextStore.indexEvent(
-                eventID: eid, signalType: "action", bundleID: "github", payload: payload, in: rawDB
-            )
-        }
-        let rows = try ftsMetaRowsForEvent(db, eventID: eid)
-        XCTAssertEqual(rows.count, 1)
-        XCTAssertEqual(rows[0].bodyKind, Schema.BodyKinds.ghPR)
-        XCTAssertTrue(try ftsContains(db, eventID: eid, query: "auth"))
-    }
-
-    func testIndexEvent_CommitMessage() throws {
-        let db = try makeDB()
-        let eid = try insertRawEventRow(db)
-        let payload = [
-            "event_kind": "gh_commit_pushed",
-            Schema.EventPayloadKeys.body: "fix(auth): tighten token refresh",
-        ]
-        try db.writeSQL { rawDB in
-            try EventsFullTextStore.indexEvent(
-                eventID: eid, signalType: "action", bundleID: "git", payload: payload, in: rawDB
-            )
-        }
-        let rows = try ftsMetaRowsForEvent(db, eventID: eid)
-        XCTAssertEqual(rows.count, 1)
-        XCTAssertEqual(rows[0].bodyKind, Schema.BodyKinds.commitMsg)
-    }
-
-    func testIndexEvent_GitHubIssueCommentBody() throws {
-        let db = try makeDB()
-        let eid = try insertRawEventRow(db)
-        let payload = [
-            "event_kind": "gh_issue_comment_authored",
-            Schema.EventPayloadKeys.body: "agreed, lets ship it",
-        ]
-        try db.writeSQL { rawDB in
-            try EventsFullTextStore.indexEvent(
-                eventID: eid, signalType: "action", bundleID: "github", payload: payload, in: rawDB
-            )
-        }
-        let rows = try ftsMetaRowsForEvent(db, eventID: eid)
-        XCTAssertEqual(rows.count, 1)
-        XCTAssertEqual(rows[0].bodyKind, Schema.BodyKinds.ghIssueComment)
-    }
-
-    func testIndexEvent_GitHubPRReviewCommentBody() throws {
-        let db = try makeDB()
-        let eid = try insertRawEventRow(db)
-        let payload = [
-            "event_kind": "gh_pr_review_comment_authored",
-            Schema.EventPayloadKeys.body: "nit: extract this constant",
-        ]
-        try db.writeSQL { rawDB in
-            try EventsFullTextStore.indexEvent(
-                eventID: eid, signalType: "action", bundleID: "github", payload: payload, in: rawDB
-            )
-        }
-        let rows = try ftsMetaRowsForEvent(db, eventID: eid)
-        XCTAssertEqual(rows.count, 1)
-        XCTAssertEqual(rows[0].bodyKind, Schema.BodyKinds.ghPRReviewComment)
-    }
-
-    // MARK: - Track-3 D2 — gist / release / deployment body-kind dispatch
-
-    func testIndexEvent_GitHubGistDescription_Created() throws {
-        let db = try makeDB()
-        let eid = try insertRawEventRow(db)
-        let payload = [
-            "event_kind": GitHubEventKindKey.gistCreated.rawValue,
-            Schema.EventPayloadKeys.body: "snippet for hkdf info string sample",
-        ]
-        try db.writeSQL { rawDB in
-            try EventsFullTextStore.indexEvent(
-                eventID: eid, signalType: "action", bundleID: "github", payload: payload, in: rawDB
-            )
-        }
-        let rows = try ftsMetaRowsForEvent(db, eventID: eid)
-        XCTAssertEqual(rows.count, 1)
-        XCTAssertEqual(rows[0].bodyKind, Schema.BodyKinds.ghGistDescription)
-        XCTAssertTrue(try ftsContains(db, eventID: eid, query: "hkdf"))
-    }
-
-    func testIndexEvent_GitHubGistDescription_Updated() throws {
-        let db = try makeDB()
-        let eid = try insertRawEventRow(db)
-        let payload = [
-            "event_kind": GitHubEventKindKey.gistUpdated.rawValue,
-            Schema.EventPayloadKeys.body: "edited description for snippet",
-        ]
-        try db.writeSQL { rawDB in
-            try EventsFullTextStore.indexEvent(
-                eventID: eid, signalType: "action", bundleID: "github", payload: payload, in: rawDB
-            )
-        }
-        let rows = try ftsMetaRowsForEvent(db, eventID: eid)
-        XCTAssertEqual(rows.count, 1)
-        XCTAssertEqual(rows[0].bodyKind, Schema.BodyKinds.ghGistDescription)
-        XCTAssertTrue(try ftsContains(db, eventID: eid, query: "edited"))
-    }
-
-    func testIndexEvent_GitHubReleaseBody() throws {
-        let db = try makeDB()
-        let eid = try insertRawEventRow(db)
-        let payload = [
-            "event_kind": GitHubEventKindKey.releasePublished.rawValue,
-            Schema.EventPayloadKeys.body: "v1.2.0 ships sparkle delta updates",
-        ]
-        try db.writeSQL { rawDB in
-            try EventsFullTextStore.indexEvent(
-                eventID: eid, signalType: "action", bundleID: "github", payload: payload, in: rawDB
-            )
-        }
-        let rows = try ftsMetaRowsForEvent(db, eventID: eid)
-        XCTAssertEqual(rows.count, 1)
-        XCTAssertEqual(rows[0].bodyKind, Schema.BodyKinds.ghReleaseBody)
-        XCTAssertTrue(try ftsContains(db, eventID: eid, query: "sparkle"))
-    }
-
-    func testIndexEvent_GitHubDeploymentDescription() throws {
-        let db = try makeDB()
-        let eid = try insertRawEventRow(db)
-        let payload = [
-            "event_kind": GitHubEventKindKey.deploymentCreated.rawValue,
-            Schema.EventPayloadKeys.body: "promote staging to production",
-        ]
-        try db.writeSQL { rawDB in
-            try EventsFullTextStore.indexEvent(
-                eventID: eid, signalType: "action", bundleID: "github", payload: payload, in: rawDB
-            )
-        }
-        let rows = try ftsMetaRowsForEvent(db, eventID: eid)
-        XCTAssertEqual(rows.count, 1)
-        XCTAssertEqual(rows[0].bodyKind, Schema.BodyKinds.ghDeploymentDescription)
-        XCTAssertTrue(try ftsContains(db, eventID: eid, query: "production"))
     }
 
     func testIndexEvent_NoBody_NoOp() throws {
@@ -353,56 +111,6 @@ final class EventsFullTextStoreTests: XCTestCase {
         XCTAssertEqual(
             results, [eHigh, eMid, eLow],
             "BM25 should order: high TF first, then short doc with TF=1, then long doc with TF=1")
-    }
-
-    /// Track-1 D2 carry-over fix regression: LinearCollector emits event_kind
-    /// "issue_updated" (no "linear_" prefix), but the FTS dispatcher checks
-    /// "linear_issue_updated" — so Linear descriptions never reached the index.
-    /// This test pins the corrected dispatch.
-    func testLinearIssueUpdatedEventKindDispatchesToFTS() throws {
-        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
-        let event = RawEvent(
-            timestamp: Date(timeIntervalSince1970: 100),
-            signalType: .action,
-            bundleID: nil,
-            payload: [
-                "source": "linear",
-                "event_kind": "issue_updated",
-                "issue_key": "LEAF-12",
-                "title": "test",
-                "status": "In Progress",
-                "project": "",
-                "team_key": "LEAF",
-                Schema.EventPayloadKeys.body: "decided to migrate the auth refresh path",
-            ]
-        )
-        try db.write(event)
-        let hits = try db.readSQL { rawDB in
-            try EventsFullTextStore.search(query: "auth refresh", period: 0...200_000, in: rawDB)
-        }
-        XCTAssertGreaterThan(hits.count, 0, "Linear issue_updated body must index into FTS5 after D1 carry-over fix")
-    }
-
-    func testLinearNotificationReceivedTitleIndexesViaFTS() throws {
-        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
-        let event = RawEvent(
-            timestamp: Date(timeIntervalSince1970: 50),
-            signalType: .context,
-            bundleID: nil,
-            payload: [
-                "source": "linear",
-                "event_kind": "linear_notification_received",
-                Schema.EventPayloadKeys.notificationId: "n1",
-                Schema.EventPayloadKeys.notificationKind: "issueAssignedToYou",
-                Schema.EventPayloadKeys.body: "Alice assigned LEAF-99 to you: rework migrations",
-            ]
-        )
-        try db.write(event)
-        let hits = try db.readSQL { rawDB in
-            try EventsFullTextStore.search(query: "rework migrations", period: 0...100_000, in: rawDB)
-        }
-        XCTAssertGreaterThan(
-            hits.count, 0, "linear_notification_received body must FTS-index under linear_notification_title body_kind")
     }
 
     func testSearch_PeriodFilterExcludesOutOfRange() throws {
