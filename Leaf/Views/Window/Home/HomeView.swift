@@ -272,6 +272,11 @@ private struct HomeContent: View {
                     TodaySection(snapshot: snapshot)
                 }
 
+                // Track-7 P3 — Work State card. Always visible (D3 detection
+                // is scheduled, always-on substrate). Headline collapses to
+                // "All clear" when openQuestions + openBlockers are both 0.
+                WorkStateCardWrapper(snapshot: snapshot)
+
                 // Track-7 P1 — Surfaces section is always rendered so disabled
                 // compact rows are visible from first launch (the "discovery"
                 // pattern per spec §3, §8). Other sections gate on data; this
@@ -284,6 +289,9 @@ private struct HomeContent: View {
             }
             .navigationDestination(for: HomeSurface.self) { surface in
                 detail(for: surface)
+            }
+            .navigationDestination(for: WorkStateRoute.self) { _ in
+                WorkStateDetailScreen()
             }
         }
     }
@@ -636,4 +644,22 @@ private func activeSession(_ snapshot: InsightsSnapshot) -> ActivitySession? {
     guard let recent = snapshot.recentSessions.first else { return nil }
     let age = Date().timeIntervalSince(recent.end)
     return age <= LeafStatusPillTokens.activeThresholdSeconds ? recent : nil
+}
+
+// MARK: - Work State card wrapper (Track-7 P3)
+
+private struct WorkStateCardWrapper: View {
+    let snapshot: InsightsSnapshot
+    @Environment(RouteCoordinator.self) private var coordinator
+
+    var body: some View {
+        let summary = WorkStateCardViewModel.state(snapshot: snapshot)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        WorkStateCard(
+            headline: WorkStateHeadlineFormatter.headline(summary),
+            subLineExcerpt: WorkStateHeadlineFormatter.subLine(summary, nowMs: nowMs),
+            subLineIsStale: WorkStateHeadlineFormatter.subLineIsStale(summary, nowMs: nowMs),
+            onTap: { coordinator.pushHomeWorkState() }
+        )
+    }
 }

@@ -116,6 +116,13 @@ public struct InsightsSnapshot: Sendable, Hashable {
     public let browsersActivity: BrowsersActivityBreakdown?
     public let zoomActivity: ZoomActivityBreakdown?
     public let googleCalendarActivity: GoogleCalendarActivityBreakdown?
+    /// Phase Track-7 P3 — D3 work state summary (decisions / open questions /
+    /// open blockers). `nil` ↔ no Work State data assembled (e.g. snapshot
+    /// builder is in private moat and not yet wired, fresh DB with no D3 rows,
+    /// or non-prod StubInsights conformer). `WorkStateCardViewModel` collapses
+    /// `nil` → `WorkStateSummary.empty` so the Home card always renders
+    /// "All clear" rather than disappearing.
+    public let workState: WorkStateSummary?
 
     public init(
         topApps: [AppTimeEntry],
@@ -156,7 +163,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         idesActivity: IDEsActivityBreakdown? = nil,
         browsersActivity: BrowsersActivityBreakdown? = nil,
         zoomActivity: ZoomActivityBreakdown? = nil,
-        googleCalendarActivity: GoogleCalendarActivityBreakdown? = nil
+        googleCalendarActivity: GoogleCalendarActivityBreakdown? = nil,
+        workState: WorkStateSummary? = nil
     ) {
         self.topApps = topApps
         self.sessions = sessions
@@ -197,6 +205,7 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.browsersActivity = browsersActivity
         self.zoomActivity = zoomActivity
         self.googleCalendarActivity = googleCalendarActivity
+        self.workState = workState
     }
 
     /// Convenience init — рассчитывает `deepSessionsCount` по threshold'у.
@@ -244,7 +253,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         idesActivity: IDEsActivityBreakdown? = nil,
         browsersActivity: BrowsersActivityBreakdown? = nil,
         zoomActivity: ZoomActivityBreakdown? = nil,
-        googleCalendarActivity: GoogleCalendarActivityBreakdown? = nil
+        googleCalendarActivity: GoogleCalendarActivityBreakdown? = nil,
+        workState: WorkStateSummary? = nil
     ) {
         self.init(
             topApps: topApps,
@@ -285,7 +295,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
             idesActivity: idesActivity,
             browsersActivity: browsersActivity,
             zoomActivity: zoomActivity,
-            googleCalendarActivity: googleCalendarActivity
+            googleCalendarActivity: googleCalendarActivity,
+            workState: workState
         )
     }
 
