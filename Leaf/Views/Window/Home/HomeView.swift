@@ -256,22 +256,55 @@ private struct LoadingScaffold: View {
 
 private struct HomeContent: View {
     let snapshot: InsightsSnapshot
+    @Environment(RouteCoordinator.self) private var coordinator
 
     var body: some View {
-        VStack(alignment: .leading, spacing: LeafSpace.xl) {
-            HeroBlock(snapshot: snapshot)
+        @Bindable var coord = coordinator
+        NavigationStack(path: $coord.homePath) {
+            VStack(alignment: .leading, spacing: LeafSpace.xl) {
+                HeroBlock(snapshot: snapshot)
 
-            if !snapshot.presenceState.isEmpty {
-                LivePresenceWidget(snapshot: snapshot.presenceState)
-            }
+                if !snapshot.presenceState.isEmpty {
+                    LivePresenceWidget(snapshot: snapshot.presenceState)
+                }
 
-            if hasTodayContent {
-                TodaySection(snapshot: snapshot)
-            }
+                if hasTodayContent {
+                    TodaySection(snapshot: snapshot)
+                }
 
-            if !snapshot.recentSessions.isEmpty || hasTodayContent || !snapshot.presenceState.isEmpty {
-                RecentSessionsBlock(sessions: snapshot.recentSessions)
+                // Track-7 P1 — Surfaces section is always rendered so disabled
+                // compact rows are visible from first launch (the "discovery"
+                // pattern per spec §3, §8). Other sections gate on data; this
+                // one never collapses.
+                SurfacesSection(snapshot: snapshot)
+
+                if !snapshot.recentSessions.isEmpty || hasTodayContent || !snapshot.presenceState.isEmpty {
+                    RecentSessionsBlock(sessions: snapshot.recentSessions)
+                }
             }
+            .navigationDestination(for: HomeSurface.self) { surface in
+                detail(for: surface)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func detail(for surface: HomeSurface) -> some View {
+        switch surface {
+        case .claudeCode:
+            ClaudeCodeDetailScreen()
+        case .xcode, .ides, .browsers, .zoom, .calendar:
+            // P2-P6 will wire these; for P1 show a placeholder.
+            VStack {
+                Spacer()
+                LeafEmptyState(
+                    icon: LeafIcons.brand.leaf,
+                    title: "\(surface.displayName) detail coming soon",
+                    description: "This surface's detail screen lands in a follow-up phase."
+                )
+                Spacer()
+            }
+            .frame(minHeight: LeafEmptyStateTokens.centeredMinHeight)
         }
     }
 
@@ -280,6 +313,7 @@ private struct HomeContent: View {
             || snapshot.linearIssuesTouched > 0
             || snapshot.githubEventsCount > 0
             || snapshot.slackMessagesCount > 0
+            || !snapshot.filesTouched.isEmpty   // Track-7 P1 — surface filesTouched
     }
 }
 
@@ -511,6 +545,11 @@ private struct TodaySection: View {
         if snapshot.aiActiveSeconds > 0 {
             let pct = Int((max(0, min(1, snapshot.aiRatio)) * 100).rounded())
             out.append("\(pct)% with AI")
+        }
+        // Track-7 P1 — filesTouched wire-up (spec §1 P1 scope).
+        let fileCount = snapshot.filesTouched.count
+        if fileCount > 0 {
+            out.append("\(fileCount) file\(fileCount == 1 ? "" : "s")")
         }
         return out
     }
