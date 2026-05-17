@@ -948,7 +948,7 @@ private struct LinearTierBundle {
     let coldCollector: LinearColdCollector?
     let coldScheduler: LinearColdScheduler?
 
-    static let disabled = LinearTierBundle(
+    static let disabled = Self(
         warmCollector: nil, warmScheduler: nil,
         coldCollector: nil, coldScheduler: nil
     )
@@ -960,7 +960,7 @@ private struct GitHubTierBundle {
     let coldCollector: GitHubColdCollector?
     let coldScheduler: GitHubColdScheduler?
 
-    static let disabled = GitHubTierBundle(
+    static let disabled = Self(
         warmCollector: nil, warmScheduler: nil,
         coldCollector: nil, coldScheduler: nil
     )
@@ -972,7 +972,7 @@ private struct SlackTierBundle {
     let coldCollector: SlackColdCollector?
     let coldScheduler: SlackColdScheduler?
 
-    static let disabled = SlackTierBundle(
+    static let disabled = Self(
         warmCollector: nil, warmScheduler: nil,
         coldCollector: nil, coldScheduler: nil
     )

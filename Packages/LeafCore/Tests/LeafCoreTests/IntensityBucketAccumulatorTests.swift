@@ -16,7 +16,6 @@ final class IntensityBucketAccumulatorTests: XCTestCase {
                 wasLocked: false,
                 wasSleeping: false
             )
-
         )
         XCTAssertEqual(snap.minuteBucketMs, 1_000)
         XCTAssertEqual(snap.keystrokes, 50)
@@ -35,7 +34,6 @@ final class IntensityBucketAccumulatorTests: XCTestCase {
                 foregroundApp: "com.spotify.client",
                 wasLocked: false, wasSleeping: false
             )
-
         )
         XCTAssertEqual(snap.foregroundApp, "com.spotify.client")
     }
@@ -50,7 +48,6 @@ final class IntensityBucketAccumulatorTests: XCTestCase {
                 foregroundApp: nil,
                 wasLocked: false, wasSleeping: false
             )
-
         )
         XCTAssertNil(snap.droppedReason)
         XCTAssertNil(snap.foregroundApp)
@@ -65,7 +62,6 @@ final class IntensityBucketAccumulatorTests: XCTestCase {
                 foregroundApp: "com.apple.Safari",
                 wasLocked: true, wasSleeping: false
             )
-
         )
         XCTAssertNil(snap.foregroundApp, "locked bucket strips foreground_app")
         XCTAssertEqual(snap.droppedReason, .locked)
@@ -80,7 +76,6 @@ final class IntensityBucketAccumulatorTests: XCTestCase {
                 foregroundApp: "com.apple.dt.Xcode",
                 wasLocked: false, wasSleeping: true
             )
-
         )
         XCTAssertNil(snap.foregroundApp)
         XCTAssertEqual(snap.droppedReason, .sleeping)
@@ -95,7 +90,6 @@ final class IntensityBucketAccumulatorTests: XCTestCase {
                 foregroundApp: nil,
                 wasLocked: true, wasSleeping: true
             )
-
         )
         XCTAssertEqual(snap.droppedReason, .locked, "locked takes priority")
     }
@@ -109,7 +103,6 @@ final class IntensityBucketAccumulatorTests: XCTestCase {
                 foregroundApp: "x",
                 wasLocked: false, wasSleeping: false
             )
-
         )
         XCTAssertEqual(snap.minuteBucketMs, 1_777_777_777_777)
     }
@@ -123,7 +116,6 @@ final class IntensityBucketAccumulatorTests: XCTestCase {
                 foregroundApp: nil,
                 wasLocked: false, wasSleeping: false
             )
-
         )
         XCTAssertEqual(snap.keystrokes, UInt32.max)
         XCTAssertEqual(snap.mouseMoves, UInt32.max)

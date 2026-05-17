@@ -100,7 +100,7 @@ public struct GoogleCalendarEventMapper: Sendable {
         let selfResponseStatus: String?
         let selfOptional: Bool?
 
-        static let empty = AttendeeSummary(
+        static let empty = Self(
             count: 0, externalCount: 0,
             selfResponseStatus: nil, selfOptional: nil
         )
