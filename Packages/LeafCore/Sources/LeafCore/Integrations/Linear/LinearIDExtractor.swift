@@ -21,6 +21,7 @@ public enum LinearIDExtractor {
 
     /// Force-try OK — pattern constant, validated в test suite.
     private static let pattern: NSRegularExpression = {
+        // swiftlint:disable:next force_try -- compile-time constant pattern; failure impossible
         try! NSRegularExpression(pattern: #"\b([A-Z][A-Z0-9]{1,4})-(\d+)\b"#, options: [])
     }()
 

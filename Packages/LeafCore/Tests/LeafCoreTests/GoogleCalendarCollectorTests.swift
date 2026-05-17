@@ -115,8 +115,10 @@ final class GoogleCalendarCollectorTests: XCTestCase {
         dict["summary"] = "evt-\(id)"
         dict["start"] = ["dateTime": "2026-01-15T10:00:00Z"]
         dict["end"] = ["dateTime": "2026-01-15T11:00:00Z"]
+        // swiftlint:disable force_try -- test fixture; dict is hand-built JSON-compatible payload
         let data = try! JSONSerialization.data(withJSONObject: dict)
         return try! JSONDecoder().decode(GoogleCalendarAPI.Event.self, from: data)
+        // swiftlint:enable force_try
     }
 
     private func makeEventsListResponse(
