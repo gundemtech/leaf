@@ -24,7 +24,7 @@ public enum GitHubTokenRefresherError: Error, Equatable, Sendable {
     case decode(String)
 }
 
-public nonisolated struct GitHubTokenRefresher: Sendable {
+nonisolated public struct GitHubTokenRefresher: Sendable {
     public let database: Database
     /// Public OAuth client_id из Info.plist (main app) или AgentThresholds (Agent).
     public let clientID: String

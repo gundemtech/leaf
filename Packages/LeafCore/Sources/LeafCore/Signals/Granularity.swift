@@ -9,7 +9,7 @@ public enum Granularity: Int, Codable, Sendable, CaseIterable, Comparable {
     case l4 = 4
     case l5 = 5
 
-    public static func < (lhs: Granularity, rhs: Granularity) -> Bool {
+    public static func < (lhs: Self, rhs: Self) -> Bool {
         lhs.rawValue < rhs.rawValue
     }
 }

@@ -110,7 +110,7 @@ public struct LinearIssueBatch: Sendable, Hashable {
         self.triageResolved = triageResolved
     }
 
-    public static let empty = LinearIssueBatch(
+    public static let empty = Self(
         issues: [], cursorMs: nil
     )
 }
@@ -149,7 +149,7 @@ public struct LinearAssignedWorkloadSnapshot: Sendable, Hashable {
         self.lastTouchedTs = lastTouchedTs
     }
 
-    public static let empty = LinearAssignedWorkloadSnapshot(
+    public static let empty = Self(
         startedCount: 0,
         topPriority: nil,
         lastTouchedIdentifier: nil,
@@ -223,7 +223,7 @@ public struct LinearCycleSnapshot: Sendable, Hashable {
         self.observedAtMs = observedAtMs
     }
 
-    public static let empty = LinearCycleSnapshot(teams: [], observedAtMs: 0)
+    public static let empty = Self(teams: [], observedAtMs: 0)
 }
 
 /// Phase Track-1 D1 — captured Linear issue comment body for FTS5 / decision
@@ -766,7 +766,7 @@ public struct LinearWarmBatch: Sendable, Hashable {
         self.subscribedIssueIds = subscribedIssueIds
     }
 
-    public static let empty = LinearWarmBatch()
+    public static let empty = Self()
 }
 
 // MARK: - Phase Track-3 D1 — cold-tier snapshot types
@@ -841,7 +841,7 @@ public struct LinearColdBatch: Sendable, Hashable {
         self.projectMemberships = projectMemberships
     }
 
-    public static let empty = LinearColdBatch()
+    public static let empty = Self()
 }
 
 /// Stub для CI / dev-без-moat сборок. Никогда не делает HTTP call,

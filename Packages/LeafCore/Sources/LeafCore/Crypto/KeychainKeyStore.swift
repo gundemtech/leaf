@@ -42,7 +42,7 @@ public enum KeychainKeyStore {
         service: String = "tech.gundem.leaf",
         account: String = "events.db.key"
     ) throws -> Data? {
-        return try fetch(accessGroup: accessGroup, service: service, account: account)
+        try fetch(accessGroup: accessGroup, service: service, account: account)
     }
 
     /// Удаляет ключ. Для dev reset / тестового tearDown.

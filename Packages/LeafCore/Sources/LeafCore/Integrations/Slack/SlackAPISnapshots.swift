@@ -51,7 +51,7 @@ public struct SlackMemberChannelsTopList: Sendable, Hashable, Codable {
         self.channels = channels
     }
 
-    public static let empty = SlackMemberChannelsTopList(channels: [])
+    public static let empty = Self(channels: [])
 }
 
 // MARK: - Reactions (reactions.list scoped to self-authored items)
@@ -79,7 +79,7 @@ public struct SlackReactionsBatch: Sendable, Hashable {
         self.reactions = reactions
     }
 
-    public static let empty = SlackReactionsBatch(reactions: [])
+    public static let empty = Self(reactions: [])
 }
 
 // MARK: - Pins (per channel id-set diff)
@@ -152,7 +152,7 @@ public struct SlackRemindersSnapshot: Sendable, Hashable, Codable {
         self.reminders = reminders
     }
 
-    public static let empty = SlackRemindersSnapshot(reminders: [])
+    public static let empty = Self(reminders: [])
 }
 
 // MARK: - Scheduled messages
@@ -180,7 +180,7 @@ public struct SlackScheduledMessagesSnapshot: Sendable, Hashable, Codable {
         self.messages = messages
     }
 
-    public static let empty = SlackScheduledMessagesSnapshot(messages: [])
+    public static let empty = Self(messages: [])
 }
 
 // MARK: - Stars (saved items)
@@ -204,7 +204,7 @@ public struct SlackStarsSnapshot: Sendable, Hashable, Codable {
         self.stars = stars
     }
 
-    public static let empty = SlackStarsSnapshot(stars: [])
+    public static let empty = Self(stars: [])
 }
 
 // MARK: - Canvases (cold tier)
@@ -232,7 +232,7 @@ public struct SlackCanvasesSnapshot: Sendable, Hashable, Codable {
         self.canvases = canvases
     }
 
-    public static let empty = SlackCanvasesSnapshot(canvases: [])
+    public static let empty = Self(canvases: [])
 }
 
 // MARK: - Custom emoji (cold tier)
@@ -247,7 +247,7 @@ public struct SlackEmojiSnapshot: Sendable, Hashable, Codable {
         self.emojiNames = emojiNames
     }
 
-    public static let empty = SlackEmojiSnapshot(emojiNames: [])
+    public static let empty = Self(emojiNames: [])
 }
 
 // MARK: - Usergroups (cold tier)
@@ -273,7 +273,7 @@ public struct SlackUsergroupsSnapshot: Sendable, Hashable, Codable {
         self.groups = groups
     }
 
-    public static let empty = SlackUsergroupsSnapshot(groups: [])
+    public static let empty = Self(groups: [])
 }
 
 // MARK: - Channels info (cold tier — archived/renamed detection)
@@ -300,7 +300,7 @@ public struct SlackChannelsInfoSnapshot: Sendable, Hashable, Codable {
         self.channels = channels
     }
 
-    public static let empty = SlackChannelsInfoSnapshot(channels: [])
+    public static let empty = Self(channels: [])
 }
 
 // MARK: - Warm / cold batch aggregates
@@ -335,7 +335,7 @@ public struct SlackWarmBatch: Sendable, Hashable {
         self.stars = stars
     }
 
-    public static let empty = SlackWarmBatch(
+    public static let empty = Self(
         memberChannelsTopList: .empty,
         reactions: .empty,
         pinsPerChannel: [],
@@ -365,7 +365,7 @@ public struct SlackColdBatch: Sendable, Hashable {
         self.channelsInfo = channelsInfo
     }
 
-    public static let empty = SlackColdBatch(
+    public static let empty = Self(
         canvases: .empty,
         emoji: .empty,
         usergroups: .empty,

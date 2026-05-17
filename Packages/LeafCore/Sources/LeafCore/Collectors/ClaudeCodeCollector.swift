@@ -232,7 +232,7 @@ public actor ClaudeCodeCollector {
             (try? database.readOffset(
                 collectorID: CollectorID.claudeCodeJSONL,
                 sourceID: canonicalPath
-            )) ?? nil
+            ))
 
         // Bootstrap branch.
         if existing == nil {

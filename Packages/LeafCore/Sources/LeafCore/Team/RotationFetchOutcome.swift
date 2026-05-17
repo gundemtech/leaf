@@ -22,7 +22,7 @@ public struct RotationFetchOutcome: Sendable, Hashable {
         self.skipped = skipped
     }
 
-    public static let empty = RotationFetchOutcome(
+    public static let empty = Self(
         fetched: 0, installed: 0, tombstoneApplied: 0, skipped: 0
     )
 }

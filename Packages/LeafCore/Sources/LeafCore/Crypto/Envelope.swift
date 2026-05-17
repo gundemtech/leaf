@@ -25,7 +25,7 @@ public struct EnvelopeHeader: Sendable, Hashable {
     /// Throws `LeafError.corruptedEnvelope` если bytes короче 17 или version
     /// не равна `currentVersion` (per architecture contract §12: implementations
     /// MUST reject unknown versions).
-    public static func peek(from bytes: Data) throws -> EnvelopeHeader {
+    public static func peek(from bytes: Data) throws -> Self {
         guard bytes.count >= prefixSize else {
             throw LeafError.corruptedEnvelope
         }
@@ -36,7 +36,7 @@ public struct EnvelopeHeader: Sendable, Hashable {
         let keyIDStart = bytes.index(bytes.startIndex, offsetBy: 1)
         let keyIDEnd = bytes.index(keyIDStart, offsetBy: 16)
         let keyID = Data(bytes[keyIDStart..<keyIDEnd])
-        return EnvelopeHeader(version: version, keyID: keyID)
+        return Self(version: version, keyID: keyID)
     }
 }
 

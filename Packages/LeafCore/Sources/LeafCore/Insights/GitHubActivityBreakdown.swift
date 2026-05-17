@@ -43,7 +43,7 @@ public struct GitHubActivityBreakdown: Sendable, Hashable {
         self.commitStreak = commitStreak
     }
 
-    public static let empty = GitHubActivityBreakdown(
+    public static let empty = Self(
         eventsCount: 0,
         byRepo: [],
         byEventKind: [],

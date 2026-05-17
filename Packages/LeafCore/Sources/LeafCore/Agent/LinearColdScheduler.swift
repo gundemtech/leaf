@@ -54,7 +54,7 @@ public actor LinearColdScheduler {
     ///
     /// `nonisolated` — reads only the immutable `calendar` `let` property; no
     /// actor state mutated. Lets tests call without `await`.
-    public nonisolated func nextLocal4am(after now: Date) -> Date {
+    nonisolated public func nextLocal4am(after now: Date) -> Date {
         var components = calendar.dateComponents([.year, .month, .day], from: now)
         components.hour = 4
         components.minute = 0
@@ -68,7 +68,7 @@ public actor LinearColdScheduler {
     ///
     /// `nonisolated` — pure function, touches no instance state. Lets tests
     /// call without `await`.
-    public nonisolated func shouldCatchUp(now: Date, lastColdMs: Int64?) -> Bool {
+    nonisolated public func shouldCatchUp(now: Date, lastColdMs: Int64?) -> Bool {
         guard let lastMs = lastColdMs else { return true }
         let nowMs = Int64(now.timeIntervalSince1970 * 1000)
         return nowMs - lastMs > 24 * 60 * 60 * 1000

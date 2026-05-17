@@ -26,7 +26,7 @@ final class LocalFilesWatcher {
     // canonical paths via `kFSEventStreamCreateFlagUseCFTypes`, so prefix
     // dispatch needs the same canonical form to match correctly when the
     // user's screenshot directory is itself a symlink (I1 review fix).
-    private var screenshotDir: URL = URL(fileURLWithPath: NSHomeDirectory() + "/Desktop").resolvingSymlinksInPath()
+    private var screenshotDir = URL(fileURLWithPath: NSHomeDirectory() + "/Desktop").resolvingSymlinksInPath()
     private let downloadsDir = URL(fileURLWithPath: NSHomeDirectory() + "/Downloads").resolvingSymlinksInPath()
     private let trashDir = URL(fileURLWithPath: NSHomeDirectory() + "/.Trash").resolvingSymlinksInPath()
 
@@ -189,7 +189,7 @@ final class LocalFilesWatcher {
 /// shape `LeafCore/Internal/FSEventStream.swift` (которое internal scope).
 /// Не reuse'им через public re-export, потому что LocalFilesWatcher живёт
 /// в LeafAgent target — отдельный wrapper держит OS bridge на target boundary.
-private final nonisolated class AgentFSEventStream: @unchecked Sendable {
+nonisolated private final class AgentFSEventStream: @unchecked Sendable {
     typealias EventsHandler = @Sendable (_ paths: [String], _ flags: [UInt32]) -> Void
 
     private var stream: FSEventStreamRef?
@@ -219,7 +219,7 @@ private final nonisolated class AgentFSEventStream: @unchecked Sendable {
         guard
             let ref = FSEventStreamCreate(
                 kCFAllocatorDefault,
-                AgentFSEventStream.callback,
+                Self.callback,
                 &context,
                 cfPaths,
                 FSEventStreamEventId(kFSEventStreamEventIdSinceNow),

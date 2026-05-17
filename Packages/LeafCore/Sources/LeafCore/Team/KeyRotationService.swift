@@ -38,7 +38,7 @@ public struct KeyRotationService: Sendable {
         rotationBlobCodec: any RotationBlobCodec,
         keystoreRoot: URL = TeamKeystore.defaultRoot(),
         now: @escaping @Sendable () -> Date = { Date() },
-        randomBytes: @escaping @Sendable (Int) throws -> Data = KeyRotationService.secureRandom,
+        randomBytes: @escaping @Sendable (Int) throws -> Data = Self.secureRandom,
         randomUUID: @escaping @Sendable () -> String = { UUID().uuidString.lowercased() },
         identity: (@Sendable () throws -> Curve25519.KeyAgreement.PrivateKey)? = nil
     ) {
@@ -282,5 +282,4 @@ public struct KeyRotationService: Sendable {
             outboxRows: outboxRows
         )
     }
-
 }

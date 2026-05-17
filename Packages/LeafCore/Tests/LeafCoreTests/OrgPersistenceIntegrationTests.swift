@@ -26,7 +26,7 @@ final class OrgPersistenceIntegrationTests: XCTestCase {
     }
 
     private func openDB() throws -> Database {
-        return try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
     }
 
     // MARK: - 1. DB rows + keystore files survive close+reopen

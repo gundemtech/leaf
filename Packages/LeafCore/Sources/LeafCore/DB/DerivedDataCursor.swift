@@ -75,7 +75,7 @@ public actor ProviderSnapshotsDerivedDataCursor: DerivedDataCursor {
                     snapshotKind: Self.snapshotKind,
                     in: raw
                 )
-            }) ?? nil
+            })
         return Self.decode(snapshot)[hash]
     }
 
@@ -111,7 +111,7 @@ public actor ProviderSnapshotsDerivedDataCursor: DerivedDataCursor {
                     snapshotKind: Self.snapshotKind,
                     in: raw
                 )
-            }) ?? nil
+            })
         return Array(Self.decode(snapshot).keys)
     }
 }

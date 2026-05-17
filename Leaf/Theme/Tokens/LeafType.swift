@@ -52,7 +52,7 @@ extension Font {
     fileprivate func leafTracking(_ ems: CGFloat) -> Font {
         // Font has no native tracking; tracking is applied via Text modifier.
         // Returning self preserves call-site pattern; consumers wrap Text with .tracking() per spec.
-        return self
+        self
     }
 }
 

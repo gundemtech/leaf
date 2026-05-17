@@ -264,7 +264,7 @@ public struct AgentThresholds: Sendable, Hashable {
         self.screenshotDirectoryOverridePath = screenshotDirectoryOverridePath
     }
 
-    public static let weakDefaults = AgentThresholds(
+    public static let weakDefaults = Self(
         idlePollIntervalSec: 10,
         idleThresholdSec: 300,
         eventFlushIntervalSec: 5,

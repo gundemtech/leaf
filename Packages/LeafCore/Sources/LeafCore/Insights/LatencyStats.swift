@@ -19,7 +19,7 @@ public struct LatencyStats: Sendable, Hashable, Codable {
 
     /// Empty sample → `nil` returned upstream вместо zero-stats — отличаем "не знаем"
     /// от "знаем, но 0 samples". UI/MCP интерпретируют `nil` как hidden.
-    public static func from(samples: [Int]) -> LatencyStats? {
+    public static func from(samples: [Int]) -> Self? {
         guard !samples.isEmpty else { return nil }
         let sorted = samples.sorted()
         let count = sorted.count
@@ -34,7 +34,7 @@ public struct LatencyStats: Sendable, Hashable, Codable {
                 return Int((Double(lo + hi) / 2.0).rounded())
             }
         }()
-        return LatencyStats(
+        return Self(
             medianSeconds: median,
             avgSeconds: avg,
             maxSeconds: sorted.last ?? 0,

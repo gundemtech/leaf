@@ -22,7 +22,7 @@
 
 import Foundation
 
-public actor RelayClient: Sendable {
+public actor RelayClient {
     public let baseURL: URL
     private let urlSession: URLSession
 

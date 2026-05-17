@@ -24,7 +24,7 @@ public enum IdentityService {
     public static func ensureLocalIdentity(
         at root: URL = TeamKeystore.defaultRoot()
     ) throws -> Curve25519.KeyAgreement.PrivateKey {
-        return try ensureLocalIdentity(
+        try ensureLocalIdentity(
             at: root,
             generate: {
                 Curve25519.KeyAgreement.PrivateKey()

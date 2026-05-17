@@ -51,7 +51,7 @@ public struct SlackActivityBreakdown: Sendable, Hashable {
         self.huddleParticipationStreak = huddleParticipationStreak
     }
 
-    public static let empty = SlackActivityBreakdown(
+    public static let empty = Self(
         messagesCount: 0,
         huddleMinutes: 0,
         byChannel: [],

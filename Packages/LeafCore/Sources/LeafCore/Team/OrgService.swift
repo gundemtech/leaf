@@ -36,7 +36,7 @@ public struct OrgService: Sendable {
         database: Database,
         keystoreRoot: URL = TeamKeystore.defaultRoot(),
         now: @escaping @Sendable () -> Date = { Date() },
-        randomBytes: @escaping @Sendable (Int) throws -> Data = OrgService.secureRandom,
+        randomBytes: @escaping @Sendable (Int) throws -> Data = Self.secureRandom,
         randomUUID: @escaping @Sendable () -> String = { UUID().uuidString.lowercased() },
         identity: (@Sendable () throws -> Curve25519.KeyAgreement.PrivateKey)? = nil
     ) {
@@ -121,7 +121,7 @@ public struct OrgService: Sendable {
     /// Pass-through через `database.readOrg()` — UI 5.1.E использует для
     /// "show CTA only if nil" логики (UI не должен знать про Database напрямую).
     public func currentOrg() throws -> Org? {
-        return try database.readOrg()
+        try database.readOrg()
     }
 
     /// Default `randomBytes` factory: `SecRandomCopyBytes` под the hood

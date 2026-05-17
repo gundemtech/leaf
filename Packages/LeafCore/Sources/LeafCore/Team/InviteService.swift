@@ -32,7 +32,7 @@ public struct InviteService: Sendable {
         inviteBlobCodec: any InviteBlobCodec,
         keystoreRoot: URL = TeamKeystore.defaultRoot(),
         now: @escaping @Sendable () -> Date = { Date() },
-        randomOTP: @escaping @Sendable () throws -> String = InviteService.secureRandomOTP,
+        randomOTP: @escaping @Sendable () throws -> String = Self.secureRandomOTP,
         identity: (@Sendable () throws -> Curve25519.KeyAgreement.PrivateKey)? = nil
     ) {
         self.database = database

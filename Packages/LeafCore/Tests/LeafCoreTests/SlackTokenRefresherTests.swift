@@ -223,7 +223,7 @@ final class SlackTokenRefresherTests: XCTestCase {
         let payload: [String: Any] = ["ok": false, "error": "invalid_grant"]
         let json = try JSONSerialization.data(withJSONObject: payload)
         SlackMockURLProtocol.handler = { _, _ in
-            return (self.httpResponse(status: 200), json)
+            (self.httpResponse(status: 200), json)
         }
         let refresher = makeRefresher(database: db)
 
@@ -256,7 +256,7 @@ final class SlackTokenRefresherTests: XCTestCase {
         let payload: [String: Any] = ["ok": false, "error": "internal_error"]
         let json = try JSONSerialization.data(withJSONObject: payload)
         SlackMockURLProtocol.handler = { _, _ in
-            return (self.httpResponse(status: 200), json)
+            (self.httpResponse(status: 200), json)
         }
         let refresher = makeRefresher(database: db)
 

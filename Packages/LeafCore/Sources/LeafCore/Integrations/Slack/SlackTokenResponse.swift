@@ -23,7 +23,7 @@ import Foundation
 /// Slack использует `ok: Bool` flag в теле — на error'е ok=false и `error`
 /// заполнено (RFC 6749 deviation; HTTP-код может быть 200 даже для ошибки).
 /// Caller должен проверять `ok` перед чтением остальных полей.
-public nonisolated struct SlackOAuthV2Response: Decodable, Sendable {
+nonisolated public struct SlackOAuthV2Response: Decodable, Sendable {
     public let ok: Bool
 
     /// Initial code exchange: bot-token (мы не запрашиваем) → nil для user-only flow.
@@ -52,12 +52,12 @@ public nonisolated struct SlackOAuthV2Response: Decodable, Sendable {
         case error
     }
 
-    public nonisolated struct SlackTeam: Decodable, Sendable {
+    nonisolated public struct SlackTeam: Decodable, Sendable {
         public let id: String
         public let name: String
     }
 
-    public nonisolated struct SlackAuthedUser: Decodable, Sendable {
+    nonisolated public struct SlackAuthedUser: Decodable, Sendable {
         /// Slack user id, e.g. "U01ABC".
         public let id: String
         /// Granted user scopes (comma-separated).

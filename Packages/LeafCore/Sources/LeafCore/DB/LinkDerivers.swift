@@ -32,7 +32,7 @@ public struct LinkConfidenceValues: Sendable {
 
     /// Conservative non-zero defaults shipped in the public substrate. Tuned
     /// values live in LeafCorePrivate `LinkConfidence`.
-    public static let publicDefault = LinkConfidenceValues(
+    public static let publicDefault = Self(
         linearIDInText: 0.5,
         branchNameLinearRef: 0.5,
         prURLInSlack: 0.5,
@@ -72,7 +72,7 @@ public struct LinkDerivers: Sendable {
 
     /// Public-substrate default — moat extractors return nil/[]. Used by callers
     /// without LeafCorePrivate wiring (CI, public-API integration tests).
-    public static let publicSubstrate = LinkDerivers(
+    public static let publicSubstrate = Self(
         extractBranchLinearID: { _, _ in nil },
         extractPRURLs: { _ in [] },
         extractPRHashRefs: { _ in [] },

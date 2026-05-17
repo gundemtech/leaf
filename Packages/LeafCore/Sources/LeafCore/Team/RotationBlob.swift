@@ -55,7 +55,7 @@ public struct RotationBlobHeader: Sendable, Hashable {
 
     /// Read-only parse первых 65 байт. No crypto.
     /// Throws `LeafError.rotationBlobMalformed` если bytes < 65 / version != currentVersion.
-    public static func peek(from blob: RotationBlob) throws -> RotationBlobHeader {
+    public static func peek(from blob: RotationBlob) throws -> Self {
         let bytes = blob.bytes
         guard bytes.count >= prefixSize else {
             throw LeafError.rotationBlobMalformed
@@ -74,7 +74,7 @@ public struct RotationBlobHeader: Sendable, Hashable {
         let newKeyID = Data(bytes[priorEnd..<newEnd])
         let recipientPubkey = Data(bytes[newEnd..<recipientEnd])
 
-        return RotationBlobHeader(
+        return Self(
             version: version,
             priorKeyID: priorKeyID,
             newKeyID: newKeyID,

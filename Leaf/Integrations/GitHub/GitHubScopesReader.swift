@@ -39,7 +39,7 @@ final class GitHubScopesReader {
     /// `nonisolated(unsafe)` так как `deinit` non-isolated в Swift 6, а
     /// `DistributedNotificationCenter.removeObserver` thread-safe. Запись
     /// единожды в `subscribeIntegrationChanged()` (MainActor) при init.
-    private nonisolated(unsafe) var observer: NSObjectProtocol?
+    nonisolated(unsafe) private var observer: NSObjectProtocol?
 
     init(service: GitHubScopesService?) {
         self.service = service

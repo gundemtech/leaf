@@ -73,9 +73,9 @@ public struct ActivityFeedEntry: Sendable, Hashable, Identifiable {
     /// merged entry keeps the latest timestamp and the leading `id`, with
     /// `mergedCount` set to the run length. Rows with different keys pass
     /// through unchanged.
-    public static func coalesceConsecutive(_ entries: [ActivityFeedEntry]) -> [ActivityFeedEntry] {
+    public static func coalesceConsecutive(_ entries: [Self]) -> [Self] {
         guard !entries.isEmpty else { return [] }
-        var result: [ActivityFeedEntry] = []
+        var result: [Self] = []
         result.reserveCapacity(entries.count)
         var current = entries[0]
         for next in entries.dropFirst() {
@@ -83,7 +83,7 @@ public struct ActivityFeedEntry: Sendable, Hashable, Identifiable {
                 // Run continues — bump count, keep the freshest timestamp
                 // (entries are typically descending, but be order-agnostic).
                 let newest = max(current.timestamp, next.timestamp)
-                current = ActivityFeedEntry(
+                current = Self(
                     id: current.id,
                     timestamp: newest,
                     provider: current.provider,

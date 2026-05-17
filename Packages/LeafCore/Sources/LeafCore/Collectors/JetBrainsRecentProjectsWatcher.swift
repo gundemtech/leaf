@@ -32,14 +32,14 @@ public actor JetBrainsRecentProjectsWatcher {
         // Public wrapper expects LeafCorePrivate-imported ProdJetBrainsProductMap.
         // For unit-testability, this method consults a static closure that
         // production sets at Agent boot to call into Prod map.
-        return _versionDirResolver?(versionDir)
+        _versionDirResolver?(versionDir)
     }
 
     /// Injection point for the prod-side product map. LeafAgent sets this
     /// at boot with `ProdJetBrainsProductMap.split` + `productToBundleID`.
     /// `nonisolated(unsafe)` — write-once at Agent boot before any concurrent
     /// access; tests reset in tearDown under serial XCTest execution.
-    public nonisolated(unsafe) static var _versionDirResolver: ((String) -> InferredIDE?)?
+    nonisolated(unsafe) public static var _versionDirResolver: ((String) -> InferredIDE?)?
 
     /// Parse recentProjects.xml or recentProjectDirectories.xml body.
     /// Returns entries with (displayName, activationTimestampMs). Malformed

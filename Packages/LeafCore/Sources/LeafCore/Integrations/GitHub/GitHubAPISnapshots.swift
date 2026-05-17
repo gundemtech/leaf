@@ -55,7 +55,7 @@ public struct GitHubProjectV2Snapshot: Sendable, Hashable {
 public struct GitHubProjectsV2Snapshot: Sendable, Hashable {
     public let projects: [GitHubProjectV2Snapshot]
     public init(projects: [GitHubProjectV2Snapshot]) { self.projects = projects }
-    public static let empty = GitHubProjectsV2Snapshot(projects: [])
+    public static let empty = Self(projects: [])
 }
 
 // MARK: - Gists
@@ -124,8 +124,8 @@ public struct GitHubIssueReactionsSnapshot: Sendable, Hashable, Codable {
     }
     public static func empty(
         owner: String, repo: String, issueNumber: Int, nowMs: Int64
-    ) -> GitHubIssueReactionsSnapshot {
-        GitHubIssueReactionsSnapshot(
+    ) -> Self {
+        Self(
             owner: owner, repo: repo, issueNumber: issueNumber, byEmoji: [:], observedAtMs: nowMs)
     }
 }
@@ -200,5 +200,5 @@ public struct GitHubOrgAuditLogBatch: Sendable, Hashable {
         self.entries = entries
         self.cursorMs = cursorMs
     }
-    public static let empty = GitHubOrgAuditLogBatch(entries: [], cursorMs: nil)
+    public static let empty = Self(entries: [], cursorMs: nil)
 }

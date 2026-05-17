@@ -51,7 +51,7 @@ public struct LinearActivityBreakdown: Sendable, Hashable {
         self.completionRate = completionRate
     }
 
-    public static let empty = LinearActivityBreakdown(
+    public static let empty = Self(
         issuesTouched: 0,
         byProject: [],
         byStatus: [],

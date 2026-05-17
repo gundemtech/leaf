@@ -53,7 +53,7 @@ public enum FileKeyStore {
         }
 
         let candidate: Data
-        if let legacy = legacy, legacy.count == keyLengthBytes {
+        if let legacy, legacy.count == keyLengthBytes {
             candidate = legacy
         } else {
             candidate = try generateRandomKey()
