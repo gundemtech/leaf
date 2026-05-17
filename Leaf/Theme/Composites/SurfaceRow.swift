@@ -36,7 +36,16 @@ struct SurfaceRow: View {
         .background(LeafColor.surface.raised)
         .clipShape(RoundedRectangle(cornerRadius: LeafCardTokens.cornerRadius, style: .continuous))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(surface.displayName), capture is off, double tap to enable")
+        .accessibilityLabel(accessibilityLabelText)
+    }
+
+    private var accessibilityLabelText: String {
+        let suffix: String
+        switch action {
+        case .enable:  suffix = "double tap to enable"
+        case .connect: suffix = "double tap to connect"
+        }
+        return "\(surface.displayName), capture is off, \(suffix)"
     }
 
     private var buttonTitle: String {
