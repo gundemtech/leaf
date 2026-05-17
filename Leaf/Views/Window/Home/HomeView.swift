@@ -293,18 +293,16 @@ private struct HomeContent: View {
         switch surface {
         case .claudeCode:
             ClaudeCodeDetailScreen()
-        case .xcode, .ides, .browsers, .zoom, .calendar:
-            // P2-P6 will wire these; for P1 show a placeholder.
-            VStack {
-                Spacer()
-                LeafEmptyState(
-                    icon: LeafIcons.brand.leaf,
-                    title: "\(surface.displayName) detail coming soon",
-                    description: "This surface's detail screen lands in a follow-up phase."
-                )
-                Spacer()
-            }
-            .frame(minHeight: LeafEmptyStateTokens.centeredMinHeight)
+        case .xcode:
+            XcodeDetailScreen()
+        case .ides:
+            IDEsDetailScreen()
+        case .browsers:
+            BrowsersDetailScreen()
+        case .zoom:
+            ZoomDetailScreen()
+        case .calendar:
+            GoogleCalendarDetailScreen()
         }
     }
 

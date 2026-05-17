@@ -29,29 +29,36 @@ struct SystemObserversSettingsSection: View {
                 ForEach(Self.observers, id: \.key) { observer in
                     SystemObserverRow(observer: observer, permissions: permissions)
                 }
-                BrowserBookmarkRow(
-                    displayName: "Browser bookmarks — Chrome",
-                    sfSymbol: "bookmark",
-                    explainer: "Tracks count of bookmarks (no titles, no URLs).",
-                    isEnabled: permissions.localAppsStore.browserBookmarksChromeEnabled,
-                    requiresFDA: false,
-                    fdaGranted: permissions.fdaGranted,
-                    onToggle: { permissions.localAppsStore.setBrowserBookmarksChromeEnabled($0) },
-                    onOpenFDA: {}
-                )
-                BrowserBookmarkRow(
-                    displayName: "Browser bookmarks — Safari",
-                    sfSymbol: "safari",
-                    explainer: "Requires Full Disk Access in System Settings.",
-                    isEnabled: permissions.localAppsStore.browserBookmarksSafariEnabled,
-                    requiresFDA: true,
-                    fdaGranted: permissions.fdaGranted,
-                    onToggle: { permissions.localAppsStore.setBrowserBookmarksSafariEnabled($0) },
-                    onOpenFDA: { permissions.openFDAPane() }
-                )
+                // Track-7 P2 — anchor for Settings deep-link from disabled
+                // Browsers SurfaceRow. Groups both bookmark rows so the scroll
+                // lands on the first of the pair.
+                Group {
+                    BrowserBookmarkRow(
+                        displayName: "Browser bookmarks — Chrome",
+                        sfSymbol: "bookmark",
+                        explainer: "Tracks count of bookmarks (no titles, no URLs).",
+                        isEnabled: permissions.localAppsStore.browserBookmarksChromeEnabled,
+                        requiresFDA: false,
+                        fdaGranted: permissions.fdaGranted,
+                        onToggle: { permissions.localAppsStore.setBrowserBookmarksChromeEnabled($0) },
+                        onOpenFDA: {}
+                    )
+                    BrowserBookmarkRow(
+                        displayName: "Browser bookmarks — Safari",
+                        sfSymbol: "safari",
+                        explainer: "Requires Full Disk Access in System Settings.",
+                        isEnabled: permissions.localAppsStore.browserBookmarksSafariEnabled,
+                        requiresFDA: true,
+                        fdaGranted: permissions.fdaGranted,
+                        onToggle: { permissions.localAppsStore.setBrowserBookmarksSafariEnabled($0) },
+                        onOpenFDA: { permissions.openFDAPane() }
+                    )
+                }
+                .id(SettingsSubsection.browsers)
             }
 
             IDEStorageSettingsSection(store: permissions.localAppsStore)
+                .id(SettingsSubsection.ides)
         }
     }
 

@@ -50,6 +50,40 @@ public protocol DerivedInsights: Sendable {
     /// Slack не подключён → .empty (default ext) — opt-in feature, no-data ≠ error.
     func slackActivity(period: DateInterval) throws -> SlackActivityBreakdown
 
+    /// Track 7 P2 — Xcode build/test activity breakdown for `period`.
+    /// Reads `signal_type='content'` (or whatever Track-6 P2 emitter uses)
+    /// events with `event_kind IN ('xcode_build_started', 'xcode_build_finished',
+    /// 'xcode_test_run_started', 'xcode_test_run_finished', 'xcode_scheme_changed',
+    /// 'xcode_run_destination_changed')`. Xcode not enabled → `.empty`.
+    func xcodeActivityBreakdown(period: DateInterval) throws -> XcodeActivityBreakdown
+
+    /// Track 7 P2 — IDE file/workspace activity for `period`. Reads events with
+    /// `event_kind IN ('vscode_active_doc_changed', 'vscode_workspace_opened',
+    /// 'jetbrains_recent_project_observed', 'ide_window_title_observed')`. Groups
+    /// by IDE family via `IDEFamilyClassifier`. IDE observers off → `.empty`.
+    func idesActivityBreakdown(period: DateInterval) throws -> IDEsActivityBreakdown
+
+    /// Track 7 P2 — Browser navigation / activation / bookmark events for `period`.
+    /// Reads `*_tab_navigated`, `*_tab_activated`, `*_bookmark_changed` event_kinds
+    /// across Safari / Chrome / Arc. Domain extraction via `URLDomainExtractor`.
+    /// All allow-listed; non-allow-listed domains never appear in DB upstream.
+    /// Browsers off → `.empty`.
+    func browsersActivityBreakdown(period: DateInterval) throws -> BrowsersActivityBreakdown
+
+    /// Track 7 P2 — Zoom meeting duration + calendar linkage for `period`.
+    /// Reads `zoom_meeting_started`, `zoom_meeting_ended`, `zoom_meeting_calendar_linked`.
+    /// Linkage count via LEFT JOIN on `event_links` where `link_kind='zoom_to_calendar_meeting'`.
+    /// Zoom off → `.empty`.
+    func zoomActivityBreakdown(period: DateInterval) throws -> ZoomActivityBreakdown
+
+    /// Track 7 P2 — Google Calendar focus / OOO / working-location activity for `period`.
+    /// Reads `google_calendar_focus_block_started`, `google_calendar_focus_block_ended`,
+    /// `google_calendar_ooo_block_started`, `google_calendar_ooo_block_ended`,
+    /// `google_calendar_working_location_changed`. Card-only in P2-collapsed —
+    /// detail screen renders empty-state until GCP gate clears. OAuth not connected
+    /// or no events → `.empty`.
+    func googleCalendarActivityBreakdown(period: DateInterval) throws -> GoogleCalendarActivityBreakdown
+
     // Team (Phase 2+)
     func teamPresenceOverlap(team: [String], period: DateInterval) throws -> TimeInterval
     func teamFocusAlignment(team: [String], period: DateInterval) throws -> Double
@@ -123,6 +157,13 @@ public extension DerivedInsights {
 
     /// Phase 4.10.B — default empty list для StubInsights / iOS-future.
     func recentSessions(period: DateInterval, limit: Int) throws -> [ActivitySession] { [] }
+
+    /// Track 7 P2 — default `.empty` so StubInsights / iOS-future stay no-op.
+    func xcodeActivityBreakdown(period: DateInterval) throws -> XcodeActivityBreakdown { .empty }
+    func idesActivityBreakdown(period: DateInterval) throws -> IDEsActivityBreakdown { .empty }
+    func browsersActivityBreakdown(period: DateInterval) throws -> BrowsersActivityBreakdown { .empty }
+    func zoomActivityBreakdown(period: DateInterval) throws -> ZoomActivityBreakdown { .empty }
+    func googleCalendarActivityBreakdown(period: DateInterval) throws -> GoogleCalendarActivityBreakdown { .empty }
 }
 
 /// Phase 1.1 / CI fallback. Все методы бросают .notImplemented.
@@ -147,4 +188,9 @@ public struct StubInsights: DerivedInsights {
     public func weekOverWeekDelta() throws -> Double? { nil }
     public func activeDaysInRow() throws -> Int { 0 }
     public func lastActivity(bundleID: String?) throws -> ActivitySnapshot? { nil }
+    public func xcodeActivityBreakdown(period: DateInterval) throws -> XcodeActivityBreakdown { .empty }
+    public func idesActivityBreakdown(period: DateInterval) throws -> IDEsActivityBreakdown { .empty }
+    public func browsersActivityBreakdown(period: DateInterval) throws -> BrowsersActivityBreakdown { .empty }
+    public func zoomActivityBreakdown(period: DateInterval) throws -> ZoomActivityBreakdown { .empty }
+    public func googleCalendarActivityBreakdown(period: DateInterval) throws -> GoogleCalendarActivityBreakdown { .empty }
 }

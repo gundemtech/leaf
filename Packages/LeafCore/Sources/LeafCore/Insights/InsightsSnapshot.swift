@@ -108,6 +108,14 @@ public struct InsightsSnapshot: Sendable, Hashable {
     /// producer side. Empty ↔ no attention events in `period` or producer not
     /// wired (StubInsights / non-prod build / B-7 not landed yet).
     public let recentSessions: [ActivitySession]
+    /// Track 7 P2-collapsed — Xcode build/test breakdown for the snapshot's
+    /// reference period. `nil` ↔ snapshot builder did not compute (P2-collapsed
+    /// defers builder extension; cards fall back to "Open for details" headline).
+    public let xcodeActivity: XcodeActivityBreakdown?
+    public let idesActivity: IDEsActivityBreakdown?
+    public let browsersActivity: BrowsersActivityBreakdown?
+    public let zoomActivity: ZoomActivityBreakdown?
+    public let googleCalendarActivity: GoogleCalendarActivityBreakdown?
 
     public init(
         topApps: [AppTimeEntry],
@@ -143,7 +151,12 @@ public struct InsightsSnapshot: Sendable, Hashable {
         linearCompletionRate: Double? = nil,
         recentActivity: [ActivityFeedEntry] = [],
         presenceState: PresenceUISnapshot = .empty,
-        recentSessions: [ActivitySession] = []
+        recentSessions: [ActivitySession] = [],
+        xcodeActivity: XcodeActivityBreakdown? = nil,
+        idesActivity: IDEsActivityBreakdown? = nil,
+        browsersActivity: BrowsersActivityBreakdown? = nil,
+        zoomActivity: ZoomActivityBreakdown? = nil,
+        googleCalendarActivity: GoogleCalendarActivityBreakdown? = nil
     ) {
         self.topApps = topApps
         self.sessions = sessions
@@ -179,6 +192,11 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.recentActivity = recentActivity
         self.presenceState = presenceState
         self.recentSessions = recentSessions
+        self.xcodeActivity = xcodeActivity
+        self.idesActivity = idesActivity
+        self.browsersActivity = browsersActivity
+        self.zoomActivity = zoomActivity
+        self.googleCalendarActivity = googleCalendarActivity
     }
 
     /// Convenience init — рассчитывает `deepSessionsCount` по threshold'у.
@@ -221,7 +239,12 @@ public struct InsightsSnapshot: Sendable, Hashable {
         linearCompletionRate: Double? = nil,
         recentActivity: [ActivityFeedEntry] = [],
         presenceState: PresenceUISnapshot = .empty,
-        recentSessions: [ActivitySession] = []
+        recentSessions: [ActivitySession] = [],
+        xcodeActivity: XcodeActivityBreakdown? = nil,
+        idesActivity: IDEsActivityBreakdown? = nil,
+        browsersActivity: BrowsersActivityBreakdown? = nil,
+        zoomActivity: ZoomActivityBreakdown? = nil,
+        googleCalendarActivity: GoogleCalendarActivityBreakdown? = nil
     ) {
         self.init(
             topApps: topApps,
@@ -257,7 +280,12 @@ public struct InsightsSnapshot: Sendable, Hashable {
             linearCompletionRate: linearCompletionRate,
             recentActivity: recentActivity,
             presenceState: presenceState,
-            recentSessions: recentSessions
+            recentSessions: recentSessions,
+            xcodeActivity: xcodeActivity,
+            idesActivity: idesActivity,
+            browsersActivity: browsersActivity,
+            zoomActivity: zoomActivity,
+            googleCalendarActivity: googleCalendarActivity
         )
     }
 
