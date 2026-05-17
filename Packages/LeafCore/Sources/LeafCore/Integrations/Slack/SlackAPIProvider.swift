@@ -327,6 +327,11 @@ public struct SlackChannelMessageCount: Sendable, Hashable {
         self.threadReplyCount = threadReplyCount
         self.messages = messages
     }
+
+    /// Snapshot represents zero authored messages в окне tick. Equivalent к
+    /// `count == 0`; exists so callers идиоматически фильтруют `!isEmpty` (also
+    /// resolves SwiftLint `empty_count`).
+    public var isEmpty: Bool { count == 0 }
 }
 
 /// Phase 4.7.B-9 — Slack presence state, как его отдаёт `users.getPresence`.
@@ -405,6 +410,11 @@ public struct SlackMentionChannelCount: Sendable, Hashable {
         self.periodStartMs = periodStartMs
         self.periodEndMs = periodEndMs
     }
+
+    /// Snapshot represents zero mentions received в окне tick. Equivalent к
+    /// `count == 0`; exists so callers идиоматически фильтруют `!isEmpty` (also
+    /// resolves SwiftLint `empty_count`).
+    public var isEmpty: Bool { count == 0 }
 }
 
 /// Phase 4.7.B-12 — aggregate snapshot of files юзер uploaded в окне tick'а.

@@ -282,7 +282,7 @@ public actor SlackCollector {
         // 6. Compose events.
         // 6a. Message events — один Action RawEvent per (channel, count > 0).
         let messageEvents: [RawEvent] = tick.channelMessageCounts
-            .filter { $0.count > 0 }
+            .filter { !$0.isEmpty }
             .map {
                 Self.makeMessageEvent(
                     channel: $0,
@@ -460,7 +460,7 @@ public actor SlackCollector {
         // создаём — provider drop'ает channels без matches до return.
         let mentionEvents: [RawEvent] =
             mentionCounts
-            .filter { $0.count > 0 }
+            .filter { !$0.isEmpty }
             .map { Self.makeMentionReceivedAggregateEvent(channelCount: $0, nowMs: nowMsForPresence) }
 
         // 6g. Phase 4.7.B-12 — slack_file_uploaded_aggregate. Single event per
