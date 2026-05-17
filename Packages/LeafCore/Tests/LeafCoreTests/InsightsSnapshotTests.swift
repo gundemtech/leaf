@@ -566,4 +566,49 @@ final class InsightsSnapshotTests: XCTestCase {
         let rate = try stub.linearCompletionRate(period: period)
         XCTAssertNil(rate, "default extension → nil")
     }
+
+    // MARK: - Track 7 P2-collapsed — 5 new surface breakdown defaults on StubInsights
+
+    private func makeStubInsights(label: String) throws -> StubInsights {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("snapshot-stub-\(label)-\(UUID().uuidString).sqlite")
+        let _ = try Database.openForWrite(at: tmp, config: .weakDefaults)
+        let reader = try Database.openForRead(at: tmp, config: .weakDefaults)
+        return StubInsights(database: reader)
+    }
+
+    func testStubInsightsXcodeActivityBreakdownDefaultsToEmpty() throws {
+        let stub = try makeStubInsights(label: "xcode")
+        let period = DateInterval(start: now.addingTimeInterval(-3600), end: now)
+        let breakdown = try stub.xcodeActivityBreakdown(period: period)
+        XCTAssertEqual(breakdown, .empty, "StubInsights inherits .empty default")
+    }
+
+    func testStubInsightsIDEsActivityBreakdownDefaultsToEmpty() throws {
+        let stub = try makeStubInsights(label: "ides")
+        let period = DateInterval(start: now.addingTimeInterval(-3600), end: now)
+        let breakdown = try stub.idesActivityBreakdown(period: period)
+        XCTAssertEqual(breakdown, .empty, "StubInsights inherits .empty default")
+    }
+
+    func testStubInsightsBrowsersActivityBreakdownDefaultsToEmpty() throws {
+        let stub = try makeStubInsights(label: "browsers")
+        let period = DateInterval(start: now.addingTimeInterval(-3600), end: now)
+        let breakdown = try stub.browsersActivityBreakdown(period: period)
+        XCTAssertEqual(breakdown, .empty, "StubInsights inherits .empty default")
+    }
+
+    func testStubInsightsZoomActivityBreakdownDefaultsToEmpty() throws {
+        let stub = try makeStubInsights(label: "zoom")
+        let period = DateInterval(start: now.addingTimeInterval(-3600), end: now)
+        let breakdown = try stub.zoomActivityBreakdown(period: period)
+        XCTAssertEqual(breakdown, .empty, "StubInsights inherits .empty default")
+    }
+
+    func testStubInsightsGoogleCalendarActivityBreakdownDefaultsToEmpty() throws {
+        let stub = try makeStubInsights(label: "gcal")
+        let period = DateInterval(start: now.addingTimeInterval(-3600), end: now)
+        let breakdown = try stub.googleCalendarActivityBreakdown(period: period)
+        XCTAssertEqual(breakdown, .empty, "StubInsights inherits .empty default")
+    }
 }
