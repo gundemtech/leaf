@@ -1,0 +1,69 @@
+name: code-style
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  style:
+    name: Format & lint (report-only)
+    runs-on: macos-26
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Select Xcode
+        run: sudo xcode-select -switch /Applications/Xcode.app
+
+      - name: Tool versions
+        run: |
+          xcrun swift-format --version
+          xcodebuild -version
+
+      - name: Install SwiftLint
+        run: brew install swiftlint
+
+      - name: SwiftLint version
+        run: swiftlint version
+
+      - name: swift-format lint
+        id: fmt
+        continue-on-error: true
+        run: |
+          xcrun swift-format lint --strict --recursive \
+            Leaf LeafAgent LeafMCP \
+            Packages/LeafCore/Sources Packages/LeafCore/Tests \
+            2>&1 | tee swift-format.log
+
+      - name: SwiftLint
+        id: lint
+        continue-on-error: true
+        run: |
+          swiftlint lint \
+            --config .swiftlint.yml \
+            --baseline .swiftlint-baseline.json \
+            --reporter github-actions-logging
+
+      - name: Style summary
+        if: always()
+        run: |
+          {
+            echo "## Style check (Phase 1 — report-only)"
+            echo ""
+            echo "| Tool | Outcome |"
+            echo "|---|---|"
+            echo "| swift-format | \`${{ steps.fmt.outcome }}\` |"
+            echo "| SwiftLint | \`${{ steps.lint.outcome }}\` |"
+            echo ""
+            echo "Violations отображены как PR annotations (Files-changed view)."
+            echo "Phase 1 — **report-only**; merge не блокируется."
+            echo ""
+            echo "См. [STYLE.md](https://github.com/${{ github.repository }}/blob/main/STYLE.md) и [.swiftlint.yml](https://github.com/${{ github.repository }}/blob/main/.swiftlint.yml)."
+          } >> $GITHUB_STEP_SUMMARY
