@@ -313,6 +313,7 @@ private struct HomeContent: View {
             || snapshot.linearIssuesTouched > 0
             || snapshot.githubEventsCount > 0
             || snapshot.slackMessagesCount > 0
+            || !snapshot.filesTouched.isEmpty   // Track-7 P1 — surface filesTouched
     }
 }
 
@@ -544,6 +545,11 @@ private struct TodaySection: View {
         if snapshot.aiActiveSeconds > 0 {
             let pct = Int((max(0, min(1, snapshot.aiRatio)) * 100).rounded())
             out.append("\(pct)% with AI")
+        }
+        // Track-7 P1 — filesTouched wire-up (spec §1 P1 scope).
+        let fileCount = snapshot.filesTouched.count
+        if fileCount > 0 {
+            out.append("\(fileCount) file\(fileCount == 1 ? "" : "s")")
         }
         return out
     }
