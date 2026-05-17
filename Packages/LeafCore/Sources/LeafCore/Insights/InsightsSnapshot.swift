@@ -108,6 +108,13 @@ public struct InsightsSnapshot: Sendable, Hashable {
     /// producer side. Empty ↔ no attention events in `period` or producer not
     /// wired (StubInsights / non-prod build / B-7 not landed yet).
     public let recentSessions: [ActivitySession]
+    /// Phase Track-7 P3 — D3 work state summary (decisions / open questions /
+    /// open blockers). `nil` ↔ no Work State data assembled (e.g. snapshot
+    /// builder is in private moat and not yet wired, fresh DB with no D3 rows,
+    /// or non-prod StubInsights conformer). `WorkStateCardViewModel` collapses
+    /// `nil` → `WorkStateSummary.empty` so the Home card always renders
+    /// "All clear" rather than disappearing.
+    public let workState: WorkStateSummary?
 
     public init(
         topApps: [AppTimeEntry],
@@ -143,7 +150,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         linearCompletionRate: Double? = nil,
         recentActivity: [ActivityFeedEntry] = [],
         presenceState: PresenceUISnapshot = .empty,
-        recentSessions: [ActivitySession] = []
+        recentSessions: [ActivitySession] = [],
+        workState: WorkStateSummary? = nil
     ) {
         self.topApps = topApps
         self.sessions = sessions
@@ -179,6 +187,7 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.recentActivity = recentActivity
         self.presenceState = presenceState
         self.recentSessions = recentSessions
+        self.workState = workState
     }
 
     /// Convenience init — рассчитывает `deepSessionsCount` по threshold'у.
@@ -221,7 +230,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         linearCompletionRate: Double? = nil,
         recentActivity: [ActivityFeedEntry] = [],
         presenceState: PresenceUISnapshot = .empty,
-        recentSessions: [ActivitySession] = []
+        recentSessions: [ActivitySession] = [],
+        workState: WorkStateSummary? = nil
     ) {
         self.init(
             topApps: topApps,
@@ -257,7 +267,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
             linearCompletionRate: linearCompletionRate,
             recentActivity: recentActivity,
             presenceState: presenceState,
-            recentSessions: recentSessions
+            recentSessions: recentSessions,
+            workState: workState
         )
     }
 
