@@ -265,7 +265,9 @@ private struct HomeContent: View {
                 HeroBlock(snapshot: snapshot)
 
                 if !snapshot.presenceState.isEmpty {
-                    LivePresenceWidget(snapshot: snapshot.presenceState)
+                    LivePresenceWidget(snapshot: snapshot.presenceState) { provider in
+                        coordinator.pushHomeLayerBProvider(provider)
+                    }
                 }
 
                 if hasTodayContent {
@@ -293,6 +295,9 @@ private struct HomeContent: View {
             .navigationDestination(for: WorkStateRoute.self) { _ in
                 WorkStateDetailScreen()
             }
+            .navigationDestination(for: LayerBProvider.self) { provider in
+                layerBDetail(for: provider)
+            }
         }
     }
 
@@ -311,6 +316,18 @@ private struct HomeContent: View {
             ZoomDetailScreen()
         case .calendar:
             GoogleCalendarDetailScreen()
+        }
+    }
+
+    @ViewBuilder
+    private func layerBDetail(for provider: LayerBProvider) -> some View {
+        switch provider {
+        case .linear:
+            LinearDetailScreen()
+        case .github:
+            GitHubDetailScreen()
+        case .slack:
+            SlackDetailScreen()
         }
     }
 

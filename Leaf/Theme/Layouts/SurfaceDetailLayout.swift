@@ -13,13 +13,8 @@
 import SwiftUI
 import LeafCore
 
-struct DetailHeadline: Equatable {
-    let value: String
-    /// Optional trend annotation, rendered next to the value. Spec §5.4 —
-    /// view-model decides whether to include this (omit if prev period has
-    /// less than 50% expected days).
-    let trend: String?
-}
+// DetailHeadline is now public in LeafCore (Track 7 P4 promotion).
+// Import LeafCore above to access it.
 
 struct SurfaceDetailLayout<Aggregates: View, Chart: View>: View {
     let title: String
