@@ -41,6 +41,14 @@ final class RouteCoordinator {
         homePath.removeLast()
     }
 
+    /// Pushes a Layer B provider drill-down destination onto homePath.
+    /// Track-7 P4: parallel к pushHome(_:HomeSurface) — LayerBProvider —
+    /// отдельный route discriminator (Layer B = provider integrations,
+    /// не capture surfaces).
+    func pushHomeLayerBProvider(_ provider: LayerBProvider) {
+        homePath.append(provider)
+    }
+
     func consumePendingSettingsTarget() -> (section: SettingsSection, sub: SettingsSubsection?)? {
         let snapshot = pendingSettingsTarget
         pendingSettingsTarget = nil

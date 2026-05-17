@@ -285,6 +285,9 @@ private struct HomeContent: View {
             .navigationDestination(for: HomeSurface.self) { surface in
                 detail(for: surface)
             }
+            .navigationDestination(for: LayerBProvider.self) { provider in
+                layerBDetail(for: provider)
+            }
         }
     }
 
@@ -301,6 +304,24 @@ private struct HomeContent: View {
                     icon: LeafIcons.brand.leaf,
                     title: "\(surface.displayName) detail coming soon",
                     description: "This surface's detail screen lands in a follow-up phase."
+                )
+                Spacer()
+            }
+            .frame(minHeight: LeafEmptyStateTokens.centeredMinHeight)
+        }
+    }
+
+    @ViewBuilder
+    private func layerBDetail(for provider: LayerBProvider) -> some View {
+        switch provider {
+        case .linear, .github, .slack:
+            // Placeholder pre-Task 6/7/8 — real screens land in subsequent tasks.
+            VStack {
+                Spacer()
+                LeafEmptyState(
+                    icon: LeafIcons.brand.leaf,
+                    title: "\(provider.displayName) detail coming soon",
+                    description: "This Layer B drill-down lands in a follow-up task within Track-7 P4."
                 )
                 Spacer()
             }
