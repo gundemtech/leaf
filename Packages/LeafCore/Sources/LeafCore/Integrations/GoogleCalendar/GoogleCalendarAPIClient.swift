@@ -169,6 +169,8 @@ public struct ProdGoogleCalendarAPIClient: GoogleCalendarAPIClient {
     public func calendarListGetPrimary(
         accessToken: String
     ) async throws -> GoogleCalendarAPI.CalendarListEntry {
+        // Reason: compile-time-constant URL literal — `URL(string:)` of a static well-formed URL never returns nil.
+        // swiftlint:disable:next force_unwrapping
         let url = URL(string: "https://www.googleapis.com/calendar/v3/users/me/calendarList/primary")!
         return try await get(url: url, accessToken: accessToken)
     }

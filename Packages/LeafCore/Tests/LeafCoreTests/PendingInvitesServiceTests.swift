@@ -6,6 +6,11 @@ import XCTest
 
 @testable import LeafCore
 
+// swiftlint:disable force_unwrapping
+// Reason: test fixtures rely on force-unwrap for setup convenience —
+// URL literals, HTTPURLResponse construction, decoded JSON, post-`try`
+// DB reads where nil ⇒ broken test, not production semantic.
+
 private final class PendingMockURLProtocol: URLProtocol {
     nonisolated(unsafe) static var handler: ((URLRequest) -> (HTTPURLResponse, Data?))?
 
@@ -303,3 +308,4 @@ final class PendingInvitesServiceTests: XCTestCase {
         XCTAssertTrue(try db.readAllPendingInvites().isEmpty)
     }
 }
+// swiftlint:enable force_unwrapping

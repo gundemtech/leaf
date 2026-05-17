@@ -18,6 +18,9 @@ public enum InviteURL {
         components.host = "invite"
         components.path = "/" + token
         components.fragment = otp
+        // Reason: `URLComponents` with scheme + host + leading-slash path produces a
+        // well-formed URL deterministically — `.url` cannot be nil here.
+        // swiftlint:disable:next force_unwrapping
         return components.url!
     }
 

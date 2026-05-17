@@ -2,6 +2,11 @@ import XCTest
 
 @testable import LeafCore
 
+// swiftlint:disable force_unwrapping
+// Reason: test fixtures rely on force-unwrap for setup convenience —
+// URL literals, HTTPURLResponse construction, decoded JSON, post-`try`
+// DB reads where nil ⇒ broken test, not production semantic.
+
 final class InvitePlaintextTests: XCTestCase {
 
     private func makePlaintext() -> InvitePlaintext {
@@ -69,3 +74,4 @@ final class InvitePlaintextTests: XCTestCase {
         XCTAssertNotEqual(a.hashValue, b.hashValue)
     }
 }
+// swiftlint:enable force_unwrapping

@@ -3,6 +3,11 @@ import os
 
 @testable import LeafCore
 
+// swiftlint:disable force_unwrapping
+// Reason: test fixtures rely on force-unwrap for setup convenience —
+// URL literals, HTTPURLResponse construction, decoded JSON, post-`try`
+// DB reads where nil ⇒ broken test, not production semantic.
+
 final class SlackColdSchedulerTests: XCTestCase {
     private let logger = Logger(subsystem: "tech.gundem.leaf.tests", category: "slack-coldsched")
     private var tempDir: URL!
@@ -122,3 +127,4 @@ final class SlackColdSchedulerTests: XCTestCase {
         XCTAssertLessThan(dt, 1.0)
     }
 }
+// swiftlint:enable force_unwrapping

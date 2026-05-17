@@ -65,6 +65,8 @@ public enum SessionFeedMapper {
         guard !rows.isEmpty else { return [] }
 
         let sorted = rows.sorted { $0.timestamp < $1.timestamp }
+        // Reason: `guard !rows.isEmpty` above guarantees `sorted.last != nil`.
+        // swiftlint:disable:next force_unwrapping
         let refEnd = referenceEnd ?? sorted.last!.timestamp
 
         var open: OpenSession?

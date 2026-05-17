@@ -9,6 +9,10 @@
 
 import Foundation
 
+// swiftlint:disable force_unwrapping
+// Reason: compile-time-constant URL literals (`URL(string: "https://...")`) never
+// fail to parse — `!` is a static guarantee, not a runtime risk.
+
 public enum LinearOAuthEndpoints {
     /// Authorize URL — browser flow начинается здесь.
     public static let authorize = URL(string: "https://linear.app/oauth/authorize")!
@@ -60,3 +64,4 @@ public enum LinearOAuthEndpoints {
     public static let userDefaultsSuite = "tech.gundem.leaf"
     public static let refreshDeniedFlagKey = "linear.refreshDenied"
 }
+// swiftlint:enable force_unwrapping

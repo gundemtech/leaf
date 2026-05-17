@@ -12,6 +12,10 @@
 
 import Foundation
 
+// swiftlint:disable force_unwrapping
+// Reason: compile-time-constant URL literals (`URL(string: "https://...")`) never
+// fail to parse — `!` is a static guarantee, not a runtime risk.
+
 public enum GitHubOAuthEndpoints {
     /// `POST /login/device/code` — initial step, возвращает device_code + user_code +
     /// verification_uri + interval. UI рендерит user_code и открывает verification_uri.
@@ -78,3 +82,4 @@ public enum GitHubOAuthEndpoints {
     public static let userDefaultsSuite = "tech.gundem.leaf"
     public static let refreshDeniedFlagKey = "github.refreshDenied"
 }
+// swiftlint:enable force_unwrapping

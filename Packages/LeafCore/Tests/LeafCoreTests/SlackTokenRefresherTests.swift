@@ -8,6 +8,11 @@ import XCTest
 
 @testable import LeafCore
 
+// swiftlint:disable force_unwrapping
+// Reason: test fixtures rely on force-unwrap for setup convenience —
+// URL literals, HTTPURLResponse construction, decoded JSON, post-`try`
+// DB reads where nil ⇒ broken test, not production semantic.
+
 private final class SlackMockURLProtocol: URLProtocol {
     nonisolated(unsafe) static var handler: ((URLRequest, Data) throws -> (HTTPURLResponse, Data))?
 
@@ -310,3 +315,4 @@ final class SlackTokenRefresherTests: XCTestCase {
         }
     }
 }
+// swiftlint:enable force_unwrapping

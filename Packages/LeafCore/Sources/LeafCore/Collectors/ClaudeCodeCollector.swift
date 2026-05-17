@@ -235,11 +235,9 @@ public actor ClaudeCodeCollector {
             ))
 
         // Bootstrap branch.
-        if existing == nil {
+        guard let stored = existing else {
             return bootstrap(url: url, canonicalPath: canonicalPath, stat: stat, nowMs: nowMs)
         }
-
-        let stored = existing!
 
         // Skip-unchanged: mtime AND size совпадают со stored — нет append'а.
         if stat.mtimeMs <= stored.lastModifiedMs && stat.size == stored.size {

@@ -4,6 +4,11 @@ import Testing
 
 @testable import LeafCore
 
+// swiftlint:disable force_unwrapping
+// Reason: test fixtures rely on force-unwrap for setup convenience —
+// URL literals, HTTPURLResponse construction, decoded JSON, post-`try`
+// DB reads where nil ⇒ broken test, not production semantic.
+
 @Suite("LocalAppsStore.derivedDataWatcherEnabled")
 struct LocalAppsStoreDerivedDataTests {
     private func makeStore() -> LocalAppsStore {
@@ -30,3 +35,4 @@ struct LocalAppsStoreDerivedDataTests {
         #expect(s.derivedDataWatcherEnabled() == false)
     }
 }
+// swiftlint:enable force_unwrapping

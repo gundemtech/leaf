@@ -7,6 +7,11 @@ import os
 
 @testable import LeafCore
 
+// swiftlint:disable force_unwrapping
+// Reason: test fixtures rely on force-unwrap for setup convenience —
+// URL literals, HTTPURLResponse construction, decoded JSON, post-`try`
+// DB reads where nil ⇒ broken test, not production semantic.
+
 final class SlackCollectorTests: XCTestCase {
     private var tempDir: URL!
     private var dbURL: URL!
@@ -1474,3 +1479,4 @@ final class SlackCollectorTests: XCTestCase {
         XCTAssertEqual(calls.count, 3, "fetchThreadReplies должен вызываться до 429-го thread'а включительно")
     }
 }
+// swiftlint:enable force_unwrapping

@@ -7,6 +7,11 @@ import XCTest
 
 @testable import LeafCore
 
+// swiftlint:disable force_unwrapping
+// Reason: test fixtures rely on force-unwrap for setup convenience —
+// URL literals, HTTPURLResponse construction, decoded JSON, post-`try`
+// DB reads where nil ⇒ broken test, not production semantic.
+
 private final class GoogleOAuthMockURLProtocol: URLProtocol {
     nonisolated(unsafe) static var handler: ((URLRequest, Data) throws -> (HTTPURLResponse, Data))?
 
@@ -224,3 +229,4 @@ final class GoogleCalendarOAuthClientTests: XCTestCase {
         }
     }
 }
+// swiftlint:enable force_unwrapping

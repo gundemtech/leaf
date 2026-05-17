@@ -14,6 +14,11 @@ import XCTest
 
 @testable import LeafCore
 
+// swiftlint:disable force_unwrapping
+// Reason: test fixtures rely on force-unwrap for setup convenience —
+// URL literals, HTTPURLResponse construction, decoded JSON, post-`try`
+// DB reads where nil ⇒ broken test, not production semantic.
+
 final class ActivityFeedMapperLocalOSTests: XCTestCase {
 
     private func payloadJSON(_ dict: [String: String]) -> String {
@@ -659,3 +664,4 @@ final class ActivityFeedMapperLocalOSTests: XCTestCase {
         XCTAssertNil(entry, "ide_window_title_observed is debug-only and must not render")
     }
 }
+// swiftlint:enable force_unwrapping

@@ -2,6 +2,11 @@ import XCTest
 
 @testable import LeafCore
 
+// swiftlint:disable force_unwrapping
+// Reason: test fixtures rely on force-unwrap for setup convenience —
+// URL literals, HTTPURLResponse construction, decoded JSON, post-`try`
+// DB reads where nil ⇒ broken test, not production semantic.
+
 final class GoogleCalendarOAuthEndpointsTests: XCTestCase {
     func testTokenURLIsCorrect() {
         XCTAssertEqual(
@@ -49,3 +54,4 @@ final class GoogleCalendarOAuthEndpointsTests: XCTestCase {
         XCTAssertEqual(GoogleCalendarOAuthEndpoints.infoPlistClientSecretKey, "LeafGoogleCalendarOAuthClientSecret")
     }
 }
+// swiftlint:enable force_unwrapping

@@ -164,6 +164,9 @@ public struct RotationFetchService: Sendable {
     private func uuidFromBytes(_ data: Data) -> UUID? {
         guard data.count == 16 else { return nil }
         let bytes: uuid_t = data.withUnsafeBytes { ptr in
+            // Reason: `data.count == 16` (guarded above) guarantees a non-empty buffer,
+            // so `bindMemory(to: uuid_t.self).baseAddress` is non-nil.
+            // swiftlint:disable:next force_unwrapping
             ptr.bindMemory(to: uuid_t.self).baseAddress!.pointee
         }
         return UUID(uuid: bytes)

@@ -3,6 +3,11 @@ import os
 
 @testable import LeafCore
 
+// swiftlint:disable force_unwrapping
+// Reason: test fixtures rely on force-unwrap for setup convenience —
+// URL literals, HTTPURLResponse construction, decoded JSON, post-`try`
+// DB reads where nil ⇒ broken test, not production semantic.
+
 final class GitHubColdSchedulerTests: XCTestCase {
     private let logger = Logger(subsystem: "tech.gundem.leaf.tests", category: "gh-coldsched")
     private var tempDir: URL!
@@ -97,3 +102,4 @@ final class GitHubColdSchedulerTests: XCTestCase {
         XCTAssertLessThan(Date().timeIntervalSince(t), 1.0, "stop() must cancel sleep promptly")
     }
 }
+// swiftlint:enable force_unwrapping

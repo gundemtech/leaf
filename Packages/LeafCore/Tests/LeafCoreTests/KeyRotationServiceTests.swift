@@ -4,6 +4,11 @@ import XCTest
 
 @testable import LeafCore
 
+// swiftlint:disable force_unwrapping
+// Reason: test fixtures rely on force-unwrap for setup convenience —
+// URL literals, HTTPURLResponse construction, decoded JSON, post-`try`
+// DB reads where nil ⇒ broken test, not production semantic.
+
 /// Phase 5.3.D — `KeyRotationService` admin orchestrator tests.
 final class KeyRotationServiceTests: XCTestCase {
 
@@ -491,3 +496,4 @@ final class KeyRotationServiceMockURLProtocol: URLProtocol {
 
     override func stopLoading() {}
 }
+// swiftlint:enable force_unwrapping

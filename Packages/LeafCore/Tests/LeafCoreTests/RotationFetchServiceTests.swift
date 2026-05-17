@@ -4,6 +4,11 @@ import XCTest
 
 @testable import LeafCore
 
+// swiftlint:disable force_unwrapping
+// Reason: test fixtures rely on force-unwrap for setup convenience —
+// URL literals, HTTPURLResponse construction, decoded JSON, post-`try`
+// DB reads where nil ⇒ broken test, not production semantic.
+
 final class RotationFetchServiceTests: XCTestCase {
 
     private var tempDir: URL!
@@ -826,3 +831,4 @@ final class RotationFetchServiceMockURLProtocol: URLProtocol {
         requestLog.filter { $0.httpMethod == "DELETE" }.count
     }
 }
+// swiftlint:enable force_unwrapping

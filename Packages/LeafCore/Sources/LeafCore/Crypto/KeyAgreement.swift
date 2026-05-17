@@ -47,11 +47,16 @@ public enum KeyAgreement {
     }
 
     private static func nibble(_ c: Character) -> UInt8? {
+        // swiftlint:disable force_unwrapping
+        // Reason: switch cases narrow `c` to ASCII ranges "0"–"9" / "a"–"f" / "A"–"F";
+        // `Character.asciiValue` is guaranteed non-nil for ASCII characters, as is the
+        // statically-known literal `Character("0").asciiValue` etc.
         switch c {
         case "0"..."9": return UInt8(c.asciiValue! - Character("0").asciiValue!)
         case "a"..."f": return UInt8(c.asciiValue! - Character("a").asciiValue!) + 10
         case "A"..."F": return UInt8(c.asciiValue! - Character("A").asciiValue!) + 10
         default: return nil
         }
+        // swiftlint:enable force_unwrapping
     }
 }
