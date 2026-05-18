@@ -23,10 +23,7 @@ struct InboxItemRow: View {
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: LeafSpace.xxs) {
-                    Text(item.title)
-                        .font(LeafType.title.small)
-                        .foregroundStyle(LeafColor.text.primary)
-                        .lineLimit(2)
+                    titleLine
                     Text(item.sourceMeta)
                         .font(LeafType.body.small)
                         .foregroundStyle(LeafColor.text.tertiary)
@@ -43,14 +40,29 @@ struct InboxItemRow: View {
         .accessibilityAddTraits(item.sourceURL == nil ? [] : .isButton)
     }
 
+    private var titleLine: some View {
+        HStack(spacing: LeafSpace.xxs) {
+            Text(item.title)
+                .font(LeafType.title.small)
+                .foregroundStyle(LeafColor.text.primary)
+                .lineLimit(2)
+            if item.aggregatedCount > 1 {
+                Text("(\(item.aggregatedCount))")
+                    .font(LeafType.body.small)
+                    .foregroundStyle(LeafColor.text.tertiary)
+            }
+        }
+    }
+
     private func handleTap() {
         guard let url = item.sourceURL else { return }
         NSWorkspace.shared.open(url)
     }
 
     private var a11yLabel: String {
+        let suffix = item.aggregatedCount > 1 ? " (\(item.aggregatedCount) similar)" : ""
         let action = item.sourceURL == nil ? "" : ", tap to open"
-        return "\(severityWord), \(item.title), \(item.sourceMeta)\(action)"
+        return "\(severityWord), \(item.title)\(suffix), \(item.sourceMeta)\(action)"
     }
 
     private var dotTone: LeafDotTone {
