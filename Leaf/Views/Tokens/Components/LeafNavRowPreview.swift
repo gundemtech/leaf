@@ -15,7 +15,6 @@ struct LeafNavRowPreview: View {
         (.activity,     5,   nil),
         (.team,         3,   nil),
         (.connections,  nil, nil),
-        (.organization, nil, nil),
         (.settings,     nil, "⌘,"),
         (.profile,      nil, nil),
     ]

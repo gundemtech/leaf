@@ -68,7 +68,6 @@ struct RootView: View {
         case .activity:     ActivityView()
         case .team:         TeamView()
         case .connections:  ConnectionsView()
-        case .organization: OrganizationView()
         case .settings:     WindowSettingsView()
         case .profile:      ProfileView()
         }
