@@ -19,6 +19,12 @@ struct WorkspaceSettingsSection: View {
     @State private var leavePresented = false
     @State private var deletePresented = false
     @State private var myPubHex: String = ""
+    /// S7 Stage 6 fix C-I5 + C-I8 — most recent destructive-op error surfaced
+    /// as an inline LeafBanner above the action buttons. Reads the operation
+    /// outcome from the return value of `workspaceReader.delete(...)` /
+    /// `leaveWorkspace(...)` instead of inspecting reader.state (which
+    /// conflates fresh op result with stale prior errors).
+    @State private var lastActionError: String?
 
     private static let createdFormatter: RelativeDateTimeFormatter = {
         let f = RelativeDateTimeFormatter()
@@ -112,6 +118,10 @@ struct WorkspaceSettingsSection: View {
                 LeaveWorkspaceConfirmationModal(
                     workspaceName: active.name,
                     onConfirm: {
+                        // leaveActiveWorkspace doesn't return a Result yet —
+                        // the underlying operation is local-only (markLeft +
+                        // re-resolve active). state.error still drives the
+                        // failure surface here pending future refactor.
                         await workspaceReader.leaveActiveWorkspace()
                         leavePresented = false
                     },
@@ -122,11 +132,28 @@ struct WorkspaceSettingsSection: View {
                 DeleteWorkspaceConfirmationModal(
                     workspaceName: active.name,
                     onConfirm: {
-                        await workspaceReader.delete(workspaceID: active.id)
-                        deletePresented = false
+                        // S7 Stage 6 fix C-I5 + C-I8 — read per-operation
+                        // outcome from the return value (nil = success;
+                        // non-nil = surface message). Stale reader.state
+                        // .error from prior refresh failures no longer
+                        // pollutes this destructive op's UX signal.
+                        let err = await workspaceReader.delete(workspaceID: active.id)
+                        lastActionError = err
+                        if err == nil {
+                            deletePresented = false
+                        }
                     },
                     onCancel: { deletePresented = false }
                 )
+            }
+            if let err = lastActionError {
+                LeafBanner(
+                    tone: .danger,
+                    title: "Workspace action failed",
+                    description: err,
+                    onDismiss: { lastActionError = nil }
+                )
+                .padding(.top, LeafSpace.sm)
             }
         }
     }

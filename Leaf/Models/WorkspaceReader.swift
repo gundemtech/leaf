@@ -165,15 +165,27 @@ final class WorkspaceReader {
     /// Orchestrate workspace rename: PATCH Supabase first (RLS gate enforced
     /// server-side; only the workspace creator can rename), then local UPDATE.
     ///
-    /// On any failure (invalid payload / server rejection / DB error):
-    ///   state transitions to .error(_) — local row is never touched if server fails.
+    /// Returns: nil on success, otherwise a user-facing error message.
     ///
-    /// When `supabase` is nil (offline / pre-auth context):
-    ///   state transitions to .error with "No network connection" message.
-    func rename(workspaceID: String, newName: String) async {
+    /// S7 Stage 6 fix C-I5 + C-I8 — explicit return value lets the caller
+    /// distinguish "this operation's outcome" from "current Reader state",
+    /// which were previously conflated when WorkspaceNameEditor inspected
+    /// state.error after the call (false positives from stale prior errors,
+    /// false negatives when state transitioned to .empty mid-call). The
+    /// reader still transitions state on failure for any subscribers that
+    /// rely on it, but callers should prefer the returned value as the
+    /// authoritative operation result.
+    ///
+    /// Note (C-I5 server/local divergence): if the server PATCH succeeds but
+    /// the local write throws (disk full, encryption error, etc.), the
+    /// returned error reflects the local failure — but the server has the
+    /// new name. The caller's banner should hint at "Restart app to retry
+    /// sync"; structural rollback is deferred to a future startup-sync pass.
+    func rename(workspaceID: String, newName: String) async -> String? {
         guard let supabase else {
-            state = .error(message: "No network connection. Please sign in first.")
-            return
+            let msg = "No network connection. Please sign in first."
+            state = .error(message: msg)
+            return msg
         }
         do {
             try await supabase.patchWorkspaceName(id: workspaceID, name: newName)
@@ -181,9 +193,12 @@ final class WorkspaceReader {
             let svc = WorkspaceService(database: db, keystoreRoot: keystoreRoot)
             try svc.updateName(workspaceID: workspaceID, newName: newName)
             refresh()
+            return nil
         } catch {
             logger.error("WorkspaceReader.rename failed: \(String(describing: error), privacy: .public)")
-            state = .error(message: userFacingMessage(for: error))
+            let msg = userFacingMessage(for: error)
+            state = .error(message: msg)
+            return msg
         }
     }
 
@@ -195,12 +210,14 @@ final class WorkspaceReader {
     /// If the deleted workspace was active, re-resolves active to the next
     /// alphabetical remaining workspace (or clears active if none remain).
     ///
-    /// When `supabase` is nil (offline / pre-auth context):
-    ///   state transitions to .error with "No network connection" message.
-    func delete(workspaceID: String) async {
+    /// Returns: nil on success, otherwise a user-facing error message.
+    ///
+    /// S7 Stage 6 fix C-I5 + C-I8 — explicit return value (mirrors rename).
+    func delete(workspaceID: String) async -> String? {
         guard let supabase else {
-            state = .error(message: "No network connection. Please sign in first.")
-            return
+            let msg = "No network connection. Please sign in first."
+            state = .error(message: msg)
+            return msg
         }
         do {
             try await supabase.softDeleteWorkspace(id: workspaceID)
@@ -214,9 +231,12 @@ final class WorkspaceReader {
                 activeStore.setActive(remaining.first?.id)
             }
             refresh()
+            return nil
         } catch {
             logger.error("WorkspaceReader.delete failed: \(String(describing: error), privacy: .public)")
-            state = .error(message: userFacingMessage(for: error))
+            let msg = userFacingMessage(for: error)
+            state = .error(message: msg)
+            return msg
         }
     }
 

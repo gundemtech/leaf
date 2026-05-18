@@ -79,9 +79,14 @@ struct WorkspaceNameEditor: View {
     private func commitRename() async {
         let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !isInvalid(draft) else { return }
-        await workspaceReader.rename(workspaceID: workspaceID, newName: trimmed)
-        if case .error(let msg) = workspaceReader.state {
-            errorMessage = msg
+        // S7 Stage 6 fix C-I5 + C-I8 — read the per-operation outcome from
+        // the rename(...) return value rather than inspecting
+        // workspaceReader.state. The latter conflates "this rename's result"
+        // with "current reader state" — a lingering .error from a prior
+        // refresh failure would falsely report this rename as failed.
+        let errorOrNil = await workspaceReader.rename(workspaceID: workspaceID, newName: trimmed)
+        if let err = errorOrNil {
+            errorMessage = err
         } else {
             isEditing = false
             errorMessage = nil
