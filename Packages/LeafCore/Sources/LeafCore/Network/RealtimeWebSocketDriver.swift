@@ -2,12 +2,14 @@
 //  RealtimeWebSocketDriver.swift
 //  LeafCore
 //
-//  Track 5 / S7 — Phase D.2 + D.3 + D.4. Phoenix Channels protocol implementation
-//  wrapping URLSessionWebSocketTask. Owns:
-//    • WS lifecycle (connect / disconnect / reconnect — D.5+)
+//  Track 5 / S7 — Phase D.2 + D.3 + D.4 + D.5 + D.6. Phoenix Channels protocol
+//  implementation wrapping URLSessionWebSocketTask. Owns:
+//    • WS lifecycle (connect / disconnect / suspend / resume)
 //    • Phoenix message ref counter (monotonic per connection)
 //    • Channel join state (single workspace channel at a time)
 //    • Dispatch from postgres_changes → typed RealtimeEvent AsyncStream
+//    • Heartbeat loop (D.5 — 30s tick, 3 missed → reconnect)
+//    • Reconnect loop with exponential backoff 1/2/4/8/16s (D.6)
 //
 //  Downstream consumer (Phase D.5+, LeafRealtimeService) reads the `events`
 //  stream, resolves teamKey by keyID, decrypts, and routes to:
@@ -17,6 +19,8 @@
 //  Test seams:
 //    • `URLSessionWebSocketTaskProtocol` — mockable WS task
 //    • `taskFactory` closure — inject mock factory in tests
+//    • `heartbeatIntervalSec` / `reconnectBaseDelayMs` — injectable timings
+//      (tests use sub-second values to keep suite fast)
 //    • State exposed via async getter for assertion
 //
 
@@ -63,6 +67,19 @@ public actor RealtimeWebSocketDriver {
     /// outside the actor without hop overhead.
     public nonisolated let events: AsyncStream<RealtimeEvent>
 
+    // MARK: - Tunables (injectable for test determinism)
+
+    /// Heartbeat tick interval — Supabase Realtime convention (30s in prod).
+    /// Tests inject sub-second values to keep suites fast.
+    private let heartbeatIntervalSec: TimeInterval
+    /// Missed heartbeats threshold before assuming the server is dead and
+    /// triggering reconnect.
+    private let missingHeartbeatLimit: Int
+    /// Initial reconnect delay — backoff schedule is 1×, 2×, 4×, 8×, 16× of this.
+    private let reconnectBaseDelayMs: Int64
+    /// Cap on reconnect delay (steady-state after 5th attempt).
+    private let reconnectMaxDelayMs: Int64
+
     // MARK: - Private state
 
     private let eventContinuation: AsyncStream<RealtimeEvent>.Continuation
@@ -71,16 +88,38 @@ public actor RealtimeWebSocketDriver {
     private var refCounter: Int = 0
     private var wsTask: (any URLSessionWebSocketTaskProtocol)?
     private var receiveLoopTask: Task<Void, Never>?
+    private var heartbeatTask: Task<Void, Never>?
+    private var reconnectTask: Task<Void, Never>?
+
+    /// Number of heartbeat frames sent without a matching `phx_reply`. Reset on
+    /// any heartbeat reply from topic="phoenix". Three or more triggers reconnect.
+    private var missedHeartbeats: Int = 0
 
     /// Topic of the currently-joined channel (single channel at a time in S7).
     private var currentChannelTopic: String?
+
+    /// Workspace ID of the currently-joined channel. Captured on phx_join so
+    /// that reconnect attempts can re-issue the same join. Mirrors
+    /// `currentChannelTopic` but avoids re-parsing the topic string.
+    private var currentChannelWorkspaceID: String?
+
+    /// Last URL passed to `connect(url:jwt:)`. Captured so the reconnect loop
+    /// can replay the connection without external coordination.
+    private var lastConnectURL: URL?
+    /// Last JWT passed to `connect(url:jwt:)`. Same purpose as `lastConnectURL`.
+    /// Used both for WS replay and for the phx_join `access_token` payload.
+    private var lastConnectJWT: String?
 
     // MARK: - Init
 
     public init(
         taskFactory: @escaping @Sendable (URLRequest) -> URLSessionWebSocketTaskProtocol = { request in
             URLSession.shared.webSocketTask(with: request)
-        }
+        },
+        heartbeatIntervalSec: TimeInterval = 30,
+        missingHeartbeatLimit: Int = 3,
+        reconnectBaseDelayMs: Int64 = 1_000,
+        reconnectMaxDelayMs: Int64 = 16_000
     ) {
         var continuationCapture: AsyncStream<RealtimeEvent>.Continuation!
         self.events = AsyncStream { continuation in
@@ -88,6 +127,10 @@ public actor RealtimeWebSocketDriver {
         }
         self.eventContinuation = continuationCapture
         self.taskFactory = taskFactory
+        self.heartbeatIntervalSec = heartbeatIntervalSec
+        self.missingHeartbeatLimit = missingHeartbeatLimit
+        self.reconnectBaseDelayMs = reconnectBaseDelayMs
+        self.reconnectMaxDelayMs = reconnectMaxDelayMs
     }
 
     // MARK: - Connect
@@ -102,6 +145,13 @@ public actor RealtimeWebSocketDriver {
     public func connect(url: URL, jwt: String) async throws {
         if state == .connected || state == .connecting { return }
 
+        // Stop any prior reconnect attempt (e.g., user called disconnect()
+        // then connect() before backoff fired).
+        reconnectTask?.cancel()
+        reconnectTask = nil
+
+        lastConnectURL = url
+        lastConnectJWT = jwt
         state = .connecting
 
         let request = URLRequest(url: url)
@@ -112,26 +162,65 @@ public actor RealtimeWebSocketDriver {
         // Transition to `.connected` happens optimistically here — URLSessionWebSocketTask
         // does not expose an "open" callback. Real connectivity is confirmed when phx_join
         // ack arrives (D.3). On WS upgrade failure, the first `receive()` throws and the
-        // loop transitions us to `.disconnected`.
+        // loop routes via handleConnectionLoss → reconnect.
         state = .connected
+        missedHeartbeats = 0
 
         // Start receive loop. Captured `task` reference is the same one we just
         // stored in `wsTask`; weak self avoids retention through the loop.
         receiveLoopTask = Task { [weak self] in
             await self?.receiveLoop()
         }
+
+        // D.5 — start heartbeat once we believe we're connected.
+        startHeartbeat()
     }
 
     // MARK: - Disconnect
 
     /// Gracefully close the WS — no auto-reconnect attempt. Idempotent.
     public func disconnect() async {
+        stopHeartbeat()
+        stopReconnectLoop()
         wsTask?.cancel(with: .normalClosure, reason: nil)
         wsTask = nil
         receiveLoopTask?.cancel()
         receiveLoopTask = nil
         currentChannelTopic = nil
+        currentChannelWorkspaceID = nil
         state = .disconnected
+    }
+
+    // MARK: - Suspend / Resume (D.6 — driver-level primitive)
+
+    /// Pause the driver — stops heartbeat + reconnect, closes the WS. State
+    /// stays `.suspended` until `resume()` is called. Used when the app moves
+    /// to background or the user toggles "Pause team sync" in Settings.
+    /// Idempotent (calling while already suspended is a no-op).
+    public func suspend() async {
+        guard state != .suspended else { return }
+        stopHeartbeat()
+        stopReconnectLoop()
+        wsTask?.cancel(with: .normalClosure, reason: nil)
+        wsTask = nil
+        receiveLoopTask?.cancel()
+        receiveLoopTask = nil
+        // Preserve currentChannelTopic / WorkspaceID — they're needed if
+        // resume() reconnects and wants to re-join the same channel.
+        state = .suspended
+    }
+
+    /// Wake the driver from suspended state. Replays the captured URL + JWT
+    /// via connect(); if a channel was joined pre-suspend, the reconnect
+    /// machinery (D.6) will re-join it.
+    /// Throws `.notConnected` if no prior connect() has happened (nothing to replay).
+    public func resume() async throws {
+        guard state == .suspended else { return }
+        guard let url = lastConnectURL, let jwt = lastConnectJWT else {
+            throw RealtimeError.notConnected
+        }
+        state = .disconnected
+        try await connect(url: url, jwt: jwt)
     }
 
     // MARK: - Phoenix channel — join / leave
@@ -160,6 +249,8 @@ public actor RealtimeWebSocketDriver {
         } catch {
             throw RealtimeError.encodingFailed(reason: "send phx_join: \(error)")
         }
+        // Remember workspaceID so reconnect can re-issue join.
+        currentChannelWorkspaceID = workspaceID
     }
 
     /// Send a `phx_leave` for the currently-joined channel (no-op if none).
@@ -172,12 +263,17 @@ public actor RealtimeWebSocketDriver {
             try? await task.send(.string(frame))
         }
         currentChannelTopic = nil
+        currentChannelWorkspaceID = nil
     }
 
     /// Test-only inspector for the currently-joined channel topic.
     /// Production callers don't need this; the driver-internal state is the
     /// authoritative source of truth.
     public func currentTopic() -> String? { currentChannelTopic }
+
+    /// Test-only inspector for the current missed-heartbeat counter.
+    /// Production has no use for the raw count — it only acts on the threshold.
+    public func currentMissedHeartbeats() -> Int { missedHeartbeats }
 
     // MARK: - Receive loop + dispatch
 
@@ -187,11 +283,9 @@ public actor RealtimeWebSocketDriver {
             do {
                 message = try await task.receive()
             } catch {
-                // WS closed / error — surface + transition. Receive loop ends here.
-                eventContinuation.yield(.disconnected(reason: "receive: \(error)"))
-                state = .disconnected
-                wsTask = nil
-                currentChannelTopic = nil
+                // WS closed / error — route through reconnect machinery (D.6).
+                // handleConnectionLoss takes care of state transition + reconnect.
+                await handleConnectionLoss(reason: "receive: \(error)")
                 return
             }
             dispatchMessage(message)
@@ -224,13 +318,15 @@ public actor RealtimeWebSocketDriver {
             eventContinuation.yield(.disconnected(reason: "phx_close"))
             state = .disconnected
             currentChannelTopic = nil
+            currentChannelWorkspaceID = nil
         case "phx_error":
             // Server-side channel error (e.g., RLS denied mid-stream). Treat as
             // a disconnect; reconnect loop (D.6) decides whether to retry.
             eventContinuation.yield(.disconnected(reason: "phx_error"))
             currentChannelTopic = nil
+            currentChannelWorkspaceID = nil
         default:
-            // heartbeat_reply, presence_diff, etc. — D.5 / future phases.
+            // presence_diff, etc. — future phases.
             break
         }
     }
@@ -243,13 +339,20 @@ public actor RealtimeWebSocketDriver {
         //   { "status": "ok" | "error", "response": { ... } }
         let status = (msg.payload["status"] as? String) ?? ""
         if status == "ok" {
+            // Heartbeat reply — server alive, reset missed counter. Heartbeats
+            // are sent on topic="phoenix" (not the workspace channel), so
+            // dispatch on topic first to avoid emitting channelJoined for them.
+            if msg.topic == "phoenix" {
+                missedHeartbeats = 0
+                return
+            }
             // First phx_reply on a workspace topic → it's the phx_join ack.
             // We don't track per-ref state in S7 (single channel at a time).
             if msg.topic.hasPrefix("realtime:leaf-workspace-") {
                 currentChannelTopic = msg.topic
                 eventContinuation.yield(.channelJoined(topic: msg.topic))
             }
-            // Other status:"ok" replies (e.g., heartbeat) are silent.
+            // Other status:"ok" replies are silent.
         } else {
             // Pull reason out of either {response: {reason: ...}} or {response: {error: ...}}.
             let reason = (response["reason"] as? String)
@@ -302,6 +405,170 @@ public actor RealtimeWebSocketDriver {
             // with future tables we subscribe to but haven't routed yet.
             break
         }
+    }
+
+    // MARK: - Heartbeat (D.5)
+
+    /// Start the heartbeat loop. Called on every successful connect / reconnect.
+    /// Idempotent — cancels any in-flight loop first.
+    private func startHeartbeat() {
+        heartbeatTask?.cancel()
+        missedHeartbeats = 0
+        let interval = heartbeatIntervalSec
+        heartbeatTask = Task { [weak self] in
+            while !Task.isCancelled {
+                let sleepNanos = UInt64(max(interval, 0) * 1_000_000_000)
+                if sleepNanos > 0 {
+                    try? await Task.sleep(nanoseconds: sleepNanos)
+                }
+                if Task.isCancelled { return }
+                await self?.tickHeartbeat()
+            }
+        }
+    }
+
+    /// Cancel + clear the heartbeat task. Safe to call multiple times.
+    private func stopHeartbeat() {
+        heartbeatTask?.cancel()
+        heartbeatTask = nil
+    }
+
+    /// One heartbeat iteration. If we've already accumulated `missingHeartbeatLimit`
+    /// unanswered heartbeats, treat the connection as dead and trigger reconnect;
+    /// otherwise send a fresh heartbeat frame and increment the unanswered counter
+    /// (decremented when the matching phx_reply arrives in `handlePhxReply`).
+    private func tickHeartbeat() async {
+        guard state.isActive else { return }
+        if missedHeartbeats >= missingHeartbeatLimit {
+            await handleConnectionLoss(reason: "heartbeat timeout (\(missedHeartbeats) missed)")
+            return
+        }
+        guard let task = wsTask else {
+            await handleConnectionLoss(reason: "heartbeat: ws task gone")
+            return
+        }
+        do {
+            let frame = try RealtimePhoenixFrame.heartbeat(ref: "hb-\(nextRef())")
+            try await task.send(.string(frame))
+            missedHeartbeats += 1
+        } catch {
+            await handleConnectionLoss(reason: "heartbeat send failed: \(error)")
+        }
+    }
+
+    // MARK: - Reconnect (D.6)
+
+    /// Compute the backoff delay (ms) for reconnect attempt #N.
+    /// Schedule: 1s, 2s, 4s, 8s, 16s, then steady 16s.
+    /// Pure function — exposed for direct unit testing of the schedule.
+    public static func delayForReconnectAttempt(
+        _ attempt: Int,
+        baseMs: Int64 = 1_000,
+        maxMs: Int64 = 16_000
+    ) -> Int64 {
+        let n = max(1, attempt)
+        // Cap exponent at 4 → 2^4 = 16 multiplier on base.
+        let exp = min(n - 1, 4)
+        let scaled = baseMs &* Int64(1 << exp)
+        return min(scaled, maxMs)
+    }
+
+    /// Common WS-level "connection is gone" handler. Stops heartbeat, tears down
+    /// the WS task, yields a `.disconnected` event, and (if the driver is still
+    /// in an active state) kicks off the reconnect loop. If the user has explicitly
+    /// disconnected or suspended, no reconnect is attempted.
+    private func handleConnectionLoss(reason: String) async {
+        stopHeartbeat()
+        wsTask?.cancel(with: .abnormalClosure, reason: nil)
+        wsTask = nil
+        receiveLoopTask?.cancel()
+        receiveLoopTask = nil
+        let topicWasJoined = currentChannelTopic != nil
+        // Preserve currentChannelTopic / WorkspaceID so reconnect can re-join.
+        // We clear them only on graceful disconnect / suspend / hard phx_close.
+        eventContinuation.yield(.disconnected(reason: reason))
+        guard state.isActive else { return }
+        // Suppress unused-warning when not joined — reserved for future hooks.
+        _ = topicWasJoined
+        await startReconnectLoop()
+    }
+
+    /// Backoff loop. State transitions to `.reconnecting(attempt: N)` and stays
+    /// there until either (a) reconnect succeeds (→ `.connected`) or (b) the
+    /// user explicitly cancels via `disconnect()` / `suspend()` (which calls
+    /// `stopReconnectLoop`). Each attempt sleeps the computed backoff before
+    /// trying.
+    private func startReconnectLoop() async {
+        reconnectTask?.cancel()
+        reconnectTask = Task { [weak self] in
+            guard let self else { return }
+            var attempt = 1
+            while !Task.isCancelled {
+                let delayMs = await self.reconnectDelay(attempt: attempt)
+                await self.setState(.reconnecting(attempt: attempt))
+                let sleepNanos = UInt64(delayMs) &* 1_000_000
+                try? await Task.sleep(nanoseconds: sleepNanos)
+                if Task.isCancelled { return }
+                do {
+                    try await self.attemptReconnect()
+                    return  // success — caller's setState(.connected) already ran inside attemptReconnect
+                } catch {
+                    // Backoff and try again. Cap the in-memory attempt counter
+                    // so it can't overflow on a multi-day outage; the delay is
+                    // already capped at reconnectMaxDelayMs.
+                    attempt = min(attempt + 1, 100)
+                }
+            }
+        }
+    }
+
+    /// Helper exposed inside the actor so the reconnect Task can call the
+    /// instance-scoped `delayForReconnectAttempt` with the configured base/max.
+    private func reconnectDelay(attempt: Int) -> Int64 {
+        Self.delayForReconnectAttempt(attempt, baseMs: reconnectBaseDelayMs, maxMs: reconnectMaxDelayMs)
+    }
+
+    /// One reconnect attempt. Throws on failure to send phx_join (or if there's
+    /// no URL/JWT captured). On success: state → `.connected`, heartbeat restarted,
+    /// channel re-joined if there was a prior `currentChannelWorkspaceID`.
+    private func attemptReconnect() async throws {
+        guard let url = lastConnectURL, let jwt = lastConnectJWT else {
+            throw RealtimeError.notConnected
+        }
+        let request = URLRequest(url: url)
+        let task = taskFactory(request)
+        wsTask = task
+        task.resume()
+        state = .connected
+        missedHeartbeats = 0
+        receiveLoopTask = Task { [weak self] in
+            await self?.receiveLoop()
+        }
+        startHeartbeat()
+        // Re-join the prior channel if we had one. JWT used for phx_join is the
+        // one captured at connect() time — caller is expected to refresh it via
+        // a new connect() if it expired.
+        if let wid = currentChannelWorkspaceID {
+            let ref = nextRef()
+            let frame = try RealtimePhoenixFrame.phxJoin(
+                workspaceID: wid,
+                accessToken: jwt,
+                ref: ref
+            )
+            try await task.send(.string(frame))
+        }
+    }
+
+    /// Cancel + clear the reconnect loop. Safe to call multiple times.
+    private func stopReconnectLoop() {
+        reconnectTask?.cancel()
+        reconnectTask = nil
+    }
+
+    /// Internal helper so the reconnect Task can mutate state from outside the
+    /// actor's synchronous context.
+    private func setState(_ new: State) {
+        state = new
     }
 
     // MARK: - Row decoders
