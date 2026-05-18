@@ -58,7 +58,25 @@ struct WithYouOnThisBlock: View {
             ForEach(matches.prefix(Self.rowCap), id: \.memberID) { match in
                 teammateRow(match)
             }
+            if matches.count > Self.rowCap {
+                overflowFooter(remaining: matches.count - Self.rowCap)
+            }
         }
+    }
+
+    @ViewBuilder
+    private func overflowFooter(remaining: Int) -> some View {
+        Button {
+            windowState.section = .team
+        } label: {
+            Text("→ +\(remaining) more on this task")
+                .font(LeafType.body.small)
+                .foregroundStyle(LeafColor.accent.primary)
+        }
+        .buttonStyle(.plain)
+        .padding(.top, LeafSpace.xs)
+        .accessibilityLabel("Show \(remaining) more teammates in Team tab")
+        .accessibilityAddTraits(.isButton)
     }
 
     @ViewBuilder
