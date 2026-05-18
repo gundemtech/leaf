@@ -202,7 +202,7 @@ private struct HomeContent: View {
         @Bindable var coord = coordinator
         NavigationStack(path: $coord.homePath) {
             VStack(alignment: .leading, spacing: LeafSpace.xl) {
-                TodayBlock()
+                TodayBlock(metrics: snapshot.todayMetrics)
 
                 HStack(alignment: .top, spacing: LeafSpace.xl) {
                     YouNowBlock()
