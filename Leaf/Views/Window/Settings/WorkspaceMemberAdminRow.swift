@@ -3,8 +3,9 @@
 //  Track 5 / S7 — F.5. Single member row inside WorkspaceMembersAdminList.
 //  Shows avatar + display name + "(you)" hint + joined date + role pill.
 //  Admin sees ellipsis context menu on non-self rows; tapping "Remove" shows
-//  confirmationDialog. Actual removal wired in Phase H composition root
-//  (KeyRotationService.removeMember). MVP: dialog button is no-op placeholder.
+//  confirmationDialog. S7 Stage 6 fix C-C4 — confirmation Remove wired to
+//  MemberRemovalReader.removeMember(workspaceID:memberID:displayName:) which
+//  invokes KeyRotationService under the hood (Phase 5.3.E surface).
 //
 
 import SwiftUI
@@ -14,6 +15,9 @@ struct WorkspaceMemberAdminRow: View {
     let member: TeamMember
     let isMe: Bool
     let viewerIsAdmin: Bool
+
+    @Environment(MemberRemovalReader.self) private var removalReader
+    @Environment(ActiveWorkspaceStore.self) private var activeWorkspaceStore
 
     @State private var removeConfirmPresented = false
 
@@ -76,7 +80,20 @@ struct WorkspaceMemberAdminRow: View {
             titleVisibility: .visible
         ) {
             Button("Remove from workspace", role: .destructive) {
-                // Phase H — KeyRotationService.removeMember(workspaceID:memberID:) wired here.
+                // S7 Stage 6 fix C-C4 — invoke KeyRotationService.removeMember
+                // through MemberRemovalReader. The reader's state machine
+                // (.removing → .success / .error) drives any UI surface that
+                // observes it; we just kick the rotation off. WorkspaceReader
+                // refresh on .success is owned by RemoveMemberSheet flow
+                // historically — for the inline confirm UI here we rely on
+                // the natural refresh tick (.task in TeamView + Settings).
+                if let wid = activeWorkspaceStore.activeWorkspaceID {
+                    removalReader.removeMember(
+                        workspaceID: wid,
+                        memberID: member.id,
+                        displayName: member.displayName
+                    )
+                }
             }
             Button("Cancel", role: .cancel) {
                 removeConfirmPresented = false

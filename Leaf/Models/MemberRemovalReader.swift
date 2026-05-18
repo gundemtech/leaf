@@ -55,16 +55,16 @@ final class MemberRemovalReader {
         self.rotationBlobCodec = rotationBlobCodec
     }
 
-    func removeMember(memberID: String, displayName: String) {
+    /// S7 Stage 6 fix C-C4 + closes S2 NIT-3 ISSUE-1 — explicit workspaceID
+    /// removes the "first workspace in DB" guess that was wrong on multi-
+    /// workspace devices. Callers (Sidebar / Settings → Workspace) pass the
+    /// workspaceID resolved from ActiveWorkspaceStore.
+    func removeMember(workspaceID: String, memberID: String, displayName: String) {
         state = .removing(displayName: displayName)
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
                 let svc = try self.ensureService()
-                // Track-5 S2: resolve workspace from DB. Single-workspace
-                // assumption holds until Task 10 wires ActiveWorkspaceStore
-                // through this reader.
-                let workspaceID = try self.resolveWorkspaceID()
                 let outcome = try await svc.removeMember(workspaceID: workspaceID, memberID: memberID)
                 self.state = .success(outcome: outcome, displayName: displayName)
             } catch {
@@ -74,8 +74,28 @@ final class MemberRemovalReader {
         }
     }
 
-    /// Transitional workspace resolver — picks the first workspace until
-    /// Task 10 wires `ActiveWorkspaceStore` into this reader.
+    /// Legacy single-workspace API kept for back-compat with RemoveMemberSheet
+    /// (no longer surfaced in the S7 UI but compiled for orphan callers).
+    /// Resolves workspace from `listWorkspaces(includeLeft: true).first` —
+    /// correct only on single-workspace devices. Prefer the explicit-id
+    /// variant for any new code path.
+    func removeMember(memberID: String, displayName: String) {
+        state = .removing(displayName: displayName)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                _ = try self.ensureService()  // primes self.database for resolveWorkspaceID
+                let workspaceID = try self.resolveWorkspaceID()
+                self.removeMember(workspaceID: workspaceID, memberID: memberID, displayName: displayName)
+            } catch {
+                self.logger.error("removeMember (legacy) failed: \(String(describing: error), privacy: .public)")
+                self.state = .error(message: self.userFacingMessage(for: error))
+            }
+        }
+    }
+
+    /// Transitional workspace resolver — picks the first workspace. Used only
+    /// by the legacy `removeMember(memberID:displayName:)` overload.
     private func resolveWorkspaceID() throws -> String {
         guard let db = self.database,
               let workspace = try db.listWorkspaces(includeLeft: true).first else {
