@@ -52,7 +52,7 @@ struct CrossPostPrivacyBanner: View {
         // overlay swaps in status.warning at 60% opacity for the cross-post
         // case (intent: clearly different from neutral cards).
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: LeafRadius.lg, style: .continuous)
                 .strokeBorder(LeafColor.status.warning.opacity(0.6), lineWidth: 1)
         )
     }

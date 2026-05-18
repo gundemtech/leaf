@@ -146,9 +146,9 @@ struct SendDirectMessageSheet: View {
                 .scrollContentBackground(.hidden)
                 .padding(LeafSpace.xs)
                 .background(LeafColor.surface.canvas)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .clipShape(RoundedRectangle(cornerRadius: LeafRadius.sm))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 6)
+                    RoundedRectangle(cornerRadius: LeafRadius.sm)
                         .stroke(LeafColor.border.subtle, lineWidth: 1)
                 )
             // A15 placeholder hint — Slack `@user` text doesn't auto-ping in
