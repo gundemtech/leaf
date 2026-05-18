@@ -12,7 +12,7 @@ struct LeafNavRowPreview: View {
 
     private let rows: [(WindowSection, Int?, String?)] = [
         (.home, nil, nil),
-        (.activity, 5, nil),
+        (.analytics, 5, nil),
         (.team, 3, nil),
         (.connections, nil, nil),
         (.organization, nil, nil),

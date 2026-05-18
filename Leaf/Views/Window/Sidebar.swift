@@ -31,7 +31,7 @@ struct Sidebar: View {
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: LeafSpace.lg) {
-                group(title: "LEAF", items: [.home, .activity])
+                group(title: "LEAF", items: [.home, .analytics])
                 group(title: "COLLABORATION", items: [.team, .connections, .organization])
                 group(title: "ACCOUNT", items: [.settings, .profile])
             }

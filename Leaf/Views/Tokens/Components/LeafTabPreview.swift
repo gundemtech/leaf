@@ -7,13 +7,13 @@ import SwiftUI
 
 #if DEBUG
 private enum LeafTabPreviewSection: String, CaseIterable, Identifiable, Hashable {
-    case overview, activity, presence, settings
+    case overview, analytics, presence, settings
     var id: String { rawValue }
     var label: String { rawValue.capitalized }
 }
 
 struct LeafTabPreview: View {
-    @State private var selection: LeafTabPreviewSection = .activity
+    @State private var selection: LeafTabPreviewSection = .analytics
 
     var body: some View {
         VStack(alignment: .leading, spacing: LeafSpace.md) {
