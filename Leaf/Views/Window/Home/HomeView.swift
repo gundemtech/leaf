@@ -71,8 +71,8 @@ struct HomeView: View {
                     emptyFullPage(msg)
                 case .error(let msg):
                     errorBanner(msg)
-                case .loaded:
-                    HomeContent()
+                case .loaded(let snapshot, _):
+                    HomeContent(snapshot: snapshot)
                 }
             }
             .padding(LeafSpace.xl)
@@ -195,6 +195,7 @@ private struct LoadingScaffold: View {
 // MARK: - Loaded content — Track-8 5-block composition
 
 private struct HomeContent: View {
+    let snapshot: InsightsSnapshot
     @Environment(RouteCoordinator.self) private var coordinator
 
     var body: some View {
