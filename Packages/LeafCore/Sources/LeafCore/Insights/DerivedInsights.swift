@@ -244,12 +244,7 @@ extension DerivedInsights {
 
     public func todayMetrics(now: Date) throws -> TodayMetrics { .empty }
 
-    public func youNowState(now: Date) throws -> YouNowState {
-        .away(
-            YouNowAway(
-                reason: .idle, lastApp: nil, lastContextLabel: nil,
-                lastLinearID: nil, idleSec: 0))
-    }
+    public func youNowState(now: Date) throws -> YouNowState { .empty }
 }
 
 /// Phase 1.1 / CI fallback. Все методы бросают .notImplemented.

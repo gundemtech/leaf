@@ -31,11 +31,31 @@ final class YouNowStateTests: XCTestCase {
 
     func testAwayCase() {
         let a = YouNowAway(
-            reason: .screenLocked, lastApp: "Xcode", lastContextLabel: nil,
-            lastLinearID: "LEAF-1", idleSec: 600)
+            reason: .screenLocked, lastApp: "Xcode", lastAppBundleID: "com.apple.dt.Xcode",
+            lastContextLabel: nil, lastLinearID: "LEAF-1", idleSec: 600)
         let s = YouNowState.away(a)
         guard case .away(let x) = s else { return XCTFail("expected .away") }
         XCTAssertEqual(x.reason, .screenLocked)
+        XCTAssertEqual(x.lastAppBundleID, "com.apple.dt.Xcode")
+    }
+
+    // MARK: - Phase 8.4 — .empty static
+
+    func test_empty_isIdleAwayWithZeroState() {
+        let s = YouNowState.empty
+        XCTAssertEqual(
+            s,
+            .away(
+                YouNowAway(
+                    reason: .idle,
+                    lastApp: nil,
+                    lastAppBundleID: nil,
+                    lastContextLabel: nil,
+                    lastLinearID: nil,
+                    idleSec: 0
+                )
+            )
+        )
     }
 
     func testMeetingSourceValues() {

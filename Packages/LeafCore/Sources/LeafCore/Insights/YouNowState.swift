@@ -68,16 +68,22 @@ public struct YouNowFocus: Equatable, Hashable, Sendable {
 public struct YouNowAway: Equatable, Hashable, Sendable {
     public let reason: AwayReason
     public let lastApp: String?
+    public let lastAppBundleID: String?
     public let lastContextLabel: String?
     public let lastLinearID: String?
     public let idleSec: Int
 
     public init(
-        reason: AwayReason, lastApp: String?, lastContextLabel: String?,
-        lastLinearID: String?, idleSec: Int
+        reason: AwayReason,
+        lastApp: String?,
+        lastAppBundleID: String?,
+        lastContextLabel: String?,
+        lastLinearID: String?,
+        idleSec: Int
     ) {
         self.reason = reason
         self.lastApp = lastApp
+        self.lastAppBundleID = lastAppBundleID
         self.lastContextLabel = lastContextLabel
         self.lastLinearID = lastLinearID
         self.idleSec = idleSec
@@ -88,4 +94,21 @@ public enum AwayReason: String, Equatable, Hashable, Sendable {
     case screenLocked
     case idle
     case sleep
+}
+
+// MARK: - Empty default (Phase 8.4)
+
+extension YouNowState {
+    /// Cold / no-signal default used by `InsightsSnapshot.youNowState`
+    /// default param and by stub deriver implementations.
+    public static let empty: YouNowState = .away(
+        YouNowAway(
+            reason: .idle,
+            lastApp: nil,
+            lastAppBundleID: nil,
+            lastContextLabel: nil,
+            lastLinearID: nil,
+            idleSec: 0
+        )
+    )
 }

@@ -78,6 +78,7 @@ public enum YouNowStateDeriver {
                 YouNowAway(
                     reason: .screenLocked,
                     lastApp: inputs.frontmostAppName,
+                    lastAppBundleID: inputs.frontmostBundleID,
                     lastContextLabel: inputs.contextLabel,
                     lastLinearID: inputs.linearID,
                     idleSec: inputs.idleSec
@@ -89,6 +90,7 @@ public enum YouNowStateDeriver {
                 YouNowAway(
                     reason: .idle,
                     lastApp: inputs.frontmostAppName,
+                    lastAppBundleID: inputs.frontmostBundleID,
                     lastContextLabel: inputs.contextLabel,
                     lastLinearID: inputs.linearID,
                     idleSec: inputs.idleSec
@@ -111,6 +113,7 @@ public enum YouNowStateDeriver {
             YouNowAway(
                 reason: .idle,
                 lastApp: nil,
+                lastAppBundleID: nil,
                 lastContextLabel: nil,
                 lastLinearID: nil,
                 idleSec: inputs.idleSec
