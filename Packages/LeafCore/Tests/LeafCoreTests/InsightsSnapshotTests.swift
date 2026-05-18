@@ -715,4 +715,28 @@ final class InsightsSnapshotTests: XCTestCase {
         )
         XCTAssertEqual(snapshot.inboxItems, [item])
     }
+
+    // MARK: - Phase Track-8 P7 — WHERE STOPPED
+
+    func testSnapshotDefaultsWhereStoppedToNil() {
+        XCTAssertNil(emptySnapshot().whereStopped)
+    }
+
+    func testSnapshotRoundTripsWhereStopped() {
+        let row = WhereStoppedSnapshot(
+            id: 1,
+            generatedAtMs: 1_700_000_000_000,
+            anchorEventId: 42,
+            excerpt: "Track-7 P5 polish · WorkStateCard.swift",
+            wipSignals: ["commitWip", "midEdit"]
+        )
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500,
+            whereStopped: row
+        )
+        XCTAssertEqual(snapshot.whereStopped, row)
+    }
 }

@@ -153,6 +153,16 @@ public struct InsightsSnapshot: Sendable, Hashable {
     /// modification. Production `InsightsReader.refresh()` writes the
     /// real value via `DerivedInsights.inboxItems(filter:query:)`.
     public let inboxItems: [InboxItem]
+    /// Phase Track-8 P7 — WHERE STOPPED block snapshot (most recent
+    /// stop-point derived from Track-1 D3 `where_stopped_log` plus
+    /// commit / ticket / file basename heuristics in
+    /// `ProdWhereStoppedDeriver`). Default `nil` so existing call-sites
+    /// keep compiling without modification. Production
+    /// `InsightsReader.refresh()` writes the real value via
+    /// `DerivedInsights.recentWhereStopped(limit: 1).first` — `nil` when
+    /// substrate has no row (fresh DB, idle gate not met, or non-prod
+    /// `StubInsights` returning `[]`).
+    public let whereStopped: WhereStoppedSnapshot?
 
     public init(
         topApps: [AppTimeEntry],
@@ -198,7 +208,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         todayMetrics: TodayMetrics = .empty,
         youNowState: YouNowState = .empty,
         sameTaskTeammates: [TeammateMatch] = [],
-        inboxItems: [InboxItem] = []
+        inboxItems: [InboxItem] = [],
+        whereStopped: WhereStoppedSnapshot? = nil
     ) {
         self.topApps = topApps
         self.sessions = sessions
@@ -244,6 +255,7 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.youNowState = youNowState
         self.sameTaskTeammates = sameTaskTeammates
         self.inboxItems = inboxItems
+        self.whereStopped = whereStopped
     }
 
     /// Convenience init — рассчитывает `deepSessionsCount` по threshold'у.
@@ -296,7 +308,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         todayMetrics: TodayMetrics = .empty,
         youNowState: YouNowState = .empty,
         sameTaskTeammates: [TeammateMatch] = [],
-        inboxItems: [InboxItem] = []
+        inboxItems: [InboxItem] = [],
+        whereStopped: WhereStoppedSnapshot? = nil
     ) {
         self.init(
             topApps: topApps,
@@ -342,7 +355,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
             todayMetrics: todayMetrics,
             youNowState: youNowState,
             sameTaskTeammates: sameTaskTeammates,
-            inboxItems: inboxItems
+            inboxItems: inboxItems,
+            whereStopped: whereStopped
         )
     }
 
