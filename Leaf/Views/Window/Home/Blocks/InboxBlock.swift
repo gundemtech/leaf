@@ -33,7 +33,7 @@ struct InboxBlock: View {
                     if items.isEmpty {
                         emptyDataState
                     } else {
-                        placeholderPopulated
+                        populatedBody
                     }
                 }
             }
@@ -58,10 +58,14 @@ struct InboxBlock: View {
         )
     }
 
-    // Placeholder until T6..T9 add scrollable list with row + tap + count.
-    private var placeholderPopulated: some View {
-        Text("\(filteredItems.count) inbox items (filter: \(selectedFilter.rawValue), query: '\(searchQuery)')")
-            .font(LeafType.body.regular)
-            .foregroundStyle(LeafColor.text.secondary)
+    private var populatedBody: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: LeafSpace.xs) {
+                ForEach(filteredItems) { item in
+                    InboxItemRow(item: item)
+                }
+            }
+        }
+        .frame(maxHeight: 320)
     }
 }
