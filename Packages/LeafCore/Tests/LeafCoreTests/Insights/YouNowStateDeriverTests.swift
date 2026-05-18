@@ -26,6 +26,43 @@ final class YouNowStateDeriverTests: XCTestCase {
         )
     }
 
+    // MARK: - Phase 8.4 — lastAppBundleID round-trip
+
+    func test_screenLocked_carriesFrontmostBundleID() {
+        let i = inputs(
+            screenLocked: true,
+            frontmostAppName: "Xcode",
+            frontmostBundleID: "com.apple.dt.Xcode")
+        guard case .away(let a) = YouNowStateDeriver.derive(i) else {
+            return XCTFail("expected .away")
+        }
+        XCTAssertEqual(a.reason, .screenLocked)
+        XCTAssertEqual(a.lastApp, "Xcode")
+        XCTAssertEqual(a.lastAppBundleID, "com.apple.dt.Xcode")
+    }
+
+    func test_idle_carriesFrontmostBundleID() {
+        let i = inputs(
+            idleSec: 9_999,
+            frontmostAppName: "Xcode",
+            frontmostBundleID: "com.apple.dt.Xcode")
+        guard case .away(let a) = YouNowStateDeriver.derive(i) else {
+            return XCTFail("expected .away")
+        }
+        XCTAssertEqual(a.reason, .idle)
+        XCTAssertEqual(a.lastAppBundleID, "com.apple.dt.Xcode")
+    }
+
+    func test_degenerate_noFrontmost_lastAppBundleIDIsNil() {
+        let i = inputs()  // all nil defaults
+        guard case .away(let a) = YouNowStateDeriver.derive(i) else {
+            return XCTFail("expected .away")
+        }
+        XCTAssertEqual(a.reason, .idle)
+        XCTAssertNil(a.lastApp)
+        XCTAssertNil(a.lastAppBundleID)
+    }
+
     func testMeetingTrumpsEverything() {
         let i = inputs(
             meetingActive: true, meetingTitle: "Standup",
