@@ -7,8 +7,8 @@
 //  + empty/error states in P1.
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct ClaudeCodeDetailScreen: View {
     @State private var vm: ClaudeCodeDetailViewModel
@@ -42,7 +42,8 @@ struct ClaudeCodeDetailScreen: View {
             LeafEmptyState(
                 icon: LeafIcons.brand.leaf,
                 title: "No Claude Code activity yet",
-                description: "Once Claude Code captures activity for this period, you'll see session counts, top tools, and project breakdowns here."
+                description:
+                    "Once Claude Code captures activity for this period, you'll see session counts, top tools, and project breakdowns here."
             )
             Spacer()
         }

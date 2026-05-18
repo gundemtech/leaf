@@ -10,8 +10,8 @@
 //  Transitions are embedded in breakdown.transitions (LinearTransitionBreakdown?).
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct LinearDetailScreen: View {
     @State private var vm: LinearDetailViewModel

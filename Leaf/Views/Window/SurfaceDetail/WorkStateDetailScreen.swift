@@ -9,8 +9,8 @@
 //  has 5 sections: range-tab → headline → sub-tab → aggregates → list.
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct WorkStateDetailScreen: View {
     @State private var vm: WorkStateDetailViewModel
@@ -71,7 +71,7 @@ struct WorkStateDetailScreen: View {
             label: { tab in
                 switch tab {
                 case .today: "Today"
-                case .week:  "Week"
+                case .week: "Week"
                 case .month: "Month"
                 }
             }
@@ -136,9 +136,11 @@ struct WorkStateDetailScreen: View {
             let o = payload.openQuestionsCount
             let r = payload.resolvedQuestionsCount
             let opens = payload.questions.filter { $0.resolvedAtMs == nil }
-            let avgAgeMs: Int64? = opens.isEmpty
+            let avgAgeMs: Int64? =
+                opens.isEmpty
                 ? nil
-                : opens.map { Int64(Date().timeIntervalSince1970 * 1000) - $0.openedAtMs }.reduce(0, +) / Int64(opens.count)
+                : opens.map { Int64(Date().timeIntervalSince1970 * 1000) - $0.openedAtMs }.reduce(0, +)
+                    / Int64(opens.count)
             var fragments: [String] = ["Open: \(o)", "Resolved: \(r)"]
             if let age = avgAgeMs {
                 fragments.append("Avg open age: \(formatAge(ms: age))")
@@ -147,11 +149,13 @@ struct WorkStateDetailScreen: View {
         case .blockers:
             let o = payload.openBlockersCount
             let r = payload.resolvedBlockersCount
-            let byKind = Dictionary(grouping: payload.blockers.filter { $0.resolvedAtMs == nil },
-                                    by: { $0.targetKind.displayName })
-                .map { "\($0.value.count)x \($0.key)" }
-                .sorted()
-                .joined(separator: ", ")
+            let byKind = Dictionary(
+                grouping: payload.blockers.filter { $0.resolvedAtMs == nil },
+                by: { $0.targetKind.displayName }
+            )
+            .map { "\($0.value.count)x \($0.key)" }
+            .sorted()
+            .joined(separator: ", ")
             var fragments: [String] = ["Open: \(o)", "Resolved: \(r)"]
             if !byKind.isEmpty {
                 fragments.append("By target: \(byKind)")
@@ -332,9 +336,9 @@ struct WorkStateDetailScreen: View {
 
     private func emptyTitle(for tab: WorkStateSubTab) -> String {
         switch tab {
-        case .decisions:    return "No decisions logged yet"
-        case .questions:    return "No open questions"
-        case .blockers:     return "No blockers"
+        case .decisions: return "No decisions logged yet"
+        case .questions: return "No open questions"
+        case .blockers: return "No blockers"
         case .whereStopped: return "No work-state snapshots yet"
         }
     }
@@ -344,7 +348,8 @@ struct WorkStateDetailScreen: View {
         case .decisions:
             return "Decisions surface here when Leaf detects them in your activity stream."
         case .questions:
-            return "Questions you've raised in chat or comments surface here when Leaf detects them. None active right now."
+            return
+                "Questions you've raised in chat or comments surface here when Leaf detects them. None active right now."
         case .blockers:
             return "Blocking states (waiting for review, stuck Linear issues) surface here. Nothing blocked right now."
         case .whereStopped:
@@ -356,17 +361,17 @@ struct WorkStateDetailScreen: View {
 
     private func refDisplayShort(_ ref: ContextRef) -> String {
         switch ref {
-        case .slackThread:                return "Slack thread"
-        case .linearIssue(let r):         return r
-        case .githubPR(let r):            return r
+        case .slackThread: return "Slack thread"
+        case .linearIssue(let r): return r
+        case .githubPR(let r): return r
         }
     }
 
     private func refDisplayFull(_ ref: ContextRef) -> String {
         switch ref {
-        case .slackThread(let ts):        return "Slack thread @ \(ts)"
-        case .linearIssue(let r):         return "Linear issue \(r)"
-        case .githubPR(let r):            return "GitHub PR \(r)"
+        case .slackThread(let ts): return "Slack thread @ \(ts)"
+        case .linearIssue(let r): return "Linear issue \(r)"
+        case .githubPR(let r): return "GitHub PR \(r)"
         }
     }
 
@@ -378,9 +383,9 @@ struct WorkStateDetailScreen: View {
 
     private func formatAge(ms: Int64) -> String {
         let s = ms / 1000
-        if s < 60      { return "\(s)s" }
-        if s < 3600    { return "\(s / 60)m" }
-        if s < 86_400  { return "\(s / 3600)h" }
+        if s < 60 { return "\(s)s" }
+        if s < 3600 { return "\(s / 60)m" }
+        if s < 86_400 { return "\(s / 3600)h" }
         return "\(s / 86_400)d"
     }
 }

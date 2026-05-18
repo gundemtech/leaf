@@ -13,9 +13,11 @@ public enum SameTaskMatcher {
     ///    leading segments after splitting on `/` and `-`.
     /// Returns matches sorted: confidence priority asc, then `lastActivityAtMs` desc,
     /// then `displayName` asc (deterministic for tests).
-    public static func match(myIdentity: TaskIdentity,
-                             teammates: [TeammateSnapshot],
-                             rule: MatchRule) -> [TeammateMatch] {
+    public static func match(
+        myIdentity: TaskIdentity,
+        teammates: [TeammateSnapshot],
+        rule: MatchRule
+    ) -> [TeammateMatch] {
         guard !myIdentity.isEmpty else { return [] }
         switch rule {
         case .hierarchical:
@@ -29,15 +31,17 @@ public enum SameTaskMatcher {
                 continue
             }
             if myIdentity.linearID == nil, t.linearID == nil,
-               let mineRepo = myIdentity.repo, let theirsRepo = t.repo, mineRepo == theirsRepo,
-               let mineBranch = myIdentity.branch, let theirsBranch = t.branch,
-               mineBranch == theirsBranch {
+                let mineRepo = myIdentity.repo, let theirsRepo = t.repo, mineRepo == theirsRepo,
+                let mineBranch = myIdentity.branch, let theirsBranch = t.branch,
+                mineBranch == theirsBranch
+            {
                 out.append(makeMatch(t, confidence: .onSameBranch, contextLabel: "same branch"))
                 continue
             }
             if let mineRepo = myIdentity.repo, let theirsRepo = t.repo, mineRepo == theirsRepo,
-               let mineBranch = myIdentity.branch, let theirsBranch = t.branch,
-               sharedSegmentCount(mineBranch, theirsBranch) >= adjacentMinSharedSegments {
+                let mineBranch = myIdentity.branch, let theirsBranch = t.branch,
+                sharedSegmentCount(mineBranch, theirsBranch) >= adjacentMinSharedSegments
+            {
                 out.append(makeMatch(t, confidence: .onAdjacentBranch, contextLabel: "adjacent branch"))
                 continue
             }
@@ -57,9 +61,11 @@ public enum SameTaskMatcher {
 
     // MARK: - Helpers
 
-    private static func makeMatch(_ t: TeammateSnapshot,
-                                  confidence: MatchConfidence,
-                                  contextLabel: String) -> TeammateMatch {
+    private static func makeMatch(
+        _ t: TeammateSnapshot,
+        confidence: MatchConfidence,
+        contextLabel: String
+    ) -> TeammateMatch {
         TeammateMatch(
             memberID: t.memberID,
             displayName: t.displayName,

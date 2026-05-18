@@ -1,11 +1,12 @@
 import XCTest
+
 @testable import LeafCore
 
 final class WhereStoppedSnapshotTests: XCTestCase {
     func testMemberwiseInit() {
         let s = WhereStoppedSnapshot(
             id: 1,
-            generatedAtMs: 1700000000000,
+            generatedAtMs: 1_700_000_000_000,
             anchorEventId: 42,
             excerpt: "You were editing 5 files and reviewing 3 PRs",
             wipSignals: ["5 files", "3 PRs"]
@@ -32,10 +33,12 @@ final class WhereStoppedSnapshotTests: XCTestCase {
     }
 
     func testHashable() {
-        let a = WhereStoppedSnapshot(id: 1, generatedAtMs: 0, anchorEventId: nil,
-                                     excerpt: "x", wipSignals: ["a"])
-        let b = WhereStoppedSnapshot(id: 1, generatedAtMs: 0, anchorEventId: nil,
-                                     excerpt: "x", wipSignals: ["a"])
+        let a = WhereStoppedSnapshot(
+            id: 1, generatedAtMs: 0, anchorEventId: nil,
+            excerpt: "x", wipSignals: ["a"])
+        let b = WhereStoppedSnapshot(
+            id: 1, generatedAtMs: 0, anchorEventId: nil,
+            excerpt: "x", wipSignals: ["a"])
         XCTAssertEqual(Set([a, b]).count, 1)
     }
 

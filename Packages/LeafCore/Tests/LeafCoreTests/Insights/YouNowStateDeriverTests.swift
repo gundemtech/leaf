@@ -1,16 +1,19 @@
 import XCTest
+
 @testable import LeafCore
 
 final class YouNowStateDeriverTests: XCTestCase {
-    func inputs(meetingActive: Bool = false, meetingTitle: String? = nil,
-                meetingStartedAtMs: Int64? = nil, meetingEndsAtMs: Int64? = nil,
-                meetingSource: MeetingSource? = nil,
-                focusActive: Bool = false, focusModeName: String? = nil,
-                screenLocked: Bool = false, idleSec: Int = 0,
-                frontmostAppName: String? = nil, frontmostBundleID: String? = nil,
-                contextLabel: String? = nil, branch: String? = nil, linearID: String? = nil,
-                activeSessionStartedAtMs: Int64? = nil, intensityBars: Int = 0,
-                nowMs: Int64 = 10_000) -> YouNowInputs {
+    func inputs(
+        meetingActive: Bool = false, meetingTitle: String? = nil,
+        meetingStartedAtMs: Int64? = nil, meetingEndsAtMs: Int64? = nil,
+        meetingSource: MeetingSource? = nil,
+        focusActive: Bool = false, focusModeName: String? = nil,
+        screenLocked: Bool = false, idleSec: Int = 0,
+        frontmostAppName: String? = nil, frontmostBundleID: String? = nil,
+        contextLabel: String? = nil, branch: String? = nil, linearID: String? = nil,
+        activeSessionStartedAtMs: Int64? = nil, intensityBars: Int = 0,
+        nowMs: Int64 = 10_000
+    ) -> YouNowInputs {
         YouNowInputs(
             frontmostAppName: frontmostAppName, frontmostBundleID: frontmostBundleID,
             contextLabel: contextLabel, branch: branch, linearID: linearID,
@@ -24,10 +27,11 @@ final class YouNowStateDeriverTests: XCTestCase {
     }
 
     func testMeetingTrumpsEverything() {
-        let i = inputs(meetingActive: true, meetingTitle: "Standup",
-                       meetingStartedAtMs: 5000, meetingSource: .eventKit,
-                       focusActive: true, screenLocked: true, idleSec: 10_000,
-                       frontmostAppName: "Xcode")
+        let i = inputs(
+            meetingActive: true, meetingTitle: "Standup",
+            meetingStartedAtMs: 5000, meetingSource: .eventKit,
+            focusActive: true, screenLocked: true, idleSec: 10_000,
+            frontmostAppName: "Xcode")
         let s = YouNowStateDeriver.derive(i)
         guard case .inMeeting(let m) = s else { return XCTFail("expected .inMeeting") }
         XCTAssertEqual(m.titleIfAvailable, "Standup")
@@ -36,8 +40,9 @@ final class YouNowStateDeriverTests: XCTestCase {
     }
 
     func testFocusActiveAndRecentBecomesDeepWork() {
-        let i = inputs(focusActive: true, focusModeName: "Deep work", idleSec: 60,
-                       frontmostAppName: "Xcode", contextLabel: "HomeView.swift")
+        let i = inputs(
+            focusActive: true, focusModeName: "Deep work", idleSec: 60,
+            frontmostAppName: "Xcode", contextLabel: "HomeView.swift")
         let s = YouNowStateDeriver.derive(i)
         guard case .deepWorkFocus(let f) = s else { return XCTFail("expected .deepWorkFocus") }
         XCTAssertEqual(f.modeName, "Deep work")
@@ -52,8 +57,9 @@ final class YouNowStateDeriverTests: XCTestCase {
     }
 
     func testScreenLockedBecomesAwayScreenLocked() {
-        let i = inputs(screenLocked: true, idleSec: 0, frontmostAppName: "Xcode",
-                       linearID: "LEAF-1")
+        let i = inputs(
+            screenLocked: true, idleSec: 0, frontmostAppName: "Xcode",
+            linearID: "LEAF-1")
         let s = YouNowStateDeriver.derive(i)
         guard case .away(let a) = s else { return XCTFail("expected .away") }
         XCTAssertEqual(a.reason, .screenLocked)
@@ -69,10 +75,11 @@ final class YouNowStateDeriverTests: XCTestCase {
     }
 
     func testFrontmostAppRecentBecomesActive() {
-        let i = inputs(idleSec: 30, frontmostAppName: "Xcode",
-                       contextLabel: "HomeView.swift", branch: "feature/track-8",
-                       linearID: "LEAF-204", activeSessionStartedAtMs: 1000,
-                       intensityBars: 2, nowMs: 121_000)
+        let i = inputs(
+            idleSec: 30, frontmostAppName: "Xcode",
+            contextLabel: "HomeView.swift", branch: "feature/track-8",
+            linearID: "LEAF-204", activeSessionStartedAtMs: 1000,
+            intensityBars: 2, nowMs: 121_000)
         let s = YouNowStateDeriver.derive(i)
         guard case .active(let act) = s else { return XCTFail("expected .active") }
         XCTAssertEqual(act.app, "Xcode")
@@ -97,9 +104,10 @@ final class YouNowStateDeriverTests: XCTestCase {
     }
 
     func testActivePreservesFields() {
-        let i = inputs(idleSec: 0, frontmostAppName: "Xcode", contextLabel: "F.swift",
-                       branch: "feat", linearID: "LEAF-1", activeSessionStartedAtMs: nil,
-                       intensityBars: 4)
+        let i = inputs(
+            idleSec: 0, frontmostAppName: "Xcode", contextLabel: "F.swift",
+            branch: "feat", linearID: "LEAF-1", activeSessionStartedAtMs: nil,
+            intensityBars: 4)
         let s = YouNowStateDeriver.derive(i)
         guard case .active(let act) = s else { return XCTFail() }
         XCTAssertEqual(act.contextLabel, "F.swift")
@@ -109,9 +117,10 @@ final class YouNowStateDeriverTests: XCTestCase {
     }
 
     func testMeetingFieldsPropagate() {
-        let i = inputs(meetingActive: true, meetingTitle: "Q",
-                       meetingStartedAtMs: 3000, meetingEndsAtMs: 4000,
-                       meetingSource: .zoom)
+        let i = inputs(
+            meetingActive: true, meetingTitle: "Q",
+            meetingStartedAtMs: 3000, meetingEndsAtMs: 4000,
+            meetingSource: .zoom)
         let s = YouNowStateDeriver.derive(i)
         guard case .inMeeting(let m) = s else { return XCTFail() }
         XCTAssertEqual(m.titleIfAvailable, "Q")

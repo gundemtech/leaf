@@ -12,9 +12,9 @@ public enum WorkStateSubTab: String, Hashable, Identifiable, CaseIterable, Senda
 
     public var displayName: String {
         switch self {
-        case .decisions:    return "Decisions"
-        case .questions:    return "Questions"
-        case .blockers:     return "Blockers"
+        case .decisions: return "Decisions"
+        case .questions: return "Questions"
+        case .blockers: return "Blockers"
         case .whereStopped: return "Where Stopped"
         }
     }

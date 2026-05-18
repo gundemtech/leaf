@@ -64,22 +64,24 @@ public struct ReviewActivityResult: Equatable, Sendable, Hashable {
     public static func decode(_ dict: [String: Any]) -> ReviewActivityResult? {
         guard let period = dict["period"] as? String else { return nil }
         let submitted = intOrZero(dict["reviews_submitted_count"])
-        let comments  = intOrZero(dict["review_comments_count"])
-        let threads   = intOrZero(dict["review_thread_resolved_count"])
+        let comments = intOrZero(dict["review_comments_count"])
+        let threads = intOrZero(dict["review_thread_resolved_count"])
 
         let byRepoArr = (dict["by_repo"] as? [[String: Any]]) ?? []
         let byRepo: [RepoEntry] = byRepoArr.compactMap { entry in
             guard let repo = entry["repo"] as? String,
-                  let r = intOrNil(entry["reviews"]),
-                  let c = intOrNil(entry["comments"]),
-                  let t = intOrNil(entry["threads"]) else { return nil }
+                let r = intOrNil(entry["reviews"]),
+                let c = intOrNil(entry["comments"]),
+                let t = intOrNil(entry["threads"])
+            else { return nil }
             return RepoEntry(repo: repo, reviews: r, comments: c, threads: t)
         }
 
         let linkedArr = (dict["linked_prs"] as? [[String: Any]]) ?? []
         let linked: [LinkedPREntry] = linkedArr.compactMap { entry in
             guard let repo = entry["repo"] as? String,
-                  let pr = intOrNil(entry["pr_number"]) else { return nil }
+                let pr = intOrNil(entry["pr_number"])
+            else { return nil }
             let lid: String?
             if let s = entry["linked_linear_id"] as? String, !s.isEmpty {
                 lid = s

@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class TaskIdentityTests: XCTestCase {
@@ -26,17 +27,21 @@ final class TaskIdentityTests: XCTestCase {
         XCTAssertEqual(MatchConfidence.onSameLinearIssue.rawValue, "onSameLinearIssue")
         XCTAssertEqual(MatchConfidence.onSameBranch.rawValue, "onSameBranch")
         XCTAssertEqual(MatchConfidence.onAdjacentBranch.rawValue, "onAdjacentBranch")
-        XCTAssertLessThan(MatchConfidence.onSameLinearIssue.sortRank,
-                          MatchConfidence.onSameBranch.sortRank)
-        XCTAssertLessThan(MatchConfidence.onSameBranch.sortRank,
-                          MatchConfidence.onAdjacentBranch.sortRank)
+        XCTAssertLessThan(
+            MatchConfidence.onSameLinearIssue.sortRank,
+            MatchConfidence.onSameBranch.sortRank)
+        XCTAssertLessThan(
+            MatchConfidence.onSameBranch.sortRank,
+            MatchConfidence.onAdjacentBranch.sortRank)
     }
 
     func testTeammateSnapshotEquatable() {
-        let s1 = TeammateSnapshot(memberID: "m1", displayName: "Anton", linearID: "LEAF-1",
-                                  branch: "b", repo: "r", currentApp: "Xcode", lastActivityAtMs: 1000)
-        let s2 = TeammateSnapshot(memberID: "m1", displayName: "Anton", linearID: "LEAF-1",
-                                  branch: "b", repo: "r", currentApp: "Xcode", lastActivityAtMs: 1000)
+        let s1 = TeammateSnapshot(
+            memberID: "m1", displayName: "Anton", linearID: "LEAF-1",
+            branch: "b", repo: "r", currentApp: "Xcode", lastActivityAtMs: 1000)
+        let s2 = TeammateSnapshot(
+            memberID: "m1", displayName: "Anton", linearID: "LEAF-1",
+            branch: "b", repo: "r", currentApp: "Xcode", lastActivityAtMs: 1000)
         XCTAssertEqual(s1, s2)
     }
 }

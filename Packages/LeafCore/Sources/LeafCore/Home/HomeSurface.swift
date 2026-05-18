@@ -26,11 +26,11 @@ public enum HomeSurface: String, CaseIterable, Hashable, Codable, Sendable, Iden
     public var displayName: String {
         switch self {
         case .claudeCode: "Claude Code"
-        case .xcode:      "Xcode"
-        case .ides:       "IDEs"
-        case .browsers:   "Browsers"
-        case .zoom:       "Zoom"
-        case .calendar:   "Calendar"
+        case .xcode: "Xcode"
+        case .ides: "IDEs"
+        case .browsers: "Browsers"
+        case .zoom: "Zoom"
+        case .calendar: "Calendar"
         }
     }
 
@@ -46,10 +46,10 @@ public enum SurfaceCatalog {
     /// follows this array.
     public static let all: [HomeSurface] = [
         .claudeCode,  // 1 — highest volume (AI coding flow)
-        .xcode,       // 2 — primary dev IDE on macOS
-        .ides,        // 3 — secondary dev IDEs
-        .browsers,    // 4 — research / docs
-        .zoom,        // 5 — async-light
-        .calendar     // 6 — atomic state events
+        .xcode,  // 2 — primary dev IDE on macOS
+        .ides,  // 3 — secondary dev IDEs
+        .browsers,  // 4 — research / docs
+        .zoom,  // 5 — async-light
+        .calendar,  // 6 — atomic state events
     ]
 }

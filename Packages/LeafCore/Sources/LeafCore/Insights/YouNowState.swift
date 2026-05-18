@@ -15,8 +15,10 @@ public struct YouNowActive: Equatable, Hashable, Sendable {
     public let durationSec: Int
     public let intensityBars: Int
 
-    public init(app: String, contextLabel: String?, branch: String?, linearID: String?,
-                durationSec: Int, intensityBars: Int) {
+    public init(
+        app: String, contextLabel: String?, branch: String?, linearID: String?,
+        durationSec: Int, intensityBars: Int
+    ) {
         self.app = app
         self.contextLabel = contextLabel
         self.branch = branch
@@ -32,8 +34,10 @@ public struct YouNowMeeting: Equatable, Hashable, Sendable {
     public let endsAtMsIfAvailable: Int64?
     public let source: MeetingSource
 
-    public init(titleIfAvailable: String?, startedAtMs: Int64,
-                endsAtMsIfAvailable: Int64?, source: MeetingSource) {
+    public init(
+        titleIfAvailable: String?, startedAtMs: Int64,
+        endsAtMsIfAvailable: Int64?, source: MeetingSource
+    ) {
         self.titleIfAvailable = titleIfAvailable
         self.startedAtMs = startedAtMs
         self.endsAtMsIfAvailable = endsAtMsIfAvailable
@@ -68,8 +72,10 @@ public struct YouNowAway: Equatable, Hashable, Sendable {
     public let lastLinearID: String?
     public let idleSec: Int
 
-    public init(reason: AwayReason, lastApp: String?, lastContextLabel: String?,
-                lastLinearID: String?, idleSec: Int) {
+    public init(
+        reason: AwayReason, lastApp: String?, lastContextLabel: String?,
+        lastLinearID: String?, idleSec: Int
+    ) {
         self.reason = reason
         self.lastApp = lastApp
         self.lastContextLabel = lastContextLabel

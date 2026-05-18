@@ -49,7 +49,8 @@ enum WorkStateHeadlineFormatter {
     /// when no last decision is set or excerpt is empty.
     static func subLine(_ summary: WorkStateSummary, nowMs: Int64) -> String? {
         guard let raw = summary.lastDecisionExcerpt?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !raw.isEmpty else {
+            !raw.isEmpty
+        else {
             return nil
         }
         let trimmed = raw.count > 60 ? String(raw.prefix(60)) + "…" : raw

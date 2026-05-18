@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class BlockerTests: XCTestCase {
@@ -58,7 +59,7 @@ final class BlockerTests: XCTestCase {
             targetRef: "LEAF-99",
             blockerKind: .linearStuck,
             excerpt: "Issue stuck for >5 days",
-            startedAtMs: 1700000000000,
+            startedAtMs: 1_700_000_000_000,
             resolvedAtMs: nil
         )
         XCTAssertEqual(blocker.id, 1)
@@ -73,8 +74,8 @@ final class BlockerTests: XCTestCase {
             targetRef: "owner/repo#42",
             blockerKind: .patternBlockedOn,
             excerpt: "Waiting for review",
-            startedAtMs: 1700000000000,
-            resolvedAtMs: 1700000999999
+            startedAtMs: 1_700_000_000_000,
+            resolvedAtMs: 1_700_000_999_999
         )
         XCTAssertNotNil(blocker.resolvedAtMs)
         XCTAssertEqual(blocker.resolvedAtMs! - blocker.startedAtMs, 999999)
@@ -90,15 +91,18 @@ final class BlockerTests: XCTestCase {
     }
 
     func testBlocker_hashable() {
-        let a = Blocker(id: 4, targetKind: .linearIssue, targetRef: "X",
-                        blockerKind: .linearStuck, excerpt: "x",
-                        startedAtMs: 0, resolvedAtMs: nil)
-        let b = Blocker(id: 4, targetKind: .linearIssue, targetRef: "X",
-                        blockerKind: .linearStuck, excerpt: "x",
-                        startedAtMs: 0, resolvedAtMs: nil)
-        let c = Blocker(id: 5, targetKind: .linearIssue, targetRef: "X",
-                        blockerKind: .linearStuck, excerpt: "x",
-                        startedAtMs: 0, resolvedAtMs: nil)
+        let a = Blocker(
+            id: 4, targetKind: .linearIssue, targetRef: "X",
+            blockerKind: .linearStuck, excerpt: "x",
+            startedAtMs: 0, resolvedAtMs: nil)
+        let b = Blocker(
+            id: 4, targetKind: .linearIssue, targetRef: "X",
+            blockerKind: .linearStuck, excerpt: "x",
+            startedAtMs: 0, resolvedAtMs: nil)
+        let c = Blocker(
+            id: 5, targetKind: .linearIssue, targetRef: "X",
+            blockerKind: .linearStuck, excerpt: "x",
+            startedAtMs: 0, resolvedAtMs: nil)
         XCTAssertEqual(Set([a, b, c]).count, 2)
     }
 }

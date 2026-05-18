@@ -1,5 +1,6 @@
 // GitHubHeadlineFormatterTests.swift
 import XCTest
+
 @testable import LeafCore
 
 final class GitHubHeadlineFormatterTests: XCTestCase {

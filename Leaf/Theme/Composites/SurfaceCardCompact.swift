@@ -12,8 +12,8 @@
 //  snapshot (Phase E SQL helpers land downstream).
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct SurfaceCardCompact: View {
     let surface: HomeSurface
@@ -27,15 +27,18 @@ struct SurfaceCardCompact: View {
                     .font(LeafType.body.regular)
                     .foregroundStyle(LeafColor.text.primary)
                 Spacer()
-                LeafIcon(systemName: "chevron.right",
-                         size: .sm,
-                         tint: LeafColor.text.tertiary)
+                LeafIcon(
+                    systemName: "chevron.right",
+                    size: .sm,
+                    tint: LeafColor.text.tertiary)
             }
             .padding(.horizontal, LeafSpace.lg)
             .frame(height: LeafSpace.xxxl)
             .background(LeafColor.surface.raised)
-            .clipShape(RoundedRectangle(cornerRadius: LeafCardTokens.cornerRadius,
-                                        style: .continuous))
+            .clipShape(
+                RoundedRectangle(
+                    cornerRadius: LeafCardTokens.cornerRadius,
+                    style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)

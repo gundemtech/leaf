@@ -10,8 +10,10 @@ public struct TaskIdentity: Equatable, Hashable, Sendable {
     public let repo: String?
     public let workspacePath: String?
 
-    public init(linearID: String? = nil, branch: String? = nil, repo: String? = nil,
-                workspacePath: String? = nil) {
+    public init(
+        linearID: String? = nil, branch: String? = nil, repo: String? = nil,
+        workspacePath: String? = nil
+    ) {
         self.linearID = linearID
         self.branch = branch
         self.repo = repo

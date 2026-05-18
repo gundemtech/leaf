@@ -7,8 +7,8 @@
 //  (Payload mapper lands in P2-collapsed).
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct SurfacesSection: View {
     let snapshot: InsightsSnapshot?
@@ -25,7 +25,7 @@ struct SurfacesSection: View {
     /// LocalAppsSettingsSection so the Home enable-state stays in lockstep
     /// with the Settings toggle.
     private static let xcodeBundleID = "com.apple.dt.Xcode"
-    private static let zoomBundleID  = "us.zoom.xos"
+    private static let zoomBundleID = "us.zoom.xos"
 
     var body: some View {
         VStack(alignment: .leading, spacing: LeafSpace.md) {
@@ -266,7 +266,8 @@ private struct XcodeCardWrapper: View {
         case .enabledPopulated(let payload):
             SurfaceCard(
                 surface: .xcode,
-                headline: "\(payload.buildCount) build\(payload.buildCount == 1 ? "" : "s") · \(payload.testRunCount) test\(payload.testRunCount == 1 ? "" : "s")",
+                headline:
+                    "\(payload.buildCount) build\(payload.buildCount == 1 ? "" : "s") · \(payload.testRunCount) test\(payload.testRunCount == 1 ? "" : "s")",
                 subStats: subStats(for: payload),
                 spark: { LeafSparkline(values: payload.dailyBuilds) },
                 onTap: onTap
@@ -321,7 +322,8 @@ private struct IDEsCardWrapper: View {
         case .enabledPopulated(let payload):
             SurfaceCard(
                 surface: .ides,
-                headline: "\(payload.fileEventCount) file\(payload.fileEventCount == 1 ? "" : "s") in \(payload.workspaceCount) workspace\(payload.workspaceCount == 1 ? "" : "s")",
+                headline:
+                    "\(payload.fileEventCount) file\(payload.fileEventCount == 1 ? "" : "s") in \(payload.workspaceCount) workspace\(payload.workspaceCount == 1 ? "" : "s")",
                 subStats: subStats(for: payload),
                 spark: { LeafSparkline(values: payload.dailyEvents) },
                 onTap: onTap
@@ -381,7 +383,8 @@ private struct BrowsersCardWrapper: View {
         case .enabledPopulated(let payload):
             SurfaceCard(
                 surface: .browsers,
-                headline: "\(payload.pageCount) page\(payload.pageCount == 1 ? "" : "s") on \(payload.domainCount) domain\(payload.domainCount == 1 ? "" : "s")",
+                headline:
+                    "\(payload.pageCount) page\(payload.pageCount == 1 ? "" : "s") on \(payload.domainCount) domain\(payload.domainCount == 1 ? "" : "s")",
                 subStats: subStats(for: payload),
                 spark: { LeafSparkline(values: payload.dailyNavigations) },
                 onTap: onTap
@@ -496,7 +499,8 @@ private struct GoogleCalendarCardWrapper: View {
         case .enabledPopulated(let payload):
             SurfaceCard(
                 surface: .calendar,
-                headline: "\(payload.focusBlockCount) focus block\(payload.focusBlockCount == 1 ? "" : "s") · \(formatHours(payload.focusDurationSeconds))",
+                headline:
+                    "\(payload.focusBlockCount) focus block\(payload.focusBlockCount == 1 ? "" : "s") · \(formatHours(payload.focusDurationSeconds))",
                 subStats: subStats(for: payload),
                 spark: { LeafSparkline(values: payload.dailyFocusMinutes) },
                 onTap: onTap

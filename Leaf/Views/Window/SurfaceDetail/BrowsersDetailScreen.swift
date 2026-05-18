@@ -5,8 +5,8 @@
 //  domains, bookmark deltas (rendered only when non-zero).
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct BrowsersDetailScreen: View {
     @State private var vm: BrowsersDetailViewModel
@@ -40,7 +40,8 @@ struct BrowsersDetailScreen: View {
             LeafEmptyState(
                 icon: LeafIcons.brand.leaf,
                 title: "No browser activity yet",
-                description: "Once you visit an allow-listed domain in Safari, Chrome, or Arc, you'll see navigation and top-domain breakdowns here."
+                description:
+                    "Once you visit an allow-listed domain in Safari, Chrome, or Arc, you'll see navigation and top-domain breakdowns here."
             )
             Spacer()
         }
@@ -105,15 +106,18 @@ struct BrowsersDetailScreen: View {
         LeafSection(title: "Per-browser breakdown") {
             LeafCard(padding: .regular) {
                 VStack(alignment: .leading, spacing: LeafSpace.sm) {
-                    browserRow(name: "Safari",
-                               pages: breakdown.safariPageCount,
-                               activations: breakdown.safariActivationCount)
-                    browserRow(name: "Chrome",
-                               pages: breakdown.chromePageCount,
-                               activations: breakdown.chromeActivationCount)
-                    browserRow(name: "Arc",
-                               pages: breakdown.arcPageCount,
-                               activations: breakdown.arcActivationCount)
+                    browserRow(
+                        name: "Safari",
+                        pages: breakdown.safariPageCount,
+                        activations: breakdown.safariActivationCount)
+                    browserRow(
+                        name: "Chrome",
+                        pages: breakdown.chromePageCount,
+                        activations: breakdown.chromeActivationCount)
+                    browserRow(
+                        name: "Arc",
+                        pages: breakdown.arcPageCount,
+                        activations: breakdown.arcActivationCount)
                 }
             }
         }

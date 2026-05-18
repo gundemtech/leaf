@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 /// ADR-010 walkback fence over the 6 new Work State public types — asserts
@@ -33,8 +34,8 @@ final class WorkStatePayloadWalkbackTests: XCTestCase {
             for forbidden in forbiddenSubstrings {
                 XCTAssertFalse(
                     label.contains(forbidden),
-                    "Property `\(child.label ?? "?")` of \(T.self) contains forbidden substring `\(forbidden)`. " +
-                    "ADR-010 walkback violated.",
+                    "Property `\(child.label ?? "?")` of \(T.self) contains forbidden substring `\(forbidden)`. "
+                        + "ADR-010 walkback violated.",
                     file: file, line: line
                 )
             }
@@ -48,29 +49,33 @@ final class WorkStatePayloadWalkbackTests: XCTestCase {
     }
 
     func testDecision_propertyLabels_haveNoForbiddenSubstrings() {
-        let d = Decision(id: 0, excerpt: "", topicKeywords: [],
-                         confidence: 0, detectedAtMs: 0, sourceEventId: nil)
+        let d = Decision(
+            id: 0, excerpt: "", topicKeywords: [],
+            confidence: 0, detectedAtMs: 0, sourceEventId: nil)
         assertNoForbiddenLabels(d)
     }
 
     func testOpenQuestion_propertyLabels_haveNoForbiddenSubstrings() {
-        let q = OpenQuestion(id: 0, excerpt: "", alternatives: [],
-                             contextRef: nil, openedAtMs: 0,
-                             resolvedAtMs: nil, resolvedBySourceEventId: nil)
+        let q = OpenQuestion(
+            id: 0, excerpt: "", alternatives: [],
+            contextRef: nil, openedAtMs: 0,
+            resolvedAtMs: nil, resolvedBySourceEventId: nil)
         assertNoForbiddenLabels(q)
     }
 
     func testBlocker_propertyLabels_haveNoForbiddenSubstrings() {
-        let b = Blocker(id: 0, targetKind: .linearIssue, targetRef: "",
-                        blockerKind: .linearStuck, excerpt: "",
-                        startedAtMs: 0, resolvedAtMs: nil)
+        let b = Blocker(
+            id: 0, targetKind: .linearIssue, targetRef: "",
+            blockerKind: .linearStuck, excerpt: "",
+            startedAtMs: 0, resolvedAtMs: nil)
         assertNoForbiddenLabels(b)
     }
 
     func testWhereStoppedSnapshot_propertyLabels_haveNoForbiddenSubstrings() {
-        let s = WhereStoppedSnapshot(id: 0, generatedAtMs: 0,
-                                     anchorEventId: nil, excerpt: "",
-                                     wipSignals: [])
+        let s = WhereStoppedSnapshot(
+            id: 0, generatedAtMs: 0,
+            anchorEventId: nil, excerpt: "",
+            wipSignals: [])
         assertNoForbiddenLabels(s)
     }
 
@@ -84,53 +89,67 @@ final class WorkStatePayloadWalkbackTests: XCTestCase {
 
     func testWorkStateSummary_schema_lockedIn() {
         let labels = Mirror(reflecting: WorkStateSummary.empty).children.compactMap(\.label)
-        XCTAssertEqual(Set(labels), [
-            "openQuestionsCount",
-            "openBlockersCount",
-            "lastDecisionExcerpt",
-            "lastDecisionAgeMs",
-        ])
+        XCTAssertEqual(
+            Set(labels),
+            [
+                "openQuestionsCount",
+                "openBlockersCount",
+                "lastDecisionExcerpt",
+                "lastDecisionAgeMs",
+            ])
     }
 
     func testDecision_schema_lockedIn() {
-        let d = Decision(id: 0, excerpt: "", topicKeywords: [],
-                         confidence: 0, detectedAtMs: 0, sourceEventId: nil)
+        let d = Decision(
+            id: 0, excerpt: "", topicKeywords: [],
+            confidence: 0, detectedAtMs: 0, sourceEventId: nil)
         let labels = Mirror(reflecting: d).children.compactMap(\.label)
-        XCTAssertEqual(Set(labels), [
-            "id", "excerpt", "topicKeywords", "confidence",
-            "detectedAtMs", "sourceEventId"
-        ])
+        XCTAssertEqual(
+            Set(labels),
+            [
+                "id", "excerpt", "topicKeywords", "confidence",
+                "detectedAtMs", "sourceEventId",
+            ])
     }
 
     func testOpenQuestion_schema_lockedIn() {
-        let q = OpenQuestion(id: 0, excerpt: "", alternatives: [],
-                             contextRef: nil, openedAtMs: 0,
-                             resolvedAtMs: nil, resolvedBySourceEventId: nil)
+        let q = OpenQuestion(
+            id: 0, excerpt: "", alternatives: [],
+            contextRef: nil, openedAtMs: 0,
+            resolvedAtMs: nil, resolvedBySourceEventId: nil)
         let labels = Mirror(reflecting: q).children.compactMap(\.label)
-        XCTAssertEqual(Set(labels), [
-            "id", "excerpt", "alternatives", "contextRef",
-            "openedAtMs", "resolvedAtMs", "resolvedBySourceEventId"
-        ])
+        XCTAssertEqual(
+            Set(labels),
+            [
+                "id", "excerpt", "alternatives", "contextRef",
+                "openedAtMs", "resolvedAtMs", "resolvedBySourceEventId",
+            ])
     }
 
     func testBlocker_schema_lockedIn() {
-        let b = Blocker(id: 0, targetKind: .linearIssue, targetRef: "",
-                        blockerKind: .linearStuck, excerpt: "",
-                        startedAtMs: 0, resolvedAtMs: nil)
+        let b = Blocker(
+            id: 0, targetKind: .linearIssue, targetRef: "",
+            blockerKind: .linearStuck, excerpt: "",
+            startedAtMs: 0, resolvedAtMs: nil)
         let labels = Mirror(reflecting: b).children.compactMap(\.label)
-        XCTAssertEqual(Set(labels), [
-            "id", "targetKind", "targetRef", "blockerKind",
-            "excerpt", "startedAtMs", "resolvedAtMs"
-        ])
+        XCTAssertEqual(
+            Set(labels),
+            [
+                "id", "targetKind", "targetRef", "blockerKind",
+                "excerpt", "startedAtMs", "resolvedAtMs",
+            ])
     }
 
     func testWhereStoppedSnapshot_schema_lockedIn() {
-        let s = WhereStoppedSnapshot(id: 0, generatedAtMs: 0,
-                                     anchorEventId: nil, excerpt: "",
-                                     wipSignals: [])
+        let s = WhereStoppedSnapshot(
+            id: 0, generatedAtMs: 0,
+            anchorEventId: nil, excerpt: "",
+            wipSignals: [])
         let labels = Mirror(reflecting: s).children.compactMap(\.label)
-        XCTAssertEqual(Set(labels), [
-            "id", "generatedAtMs", "anchorEventId", "excerpt", "wipSignals"
-        ])
+        XCTAssertEqual(
+            Set(labels),
+            [
+                "id", "generatedAtMs", "anchorEventId", "excerpt", "wipSignals",
+            ])
     }
 }

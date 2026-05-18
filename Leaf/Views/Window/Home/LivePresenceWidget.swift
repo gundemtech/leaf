@@ -31,14 +31,17 @@ struct LivePresenceWidget: View {
 
             LeafCard(padding: .regular) {
                 HStack(alignment: .top, spacing: LeafSpace.xl) {
-                    column(title: "GITHUB", provider: .github,
-                           lines: githubLines, connected: snapshot.github != nil)
+                    column(
+                        title: "GITHUB", provider: .github,
+                        lines: githubLines, connected: snapshot.github != nil)
                     verticalDivider
-                    column(title: "LINEAR", provider: .linear,
-                           lines: linearLines, connected: snapshot.linear != nil)
+                    column(
+                        title: "LINEAR", provider: .linear,
+                        lines: linearLines, connected: snapshot.linear != nil)
                     verticalDivider
-                    column(title: "SLACK", provider: .slack,
-                           lines: slackLines, connected: snapshot.slack != nil)
+                    column(
+                        title: "SLACK", provider: .slack,
+                        lines: slackLines, connected: snapshot.slack != nil)
                 }
             }
         }

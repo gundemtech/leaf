@@ -17,7 +17,8 @@ enum BrowsersSurfaceCardViewModel {
         browserAllowList: BrowserAllowListStore,
         snapshot: InsightsSnapshot?
     ) -> SurfaceCardState<BrowsersCardPayload> {
-        let enabled = !browserAllowList.entries.isEmpty
+        let enabled =
+            !browserAllowList.entries.isEmpty
             || localAppsStore.browserBookmarksChromeEnabled
             || localAppsStore.browserBookmarksSafariEnabled
         guard enabled else {

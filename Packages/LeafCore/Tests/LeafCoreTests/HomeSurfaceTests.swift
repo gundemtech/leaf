@@ -1,5 +1,6 @@
 // Packages/LeafCore/Tests/LeafCoreTests/HomeSurfaceTests.swift
 import XCTest
+
 @testable import LeafCore
 
 final class HomeSurfaceTests: XCTestCase {
@@ -20,11 +21,11 @@ final class HomeSurfaceTests: XCTestCase {
 
     func testRawValuesAreStable() {
         XCTAssertEqual(HomeSurface.claudeCode.rawValue, "claudeCode")
-        XCTAssertEqual(HomeSurface.xcode.rawValue,      "xcode")
-        XCTAssertEqual(HomeSurface.ides.rawValue,       "ides")
-        XCTAssertEqual(HomeSurface.browsers.rawValue,   "browsers")
-        XCTAssertEqual(HomeSurface.zoom.rawValue,       "zoom")
-        XCTAssertEqual(HomeSurface.calendar.rawValue,   "calendar")
+        XCTAssertEqual(HomeSurface.xcode.rawValue, "xcode")
+        XCTAssertEqual(HomeSurface.ides.rawValue, "ides")
+        XCTAssertEqual(HomeSurface.browsers.rawValue, "browsers")
+        XCTAssertEqual(HomeSurface.zoom.rawValue, "zoom")
+        XCTAssertEqual(HomeSurface.calendar.rawValue, "calendar")
     }
 
     func testDisplayNamesAreNonEmpty() {

@@ -6,8 +6,8 @@
 //  a JetBrains-only user doesn't see an empty VSCode block.
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct IDEsDetailScreen: View {
     @State private var vm: IDEsDetailViewModel
@@ -41,7 +41,8 @@ struct IDEsDetailScreen: View {
             LeafEmptyState(
                 icon: LeafIcons.brand.leaf,
                 title: "No IDE activity yet",
-                description: "Once VSCode or a JetBrains IDE is active for this period, you'll see workspace and file breakdowns here."
+                description:
+                    "Once VSCode or a JetBrains IDE is active for this period, you'll see workspace and file breakdowns here."
             )
             Spacer()
         }

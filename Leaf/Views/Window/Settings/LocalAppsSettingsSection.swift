@@ -6,9 +6,9 @@
 //  the shared LocalAppsStore + AppleScriptPermissionStore.
 //
 
-import SwiftUI
 import AppKit
 import LeafCore
+import SwiftUI
 
 struct LocalAppsSettingsSection: View {
     @Environment(PermissionsService.self) private var permissions
@@ -16,7 +16,8 @@ struct LocalAppsSettingsSection: View {
     var body: some View {
         LeafSection(
             title: "Local Apps",
-            description: "Read what you're working on through Apple's automation API. Each app asks permission separately."
+            description:
+                "Read what you're working on through Apple's automation API. Each app asks permission separately."
         ) {
             VStack(alignment: .leading, spacing: LeafSpace.sm) {
                 ForEach(Self.adapters, id: \.bundleID) { app in
@@ -101,7 +102,8 @@ struct LocalAppsSettingsSection: View {
         .init(
             bundleID: "us.zoom.xos",
             displayName: "Zoom",
-            explainer: "Captures meeting state, session start/end timestamps, duration, and links to your calendar event (anonymized hash). Never attendee list, password, screen-share content, chat messages, or recording state.",
+            explainer:
+                "Captures meeting state, session start/end timestamps, duration, and links to your calendar event (anonymized hash). Never attendee list, password, screen-share content, chat messages, or recording state.",
             subFieldLabel: "Also capture meeting topic",
             subFieldKey: "ownMeetingTopic"
         ),
@@ -125,7 +127,7 @@ struct LocalAppsSettingsSection: View {
             explainer: "Same as Safari.",
             subFieldLabel: nil,
             subFieldKey: nil
-        )
+        ),
     ]
 }
 
@@ -155,22 +157,28 @@ private struct LocalAppRow: View {
                     }
                     Spacer(minLength: 0)
                     permissionBadge
-                    Toggle("", isOn: Binding(
-                        get: { enabled },
-                        set: { newValue in
-                            enabled = newValue
-                            permissions.setLocalAppEnabled(app.bundleID, newValue)
-                        }
-                    )).labelsHidden().toggleStyle(.switch).tint(LeafColor.accent.primary)
+                    Toggle(
+                        "",
+                        isOn: Binding(
+                            get: { enabled },
+                            set: { newValue in
+                                enabled = newValue
+                                permissions.setLocalAppEnabled(app.bundleID, newValue)
+                            }
+                        )
+                    ).labelsHidden().toggleStyle(.switch).tint(LeafColor.accent.primary)
                 }
                 if let label = app.subFieldLabel, let key = app.subFieldKey, enabled {
-                    Toggle(label, isOn: Binding(
-                        get: { subFieldOn },
-                        set: { newValue in
-                            subFieldOn = newValue
-                            permissions.setLocalAppSubFieldOptedIn(app.bundleID, field: key, optedIn: newValue)
-                        }
-                    ))
+                    Toggle(
+                        label,
+                        isOn: Binding(
+                            get: { subFieldOn },
+                            set: { newValue in
+                                subFieldOn = newValue
+                                permissions.setLocalAppSubFieldOptedIn(app.bundleID, field: key, optedIn: newValue)
+                            }
+                        )
+                    )
                     .font(LeafType.body.small)
                     .toggleStyle(.switch)
                     .tint(LeafColor.accent.primary)

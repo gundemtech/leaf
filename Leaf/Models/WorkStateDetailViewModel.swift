@@ -9,9 +9,10 @@
 //
 
 import Foundation
-import Observation
-import OSLog
 import LeafCore
+import OSLog
+import Observation
+
 #if LEAF_PROD
 import LeafCorePrivate
 #endif
@@ -27,7 +28,10 @@ final class WorkStateDetailViewModel {
 
     private(set) var state: State = .loading
     var range: DetailRange = .default {
-        didSet { guard range != oldValue else { return }; reload() }
+        didSet {
+            guard range != oldValue else { return }
+            reload()
+        }
     }
     var subTab: WorkStateSubTab = .questions
 

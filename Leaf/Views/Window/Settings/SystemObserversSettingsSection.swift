@@ -14,8 +14,8 @@
 //  storage FSEvents watchers (both OFF by default, ADR-020 opt-in posture).
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct SystemObserversSettingsSection: View {
     @Environment(PermissionsService.self) private var permissions
@@ -23,7 +23,8 @@ struct SystemObserversSettingsSection: View {
     var body: some View {
         LeafSection(
             title: "System Observers",
-            description: "Background observers capture context shifts — audio routing, displays, voice calls, downloads. Local-only by default; Share Controls (above) gate what reaches your team."
+            description:
+                "Background observers capture context shifts — audio routing, displays, voice calls, downloads. Local-only by default; Share Controls (above) gate what reaches your team."
         ) {
             VStack(alignment: .leading, spacing: LeafSpace.sm) {
                 ForEach(Self.observers, id: \.key) { observer in
@@ -132,7 +133,7 @@ struct SystemObserversSettingsSection: View {
             sfSymbol: "trash",
             explainer: "Detects items added / emptied from Trash. Never reads file contents.",
             requiresInputMonitoring: false
-        )
+        ),
     ]
 }
 
@@ -178,19 +179,23 @@ private struct BrowserBookmarkRow: View {
                             .foregroundStyle(LeafColor.text.secondary)
                     }
                     Spacer(minLength: 0)
-                    Toggle("", isOn: Binding(
-                        get: { enabled },
-                        set: { newValue in
-                            enabled = newValue
-                            onToggle(newValue)
-                        }
-                    )).labelsHidden().toggleStyle(.switch).tint(LeafColor.accent.primary)
+                    Toggle(
+                        "",
+                        isOn: Binding(
+                            get: { enabled },
+                            set: { newValue in
+                                enabled = newValue
+                                onToggle(newValue)
+                            }
+                        )
+                    ).labelsHidden().toggleStyle(.switch).tint(LeafColor.accent.primary)
                 }
                 if requiresFDA && enabled && !fdaGranted {
                     LeafBanner(
                         tone: .warning,
                         title: "Full Disk Access required",
-                        description: "Safari bookmarks live in ~/Library/Safari — readable only with Full Disk Access. After granting, restart Leaf.",
+                        description:
+                            "Safari bookmarks live in ~/Library/Safari — readable only with Full Disk Access. After granting, restart Leaf.",
                         ctaTitle: "Open System Settings",
                         onCTA: onOpenFDA
                     )
@@ -220,7 +225,8 @@ private struct IDEStorageSettingsSection: View {
             IDEStorageToggleRow(
                 sfSymbol: "chevron.left.forwardslash.chevron.right",
                 displayName: "VSCode workspace tracking",
-                explainer: "Detects workspace opens across VSCode, Cursor, Insiders, and VSCodium. Workspace name only — never file contents.",
+                explainer:
+                    "Detects workspace opens across VSCode, Cursor, Insiders, and VSCodium. Workspace name only — never file contents.",
                 isOn: Binding(
                     get: { store.vscodeStorageEnabled },
                     set: { store.vscodeStorageEnabled = $0 }
@@ -230,7 +236,8 @@ private struct IDEStorageSettingsSection: View {
             IDEStorageToggleRow(
                 sfSymbol: "cube",
                 displayName: "JetBrains recent projects",
-                explainer: "Detects recent project activations across IntelliJ, PyCharm, GoLand, etc. Project display name only — never file contents.",
+                explainer:
+                    "Detects recent project activations across IntelliJ, PyCharm, GoLand, etc. Project display name only — never file contents.",
                 isOn: Binding(
                     get: { store.jetbrainsStorageEnabled },
                     set: { store.jetbrainsStorageEnabled = $0 }
@@ -300,19 +307,23 @@ private struct SystemObserverRow: View {
                     if observer.requiresInputMonitoring {
                         permissionBadge
                     }
-                    Toggle("", isOn: Binding(
-                        get: { enabled },
-                        set: { newValue in
-                            enabled = newValue
-                            permissions.setSystemObserverEnabled(observer.key, newValue)
-                        }
-                    )).labelsHidden().toggleStyle(.switch).tint(LeafColor.accent.primary)
+                    Toggle(
+                        "",
+                        isOn: Binding(
+                            get: { enabled },
+                            set: { newValue in
+                                enabled = newValue
+                                permissions.setSystemObserverEnabled(observer.key, newValue)
+                            }
+                        )
+                    ).labelsHidden().toggleStyle(.switch).tint(LeafColor.accent.primary)
                 }
                 if observer.requiresInputMonitoring && enabled && !permissions.inputMonitoringGranted {
                     LeafBanner(
                         tone: .warning,
                         title: "Input Monitoring required",
-                        description: "Intensity uses macOS Input Monitoring to count keystrokes (it never reads key content). Grant access to enable.",
+                        description:
+                            "Intensity uses macOS Input Monitoring to count keystrokes (it never reads key content). Grant access to enable.",
                         ctaTitle: "Open Settings",
                         onCTA: { permissions.openInputMonitoringSettings() }
                     )

@@ -8,11 +8,14 @@ public struct TodayMetrics: Equatable, Hashable, Sendable {
     public let commitsCount: Int
     public let surfacePills: [SurfacePill]
 
-    public static let empty = TodayMetrics(focusedMin: 0, aiRatio: 0, sessionsCount: 0,
-                                           switchCount: 0, commitsCount: 0, surfacePills: [])
+    public static let empty = TodayMetrics(
+        focusedMin: 0, aiRatio: 0, sessionsCount: 0,
+        switchCount: 0, commitsCount: 0, surfacePills: [])
 
-    public init(focusedMin: Int, aiRatio: Double, sessionsCount: Int, switchCount: Int,
-                commitsCount: Int, surfacePills: [SurfacePill]) {
+    public init(
+        focusedMin: Int, aiRatio: Double, sessionsCount: Int, switchCount: Int,
+        commitsCount: Int, surfacePills: [SurfacePill]
+    ) {
         self.focusedMin = focusedMin
         self.aiRatio = aiRatio
         self.sessionsCount = sessionsCount

@@ -10,8 +10,10 @@ public struct InboxItem: Equatable, Hashable, Sendable, Identifiable {
     public let aggregatedCount: Int
     public let createdAtMs: Int64
 
-    public init(id: String, kind: InboxKind, severity: InboxSeverity, title: String,
-                sourceMeta: String, sourceURL: URL?, aggregatedCount: Int, createdAtMs: Int64) {
+    public init(
+        id: String, kind: InboxKind, severity: InboxSeverity, title: String,
+        sourceMeta: String, sourceURL: URL?, aggregatedCount: Int, createdAtMs: Int64
+    ) {
         self.id = id
         self.kind = kind
         self.severity = severity
@@ -39,8 +41,8 @@ public enum InboxSeverity: String, Equatable, Hashable, Sendable {
     public var sortRank: Int {
         switch self {
         case .danger: return 0
-        case .warn:   return 1
-        case .muted:  return 2
+        case .warn: return 1
+        case .muted: return 2
         }
     }
 }
@@ -54,10 +56,10 @@ public enum InboxFilter: String, Equatable, Hashable, Sendable, CaseIterable {
     /// Returns true if the filter admits this kind.
     public func admits(_ kind: InboxKind) -> Bool {
         switch self {
-        case .all:       return true
-        case .reviews:   return kind == .reviewRequest
+        case .all: return true
+        case .reviews: return kind == .reviewRequest
         case .questions: return kind == .openQuestion
-        case .mentions:  return kind == .mention
+        case .mentions: return kind == .mention
         }
     }
 }

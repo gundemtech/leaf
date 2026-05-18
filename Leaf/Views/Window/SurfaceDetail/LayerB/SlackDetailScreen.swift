@@ -10,8 +10,8 @@
 //  - LatencyStats.medianSeconds / .avgSeconds / .maxSeconds (Int) — Double() cast
 //    (plan used stats.median / .average / .maximum which don't exist on LatencyStats)
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct SlackDetailScreen: View {
     @State private var vm: SlackDetailViewModel
@@ -83,7 +83,8 @@ struct SlackDetailScreen: View {
             LeafBanner(
                 tone: .warning,
                 title: "Slack permissions need a refresh",
-                description: "\(missing.count) new event type\(missing.count == 1 ? "" : "s") \(missing.count == 1 ? "is" : "are") blocked until you re-authorize.",
+                description:
+                    "\(missing.count) new event type\(missing.count == 1 ? "" : "s") \(missing.count == 1 ? "is" : "are") blocked until you re-authorize.",
                 ctaTitle: "Re-authorize Slack",
                 onCTA: {
                     Task { await slackOAuth.connect() }

@@ -24,7 +24,7 @@ public enum IDEFamilyClassifier {
         "com.google.android.studio",
         "com.jetbrains.datagrip",
         "com.jetbrains.rustrover",
-        "com.jetbrains.dataspell"
+        "com.jetbrains.dataspell",
     ]
 
     public static func family(forBundleID id: String) -> IDEFamily {

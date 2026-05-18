@@ -29,7 +29,8 @@ enum GoogleCalendarSurfaceCardViewModel {
         }
         if activity.focusBlockCount == 0
             && activity.oooBlockCount == 0
-            && activity.workingLocationCount == 0 {
+            && activity.workingLocationCount == 0
+        {
             return .enabledZeroToday
         }
         let payload = GoogleCalendarCardPayload(

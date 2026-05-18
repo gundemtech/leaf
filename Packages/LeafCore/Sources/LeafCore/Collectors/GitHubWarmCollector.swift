@@ -475,26 +475,29 @@ public actor GitHubWarmCollector {
         for curr in current {
             guard let p = priorByID[curr.itemID] else { continue }
             if p.status != curr.status {
-                cardMoved.append(ProjectV2CardMoved(
-                    itemID: curr.itemID, projectID: curr.projectID,
-                    oldStatus: p.status, newStatus: curr.status
-                ))
+                cardMoved.append(
+                    ProjectV2CardMoved(
+                        itemID: curr.itemID, projectID: curr.projectID,
+                        oldStatus: p.status, newStatus: curr.status
+                    ))
             }
             if p.iterationID != curr.iterationID {
-                iter.append(ProjectV2IterationChanged(
-                    itemID: curr.itemID, projectID: curr.projectID,
-                    oldIteration: p.iterationID, newIteration: curr.iterationID
-                ))
+                iter.append(
+                    ProjectV2IterationChanged(
+                        itemID: curr.itemID, projectID: curr.projectID,
+                        oldIteration: p.iterationID, newIteration: curr.iterationID
+                    ))
             }
             let allFieldNames = Set(p.fieldValues.keys).union(curr.fieldValues.keys)
             for name in allFieldNames.sorted() {
                 let oldV = p.fieldValues[name]
                 let newV = curr.fieldValues[name]
                 if oldV != newV {
-                    fields.append(ProjectV2FieldUpdated(
-                        itemID: curr.itemID, projectID: curr.projectID,
-                        fieldName: name, oldValue: oldV, newValue: newV
-                    ))
+                    fields.append(
+                        ProjectV2FieldUpdated(
+                            itemID: curr.itemID, projectID: curr.projectID,
+                            fieldName: name, oldValue: oldV, newValue: newV
+                        ))
                 }
             }
         }

@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class TeammatePresenceReaderTests: XCTestCase {
@@ -25,22 +26,25 @@ final class TeammatePresenceReaderTests: XCTestCase {
     }
 
     func testFactoryReturnsStubWhenNoProviderRegistered() throws {
-        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults,
-                                           encryption: .deterministicTest)
+        let db = try Database.openForWrite(
+            at: dbURL, config: .weakDefaults,
+            encryption: .deterministicTest)
         let reader = TeammatePresenceReaderFactory.make(database: db)
         let snapshots = try reader.recentTeammateSnapshots(maxAge: 600, now: Date())
         XCTAssertEqual(snapshots, [])
     }
 
     func testFactoryReturnsRegisteredProvider() throws {
-        let sentinel = TeammateSnapshot(memberID: "m1", displayName: "Anton",
-                                        linearID: nil, branch: nil, repo: nil,
-                                        currentApp: nil, lastActivityAtMs: 0)
+        let sentinel = TeammateSnapshot(
+            memberID: "m1", displayName: "Anton",
+            linearID: nil, branch: nil, repo: nil,
+            currentApp: nil, lastActivityAtMs: 0)
         TeammatePresenceReaderFactory.register { _ in
             FixedReader(snapshots: [sentinel])
         }
-        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults,
-                                           encryption: .deterministicTest)
+        let db = try Database.openForWrite(
+            at: dbURL, config: .weakDefaults,
+            encryption: .deterministicTest)
         let reader = TeammatePresenceReaderFactory.make(database: db)
         let snapshots = try reader.recentTeammateSnapshots(maxAge: 600, now: Date())
         XCTAssertEqual(snapshots, [sentinel])

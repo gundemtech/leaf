@@ -22,8 +22,8 @@
 //  'Leaf is listening'. Symmetric degradation.
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 private let knownLinearPrefixesForHero: Set<String> = ["LEAF"]
 
@@ -97,11 +97,11 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: LeafSpace.xl) {
-                if case let .connectedScopeOutdated(missing) = scopesReader.state, shouldShowReauthBanner {
+                if case .connectedScopeOutdated(let missing) = scopesReader.state, shouldShowReauthBanner {
                     reauthBanner(missingCount: missing.count)
                 }
 
-                if case let .connectedScopeOutdated(missing) = slackScopes.state, shouldShowSlackReauthBanner {
+                if case .connectedScopeOutdated(let missing) = slackScopes.state, shouldShowSlackReauthBanner {
                     slackReauthBanner(missingCount: missing.count)
                 }
 
@@ -139,7 +139,8 @@ struct HomeView: View {
         LeafBanner(
             tone: .warning,
             title: "GitHub permissions need a refresh",
-            description: "\(missingCount) new event type\(missingCount == 1 ? "" : "s") \(missingCount == 1 ? "is" : "are") blocked until you re-authorize.",
+            description:
+                "\(missingCount) new event type\(missingCount == 1 ? "" : "s") \(missingCount == 1 ? "is" : "are") blocked until you re-authorize.",
             ctaTitle: "Re-authorize",
             onCTA: {
                 Task { await githubOAuth.connect(scopes: GitHubScopesService.requested()) }
@@ -161,7 +162,8 @@ struct HomeView: View {
         LeafBanner(
             tone: .warning,
             title: "Slack permissions need a refresh",
-            description: "\(missingCount) new event type\(missingCount == 1 ? "" : "s") \(missingCount == 1 ? "is" : "are") blocked until you re-authorize.",
+            description:
+                "\(missingCount) new event type\(missingCount == 1 ? "" : "s") \(missingCount == 1 ? "is" : "are") blocked until you re-authorize.",
             ctaTitle: "Re-authorize Slack",
             onCTA: {
                 Task { await slackOAuth.connect() }
@@ -329,7 +331,7 @@ private struct HomeContent: View {
             || snapshot.linearIssuesTouched > 0
             || snapshot.githubEventsCount > 0
             || snapshot.slackMessagesCount > 0
-            || !snapshot.filesTouched.isEmpty   // Track-7 P1 — surface filesTouched
+            || !snapshot.filesTouched.isEmpty  // Track-7 P1 — surface filesTouched
     }
 }
 
@@ -358,8 +360,10 @@ private struct HeroBlock: View {
                 bundleID: session.bundleID,
                 title: Text("Idle")
                     .foregroundStyle(LeafColor.text.secondary),
-                caption: Text("last: \(AppNameResolver.shared.displayName(for: session.bundleID)) · \(relativePast(session.end))")
-                    .foregroundStyle(LeafColor.text.tertiary)
+                caption: Text(
+                    "last: \(AppNameResolver.shared.displayName(for: session.bundleID)) · \(relativePast(session.end))"
+                )
+                .foregroundStyle(LeafColor.text.tertiary)
             )
 
         case .noData:
@@ -385,7 +389,8 @@ private struct HeroBlock: View {
         caption: Text
     ) -> some View {
         if let bundleID,
-           let nsImage = AppIconResolver.shared.icon(for: bundleID, size: heroIconSize) {
+            let nsImage = AppIconResolver.shared.icon(for: bundleID, size: heroIconSize)
+        {
             HStack(alignment: .heroIconAnchor, spacing: LeafSpace.md) {
                 Image(nsImage: nsImage)
                     .resizable()
@@ -430,7 +435,8 @@ private struct HeroBlock: View {
         var parts: [String] = []
 
         if let context = session.contextLabel?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !context.isEmpty {
+            !context.isEmpty
+        {
             if let linearID = LinearIDExtractor.extract(text: context, knownPrefixes: knownLinearPrefixesForHero) {
                 parts.append(linearID)
             } else {
@@ -623,7 +629,8 @@ private struct TodaySection: View {
             fragments.append("\(snapshot.slackHuddleMinutes)m huddle")
         }
         if snapshot.slackReactionsReceived > 0 {
-            fragments.append("\(snapshot.slackReactionsReceived) reaction\(snapshot.slackReactionsReceived == 1 ? "" : "s")")
+            fragments.append(
+                "\(snapshot.slackReactionsReceived) reaction\(snapshot.slackReactionsReceived == 1 ? "" : "s")")
         }
         guard fragments.count > 1 else { return nil }
         return ProviderRow(

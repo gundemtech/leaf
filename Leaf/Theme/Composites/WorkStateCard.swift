@@ -10,8 +10,8 @@
 //  older than 7 days).
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct WorkStateCard: View {
     let headline: String
@@ -23,9 +23,10 @@ struct WorkStateCard: View {
         Button(action: onTap) {
             LeafCard(variant: .raised, padding: .regular) {
                 HStack(alignment: .center, spacing: LeafSpace.md) {
-                    LeafIcon(systemName: "checkmark.bubble.fill",
-                             size: .lg,
-                             tint: LeafColor.accent.primary)
+                    LeafIcon(
+                        systemName: "checkmark.bubble.fill",
+                        size: .lg,
+                        tint: LeafColor.accent.primary)
                     VStack(alignment: .leading, spacing: LeafSpace.xxs) {
                         Text(headline)
                             .font(LeafType.title.medium)
@@ -33,17 +34,20 @@ struct WorkStateCard: View {
                         if let sub = subLineExcerpt, !sub.isEmpty {
                             Text(sub)
                                 .font(LeafType.body.regular)
-                                .foregroundStyle(subLineIsStale
-                                                 ? LeafColor.text.tertiary
-                                                 : LeafColor.text.secondary)
+                                .foregroundStyle(
+                                    subLineIsStale
+                                        ? LeafColor.text.tertiary
+                                        : LeafColor.text.secondary
+                                )
                                 .lineLimit(1)
                                 .truncationMode(.tail)
                         }
                     }
                     Spacer(minLength: LeafSpace.md)
-                    LeafIcon(systemName: "chevron.right",
-                             size: .sm,
-                             tint: LeafColor.text.tertiary)
+                    LeafIcon(
+                        systemName: "chevron.right",
+                        size: .sm,
+                        tint: LeafColor.text.tertiary)
                 }
             }
         }

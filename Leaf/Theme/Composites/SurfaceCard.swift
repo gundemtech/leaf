@@ -9,8 +9,8 @@
 //  Chart, or a SwiftUI-rendered glyph without losing type-erasure.
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct SurfaceCard<Spark: View>: View {
     let surface: HomeSurface
@@ -38,11 +38,13 @@ struct SurfaceCard<Spark: View>: View {
                     }
                     Spacer(minLength: LeafSpace.md)
                     spark()
-                        .frame(width: LeafSpace.xxxl + LeafSpace.xxl,   // 80pt
-                               height: LeafSpace.xxl - LeafSpace.xs)    // 28pt
-                    LeafIcon(systemName: "chevron.right",
-                             size: .sm,
-                             tint: LeafColor.text.tertiary)
+                        .frame(
+                            width: LeafSpace.xxxl + LeafSpace.xxl,  // 80pt
+                            height: LeafSpace.xxl - LeafSpace.xs)  // 28pt
+                    LeafIcon(
+                        systemName: "chevron.right",
+                        size: .sm,
+                        tint: LeafColor.text.tertiary)
                 }
             }
         }
@@ -67,14 +69,15 @@ struct SurfaceCard<Spark: View>: View {
 /// catalog entries to avoid shipping new assets in P1.
 extension LeafIcon {
     init(surface: HomeSurface) {
-        let symbol: String = switch surface {
-        case .claudeCode: "sparkles"
-        case .xcode:      "hammer.fill"
-        case .ides:       "curlybraces.square"
-        case .browsers:   "globe"
-        case .zoom:       "video.fill"
-        case .calendar:   "calendar"
-        }
+        let symbol: String =
+            switch surface {
+            case .claudeCode: "sparkles"
+            case .xcode: "hammer.fill"
+            case .ides: "curlybraces.square"
+            case .browsers: "globe"
+            case .zoom: "video.fill"
+            case .calendar: "calendar"
+            }
         self.init(systemName: symbol, size: .lg, tint: LeafColor.accent.primary)
     }
 }

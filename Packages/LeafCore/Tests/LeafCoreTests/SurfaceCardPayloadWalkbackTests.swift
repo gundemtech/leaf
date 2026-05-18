@@ -11,6 +11,7 @@
 //
 
 import XCTest
+
 @testable import LeafCore
 
 final class SurfaceCardPayloadWalkbackTests: XCTestCase {
@@ -32,7 +33,7 @@ final class SurfaceCardPayloadWalkbackTests: XCTestCase {
         "content",
         "thinking",
         "signature",
-        "message"
+        "message",
     ]
 
     // MARK: - Payloads
@@ -122,11 +123,13 @@ final class SurfaceCardPayloadWalkbackTests: XCTestCase {
             schemesTouchedCount: 0, dailyBuilds: []
         )
         let labels = Set(propertyLabels(of: payload))
-        XCTAssertEqual(labels, [
-            "buildCount", "testRunCount",
-            "buildSuccessCount", "buildFailureCount",
-            "schemesTouchedCount", "dailyBuilds"
-        ])
+        XCTAssertEqual(
+            labels,
+            [
+                "buildCount", "testRunCount",
+                "buildSuccessCount", "buildFailureCount",
+                "schemesTouchedCount", "dailyBuilds",
+            ])
     }
 
     // MARK: - Helpers

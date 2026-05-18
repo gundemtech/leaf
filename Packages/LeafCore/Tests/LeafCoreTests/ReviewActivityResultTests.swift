@@ -1,5 +1,6 @@
 // Packages/LeafCore/Tests/LeafCoreTests/ReviewActivityResultTests.swift
 import XCTest
+
 @testable import LeafCore
 
 final class ReviewActivityResultTests: XCTestCase {
@@ -13,7 +14,7 @@ final class ReviewActivityResultTests: XCTestCase {
             "review_comments_count": 0,
             "review_thread_resolved_count": 0,
             "by_repo": [Any](),
-            "linked_prs": [Any]()
+            "linked_prs": [Any](),
         ]
         XCTAssertNil(ReviewActivityResult.decode(dict))
     }
@@ -27,7 +28,7 @@ final class ReviewActivityResultTests: XCTestCase {
             "review_comments_count": 5,
             "review_thread_resolved_count": 2,
             "by_repo": [Any](),
-            "linked_prs": [Any]()
+            "linked_prs": [Any](),
         ]
         let r = ReviewActivityResult.decode(dict)
         XCTAssertNotNil(r)
@@ -48,9 +49,9 @@ final class ReviewActivityResultTests: XCTestCase {
             "review_thread_resolved_count": 0,
             "by_repo": [
                 ["repo": "gundemtech/leaf", "reviews": 2, "comments": 1, "threads": 0],
-                ["repo": "gundemtech/leaf-docs", "reviews": 1, "comments": 0, "threads": 0]
+                ["repo": "gundemtech/leaf-docs", "reviews": 1, "comments": 0, "threads": 0],
             ] as [[String: Any]],
-            "linked_prs": [Any]()
+            "linked_prs": [Any](),
         ]
         let r = ReviewActivityResult.decode(dict)
         XCTAssertEqual(r?.byRepo.count, 2)
@@ -70,8 +71,8 @@ final class ReviewActivityResultTests: XCTestCase {
             "by_repo": [Any](),
             "linked_prs": [
                 ["repo": "gundemtech/leaf", "pr_number": 142, "linked_linear_id": "LEAF-99"],
-                ["repo": "gundemtech/leaf", "pr_number": 143, "linked_linear_id": NSNull()]
-            ] as [[String: Any]]
+                ["repo": "gundemtech/leaf", "pr_number": 143, "linked_linear_id": NSNull()],
+            ] as [[String: Any]],
         ]
         let r = ReviewActivityResult.decode(dict)
         XCTAssertEqual(r?.linkedPRs.count, 2)
@@ -90,9 +91,9 @@ final class ReviewActivityResultTests: XCTestCase {
             "review_thread_resolved_count": 0,
             "by_repo": [
                 ["repo": "ok-repo", "reviews": 1, "comments": 1, "threads": 1],
-                ["repo": "missing-numbers"]  // malformed — should skip
+                ["repo": "missing-numbers"],  // malformed — should skip
             ] as [[String: Any]],
-            "linked_prs": [Any]()
+            "linked_prs": [Any](),
         ]
         let r = ReviewActivityResult.decode(dict)
         XCTAssertEqual(r?.byRepo.count, 1, "malformed entry should be skipped")
@@ -109,8 +110,8 @@ final class ReviewActivityResultTests: XCTestCase {
             "by_repo": [Any](),
             "linked_prs": [
                 ["repo": "ok-repo", "pr_number": 1],
-                ["repo": "missing-pr"]
-            ] as [[String: Any]]
+                ["repo": "missing-pr"],
+            ] as [[String: Any]],
         ]
         let r = ReviewActivityResult.decode(dict)
         XCTAssertEqual(r?.linkedPRs.count, 1)
@@ -124,7 +125,7 @@ final class ReviewActivityResultTests: XCTestCase {
             "review_comments_count": NSNumber(value: 3),
             "review_thread_resolved_count": NSNumber(value: 1),
             "by_repo": [Any](),
-            "linked_prs": [Any]()
+            "linked_prs": [Any](),
         ]
         let r = ReviewActivityResult.decode(dict)
         XCTAssertEqual(r?.reviewsSubmittedCount, 7)
@@ -140,7 +141,7 @@ final class ReviewActivityResultTests: XCTestCase {
             "review_comments_count": 0,
             "review_thread_resolved_count": 0,
             "by_repo": [Any](),
-            "linked_prs": [Any]()
+            "linked_prs": [Any](),
         ]
         let a = ReviewActivityResult.decode(dict)
         let b = ReviewActivityResult.decode(dict)
@@ -168,7 +169,7 @@ final class ReviewActivityResultTests: XCTestCase {
             "review_comments_count": 0,
             "review_thread_resolved_count": 0,
             "by_repo": [Any](),
-            "linked_prs": [Any]()
+            "linked_prs": [Any](),
         ]
         XCTAssertNotNil(ReviewActivityResult.decode(dict))
     }

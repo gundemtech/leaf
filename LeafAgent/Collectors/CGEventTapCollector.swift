@@ -4,6 +4,7 @@ import Foundation
 import IOKit.hid
 import LeafCore
 import os
+
 final class CGEventTapCollector: @unchecked Sendable {
     private struct CounterState {
         var keystrokes: UInt32 = 0

@@ -9,8 +9,8 @@
 //  - EventKindCountEntry.eventKind (not .kind) — id: \.eventKind, entry.eventKind
 //  - LatencyStats.medianSeconds / .avgSeconds / .maxSeconds (Int) — Double() cast
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct GitHubDetailScreen: View {
     @State private var vm: GitHubDetailViewModel
@@ -86,7 +86,8 @@ struct GitHubDetailScreen: View {
             LeafBanner(
                 tone: .warning,
                 title: "GitHub permissions need a refresh",
-                description: "\(missing.count) new event type\(missing.count == 1 ? "" : "s") \(missing.count == 1 ? "is" : "are") blocked until you re-authorize.",
+                description:
+                    "\(missing.count) new event type\(missing.count == 1 ? "" : "s") \(missing.count == 1 ? "is" : "are") blocked until you re-authorize.",
                 ctaTitle: "Re-authorize",
                 onCTA: {
                     Task { await githubOAuth.connect(scopes: GitHubScopesService.requested()) }
@@ -117,7 +118,8 @@ struct GitHubDetailScreen: View {
             if let stats = breakdown.prCycleStats {
                 prCycleSection(stats: stats)
             }
-            if let r = reviewActivity, r.reviewsSubmittedCount + r.reviewCommentsCount + r.reviewThreadResolvedCount > 0 {
+            if let r = reviewActivity, r.reviewsSubmittedCount + r.reviewCommentsCount + r.reviewThreadResolvedCount > 0
+            {
                 reviewActivitySection(result: r)
             }
             if let stats = breakdown.reviewDelayStats {

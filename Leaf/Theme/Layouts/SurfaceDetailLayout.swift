@@ -10,8 +10,8 @@
 //  and re-queries Derived Insights when it changes.
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 // DetailHeadline is now public in LeafCore (Track 7 P4 promotion).
 // Import LeafCore above to access it.
@@ -44,7 +44,7 @@ struct SurfaceDetailLayout<Aggregates: View, Chart: View>: View {
             label: { tab in
                 switch tab {
                 case .today: "Today"
-                case .week:  "Week"
+                case .week: "Week"
                 case .month: "Month"
                 }
             }
@@ -67,7 +67,7 @@ struct SurfaceDetailLayout<Aggregates: View, Chart: View>: View {
     private var chartBlock: some View {
         LeafCard(padding: .regular) {
             chart()
-                .frame(height: LeafSpace.xxxxl + LeafSpace.xxxl)   // 112pt ≈ spec §5.1 ~120pt
+                .frame(height: LeafSpace.xxxxl + LeafSpace.xxxl)  // 112pt ≈ spec §5.1 ~120pt
         }
     }
 

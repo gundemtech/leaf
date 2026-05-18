@@ -1,5 +1,6 @@
 // Packages/LeafCore/Tests/LeafCoreTests/DetailRangeTests.swift
 import XCTest
+
 @testable import LeafCore
 
 final class DetailRangeTests: XCTestCase {

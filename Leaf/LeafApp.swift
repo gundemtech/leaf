@@ -3,9 +3,10 @@
 //  Leaf
 //
 
+import LeafCore
 import SwiftUI
 import os
-import LeafCore
+
 #if LEAF_PROD
 import LeafCorePrivate
 #endif
@@ -74,7 +75,8 @@ struct LeafApp: App {
             FileKeyStore.cleanupLegacyKeychainBestEffort()
         } catch {
             // Не падаем — popover/Settings покажет error через InsightsReader state machine.
-            leafAppLogger.error("FileKeyStore.fetchOrCreate failed at init: \(String(describing: error), privacy: .public)")
+            leafAppLogger.error(
+                "FileKeyStore.fetchOrCreate failed at init: \(String(describing: error), privacy: .public)")
         }
         #endif
 
@@ -131,8 +133,9 @@ struct LeafApp: App {
                 .environment(routeCoordinator)
                 .environment(browserAllowList)
                 .onAppear {
-                    inviteURLHandler.wire(acceptReader: inviteAcceptReader,
-                                          outboxReader: inviteOutboxReader)
+                    inviteURLHandler.wire(
+                        acceptReader: inviteAcceptReader,
+                        outboxReader: inviteOutboxReader)
                 }
                 .onOpenURL { url in
                     inviteURLHandler.handle(url)

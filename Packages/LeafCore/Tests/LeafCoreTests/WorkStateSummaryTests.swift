@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class WorkStateSummaryTests: XCTestCase {
@@ -24,10 +25,12 @@ final class WorkStateSummaryTests: XCTestCase {
     }
 
     func testHashable() {
-        let a = WorkStateSummary(openQuestionsCount: 1, openBlockersCount: 0,
-                                 lastDecisionExcerpt: nil, lastDecisionAgeMs: nil)
-        let b = WorkStateSummary(openQuestionsCount: 1, openBlockersCount: 0,
-                                 lastDecisionExcerpt: nil, lastDecisionAgeMs: nil)
+        let a = WorkStateSummary(
+            openQuestionsCount: 1, openBlockersCount: 0,
+            lastDecisionExcerpt: nil, lastDecisionAgeMs: nil)
+        let b = WorkStateSummary(
+            openQuestionsCount: 1, openBlockersCount: 0,
+            lastDecisionExcerpt: nil, lastDecisionAgeMs: nil)
         XCTAssertEqual(Set([a, b]).count, 1)
     }
 

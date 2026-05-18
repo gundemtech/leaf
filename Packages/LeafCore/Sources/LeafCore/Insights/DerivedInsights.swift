@@ -194,57 +194,61 @@ public protocol DerivedInsights: Sendable {
 
 /// Default implementations — конформер'ы могут override'ить, но без явного
 /// override получают `.empty` (opt-in feature, no-data ≠ error).
-public extension DerivedInsights {
-    func slackActivity(period: DateInterval) throws -> SlackActivityBreakdown { .empty }
+extension DerivedInsights {
+    public func slackActivity(period: DateInterval) throws -> SlackActivityBreakdown { .empty }
 
     /// Phase 4.6.C.2 — default nil чтобы StubInsights / iOS-future free от обновления.
-    func longestUninterruptedWindow(period: DateInterval) throws -> UninterruptedWindow? { nil }
+    public func longestUninterruptedWindow(period: DateInterval) throws -> UninterruptedWindow? { nil }
 
     /// Phase 4.6.B — default `.empty` для StubInsights / iOS-future.
-    func linearTransitions(period: DateInterval) throws -> LinearTransitionBreakdown { .empty }
+    public func linearTransitions(period: DateInterval) throws -> LinearTransitionBreakdown { .empty }
 
     /// Phase 4.6.B — default `nil` для StubInsights / iOS-future.
-    func linearCompletionRate(period: DateInterval) throws -> Double? { nil }
+    public func linearCompletionRate(period: DateInterval) throws -> Double? { nil }
 
     /// Phase 4.10.A — default empty feed для StubInsights / iOS-future / любого
     /// конформера, который ещё не имплементил raw-events SELECT.
-    func recentActivity(period: DateInterval, limit: Int) throws -> [ActivityFeedEntry] { [] }
+    public func recentActivity(period: DateInterval, limit: Int) throws -> [ActivityFeedEntry] { [] }
 
     /// Phase 4.10.B — default empty list для StubInsights / iOS-future.
-    func recentSessions(period: DateInterval, limit: Int) throws -> [ActivitySession] { [] }
+    public func recentSessions(period: DateInterval, limit: Int) throws -> [ActivitySession] { [] }
 
     /// Track 7 P2 — default `.empty` so StubInsights / iOS-future stay no-op.
-    func xcodeActivityBreakdown(period: DateInterval) throws -> XcodeActivityBreakdown { .empty }
-    func idesActivityBreakdown(period: DateInterval) throws -> IDEsActivityBreakdown { .empty }
-    func browsersActivityBreakdown(period: DateInterval) throws -> BrowsersActivityBreakdown { .empty }
-    func zoomActivityBreakdown(period: DateInterval) throws -> ZoomActivityBreakdown { .empty }
-    func googleCalendarActivityBreakdown(period: DateInterval) throws -> GoogleCalendarActivityBreakdown { .empty }
+    public func xcodeActivityBreakdown(period: DateInterval) throws -> XcodeActivityBreakdown { .empty }
+    public func idesActivityBreakdown(period: DateInterval) throws -> IDEsActivityBreakdown { .empty }
+    public func browsersActivityBreakdown(period: DateInterval) throws -> BrowsersActivityBreakdown { .empty }
+    public func zoomActivityBreakdown(period: DateInterval) throws -> ZoomActivityBreakdown { .empty }
+    public func googleCalendarActivityBreakdown(period: DateInterval) throws -> GoogleCalendarActivityBreakdown {
+        .empty
+    }
 
     /// Phase Track-7 P3 — default `[]` for stubs / iOS-future.
-    func recentDecisions(period: DateInterval, limit: Int) throws -> [Decision] { [] }
+    public func recentDecisions(period: DateInterval, limit: Int) throws -> [Decision] { [] }
 
     /// Phase Track-7 P3 — default `[]` for stubs / iOS-future.
-    func openQuestions(period: DateInterval) throws -> [OpenQuestion] { [] }
+    public func openQuestions(period: DateInterval) throws -> [OpenQuestion] { [] }
 
     /// Phase Track-7 P3 — default `[]` for stubs / iOS-future.
-    func openBlockers() throws -> [Blocker] { [] }
+    public func openBlockers() throws -> [Blocker] { [] }
 
     /// Phase Track-7 P3 — default `[]` for stubs / iOS-future.
-    func recentWhereStopped(limit: Int) throws -> [WhereStoppedSnapshot] { [] }
+    public func recentWhereStopped(limit: Int) throws -> [WhereStoppedSnapshot] { [] }
 
     // MARK: - Track 8 P1 defaults
 
-    func currentTaskIdentity() throws -> TaskIdentity? { nil }
+    public func currentTaskIdentity() throws -> TaskIdentity? { nil }
 
-    func sameTaskTeammates(rule: MatchRule) throws -> [TeammateMatch] { [] }
+    public func sameTaskTeammates(rule: MatchRule) throws -> [TeammateMatch] { [] }
 
-    func inboxItems(filter: InboxFilter, query: String?) throws -> [InboxItem] { [] }
+    public func inboxItems(filter: InboxFilter, query: String?) throws -> [InboxItem] { [] }
 
-    func todayMetrics(now: Date) throws -> TodayMetrics { .empty }
+    public func todayMetrics(now: Date) throws -> TodayMetrics { .empty }
 
-    func youNowState(now: Date) throws -> YouNowState {
-        .away(YouNowAway(reason: .idle, lastApp: nil, lastContextLabel: nil,
-                         lastLinearID: nil, idleSec: 0))
+    public func youNowState(now: Date) throws -> YouNowState {
+        .away(
+            YouNowAway(
+                reason: .idle, lastApp: nil, lastContextLabel: nil,
+                lastLinearID: nil, idleSec: 0))
     }
 }
 
@@ -264,9 +268,15 @@ public struct StubInsights: DerivedInsights {
     public func linearActivity(period: DateInterval) throws -> LinearActivityBreakdown { .empty }
     public func githubActivity(period: DateInterval) throws -> GitHubActivityBreakdown { .empty }
     public func slackActivity(period: DateInterval) throws -> SlackActivityBreakdown { .empty }
-    public func teamPresenceOverlap(team: [String], period: DateInterval) throws -> TimeInterval { throw LeafError.notImplemented }
-    public func teamFocusAlignment(team: [String], period: DateInterval) throws -> Double { throw LeafError.notImplemented }
-    public func teamTimeline(team: [String], period: DateInterval) throws -> [AppTimeEntry] { throw LeafError.notImplemented }
+    public func teamPresenceOverlap(team: [String], period: DateInterval) throws -> TimeInterval {
+        throw LeafError.notImplemented
+    }
+    public func teamFocusAlignment(team: [String], period: DateInterval) throws -> Double {
+        throw LeafError.notImplemented
+    }
+    public func teamTimeline(team: [String], period: DateInterval) throws -> [AppTimeEntry] {
+        throw LeafError.notImplemented
+    }
     public func weekOverWeekDelta() throws -> Double? { nil }
     public func activeDaysInRow() throws -> Int { 0 }
     public func lastActivity(bundleID: String?) throws -> ActivitySnapshot? { nil }
@@ -274,5 +284,7 @@ public struct StubInsights: DerivedInsights {
     public func idesActivityBreakdown(period: DateInterval) throws -> IDEsActivityBreakdown { .empty }
     public func browsersActivityBreakdown(period: DateInterval) throws -> BrowsersActivityBreakdown { .empty }
     public func zoomActivityBreakdown(period: DateInterval) throws -> ZoomActivityBreakdown { .empty }
-    public func googleCalendarActivityBreakdown(period: DateInterval) throws -> GoogleCalendarActivityBreakdown { .empty }
+    public func googleCalendarActivityBreakdown(period: DateInterval) throws -> GoogleCalendarActivityBreakdown {
+        .empty
+    }
 }

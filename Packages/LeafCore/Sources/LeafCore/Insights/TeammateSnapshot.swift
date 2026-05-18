@@ -11,8 +11,10 @@ public struct TeammateSnapshot: Equatable, Hashable, Sendable {
     public let currentApp: String?
     public let lastActivityAtMs: Int64
 
-    public init(memberID: String, displayName: String, linearID: String?, branch: String?,
-                repo: String?, currentApp: String?, lastActivityAtMs: Int64) {
+    public init(
+        memberID: String, displayName: String, linearID: String?, branch: String?,
+        repo: String?, currentApp: String?, lastActivityAtMs: Int64
+    ) {
         self.memberID = memberID
         self.displayName = displayName
         self.linearID = linearID

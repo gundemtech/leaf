@@ -1,5 +1,6 @@
 // LinearHeadlineFormatterTests.swift
 import XCTest
+
 @testable import LeafCore
 
 final class LinearHeadlineFormatterTests: XCTestCase {

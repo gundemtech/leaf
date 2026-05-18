@@ -11,9 +11,10 @@
 //  the system browser (or Slack relay loopback). No sheet redesign in D3.
 //
 
-import SwiftUI
 import Combine
 import LeafCore
+import SwiftUI
+
 #if LEAF_PROD
 import LeafCorePrivate
 #endif
@@ -76,7 +77,7 @@ struct ConnectionsView: View {
         "read:org": "Required to detect Organization context for audit log and project membership.",
         "read:project": "Required to track ProjectsV2 board activity (cards, iterations, fields).",
         "security_events": "Recommended: surfaces secret-scanning, code-scanning, and Dependabot alerts.",
-        "read:audit_log": "Recommended: tracks admin actions on your GitHub Organization."
+        "read:audit_log": "Recommended: tracks admin actions on your GitHub Organization.",
     ]
 
     /// Per-scope explainer copy для Slack — D3 Task 20. Только missing-core
@@ -91,7 +92,7 @@ struct ConnectionsView: View {
         "im:history": "Required to read DM history you participated in.",
         "mpim:history": "Required to read group-DM history you participated in.",
         "dnd:read": "Required to capture Do Not Disturb intervals as Focus context.",
-        "files:read": "Required to track files you uploaded for activity attribution."
+        "files:read": "Required to track files you uploaded for activity attribution.",
     ]
 
     var body: some View {
@@ -114,13 +115,15 @@ struct ConnectionsView: View {
         .onReceive(countdownTimer) { now in
             nowTick = now
         }
-        .onReceive(DistributedNotificationCenter.default().publisher(
-            for: NSNotification.Name(GitHubOAuthEndpoints.integrationChangedNotificationName))
+        .onReceive(
+            DistributedNotificationCenter.default().publisher(
+                for: NSNotification.Name(GitHubOAuthEndpoints.integrationChangedNotificationName))
         ) { _ in
             refreshGrantedGitHubScopes()
         }
-        .onReceive(DistributedNotificationCenter.default().publisher(
-            for: NSNotification.Name(SlackOAuthEndpoints.integrationChangedNotificationName))
+        .onReceive(
+            DistributedNotificationCenter.default().publisher(
+                for: NSNotification.Name(SlackOAuthEndpoints.integrationChangedNotificationName))
         ) { _ in
             refreshGrantedSlackScopes()
         }
@@ -136,9 +139,11 @@ struct ConnectionsView: View {
             Text("Connections")
                 .font(LeafType.title.large)
                 .foregroundStyle(LeafColor.text.primary)
-            Text("Linear, GitHub, Slack, Google Calendar — sources of truth Leaf observes on your behalf. Data stays on your device.")
-                .font(LeafType.body.regular)
-                .foregroundStyle(LeafColor.text.secondary)
+            Text(
+                "Linear, GitHub, Slack, Google Calendar — sources of truth Leaf observes on your behalf. Data stays on your device."
+            )
+            .font(LeafType.body.regular)
+            .foregroundStyle(LeafColor.text.secondary)
         }
     }
 
@@ -150,7 +155,8 @@ struct ConnectionsView: View {
                 logoAsset: "leaf-brand-linear",
                 logoTileColor: .black,
                 title: "Linear",
-                description: "Read-only access — issue activity (assigned, updated, completed) into your local timeline."
+                description:
+                    "Read-only access — issue activity (assigned, updated, completed) into your local timeline."
             ) {
                 LeafCard(variant: .raised, padding: .regular) {
                     linearContent
@@ -161,7 +167,8 @@ struct ConnectionsView: View {
                 logoAsset: "leaf-brand-github",
                 logoTileColor: .white,
                 title: "GitHub",
-                description: "Read-only access — self-authored events (commits, PRs, issues, reviews) into your local timeline."
+                description:
+                    "Read-only access — self-authored events (commits, PRs, issues, reviews) into your local timeline."
             ) {
                 VStack(alignment: .leading, spacing: LeafSpace.lg) {
                     LeafCard(variant: .raised, padding: .regular) {
@@ -177,7 +184,8 @@ struct ConnectionsView: View {
                 logoAsset: "leaf-brand-slack",
                 logoTileColor: .white,
                 title: "Slack",
-                description: "Read-only access — self-authored message counts per channel and huddle minutes into your local timeline."
+                description:
+                    "Read-only access — self-authored message counts per channel and huddle minutes into your local timeline."
             ) {
                 VStack(alignment: .leading, spacing: LeafSpace.lg) {
                     LeafCard(variant: .raised, padding: .regular) {
@@ -198,7 +206,8 @@ struct ConnectionsView: View {
                 logoTileColor: .white,
                 symbolTint: Color("BrandGoogleBlue"),
                 title: "Google Calendar",
-                description: "Read-only access — meeting metadata (titles, times, attendee counts) into your local timeline. Attendee identities and event bodies stay on Google."
+                description:
+                    "Read-only access — meeting metadata (titles, times, attendee counts) into your local timeline. Attendee identities and event bodies stay on Google."
             ) {
                 LeafCard(variant: .raised, padding: .regular) {
                     googleCalendarContent
@@ -247,8 +256,8 @@ struct ConnectionsView: View {
     /// `tileColor: nil` → logo at full 28pt without tile.
     @ViewBuilder
     private func providerLogo(asset: String, tileColor: Color?) -> some View {
-        let outer: CGFloat = 28                   // raw — between LeafIconSize.lg (24) and .xl (32)
-        let inner: CGFloat = 20                   // logo glyph inside tile
+        let outer: CGFloat = 28  // raw — between LeafIconSize.lg (24) and .xl (32)
+        let inner: CGFloat = 20  // logo glyph inside tile
         if let tileColor {
             ZStack {
                 RoundedRectangle(cornerRadius: LeafRadius.sm, style: .continuous)
@@ -338,7 +347,8 @@ struct ConnectionsView: View {
         case .notConnected:
             disconnectedBlock(
                 title: "Not connected",
-                description: "Sign in with Google to share meeting metadata (titles, times, attendee counts) into your local timeline.",
+                description:
+                    "Sign in with Google to share meeting metadata (titles, times, attendee counts) into your local timeline.",
                 ctaTitle: "Connect Google Calendar",
                 action: { Task { await googleCalendarOAuth.connect() } }
             )
@@ -352,7 +362,8 @@ struct ConnectionsView: View {
             )
         case .reconnectNeeded:
             reconnectBlock(
-                description: "Your Google session expired and Leaf can't refresh it automatically. Sign in again to resume polling.",
+                description:
+                    "Your Google session expired and Leaf can't refresh it automatically. Sign in again to resume polling.",
                 ctaTitle: "Reconnect Google Calendar",
                 action: { Task { await googleCalendarOAuth.connect() } }
             )
@@ -396,7 +407,8 @@ struct ConnectionsView: View {
             )
         case .reconnectNeeded:
             reconnectBlock(
-                description: "Your Linear session expired and Leaf can't refresh it automatically. Sign in again to resume polling.",
+                description:
+                    "Your Linear session expired and Leaf can't refresh it automatically. Sign in again to resume polling.",
                 ctaTitle: "Reconnect Linear",
                 action: { Task { await linearOAuth.connect() } }
             )
@@ -456,7 +468,8 @@ struct ConnectionsView: View {
             )
         case .reconnectNeeded:
             reconnectBlock(
-                description: "Your GitHub session expired and Leaf can't refresh it automatically. Sign in again to resume polling.",
+                description:
+                    "Your GitHub session expired and Leaf can't refresh it automatically. Sign in again to resume polling.",
                 ctaTitle: "Reconnect GitHub",
                 action: { Task { await githubOAuth.connect() } }
             )
@@ -523,7 +536,8 @@ struct ConnectionsView: View {
         case .notConnected:
             disconnectedBlock(
                 title: "Not connected",
-                description: "Sign in with Slack to capture self-authored message counts and huddle minutes into your local timeline.",
+                description:
+                    "Sign in with Slack to capture self-authored message counts and huddle minutes into your local timeline.",
                 ctaTitle: "Connect Slack",
                 action: { Task { await slackOAuth.connect() } }
             )
@@ -546,7 +560,8 @@ struct ConnectionsView: View {
             )
         case .reconnectNeeded:
             reconnectBlock(
-                description: "Your Slack session expired and Leaf can't refresh it automatically. Sign in again to resume polling.",
+                description:
+                    "Your Slack session expired and Leaf can't refresh it automatically. Sign in again to resume polling.",
                 ctaTitle: "Reconnect Slack",
                 action: { Task { await slackOAuth.connect() } }
             )
@@ -603,7 +618,7 @@ struct ConnectionsView: View {
     ) -> some View {
         HStack(alignment: .top, spacing: LeafSpace.md) {
             LeafDot(tone: .success, size: .md)
-                .padding(.top, LeafSpace.xs)   // align with title baseline (xs = 4pt nudge)
+                .padding(.top, LeafSpace.xs)  // align with title baseline (xs = 4pt nudge)
             VStack(alignment: .leading, spacing: LeafSpace.xxs) {
                 Text(title)
                     .font(LeafType.title.small)
@@ -863,7 +878,8 @@ struct ConnectionsView: View {
     /// header form is space-separated.
     nonisolated private static func parseGitHubScopeString(_ raw: String?) -> Set<String> {
         guard let raw else { return [] }
-        let parts = raw
+        let parts =
+            raw
             .split(whereSeparator: { $0.isWhitespace || $0 == "," })
             .map { String($0) }
             .filter { !$0.isEmpty }
@@ -898,8 +914,10 @@ struct ConnectionsView: View {
     }
 
     private var allRequestedSlackScopes: [String] {
-        Array(SlackScopesService.requiredCore
-            .union(SlackScopesService.requiredOptional)).sorted()
+        Array(
+            SlackScopesService.requiredCore
+                .union(SlackScopesService.requiredOptional)
+        ).sorted()
     }
 
     @ViewBuilder

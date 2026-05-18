@@ -5,8 +5,8 @@
 //  (cognitive flow: enable agent → tell it where to look → meta).
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct WindowSettingsView: View {
     @Environment(LaunchAgentService.self) private var launchAgent

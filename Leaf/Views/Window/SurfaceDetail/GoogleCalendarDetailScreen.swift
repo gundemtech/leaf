@@ -8,8 +8,8 @@
 //  screen file.
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct GoogleCalendarDetailScreen: View {
     @State private var vm: GoogleCalendarDetailViewModel
@@ -24,7 +24,8 @@ struct GoogleCalendarDetailScreen: View {
             LeafEmptyState(
                 icon: LeafIcons.brand.leaf,
                 title: "Detail view coming after GCP gate clears",
-                description: "Calendar capture requires Google Cloud Platform project verification (in progress). Detail aggregates land in a follow-up phase."
+                description:
+                    "Calendar capture requires Google Cloud Platform project verification (in progress). Detail aggregates land in a follow-up phase."
             )
             Spacer()
         }

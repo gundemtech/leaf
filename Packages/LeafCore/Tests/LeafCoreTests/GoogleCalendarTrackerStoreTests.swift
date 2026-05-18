@@ -73,7 +73,7 @@ final class GoogleCalendarTrackerStoreTests: XCTestCase {
                     eventType: "focusTime", startMs: 1_000, endMs: 2_000,
                     workingLocationType: nil, autoDeclineMode: nil, chatStatus: nil, upsertedAtMs: 500
                 ),
- in: rawDB
+                in: rawDB
             )
             try GoogleCalendarTrackerStore.markStartedEmitted(eventID: "evt-1", atMs: 1_100, in: rawDB)
             // Server pushes end_ms extension; UPSERT must not clobber emitted flag.
@@ -83,7 +83,7 @@ final class GoogleCalendarTrackerStoreTests: XCTestCase {
                     eventType: "focusTime", startMs: 1_000, endMs: 3_000,
                     workingLocationType: nil, autoDeclineMode: nil, chatStatus: nil, upsertedAtMs: 1_200
                 ),
- in: rawDB
+                in: rawDB
             )
         }
         try db.readSQL { rawDB in
@@ -113,7 +113,7 @@ final class GoogleCalendarTrackerStoreTests: XCTestCase {
                     eventType: "focusTime", startMs: 100, endMs: 1_000,
                     workingLocationType: nil, autoDeclineMode: nil, chatStatus: nil, upsertedAtMs: 10
                 ),
- in: rawDB
+                in: rawDB
             )
             // Row B: start in the future — must NOT appear.
             try GoogleCalendarTrackerStore.upsert(
@@ -122,7 +122,7 @@ final class GoogleCalendarTrackerStoreTests: XCTestCase {
                     eventType: "focusTime", startMs: 5_000, endMs: 6_000,
                     workingLocationType: nil, autoDeclineMode: nil, chatStatus: nil, upsertedAtMs: 10
                 ),
- in: rawDB
+                in: rawDB
             )
             // Row C: already emitted — must NOT appear.
             try GoogleCalendarTrackerStore.upsert(
@@ -131,7 +131,7 @@ final class GoogleCalendarTrackerStoreTests: XCTestCase {
                     eventType: "focusTime", startMs: 200, endMs: 1_000,
                     workingLocationType: nil, autoDeclineMode: nil, chatStatus: nil, upsertedAtMs: 10
                 ),
- in: rawDB
+                in: rawDB
             )
             try GoogleCalendarTrackerStore.markStartedEmitted(eventID: "C", atMs: 250, in: rawDB)
         }
@@ -152,7 +152,7 @@ final class GoogleCalendarTrackerStoreTests: XCTestCase {
                     eventType: "focusTime", startMs: 100, endMs: 1_000,
                     workingLocationType: nil, autoDeclineMode: nil, chatStatus: nil, upsertedAtMs: 10
                 ),
- in: rawDB
+                in: rawDB
             )
             try GoogleCalendarTrackerStore.markStartedEmitted(eventID: "evt", atMs: 150, in: rawDB)
         }
@@ -180,7 +180,7 @@ final class GoogleCalendarTrackerStoreTests: XCTestCase {
                     eventType: "focusTime", startMs: 100, endMs: 200,
                     workingLocationType: nil, autoDeclineMode: nil, chatStatus: nil, upsertedAtMs: 10
                 ),
- in: rawDB
+                in: rawDB
             )
             try GoogleCalendarTrackerStore.markStartedEmitted(eventID: "A", atMs: 110, in: rawDB)
             // Row B: ended-due BUT not yet started_emitted — must NOT appear (we never emitted _started, so no _ended either).
@@ -190,7 +190,7 @@ final class GoogleCalendarTrackerStoreTests: XCTestCase {
                     eventType: "focusTime", startMs: 100, endMs: 200,
                     workingLocationType: nil, autoDeclineMode: nil, chatStatus: nil, upsertedAtMs: 10
                 ),
- in: rawDB
+                in: rawDB
             )
             // Row C: started_emitted, end in future — must NOT appear.
             try GoogleCalendarTrackerStore.upsert(
@@ -199,7 +199,7 @@ final class GoogleCalendarTrackerStoreTests: XCTestCase {
                     eventType: "focusTime", startMs: 100, endMs: 5_000,
                     workingLocationType: nil, autoDeclineMode: nil, chatStatus: nil, upsertedAtMs: 10
                 ),
- in: rawDB
+                in: rawDB
             )
             try GoogleCalendarTrackerStore.markStartedEmitted(eventID: "C", atMs: 110, in: rawDB)
             // Row D: started_emitted + ended_emitted already — must NOT appear.
@@ -209,7 +209,7 @@ final class GoogleCalendarTrackerStoreTests: XCTestCase {
                     eventType: "focusTime", startMs: 100, endMs: 200,
                     workingLocationType: nil, autoDeclineMode: nil, chatStatus: nil, upsertedAtMs: 10
                 ),
- in: rawDB
+                in: rawDB
             )
             try GoogleCalendarTrackerStore.markStartedEmitted(eventID: "D", atMs: 110, in: rawDB)
             try GoogleCalendarTrackerStore.markEndedEmitted(eventID: "D", atMs: 210, in: rawDB)
@@ -232,7 +232,7 @@ final class GoogleCalendarTrackerStoreTests: XCTestCase {
                     eventType: "workingLocation", startMs: 100, endMs: 200,
                     workingLocationType: "homeOffice", autoDeclineMode: nil, chatStatus: nil, upsertedAtMs: 10
                 ),
- in: rawDB
+                in: rawDB
             )
             try GoogleCalendarTrackerStore.markStartedEmitted(eventID: "wl", atMs: 110, in: rawDB)
             // focusTime control row that DOES need _ended.
@@ -242,7 +242,7 @@ final class GoogleCalendarTrackerStoreTests: XCTestCase {
                     eventType: "focusTime", startMs: 100, endMs: 200,
                     workingLocationType: nil, autoDeclineMode: nil, chatStatus: nil, upsertedAtMs: 10
                 ),
- in: rawDB
+                in: rawDB
             )
             try GoogleCalendarTrackerStore.markStartedEmitted(eventID: "ft", atMs: 110, in: rawDB)
         }
@@ -265,7 +265,7 @@ final class GoogleCalendarTrackerStoreTests: XCTestCase {
                     eventType: "focusTime", startMs: 100, endMs: 200,
                     workingLocationType: nil, autoDeclineMode: nil, chatStatus: nil, upsertedAtMs: 10
                 ),
- in: rawDB
+                in: rawDB
             )
             try GoogleCalendarTrackerStore.upsert(
                 GoogleCalendarTrackerStore.UpsertParams(
@@ -273,7 +273,7 @@ final class GoogleCalendarTrackerStoreTests: XCTestCase {
                     eventType: "outOfOffice", startMs: 100, endMs: 200,
                     workingLocationType: nil, autoDeclineMode: nil, chatStatus: nil, upsertedAtMs: 10
                 ),
- in: rawDB
+                in: rawDB
             )
             try GoogleCalendarTrackerStore.upsert(
                 GoogleCalendarTrackerStore.UpsertParams(
@@ -281,7 +281,7 @@ final class GoogleCalendarTrackerStoreTests: XCTestCase {
                     eventType: "focusTime", startMs: 100, endMs: 200,
                     workingLocationType: nil, autoDeclineMode: nil, chatStatus: nil, upsertedAtMs: 10
                 ),
- in: rawDB
+                in: rawDB
             )
             try GoogleCalendarTrackerStore.deleteByCalendarID("calA", in: rawDB)
         }
@@ -305,7 +305,7 @@ final class GoogleCalendarTrackerStoreTests: XCTestCase {
                     eventType: "focusTime", startMs: 100, endMs: 200,
                     workingLocationType: nil, autoDeclineMode: nil, chatStatus: nil, upsertedAtMs: 10
                 ),
- in: rawDB
+                in: rawDB
             )
             try GoogleCalendarTrackerStore.upsert(
                 GoogleCalendarTrackerStore.UpsertParams(
@@ -313,7 +313,7 @@ final class GoogleCalendarTrackerStoreTests: XCTestCase {
                     eventType: "focusTime", startMs: 100, endMs: 200,
                     workingLocationType: nil, autoDeclineMode: nil, chatStatus: nil, upsertedAtMs: 10
                 ),
- in: rawDB
+                in: rawDB
             )
             try GoogleCalendarTrackerStore.delete(eventID: "x", in: rawDB)
         }
@@ -338,7 +338,7 @@ final class GoogleCalendarTrackerStoreTests: XCTestCase {
                     eventType: "focusTime", startMs: 10, endMs: 100,
                     workingLocationType: nil, autoDeclineMode: nil, chatStatus: nil, upsertedAtMs: 5
                 ),
- in: rawDB
+                in: rawDB
             )
             // end_ms = 500 — boundary, retained (NOT strictly less than cutoff).
             try GoogleCalendarTrackerStore.upsert(
@@ -347,7 +347,7 @@ final class GoogleCalendarTrackerStoreTests: XCTestCase {
                     eventType: "focusTime", startMs: 400, endMs: 500,
                     workingLocationType: nil, autoDeclineMode: nil, chatStatus: nil, upsertedAtMs: 5
                 ),
- in: rawDB
+                in: rawDB
             )
             // end_ms = 1000 — retained.
             try GoogleCalendarTrackerStore.upsert(
@@ -356,7 +356,7 @@ final class GoogleCalendarTrackerStoreTests: XCTestCase {
                     eventType: "focusTime", startMs: 800, endMs: 1_000,
                     workingLocationType: nil, autoDeclineMode: nil, chatStatus: nil, upsertedAtMs: 5
                 ),
- in: rawDB
+                in: rawDB
             )
             try GoogleCalendarTrackerStore.cleanup(beforeMs: 500, in: rawDB)
         }
@@ -381,7 +381,7 @@ final class GoogleCalendarTrackerStoreTests: XCTestCase {
                     eventType: "focusTime", startMs: 1_000, endMs: 2_000,
                     workingLocationType: nil, autoDeclineMode: nil, chatStatus: nil, upsertedAtMs: 10
                 ),
- in: rawDB
+                in: rawDB
             )
             // OOO active at now=1500.
             try GoogleCalendarTrackerStore.upsert(
@@ -390,7 +390,7 @@ final class GoogleCalendarTrackerStoreTests: XCTestCase {
                     eventType: "outOfOffice", startMs: 1_200, endMs: 1_800,
                     workingLocationType: nil, autoDeclineMode: nil, chatStatus: nil, upsertedAtMs: 10
                 ),
- in: rawDB
+                in: rawDB
             )
             // workingLocation: two rows, picking most recent start covering now.
             try GoogleCalendarTrackerStore.upsert(
@@ -399,7 +399,7 @@ final class GoogleCalendarTrackerStoreTests: XCTestCase {
                     eventType: "workingLocation", startMs: 500, endMs: 5_000,
                     workingLocationType: "officeLocation", autoDeclineMode: nil, chatStatus: nil, upsertedAtMs: 5
                 ),
- in: rawDB
+                in: rawDB
             )
             try GoogleCalendarTrackerStore.upsert(
                 GoogleCalendarTrackerStore.UpsertParams(
@@ -407,7 +407,7 @@ final class GoogleCalendarTrackerStoreTests: XCTestCase {
                     eventType: "workingLocation", startMs: 1_400, endMs: 3_000,
                     workingLocationType: "homeOffice", autoDeclineMode: nil, chatStatus: nil, upsertedAtMs: 6
                 ),
- in: rawDB
+                in: rawDB
             )
         }
         try db.readSQL { rawDB in

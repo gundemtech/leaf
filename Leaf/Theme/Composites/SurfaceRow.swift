@@ -6,12 +6,12 @@
 //  ambiguity with adjacent enabled cards which ARE tappable.
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 enum SurfaceRowAction {
-    case enable    // toggles a UserDefaults preference
-    case connect   // initiates an OAuth flow
+    case enable  // toggles a UserDefaults preference
+    case connect  // initiates an OAuth flow
 }
 
 struct SurfaceRow: View {
@@ -21,9 +21,10 @@ struct SurfaceRow: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: LeafSpace.md) {
-            LeafIcon(systemName: surfaceSymbolName,
-                     size: .md,
-                     tint: LeafColor.text.tertiary)
+            LeafIcon(
+                systemName: surfaceSymbolName,
+                size: .md,
+                tint: LeafColor.text.tertiary)
             Text(surface.displayName)
                 .font(LeafType.body.regular)
                 .foregroundStyle(LeafColor.text.primary)
@@ -32,7 +33,7 @@ struct SurfaceRow: View {
             LeafButton(buttonTitle, variant: .secondary, size: .sm, action: onTap)
         }
         .padding(.horizontal, LeafSpace.lg)
-        .frame(height: LeafSpace.xxl + LeafSpace.xs)   // 32 + 4 = 36pt
+        .frame(height: LeafSpace.xxl + LeafSpace.xs)  // 32 + 4 = 36pt
         .background(LeafColor.surface.raised)
         .clipShape(RoundedRectangle(cornerRadius: LeafCardTokens.cornerRadius, style: .continuous))
         .accessibilityElement(children: .combine)
@@ -42,7 +43,7 @@ struct SurfaceRow: View {
     private var accessibilityLabelText: String {
         let suffix: String
         switch action {
-        case .enable:  suffix = "double tap to enable"
+        case .enable: suffix = "double tap to enable"
         case .connect: suffix = "double tap to connect"
         }
         return "\(surface.displayName), capture is off, \(suffix)"
@@ -50,7 +51,7 @@ struct SurfaceRow: View {
 
     private var buttonTitle: String {
         switch action {
-        case .enable:  "Enable"
+        case .enable: "Enable"
         case .connect: "Connect"
         }
     }
@@ -63,11 +64,11 @@ struct SurfaceRow: View {
     private var surfaceSymbolName: String {
         switch surface {
         case .claudeCode: "sparkles"
-        case .xcode:      "hammer.fill"
-        case .ides:       "curlybraces.square"
-        case .browsers:   "globe"
-        case .zoom:       "video.fill"
-        case .calendar:   "calendar"
+        case .xcode: "hammer.fill"
+        case .ides: "curlybraces.square"
+        case .browsers: "globe"
+        case .zoom: "video.fill"
+        case .calendar: "calendar"
         }
     }
 }

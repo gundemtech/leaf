@@ -412,10 +412,12 @@ public actor GitHubColdCollector {
         if priorPresent {
             let d = Self.securityAlertsDiff(prior: prior, current: req.current)
             for a in d.observed {
-                events.append(Self.makeSecurityAlertEvent(eventKind: req.observedKind, alert: a, observedAtMs: req.nowMs))
+                events.append(
+                    Self.makeSecurityAlertEvent(eventKind: req.observedKind, alert: a, observedAtMs: req.nowMs))
             }
             for a in d.resolved {
-                events.append(Self.makeSecurityAlertEvent(eventKind: req.resolvedKind, alert: a, observedAtMs: req.nowMs))
+                events.append(
+                    Self.makeSecurityAlertEvent(eventKind: req.resolvedKind, alert: a, observedAtMs: req.nowMs))
             }
         }
         snapshots.append(makeAlertsSnapshot(snapshotKind: snapshotKind, alerts: req.current, capturedAtMs: req.nowMs))

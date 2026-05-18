@@ -1,5 +1,6 @@
 // SlackHeadlineFormatterTests.swift
 import XCTest
+
 @testable import LeafCore
 
 final class SlackHeadlineFormatterTests: XCTestCase {

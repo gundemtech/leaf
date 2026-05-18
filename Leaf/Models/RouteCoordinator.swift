@@ -6,9 +6,9 @@
 //  banners push a detail destination without nesting NavigationLink calls).
 
 import Foundation
+import LeafCore
 import Observation
 import SwiftUI
-import LeafCore
 
 @MainActor
 @Observable

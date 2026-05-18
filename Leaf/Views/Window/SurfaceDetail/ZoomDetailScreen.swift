@@ -6,8 +6,8 @@
 //  ZoomDetailViewModel.formatHours for duration rendering.
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct ZoomDetailScreen: View {
     @State private var vm: ZoomDetailViewModel
@@ -41,7 +41,8 @@ struct ZoomDetailScreen: View {
             LeafEmptyState(
                 icon: LeafIcons.brand.leaf,
                 title: "No Zoom activity yet",
-                description: "Once you have a Zoom meeting in this period, you'll see meeting totals, calendar linkage, and your longest call here."
+                description:
+                    "Once you have a Zoom meeting in this period, you'll see meeting totals, calendar linkage, and your longest call here."
             )
             Spacer()
         }
@@ -104,9 +105,11 @@ struct ZoomDetailScreen: View {
         LeafSection(title: "Meeting totals") {
             LeafCard(padding: .regular) {
                 VStack(alignment: .leading, spacing: LeafSpace.sm) {
-                    row(label: "Meetings",
+                    row(
+                        label: "Meetings",
                         value: "\(breakdown.meetingCount)")
-                    row(label: "Total time",
+                    row(
+                        label: "Total time",
                         value: ZoomDetailViewModel.formatHours(breakdown.totalDurationSeconds))
                 }
             }

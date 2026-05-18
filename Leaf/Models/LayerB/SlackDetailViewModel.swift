@@ -5,9 +5,10 @@
 //
 
 import Foundation
-import Observation
-import OSLog
 import LeafCore
+import OSLog
+import Observation
+
 #if LEAF_PROD
 import LeafCorePrivate
 #endif

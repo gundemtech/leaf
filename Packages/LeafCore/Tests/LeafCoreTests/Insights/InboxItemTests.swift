@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 final class InboxItemTests: XCTestCase {
@@ -29,12 +30,14 @@ final class InboxItemTests: XCTestCase {
     }
 
     func testInboxItemEquatable() {
-        let a = InboxItem(id: "x", kind: .reviewRequest, severity: .warn, title: "T",
-                          sourceMeta: "M", sourceURL: URL(string: "https://x.com")!,
-                          aggregatedCount: 1, createdAtMs: 1)
-        let b = InboxItem(id: "x", kind: .reviewRequest, severity: .warn, title: "T",
-                          sourceMeta: "M", sourceURL: URL(string: "https://x.com")!,
-                          aggregatedCount: 1, createdAtMs: 1)
+        let a = InboxItem(
+            id: "x", kind: .reviewRequest, severity: .warn, title: "T",
+            sourceMeta: "M", sourceURL: URL(string: "https://x.com")!,
+            aggregatedCount: 1, createdAtMs: 1)
+        let b = InboxItem(
+            id: "x", kind: .reviewRequest, severity: .warn, title: "T",
+            sourceMeta: "M", sourceURL: URL(string: "https://x.com")!,
+            aggregatedCount: 1, createdAtMs: 1)
         XCTAssertEqual(a, b)
         XCTAssertEqual(a.id, "x")
     }

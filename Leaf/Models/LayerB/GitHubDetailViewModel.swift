@@ -6,9 +6,10 @@
 //
 
 import Foundation
-import Observation
-import OSLog
 import LeafCore
+import OSLog
+import Observation
+
 #if LEAF_PROD
 import LeafCorePrivate
 #endif
@@ -111,9 +112,9 @@ final class GitHubDetailViewModel {
 
             switch result {
             case .success(let (breakdown, reviewActivity)):
-                let reviewEmpty = (reviewActivity?.reviewsSubmittedCount ?? 0) +
-                                  (reviewActivity?.reviewCommentsCount ?? 0) +
-                                  (reviewActivity?.reviewThreadResolvedCount ?? 0) == 0
+                let reviewEmpty =
+                    (reviewActivity?.reviewsSubmittedCount ?? 0) + (reviewActivity?.reviewCommentsCount ?? 0)
+                    + (reviewActivity?.reviewThreadResolvedCount ?? 0) == 0
                 if breakdown.eventsCount == 0 && reviewEmpty {
                     self.state = .empty
                 } else {
@@ -131,7 +132,7 @@ final class GitHubDetailViewModel {
     private static func reviewPeriod(for range: DetailRange) -> ReviewActivityInsights.ReviewActivityPeriod? {
         switch range {
         case .today: .today
-        case .week:  .last7Days
+        case .week: .last7Days
         case .month: nil
         }
     }

@@ -26,10 +26,12 @@ public enum DetailRange: String, CaseIterable, Hashable, Codable, Sendable, Iden
         case .today:
             start = calendar.startOfDay(for: now)
         case .week:
-            start = calendar.dateInterval(of: .weekOfYear, for: now)?.start
+            start =
+                calendar.dateInterval(of: .weekOfYear, for: now)?.start
                 ?? calendar.startOfDay(for: now)
         case .month:
-            start = calendar.dateInterval(of: .month, for: now)?.start
+            start =
+                calendar.dateInterval(of: .month, for: now)?.start
                 ?? calendar.startOfDay(for: now)
         }
         return DateInterval(start: start, end: now)

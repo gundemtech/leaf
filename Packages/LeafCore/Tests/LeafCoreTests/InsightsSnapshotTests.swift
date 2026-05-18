@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import LeafCore
 
 /// Phase 2.5 — закрепляем семантику `InsightsSnapshot.isEmpty`. Это
@@ -375,7 +376,8 @@ final class InsightsSnapshotTests: XCTestCase {
     // MARK: - Phase 4.6.C.2 — longestUninterruptedWindow
 
     func testSnapshotLongestUninterruptedWindowDefaultNil() {
-        XCTAssertNil(emptySnapshot().longestUninterruptedWindow,
+        XCTAssertNil(
+            emptySnapshot().longestUninterruptedWindow,
             "convenience init без аргумента → default nil (backwards compat)")
     }
 
@@ -394,8 +396,9 @@ final class InsightsSnapshotTests: XCTestCase {
             longestUninterruptedWindow: win
         )
         XCTAssertEqual(snapshot.longestUninterruptedWindow?.durationSeconds, 9000)
-        XCTAssertEqual(snapshot.longestUninterruptedWindow?.sourcesActiveInPeriod,
-                       ["github", "slack"])
+        XCTAssertEqual(
+            snapshot.longestUninterruptedWindow?.sourcesActiveInPeriod,
+            ["github", "slack"])
     }
 
     /// Default extension impl возвращает nil — StubInsights не override'ит,
@@ -468,7 +471,8 @@ final class InsightsSnapshotTests: XCTestCase {
             byChannel: [],
             huddleParticipationStreak: 1
         )
-        XCTAssertEqual(bd.huddleParticipationStreak, 1,
+        XCTAssertEqual(
+            bd.huddleParticipationStreak, 1,
             "single-day streak=1 — legitimate value (не nil), edge между \"never\" и \"started today\"")
     }
 
@@ -497,7 +501,8 @@ final class InsightsSnapshotTests: XCTestCase {
         XCTAssertEqual(bd.transitions?.completed, 3)
         XCTAssertEqual(bd.transitions?.canceled, 1)
         XCTAssertEqual(bd.transitions?.reopened, 1)
-        XCTAssertEqual(bd.transitions?.total, 7, "sum может exceed unique transition count для completed→canceled overlap")
+        XCTAssertEqual(
+            bd.transitions?.total, 7, "sum может exceed unique transition count для completed→canceled overlap")
         XCTAssertEqual(bd.completionRate, 0.5)
     }
 
@@ -646,7 +651,9 @@ final class InsightsSnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.browsersActivity, .empty)
         XCTAssertEqual(snapshot.zoomActivity, .empty)
         XCTAssertEqual(snapshot.googleCalendarActivity, .empty)
-        XCTAssertTrue(snapshot.isEmpty,
-            ".empty surface breakdowns don't flip isEmpty — Track 7 P2 fields excluded from isEmpty check (nil = not computed, not zero data)")
+        XCTAssertTrue(
+            snapshot.isEmpty,
+            ".empty surface breakdowns don't flip isEmpty — Track 7 P2 fields excluded from isEmpty check (nil = not computed, not zero data)"
+        )
     }
 }

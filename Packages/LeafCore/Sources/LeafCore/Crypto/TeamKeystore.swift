@@ -80,7 +80,7 @@ public enum TeamKeystore {
     // MARK: - Internals
 
     private static func teamKeyURL(id: String, root: URL) -> URL {
-                    root
+        root
             .appendingPathComponent(teamKeysSubdir, isDirectory: true)
             .appendingPathComponent("\(id).\(teamKeyExtension)", isDirectory: false)
     }

@@ -6,8 +6,8 @@
 //  when present), schemes & destinations (rendered only when non-empty).
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct XcodeDetailScreen: View {
     @State private var vm: XcodeDetailViewModel
@@ -41,7 +41,8 @@ struct XcodeDetailScreen: View {
             LeafEmptyState(
                 icon: LeafIcons.brand.leaf,
                 title: "No Xcode activity yet",
-                description: "Once Xcode captures activity for this period, you'll see build and test counts, success/failure splits, and your top schemes here."
+                description:
+                    "Once Xcode captures activity for this period, you'll see build and test counts, success/failure splits, and your top schemes here."
             )
             Spacer()
         }

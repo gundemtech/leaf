@@ -19,7 +19,7 @@ public enum LayerBProvider: String, CaseIterable, Hashable, Codable, Sendable, I
         switch self {
         case .linear: "Linear"
         case .github: "GitHub"
-        case .slack:  "Slack"
+        case .slack: "Slack"
         }
     }
 }

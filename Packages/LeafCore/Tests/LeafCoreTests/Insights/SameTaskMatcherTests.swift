@@ -1,17 +1,22 @@
 import XCTest
+
 @testable import LeafCore
 
 final class SameTaskMatcherTests: XCTestCase {
-    func snap(_ name: String, linearID: String? = nil, branch: String? = nil,
-              repo: String? = "leaf", at ms: Int64 = 1000) -> TeammateSnapshot {
-        TeammateSnapshot(memberID: name, displayName: name, linearID: linearID, branch: branch,
-                         repo: repo, currentApp: "Xcode", lastActivityAtMs: ms)
+    func snap(
+        _ name: String, linearID: String? = nil, branch: String? = nil,
+        repo: String? = "leaf", at ms: Int64 = 1000
+    ) -> TeammateSnapshot {
+        TeammateSnapshot(
+            memberID: name, displayName: name, linearID: linearID, branch: branch,
+            repo: repo, currentApp: "Xcode", lastActivityAtMs: ms)
     }
 
     func testEmptyIdentityReturnsEmpty() {
         let me = TaskIdentity()
-        let matches = SameTaskMatcher.match(myIdentity: me, teammates: [snap("a", linearID: "LEAF-1")],
-                                            rule: .hierarchical)
+        let matches = SameTaskMatcher.match(
+            myIdentity: me, teammates: [snap("a", linearID: "LEAF-1")],
+            rule: .hierarchical)
         XCTAssertEqual(matches, [])
     }
 
@@ -60,15 +65,15 @@ final class SameTaskMatcherTests: XCTestCase {
     func testMixedCohortSortByConfidenceThenTime() {
         let me = TaskIdentity(linearID: "LEAF-204", branch: "feature/track-8-home", repo: "leaf")
         let teammates = [
-            snap("zed", linearID: "LEAF-OTHER", branch: "feature/track-8-foo", at: 5000), // adjacent
-            snap("anton", linearID: "LEAF-204", at: 1000),                                  // same issue, older
-            snap("maria", linearID: "LEAF-204", at: 2000),                                  // same issue, newer
+            snap("zed", linearID: "LEAF-OTHER", branch: "feature/track-8-foo", at: 5000),  // adjacent
+            snap("anton", linearID: "LEAF-204", at: 1000),  // same issue, older
+            snap("maria", linearID: "LEAF-204", at: 2000),  // same issue, newer
         ]
         let matches = SameTaskMatcher.match(myIdentity: me, teammates: teammates, rule: .hierarchical)
         XCTAssertEqual(matches.count, 3)
-        XCTAssertEqual(matches[0].memberID, "maria")    // same issue, newer
-        XCTAssertEqual(matches[1].memberID, "anton")    // same issue, older
-        XCTAssertEqual(matches[2].memberID, "zed")      // adjacent
+        XCTAssertEqual(matches[0].memberID, "maria")  // same issue, newer
+        XCTAssertEqual(matches[1].memberID, "anton")  // same issue, older
+        XCTAssertEqual(matches[2].memberID, "zed")  // adjacent
     }
 
     func testMyLinearIDPresentSkipsRule2EvenOnIdenticalBranch() {

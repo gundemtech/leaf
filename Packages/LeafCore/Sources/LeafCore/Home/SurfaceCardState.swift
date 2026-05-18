@@ -12,8 +12,8 @@ import Foundation
 public enum SurfaceCardState<Payload: Equatable & Sendable>: Equatable, Sendable {
     case disabled
     case enabledLoading
-    case enabledEmpty                          // ON + zero all-time
-    case enabledZeroToday                      // ON + zero today, may have spark from 7d
+    case enabledEmpty  // ON + zero all-time
+    case enabledZeroToday  // ON + zero today, may have spark from 7d
     case enabledPopulated(payload: Payload)
     case error(message: String)
 
