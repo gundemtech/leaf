@@ -32,6 +32,8 @@ struct InboxBlock: View {
                     LeafDivider()
                     if items.isEmpty {
                         emptyDataState
+                    } else if filteredItems.isEmpty {
+                        noMatchState
                     } else {
                         populatedBody
                     }
@@ -55,6 +57,19 @@ struct InboxBlock: View {
             icon: LeafIcons.brand.leaf,
             title: "All clear.",
             description: "No reviews, questions, or mentions right now."
+        )
+    }
+
+    private var noMatchState: some View {
+        LeafEmptyState(
+            icon: LeafIcons.brand.leaf,
+            title: "No matches.",
+            description: "Try a different filter or clear the search.",
+            ctaTitle: "Clear filters",
+            onCTA: {
+                selectedFilter = .all
+                searchQuery = ""
+            }
         )
     }
 

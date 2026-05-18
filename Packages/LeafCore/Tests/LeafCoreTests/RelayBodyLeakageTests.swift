@@ -2964,4 +2964,49 @@ final class RelayBodyLeakageTests: XCTestCase {
             }
         }
     }
+
+    // MARK: - Phase Track-8 P6 — INBOX
+
+    /// Defense-in-depth regression guard. INBOX is local-render-only; this
+    /// test asserts that body content from upstream Layer B / D3 events
+    /// (which feed `open_questions` / `blockers` and ultimately the
+    /// `DerivedInsights.inboxItems` surface) never round-trips into the
+    /// `presence_state` broadcast envelope. Pattern mirrors the existing
+    /// per-provider tests above. Padded body ensures the 60-char excerpt
+    /// truncation would still expose the sentinel if mishandled.
+    func testEventBodyDoesNotLeakIntoPresenceState_INBOX() throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let sentinel = "LEAKED_SENTINEL_INBOX_BODY"
+        let bodyText = "padding-prefix-padding-prefix-" + sentinel + "-padding-suffix-padding-suffix"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let event = RawEvent(
+            timestamp: Date(),
+            signalType: .action,
+            bundleID: "com.linear.linear",
+            payload: [
+                "event_kind": "linear_comment_authored",
+                "issue_key": "LEA-200",
+                Schema.EventPayloadKeys.body: bodyText,
+            ]
+        )
+        let presenceState: [String: Any] = ["inbox_count": 1]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(collectorID: CollectorID.linearPolling, sourceID: "linear:inbox-test", nowMs: nowMs),
+            presence: (provider: .linear, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+
+        try db.readSQL { rawDB in
+            let row = try Row.fetchOne(rawDB, sql: "SELECT state_json FROM presence_state WHERE provider='linear'")
+            let stateJSON = (row?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state row should exist after upsert")
+            XCTAssertFalse(
+                stateJSON.contains(sentinel),
+                "INBOX sentinel '\(sentinel)' MUST NOT appear in presence_state.state_json")
+            XCTAssertFalse(
+                stateJSON.contains("\"body\""),
+                "Payload key 'body' should not appear in presence_state.state_json")
+        }
+    }
 }
