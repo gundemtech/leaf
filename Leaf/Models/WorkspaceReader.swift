@@ -37,6 +37,11 @@ final class WorkspaceReader {
     private let databaseEncryption: EncryptionOptions?
     private let keystoreRoot: URL
     private let activeStore: ActiveWorkspaceStore
+    /// Optional Supabase client used by rename() and delete() to PATCH the
+    /// server before applying local mutations. Injected from LeafApp composition
+    /// root (S7 Phase H). Nil during unit tests and early onboarding where
+    /// Supabase may not yet be authenticated.
+    private let supabase: SupabaseClient?
     private let logger = Logger(subsystem: "tech.gundem.leaf.app", category: "workspace")
 
     init(
@@ -44,13 +49,15 @@ final class WorkspaceReader {
         databaseConfig: DatabaseConfig = WorkspaceReader.defaultConfig(),
         databaseEncryption: EncryptionOptions? = WorkspaceReader.defaultEncryption(),
         keystoreRoot: URL = TeamKeystore.defaultRoot(),
-        activeStore: ActiveWorkspaceStore
+        activeStore: ActiveWorkspaceStore,
+        supabase: SupabaseClient? = nil
     ) {
         self.databaseURL = databaseURL
         self.databaseConfig = databaseConfig
         self.databaseEncryption = databaseEncryption
         self.keystoreRoot = keystoreRoot
         self.activeStore = activeStore
+        self.supabase = supabase
     }
 
     /// Reads workspaces + active members from DB into state. Idempotent.
@@ -111,6 +118,92 @@ final class WorkspaceReader {
         refresh()
     }
 
+    // MARK: - Track 5 / S7 E.8 — leaveActiveWorkspace (closes S2 NIT-3)
+
+    /// Soft-marks the currently-active workspace as left, re-resolves active
+    /// to the next alphabetical remaining workspace, and refreshes state.
+    ///
+    /// On success: state transitions to .loaded(newActive, ...) or .empty
+    ///             (if no remaining workspaces after leaving).
+    /// On failure: state transitions to .error(_).
+    /// No-ops when state is not .loaded (e.g., .loading, .empty, .error).
+    func leaveActiveWorkspace() async {
+        guard case .loaded(_, let active, _) = state else { return }
+        do {
+            let db = try ensureDatabase()
+            let svc = WorkspaceService(database: db, keystoreRoot: keystoreRoot)
+            try svc.markLeft(workspaceID: active.id, at: Date())
+            let remaining = try svc.listWorkspaces(includeLeft: false)
+                .filter { $0.id != active.id }
+                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            activeStore.setActive(remaining.first?.id)
+            refresh()
+        } catch {
+            logger.error("WorkspaceReader.leaveActiveWorkspace failed: \(String(describing: error), privacy: .public)")
+            state = .error(message: userFacingMessage(for: error))
+        }
+    }
+
+    // MARK: - Track 5 / S7 E.6 — rename
+
+    /// Orchestrate workspace rename: PATCH Supabase first (RLS gate enforced
+    /// server-side; only the workspace creator can rename), then local UPDATE.
+    ///
+    /// On any failure (invalid payload / server rejection / DB error):
+    ///   state transitions to .error(_) — local row is never touched if server fails.
+    ///
+    /// When `supabase` is nil (offline / pre-auth context):
+    ///   state transitions to .error with "No network connection" message.
+    func rename(workspaceID: String, newName: String) async {
+        guard let supabase else {
+            state = .error(message: "No network connection. Please sign in first.")
+            return
+        }
+        do {
+            try await supabase.patchWorkspaceName(id: workspaceID, name: newName)
+            let db = try ensureDatabase()
+            let svc = WorkspaceService(database: db, keystoreRoot: keystoreRoot)
+            try svc.updateName(workspaceID: workspaceID, newName: newName)
+            refresh()
+        } catch {
+            logger.error("WorkspaceReader.rename failed: \(String(describing: error), privacy: .public)")
+            state = .error(message: userFacingMessage(for: error))
+        }
+    }
+
+    // MARK: - Track 5 / S7 E.7 — delete (admin-only)
+
+    /// Orchestrate workspace delete (admin-only via server RLS gate).
+    /// PATCH Supabase first (soft-delete), then local cascade DELETE.
+    ///
+    /// If the deleted workspace was active, re-resolves active to the next
+    /// alphabetical remaining workspace (or clears active if none remain).
+    ///
+    /// When `supabase` is nil (offline / pre-auth context):
+    ///   state transitions to .error with "No network connection" message.
+    func delete(workspaceID: String) async {
+        guard let supabase else {
+            state = .error(message: "No network connection. Please sign in first.")
+            return
+        }
+        do {
+            try await supabase.softDeleteWorkspace(id: workspaceID)
+            let db = try ensureDatabase()
+            let svc = WorkspaceService(database: db, keystoreRoot: keystoreRoot)
+            try svc.softDelete(workspaceID: workspaceID, at: Date())
+            if activeStore.activeWorkspaceID == workspaceID {
+                let remaining = try svc.listWorkspaces(includeLeft: false)
+                    .filter { $0.id != workspaceID }
+                    .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+                activeStore.setActive(remaining.first?.id)
+            }
+            refresh()
+        } catch {
+            logger.error("WorkspaceReader.delete failed: \(String(describing: error), privacy: .public)")
+            state = .error(message: userFacingMessage(for: error))
+        }
+    }
+
     // MARK: - Internals
 
     private func ensureDatabase() throws -> LeafCore.Database {
@@ -128,13 +221,23 @@ final class WorkspaceReader {
         if let leafErr = error as? LeafError {
             switch leafErr {
             case .invalidPayload:
-                return "Workspace name can’t be empty."
+                return "Workspace name can’t be empty or too long."
             case .keyFileUnavailable, .keyFileCorrupted:
                 return "Couldn’t access local keystore. Try restarting the app."
             case .keychainUnavailable:
                 return "Couldn’t generate secure random data. Try again."
             default:
                 return "Couldn’t complete the operation. See Console for details."
+            }
+        }
+        if let supErr = error as? SupabaseError {
+            switch supErr {
+            case .forbidden:
+                return "Only the workspace creator can perform this action."
+            case .transport(let reason):
+                return "Network error: \(reason)"
+            default:
+                return "Server error. Try again later."
             }
         }
         return "Couldn’t complete the operation. See Console for details."

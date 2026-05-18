@@ -755,10 +755,13 @@ public final class Database: @unchecked Sendable {
 
     /// Lists workspaces ordered by `created_at_ms` ASC.
     /// `includeLeft: false` (default) filters out soft-marked rows where
-    /// `left_at_ms IS NOT NULL` (OQ-T5-2 — UI hides from active list).
+    /// `left_at_ms IS NOT NULL` (OQ-T5-2 — UI hides from active list) and
+    /// admin-deleted rows where `deleted_at_ms IS NOT NULL` (M025 / E.2).
     public func listWorkspaces(includeLeft: Bool = false) throws -> [Workspace] {
         try pool.read { db in
-            let filter = includeLeft ? "" : " WHERE \(Schema.Workspaces.leftAtMs) IS NULL"
+            let filter = includeLeft
+                ? ""
+                : " WHERE \(Schema.Workspaces.leftAtMs) IS NULL AND \(Schema.Workspaces.deletedAtMs) IS NULL"
             let rows = try Row.fetchAll(db, sql: """
                 SELECT \(Schema.Workspaces.id), \(Schema.Workspaces.name),
                        \(Schema.Workspaces.createdAtMs), \(Schema.Workspaces.createdByMemberID),
