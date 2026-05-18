@@ -27,11 +27,9 @@ struct YouNowBlock: View {
 
             LeafCard(padding: .regular) {
                 cardContent
-                    .transition(.opacity)
                     .animation(.easeInOut(duration: 0.25), value: state)
             }
-            .contentShape(Rectangle())
-            .onTapGesture { handleTap() }
+            .modifier(YouNowTapModifier(state: state, handleTap: handleTap))
         }
     }
 
@@ -169,6 +167,7 @@ struct YouNowBlock: View {
                     .opacity(i < count ? 1.0 : 0.25)
             }
         }
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel("Intensity \(count) of 4")
     }
 
@@ -184,8 +183,12 @@ struct YouNowBlock: View {
 
     @ViewBuilder
     private func resumeCTA(for a: YouNowAway) -> some View {
-        let appLabel = a.lastApp ?? "app"
-        let issue = a.lastLinearID ?? "task"
+        // Safe to force-unwrap: `shouldShowResume` already gated on both
+        // `lastLinearID != nil` and `lastAppBundleID != nil`; `lastApp`
+        // (display name) defaults to the bundle id when display lookup
+        // misses, so we still want a final string fallback there.
+        let issue = a.lastLinearID ?? ""
+        let appLabel = a.lastApp ?? a.lastAppBundleID ?? "app"
         Button {
             triggerResume(for: a)
         } label: {
@@ -200,13 +203,12 @@ struct YouNowBlock: View {
 
     // MARK: - Tap handling
 
+    /// `.onTapGesture` is gated by `YouNowTapModifier` to `.away` only, so
+    /// this method always runs in away context. `.active` / `.deepWorkFocus`
+    /// are intentionally inert; `.inMeeting` `ical://` deep-link is P9.
     private func handleTap() {
-        switch state {
-        case .active, .deepWorkFocus, .inMeeting:
-            return  // No-op for P4 (inMeeting Calendar deep-link is P9 carry-over).
-        case .away(let a):
-            triggerResume(for: a)
-        }
+        guard case .away(let a) = state else { return }
+        triggerResume(for: a)
     }
 
     private func triggerResume(for a: YouNowAway) {
@@ -233,4 +235,25 @@ extension String {
     /// `[fields].compactMap { $0 }.joined(separator: " · ")` down to `nil`
     /// when every input was nil — so the `if let line2` branch is skipped.
     fileprivate var nilIfEmpty: String? { isEmpty ? nil : self }
+}
+
+/// Gate `.onTapGesture` behind `.away` only — non-away states currently
+/// no-op per master spec §3.4 (inMeeting `ical://` deep-link is P9
+/// carry-forward; active / deepWorkFocus are intentionally inert because
+/// they describe the user's own current state). Without this gate the
+/// cursor still hovers as if tappable, signalling a "dead" affordance.
+private struct YouNowTapModifier: ViewModifier {
+    let state: YouNowState
+    let handleTap: () -> Void
+
+    func body(content: Content) -> some View {
+        switch state {
+        case .away:
+            content
+                .contentShape(Rectangle())
+                .onTapGesture { handleTap() }
+        case .active, .inMeeting, .deepWorkFocus:
+            content
+        }
+    }
 }
