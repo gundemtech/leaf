@@ -134,6 +134,89 @@ public struct WorkspaceService: Sendable {
         try database.clearWorkspaceLeftAt(workspaceID: workspaceID)
     }
 
+    // MARK: - Track 5 / S7 E.1 — updateName
+
+    /// Validate + update workspace display name in local DB. Synchronous.
+    ///
+    /// Throws:
+    /// - `LeafError.invalidPayload` if `newName` is empty or > 80 chars after trim.
+    /// - Propagates `Database` errors on write failure.
+    ///
+    /// Server-side PATCH is orchestrated separately by WorkspaceReader (E.6).
+    /// This method only touches the local SQLCipher row.
+    public func updateName(workspaceID: String, newName: String) throws {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.count <= 80 else {
+            throw LeafError.invalidPayload
+        }
+        try database.updateWorkspaceName(workspaceID: workspaceID, name: trimmed)
+    }
+
+    // MARK: - Track 5 / S7 E.2 — softDelete
+
+    /// Soft-delete local copy of workspace. Performs:
+    ///
+    /// 1. Cascade DELETE of workspace-scoped rows from 5 tables:
+    ///    `messages_mirror`, `team_events_mirror`, `share_rules`,
+    ///    `pending_invites`, `team_event_broadcast_offsets`.
+    ///
+    /// 2. Sets `workspaces.deleted_at_ms = at` (milliseconds epoch).
+    ///
+    /// 3. Removes the per-workspace keystore subdirectory
+    ///    (`<keystoreRoot>/workspaces/<workspaceID>/`) so no key material lingers.
+    ///
+    /// **Audit invariant:** `team_members` and `team_keys` rows are NOT deleted.
+    /// They are forever-retained for history decryption (Track 5 contract §12).
+    /// Hard-wipe of those rows is an opt-in Settings action deferred to S8.
+    ///
+    /// **Idempotent:** safe to call again on an already-deleted workspace.
+    /// Cascade DELETEs match 0 rows; UPDATE re-stamps `deleted_at_ms` (harmless).
+    /// Keystore removal via `try?` is also idempotent.
+    ///
+    /// Server-side PATCH should be done *before* calling this (via
+    /// `SupabaseClient.softDeleteWorkspace`) so the Supabase row is marked
+    /// deleted before the local keystore is wiped.
+    public func softDelete(workspaceID: String, at: Date) throws {
+        let deletedAtMs = Int64(at.timeIntervalSince1970 * 1000)
+
+        try database.writeSQL { rawDB in
+            // Cascade DELETEs — workspace-scoped rows only.
+            // team_members + team_keys are NOT touched (audit invariant, see above).
+            try rawDB.execute(
+                sql: "DELETE FROM \(Schema.MessagesMirror.tableName) WHERE \(Schema.MessagesMirror.workspaceID) = ?",
+                arguments: [workspaceID]
+            )
+            try rawDB.execute(
+                sql: "DELETE FROM \(Schema.TeamEventsMirror.tableName) WHERE \(Schema.TeamEventsMirror.workspaceID) = ?",
+                arguments: [workspaceID]
+            )
+            try rawDB.execute(
+                sql: "DELETE FROM \(Schema.ShareRules.tableName) WHERE \(Schema.ShareRules.workspaceID) = ?",
+                arguments: [workspaceID]
+            )
+            try rawDB.execute(
+                sql: "DELETE FROM \(Schema.PendingInvites.tableName) WHERE \(Schema.PendingInvites.workspaceID) = ?",
+                arguments: [workspaceID]
+            )
+            try rawDB.execute(
+                sql: "DELETE FROM \(Schema.TeamEventBroadcastOffsets.tableName) WHERE \(Schema.TeamEventBroadcastOffsets.workspaceID) = ?",
+                arguments: [workspaceID]
+            )
+            // Stamp deleted_at_ms on the workspace row itself.
+            try rawDB.execute(
+                sql: "UPDATE \(Schema.Workspaces.tableName) SET \(Schema.Workspaces.deletedAtMs) = ? WHERE \(Schema.Workspaces.id) = ?",
+                arguments: [deletedAtMs, workspaceID]
+            )
+        }
+
+        // Per-workspace keystore subdirectory removal (S2 file layout).
+        // `try?` — idempotent, missing directory is not an error.
+        let keystoreDir = keystoreRoot
+            .appendingPathComponent("workspaces", isDirectory: true)
+            .appendingPathComponent(workspaceID, isDirectory: true)
+        try? FileManager.default.removeItem(at: keystoreDir)
+    }
+
     /// Default `randomBytes` factory: `SecRandomCopyBytes` под the hood.
     /// Mirrors `OrgService.secureRandom`.
     public static func secureRandom(_ count: Int) throws -> Data {

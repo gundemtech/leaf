@@ -818,6 +818,23 @@ public final class Database: @unchecked Sendable {
         }
     }
 
+    /// Track-5 S7 E.1 — Updates workspace display name. Idempotent (UPDATE
+    /// WHERE id=? matches 0 rows on unknown workspace — no error).
+    /// Caller (`WorkspaceService.updateName`) has already validated and trimmed
+    /// the name; this helper just persists it.
+    public func updateWorkspaceName(workspaceID: String, name: String) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            try db.execute(sql: """
+                UPDATE \(Schema.Workspaces.tableName)
+                SET \(Schema.Workspaces.name) = ?
+                WHERE \(Schema.Workspaces.id) = ?
+                """,
+                arguments: [name, workspaceID]
+            )
+        }
+    }
+
     /// Strict INSERT — re-insert того же UUID — это bug (caller контролирует
     /// PK). Идемпотентность создания workspace+self-row на caller'е (5.1.D
     /// `OrgService.createPersonalOrg` проверяет `listWorkspaces()` first).

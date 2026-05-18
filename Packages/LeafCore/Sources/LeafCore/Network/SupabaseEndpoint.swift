@@ -191,6 +191,20 @@ public enum SupabaseEndpoint {
         return components.url!
     }
 
+    // MARK: - PostgREST tables — Track 5 / S7 (workspace mutations)
+
+    /// PATCH /rest/v1/workspaces?id=eq.<id>
+    /// Used by `SupabaseClient.patchWorkspaceName` and `SupabaseClient.softDeleteWorkspace`.
+    /// RLS-gated: only the workspace creator can UPDATE (M025 server policy).
+    public static func workspaceByID(_ id: String, baseURL: URL) -> URL {
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("rest/v1/workspaces"),
+            resolvingAgainstBaseURL: false
+        )!
+        components.queryItems = [URLQueryItem(name: "id", value: "eq.\(id)")]
+        return components.url!
+    }
+
     // MARK: - Header builders
 
     public static func anonHeaders(anonKey: String) -> [String: String] {
