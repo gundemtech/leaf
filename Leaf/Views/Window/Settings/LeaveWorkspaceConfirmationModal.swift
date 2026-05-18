@@ -24,7 +24,13 @@ struct LeaveWorkspaceConfirmationModal: View {
                 Text("You'll stop receiving messages and updates from this team.")
                     .font(LeafType.body.regular)
                     .foregroundStyle(LeafColor.text.secondary)
-                Text("Your local message history will remain available for 30 days, then auto-delete.")
+                // S7 Stage 6 fix C-I7 — the prior copy promised
+                // "auto-delete after 30 days" but there is no on-device
+                // retention pruner extension yet for left workspaces. The
+                // Supabase-side 30d cron for cross_post_log is unrelated to
+                // local mirror data. Honest wording until the local pruner
+                // ships (S8 / Settings restructure).
+                Text("Your local message history stays on this device until you delete the workspace.")
                     .font(LeafType.body.regular)
                     .foregroundStyle(LeafColor.text.secondary)
             }
