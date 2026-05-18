@@ -153,12 +153,18 @@ struct WithYouOnThisBlock: View {
     /// identity. Swift's String.hashValue is randomized across launches,
     /// so the tint may drift between runs. Acceptable in P5; P9 carry
     /// could swap to a stable hash if it bothers.
+    ///
+    /// Palette deliberately excludes `status.warning` and `status.success`
+    /// because those are the badge tints in `confidenceTint(_:)`; reusing
+    /// them on the avatar would create a false semantic pairing
+    /// (an amber circle next to an amber "adjacent branch" badge reads
+    /// as if the avatar itself encodes confidence).
     private func avatarTint(forMemberID id: String) -> Color {
         let palette: [Color] = [
             LeafColor.accent.primary,
+            LeafColor.accent.emphasis,
             LeafColor.status.info,
-            LeafColor.status.warning,
-            LeafColor.status.success,
+            LeafColor.status.danger,
             LeafColor.text.secondary,
         ]
         let hash = abs(id.hashValue)
