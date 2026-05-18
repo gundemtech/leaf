@@ -15,8 +15,12 @@ import CryptoKit
 import Foundation
 
 public actor SupabaseClient {
-    public let baseURL: URL
-    public let anonKey: String
+    // Track 5 / S7 H.1 — `baseURL` and `anonKey` are immutable post-init and
+    // safely readable from nonisolated contexts (e.g., Realtime URL composition
+    // at LeafApp.init time). Marking `nonisolated let` makes them callable
+    // without an `await` actor hop.
+    public nonisolated let baseURL: URL
+    public nonisolated let anonKey: String
     internal let urlSession: URLSession
     private let identity: @Sendable () throws -> Curve25519.KeyAgreement.PrivateKey
     internal let now: @Sendable () -> Date

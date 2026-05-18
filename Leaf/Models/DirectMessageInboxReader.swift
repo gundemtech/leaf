@@ -19,9 +19,12 @@ import LeafCore
 import LeafCorePrivate
 #endif
 
+/// Track 5 / S7 H.1 — conforms to `RealtimeDirectMessageAbsorbing` so
+/// `LeafRealtimeService` can inject this reader without an inverse
+/// dependency on the app target.
 @MainActor
 @Observable
-final class DirectMessageInboxReader {
+final class DirectMessageInboxReader: RealtimeDirectMessageAbsorbing {
     private(set) var recentMessages: [DirectMessageMirrorRow] = []
     private(set) var unreadCount: Int = 0
     /// Per-workspace map of unread inbound DM counts.

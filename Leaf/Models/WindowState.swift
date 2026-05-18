@@ -41,4 +41,16 @@ enum WindowSection: String, CaseIterable, Hashable, Codable, Identifiable {
 @Observable
 final class WindowState {
     var section: WindowSection = .home
+
+    /// Track 5 / S7 H.6 — Deep-link target for "scroll to specific DM" after the
+    /// user clicks an APNs notification. LeafAppDelegate populates this from
+    /// `userInfo["leaf_message_id"]`; TeamView observes via `.onChange` and
+    /// scrolls/highlights the matching cell, then clears the value to nil.
+    var pendingMessageID: String?
+
+    /// Track 5 / S7 H.6 — Workspace activation target set alongside
+    /// `pendingMessageID`. LeafAppDelegate first switches the active workspace
+    /// (via ActiveWorkspaceStore.setActive), then sets this for the UI to
+    /// confirm/observe (e.g., for transient debugging surfaces).
+    var pendingWorkspaceID: String?
 }

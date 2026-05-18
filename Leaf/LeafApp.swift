@@ -69,6 +69,13 @@ struct LeafApp: App {
     @State private var linearTeamsReader: LinearTeamsReader
     @State private var linearScopesReader: LinearScopesReader
     @State private var linearUsersResolver: LinearUsersResolver
+    /// Track 5 / S7 H.1 — Team feed reader + filter store + cross-post log
+    /// + attachment metadata resolver + Realtime service. Wired in init below.
+    @State private var teamFeedReader: TeamFeedReader
+    @State private var crossPostLogReader: CrossPostLogReader
+    @State private var attachmentMetadataResolver: AttachmentMetadataResolver?
+    @State private var feedFilterStore: FeedFilterStore
+    @State private var realtimeService: LeafRealtimeService
     @State private var memberRemovalReader = MemberRemovalReader()  // Phase 5.3.E
     @State private var pendingInvitesReader = PendingInvitesReader()  // Phase 5.5.C
     @State private var inviteURLHandler = InviteURLHandler()  // Phase 5.5.B
@@ -173,12 +180,137 @@ struct LeafApp: App {
             provider: StubLinearGraphQLProvider()
         ))
 
+        // Track 5 / S7 H.1 — Team feed substrate composition.
+        //
+        // Dependency order:
+        //   1. Database open for AttachmentMetadataResolver actor (DB-backed,
+        //      reads `events` table via json_extract for local resolution).
+        //      Falls back to nil-resolver on DB open failure (graceful: TeamView
+        //      already handles `nil` resolver — attachment cards render label-only).
+        //   2. TeamFeedQueryService — depends on Database (shared with resolver
+        //      where available; constructed via its own open if separate).
+        //   3. TeamFeedReader — wraps QueryService + memberResolver closure that
+        //      looks up TeamMember by pubkeyHex from the live WorkspaceReader.
+        //   4. CrossPostLogReader — wraps SupabaseClient for cache fetches.
+        //   5. FeedFilterStore — no deps; UserDefaults-backed.
+        //   6. RealtimeWebSocketDriver — actor; URLSession.shared by default.
+        //   7. LeafRealtimeService — wraps driver + supabase + active store +
+        //      inbox/mirror readers + cross-post reader + decryption closures.
+        let attachmentResolver: AttachmentMetadataResolver?
+        let teamFeedQueryDB: LeafCore.Database?
+        if let resolverDB = LeafApp.makeDatabaseForTeamFeed() {
+            attachmentResolver = AttachmentMetadataResolver(
+                database: resolverDB,
+                collectorsRegistry: nil  // Phase H+1: wire GitHub/Linear/Slack collector providers
+            )
+            teamFeedQueryDB = resolverDB
+        } else {
+            attachmentResolver = nil
+            teamFeedQueryDB = nil
+        }
+        _attachmentMetadataResolver = State(initialValue: attachmentResolver)
+
+        // TeamFeedReader requires a QueryService. On DB open failure we still
+        // need a constructable reader so .environment() injection doesn't crash;
+        // we open a second DB handle as a best-effort (same default URL). If
+        // that also fails the reader will surface .error on first loadInitial.
+        let queryServiceDB = teamFeedQueryDB ?? LeafApp.makeDatabaseForTeamFeed()
+        // memberResolver closure captures the local `let workspaceReader = ...`
+        // ref (which is initialized above via the explicit _workspaceReader
+        // pattern). We capture weakly to avoid retention through the closure.
+        let workspaceReaderLocal = _workspaceReader.wrappedValue
+        let memberResolver: (String) -> TeamMember? = { [weak workspaceReaderLocal] pubkeyHex in
+            guard let reader = workspaceReaderLocal else { return nil }
+            if case .loaded(_, _, let members) = reader.state {
+                return members.first { $0.pubkeyHex == pubkeyHex }
+            }
+            return nil
+        }
+        if let qdb = queryServiceDB {
+            let queryService = TeamFeedQueryService(database: qdb)
+            _teamFeedReader = State(initialValue: TeamFeedReader(
+                queryService: queryService,
+                memberResolver: memberResolver
+            ))
+        } else {
+            // Last-resort fallback — open a throw-away in-memory query service
+            // is not supported by TeamFeedQueryService (it requires Database).
+            // We surface the error path by opening a default URL once more and
+            // letting failures bubble at first fetch time. If both opens above
+            // failed we'd already be in a broken state; assert + force-init
+            // via the default URL on a fresh DatabaseConfig so the type compiles.
+            leafAppLogger.error("TeamFeedReader degraded: DB open failures in init")
+            // We *must* hand TeamFeedReader something — synthesize a Database
+            // by re-attempting the default open. If this still fails, crash
+            // here is acceptable because the entire feed substrate cannot work.
+            let fallbackDB = try? LeafCore.Database.openForWrite(
+                at: DatabasePath.defaultURL(),
+                config: DatabaseConfig.weakDefaults,
+                encryption: nil
+            )
+            if let fdb = fallbackDB {
+                let queryService = TeamFeedQueryService(database: fdb)
+                _teamFeedReader = State(initialValue: TeamFeedReader(
+                    queryService: queryService,
+                    memberResolver: memberResolver
+                ))
+            } else {
+                // Genuine cold-start broken state — fatalError keeps the crash
+                // localized to init rather than a confusing runtime null deref.
+                fatalError("LeafApp init: cannot open SQLCipher database for TeamFeed")
+            }
+        }
+
+        _crossPostLogReader = State(initialValue: CrossPostLogReader(supabase: supabase))
+        _feedFilterStore = State(initialValue: FeedFilterStore(userDefaults: .standard))
+
+        // Realtime substrate. Driver = actor with URLSession.shared by default.
+        let realtimeDriver = RealtimeWebSocketDriver()
+        let realtimeURL = LeafApp.realtimeURL(forSupabase: supabase)
+
+        // Decryption closures — Phase H ships the substrate; the wire→plaintext
+        // mapping requires keystore lookup + AES-GCM decode which is identical to
+        // existing TeamEventMirrorService.tick / DirectMessageInboxService.tick
+        // logic but isn't currently exposed as a clean per-row closure. Until
+        // that refactor lands (carryover), the closures throw a marker error and
+        // the Realtime path silently drops pushes (see LeafRealtimeService.dispatch).
+        // The 30s polling tick on OrganizationView already covers latency-tolerant
+        // delivery; Realtime is a latency optimisation, not a delivery requirement.
+        let teamEventDecryptor: @Sendable (SupabaseTeamEventRow) async throws -> TeamEventMirrorRow = { _ in
+            throw NSError(domain: "S7.RealtimeDecrypt", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "TeamEvent decrypt wiring deferred to signed-build smoke (G19); falls back to 30s mirror tick"
+            ])
+        }
+        let directMessageDecryptor: @Sendable (SupabaseDirectMessageRow) async throws -> DirectMessageMirrorRow = { _ in
+            throw NSError(domain: "S7.RealtimeDecrypt", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "DirectMessage decrypt wiring deferred to signed-build smoke (G19); falls back to 30s inbox tick"
+            ])
+        }
+
+        let crossPostLog = _crossPostLogReader.wrappedValue
+        let realtime = LeafRealtimeService(
+            driver: realtimeDriver,
+            supabase: supabase,
+            activeWorkspaceStore: active,
+            directMessageInboxReader: inboxReader,
+            teamEventMirrorReader: _teamEventMirrorReader.wrappedValue,
+            crossPostLogReader: crossPostLog,
+            realtimeURL: realtimeURL,
+            teamEventDecryptor: teamEventDecryptor,
+            directMessageDecryptor: directMessageDecryptor
+        )
+        _realtimeService = State(initialValue: realtime)
+
         // C1 fix — Track 5 / S4 Stage 6 review:
         // AppDelegate handles APNs callbacks and needs reader references. SwiftUI
         // doesn't propagate @Environment into AppDelegate callbacks; static weak
         // refs bridge that gap. Populated here before any APNs registration fires.
         LeafAppDelegate.directMessageInboxReader = inboxReader
         LeafAppDelegate.apnsRegistrationReader = apnsReader
+        // Track 5 / S7 H.6 — APNs notification click → deep-link to TeamView +
+        // scroll-to/highlight the message cell. Same static-ref bridge pattern.
+        LeafAppDelegate.windowState = _windowState.wrappedValue
+        LeafAppDelegate.activeWorkspaceStore = active
 
         // D1 — idempotent register для post-update relaunch restoration.
         // Sparkle relaunch'ает app после bundle replace + cold launch без update flow:
@@ -224,6 +356,13 @@ struct LeafApp: App {
                 // LinearUsersResolver is an actor (not @Observable); plumbed via
                 // explicit closure into Send sheet from OrganizationView call site.
                 .environment(\.linearUsersResolver, linearUsersResolver)
+                .environment(teamFeedReader)            // Track 5 / S7 H.3
+                .environment(crossPostLogReader)        // Track 5 / S7 H.3
+                .environment(feedFilterStore)           // Track 5 / S7 H.3
+                .environment(realtimeService)           // Track 5 / S7 H.3
+                // AttachmentMetadataResolver is an actor (not @Observable);
+                // custom EnvironmentKey threads optional resolver to TeamView.
+                .environment(\.attachmentMetadataResolver, attachmentMetadataResolver)
                 .environment(memberRemovalReader)  // Phase 5.3.E
                 .environment(pendingInvitesReader)  // Phase 5.5.C
                 .environment(inviteURLHandler)  // Phase 5.5.B
@@ -342,6 +481,62 @@ struct LeafApp: App {
         }
     }
 
+    // MARK: - Team feed DB bootstrap + Realtime URL (Track 5 / S7 H.1)
+
+    /// Same DB-open shape as `makeGitHubScopesService` — used by
+    /// `AttachmentMetadataResolver` (reads events table via json_extract) and
+    /// `TeamFeedQueryService` (reads messages_mirror + team_events_mirror via
+    /// UNION). Returns `nil` on failure so callers can fall back gracefully.
+    private static func makeDatabaseForTeamFeed() -> LeafCore.Database? {
+        let url = DatabasePath.defaultURL()
+        #if LEAF_PROD
+        let config = ProdConfigs.database
+        let encryption: EncryptionOptions? = EncryptionOptions(
+            keyProvider: .callback { @Sendable in
+                try FileKeyStore.fetchOrCreate()
+            },
+            preKeyPragmas: ProdConfigs.sqlcipherPragmasPreKey,
+            postKeyPragmas: ProdConfigs.sqlcipherPragmasPostKey
+        )
+        #else
+        let config = DatabaseConfig.weakDefaults
+        let encryption: EncryptionOptions? = nil
+        #endif
+        do {
+            return try LeafCore.Database.openForWrite(at: url, config: config, encryption: encryption)
+        } catch {
+            leafAppLogger.error("makeDatabaseForTeamFeed failed: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+    }
+
+    /// Derive the Supabase Realtime WebSocket URL from the configured base URL.
+    ///
+    /// Format per Supabase Realtime convention:
+    ///   `wss://<project>.supabase.co/realtime/v1/websocket?apikey=<anon>&vsn=1.0.0`
+    ///
+    /// SupabaseClient.baseURL is typically `https://<project>.supabase.co` (or
+    /// `http://127.0.0.1:54321` for local dev). We swap scheme to `wss`/`ws` and
+    /// append the path + query.
+    nonisolated static func realtimeURL(forSupabase supabase: SupabaseClient) -> URL {
+        let baseURL = supabase.baseURL
+        let anonKey = supabase.anonKey
+        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) ?? URLComponents()
+        // Map http→ws, https→wss; default to wss for unknown.
+        switch components.scheme?.lowercased() {
+        case "http":  components.scheme = "ws"
+        case "https": components.scheme = "wss"
+        default:      components.scheme = "wss"
+        }
+        components.path = "/realtime/v1/websocket"
+        var qs = components.queryItems ?? []
+        qs.append(URLQueryItem(name: "apikey", value: anonKey))
+        qs.append(URLQueryItem(name: "vsn", value: "1.0.0"))
+        components.queryItems = qs
+        // Fallback if URLComponents fails — defensively never crash here.
+        return components.url ?? baseURL
+    }
+
     // MARK: - Slack scopes reader DB bootstrap (Task 18, mirrors GitHub above)
 
     /// Same DB-open shape as `makeGitHubScopesService()` — `SlackScopesService`
@@ -385,6 +580,10 @@ final class LeafAppDelegate: NSObject, NSApplicationDelegate, UNUserNotification
 
     @MainActor static weak var apnsRegistrationReader: APNsRegistrationReader?
     @MainActor static weak var directMessageInboxReader: DirectMessageInboxReader?
+    /// Track 5 / S7 H.6 — Deep-link targets for APNs notification click.
+    /// Populated by LeafApp.init before any APNs delivery can fire.
+    @MainActor static weak var windowState: WindowState?
+    @MainActor static weak var activeWorkspaceStore: ActiveWorkspaceStore?
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag {
@@ -455,7 +654,10 @@ final class LeafAppDelegate: NSObject, NSApplicationDelegate, UNUserNotification
         return [.banner, .sound, .badge]
     }
 
-    /// User clicked notification → eager-fetch the referenced message.
+    /// User clicked notification → eager-fetch the referenced message AND
+    /// (Track 5 / S7 H.6) deep-link the UI to the Team tab, switch active
+    /// workspace if needed, and signal TeamView to scroll-to/highlight the
+    /// matching message cell via `WindowState.pendingMessageID`.
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 didReceive response: UNNotificationResponse) async {
         let userInfo = response.notification.request.content.userInfo
@@ -463,6 +665,18 @@ final class LeafAppDelegate: NSObject, NSApplicationDelegate, UNUserNotification
               let workspaceID = userInfo["leaf_workspace_id"] as? String else {
             return
         }
+        // Switch active workspace + drive UI to Team tab + signal scroll-to.
+        // Done before tickOnce so the UI renders pre-fetch (graceful empty
+        // until decryption lands the row).
+        if Self.activeWorkspaceStore?.activeWorkspaceID != workspaceID {
+            Self.activeWorkspaceStore?.setActive(workspaceID)
+        }
+        Self.windowState?.section = .team
+        Self.windowState?.pendingWorkspaceID = workspaceID
+        Self.windowState?.pendingMessageID = messageID
+
+        // Eager-fetch the message so it is in the local mirror by the time
+        // TeamView's scrollTo fires. If the row already exists this is a no-op.
         await Self.directMessageInboxReader?.tickOnce(
             workspaceID: workspaceID, forMessageID: messageID
         )

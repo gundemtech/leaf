@@ -25,6 +25,12 @@ struct RootView: View {
     @Environment(WindowState.self) private var windowState
     @Environment(InsightsReader.self) private var reader
     @Environment(WorkspaceReader.self) private var workspaceReader
+    // Track 5 / S7 H.4 + H.5 — Realtime subscribe/unsubscribe lifecycle driven
+    // by active workspace + scenePhase. The service is @MainActor @Observable
+    // so we can pass it through the environment from LeafApp.init.
+    @Environment(LeafRealtimeService.self) private var realtimeService
+    @Environment(ActiveWorkspaceStore.self) private var activeWorkspaceStore
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Group {
@@ -37,6 +43,30 @@ struct RootView: View {
         .onAppear {
             reader.refresh()
             workspaceReader.refresh()
+        }
+        // Track 5 / S7 H.4 — Subscribe Realtime to the active workspace channel.
+        // Triggered on active workspace change AND on initial appearance.
+        // Idempotent: same workspaceID → no-op (LeafRealtimeService.subscribe).
+        // nil workspaceID → unsubscribe (defensive — workspace not yet resolved
+        // or user just left the only workspace).
+        .task(id: activeWorkspaceStore.activeWorkspaceID) {
+            if let wid = activeWorkspaceStore.activeWorkspaceID {
+                await realtimeService.subscribe(workspaceID: wid)
+            } else {
+                await realtimeService.unsubscribe()
+            }
+        }
+        // Track 5 / S7 H.5 — Suspend/resume Realtime on scenePhase boundary to
+        // save battery in background. resume() recovers via persisted active
+        // workspace; suspend() closes WS + cancels reconnect timers.
+        .onChange(of: scenePhase) { _, phase in
+            Task {
+                if phase == .active {
+                    await realtimeService.resume()
+                } else {
+                    await realtimeService.suspend()
+                }
+            }
         }
     }
 

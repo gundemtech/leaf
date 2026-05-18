@@ -81,6 +81,22 @@ struct TeamView: View {
     @Environment(TeamFeedReader.self)  private var teamFeedReader
     @Environment(FeedFilterStore.self) private var feedFilterStore
 
+    // MARK: - Phase H.6: APNs deep-link target
+    //
+    // LeafAppDelegate.userNotificationCenter(didReceive:) populates
+    // `windowState.pendingMessageID` after the user clicks a notification.
+    // We observe via .onChange and scroll-to + transient highlight pulse.
+
+    @Environment(WindowState.self) private var windowState
+
+    // MARK: - Phase H.3 attachment resolver (replaces local @State noop)
+    //
+    // Composition root wires `AttachmentMetadataResolver` (DB-backed) via
+    // custom EnvironmentKey. Falls back to nil when not yet wired — G.9
+    // already gracefully degrades to label-only attachment chips.
+
+    @Environment(\.attachmentMetadataResolver) private var injectedResolver
+
     // MARK: - Local sheet state
 
     @State private var sendSheetRecipient: SendRecipient? = nil
@@ -107,16 +123,17 @@ struct TeamView: View {
     /// attachment metadata embed but attachment label is still shown).
     @State private var attachmentMetadataCache: [String: AttachmentMetadata] = [:]
 
-    /// Resolver actor — Phase H composition root replaces this with a DB-backed
-    /// instance. Lazily created here as a noop resolver (no database, no collectors)
-    /// so G.9 compile-path is fully wired without requiring Phase H.
-    ///
-    /// Note: AttachmentMetadataResolver is an `actor` — not injectable via
-    /// `@Environment` directly (SwiftUI environment requires `@Observable` or
-    /// `EnvironmentKey` returning a Sendable value). We store it as @State here
-    /// and Phase H can replace the reference at composition time via an
-    /// `@Environment(\.attachmentMetadataResolver)` key (deferred to H).
+    /// Phase H landed: resolver is now injected via
+    /// `@Environment(\.attachmentMetadataResolver)` (see above).
+    /// Retained @State exists only as a fallback when the EnvironmentKey
+    /// returns nil (e.g., unit-test snapshots or DB open failures).
     @State private var attachmentMetadataResolver: AttachmentMetadataResolver? = nil
+
+    // MARK: - G.6 / H.6 transient scroll-to highlight
+
+    /// Message id that is currently being highlighted as the deep-link target.
+    /// Cleared via a Task.sleep timer ~2s after scroll-to fires.
+    @State private var highlightedMessageID: String? = nil
 
     // MARK: - Body
 
@@ -286,17 +303,43 @@ struct TeamView: View {
                 emptyState(forMembers: members.count)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ScrollView {
-                    LazyVStack(spacing: LeafSpace.sm) {
-                        ForEach(items) { item in
-                            cardView(for: item, members: members)
-                                .id(item.id)
+                // H.6 — ScrollViewReader gives us scrollTo(_:anchor:) so the
+                // APNs deep-link can jump to the matched message cell. The
+                // proxy.scrollTo(...) call must run inside `.onChange` which
+                // is wired below via a binding to `windowState.pendingMessageID`.
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: LeafSpace.sm) {
+                            ForEach(items) { item in
+                                cardView(for: item, members: members)
+                                    .id(item.id)
+                            }
+                            if hasMore {
+                                paginationSentinel(workspaceID: workspaceID)
+                            }
                         }
-                        if hasMore {
-                            paginationSentinel(workspaceID: workspaceID)
+                        .padding(.bottom, LeafSpace.md)
+                    }
+                    // H.6 — observe deep-link target and scroll/highlight.
+                    .onChange(of: windowState.pendingMessageID) { _, newID in
+                        guard let messageID = newID else { return }
+                        withAnimation {
+                            proxy.scrollTo(messageID, anchor: .center)
+                        }
+                        highlightedMessageID = messageID
+                        Task {
+                            try? await Task.sleep(nanoseconds: 2_000_000_000)
+                            await MainActor.run {
+                                if highlightedMessageID == messageID {
+                                    highlightedMessageID = nil
+                                }
+                                if windowState.pendingMessageID == messageID {
+                                    windowState.pendingMessageID = nil
+                                    windowState.pendingWorkspaceID = nil
+                                }
+                            }
                         }
                     }
-                    .padding(.bottom, LeafSpace.md)
                 }
             }
         }
@@ -426,7 +469,9 @@ struct TeamView: View {
         guard let att = row.attachment else { return }
         let ref = att.externalRef
         if attachmentMetadataCache[ref] != nil { return }  // already cached
-        guard let resolver = attachmentMetadataResolver else { return }  // noop until Phase H
+        // H.3 — prefer env-injected DB-backed resolver; @State fallback survives
+        // for unit-test snapshots / DB-open failures (degrades to label-only).
+        guard let resolver = injectedResolver ?? attachmentMetadataResolver else { return }
         let provider = providerFromKind(att.kind)
         let metadata = await resolver.resolve(provider: provider, externalRef: ref)
         await MainActor.run {

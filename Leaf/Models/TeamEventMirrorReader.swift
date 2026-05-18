@@ -17,9 +17,12 @@ import LeafCore
 import LeafCorePrivate
 #endif
 
+/// Track 5 / S7 H.1 — conforms to `RealtimeTeamEventAbsorbing` so
+/// `LeafRealtimeService` can inject this reader without an inverse
+/// dependency on the app target.
 @MainActor
 @Observable
-final class TeamEventMirrorReader {
+final class TeamEventMirrorReader: RealtimeTeamEventAbsorbing {
     enum State: Equatable {
         case idle
         case ticking
