@@ -140,7 +140,28 @@ struct TeamView: View {
     /// Cleared via a Task.sleep timer ~2s after scroll-to fires.
     @State private var highlightedMessageID: String? = nil
 
+    /// S7 Stage 6 fix C-I6 — cached self-pubkey hex. Loaded once via
+    /// `loadCachedSelfPubHex()` on `.onAppear`; consulted by `selfPubkeyHex()`.
+    /// Replaces a per-render call to `IdentityService.ensureLocalIdentity`
+    /// (filesystem I/O on the main thread inside the LazyVStack body). Empty
+    /// string == "not yet loaded" / "no identity" — TeamFeedReader treats
+    /// that as no self-exclusion (graceful).
+    @State private var cachedSelfPubHex: String = ""
+
     // MARK: - Body
+
+    /// S7 Stage 6 fix C-I6 — loads `cachedSelfPubHex` once per view appearance.
+    /// `IdentityService.ensureLocalIdentity` reads the X25519 priv-key file
+    /// from `<TeamKeystore.defaultRoot()>/x25519.priv`; doing this on every
+    /// directMessageCard render is per-row filesystem I/O on the main thread.
+    private func loadCachedSelfPubHex() {
+        guard cachedSelfPubHex.isEmpty,
+              let key = try? IdentityService.ensureLocalIdentity(at: TeamKeystore.defaultRoot())
+        else { return }
+        cachedSelfPubHex = key.publicKey.rawRepresentation
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
 
     var body: some View {
         Group {
@@ -183,6 +204,10 @@ struct TeamView: View {
         // Restore persisted filter selection + trigger initial feed load when
         // the active workspace changes.
         .task(id: activeWorkspaceStore.activeWorkspaceID) {
+            // S7 Stage 6 fix C-I6 — prime the self-pubkey cache once; cheap
+            // single filesystem read, then every directMessageCard render
+            // reuses the @State value instead of re-reading the priv file.
+            loadCachedSelfPubHex()
             guard let wid = activeWorkspaceStore.activeWorkspaceID else { return }
             feedFilterStore.loadForWorkspace(wid)
             await teamFeedReader.loadInitial(
@@ -659,7 +684,16 @@ struct TeamView: View {
 
     /// Best-effort self pubkey for TeamFeedReader selfPubkeyHex parameter.
     /// Falls back to "" — TeamFeedReader treats "" as "no self-exclusion" (graceful).
+    ///
+    /// S7 Stage 6 fix C-I6 — returns the cached @State value if loaded
+    /// (loadSelfPubHex sets it on .onAppear), else performs the
+    /// IdentityService disk read once. The earlier impl did the disk read on
+    /// every call — including N times per LazyVStack render pass through
+    /// directMessageCard. With long DM feeds this manifested as visible UI
+    /// jank on scroll. Matches the WorkspaceSettingsSection.loadMyPubHex
+    /// + WorkspaceMembersAdminList pattern.
     private func selfPubkeyHex() -> String {
+        if !cachedSelfPubHex.isEmpty { return cachedSelfPubHex }
         guard let key = try? IdentityService.ensureLocalIdentity(at: TeamKeystore.defaultRoot()) else {
             return ""
         }
