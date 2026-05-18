@@ -5,8 +5,8 @@ import Foundation
 /// Превращает bundle ID в `NSImage` иконку приложения с in-memory кэшем.
 /// AppKit-специфично, поэтому живёт в Leaf target, не в LeafCore.
 ///
-/// Используется SessionRow и другими view'хами для рендеринга real app icon
-/// рядом с context label вместо generic SF symbol.
+/// Используется view'хами для рендеринга real app icon рядом с context
+/// label вместо generic SF symbol.
 @MainActor
 final class AppIconResolver {
     static let shared = AppIconResolver()

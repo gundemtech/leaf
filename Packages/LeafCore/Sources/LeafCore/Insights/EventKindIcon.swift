@@ -1,8 +1,8 @@
 import Foundation
 
 /// Pure mapping from `event_kind` → SF Symbol name. UI-target consumers
-/// (`ActivityRow`) read from here so the logic stays unit-testable from
-/// LeafCore. Phase Track-4 S4 — added per-event-kind dispatch for the 33
+/// read from here so the logic stays unit-testable from LeafCore.
+/// Phase Track-4 S4 — added per-event-kind dispatch for the 33
 /// visible LocalOS kinds landed by S1+S2+S3. Pairs (entered/exited,
 /// connected/disconnected, locked/unlocked) intentionally share a symbol;
 /// copy strings in `ActivityFeedMapper.mapLocalOS` disambiguate.
