@@ -1,6 +1,6 @@
 //
-//  PendingInviteRow.swift
-//  Track 2 / D3 — per-row layout for PendingInvitesSection on D1 substrate.
+//  PendingInviteAdminRow.swift
+//  Track 5 / S7 — Relocated from Team/ to Settings/ (F.6). Per-row layout for PendingInvitesSection (admin).
 //  Status-driven action cluster:
 //    .pending  → [Re-share popover] + [Revoke] (LeafIconButton.bordered/destructive)
 //    .revoked / .expired / .failed → [Dismiss] (LeafButton.secondary)

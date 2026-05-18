@@ -1,9 +1,10 @@
 //
-//  PendingInvitesSection.swift
-//  Track 2 / D3 — TeamView section between active members list и [Add member]
-//  CTA on D1 substrate. Hidden when no visible rows (Phase 5.5.C contract D6).
+//  PendingInvitesAdminSection.swift
+//  Track 5 / S7 — Relocated from Team/ to Settings/ (F.6). Admin-facing
+//  pending-invites list within WorkspaceSettingsSection. Struct name unchanged
+//  so TeamView callers compile without modification.
 //  Section header has Refresh CTA via LeafButton.secondary (batch poll via
-//  PendingInvitesReader.poll()). Per-row actions delegated to PendingInviteRow.
+//  PendingInvitesReader.poll()). Per-row actions delegated to PendingInviteAdminRow.
 //
 
 import SwiftUI
