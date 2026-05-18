@@ -56,12 +56,22 @@ struct TodayBlock: View {
 
     private var metricsRow: some View {
         HStack(alignment: .top, spacing: LeafSpace.lg) {
-            LeafMetricAmbient(value: focusValue, label: "focused")
-            LeafMetricAmbient(value: aiRatioValue, label: "AI ratio")
-            LeafMetricAmbient(value: "\(metrics.sessionsCount)", label: "sessions")
-            LeafMetricAmbient(value: "\(metrics.switchCount)", label: "switches")
-            LeafMetricAmbient(value: "\(metrics.commitsCount)", label: "commits")
+            metricCell(value: focusValue, label: "focused")
+            metricCell(value: aiRatioValue, label: "AI ratio")
+            metricCell(value: "\(metrics.sessionsCount)", label: "sessions")
+            metricCell(value: "\(metrics.commitsCount)", label: "commits")
             Spacer(minLength: 0)
+        }
+    }
+
+    private func metricCell(value: String, label: String) -> some View {
+        VStack(alignment: .leading, spacing: LeafSpace.xxs) {
+            Text(value)
+                .font(LeafType.title.medium.monospacedDigit())
+                .foregroundStyle(LeafColor.text.primary)
+            Text(label)
+                .font(LeafType.body.small)
+                .foregroundStyle(LeafColor.text.tertiary)
         }
     }
 
