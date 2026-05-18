@@ -50,6 +50,11 @@ public actor AttachmentMetadataResolver {
     private let database: Database
     private let collectorsRegistry: CollectorsRegistry?
     private var cache: [CacheKey: CacheEntry] = [:]
+    /// S7 Stage 6 fix B-I2 — in-flight resolve tasks per cache key. When a
+    /// cache miss triggers a collector fetch, subsequent concurrent resolves
+    /// for the same key suspend on the existing Task's value rather than
+    /// firing parallel collector requests (Linear / Slack rate-limit budget).
+    private var inflight: [CacheKey: Task<AttachmentMetadata?, Never>] = [:]
     private let ttl: TimeInterval = 300       // 5 minutes for successful hits
     private let nilTTL: TimeInterval = 60     // 60s for nil results
     private let now: @Sendable () -> Date
@@ -87,13 +92,47 @@ public actor AttachmentMetadataResolver {
             // Expired — fall through to re-resolve.
         }
 
-        // Step 2: Local events table lookup.
+        // Step 2: Local events table lookup (sync — no suspension between
+        // cache miss check and write, so no in-flight coalescing needed for
+        // this branch).
         if let local = lookupLocal(provider: provider, externalRef: externalRef) {
             cache[key] = CacheEntry(metadata: local, storedAt: now())
             return local
         }
 
-        // Step 3: Collector fetch fallback (C.9).
+        // Step 3: Collector fetch fallback (C.9). Coalesce concurrent calls
+        // for the same key — without this, the `await fetchFromCollector(...)`
+        // suspension below releases the actor lock and lets N concurrent
+        // resolve(...) calls all see the same cache miss and all fire their
+        // own collector request. With Linear's 2M-complexity/hr and Slack's
+        // tier-limited HTTP budget, that's a multiplicative cost defeating
+        // the cache. The inflight map coalesces all callers onto a single
+        // Task; the Task writes the result into the cache before returning.
+        if let pending = inflight[key] {
+            return await pending.value
+        }
+        let task = Task { [weak self] () -> AttachmentMetadata? in
+            guard let self else { return nil }
+            return await self.performCollectorFetchAndCache(
+                provider: provider,
+                externalRef: externalRef,
+                key: key
+            )
+        }
+        inflight[key] = task
+        let result = await task.value
+        inflight[key] = nil
+        return result
+    }
+
+    /// Off-the-actor work for B-I2 coalescing: do the collector fetch + cache
+    /// write. Lives in its own method so the Task's @Sendable closure has a
+    /// tight surface to call (single method instead of inlined fetch+cache).
+    private func performCollectorFetchAndCache(
+        provider: AttachmentProvider,
+        externalRef: String,
+        key: CacheKey
+    ) async -> AttachmentMetadata? {
         let fetched = await fetchFromCollector(provider: provider, externalRef: externalRef)
         cache[key] = CacheEntry(metadata: fetched, storedAt: now())
         return fetched

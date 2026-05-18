@@ -493,11 +493,13 @@ final class AttachmentMetadataResolverTests: XCTestCase {
     // MARK: - Concurrency: same key no double-fetch
 
     func testConcurrentResolve_SameKey_NoDoubleFetchFromCollector() async throws {
-        // Actor isolation prevents double-invocation: resolve() is called on the
-        // actor, so concurrent calls to the same key are serialized. The first call
-        // populates the cache; subsequent calls in the same tick may or may not hit
-        // the cache depending on scheduling. We verify the provider is called at most
-        // a small bounded number of times across N concurrent calls.
+        // S7 Stage 6 fix B-I2 — concurrent resolves for the same key now
+        // coalesce onto a single Task via the inflight map. Previously the
+        // `await fetchFromCollector(...)` suspension released the actor lock
+        // and let N concurrent callers all see the same cache miss and fire
+        // their own collector requests. With Linear/Slack rate-limit budgets
+        // this matters: 10 concurrent feed-card renders for the same PR
+        // should produce exactly one HTTP call.
         let mockProvider = MockGitHubAttachmentProvider(result: nil)
         let registry = CollectorsRegistry(gitHubProvider: mockProvider)
         let resolver = makeResolver(registry: registry)
@@ -511,20 +513,38 @@ final class AttachmentMetadataResolverTests: XCTestCase {
             }
         }
 
-        // Actor isolation guarantees sequential execution inside the actor, so the
-        // first call primes the nil cache and subsequent calls respect nilTTL.
-        // Provider should be called exactly once (or at most a small number of times
-        // if the task group fires them all before the cache entry is written).
         let callCountFinal = await mockProvider.callCount
-        XCTAssertLessThanOrEqual(
+        XCTAssertEqual(
             callCountFinal,
-            10,
-            "Provider calls should be bounded (actor isolation serialises invocations)"
+            1,
+            "B-I2: inflight coalescing must collapse N concurrent resolves for the same key into exactly 1 collector call"
         )
-        // In practice with actor isolation, the nil cache entry is written after
-        // the first call completes, so subsequent calls from the group that haven't
-        // started yet will hit the cache. The concrete bound depends on runtime
-        // scheduling — we only assert a generous upper bound to avoid flakiness.
+    }
+
+    /// B-I2 sanity check: coalescing must NOT cross keys. Different keys must
+    /// each get their own fetch.
+    func testConcurrentResolve_DistinctKeys_EachFetchesOnce() async throws {
+        let mockProvider = MockGitHubAttachmentProvider(result: nil)
+        let registry = CollectorsRegistry(gitHubProvider: mockProvider)
+        let resolver = makeResolver(registry: registry)
+
+        // 5 keys × 4 concurrent resolves each = 20 calls collapsing to 5.
+        await withTaskGroup(of: Void.self) { group in
+            for k in 0..<5 {
+                for _ in 0..<4 {
+                    group.addTask {
+                        _ = await resolver.resolve(provider: .github, externalRef: "ref-\(k)")
+                    }
+                }
+            }
+        }
+
+        let callCountFinal = await mockProvider.callCount
+        XCTAssertEqual(
+            callCountFinal,
+            5,
+            "Distinct keys must each fetch once — coalescing is per-key, not global"
+        )
     }
 }
 
