@@ -29,7 +29,25 @@ struct YouNowBlock: View {
                 cardContent
                     .animation(.easeInOut(duration: 0.25), value: state)
             }
+            .overlay(
+                RoundedRectangle(cornerRadius: LeafRadius.lg, style: .continuous)
+                    .strokeBorder(stateBorderTint, lineWidth: 1)
+                    .animation(.easeInOut(duration: 0.25), value: state)
+            )
             .modifier(YouNowTapModifier(state: state, handleTap: handleTap))
+        }
+    }
+
+    /// Tone-tinted card border per state — matches Figma mockup §3 in
+    /// master spec where the YOU·NOW card is outlined in the state colour
+    /// (extra signal beyond the leading IconChip tint). `.away` reverts
+    /// to LeafCard's default subtle border by rendering a clear stroke.
+    private var stateBorderTint: Color {
+        switch state {
+        case .active:        return LeafColor.accent.primary.opacity(0.4)
+        case .inMeeting:     return LeafColor.status.info.opacity(0.4)
+        case .deepWorkFocus: return LeafColor.status.warning.opacity(0.4)
+        case .away:          return .clear
         }
     }
 
@@ -48,7 +66,7 @@ struct YouNowBlock: View {
     @ViewBuilder
     private func activeContent(_ s: YouNowActive) -> some View {
         rowLayout(
-            iconAsset: "play.circle.fill",
+            iconSystemName: "play.circle.fill",
             tint: LeafColor.accent.primary,
             title: s.app,
             titleTint: LeafColor.accent.primary,
@@ -61,7 +79,7 @@ struct YouNowBlock: View {
     @ViewBuilder
     private func meetingContent(_ m: YouNowMeeting) -> some View {
         rowLayout(
-            iconAsset: "video.fill",
+            iconSystemName: "video.fill",
             tint: LeafColor.status.info,
             title: m.titleIfAvailable ?? "In a meeting",
             titleTint: LeafColor.status.info,
@@ -74,7 +92,7 @@ struct YouNowBlock: View {
     @ViewBuilder
     private func focusContent(_ f: YouNowFocus) -> some View {
         rowLayout(
-            iconAsset: "moon.fill",
+            iconSystemName: "moon.fill",
             tint: LeafColor.status.warning,
             title: "Deep work: \(f.modeName ?? "Focus")",
             titleTint: LeafColor.status.warning,
@@ -89,7 +107,7 @@ struct YouNowBlock: View {
         let (icon, titleText, timeFooter) = awayPresentation(for: a)
         VStack(alignment: .leading, spacing: LeafSpace.sm) {
             rowLayout(
-                iconAsset: icon,
+                iconSystemName: icon,
                 tint: LeafColor.text.tertiary,
                 title: titleText,
                 titleTint: LeafColor.text.secondary,
@@ -121,7 +139,7 @@ struct YouNowBlock: View {
 
     @ViewBuilder
     private func rowLayout(
-        iconAsset: String,
+        iconSystemName: String,
         tint: Color,
         title: String,
         titleTint: Color,
@@ -130,7 +148,7 @@ struct YouNowBlock: View {
         trailingBars: Int
     ) -> some View {
         HStack(alignment: .top, spacing: LeafSpace.md) {
-            LeafIconChip(asset: iconAsset, size: .md, tint: tint)
+            LeafIconChip(systemName: iconSystemName, size: .md, tint: tint)
             VStack(alignment: .leading, spacing: LeafSpace.xs) {
                 Text(title)
                     .font(LeafType.title.small)
