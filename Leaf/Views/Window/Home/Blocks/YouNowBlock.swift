@@ -38,10 +38,10 @@ struct YouNowBlock: View {
     @ViewBuilder
     private var cardContent: some View {
         switch state {
-        case .active(let s):        activeContent(s)
-        case .inMeeting(let m):     meetingContent(m)
+        case .active(let s): activeContent(s)
+        case .inMeeting(let m): meetingContent(m)
         case .deepWorkFocus(let f): focusContent(f)
-        case .away(let a):          awayContent(a)
+        case .away(let a): awayContent(a)
         }
     }
 
@@ -161,7 +161,7 @@ struct YouNowBlock: View {
     private func intensityBarsView(count: Int) -> some View {
         HStack(spacing: 2) {
             ForEach(0..<4, id: \.self) { i in
-                RoundedRectangle(cornerRadius: 1, style: .continuous)
+                Rectangle()
                     .fill(LeafColor.accent.primary)
                     .frame(width: 3, height: 8)
                     .opacity(i < count ? 1.0 : 0.25)
@@ -175,8 +175,8 @@ struct YouNowBlock: View {
 
     private func shouldShowResume(_ a: YouNowAway) -> Bool {
         guard let bundleID = a.lastAppBundleID, !bundleID.isEmpty,
-              a.lastLinearID != nil,
-              a.idleSec <= 86_400
+            a.lastLinearID != nil,
+            a.idleSec <= 86_400
         else { return false }
         return localAppsStore.isEnabled(bundleID)
     }
@@ -213,8 +213,8 @@ struct YouNowBlock: View {
 
     private func triggerResume(for a: YouNowAway) {
         guard shouldShowResume(a),
-              let bundleID = a.lastAppBundleID,
-              let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
+            let bundleID = a.lastAppBundleID,
+            let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
         else { return }
         NSWorkspace.shared.open(url)
     }
