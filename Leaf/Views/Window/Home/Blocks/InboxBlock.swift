@@ -12,6 +12,8 @@ import SwiftUI
 struct InboxBlock: View {
     let items: [InboxItem]
 
+    @State private var selectedFilter: InboxFilter = .all
+
     var body: some View {
         VStack(alignment: .leading, spacing: LeafSpace.md) {
             Text("INBOX")
@@ -19,13 +21,21 @@ struct InboxBlock: View {
                 .foregroundStyle(LeafColor.text.tertiary)
 
             LeafCard(padding: .regular) {
-                if items.isEmpty {
-                    emptyDataState
-                } else {
-                    placeholderPopulated
+                VStack(alignment: .leading, spacing: LeafSpace.sm) {
+                    InboxFilterRow(selected: $selectedFilter)
+                    LeafDivider()
+                    if items.isEmpty {
+                        emptyDataState
+                    } else {
+                        placeholderPopulated
+                    }
                 }
             }
         }
+    }
+
+    private var filteredItems: [InboxItem] {
+        items.filter { selectedFilter.admits($0.kind) }
     }
 
     private var emptyDataState: some View {
@@ -36,10 +46,9 @@ struct InboxBlock: View {
         )
     }
 
-    // Placeholder until T4–T9 add the real UI (filter row + search +
-    // scrollable list with severity dots + aggregation count + tap).
+    // Placeholder until T5 adds search + T6..T9 add scrollable list.
     private var placeholderPopulated: some View {
-        Text("\(items.count) inbox items")
+        Text("\(filteredItems.count) inbox items (filter: \(selectedFilter.rawValue))")
             .font(LeafType.body.regular)
             .foregroundStyle(LeafColor.text.secondary)
     }
