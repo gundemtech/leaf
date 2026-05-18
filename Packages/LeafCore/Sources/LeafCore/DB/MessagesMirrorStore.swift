@@ -121,14 +121,21 @@ public struct MessagesMirrorStore: Sendable {
     /// Per-workspace count of unread inbound DMs.
     /// Single SQL aggregate — uses `idx_messages_mirror_unread` partial index.
     /// Returns an empty dict when no unread messages exist.
+    ///
+    /// S7 Stage 6 fix B-I3 — direction enum bound via `?` argument instead of
+    /// inline string interpolation. The value is a compile-time constant
+    /// today, but bind-via-argument is the uniform pattern across this file
+    /// (e.g., `readUnreadInbound` on the line above) and defends against a
+    /// hypothetical future where the constant becomes user-derived or
+    /// contains a quote that breaks the literal SQL.
     public static func unreadInboundCountByWorkspace(in db: GRDB.Database) throws -> [String: Int] {
         let rows = try Row.fetchAll(db, sql: """
             SELECT \(Schema.MessagesMirror.workspaceID), COUNT(*) AS cnt
             FROM \(Schema.MessagesMirror.tableName)
-            WHERE \(Schema.MessagesMirror.direction) = '\(Schema.MessagesMirror.directionInbound)'
+            WHERE \(Schema.MessagesMirror.direction) = ?
               AND \(Schema.MessagesMirror.readAtMs) IS NULL
             GROUP BY \(Schema.MessagesMirror.workspaceID)
-            """)
+            """, arguments: [Schema.MessagesMirror.directionInbound])
         var result: [String: Int] = [:]
         for row in rows {
             if let wid: String = row[Schema.MessagesMirror.workspaceID],
