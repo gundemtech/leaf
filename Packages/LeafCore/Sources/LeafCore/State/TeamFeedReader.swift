@@ -60,6 +60,15 @@ public final class TeamFeedReader {
     /// saw, and the banner reflects the transient pagination failure.
     public private(set) var lastLoadOlderError: String?
 
+    /// S7 Stage 6 fix B-I5 — refresh-in-flight indicator surfaced as a side
+    /// channel. When `loadInitial` is called from a `.loaded` state (filter
+    /// toggle, workspace switch where prior state is still visible,
+    /// pull-to-refresh), the reader keeps the current items rendered and
+    /// flips `isRefreshing = true` for the fetch duration. The UI overlays a
+    /// subtle progress indicator instead of flashing through `.loading` (which
+    /// would wipe the feed for tens of ms each time a chip toggles).
+    public private(set) var isRefreshing: Bool = false
+
     // MARK: - Dependencies
 
     private let queryService: TeamFeedQueryService
@@ -91,14 +100,29 @@ public final class TeamFeedReader {
 
     // MARK: - Public API
 
-    /// Load the initial page of feed items. Sets state → .loaded or .error.
+    /// Load the initial page of feed items.
+    ///
+    /// Cold first call (state == .loading or .error): transitions to .loading
+    /// for the fetch duration, then to .loaded or .error.
+    ///
+    /// Warm refresh (state == .loaded): keeps the current items rendered and
+    /// flips `isRefreshing` true for the fetch duration, then replaces items
+    /// atomically (or transitions to .error on failure — preserving items via
+    /// .loaded would be inconsistent with the user-perceived "I asked for a
+    /// fresh page and it failed"). S7 Stage 6 fix B-I5.
     public func loadInitial(
         workspaceID: String,
         filters: Set<FeedFilter>,
         selfPubkeyHex: String,
         limit: Int = 50
     ) async {
-        state = .loading
+        if case .loaded = state {
+            isRefreshing = true
+        } else {
+            state = .loading
+        }
+        defer { isRefreshing = false }
+
         do {
             let raw = try await queryService.fetch(
                 workspaceID: workspaceID,

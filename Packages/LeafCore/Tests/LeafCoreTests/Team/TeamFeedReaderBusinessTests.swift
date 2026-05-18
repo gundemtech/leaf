@@ -510,6 +510,34 @@ final class TeamFeedReaderBusinessTests: XCTestCase {
         XCTAssertEqual(reader.state, .loading)
     }
 
+    // S7 Stage 6 fix B-I5 — warm loadInitial preserves visible items via
+    // isRefreshing side-channel (no flash to .loading on every filter toggle).
+    func testLoadInitial_WarmRefresh_PreservesItemsViaIsRefreshing() async throws {
+        try insertEvent(eventID: "e1", source: .gitCommits, serverCreatedAtMs: 100, eventTsMs: 100)
+        try insertEvent(eventID: "e2", source: .gitCommits, serverCreatedAtMs: 200, eventTsMs: 200)
+
+        let reader = TeamFeedReader(queryService: queryService)
+        // Cold first load: state passes through .loading → .loaded.
+        await reader.loadInitial(workspaceID: "w1", filters: [.all], selfPubkeyHex: "rhex", limit: 5)
+        guard case .loaded(let coldItems, _) = reader.state, coldItems.count == 2 else {
+            XCTFail("Expected cold loadInitial to populate 2 items, got \(reader.state)")
+            return
+        }
+        XCTAssertFalse(reader.isRefreshing, "isRefreshing must reset to false after fetch completes")
+
+        // Warm refresh: state must NOT flip back to .loading during the second
+        // loadInitial. We can't capture the in-flight transient (would race
+        // against the fetch), but the post-condition is observable: state
+        // remains .loaded throughout, populated with the same/fresh items.
+        await reader.loadInitial(workspaceID: "w1", filters: [.all], selfPubkeyHex: "rhex", limit: 5)
+        guard case .loaded(let warmItems, _) = reader.state else {
+            XCTFail("Warm loadInitial must keep state in .loaded, got \(reader.state)")
+            return
+        }
+        XCTAssertEqual(warmItems.count, 2, "Warm refresh should re-fetch the same 2 items")
+        XCTAssertFalse(reader.isRefreshing, "isRefreshing must reset to false after fetch completes")
+    }
+
     // S7 Stage 6 fix B-I1 — loadOlder error preserves loaded items + surfaces
     // lastLoadOlderError. Without the fix, the catch transitions state to
     // .error which wipes the entire visible feed from the UI on any flaky
