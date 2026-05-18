@@ -44,10 +44,10 @@ struct YouNowBlock: View {
     /// to LeafCard's default subtle border by rendering a clear stroke.
     private var stateBorderTint: Color {
         switch state {
-        case .active:        return LeafColor.accent.primary.opacity(0.4)
-        case .inMeeting:     return LeafColor.status.info.opacity(0.4)
+        case .active: return LeafColor.accent.primary.opacity(0.4)
+        case .inMeeting: return LeafColor.status.info.opacity(0.4)
         case .deepWorkFocus: return LeafColor.status.warning.opacity(0.4)
-        case .away:          return .clear
+        case .away: return .clear
         }
     }
 
@@ -68,10 +68,11 @@ struct YouNowBlock: View {
         rowLayout(
             iconSystemName: "play.circle.fill",
             tint: LeafColor.accent.primary,
+            bundleIDForIcon: s.bundleID,
             title: s.app,
             titleTint: LeafColor.accent.primary,
             line2: [s.contextLabel, s.branch, s.linearID].compactMap { $0 }.joined(separator: " · ").nilIfEmpty,
-            line3: formatDuration(TimeInterval(s.durationSec)),
+            line3: activeTimeLine(s),
             trailingBars: s.intensityBars
         )
     }
@@ -81,6 +82,7 @@ struct YouNowBlock: View {
         rowLayout(
             iconSystemName: "video.fill",
             tint: LeafColor.status.info,
+            bundleIDForIcon: nil,
             title: m.titleIfAvailable ?? "In a meeting",
             titleTint: LeafColor.status.info,
             line2: "Started \(formatRelative(msAgo: m.startedAtMs))",
@@ -94,6 +96,7 @@ struct YouNowBlock: View {
         rowLayout(
             iconSystemName: "moon.fill",
             tint: LeafColor.status.warning,
+            bundleIDForIcon: nil,
             title: "Deep work: \(f.modeName ?? "Focus")",
             titleTint: LeafColor.status.warning,
             line2: [f.app, f.contextLabel].compactMap { $0 }.joined(separator: " · ").nilIfEmpty,
@@ -109,6 +112,7 @@ struct YouNowBlock: View {
             rowLayout(
                 iconSystemName: icon,
                 tint: LeafColor.text.tertiary,
+                bundleIDForIcon: a.lastAppBundleID,
                 title: titleText,
                 titleTint: LeafColor.text.secondary,
                 line2: [a.lastApp.map { "Last in \($0)" }, a.lastContextLabel]
@@ -122,6 +126,15 @@ struct YouNowBlock: View {
                 resumeCTA(for: a)
             }
         }
+    }
+
+    /// Compose the timing footer for `.active` — prefer `"Started 17:30 · 38m"`
+    /// when we know when the session began (gives a clearer temporal anchor than
+    /// raw duration), fall back to the duration string otherwise.
+    private func activeTimeLine(_ s: YouNowActive) -> String {
+        let duration = formatDuration(TimeInterval(s.durationSec))
+        guard let startMs = s.sessionStartedAtMs else { return duration }
+        return "Started \(Self.startTimeString(msSinceEpoch: startMs)) · \(duration)"
     }
 
     private func awayPresentation(for a: YouNowAway) -> (icon: String, title: String, footer: String) {
@@ -141,6 +154,7 @@ struct YouNowBlock: View {
     private func rowLayout(
         iconSystemName: String,
         tint: Color,
+        bundleIDForIcon: String?,
         title: String,
         titleTint: Color,
         line2: String?,
@@ -148,7 +162,7 @@ struct YouNowBlock: View {
         trailingBars: Int
     ) -> some View {
         HStack(alignment: .top, spacing: LeafSpace.md) {
-            LeafIconChip(systemName: iconSystemName, size: .md, tint: tint)
+            leadingIcon(systemName: iconSystemName, tint: tint, bundleID: bundleIDForIcon)
             VStack(alignment: .leading, spacing: LeafSpace.xs) {
                 Text(title)
                     .font(LeafType.title.small)
@@ -243,6 +257,50 @@ struct YouNowBlock: View {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         let delta = max(0, Int((nowMs - msAgo) / 1000))
         return "\(formatDuration(TimeInterval(delta))) ago"
+    }
+
+    // MARK: - Leading icon (app icon when known, fallback to SF chip)
+
+    /// Prefer the real macOS app icon when we have a bundle id — it's the
+    /// fastest visual anchor for "what app". Falls back to the tone-tinted
+    /// SF symbol chip for states without a bundle (meeting / focus
+    /// without app context / cold-empty away).
+    @ViewBuilder
+    private func leadingIcon(systemName: String, tint: Color, bundleID: String?) -> some View {
+        if let bundleID, let icon = Self.appIcon(forBundleID: bundleID) {
+            Image(nsImage: icon)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: 32, height: 32)
+                .clipShape(RoundedRectangle(cornerRadius: LeafRadius.md, style: .continuous))
+                .accessibilityHidden(true)
+        } else {
+            LeafIconChip(systemName: systemName, size: .md, tint: tint)
+        }
+    }
+
+    /// Resolve the macOS app icon for a bundle id via NSWorkspace. Returns
+    /// `nil` for unknown / uninstalled bundles — caller falls back to the SF
+    /// chip. Cached implicitly by NSWorkspace; per-call cost is negligible
+    /// at human-perceivable cadences.
+    private static func appIcon(forBundleID bundleID: String) -> NSImage? {
+        guard
+            let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
+        else { return nil }
+        return NSWorkspace.shared.icon(forFile: url.path)
+    }
+
+    /// Cached `HH:mm` formatter — locale-aware (`setLocalizedDateFormatFromTemplate`)
+    /// without per-render allocation. Phase 8.4 carry-fix in the spirit of master
+    /// §9.1 C-4 (TODAY DateFormatter caching) — same micro-perf reasoning.
+    private static let startTimeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.setLocalizedDateFormatFromTemplate("HH:mm")
+        return f
+    }()
+
+    fileprivate static func startTimeString(msSinceEpoch: Int64) -> String {
+        startTimeFormatter.string(from: Date(timeIntervalSince1970: TimeInterval(msSinceEpoch) / 1000))
     }
 }
 

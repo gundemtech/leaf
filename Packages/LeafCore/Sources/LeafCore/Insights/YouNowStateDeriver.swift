@@ -101,10 +101,12 @@ public enum YouNowStateDeriver {
             return .active(
                 YouNowActive(
                     app: app,
+                    bundleID: inputs.frontmostBundleID,
                     contextLabel: inputs.contextLabel,
                     branch: inputs.branch,
                     linearID: inputs.linearID,
                     durationSec: durationSec(from: inputs.activeSessionStartedAtMs, now: inputs.nowMs),
+                    sessionStartedAtMs: inputs.activeSessionStartedAtMs,
                     intensityBars: inputs.intensityBars
                 ))
         }

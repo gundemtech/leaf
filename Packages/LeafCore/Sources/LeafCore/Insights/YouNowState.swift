@@ -9,21 +9,31 @@ public enum YouNowState: Equatable, Hashable, Sendable {
 
 public struct YouNowActive: Equatable, Hashable, Sendable {
     public let app: String
+    public let bundleID: String?
     public let contextLabel: String?
     public let branch: String?
     public let linearID: String?
     public let durationSec: Int
+    public let sessionStartedAtMs: Int64?
     public let intensityBars: Int
 
     public init(
-        app: String, contextLabel: String?, branch: String?, linearID: String?,
-        durationSec: Int, intensityBars: Int
+        app: String,
+        bundleID: String?,
+        contextLabel: String?,
+        branch: String?,
+        linearID: String?,
+        durationSec: Int,
+        sessionStartedAtMs: Int64?,
+        intensityBars: Int
     ) {
         self.app = app
+        self.bundleID = bundleID
         self.contextLabel = contextLabel
         self.branch = branch
         self.linearID = linearID
         self.durationSec = durationSec
+        self.sessionStartedAtMs = sessionStartedAtMs
         self.intensityBars = intensityBars
     }
 }

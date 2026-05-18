@@ -5,11 +5,15 @@ import XCTest
 final class YouNowStateTests: XCTestCase {
     func testActiveCase() {
         let a = YouNowActive(
-            app: "Xcode", contextLabel: "HomeView.swift", branch: "feat",
-            linearID: "LEAF-1", durationSec: 60, intensityBars: 3)
+            app: "Xcode", bundleID: "com.apple.dt.Xcode",
+            contextLabel: "HomeView.swift", branch: "feat",
+            linearID: "LEAF-1", durationSec: 60,
+            sessionStartedAtMs: 1_700_000_000_000, intensityBars: 3)
         let s = YouNowState.active(a)
         guard case .active(let x) = s else { return XCTFail("expected .active") }
         XCTAssertEqual(x.app, "Xcode")
+        XCTAssertEqual(x.bundleID, "com.apple.dt.Xcode")
+        XCTAssertEqual(x.sessionStartedAtMs, 1_700_000_000_000)
         XCTAssertEqual(x.intensityBars, 3)
     }
 
@@ -72,11 +76,11 @@ final class YouNowStateTests: XCTestCase {
 
     func testEquatable() {
         let a1 = YouNowActive(
-            app: "X", contextLabel: nil, branch: nil, linearID: nil,
-            durationSec: 0, intensityBars: 0)
+            app: "X", bundleID: nil, contextLabel: nil, branch: nil, linearID: nil,
+            durationSec: 0, sessionStartedAtMs: nil, intensityBars: 0)
         let a2 = YouNowActive(
-            app: "X", contextLabel: nil, branch: nil, linearID: nil,
-            durationSec: 0, intensityBars: 0)
+            app: "X", bundleID: nil, contextLabel: nil, branch: nil, linearID: nil,
+            durationSec: 0, sessionStartedAtMs: nil, intensityBars: 0)
         XCTAssertEqual(YouNowState.active(a1), YouNowState.active(a2))
     }
 }
