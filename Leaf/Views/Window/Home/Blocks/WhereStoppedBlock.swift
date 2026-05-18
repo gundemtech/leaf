@@ -36,7 +36,7 @@ struct WhereStoppedBlock: View {
 
     @ViewBuilder
     private var cardContent: some View {
-        if let snap = snapshot {
+        if hasUsableSnapshot, let snap = snapshot {
             populatedBody(snap)
         } else {
             emptyState
@@ -49,10 +49,13 @@ struct WhereStoppedBlock: View {
             title: "Last work context",
             description: "No recent stop-points captured."
         )
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func populatedBody(_ snap: WhereStoppedSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: LeafSpace.sm) {
+        let cleanWipSignals = snap.wipSignals
+            .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        return VStack(alignment: .leading, spacing: LeafSpace.sm) {
             Text(snap.excerpt)
                 .font(LeafType.title.small)
                 .foregroundStyle(LeafColor.text.primary)
@@ -60,8 +63,8 @@ struct WhereStoppedBlock: View {
                 .truncationMode(.tail)
                 .multilineTextAlignment(.leading)
 
-            if !snap.wipSignals.isEmpty {
-                Text(snap.wipSignals.joined(separator: " · "))
+            if !cleanWipSignals.isEmpty {
+                Text(cleanWipSignals.joined(separator: " · "))
                     .font(LeafType.body.small)
                     .foregroundStyle(LeafColor.text.tertiary)
                     .lineLimit(1)
@@ -71,17 +74,25 @@ struct WhereStoppedBlock: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// Treats a snapshot with empty `excerpt` as no-data — header drops age
+    /// suffix and card falls back to `emptyState`. Substrate today never
+    /// emits empty excerpts, but this defends against future producer regressions.
+    private var hasUsableSnapshot: Bool {
+        guard let snap = snapshot else { return false }
+        return !snap.excerpt.isEmpty
+    }
+
     private var headerText: String {
-        guard let snap = snapshot else { return "WHERE YOU STOPPED" }
+        guard hasUsableSnapshot, let snap = snapshot else { return "WHERE YOU STOPPED" }
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         let delta = max(0, nowMs - snap.generatedAtMs)
         return "WHERE YOU STOPPED · \(Self.formatRelative(delta, nowMs: nowMs))"
     }
 
     private var accessibilityHint: String {
-        snapshot == nil
-            ? "No recent stop-points. Opens full detector history."
-            : "Opens decisions, open questions, blockers, and where-stopped history."
+        hasUsableSnapshot
+            ? "Opens decisions, open questions, blockers, and where-stopped history."
+            : "No recent stop-points. Opens full detector history."
     }
 
     private static func formatRelative(_ deltaMs: Int64, nowMs: Int64) -> String {
