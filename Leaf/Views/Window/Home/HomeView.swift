@@ -211,7 +211,7 @@ private struct HomeContent: View {
                         .frame(maxWidth: .infinity)
                 }
 
-                InboxBlock()
+                InboxBlock(items: snapshot.inboxItems)
 
                 WhereStoppedBlock()
             }
