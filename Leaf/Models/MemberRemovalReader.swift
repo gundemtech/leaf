@@ -4,8 +4,9 @@
 //
 //  Phase 5.3.E — @Observable wrapper for KeyRotationService.removeMember.
 //  Lazy-init Database + RelayClient + service. State machine drives
-//  RemoveMemberSheet. Mirror InviteOutboxReader (5.2.D) lazy-init pattern +
-//  composition root #if LEAF_PROD.
+//  destructive admin flows (S7 Settings → Workspace Member admin row).
+//  Mirror InviteOutboxReader (5.2.D) lazy-init pattern + composition root
+//  #if LEAF_PROD.
 //
 
 import Foundation
@@ -72,36 +73,6 @@ final class MemberRemovalReader {
                 self.state = .error(message: self.userFacingMessage(for: error))
             }
         }
-    }
-
-    /// Legacy single-workspace API kept for back-compat with RemoveMemberSheet
-    /// (no longer surfaced in the S7 UI but compiled for orphan callers).
-    /// Resolves workspace from `listWorkspaces(includeLeft: true).first` —
-    /// correct only on single-workspace devices. Prefer the explicit-id
-    /// variant for any new code path.
-    func removeMember(memberID: String, displayName: String) {
-        state = .removing(displayName: displayName)
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            do {
-                _ = try self.ensureService()  // primes self.database for resolveWorkspaceID
-                let workspaceID = try self.resolveWorkspaceID()
-                self.removeMember(workspaceID: workspaceID, memberID: memberID, displayName: displayName)
-            } catch {
-                self.logger.error("removeMember (legacy) failed: \(String(describing: error), privacy: .public)")
-                self.state = .error(message: self.userFacingMessage(for: error))
-            }
-        }
-    }
-
-    /// Transitional workspace resolver — picks the first workspace. Used only
-    /// by the legacy `removeMember(memberID:displayName:)` overload.
-    private func resolveWorkspaceID() throws -> String {
-        guard let db = self.database,
-              let workspace = try db.listWorkspaces(includeLeft: true).first else {
-            throw LeafError.databaseUnavailable
-        }
-        return workspace.id
     }
 
     func dismiss() {
