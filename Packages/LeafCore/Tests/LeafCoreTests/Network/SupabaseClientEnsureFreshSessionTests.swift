@@ -280,6 +280,113 @@ final class SupabaseClientEnsureFreshSessionTests: XCTestCase {
                        "lastRefreshAt + 55min < now must trigger refresh even when exp is far")
     }
 
+    // MARK: - Test 5 — DuringBootstrap → waits, no .unauthorized throw (review I1 fix)
+
+    /// Race window the P1 code-review I1 fixed: a Realtime reconnect can fire
+    /// `ensureFreshSession()` concurrent with the very first
+    /// `ensureAuthenticated()` cold-launch bootstrap (when state is
+    /// `.bootstrapping(task)` rather than `.authenticated`). Pre-fix
+    /// behaviour: `ensureFreshSession` saw "not .authenticated" → threw
+    /// `.unauthorized`. Post-fix: awaits the in-flight bootstrap Task, then
+    /// re-checks `shouldRefresh` against the fresh session before falling
+    /// through to the refresh path.
+    ///
+    /// We drive the real race by gating the bootstrap HTTP responses on a
+    /// continuation; calls fired before `releaseBootstrap()` are guaranteed
+    /// to observe state `.bootstrapping`.
+    func testEnsureFreshSession_DuringBootstrap_WaitsForBootstrapNotUnauthorized() async throws {
+        let clock = ClockBox()
+        clock.set(Date(timeIntervalSince1970: 1000))
+        let pubkey = String(repeating: "42", count: 32)
+        let initialJWT = makeJWT(pubkey: pubkey)
+        let counter = CallCounter()
+
+        // Gate that the first /auth/v1/token (initial token-refresh inside
+        // performBootstrap) waits on until released. We release only AFTER
+        // the second-Task ensureFreshSession() has had a chance to observe
+        // state `.bootstrapping`.
+        let gate = AsyncBootstrapGate()
+
+        MockURLProtocol.handler = { request, _ in
+            let path = request.url?.path ?? ""
+            counter.increment(path)
+            switch path {
+            case "/auth/v1/signup":
+                return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                        """
+                        { "access_token": "boot-tok", "refresh_token": "boot-rt",
+                          "user": { "id": "00000000-0000-0000-0000-000000000aaa" },
+                          "expires_at": 99999 }
+                        """.data(using: .utf8)!)
+            case "/functions/v1/register_pubkey":
+                return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                        Data(#"{"ok":true}"#.utf8))
+            case "/auth/v1/token":
+                // Block this call until the test releases — keeps the
+                // SupabaseClient pinned in state .bootstrapping while the
+                // concurrent ensureFreshSession() races in.
+                gate.waitSync()
+                return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                        """
+                        { "access_token": "\(initialJWT)", "refresh_token": "ref-2",
+                          "user": { "id": "00000000-0000-0000-0000-000000000aaa" },
+                          "expires_at": 99999 }
+                        """.data(using: .utf8)!)
+            default:
+                return (HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!, Data())
+            }
+        }
+
+        let client = SupabaseClient(
+            baseURL: baseURL, anonKey: anonKey,
+            urlSession: makeSession(),
+            identity: fixedIdentity(),
+            now: { clock.get() }
+        )
+
+        // Task A drives ensureAuthenticated → state becomes .bootstrapping
+        // (and stays there because the token endpoint is gated).
+        let bootstrapTask: Task<SupabaseAuthSession, Error> = Task {
+            try await client.ensureAuthenticated()
+        }
+
+        // Give Task A a moment to actually enter ensureAuthenticated and
+        // install the .bootstrapping state. Polling is OK — we just need
+        // ANY scheduling beat before Task B fires.
+        try await Task.sleep(nanoseconds: 50_000_000)  // 50ms
+
+        // Task B fires ensureFreshSession concurrent with .bootstrapping.
+        // Pre-fix: this throws .unauthorized synchronously (no await).
+        // Post-fix: this awaits Task A's bootstrap result.
+        async let freshSession: SupabaseAuthSession = client.ensureFreshSession()
+
+        // Now release the gate so Task A's bootstrap can complete.
+        gate.release()
+
+        let bootstrapped = try await bootstrapTask.value
+        let fresh = try await freshSession
+
+        // Same session — Task B did NOT initiate a separate refresh, it
+        // waited for Task A's in-flight bootstrap. session.exp = 99999 → far
+        // future → shouldRefresh(false) → fall through to "return session".
+        XCTAssertEqual(fresh.accessToken, bootstrapped.accessToken)
+        XCTAssertEqual(fresh.accessToken, initialJWT)
+        // Bootstrap = 1× signup + 1× register_pubkey + 1× token. The fresh
+        // session call must NOT have triggered a SECOND token call.
+        XCTAssertEqual(counter.get("/auth/v1/token"), 1,
+                       "ensureFreshSession during .bootstrapping must reuse the bootstrap result (no extra /auth/v1/token)")
+        XCTAssertEqual(counter.get("/auth/v1/signup"), 1)
+    }
+
+    /// Gate that blocks a synchronous caller (URLProtocol handler) until the
+    /// test releases. Uses a `DispatchSemaphore` since the URLProtocol stub
+    /// runs on a background dispatch queue (sync wait is fine there).
+    final class AsyncBootstrapGate: @unchecked Sendable {
+        private let sema = DispatchSemaphore(value: 0)
+        func waitSync() { sema.wait() }
+        func release() { sema.signal() }
+    }
+
     // MARK: - Test 4 — Concurrent calls coalesce
 
     func testEnsureFreshSession_ConcurrentCalls_Coalesce() async throws {

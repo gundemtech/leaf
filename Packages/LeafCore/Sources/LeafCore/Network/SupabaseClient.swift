@@ -113,6 +113,22 @@ public actor SupabaseClient {
             return try await task.value
         }
 
+        // Cold-launch race (P1 code-review I1): a Realtime reconnect can fire
+        // ensureFreshSession concurrent with the very first
+        // ensureAuthenticated() bootstrap. Mirror ensureAuthenticated's
+        // pattern — await the in-flight Task instead of throwing
+        // .unauthorized. After the bootstrap returns, re-check shouldRefresh
+        // against the freshly-bootstrapped session. If refresh isn't needed
+        // (typical — bootstrap finishes with a token refresh, lastRefreshAt
+        // is freshly stamped), return it directly. Otherwise fall through to
+        // the refresh path which will read the now-`.authenticated` state.
+        if case .bootstrapping(let task) = state {
+            let bootstrapped = try await task.value
+            if !shouldRefresh(session: bootstrapped) {
+                return bootstrapped
+            }
+        }
+
         // Need an existing session to refresh from.
         guard case .authenticated(let current) = state else {
             throw SupabaseError.unauthorized
