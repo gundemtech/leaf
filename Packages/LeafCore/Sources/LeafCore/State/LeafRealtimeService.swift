@@ -127,19 +127,13 @@ public final class LeafRealtimeService {
         self.teamEventDecryptor = teamEventDecryptor
         self.directMessageDecryptor = directMessageDecryptor
 
-        // P1 hot-fix — install the pre-reconnect JWT provider closure on the
-        // driver. The closure asks SupabaseClient for a fresh JWT before each
-        // reconnect attempt (avoids replaying an expired lastConnectJWT). We
-        // can't `await driver.setJWTProvider(...)` from init, so install via
-        // a fire-and-forget Task. The driver retains the closure until cleared.
-        // `supabase` is an actor; capturing it strongly is safe (same lifetime
-        // as the service in practice, and the closure does not hold `self`).
-        let supabaseRef = supabase
-        Task { [weak driver] in
-            await driver?.setJWTProvider({
-                try? await supabaseRef.ensureFreshSession().accessToken
-            })
-        }
+        // P1 re-dispatch — Important-2 race fix. Composition root passes the
+        // jwtProvider into RealtimeWebSocketDriver.init directly (no
+        // fire-and-forget Task → no race window where a transport-level
+        // reconnect could fire before the provider was installed). For tests
+        // that construct the driver without a provider, callers can still use
+        // `await driver.setJWTProvider(...)`. The prior fire-and-forget Task
+        // here is removed — composition root wires init-time installation.
     }
 
     // MARK: - Public API
@@ -205,6 +199,15 @@ public final class LeafRealtimeService {
             // handleDirectMessageInsert already filters cross-workspace events,
             // so a single long-lived loop is correct.
             ensureDispatchLoop()
+            // P1 re-dispatch — Critical-1 fix. Auto-start the 50min refresh
+            // timer at the end of a successful subscribe. Composition root no
+            // longer needs to call `startRefreshTimer()` separately; the
+            // timer lifetime is tied to subscription state, so it naturally
+            // restarts on resume (which routes through subscribe) and stops
+            // on unsubscribe/suspend. startRefreshTimer() is idempotent —
+            // a subsequent successful subscribe (e.g., workspace switch)
+            // simply rotates the underlying Task.
+            startRefreshTimer()
         } catch {
             // Connect or join failed (e.g., URL bogus, transport error). The
             // driver's reconnect loop (D.6) takes over if the WS was up and
@@ -223,8 +226,15 @@ public final class LeafRealtimeService {
     /// S7 Stage 6 fix A-I5 — does NOT cancel the dispatch loop. The loop is
     /// pinned to the driver lifetime; while unsubscribed, C3 gate inside the
     /// handlers drops any in-flight cross-workspace event silently.
+    ///
+    /// P1 re-dispatch — Critical-1 fix. Cancels the refresh timer because the
+    /// service is no longer subscribed to any workspace; there's no JWT
+    /// rotation worth doing in the background while idle. The next subscribe()
+    /// re-arms the timer automatically.
     public func unsubscribe() async {
         await driver.leaveCurrentChannel()
+        refreshTimerTask?.cancel()
+        refreshTimerTask = nil
         currentWorkspaceID = nil
         state = .disconnected
     }
@@ -237,8 +247,9 @@ public final class LeafRealtimeService {
     /// service holds no live AsyncStream consumer. resume() rebuilds the loop
     /// via subscribe() → ensureDispatchLoop().
     ///
-    /// P1 hot-fix — also stops the refresh timer; resume() does NOT auto-restart
-    /// it (caller must re-`startRefreshTimer()` if needed). This keeps suspend
+    /// P1 re-dispatch — Important-1 fix. Cancels the refresh timer; resume()
+    /// auto-restarts it via subscribe()'s auto-start path (Critical-1 fix), so
+    /// suspend→resume cycles don't permanently kill the timer. Keeps suspend
     /// truly silent — no token churn on a backgrounded app.
     public func suspend() async {
         dispatchTask?.cancel()
@@ -258,8 +269,12 @@ public final class LeafRealtimeService {
     /// Start the periodic refresh loop. Cancels any prior loop first
     /// (idempotent). Each tick calls `refreshIfNeeded()`.
     ///
-    /// Composition root typically calls this once after the first successful
-    /// `subscribe()` lands. Tests inject sub-second intervals.
+    /// P1 re-dispatch — Critical-1 fix. Production callers do NOT need to
+    /// invoke this; `subscribe()` auto-starts the timer (and `unsubscribe()` /
+    /// `suspend()` cancel it). The public method is preserved for tests that
+    /// inject sub-second intervals via `intervalSec:` and for any future
+    /// composition pattern that needs to start the timer outside a subscribe
+    /// path.
     public func startRefreshTimer(intervalSec: TimeInterval = LeafRealtimeService.defaultRefreshIntervalSec) {
         refreshTimerTask?.cancel()
         let interval = max(intervalSec, 0)
@@ -281,6 +296,13 @@ public final class LeafRealtimeService {
         refreshTimerTask?.cancel()
         refreshTimerTask = nil
     }
+
+    #if DEBUG
+    /// Test-only inspector for refresh-timer liveness. Production callers should
+    /// not depend on the raw timer state — the auto-start/stop discipline tied
+    /// to `subscribe`/`unsubscribe`/`suspend` is the contract surface.
+    public var isRefreshTimerRunning: Bool { refreshTimerTask != nil }
+    #endif
 
     /// Refresh-on-demand. Pulls a fresh JWT via `SupabaseClient.ensureFreshSession()`
     /// (which decides whether a `/auth/v1/token` round-trip is actually needed),

@@ -265,7 +265,15 @@ struct LeafApp: App {
         _feedFilterStore = State(initialValue: FeedFilterStore(userDefaults: .standard))
 
         // Realtime substrate. Driver = actor with URLSession.shared by default.
-        let realtimeDriver = RealtimeWebSocketDriver()
+        // P1 re-dispatch — Important-2 race fix. The JWT provider is wired at
+        // init time so the driver has it available the moment any reconnect
+        // attempt fires (eliminates the prior async install Task race where a
+        // transport-level reconnect could race ahead of `setJWTProvider`).
+        let realtimeDriver = RealtimeWebSocketDriver(
+            jwtProvider: { [supabase] in
+                try? await supabase.ensureFreshSession().accessToken
+            }
+        )
         let realtimeURL = LeafApp.realtimeURL(forSupabase: supabase)
 
         // Decryption closures — Phase H ships the substrate; the wire→plaintext

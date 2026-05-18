@@ -128,7 +128,8 @@ public actor RealtimeWebSocketDriver {
         heartbeatIntervalSec: TimeInterval = 30,
         missingHeartbeatLimit: Int = 3,
         reconnectBaseDelayMs: Int64 = 1_000,
-        reconnectMaxDelayMs: Int64 = 16_000
+        reconnectMaxDelayMs: Int64 = 16_000,
+        jwtProvider: (@Sendable () async -> String?)? = nil
     ) {
         var continuationCapture: AsyncStream<RealtimeEvent>.Continuation!
         self.events = AsyncStream { continuation in
@@ -140,6 +141,11 @@ public actor RealtimeWebSocketDriver {
         self.missingHeartbeatLimit = missingHeartbeatLimit
         self.reconnectBaseDelayMs = reconnectBaseDelayMs
         self.reconnectMaxDelayMs = reconnectMaxDelayMs
+        // P1 re-dispatch — Important-2 race fix. Install the provider at init
+        // time so the actor has it immediately, no async install Task → no
+        // race window where a transport-level reconnect could fire before
+        // `setJWTProvider` arrived.
+        self.jwtProvider = jwtProvider
     }
 
     // MARK: - Connect
@@ -321,6 +327,11 @@ public actor RealtimeWebSocketDriver {
     /// `SupabaseClient.ensureFreshSession()` path. The closure is invoked
     /// before each `attemptReconnect()` so a long-running session always
     /// reconnects with a non-expired JWT. nil disables the hook.
+    ///
+    /// P1 re-dispatch — prefer the init-time `jwtProvider:` parameter for
+    /// production wiring (zero race window). This method exists for legacy
+    /// callers + future programmatic replacement (e.g., closure swap on
+    /// re-auth).
     public func setJWTProvider(_ provider: (@Sendable () async -> String?)?) {
         self.jwtProvider = provider
     }
@@ -330,6 +341,11 @@ public actor RealtimeWebSocketDriver {
     /// Production has no use for the raw value — it is only used internally
     /// for phx_join replay during reconnect.
     public func currentConnectJWT() -> String? { lastConnectJWT }
+
+    /// Test-only inspector — was the jwtProvider closure registered?
+    /// Used by the P1 re-dispatch race-fix test to confirm init-time install
+    /// (no fire-and-forget Task hop).
+    public func hasJWTProviderForTest() -> Bool { jwtProvider != nil }
     #endif
 
     // MARK: - Receive loop + dispatch

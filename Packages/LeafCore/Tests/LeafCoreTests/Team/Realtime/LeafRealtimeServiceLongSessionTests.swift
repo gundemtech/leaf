@@ -299,6 +299,104 @@ final class LeafRealtimeServiceLongSessionTests: XCTestCase {
         await service.suspend()
     }
 
+    // MARK: - P1 spec compliance fix-up (re-dispatch) — auto-started timer + race-free provider
+
+    /// Critical-1: a successful subscribe() must auto-start the 50min refresh
+    /// timer. Composition root never calls startRefreshTimer() in production;
+    /// the timer must be tied to subscription lifetime so the JWT refresh path
+    /// is actually active.
+    func testSubscribe_StartsRefreshTimerAutomatically() async throws {
+        let clock = ClockBox()
+        let counter = CallCounter()
+        let supabase = try await bootstrappedClient(clock: clock, counter: counter)
+
+        let mock = MockWebSocketTask()
+        let driver = RealtimeWebSocketDriver(taskFactory: { _ in mock }, heartbeatIntervalSec: 60)
+        let service = makeService(driver: driver, supabase: supabase)
+        // BEFORE subscribe — timer not running yet.
+        XCTAssertFalse(service.isRefreshTimerRunning,
+                       "Refresh timer must not run before subscribe()")
+
+        await service.subscribe(workspaceID: "wid-auto-start")
+
+        // AFTER subscribe — timer must be running automatically.
+        XCTAssertTrue(service.isRefreshTimerRunning,
+                      "subscribe() must auto-start the refresh timer")
+
+        await service.suspend()
+    }
+
+    /// Important-1: suspend() cancels the refresh timer, but resume() must
+    /// restart it (resume() calls subscribe() internally, which auto-starts
+    /// the timer per Critical-1 fix). Without this, the timer is permanently
+    /// dead after first scene-phase background→foreground cycle.
+    func testSuspendResume_TimerRestartsAfterResume() async throws {
+        let clock = ClockBox()
+        let counter = CallCounter()
+        let supabase = try await bootstrappedClient(clock: clock, counter: counter)
+
+        let mock = MockWebSocketTask()
+        let driver = RealtimeWebSocketDriver(taskFactory: { _ in mock }, heartbeatIntervalSec: 60)
+        let service = makeService(driver: driver, supabase: supabase)
+
+        await service.subscribe(workspaceID: "wid-resume-timer")
+        XCTAssertTrue(service.isRefreshTimerRunning, "subscribe() must auto-start the timer")
+
+        await service.suspend()
+        XCTAssertFalse(service.isRefreshTimerRunning,
+                       "suspend() must cancel the refresh timer")
+
+        await service.resume()
+        XCTAssertTrue(service.isRefreshTimerRunning,
+                      "resume() must restart the refresh timer (via subscribe→auto-start)")
+
+        await service.suspend()
+    }
+
+    /// unsubscribe() must stop the refresh timer — the service is no longer
+    /// subscribed to any workspace so there's no reason to keep the timer
+    /// rotating JWTs in the background.
+    func testUnsubscribe_StopsRefreshTimer() async throws {
+        let clock = ClockBox()
+        let counter = CallCounter()
+        let supabase = try await bootstrappedClient(clock: clock, counter: counter)
+
+        let mock = MockWebSocketTask()
+        let driver = RealtimeWebSocketDriver(taskFactory: { _ in mock }, heartbeatIntervalSec: 60)
+        let service = makeService(driver: driver, supabase: supabase)
+
+        await service.subscribe(workspaceID: "wid-unsub")
+        XCTAssertTrue(service.isRefreshTimerRunning, "subscribe() must auto-start the timer")
+
+        await service.unsubscribe()
+        XCTAssertFalse(service.isRefreshTimerRunning,
+                       "unsubscribe() must cancel the refresh timer")
+    }
+
+    /// Important-2: Init-time race fix. When the driver is constructed with a
+    /// `jwtProvider` argument inline (not installed via a fire-and-forget Task
+    /// after init), it's available immediately for any reconnect attempt.
+    /// We assert this indirectly: a fresh driver with provider-in-init has the
+    /// provider visible from inside the actor (currentJWTProvider != nil).
+    func testDriverInit_JWTProviderAvailableImmediately() async throws {
+        let mock = MockWebSocketTask()
+        let calls = OSAllocatedUnfairLock(initialState: 0)
+        let driver = RealtimeWebSocketDriver(
+            taskFactory: { _ in mock },
+            heartbeatIntervalSec: 60,
+            jwtProvider: { @Sendable in
+                calls.withLock { $0 += 1 }
+                return "PROVIDER-JWT"
+            }
+        )
+        // Inspector confirms the provider was registered at init time — no
+        // post-init Task hop, no race window where the driver could reconnect
+        // without consulting the provider.
+        let installed = await driver.hasJWTProviderForTest()
+        XCTAssertTrue(installed,
+                      "jwtProvider passed to init must be available on the actor immediately, not via async install")
+    }
+
     /// 4. startRefreshTimer is idempotent — calling twice does not multiply
     ///    the firing rate. (Cancels the prior task before installing a new one.)
     func testRefreshTimer_StartTwice_OnlyOneLoopRuns() async throws {
