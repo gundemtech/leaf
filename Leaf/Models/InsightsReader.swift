@@ -149,6 +149,12 @@ final class InsightsReader {
                         // view, no period). Empty pre-4.7 install / non-prod CI.
                         let presenceState: PresenceUISnapshot = (try? PresenceUISnapshot.read(database: db)) ?? .empty
                         try Task.checkCancellation()
+                        // Track-8 Phase 8.3 — TODAY block aggregates (focused
+                        // minutes / AI ratio / sessions / switches / commits +
+                        // surface pills). Single SQL call backed by Phase 8.1
+                        // substrate; stub on non-prod returns .empty.
+                        let todayMetrics = try insights.todayMetrics(now: Date())
+                        try Task.checkCancellation()
                         let snapshot = InsightsSnapshot(
                             topApps: topApps,
                             sessions: sessions,
@@ -185,7 +191,8 @@ final class InsightsReader {
                             linearCompletionRate: linear.completionRate,
                             recentActivity: recentActivity,
                             presenceState: presenceState,
-                            recentSessions: recentSessions
+                            recentSessions: recentSessions,
+                            todayMetrics: todayMetrics
                         )
                         return .success((db, snapshot))
                     } catch {

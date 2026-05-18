@@ -123,6 +123,12 @@ public struct InsightsSnapshot: Sendable, Hashable {
     /// `nil` → `WorkStateSummary.empty` so the Home card always renders
     /// "All clear" rather than disappearing.
     public let workState: WorkStateSummary?
+    /// Phase Track-8 P3 — TODAY block metrics (focused minutes / AI ratio /
+    /// sessions / context switches / commits + surface pills). Default
+    /// `.empty` so existing callsites (tests, previews) keep compiling
+    /// without modification; production `InsightsReader.refresh()` writes
+    /// the real value via `DerivedInsights.todayMetrics(now:)`.
+    public let todayMetrics: TodayMetrics
 
     public init(
         topApps: [AppTimeEntry],
@@ -164,7 +170,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         browsersActivity: BrowsersActivityBreakdown? = nil,
         zoomActivity: ZoomActivityBreakdown? = nil,
         googleCalendarActivity: GoogleCalendarActivityBreakdown? = nil,
-        workState: WorkStateSummary? = nil
+        workState: WorkStateSummary? = nil,
+        todayMetrics: TodayMetrics = .empty
     ) {
         self.topApps = topApps
         self.sessions = sessions
@@ -206,6 +213,7 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.zoomActivity = zoomActivity
         self.googleCalendarActivity = googleCalendarActivity
         self.workState = workState
+        self.todayMetrics = todayMetrics
     }
 
     /// Convenience init — рассчитывает `deepSessionsCount` по threshold'у.
@@ -254,7 +262,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         browsersActivity: BrowsersActivityBreakdown? = nil,
         zoomActivity: ZoomActivityBreakdown? = nil,
         googleCalendarActivity: GoogleCalendarActivityBreakdown? = nil,
-        workState: WorkStateSummary? = nil
+        workState: WorkStateSummary? = nil,
+        todayMetrics: TodayMetrics = .empty
     ) {
         self.init(
             topApps: topApps,
@@ -296,7 +305,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
             browsersActivity: browsersActivity,
             zoomActivity: zoomActivity,
             googleCalendarActivity: googleCalendarActivity,
-            workState: workState
+            workState: workState,
+            todayMetrics: todayMetrics
         )
     }
 
