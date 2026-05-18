@@ -57,7 +57,7 @@ final class AttachmentMetadataResolverTests: XCTestCase {
         number: String = "42",
         repo: String = "octocat/hello-world",
         title: String = "Fix the bug",
-        eventKind: String = "github_pr_opened",
+        eventKind: String = "gh_pr_opened",
         tsMs: Int64 = 1_700_000_000_000
     ) throws {
         let payload: [String: String] = [
@@ -199,7 +199,7 @@ final class AttachmentMetadataResolverTests: XCTestCase {
     // MARK: - Local lookup: GitHub
 
     func testGitHubLookup_LocalEventHit_ReturnsMetadata() async throws {
-        try makeGitHubPREvent(number: "42", title: "Add dark mode", eventKind: "github_pr_opened")
+        try makeGitHubPREvent(number: "42", title: "Add dark mode", eventKind: "gh_pr_opened")
         let resolver = makeResolver()
         let result = await resolver.resolve(provider: .github, externalRef: "42")
         XCTAssertNotNil(result)
@@ -271,7 +271,7 @@ final class AttachmentMetadataResolverTests: XCTestCase {
     // MARK: - Parsing
 
     func testGitHubParse_PRMergedSetsStatusMerged() async throws {
-        try makeGitHubPREvent(number: "7", title: "Merged PR", eventKind: "github_pr_merged")
+        try makeGitHubPREvent(number: "7", title: "Merged PR", eventKind: "gh_pr_merged")
         let resolver = makeResolver()
         let result = await resolver.resolve(provider: .github, externalRef: "7")
         XCTAssertEqual(result?.statusLabel, "merged")
@@ -279,7 +279,7 @@ final class AttachmentMetadataResolverTests: XCTestCase {
     }
 
     func testGitHubParse_PROpenSetsStatusOpen() async throws {
-        try makeGitHubPREvent(number: "8", title: "Open PR", eventKind: "github_pr_opened")
+        try makeGitHubPREvent(number: "8", title: "Open PR", eventKind: "gh_pr_opened")
         let resolver = makeResolver()
         let result = await resolver.resolve(provider: .github, externalRef: "8")
         XCTAssertEqual(result?.statusLabel, "open")
@@ -287,7 +287,7 @@ final class AttachmentMetadataResolverTests: XCTestCase {
     }
 
     func testGitHubParse_PRClosedSetsStatusClosed() async throws {
-        try makeGitHubPREvent(number: "9", title: "Closed PR", eventKind: "github_pr_closed")
+        try makeGitHubPREvent(number: "9", title: "Closed PR", eventKind: "gh_pr_closed")
         let resolver = makeResolver()
         let result = await resolver.resolve(provider: .github, externalRef: "9")
         XCTAssertEqual(result?.statusLabel, "closed")
@@ -406,6 +406,88 @@ final class AttachmentMetadataResolverTests: XCTestCase {
         XCTAssertEqual(result, expected)
         let callCount3 = await mockProvider.callCount
         XCTAssertEqual(callCount3, 1)
+    }
+
+    // MARK: - S7 Stage 6 fix B-C1 — index usage
+
+    /// Verifies the lookupLocal SQL uses M011's `idx_events_event_kind_ts`
+    /// expression index. The leading WHERE term is
+    /// `json_extract(payload_json, '$.event_kind') GLOB 'gh*'` — SQLite's
+    /// query planner emits "USING INDEX idx_events_event_kind_ts" in EXPLAIN
+    /// QUERY PLAN output when it seeks via this column. Without the LIKE
+    /// term (pre-fix), the same query falls back to a full table scan
+    /// because `$.source` has no index. This test prevents future regressions
+    /// that swap the predicate ordering or drop the index-using prefix.
+    func testGitHubLookupSQL_UsesM011IndexExpressionExpression() async throws {
+        // Seed at least one row so the planner has a table to consider.
+        try makeGitHubPREvent(number: "42")
+
+        try db.writeSQL { db in
+            let sql = """
+                EXPLAIN QUERY PLAN
+                SELECT payload_json FROM events
+                WHERE json_extract(payload_json, '$.event_kind') GLOB 'gh*'
+                  AND json_extract(payload_json, '$.source') = 'github'
+                  AND json_extract(payload_json, '$.number') = ?
+                  AND json_extract(payload_json, '$.number') != ''
+                ORDER BY ts DESC LIMIT 1
+            """
+            let rows = try Row.fetchAll(db, sql: sql, arguments: ["42"])
+            let combined = rows.compactMap { row -> String? in
+                row["detail"] as? String
+            }.joined(separator: " | ")
+            XCTAssertTrue(
+                combined.contains("idx_events_event_kind_ts"),
+                "Expected GitHub lookup plan to seek via idx_events_event_kind_ts; got: \(combined)"
+            )
+        }
+    }
+
+    func testLinearLookupSQL_UsesM011IndexExpression() async throws {
+        try makeLinearEvent(issueKey: "LEAF-42")
+
+        try db.writeSQL { db in
+            let sql = """
+                EXPLAIN QUERY PLAN
+                SELECT payload_json FROM events
+                WHERE json_extract(payload_json, '$.event_kind') GLOB 'linear*'
+                  AND json_extract(payload_json, '$.source') = 'linear'
+                  AND json_extract(payload_json, '$.issue_key') = ?
+                ORDER BY ts DESC LIMIT 1
+            """
+            let rows = try Row.fetchAll(db, sql: sql, arguments: ["LEAF-42"])
+            let combined = rows.compactMap { row -> String? in
+                row["detail"] as? String
+            }.joined(separator: " | ")
+            XCTAssertTrue(
+                combined.contains("idx_events_event_kind_ts"),
+                "Expected Linear lookup plan to seek via idx_events_event_kind_ts; got: \(combined)"
+            )
+        }
+    }
+
+    func testSlackLookupSQL_UsesM011IndexExpression() async throws {
+        try makeSlackEvent()
+
+        try db.writeSQL { db in
+            let sql = """
+                EXPLAIN QUERY PLAN
+                SELECT payload_json FROM events
+                WHERE json_extract(payload_json, '$.event_kind') GLOB 'slack*'
+                  AND json_extract(payload_json, '$.source') = 'slack'
+                  AND json_extract(payload_json, '$.channel_id') = ?
+                  AND json_extract(payload_json, '$.thread_ts') = ?
+                ORDER BY ts DESC LIMIT 1
+            """
+            let rows = try Row.fetchAll(db, sql: sql, arguments: ["C01ABCDEF", "1717024800.123456"])
+            let combined = rows.compactMap { row -> String? in
+                row["detail"] as? String
+            }.joined(separator: " | ")
+            XCTAssertTrue(
+                combined.contains("idx_events_event_kind_ts"),
+                "Expected Slack lookup plan to seek via idx_events_event_kind_ts; got: \(combined)"
+            )
+        }
     }
 
     // MARK: - Concurrency: same key no double-fetch

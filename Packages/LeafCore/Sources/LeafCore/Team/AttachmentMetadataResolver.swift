@@ -104,10 +104,23 @@ public actor AttachmentMetadataResolver {
     /// Searches the local `events` table for a matching event using json_extract.
     ///
     /// The events table stores flat [String: String] payloads. Supported lookups:
-    /// - GitHub: event_kind IN github_pr_* + number field matches externalRef.
-    /// - Linear: event_kind LIKE 'linear_%' + issue_key field matches externalRef.
-    /// - Slack: event_kind LIKE 'slack_%' + channel_id + thread_ts match
-    ///          the "<channel>/<ts>" externalRef format.
+    /// - GitHub: event_kind GLOB 'gh*' + number field matches externalRef.
+    ///           (matches both production prefix `gh_pr_*` / `gh_commit_*` and the
+    ///            legacy `github_*` family found in older fixtures.)
+    /// - Linear: event_kind GLOB 'linear*' + issue_key field matches externalRef.
+    /// - Slack:  event_kind GLOB 'slack*' + channel_id + thread_ts match
+    ///           the "<channel>/<ts>" externalRef format.
+    ///
+    /// S7 Stage 6 fix B-C1: each lookup carries an `event_kind GLOB 'prefix*'`
+    /// predicate as the leading WHERE term. M011's expression index
+    /// `idx_events_event_kind_ts` is on `(json_extract($.event_kind), ts)`.
+    /// SQLite converts GLOB-prefix to a BINARY range scan that can seek into
+    /// the expression index — LIKE would not, because default LIKE is
+    /// case-insensitive while expression indexes default to BINARY collation
+    /// (the two collations don't match, so the planner can't safely
+    /// substitute a range). GLOB is always case-sensitive BINARY, which
+    /// matches the index collation. The follow-on `$.source` + identifier
+    /// checks become residual filters on the already-narrowed set.
     ///
     /// Returns nil on any DB error or if required fields are missing.
     private func lookupLocal(provider: AttachmentProvider, externalRef: String) -> AttachmentMetadata? {
@@ -121,11 +134,12 @@ public actor AttachmentMetadataResolver {
                     let number = Self.extractGitHubNumber(from: externalRef)
                     guard let number else { return nil }
                     // events table has no event_kind column — it lives inside payload_json.
-                    // Use json_extract to filter by source + number. We accept any github
-                    // source event that carries a PR number to maximise local hit rate.
+                    // event_kind GLOB 'gh*' is the index-using leading predicate;
+                    // source + number narrow further.
                     let sql = """
                         SELECT payload_json FROM events
-                        WHERE json_extract(payload_json, '$.source') = 'github'
+                        WHERE json_extract(payload_json, '$.event_kind') GLOB 'gh*'
+                          AND json_extract(payload_json, '$.source') = 'github'
                           AND json_extract(payload_json, '$.number') = ?
                           AND json_extract(payload_json, '$.number') != ''
                         ORDER BY ts DESC LIMIT 1
@@ -135,7 +149,8 @@ public actor AttachmentMetadataResolver {
                     // externalRef: "LEAF-128" style identifier matching issue_key field.
                     let sql = """
                         SELECT payload_json FROM events
-                        WHERE json_extract(payload_json, '$.source') = 'linear'
+                        WHERE json_extract(payload_json, '$.event_kind') GLOB 'linear*'
+                          AND json_extract(payload_json, '$.source') = 'linear'
                           AND json_extract(payload_json, '$.issue_key') = ?
                         ORDER BY ts DESC LIMIT 1
                     """
@@ -148,7 +163,8 @@ public actor AttachmentMetadataResolver {
                     let threadTs = String(parts[1])
                     let sql = """
                         SELECT payload_json FROM events
-                        WHERE json_extract(payload_json, '$.source') = 'slack'
+                        WHERE json_extract(payload_json, '$.event_kind') GLOB 'slack*'
+                          AND json_extract(payload_json, '$.source') = 'slack'
                           AND json_extract(payload_json, '$.channel_id') = ?
                           AND json_extract(payload_json, '$.thread_ts') = ?
                         ORDER BY ts DESC LIMIT 1
