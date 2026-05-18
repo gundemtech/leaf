@@ -692,14 +692,22 @@ struct TeamView: View {
     /// directMessageCard. With long DM feeds this manifested as visible UI
     /// jank on scroll. Matches the WorkspaceSettingsSection.loadMyPubHex
     /// + WorkspaceMembersAdminList pattern.
+    ///
+    /// S7 Stage 6 fix M3 — fallback path writes back into cachedSelfPubHex
+    /// so a subsequent call doesn't re-attempt the disk read. Without this,
+    /// if loadCachedSelfPubHex() failed during .task (identity not yet
+    /// provisioned, race against keystore setup, etc.), every directMessageCard
+    /// render would retry the disk read until the next .task fires.
     private func selfPubkeyHex() -> String {
         if !cachedSelfPubHex.isEmpty { return cachedSelfPubHex }
         guard let key = try? IdentityService.ensureLocalIdentity(at: TeamKeystore.defaultRoot()) else {
             return ""
         }
-        return key.publicKey.rawRepresentation
+        let hex = key.publicKey.rawRepresentation
             .map { String(format: "%02x", $0) }
             .joined()
+        cachedSelfPubHex = hex
+        return hex
     }
 }
 
