@@ -374,9 +374,22 @@ Per CLAUDE.md "one phase = one session". 9 phases.
 | **P6 — INBOX block** | Items derive from Layer B + D3, severity logic, filter chips, searchbar, aggregation dedup | `inboxItems(filter:query:)` impl + sentinel-leakage test | `InboxBlock.swift`, `InboxItemRow.swift`, `InboxFilterRow.swift` |
 | **P7 — WHERE YOU STOPPED** | Compact summary + click → existing detail | None new (reuse Track-1 D3 + existing route) | `WhereStoppedBlock.swift` |
 | **P8 — Activity → Analytics** | Tab rename in `WindowState.WindowSection` + icon. Delete `ActivityView.swift` + `ActivityRow.swift` + `SessionRow.swift` + `RecentSessionsBlock.swift`. Ship `AnalyticsView.swift` placeholder. | None | `AnalyticsView.swift`, `WindowState.swift` enum rename |
-| **P9 — Polish + acceptance** | HIG sweep, accessibility labels, token-fidelity sweep, performance pass (Home load < 16ms paint), manual smoke per §10 | None | Per-block polish, accessibility props |
+| **P9 — Polish + acceptance** | HIG sweep, accessibility labels, token-fidelity sweep, performance pass (Home load < 16ms paint), manual smoke per §10, **+ carry-over backlog §9.1** | Per-carry-over (see §9.1) | Per-block polish, accessibility props |
 
 Each phase ships behind a feature branch, gets independent code-review subagent run + verification-before-completion. Collective merge of P1-P9 happens after P9 acceptance gate clears.
+
+### 9.1 P9 carry-over backlog
+
+Items deferred from earlier phases. Append to this list during phase wrap so nothing falls through. P9 closes all entries or explicitly re-defers to v1.1.
+
+**From P3 (TODAY block):**
+
+- **C-1 Hybrid surface pills** — replace current `SurfacePill.label`-only render with semantic per-surface units: capture-surfaces (Claude Code / Xcode / IDEs / Browsers / Zoom / Calendar) show attention-time (e.g. `Claude Code · 1h 47m`); Layer B providers (Linear / GitHub / Slack) show action-noun count (e.g. `Linear · 3 issues`, `GitHub · 5 commits`, `Slack · 12 msgs`). Requires substrate change: extend `SurfacePill` shape (decision: `displayValue: String` precomputed by substrate vs `kind` enum dispatched by view — brainstorm at P9), add 3 SQL queries in `ProdInsights+TodayMetrics.swift` (Linear distinct issues / GitHub commits / Slack messages today), and close **Phase 8.1 emission gap** — current substrate only emits capture-surface pills, never Layer B (router `LayerBProvider` branch is dead code today).
+- **C-2 Error-state last-known retention** — Phase 8.3 spec §6 + MS-5 assumed `InsightsReader.State.error` carries last-known snapshot so TODAY card renders with prior metrics under a danger banner. Current `InsightsReader.State.error(message: String)` has no snapshot field — state machine refactor needed (`error(message: String, lastKnown: InsightsSnapshot?)`) + `HomeView` rendering tweak so `.error` shows banner above `HomeContent(snapshot: lastKnown)` instead of full-page banner.
+- **C-3 Narrow-window wrap fallback** — TODAY metrics row is a fixed `HStack`; expected visible clip if popover width < ~520pt. Spec §10 R-4 deferred — add `ViewThatFits` 2-row compact fallback.
+- **C-4 DateFormatter caching** — `TodayBlock.sectionLabel` allocates a `DateFormatter` per render. Tiny cost in practice but trivial fix: `static let` cached formatter (note: `setLocalizedDateFormatFromTemplate` is locale-aware, so cache by locale or accept en_US-only).
+
+**Open for append:** P4 / P5 / P6 / P7 / P8 add their own carry-overs to this list at phase wrap. Each entry: ID, one-line summary, file/spec ref, rationale for defer.
 
 ---
 
