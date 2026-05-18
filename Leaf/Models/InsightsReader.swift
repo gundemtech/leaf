@@ -169,6 +169,14 @@ final class InsightsReader {
                         // until then.
                         let sameTaskTeammates = try insights.sameTaskTeammates(rule: .hierarchical)
                         try Task.checkCancellation()
+                        // Track-8 Phase 8.6 — INBOX dashboard items list.
+                        // Fetched with .all/"" defaults; filter + search
+                        // applied view-side as @State, no re-fetch on
+                        // keystroke. Stub returns [] until Phase 4.8/4.9
+                        // wire Layer B; D3 detection tables already feed
+                        // open questions + blockers via the moat impl.
+                        let inboxItems = try insights.inboxItems(filter: .all, query: "")
+                        try Task.checkCancellation()
                         let snapshot = InsightsSnapshot(
                             topApps: topApps,
                             sessions: sessions,
@@ -208,7 +216,8 @@ final class InsightsReader {
                             recentSessions: recentSessions,
                             todayMetrics: todayMetrics,
                             youNowState: youNowState,
-                            sameTaskTeammates: sameTaskTeammates
+                            sameTaskTeammates: sameTaskTeammates,
+                            inboxItems: inboxItems
                         )
                         return .success((db, snapshot))
                     } catch {
