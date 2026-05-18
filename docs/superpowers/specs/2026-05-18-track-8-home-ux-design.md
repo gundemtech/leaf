@@ -394,6 +394,13 @@ Items deferred from earlier phases. Append to this list during phase wrap so not
 - **C-8 Resume CTA branch-deletion staleness (P4 carry)** — if `lastLinearID` was extracted from a now-deleted branch, Resume CTA still renders with stale ID. v1.1 — validate via `LinearIDExtractor` registry refresh or `git branch --list` check before showing CTA. Not blocking ship.
 - **C-9 YouNowMeeting substrate enrichment (P4 carry, cross-track)** — `ProdInsights+YouNowState.swift` hard-codes `meetingTitle: nil`, `meetingEndsAtMs: nil`, and `meetingSource` only `.eventKit` (Zoom never fires). Substrate enrichment needed: read meeting title from `meeting_state_entered` event payload (per ADR-010 allow-list), fetch `endsAtMs` from same payload, merge `zoom_meeting_started` snapshots into source `.both` when overlap window matches. Separate substrate track — not pure P4.
 
+**From P5 (WITH YOU ON THIS):**
+
+- **C-10 WithYouOnThisBlock empty-state CTA missing N count.** Spec §4.3 calls for "→ Team (N active elsewhere)" where N = teammates active anywhere who don't match my task. P5 ships CTA as "→ Team" without count. Resolution requires either (a) new `totalActiveTeammates` deriver, or (b) plumbing teammate list through `InsightsSnapshot` (privacy surface expansion — list of all teammates, not just matches). Phase 5.4 enrichment. File: `Leaf/Views/Window/Home/Blocks/WithYouOnThisBlock.swift:emptyState`.
+- **C-11 WithYouOnThisBlock offline / stale footer absent.** Spec §4.3 calls for muted footer "Team data stale ({lastSync} ago). Reconnecting…" when relay disconnected OR last `presence_history` sync > 10 min. No relay status signal in `InsightsSnapshot` today. P9 / Phase 5.6 carry — pairs with relay status plumbing.
+- **C-12 Row tap routes to Team tab without teammate selection.** Spec §4.3 "Click row → opens teammate detail in Team tab" — Team tab has no per-teammate detail screen. P5 ships row tap as `windowState.section = .team`. Resolution = Team-tab teammate detail screen + `RouteCoordinator.pushTeam(memberID:)`. Track-9 / separate feature.
+- **C-13 TeammateMatch.durationSec hardcoded 0 in substrate.** `SameTaskMatcher.makeMatch` sets `durationSec: 0` unconditionally (`Packages/LeafCore/Sources/LeafCore/Insights/SameTaskMatcher.swift:73`). UI does not surface a "duration on task" field today (row line 2 uses `lastActivityAtMs` "ago" relative time). Substrate enrichment (compute duration from earliest task-matching snapshot per teammate) is Phase 5.4 / Track-9 territory.
+
 **Open for append:** P4 / P5 / P6 / P7 / P8 add their own carry-overs to this list at phase wrap. Each entry: ID, one-line summary, file/spec ref, rationale for defer.
 
 ---
