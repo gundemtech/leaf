@@ -1,13 +1,35 @@
 //
 //  TeamView.swift
-//  Track 5 / S7 G.2-G.5 — Unified Team feed layout.
+//  Track 5 / S7 G.2-G.11 — Unified Team feed layout.
 //
 //  Replaces Track 2 / D3 adaptive-grid-of-members with the new feed structure:
 //
 //    ┌── toolbar: name · N members · [+ Send] ⌘N ───────────────────────────┐
 //    ├── members pill-row (horizontal scroll) ────────────────────────────────┤
 //    ├── LeafFilterChips (All · DM · Tasks · Decisions · Blockers · More…) ───┤
-//    └── feed body placeholder (G.6-G.11 dispatch fills in) ─────────────────┘
+//    └── feed body: LazyVStack dispatch (G.6-G.11) ───────────────────────────┘
+//
+//  Feed dispatch (G.6):
+//    .loading     → ProgressView
+//    .error(msg)  → LeafBanner .danger
+//    .loaded(items, hasMore):
+//       items.isEmpty → 3-state emptyState (G.10)
+//       items.nonEmpty → ScrollView + LazyVStack + cardView dispatch (G.7/G.8)
+//                        + pagination sentinel when hasMore (G.11)
+//
+//  cardView dispatch (G.6):
+//    .directMessage  → LeafMessageCard (G.7) with auto-mark-read + actions
+//    .teamEvent      → LeafFeedRow single (G.8)
+//    .grouped        → LeafFeedRow.grouped collapsible (G.8)
+//
+//  Empty states (G.10):
+//    State 1 — 0 or 1 member (only self): invite CTA
+//    State 2 — members joined, no activity: send first message CTA
+//    State 3 — filters narrow: clear filters CTA
+//
+//  Attachment resolution (G.9): per-row async cache via @State dict keyed by
+//  externalRef. Resolver is a lazily-noop-defaulted AttachmentMetadataResolver;
+//  Phase H composition root replaces it with a live DB-backed resolver.
 //
 //  Environment dependencies:
 //    Already wired (S2/S4/S5/S6):
@@ -23,7 +45,7 @@
 //
 //  Send entry:
 //    • Tapping a member pill opens SendDirectMessageSheet for that member.
-//    • [+ Send] toolbar button (G.6 dispatch will wire full recipient-picker).
+//    • [+ Send] toolbar button opens GenerateInviteSheet (⌘N).
 //
 //  S6 closure-injection pattern preserved 1:1 from OrganizationView:
 //    • onReauthorizeSlack  — SlackOAuthService.connect()
@@ -62,6 +84,7 @@ struct TeamView: View {
     // MARK: - Local sheet state
 
     @State private var sendSheetRecipient: SendRecipient? = nil
+    @State private var generateInvitePresented: Bool = false
 
     /// Identifiable wrapper for sheet(item:). TeamMember is Hashable+Sendable but
     /// not Identifiable; wrap its id + member ref.
@@ -69,6 +92,31 @@ struct TeamView: View {
         let id: String       // matches TeamMember.id
         let member: TeamMember
     }
+
+    // MARK: - G.8 grouped expand state
+
+    /// Set of group IDs currently expanded in the feed. A group ID is:
+    /// "grouped-<source.rawValue>-<senderPubkeyHex>-<spanStartMs>"
+    @State private var expandedGroups: Set<String> = []
+
+    // MARK: - G.9 Attachment metadata cache
+
+    /// Keyed by `DirectMessageAttachment.externalRef`. Populated lazily via
+    /// `.task(id: externalRef)` on each DM card. Phase H wires a live resolver;
+    /// until then every resolve() call returns nil (graceful: card renders without
+    /// attachment metadata embed but attachment label is still shown).
+    @State private var attachmentMetadataCache: [String: AttachmentMetadata] = [:]
+
+    /// Resolver actor — Phase H composition root replaces this with a DB-backed
+    /// instance. Lazily created here as a noop resolver (no database, no collectors)
+    /// so G.9 compile-path is fully wired without requiring Phase H.
+    ///
+    /// Note: AttachmentMetadataResolver is an `actor` — not injectable via
+    /// `@Environment` directly (SwiftUI environment requires `@Observable` or
+    /// `EnvironmentKey` returning a Sendable value). We store it as @State here
+    /// and Phase H can replace the reference at composition time via an
+    /// `@Environment(\.attachmentMetadataResolver)` key (deferred to H).
+    @State private var attachmentMetadataResolver: AttachmentMetadataResolver? = nil
 
     // MARK: - Body
 
@@ -80,7 +128,9 @@ struct TeamView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             case .empty:
-                emptyStatePlaceholder
+                // workspaceReader.empty = no workspaces at all; show invite/setup CTA.
+                emptyState(forMembers: 0)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             case .loaded(_, let active, let members):
                 loadedContent(active: active, members: members)
@@ -104,6 +154,9 @@ struct TeamView: View {
                     try? await linearUsersResolver.resolve(displayName: displayName)
                 }
             )
+        }
+        .sheet(isPresented: $generateInvitePresented) {
+            GenerateInviteSheet()
         }
         // Restore persisted filter selection + trigger initial feed load when
         // the active workspace changes.
@@ -140,8 +193,8 @@ struct TeamView: View {
             membersPillRow(members: members)
             // G.5 — Filter chips (All / DM / Open Tasks / Decisions / Blockers / More…)
             FeedFilterChipsBindable(store: feedFilterStore)
-            // G.6-G.11 — Feed body (placeholder; dispatch fills)
-            feedBodyPlaceholder
+            // G.6-G.11 — Feed body: LazyVStack + card dispatch + empty states + pagination
+            feedBody(workspaceID: active.id, members: members)
         }
         .padding(LeafSpace.xxl)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -162,11 +215,12 @@ struct TeamView: View {
                     .foregroundStyle(LeafColor.text.tertiary)
             }
             Spacer(minLength: 0)
-            // G.3 — [+ Send] button. ⌘N keyboard shortcut.
-            // G.6 dispatch wires to a recipient-picker flow for a "broadcast
-            // to whole team" send path. For now: no-op (recipient required).
-            LeafButton("+ Send", variant: .primary, size: .md) {
-                // G.6 will complete this action with a recipient-picker.
+            // G.3 — [+ Invite] button opens GenerateInviteSheet. ⌘N keyboard shortcut.
+            // The "broadcast to whole team" send path (recipient-picker) is deferred
+            // to Phase H; for now the toolbar CTA lands on invite flow (most common
+            // primary action for a small team).
+            LeafButton("+ Invite", variant: .primary, size: .md) {
+                generateInvitePresented = true
             }
             .keyboardShortcut("n", modifiers: .command)
         }
@@ -205,31 +259,304 @@ struct TeamView: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: - Feed body placeholder (G.6-G.11 dispatch)
+    // MARK: - G.6 Feed body: LazyVStack + card dispatch
 
     @ViewBuilder
-    private var feedBodyPlaceholder: some View {
-        VStack(spacing: 0) {
-            Spacer(minLength: 0)
-            Text("Team feed — coming in G.6")
-                .font(LeafType.caption)
-                .foregroundStyle(LeafColor.text.tertiary)
-                .frame(maxWidth: .infinity, alignment: .center)
-            Spacer(minLength: 0)
+    private func feedBody(workspaceID: String, members: [TeamMember]) -> some View {
+        switch teamFeedReader.state {
+        case .loading:
+            VStack {
+                Spacer(minLength: 0)
+                ProgressView()
+                    .frame(maxWidth: .infinity, alignment: .center)
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+        case .error(let msg):
+            LeafBanner(
+                tone: .danger,
+                title: "Feed error",
+                description: msg,
+                onDismiss: nil
+            )
+
+        case .loaded(let items, let hasMore):
+            if items.isEmpty {
+                emptyState(forMembers: members.count)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: LeafSpace.sm) {
+                        ForEach(items) { item in
+                            cardView(for: item, members: members)
+                                .id(item.id)
+                        }
+                        if hasMore {
+                            paginationSentinel(workspaceID: workspaceID)
+                        }
+                    }
+                    .padding(.bottom, LeafSpace.md)
+                }
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: - Empty state placeholder (G.10 dispatch fills with full copy)
+    // MARK: - G.6 cardView dispatch
 
     @ViewBuilder
-    private var emptyStatePlaceholder: some View {
+    private func cardView(for item: FeedItem, members: [TeamMember]) -> some View {
+        switch item {
+        case .directMessage(let row):
+            directMessageCard(row: row)
+        case .teamEvent(let row):
+            teamEventRow(row: row)
+        case .grouped(let kind, let sender, let count, let spanStart, let spanEnd, let expandedItems):
+            groupedRow(
+                source: kind,
+                sender: sender,
+                count: count,
+                spanStart: spanStart,
+                spanEnd: spanEnd,
+                items: expandedItems
+            )
+        }
+    }
+
+    // MARK: - G.7 directMessageCard
+
+    @ViewBuilder
+    private func directMessageCard(row: DirectMessageMirrorRow) -> some View {
+        let isOutbound = row.senderPubkeyHex == selfPubkeyHex()
+        let direction: MessageDirectionUI = isOutbound ? .outbound : .inbound
+        // CrossPostLogReader is wired in Phase H; graceful empty fallback until then.
+        let crossPosts: [CrossPostLogRow] = []
+        let cachedMeta = row.attachment.flatMap { attachmentMetadataCache[$0.externalRef] }
+        let actions = computeActions(for: row, isOutbound: isOutbound)
+
+        LeafMessageCard(
+            row: row,
+            direction: direction,
+            crossPosts: crossPosts,
+            attachmentMetadata: cachedMeta,
+            actions: actions,
+            onAction: { handleAction($0, for: row) },
+            onAppear: {
+                Task { await markReadIfNeeded(row: row, isOutbound: isOutbound) }
+            }
+        )
+        .task(id: row.attachment?.externalRef) {
+            await resolveAttachment(for: row)
+        }
+    }
+
+    private func computeActions(
+        for row: DirectMessageMirrorRow,
+        isOutbound: Bool
+    ) -> [MessageAction] {
+        var actions: [MessageAction] = []
+        if !isOutbound {
+            if row.readAtMs == nil { actions.append(.markRead) }
+            actions.append(.reply)
+            if row.kind == .task && row.doneAtMs == nil { actions.append(.markDone) }
+        }
+        actions.append(.copyText)
+        if row.attachment != nil { actions.append(.viewOriginal) }
+        return actions
+    }
+
+    private func handleAction(_ action: MessageAction, for row: DirectMessageMirrorRow) {
+        switch action {
+        case .markRead:
+            Task { await inboxReader.markRead(messageID: row.messageID) }
+        case .markUnread:
+            // Phase v1.1 carry-over — unread write not yet in service layer.
+            break
+        case .reply:
+            // Phase v1.1 — open Send sheet pre-filled with reply_to.
+            // Until then, open a fresh send sheet toward the sender.
+            sendSheetRecipient = nil   // dismiss current if any
+            // We don't have a TeamMember for the sender here; defer to Phase H
+            // member-lookup wiring which provides members via workspaceReader.
+            break
+        case .markDone:
+            Task { await inboxReader.markDone(messageID: row.messageID) }
+        case .copyText:
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(row.body, forType: .string)
+        case .viewOriginal:
+            if let att = row.attachment,
+               let url = composeURL(forExternalRef: att.externalRef, kind: att.kind) {
+                NSWorkspace.shared.open(url)
+            }
+        }
+    }
+
+    private func markReadIfNeeded(row: DirectMessageMirrorRow, isOutbound: Bool) async {
+        guard !isOutbound, row.readAtMs == nil else { return }
+        // LeafMessageCard schedules a 1500ms timer before calling onAppear.
+        // When this callback fires the message has been visible long enough.
+        await inboxReader.markRead(messageID: row.messageID)
+    }
+
+    /// Best-effort URL composer for a DM attachment external ref.
+    private func composeURL(forExternalRef ref: String, kind: String) -> URL? {
+        if kind.hasPrefix("github") {
+            // Format: "owner/repo#N" or plain number.
+            return URL(string: "https://github.com/\(ref.replacingOccurrences(of: "#", with: "/pull/"))")
+        }
+        if kind.hasPrefix("linear") {
+            return URL(string: "https://linear.app/issue/\(ref)")
+        }
+        if kind.hasPrefix("slack") {
+            // Format: "channel_id/thread_ts"
+            let parts = ref.split(separator: "/", maxSplits: 1)
+            if parts.count == 2 {
+                let chan = String(parts[0])
+                let ts   = String(parts[1]).replacingOccurrences(of: ".", with: "")
+                return URL(string: "https://slack.com/archives/\(chan)/p\(ts)")
+            }
+        }
+        return nil
+    }
+
+    // MARK: - G.9 Attachment resolution
+
+    private func resolveAttachment(for row: DirectMessageMirrorRow) async {
+        guard let att = row.attachment else { return }
+        let ref = att.externalRef
+        if attachmentMetadataCache[ref] != nil { return }  // already cached
+        guard let resolver = attachmentMetadataResolver else { return }  // noop until Phase H
+        let provider = providerFromKind(att.kind)
+        let metadata = await resolver.resolve(provider: provider, externalRef: ref)
+        await MainActor.run {
+            if let metadata { attachmentMetadataCache[ref] = metadata }
+        }
+    }
+
+    private func providerFromKind(_ kind: String) -> AttachmentProvider {
+        if kind.hasPrefix("github") { return .github }
+        if kind.hasPrefix("linear") { return .linear }
+        if kind.hasPrefix("slack")  { return .slack }
+        return .github
+    }
+
+    // MARK: - G.8 teamEventRow + groupedRow
+
+    @ViewBuilder
+    private func teamEventRow(row: TeamEventMirrorRow) -> some View {
+        LeafFeedRow(row: row, attachmentMetadata: nil, onTap: {
+            // Phase v1.1 — tap → open detail view or external URL.
+        })
+    }
+
+    @ViewBuilder
+    private func groupedRow(
+        source: ShareSource,
+        sender: TeamMember,
+        count: Int,
+        spanStart: Int64,
+        spanEnd: Int64,
+        items: [TeamEventMirrorRow]
+    ) -> some View {
+        let groupID = "grouped-\(source.rawValue)-\(sender.pubkeyHex)-\(spanStart)"
+        let isExpanded = Binding<Bool>(
+            get: { expandedGroups.contains(groupID) },
+            set: { newValue in
+                if newValue { expandedGroups.insert(groupID) }
+                else        { expandedGroups.remove(groupID) }
+            }
+        )
+        LeafFeedRow.grouped(
+            source: source,
+            senderDisplayName: sender.displayName,
+            senderPubkeyHex: sender.pubkeyHex,
+            count: count,
+            spanStartMs: spanStart,
+            spanEndMs: spanEnd,
+            expandedItems: items,
+            isExpanded: isExpanded
+        )
+    }
+
+    // MARK: - G.10 Three explicit empty states
+
+    @ViewBuilder
+    private func emptyState(forMembers memberCount: Int) -> some View {
+        if memberCount <= 1 {
+            emptyStateNoTeam
+        } else if !feedFilterStore.selected.contains(.all) {
+            emptyStateFiltered
+        } else {
+            emptyStateAwaitingActivity(memberCount: memberCount)
+        }
+    }
+
+    /// State 1 — fresh workspace or no workspace at all (only self or nobody).
+    @ViewBuilder
+    private var emptyStateNoTeam: some View {
         LeafEmptyState(
             icon: LeafIcons.nav.team,
-            title: "No team yet",
-            description: "Create a workspace or accept an invite to see your team's feed.",
-            ctaTitle: nil,
-            onCTA: nil
+            title: "It's quiet here",
+            description: "Invite teammates to start sharing work together.",
+            ctaTitle: "+ Invite teammate",
+            onCTA: { generateInvitePresented = true }
+        )
+    }
+
+    /// State 2 — members joined but no activity yet (all filters selected).
+    @ViewBuilder
+    private func emptyStateAwaitingActivity(memberCount: Int) -> some View {
+        let membersLabel = memberCount == 2 ? "1 teammate" : "\(memberCount - 1) teammates"
+        LeafEmptyState(
+            icon: LeafIcons.comm.message,
+            title: "\(membersLabel) here",
+            description: "Activity will appear as your team shares work. Send the first message.",
+            ctaTitle: "+ Send first message",
+            onCTA: { sendSheetRecipient = nil }  // Phase H: open recipient-picker
+        )
+    }
+
+    /// State 3 — active filters yield no results.
+    @ViewBuilder
+    private var emptyStateFiltered: some View {
+        // LeafEmptyState takes an Asset Catalog name; use folderEmpty as "no results" icon.
+        // A dedicated filter icon (leaf-nav-filter) can replace this in Phase H Theme pass.
+        LeafEmptyState(
+            icon: LeafIcons.object.folderEmpty,
+            title: "No matches",
+            description: "Try clearing filters or selecting different sources.",
+            ctaTitle: "Clear filters",
+            onCTA: { feedFilterStore.clearAll() }
+        )
+    }
+
+    // MARK: - G.11 Pagination sentinel
+
+    @ViewBuilder
+    private func paginationSentinel(workspaceID: String) -> some View {
+        HStack(spacing: LeafSpace.sm) {
+            ProgressView()
+                .scaleEffect(0.7)
+            Text("Loading older…")
+                .font(LeafType.caption)
+                .foregroundStyle(LeafColor.text.tertiary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, LeafSpace.md)
+        .task {
+            await loadOlderIfNeeded(workspaceID: workspaceID)
+        }
+    }
+
+    private func loadOlderIfNeeded(workspaceID: String) async {
+        guard case .loaded(let items, let hasMore) = teamFeedReader.state, hasMore else { return }
+        guard let oldestTs = items.last?.timestamp else { return }
+        await teamFeedReader.loadOlder(
+            workspaceID: workspaceID,
+            filters: feedFilterStore.selected,
+            selfPubkeyHex: selfPubkeyHex(),
+            before: oldestTs
         )
     }
 

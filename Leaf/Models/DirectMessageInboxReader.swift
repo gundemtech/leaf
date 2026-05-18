@@ -165,6 +165,41 @@ final class DirectMessageInboxReader {
         return hex
     }
 
+    // MARK: - Mark read / done (proxy to SupabaseClient + local refresh)
+
+    /// Server PATCH for read state + local mirror refresh via next-tick.
+    /// Follows the I4 fix pattern from Track 5 / S4 Stage 6:
+    /// supabase.markRead → server PATCH; local mirror is refreshed by calling
+    /// refreshLocalState after the write completes. Full local UPDATE (mirror store)
+    /// would require a Database write handle; deferred to Phase H composition root
+    /// which wires a DirectMessageService with both supabase + database handles.
+    /// Until then, the unread count refreshes on the next foreground tick.
+    func markRead(messageID: String) async {
+        let nowISO: String = {
+            let f = ISO8601DateFormatter()
+            f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            return f.string(from: Date())
+        }()
+        try? await supabase.markRead(messageID: messageID, readAtISO: nowISO)
+        refreshUnreadCounts()
+    }
+
+    /// Server PATCH for task done state.
+    /// Local mirror updated on next foreground tick (see markRead note).
+    func markDone(messageID: String) async {
+        let pubkey = cachedPubkey() ?? ""
+        let nowISO: String = {
+            let f = ISO8601DateFormatter()
+            f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            return f.string(from: Date())
+        }()
+        try? await supabase.markDone(
+            messageID: messageID,
+            doneAtISO: nowISO,
+            doneByPubkeyHex: pubkey
+        )
+    }
+
     // MARK: - Internal
 
     private func ensureService() throws -> DirectMessageInboxService {
