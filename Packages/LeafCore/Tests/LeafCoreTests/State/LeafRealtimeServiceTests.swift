@@ -325,6 +325,71 @@ final class LeafRealtimeServiceTests: XCTestCase {
         await service.suspend()
     }
 
+    // MARK: - S7 Stage 6 fix A-I1 + A-I2 — sticky-state regression fences
+
+    /// A-I1: subscribe() that fails on JWT-nil must NOT pin `currentWorkspaceID`.
+    /// Otherwise a retry with the same workspace would silently no-op via
+    /// the idempotency guard `workspaceID != currentWorkspaceID`. After the
+    /// fix, currentWorkspaceID is cleared on every failure exit so that the
+    /// next subscribe() proceeds normally.
+    func testSubscribe_FailsOnJWTNil_ClearsCurrentWorkspaceID() async {
+        let mock = MockWebSocketTask()
+        let driver = RealtimeWebSocketDriver(taskFactory: { _ in mock }, heartbeatIntervalSec: 60)
+        let supabase = makeUnauthClient()
+        let dmStub = MockDirectMessageAbsorber()
+        let teamStub = MockTeamEventAbsorber()
+        let crossPost = CrossPostLogReader(supabase: supabase)
+        let service = makeService(
+            driver: driver, supabase: supabase,
+            directMessageInboxReader: dmStub,
+            teamEventMirrorReader: teamStub,
+            crossPostLogReader: crossPost
+        )
+
+        await service.subscribe(workspaceID: "wid-X")
+        XCTAssertEqual(service.state, .disconnected)
+        XCTAssertNil(
+            service.currentWorkspaceID,
+            "Subscribe-failed-on-JWT-nil must clear currentWorkspaceID so caller retry isn't no-op'd by the idempotency guard"
+        )
+        await service.suspend()
+    }
+
+    /// A-I2: channelRejected dispatch must NOT pin `currentWorkspaceID`.
+    /// Server-side reject (JWT expired, RLS denied, etc.) transitions state
+    /// to .disconnected; without clearing currentWorkspaceID, the caller's
+    /// natural retry (with the same wid) hits the idempotency guard and
+    /// silently no-ops — user stays disconnected indefinitely.
+    func testDispatch_ChannelRejected_ClearsCurrentWorkspaceID() async throws {
+        let mock = MockWebSocketTask()
+        let driver = RealtimeWebSocketDriver(taskFactory: { _ in mock }, heartbeatIntervalSec: 60)
+        let supabase = try await installAuthBootstrap()
+        let dmStub = MockDirectMessageAbsorber()
+        let teamStub = MockTeamEventAbsorber()
+        let crossPost = CrossPostLogReader(supabase: supabase)
+        let service = makeService(
+            driver: driver, supabase: supabase,
+            directMessageInboxReader: dmStub,
+            teamEventMirrorReader: teamStub,
+            crossPostLogReader: crossPost
+        )
+
+        await service.subscribe(workspaceID: "wid-A")
+        XCTAssertEqual(service.currentWorkspaceID, "wid-A")
+
+        // Server rejects the join.
+        await driver.dispatchMessage(.string("""
+        {"topic":"realtime:leaf-workspace-wid-A","event":"phx_reply","payload":{"status":"error","response":{"reason":"rls-denied"}},"ref":"1"}
+        """))
+
+        try await waitForCondition { service.state == .disconnected }
+        XCTAssertNil(
+            service.currentWorkspaceID,
+            ".channelRejected must clear currentWorkspaceID so caller retry can proceed past the idempotency guard"
+        )
+        await service.suspend()
+    }
+
     // MARK: - dispatch
 
     /// 4. team_events INSERT for the active workspace → decryptor + absorb fired.

@@ -154,6 +154,9 @@ public final class LeafRealtimeService {
         // bootstrap kick. If no session yet, fall back to .disconnected and
         // surface the caller to retry on the next tick.
         guard let jwt = await supabase.currentAccessToken() else {
+            // S7 Stage 6 fix A-I1 — clear currentWorkspaceID so a caller retry
+            // with the same wid isn't no-op'd by the idempotency guard above.
+            currentWorkspaceID = nil
             state = .disconnected
             return
         }
@@ -181,6 +184,9 @@ public final class LeafRealtimeService {
             // Connect or join failed (e.g., URL bogus, transport error). The
             // driver's reconnect loop (D.6) takes over if the WS was up and
             // dropped — we just reflect state and bail out.
+            // S7 Stage 6 fix A-I1 — clear currentWorkspaceID on the failure
+            // path for the same reason as the JWT-nil branch above.
+            currentWorkspaceID = nil
             state = .disconnected
         }
     }
@@ -247,8 +253,16 @@ public final class LeafRealtimeService {
 
         case .channelRejected:
             // Server rejected the join (RLS denied, JWT expired, etc.). A
-            // future improvement: refresh the JWT and retry. For D.7 we treat
-            // this as terminal — the caller can resubscribe.
+            // future improvement: refresh the JWT and retry (A-I3 carry-over
+            // — wire JWT refresh through `attemptReconnect` so long-running
+            // sessions recover from stale-token rejects). For now we treat
+            // this as terminal — the caller resubscribes.
+            //
+            // S7 Stage 6 fix A-I2 — clear currentWorkspaceID so the caller's
+            // natural retry (with the same wid) actually proceeds past the
+            // idempotency guard in subscribe(). Without this, the user is
+            // pinned to .disconnected forever after a single server reject.
+            currentWorkspaceID = nil
             state = .disconnected
 
         case .teamEventInserted(let row):
