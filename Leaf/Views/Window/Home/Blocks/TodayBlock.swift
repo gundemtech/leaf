@@ -116,13 +116,13 @@ struct TodayBlock: View {
             Button {
                 push(route)
             } label: {
-                LeafPill(title: pillTitle(pill))
+                LeafPill(title: pill.label)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(pill.label): \(pill.count) events today")
+            .accessibilityLabel("\(pill.label) — open details")
             .accessibilityAddTraits(.isButton)
         } else {
-            LeafPill(title: pillTitle(pill))
+            LeafPill(title: pill.label)
         }
     }
 
@@ -135,10 +135,6 @@ struct TodayBlock: View {
         .buttonStyle(.plain)
         .accessibilityLabel("Show \(remaining) more surfaces")
         .accessibilityAddTraits(.isButton)
-    }
-
-    private func pillTitle(_ pill: SurfacePill) -> String {
-        "\(pill.label) \(pill.count)"
     }
 
     private func push(_ route: SurfacePillRoute) {
