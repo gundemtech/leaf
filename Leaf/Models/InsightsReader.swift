@@ -161,6 +161,14 @@ final class InsightsReader {
                         // screen-lock transitions). Stub returns .empty.
                         let youNowState = try insights.youNowState(now: Date())
                         try Task.checkCancellation()
+                        // Track-8 Phase 8.5 — same-task teammates list.
+                        // Hierarchical rule (same Linear → same branch →
+                        // adjacent branch). Stub reader returns [] until
+                        // Phase 5.4 wires DBTeammatePresenceReader against
+                        // presence_history; block renders empty state
+                        // until then.
+                        let sameTaskTeammates = try insights.sameTaskTeammates(rule: .hierarchical)
+                        try Task.checkCancellation()
                         let snapshot = InsightsSnapshot(
                             topApps: topApps,
                             sessions: sessions,
@@ -199,7 +207,8 @@ final class InsightsReader {
                             presenceState: presenceState,
                             recentSessions: recentSessions,
                             todayMetrics: todayMetrics,
-                            youNowState: youNowState
+                            youNowState: youNowState,
+                            sameTaskTeammates: sameTaskTeammates
                         )
                         return .success((db, snapshot))
                     } catch {
