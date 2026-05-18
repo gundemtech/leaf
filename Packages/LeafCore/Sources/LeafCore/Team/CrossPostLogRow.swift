@@ -50,6 +50,21 @@ public struct CrossPostLogRow: Codable, Hashable, Sendable, Identifiable {
     /// to multiple channels/issues on the same platform.
     public var id: String { "\(messageID)-\(platform)-\(externalRef)" }
 
+    // MARK: - CodingKeys (PostgREST snake_case mapping)
+
+    /// Explicit CodingKeys so Codable synthesis maps PostgREST snake_case column
+    /// names (message_id, external_ref, etc.) to Swift camelCase properties.
+    /// Without this, synthesized keys would look for "messageID", "externalRef",
+    /// etc. — causing decode failures on rows returned by `/rest/v1/cross_post_log`.
+    enum CodingKeys: String, CodingKey {
+        case messageID = "message_id"
+        case platform
+        case externalRef = "external_ref"
+        case externalURL = "external_url"
+        case postedAtMs = "posted_at_ms"
+        case errorText = "error_text"
+    }
+
     // MARK: - Init
 
     /// Failable init: throws `.nonHTTPSURL` if `externalURL.scheme != "https"`.
@@ -68,5 +83,35 @@ public struct CrossPostLogRow: Codable, Hashable, Sendable, Identifiable {
         self.externalURL = externalURL
         self.postedAtMs = postedAtMs
         self.errorText = errorText
+    }
+
+    // MARK: - Codable (custom decoder enforces HTTPS invariant at decode time)
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        messageID  = try container.decode(String.self, forKey: .messageID)
+        platform   = try container.decode(String.self, forKey: .platform)
+        externalRef = try container.decode(String.self, forKey: .externalRef)
+        let rawURL  = try container.decode(URL.self, forKey: .externalURL)
+        guard rawURL.scheme == "https" else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .externalURL,
+                in: container,
+                debugDescription: "externalURL must use https scheme, got: \(rawURL.scheme ?? "nil")"
+            )
+        }
+        externalURL = rawURL
+        postedAtMs  = try container.decode(Int64.self, forKey: .postedAtMs)
+        errorText   = try container.decodeIfPresent(String.self, forKey: .errorText)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(messageID,  forKey: .messageID)
+        try container.encode(platform,   forKey: .platform)
+        try container.encode(externalRef, forKey: .externalRef)
+        try container.encode(externalURL, forKey: .externalURL)
+        try container.encode(postedAtMs,  forKey: .postedAtMs)
+        try container.encodeIfPresent(errorText, forKey: .errorText)
     }
 }

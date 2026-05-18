@@ -170,6 +170,27 @@ public enum SupabaseEndpoint {
         return components.url!
     }
 
+    // MARK: - PostgREST tables — Track 5 / S7 (cross_post_log read)
+
+    /// GET /rest/v1/cross_post_log?message_id=in.(<csv>)&select=*
+    /// RLS-gated to sender OR recipient (per S6 baseline cross_post_log_party_read policy).
+    /// Caller is responsible for non-empty messageIDs (empty input → skip calling this).
+    public static func crossPostLogByMessageIDs(_ messageIDs: [String], baseURL: URL) -> URL {
+        // PostgREST IN filter: message_id=in.(id1,id2,id3)
+        // Comma-separated values inside the parentheses — PostgREST handles quoting
+        // for most characters. UUIDs contain only hex + dashes; safe to embed directly.
+        let csv = messageIDs.joined(separator: ",")
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("rest/v1/cross_post_log"),
+            resolvingAgainstBaseURL: false
+        )!
+        components.queryItems = [
+            URLQueryItem(name: "message_id", value: "in.(\(csv))"),
+            URLQueryItem(name: "select", value: "*"),
+        ]
+        return components.url!
+    }
+
     // MARK: - Header builders
 
     public static func anonHeaders(anonKey: String) -> [String: String] {
