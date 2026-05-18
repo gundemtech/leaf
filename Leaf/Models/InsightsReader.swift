@@ -155,6 +155,12 @@ final class InsightsReader {
                         // substrate; stub on non-prod returns .empty.
                         let todayMetrics = try insights.todayMetrics(now: Date())
                         try Task.checkCancellation()
+                        // Track-8 Phase 8.4 — YOU·NOW dashboard cell state.
+                        // Single deriver call over the same substrate
+                        // (presence_state + attention / meeting / focus /
+                        // screen-lock transitions). Stub returns .empty.
+                        let youNowState = try insights.youNowState(now: Date())
+                        try Task.checkCancellation()
                         let snapshot = InsightsSnapshot(
                             topApps: topApps,
                             sessions: sessions,
@@ -192,7 +198,8 @@ final class InsightsReader {
                             recentActivity: recentActivity,
                             presenceState: presenceState,
                             recentSessions: recentSessions,
-                            todayMetrics: todayMetrics
+                            todayMetrics: todayMetrics,
+                            youNowState: youNowState
                         )
                         return .success((db, snapshot))
                     } catch {
