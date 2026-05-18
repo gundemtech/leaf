@@ -13,6 +13,7 @@ struct InboxBlock: View {
     let items: [InboxItem]
 
     @State private var selectedFilter: InboxFilter = .all
+    @State private var searchQuery: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: LeafSpace.md) {
@@ -22,6 +23,11 @@ struct InboxBlock: View {
 
             LeafCard(padding: .regular) {
                 VStack(alignment: .leading, spacing: LeafSpace.sm) {
+                    LeafInput(
+                        text: $searchQuery,
+                        placeholder: "Search inbox…",
+                        prefixIcon: .system("magnifyingglass")
+                    )
                     InboxFilterRow(selected: $selectedFilter)
                     LeafDivider()
                     if items.isEmpty {
@@ -35,7 +41,13 @@ struct InboxBlock: View {
     }
 
     private var filteredItems: [InboxItem] {
-        items.filter { selectedFilter.admits($0.kind) }
+        let trimmed = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return items.filter { item in
+            guard selectedFilter.admits(item.kind) else { return false }
+            guard !trimmed.isEmpty else { return true }
+            return item.title.lowercased().contains(trimmed)
+                || item.sourceMeta.lowercased().contains(trimmed)
+        }
     }
 
     private var emptyDataState: some View {
@@ -46,9 +58,9 @@ struct InboxBlock: View {
         )
     }
 
-    // Placeholder until T5 adds search + T6..T9 add scrollable list.
+    // Placeholder until T6..T9 add scrollable list with row + tap + count.
     private var placeholderPopulated: some View {
-        Text("\(filteredItems.count) inbox items (filter: \(selectedFilter.rawValue))")
+        Text("\(filteredItems.count) inbox items (filter: \(selectedFilter.rawValue), query: '\(searchQuery)')")
             .font(LeafType.body.regular)
             .foregroundStyle(LeafColor.text.secondary)
     }
