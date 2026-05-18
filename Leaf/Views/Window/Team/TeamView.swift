@@ -80,6 +80,11 @@ struct TeamView: View {
 
     @Environment(TeamFeedReader.self)  private var teamFeedReader
     @Environment(FeedFilterStore.self) private var feedFilterStore
+    // S7 Stage 6 fix C-I4 — Phase H wired this reader into LeafApp's
+    // composition root but the consumer side here remained `let crossPosts =
+    // []`. Inject + read in directMessageCard so cross-post badges actually
+    // render (OQ-S7-1).
+    @Environment(CrossPostLogReader.self) private var crossPostLogReader
 
     // MARK: - Phase H.6: APNs deep-link target
     //
@@ -185,6 +190,7 @@ struct TeamView: View {
                 filters: feedFilterStore.selected,
                 selfPubkeyHex: selfPubkeyHex()
             )
+            await loadCrossPostsForVisibleDMs()
         }
         // Re-fetch when filter chip selection changes.
         .onChange(of: feedFilterStore.selected) { _, newFilters in
@@ -195,8 +201,25 @@ struct TeamView: View {
                     filters: newFilters,
                     selfPubkeyHex: selfPubkeyHex()
                 )
+                await loadCrossPostsForVisibleDMs()
             }
         }
+    }
+
+    /// S7 Stage 6 fix C-I4 — batch-fetch cross-post log rows for all DM IDs
+    /// in the currently-loaded feed. Realtime push covers newly-inserted rows
+    /// at runtime; this is the cold-start path on app launch / workspace
+    /// switch / filter change. Cheap when nothing new (server returns empty
+    /// + reader caches the nil result to avoid retry storms — see
+    /// CrossPostLogReader cache semantics).
+    private func loadCrossPostsForVisibleDMs() async {
+        guard case .loaded(let items, _) = teamFeedReader.state else { return }
+        let dmIDs = items.compactMap { item -> String? in
+            if case .directMessage(let row) = item { return row.messageID }
+            return nil
+        }
+        guard !dmIDs.isEmpty else { return }
+        await crossPostLogReader.loadForMessages(dmIDs)
     }
 
     // MARK: - G.2 Loaded content
@@ -372,8 +395,12 @@ struct TeamView: View {
     private func directMessageCard(row: DirectMessageMirrorRow) -> some View {
         let isOutbound = row.senderPubkeyHex == selfPubkeyHex()
         let direction: MessageDirectionUI = isOutbound ? .outbound : .inbound
-        // CrossPostLogReader is wired in Phase H; graceful empty fallback until then.
-        let crossPosts: [CrossPostLogRow] = []
+        // S7 Stage 6 fix C-I4 — read CrossPostLogReader for the badges. The
+        // reader is populated by (a) Realtime POSTGRES_CHANGES push via
+        // LeafRealtimeService → absorbRealtimePush, or (b) explicit
+        // loadForMessages batch fetch (kicked from the feed-loaded .task
+        // below). Empty array when the message has no cross-posts (most DMs).
+        let crossPosts = crossPostLogReader.crossPosts(for: row.messageID)
         let cachedMeta = row.attachment.flatMap { attachmentMetadataCache[$0.externalRef] }
         let actions = computeActions(for: row, isOutbound: isOutbound)
 
