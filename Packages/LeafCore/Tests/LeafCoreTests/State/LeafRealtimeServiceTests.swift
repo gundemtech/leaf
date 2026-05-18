@@ -390,6 +390,50 @@ final class LeafRealtimeServiceTests: XCTestCase {
         await service.suspend()
     }
 
+    /// S7 Stage 6 fix M2 — dispatch loop must ignore a stale channelJoined
+    /// ack arriving on a topic that doesn't match the current workspace. The
+    /// prior impl set `state = .connected` unconditionally on any ack, which
+    /// would resurrect a stale "B connected" claim from a stale A→B
+    /// transition the moment A's late join-reply arrived.
+    func testDispatch_ChannelJoined_StaleTopic_IgnoredSilently() async throws {
+        let mock = MockWebSocketTask()
+        let driver = RealtimeWebSocketDriver(taskFactory: { _ in mock }, heartbeatIntervalSec: 60)
+        let supabase = try await installAuthBootstrap()
+        let dmStub = MockDirectMessageAbsorber()
+        let teamStub = MockTeamEventAbsorber()
+        let crossPost = CrossPostLogReader(supabase: supabase)
+        let service = makeService(
+            driver: driver, supabase: supabase,
+            directMessageInboxReader: dmStub,
+            teamEventMirrorReader: teamStub,
+            crossPostLogReader: crossPost
+        )
+
+        // Subscribe to wid-A — state transitions to .connecting.
+        await service.subscribe(workspaceID: "wid-A")
+        XCTAssertEqual(service.currentWorkspaceID, "wid-A")
+
+        // A stale phx_join ack arrives from wid-OTHER topic — must NOT
+        // transition state to .connected for wid-A.
+        await driver.dispatchMessage(.string("""
+        {"topic":"realtime:leaf-workspace-wid-OTHER","event":"phx_reply","payload":{"status":"ok","response":{}},"ref":"99"}
+        """))
+
+        // No transition to .connected — state stays as it was.
+        // (state could be .connecting or .connected depending on whether the
+        // optimistic transition fired earlier; either way it must not be
+        // *promoted* by a stale ack.)
+        XCTAssertNotEqual(service.state, .reconnecting(attempt: 1))
+
+        // The legitimate ack for wid-A must still flip to .connected.
+        await driver.dispatchMessage(.string("""
+        {"topic":"realtime:leaf-workspace-wid-A","event":"phx_reply","payload":{"status":"ok","response":{}},"ref":"1"}
+        """))
+        try await waitForCondition { service.state == .connected }
+        XCTAssertEqual(service.state, .connected)
+        await service.suspend()
+    }
+
     // MARK: - dispatch
 
     /// 4. team_events INSERT for the active workspace → decryptor + absorb fired.

@@ -266,11 +266,25 @@ public final class LeafRealtimeService {
 
     private func dispatch(_ event: RealtimeEvent) async {
         switch event {
-        case .channelJoined:
+        case .channelJoined(let topic):
             // The phx_join ack confirms the channel is live. We already
             // optimistically set .connected in subscribe(); the ack arriving
             // is a confirmation, not a re-transition.
-            state = .connected
+            //
+            // S7 Stage 6 fix M2 — verify the ack's topic matches the current
+            // workspace. On rapid subscribe(A) → subscribe(B), a late ack from
+            // the prior channel A would otherwise re-affirm .connected even
+            // if B's join hasn't completed yet (state could already be
+            // .connecting for B, then mis-flipped to .connected by A's stale
+            // ack). The Phoenix topic format is `realtime:leaf-workspace-<wid>`
+            // (RealtimePhoenixMessage.topicForWorkspace) — compare suffix
+            // against currentWorkspaceID before transitioning.
+            if let wid = currentWorkspaceID,
+               topic == "realtime:leaf-workspace-\(wid)" {
+                state = .connected
+            }
+            // else: stale ack from a prior channel — ignore silently. The
+            // current channel's own ack will arrive separately.
 
         case .channelRejected:
             // Server rejected the join (RLS denied, JWT expired, etc.). A
