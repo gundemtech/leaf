@@ -17,18 +17,27 @@ public struct Workspace: Sendable, Hashable {
     public let createdAt: Date
     public let createdByMemberID: String
     public let leftAt: Date?
+    /// S7 Stage 6 fix C-I1 — admin soft-delete marker from M025 (and the
+    /// Supabase mirror migration `20260516120200_workspace_soft_delete_s7`).
+    /// `nil` = not deleted. Non-nil = workspace has been soft-deleted by its
+    /// creator; row is hidden from `listWorkspaces(includeLeft: false)` and
+    /// the on-device retention pruner will sweep its descendants on the
+    /// schedule landed in S8.
+    public let deletedAt: Date?
 
     public init(
         id: String,
         name: String,
         createdAt: Date,
         createdByMemberID: String,
-        leftAt: Date? = nil
+        leftAt: Date? = nil,
+        deletedAt: Date? = nil
     ) {
         self.id = id
         self.name = name
         self.createdAt = createdAt
         self.createdByMemberID = createdByMemberID
         self.leftAt = leftAt
+        self.deletedAt = deletedAt
     }
 }

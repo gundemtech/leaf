@@ -735,14 +735,15 @@ public final class Database: @unchecked Sendable {
         }
     }
 
-    /// Returns the workspace row by id, regardless of `left_at_ms` state.
+    /// Returns the workspace row by id, regardless of `left_at_ms` /
+    /// `deleted_at_ms` state.
     /// Track-5 S2: replaces `readOrg()` single-row lookup.
     public func readWorkspace(id: String) throws -> Workspace? {
         try pool.read { db in
             let row = try Row.fetchOne(db, sql: """
                 SELECT \(Schema.Workspaces.id), \(Schema.Workspaces.name),
                        \(Schema.Workspaces.createdAtMs), \(Schema.Workspaces.createdByMemberID),
-                       \(Schema.Workspaces.leftAtMs)
+                       \(Schema.Workspaces.leftAtMs), \(Schema.Workspaces.deletedAtMs)
                 FROM \(Schema.Workspaces.tableName)
                 WHERE \(Schema.Workspaces.id) = ?
                 LIMIT 1
@@ -765,7 +766,7 @@ public final class Database: @unchecked Sendable {
             let rows = try Row.fetchAll(db, sql: """
                 SELECT \(Schema.Workspaces.id), \(Schema.Workspaces.name),
                        \(Schema.Workspaces.createdAtMs), \(Schema.Workspaces.createdByMemberID),
-                       \(Schema.Workspaces.leftAtMs)
+                       \(Schema.Workspaces.leftAtMs), \(Schema.Workspaces.deletedAtMs)
                 FROM \(Schema.Workspaces.tableName)\(filter)
                 ORDER BY \(Schema.Workspaces.createdAtMs) ASC
                 """)
@@ -1471,12 +1472,14 @@ public final class Database: @unchecked Sendable {
             let createdByMemberID = row[Schema.Workspaces.createdByMemberID] as String?
         else { return nil }
         let leftAtMs = row[Schema.Workspaces.leftAtMs] as Int64?
+        let deletedAtMs = row[Schema.Workspaces.deletedAtMs] as Int64?
         return Workspace(
             id: id,
             name: name,
             createdAt: Date(timeIntervalSince1970: TimeInterval(createdAtMs) / 1000.0),
             createdByMemberID: createdByMemberID,
-            leftAt: leftAtMs.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000.0) }
+            leftAt: leftAtMs.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000.0) },
+            deletedAt: deletedAtMs.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000.0) }
         )
     }
 

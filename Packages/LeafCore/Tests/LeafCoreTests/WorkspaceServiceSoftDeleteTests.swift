@@ -55,6 +55,38 @@ final class WorkspaceServiceSoftDeleteTests: XCTestCase {
         XCTAssertEqual(deletedAtMs, Int64(deleteDate.timeIntervalSince1970 * 1000))
     }
 
+    /// S7 Stage 6 fix C-I1 — Workspace value type carries deletedAt round-tripped
+    /// from the DB column. Previously the mapper read leftAt but silently dropped
+    /// deleted_at_ms; downstream consumers (admin audit screens, post-delete
+    /// tombstone UI) had no signal that a workspace had been soft-deleted.
+    func testSoftDelete_WorkspaceValueTypeCarriesDeletedAt() throws {
+        let svc = makeService()
+        let ws = try svc.createWorkspace(displayName: "Acme")
+        try svc.softDelete(workspaceID: ws.id, at: deleteDate)
+
+        // readWorkspace returns rows regardless of soft-delete state.
+        let recovered = try db.readWorkspace(id: ws.id)
+        XCTAssertNotNil(recovered)
+        XCTAssertEqual(
+            recovered?.deletedAt,
+            Date(timeIntervalSince1970: deleteDate.timeIntervalSince1970),
+            "Workspace.deletedAt must round-trip from the DB column (ms precision)"
+        )
+        XCTAssertNil(
+            recovered?.leftAt,
+            "softDelete must not also set leftAt — those are independent admin vs personal markers"
+        )
+    }
+
+    /// C-I1 sanity: a workspace not soft-deleted has nil deletedAt.
+    func testCreateWorkspace_NewRowHasNilDeletedAt() throws {
+        let svc = makeService()
+        let ws = try svc.createWorkspace(displayName: "Beta")
+        let recovered = try db.readWorkspace(id: ws.id)
+        XCTAssertNotNil(recovered)
+        XCTAssertNil(recovered?.deletedAt)
+    }
+
     // MARK: - Cascade DELETEs
 
     func testSoftDelete_CascadeDELETES_MessagesMirror() throws {
