@@ -30,6 +30,14 @@ struct RootView: View {
     // so we can pass it through the environment from LeafApp.init.
     @Environment(LeafRealtimeService.self) private var realtimeService
     @Environment(ActiveWorkspaceStore.self) private var activeWorkspaceStore
+    // Track 5 / S7 Stage 6 fix C-C1 — 30s polling tick host. OrganizationView
+    // (which previously hosted the polling loop) was deleted in commit 1a3fbcc;
+    // these readers' .tick() methods had no caller until rewired here. The loop
+    // is the latency-tolerant fallback delivery path when Realtime is down /
+    // suspended / decryption-stubbed (Phase H carry-over).
+    @Environment(DirectMessageInboxReader.self) private var directMessageInboxReader
+    @Environment(TeamEventBroadcastReader.self) private var teamEventBroadcastReader
+    @Environment(TeamEventMirrorReader.self) private var teamEventMirrorReader
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -66,6 +74,28 @@ struct RootView: View {
                 } else {
                     await realtimeService.suspend()
                 }
+            }
+        }
+        // Track 5 / S7 Stage 6 fix C-C1 — 30s polling tick scheduler for
+        // broadcast / mirror / DM inbox. Replaces OrganizationView's lifecycle
+        // host (deleted in commit 1a3fbcc). Loop terminates when active
+        // workspace changes (Task re-issued on .task(id:) match) or window
+        // closes (Task cancellation). Cancellation-safe via Task.isCancelled
+        // check between awaits + Task.sleep cancellation honours.
+        //
+        // Why .task(id:) and not .onChange + manual Task: SwiftUI cancels
+        // the prior Task automatically on id change, which gives us a clean
+        // single-loop-per-workspace invariant.
+        .task(id: activeWorkspaceStore.activeWorkspaceID) {
+            guard let wid = activeWorkspaceStore.activeWorkspaceID else { return }
+            while !Task.isCancelled {
+                await teamEventBroadcastReader.tick(workspaceID: wid)
+                if Task.isCancelled { break }
+                await teamEventMirrorReader.tick(workspaceID: wid)
+                if Task.isCancelled { break }
+                await directMessageInboxReader.tick()
+                if Task.isCancelled { break }
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
             }
         }
     }
