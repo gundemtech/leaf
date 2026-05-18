@@ -656,4 +656,10 @@ final class InsightsSnapshotTests: XCTestCase {
             ".empty surface breakdowns don't flip isEmpty — Track 7 P2 fields excluded from isEmpty check (nil = not computed, not zero data)"
         )
     }
+
+    // MARK: - Phase 8.4 — youNowState defaulted init
+
+    func test_init_defaultsYouNowStateToEmpty() {
+        XCTAssertEqual(emptySnapshot().youNowState, .empty)
+    }
 }

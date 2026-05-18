@@ -129,6 +129,13 @@ public struct InsightsSnapshot: Sendable, Hashable {
     /// without modification; production `InsightsReader.refresh()` writes
     /// the real value via `DerivedInsights.todayMetrics(now:)`.
     public let todayMetrics: TodayMetrics
+    /// Phase Track-8 P4 — YOU·NOW dashboard cell state (active /
+    /// inMeeting / deepWorkFocus / away). Default `.empty` matches the
+    /// `todayMetrics` pattern — no fixture sweep needed across existing
+    /// snapshot construction sites. Production
+    /// `InsightsReader.refresh()` writes the real value via
+    /// `DerivedInsights.youNowState(now:)`.
+    public let youNowState: YouNowState
 
     public init(
         topApps: [AppTimeEntry],
@@ -171,7 +178,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         zoomActivity: ZoomActivityBreakdown? = nil,
         googleCalendarActivity: GoogleCalendarActivityBreakdown? = nil,
         workState: WorkStateSummary? = nil,
-        todayMetrics: TodayMetrics = .empty
+        todayMetrics: TodayMetrics = .empty,
+        youNowState: YouNowState = .empty
     ) {
         self.topApps = topApps
         self.sessions = sessions
@@ -214,6 +222,7 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.googleCalendarActivity = googleCalendarActivity
         self.workState = workState
         self.todayMetrics = todayMetrics
+        self.youNowState = youNowState
     }
 
     /// Convenience init — рассчитывает `deepSessionsCount` по threshold'у.
@@ -263,7 +272,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         zoomActivity: ZoomActivityBreakdown? = nil,
         googleCalendarActivity: GoogleCalendarActivityBreakdown? = nil,
         workState: WorkStateSummary? = nil,
-        todayMetrics: TodayMetrics = .empty
+        todayMetrics: TodayMetrics = .empty,
+        youNowState: YouNowState = .empty
     ) {
         self.init(
             topApps: topApps,
@@ -306,7 +316,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
             zoomActivity: zoomActivity,
             googleCalendarActivity: googleCalendarActivity,
             workState: workState,
-            todayMetrics: todayMetrics
+            todayMetrics: todayMetrics,
+            youNowState: youNowState
         )
     }
 
