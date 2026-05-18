@@ -177,6 +177,13 @@ final class InsightsReader {
                         // open questions + blockers via the moat impl.
                         let inboxItems = try insights.inboxItems(filter: .all, query: "")
                         try Task.checkCancellation()
+                        // Track-8 Phase 8.7 — WHERE STOPPED block snapshot.
+                        // Take first (most recent) row; substrate returns
+                        // most-recent-first per `ProdWhereStoppedDeriver`.
+                        // `nil` when substrate has no row (fresh DB, idle
+                        // gate not met, or non-prod StubInsights).
+                        let whereStopped = try insights.recentWhereStopped(limit: 1).first
+                        try Task.checkCancellation()
                         let snapshot = InsightsSnapshot(
                             topApps: topApps,
                             sessions: sessions,
@@ -217,7 +224,8 @@ final class InsightsReader {
                             todayMetrics: todayMetrics,
                             youNowState: youNowState,
                             sameTaskTeammates: sameTaskTeammates,
-                            inboxItems: inboxItems
+                            inboxItems: inboxItems,
+                            whereStopped: whereStopped
                         )
                         return .success((db, snapshot))
                     } catch {
