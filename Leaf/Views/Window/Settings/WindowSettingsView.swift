@@ -1,8 +1,8 @@
 //
 //  WindowSettingsView.swift
 //  Track 2 / D4 — drop manual top-level header chrome. Pure VStack hosting
-//  4 sub-section views в порядке Background → Folders → Updates → Privacy
-//  (cognitive flow: enable agent → tell it where to look → meta).
+//  sub-section views. Track 5 / S7 — F.11: WorkspaceSettingsSection added first
+//  (team identity → collection setup → privacy → updates).
 //
 
 import SwiftUI
@@ -16,6 +16,7 @@ struct WindowSettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: LeafSpace.xxl) {
+                WorkspaceSettingsSection()
                 BackgroundCollectionSection(launchAgent: launchAgent)
                 FoldersSettings(service: watchedFolders)
                 LocalAppsSettingsSection()

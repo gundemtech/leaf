@@ -1,17 +1,24 @@
 //
 //  WorkspaceSettingsSection.swift
-//  Track 5 / S7 — F.1 + F.2. Settings → Workspace section host.
+//  Track 5 / S7 — F.1 + F.2 + F.10. Settings → Workspace section host.
 //  Renders workspace header row (name editor + created date + member count),
-//  member admin list, and pending invites admin section.
-//  F.10 action buttons (Invite / Leave / Delete / New) wired in the next dispatch.
+//  member admin list, pending invites admin section, and action buttons row
+//  (Invite / New Workspace / Leave / Delete Permanently).
 //
 
+import CryptoKit
 import SwiftUI
 import LeafCore
 
 struct WorkspaceSettingsSection: View {
     @Environment(WorkspaceReader.self) private var workspaceReader
     @Environment(PendingInvitesReader.self) private var pendingInvitesReader
+
+    @State private var generateInvitePresented = false
+    @State private var createWorkspacePresented = false
+    @State private var leavePresented = false
+    @State private var deletePresented = false
+    @State private var myPubHex: String = ""
 
     private static let createdFormatter: RelativeDateTimeFormatter = {
         let f = RelativeDateTimeFormatter()
@@ -31,6 +38,7 @@ struct WorkspaceSettingsSection: View {
                 actionButtonsRow
             }
         }
+        .onAppear { loadMyPubHex() }
     }
 
     // MARK: - F.2 — Header row
@@ -66,17 +74,77 @@ struct WorkspaceSettingsSection: View {
         }
     }
 
-    // MARK: - F.10 placeholder
+    // MARK: - F.10 — Action buttons row
 
     @ViewBuilder
     private var actionButtonsRow: some View {
-        // Placeholder — Phase F.10 fills with Invite / Leave / Delete / New workspace buttons.
-        EmptyView()
+        if case .loaded(_, let active, let members) = workspaceReader.state {
+            let viewerIsAdmin = members.contains { $0.pubkeyHex == myPubHex && $0.role == .admin }
+
+            HStack(spacing: LeafSpace.sm) {
+                LeafButton("+ Invite teammate", variant: .secondary, size: .md) {
+                    generateInvitePresented = true
+                }
+                LeafButton("+ New Workspace", variant: .secondary, size: .md) {
+                    createWorkspacePresented = true
+                }
+                Spacer()
+                LeafButton("Leave Workspace", variant: .destructive, size: .md) {
+                    leavePresented = true
+                }
+                if viewerIsAdmin {
+                    LeafButton("Delete Permanently", variant: .destructive, size: .md) {
+                        deletePresented = true
+                    }
+                }
+            }
+            .padding(.top, LeafSpace.md)
+            .sheet(isPresented: $generateInvitePresented) {
+                GenerateInviteSheet()
+            }
+            .sheet(isPresented: $createWorkspacePresented) {
+                WorkspaceCreateSheet(
+                    onCreated: { createWorkspacePresented = false },
+                    onCancel: { createWorkspacePresented = false }
+                )
+            }
+            .sheet(isPresented: $leavePresented) {
+                LeaveWorkspaceConfirmationModal(
+                    workspaceName: active.name,
+                    onConfirm: {
+                        await workspaceReader.leaveActiveWorkspace()
+                        leavePresented = false
+                    },
+                    onCancel: { leavePresented = false }
+                )
+            }
+            .sheet(isPresented: $deletePresented) {
+                DeleteWorkspaceConfirmationModal(
+                    workspaceName: active.name,
+                    onConfirm: {
+                        await workspaceReader.delete(workspaceID: active.id)
+                        deletePresented = false
+                    },
+                    onCancel: { deletePresented = false }
+                )
+            }
+        }
     }
 
     // MARK: - Helpers
 
     private func relativeDate(_ date: Date) -> String {
         Self.createdFormatter.localizedString(for: date, relativeTo: Date())
+    }
+
+    private func loadMyPubHex() {
+        guard myPubHex.isEmpty else { return }
+        do {
+            let priv = try IdentityService.ensureLocalIdentity(at: TeamKeystore.defaultRoot())
+            myPubHex = priv.publicKey.rawRepresentation
+                .map { String(format: "%02x", $0) }.joined()
+        } catch {
+            myPubHex = ""
+        }
     }
 }
