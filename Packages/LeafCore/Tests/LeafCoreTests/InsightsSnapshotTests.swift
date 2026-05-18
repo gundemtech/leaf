@@ -688,4 +688,31 @@ final class InsightsSnapshotTests: XCTestCase {
         )
         XCTAssertEqual(snapshot.sameTaskTeammates, [match])
     }
+
+    // MARK: - Phase Track-8 P6 — INBOX
+
+    func testSnapshotDefaultsInboxItemsEmpty() {
+        XCTAssertEqual(emptySnapshot().inboxItems, [])
+    }
+
+    func testSnapshotRoundTripsInboxItems() {
+        let item = InboxItem(
+            id: "x",
+            kind: .reviewRequest,
+            severity: .warn,
+            title: "PR review",
+            sourceMeta: "GitHub · 1h ago",
+            sourceURL: URL(string: "https://github.com/x/y/pull/1"),
+            aggregatedCount: 1,
+            createdAtMs: 0
+        )
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500,
+            inboxItems: [item]
+        )
+        XCTAssertEqual(snapshot.inboxItems, [item])
+    }
 }

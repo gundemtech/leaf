@@ -146,6 +146,13 @@ public struct InsightsSnapshot: Sendable, Hashable {
     /// `[]` until Phase 5.4 wires a DB-backed `TeammatePresenceReader`
     /// against `presence_history`.
     public let sameTaskTeammates: [TeammateMatch]
+    /// Phase Track-8 P6 — INBOX dashboard items list (review requests,
+    /// comments on my work, mentions, open questions, blockers). Substrate
+    /// already sorts by `InboxSeverity.sortRank` asc → `createdAtMs` desc.
+    /// Default `[]` so existing call-sites keep compiling without
+    /// modification. Production `InsightsReader.refresh()` writes the
+    /// real value via `DerivedInsights.inboxItems(filter:query:)`.
+    public let inboxItems: [InboxItem]
 
     public init(
         topApps: [AppTimeEntry],
@@ -190,7 +197,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         workState: WorkStateSummary? = nil,
         todayMetrics: TodayMetrics = .empty,
         youNowState: YouNowState = .empty,
-        sameTaskTeammates: [TeammateMatch] = []
+        sameTaskTeammates: [TeammateMatch] = [],
+        inboxItems: [InboxItem] = []
     ) {
         self.topApps = topApps
         self.sessions = sessions
@@ -235,6 +243,7 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.todayMetrics = todayMetrics
         self.youNowState = youNowState
         self.sameTaskTeammates = sameTaskTeammates
+        self.inboxItems = inboxItems
     }
 
     /// Convenience init — рассчитывает `deepSessionsCount` по threshold'у.
@@ -286,7 +295,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         workState: WorkStateSummary? = nil,
         todayMetrics: TodayMetrics = .empty,
         youNowState: YouNowState = .empty,
-        sameTaskTeammates: [TeammateMatch] = []
+        sameTaskTeammates: [TeammateMatch] = [],
+        inboxItems: [InboxItem] = []
     ) {
         self.init(
             topApps: topApps,
@@ -331,7 +341,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
             workState: workState,
             todayMetrics: todayMetrics,
             youNowState: youNowState,
-            sameTaskTeammates: sameTaskTeammates
+            sameTaskTeammates: sameTaskTeammates,
+            inboxItems: inboxItems
         )
     }
 
