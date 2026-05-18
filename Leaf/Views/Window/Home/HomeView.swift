@@ -205,7 +205,7 @@ private struct HomeContent: View {
                 TodayBlock(metrics: snapshot.todayMetrics)
 
                 HStack(alignment: .top, spacing: LeafSpace.xl) {
-                    YouNowBlock()
+                    YouNowBlock(state: snapshot.youNowState)
                         .frame(maxWidth: .infinity)
                     WithYouOnThisBlock()
                         .frame(maxWidth: .infinity)
