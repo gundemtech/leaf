@@ -31,8 +31,7 @@ struct InboxFilterRow: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("\(chip.label) filter")
-                .accessibilityAddTraits(.isButton)
-                .accessibilityHint(selected == chip.filter ? "Selected" : "Tap to filter")
+                .accessibilityAddTraits(selected == chip.filter ? [.isButton, .isSelected] : .isButton)
             }
         }
     }

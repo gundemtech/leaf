@@ -1,11 +1,11 @@
 //
 //  InboxItemRow.swift
 //  Track 8 / Phase 8.6 — INBOX item row. Severity dot leading edge,
-//  title + sourceMeta lines, whole-row Button tap routes to
+//  title (+ inline `(N)` aggregation suffix when count > 1) +
+//  sourceMeta line, whole-row Button tap routes to
 //  `NSWorkspace.shared.open(sourceURL)` when sourceURL non-nil.
 //  Items with nil sourceURL (D3-derived open questions / blockers
 //  pre-Phase 4.8/4.9 enrichment) render as inert informational rows.
-//  Aggregation count suffix added in T8.
 //
 
 import AppKit
