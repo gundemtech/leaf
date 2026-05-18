@@ -173,6 +173,22 @@ public actor TeamEventMirrorService {
         )
     }
 
+    /// Realtime push handler — UPSERTs a single pre-decoded `TeamEventMirrorRow`
+    /// received from a Supabase Realtime POSTGRES_CHANGES event.
+    ///
+    /// The row arrives already decrypted and validated by the Realtime dispatch
+    /// path. C2/C3 trust gates (senderPubkeyHex + workspaceID) are enforced by
+    /// the caller (LeafRealtimeService) before routing here; the service mirrors
+    /// the same batch-UPSERT pattern as `tick` but for a single row.
+    ///
+    /// Idempotent: calling with the same (workspaceID, eventID) twice UPSERTs
+    /// without error (matches `TeamEventMirrorStore.upsert` ON CONFLICT DO UPDATE).
+    public func absorbRealtimePush(_ row: TeamEventMirrorRow) throws {
+        try database.writeSQL { rawDB in
+            try TeamEventMirrorStore.upsert(row, in: rawDB)
+        }
+    }
+
     // MARK: - Internals
 
     static func keyIDDataToUUIDString(_ data: Data) -> String {

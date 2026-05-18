@@ -308,6 +308,18 @@ public final class Database: @unchecked Sendable {
         }
     }
 
+    // MARK: - Direct message mirror (Track 5 / S4 + S7)
+
+    /// Single-pass aggregate: number of unread inbound DMs per workspace.
+    /// Uses the `idx_messages_mirror_unread` partial index — cheap at any DB size.
+    /// Called by `DirectMessageInboxReader.refreshUnreadCounts()` after every tick
+    /// + every Realtime push absorption.
+    public func readUnreadDMCountByWorkspace() throws -> [String: Int] {
+        try pool.read { rawDB in
+            try MessagesMirrorStore.unreadInboundCountByWorkspace(in: rawDB)
+        }
+    }
+
     // MARK: - Team event mirror retention (Track 5 / S5)
 
     public func deleteTeamEventMirrorOlderThan(cutoffMs: Int64) throws -> Int {

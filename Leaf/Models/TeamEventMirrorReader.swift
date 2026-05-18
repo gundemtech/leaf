@@ -78,6 +78,22 @@ final class TeamEventMirrorReader {
         }
     }
 
+    /// Realtime push handler — UPSERTs a single team event row.
+    /// Called by LeafRealtimeService when a Realtime POSTGRES_CHANGES INSERT event
+    /// fires on `team_events` for this device's workspace.
+    ///
+    /// C2/C3 plaintext-trust gates (senderPubkeyHex + workspaceID verification)
+    /// are applied by the caller (LeafRealtimeService) before routing here.
+    /// Falls back gracefully: logs + skips on service unavailability or decode error.
+    func absorbRealtimePush(_ row: TeamEventMirrorRow) async {
+        do {
+            let svc = try ensureMirror()
+            try await svc.absorbRealtimePush(row)
+        } catch {
+            logger.error("team event realtime push failed: \(String(describing: error), privacy: .public)")
+        }
+    }
+
     func pruneIfDueDaily(now: Date = Date()) async {
         if let last = lastPrunedAt, now.timeIntervalSince(last) < 86_400 {
             return

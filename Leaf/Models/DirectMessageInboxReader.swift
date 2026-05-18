@@ -24,6 +24,10 @@ import LeafCorePrivate
 final class DirectMessageInboxReader {
     private(set) var recentMessages: [DirectMessageMirrorRow] = []
     private(set) var unreadCount: Int = 0
+    /// Per-workspace map of unread inbound DM counts.
+    /// Populated on every successful `tick()` + every `absorbRealtimePush(_:)`.
+    /// Used by `LeafWorkspaceSwitcher` badge. Key = workspaceID.
+    private(set) var unreadCountByWorkspace: [String: Int] = [:]
     private(set) var lastTickError: String?
 
     /// I10 fix — cache pubkey hex once instead of re-reading IdentityService
@@ -72,6 +76,7 @@ final class DirectMessageInboxReader {
         do {
             _ = try await svc.tick(workspaceID: wid)
             refreshLocalState(workspaceID: wid)
+            refreshUnreadCounts()
             lastTickError = nil
         } catch {
             lastTickError = String(describing: error)
@@ -89,6 +94,42 @@ final class DirectMessageInboxReader {
         }
         _ = try? await svc.tickOnce(workspaceID: workspaceID, forMessageID: messageID)
         refreshLocalState(workspaceID: workspaceID)
+    }
+
+    /// Recomputes `unreadCountByWorkspace` via a single SQL aggregate over all
+    /// workspaces. Cheap — uses the `idx_messages_mirror_unread` partial index.
+    /// Called after every successful `tick()` and every `absorbRealtimePush(_:)`.
+    func refreshUnreadCounts() {
+        guard let db = database else { return }
+        do {
+            unreadCountByWorkspace = try db.readUnreadDMCountByWorkspace()
+        } catch {
+            logger.error("refreshUnreadCounts failed: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    /// Realtime push handler — UPSERTs a single inbound DM row + refreshes counts.
+    /// Called by LeafRealtimeService when a Realtime POSTGRES_CHANGES INSERT/UPDATE
+    /// event fires on `direct_messages` for this device's pubkey.
+    /// Falls back gracefully on DB unavailability: sets `lastTickError` + skips.
+    func absorbRealtimePush(_ row: DirectMessageMirrorRow) async {
+        let svc: DirectMessageInboxService
+        do {
+            svc = try ensureService()
+        } catch {
+            lastTickError = "DB open failed (realtime push): \(error)"
+            return
+        }
+        do {
+            try svc.absorbRealtimePush(row)
+            if row.workspaceID == activeWorkspaceStore.activeWorkspaceID {
+                refreshLocalState(workspaceID: row.workspaceID)
+            }
+            refreshUnreadCounts()
+            lastTickError = nil
+        } catch {
+            lastTickError = "Realtime push absorb failed: \(error)"
+        }
     }
 
     /// Refresh published surfaces from local mirror — called after every successful tick.

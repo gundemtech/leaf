@@ -118,6 +118,27 @@ public struct MessagesMirrorStore: Sendable {
         return rows.compactMap(Self.mapRow)
     }
 
+    /// Per-workspace count of unread inbound DMs.
+    /// Single SQL aggregate — uses `idx_messages_mirror_unread` partial index.
+    /// Returns an empty dict when no unread messages exist.
+    public static func unreadInboundCountByWorkspace(in db: GRDB.Database) throws -> [String: Int] {
+        let rows = try Row.fetchAll(db, sql: """
+            SELECT \(Schema.MessagesMirror.workspaceID), COUNT(*) AS cnt
+            FROM \(Schema.MessagesMirror.tableName)
+            WHERE \(Schema.MessagesMirror.direction) = '\(Schema.MessagesMirror.directionInbound)'
+              AND \(Schema.MessagesMirror.readAtMs) IS NULL
+            GROUP BY \(Schema.MessagesMirror.workspaceID)
+            """)
+        var result: [String: Int] = [:]
+        for row in rows {
+            if let wid: String = row[Schema.MessagesMirror.workspaceID],
+               let cnt: Int = row["cnt"] {
+                result[wid] = cnt
+            }
+        }
+        return result
+    }
+
     /// MAX(server_created_at_ms) for incremental sync cursor. nil → cold bootstrap.
     public static func maxServerCreatedAtMs(
         workspaceID: String,

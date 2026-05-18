@@ -102,6 +102,21 @@ public struct DirectMessageInboxService: Sendable {
         return true
     }
 
+    /// Realtime push handler — UPSERTs a single pre-decoded `DirectMessageMirrorRow`
+    /// received from a Supabase Realtime POSTGRES_CHANGES event.
+    ///
+    /// The Realtime path delivers rows that have already passed server-side RLS
+    /// (same policy as REST fetchInboundMessages). No re-decryption needed — the
+    /// row is already in plaintext-trust form (analogous to the decoded rows that
+    /// `tick` assembles after AES-GCM decrypt + C4 plaintext-wins logic).
+    ///
+    /// Idempotent: calling with the same messageID twice UPSERTs without error.
+    public func absorbRealtimePush(_ row: DirectMessageMirrorRow) throws {
+        try database.writeSQL { db in
+            try MessagesMirrorStore.upsert(row, in: db)
+        }
+    }
+
     // MARK: - Helpers
 
     private func decryptRow(
