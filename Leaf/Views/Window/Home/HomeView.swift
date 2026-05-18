@@ -213,7 +213,7 @@ private struct HomeContent: View {
 
                 InboxBlock(items: snapshot.inboxItems)
 
-                WhereStoppedBlock()
+                WhereStoppedBlock(snapshot: snapshot.whereStopped)
             }
             .navigationDestination(for: HomeSurface.self) { surface in
                 detail(for: surface)
