@@ -33,9 +33,7 @@ struct WithYouOnThisBlock: View {
                 if matches.isEmpty {
                     emptyState
                 } else {
-                    Text("rows placeholder — Task 4")
-                        .font(LeafType.body.regular)
-                        .foregroundStyle(LeafColor.text.secondary)
+                    populatedBody
                 }
             }
         }
@@ -52,5 +50,122 @@ struct WithYouOnThisBlock: View {
             ctaTitle: "→ Team",
             onCTA: { windowState.section = .team }
         )
+    }
+
+    @ViewBuilder
+    private var populatedBody: some View {
+        VStack(alignment: .leading, spacing: LeafSpace.sm) {
+            ForEach(matches.prefix(Self.rowCap), id: \.memberID) { match in
+                teammateRow(match)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func teammateRow(_ match: TeammateMatch) -> some View {
+        Button {
+            windowState.section = .team
+        } label: {
+            HStack(alignment: .center, spacing: LeafSpace.md) {
+                avatarCircle(for: match)
+                VStack(alignment: .leading, spacing: LeafSpace.xxs) {
+                    Text(match.displayName)
+                        .font(LeafType.title.small)
+                        .foregroundStyle(LeafColor.text.primary)
+                        .lineLimit(1)
+                    Text(secondLine(for: match))
+                        .font(LeafType.body.small)
+                        .foregroundStyle(LeafColor.text.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                Spacer(minLength: 0)
+                confidenceBadge(for: match)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(match.displayName), \(match.contextLabel), tap to open Team tab")
+        .accessibilityAddTraits(.isButton)
+    }
+
+    @ViewBuilder
+    private func avatarCircle(for match: TeammateMatch) -> some View {
+        Circle()
+            .fill(avatarTint(forMemberID: match.memberID))
+            .frame(width: 32, height: 32)
+            .overlay(
+                Text(initials(match.displayName))
+                    .font(LeafType.body.small)
+                    .foregroundStyle(.white)
+            )
+            .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private func confidenceBadge(for match: TeammateMatch) -> some View {
+        let tint = confidenceTint(match.confidence)
+        Text(match.contextLabel)
+            .font(LeafType.body.small)
+            .foregroundStyle(tint)
+            .padding(.horizontal, LeafSpace.sm)
+            .padding(.vertical, LeafSpace.xxs)
+            .background(
+                RoundedRectangle(cornerRadius: LeafRadius.sm, style: .continuous)
+                    .fill(tint.opacity(0.15))
+            )
+            .accessibilityHidden(true)
+    }
+
+    private func secondLine(for match: TeammateMatch) -> String {
+        let app = match.currentApp ?? "—"
+        return "\(app) · \(formatRelative(msAgo: match.lastActivityAtMs))"
+    }
+
+    private func confidenceTint(_ confidence: MatchConfidence) -> Color {
+        switch confidence {
+        case .onSameLinearIssue, .onSameBranch:
+            return LeafColor.status.success
+        case .onAdjacentBranch:
+            return LeafColor.status.warning
+        }
+    }
+
+    /// Deterministic palette pick by member id — visual aid only, not
+    /// identity. Swift's String.hashValue is randomized across launches,
+    /// so the tint may drift between runs. Acceptable in P5; P9 carry
+    /// could swap to a stable hash if it bothers.
+    private func avatarTint(forMemberID id: String) -> Color {
+        let palette: [Color] = [
+            LeafColor.accent.primary,
+            LeafColor.status.info,
+            LeafColor.status.warning,
+            LeafColor.status.success,
+            LeafColor.text.secondary,
+        ]
+        let hash = abs(id.hashValue)
+        return palette[hash % palette.count]
+    }
+
+    /// "Dmitrii Demidov" → "DD", "Anton" → "A", "" → "?".
+    private func initials(_ displayName: String) -> String {
+        let parts = displayName.split(separator: " ").prefix(2)
+        let chars = parts.compactMap { $0.first.map(String.init) }
+        let joined = chars.joined().uppercased()
+        return joined.isEmpty ? "?" : String(joined.prefix(2))
+    }
+
+    /// Coarse "X ago" relative formatter. Block-private to avoid coupling
+    /// with `YouNowBlock`'s own `formatRelative` helper; extract to a
+    /// shared util when a 3rd caller appears.
+    private func formatRelative(msAgo ms: Int64) -> String {
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let secs = max(0, Int((nowMs - ms) / 1000))
+        if secs < 60 { return "\(secs)s ago" }
+        let mins = secs / 60
+        if mins < 60 { return "\(mins)m ago" }
+        let hours = mins / 60
+        if hours < 24 { return "\(hours)h ago" }
+        return "\(hours / 24)d ago"
     }
 }
