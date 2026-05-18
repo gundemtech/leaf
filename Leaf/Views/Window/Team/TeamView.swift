@@ -1,14 +1,33 @@
 //
 //  TeamView.swift
-//  Track 2 / D3 — Team screen on D1 substrate. Adaptive grid (LazyVGrid with
-//  GridItem(.adaptive(minimum: 240, maximum: 360))) of LeafCard members.
-//  Empty state — gain-framed copy ("You're solo for now"). Error state —
-//  LeafBanner.danger + retry. RemovedFromTeamBanner preempts via RootView.
+//  Track 5 / S7 G.2-G.5 — Unified Team feed layout.
 //
-//  Self-row hides overflow Menu (compare member.pubkeyHex против myPubHex
-//  resolved from IdentityService.ensureLocalIdentity). 'Add member' CTA
-//  переезжает в LeafSection cta-slot (top-right) — убирает floating
-//  bottom button.
+//  Replaces Track 2 / D3 adaptive-grid-of-members with the new feed structure:
+//
+//    ┌── toolbar: name · N members · [+ Send] ⌘N ───────────────────────────┐
+//    ├── members pill-row (horizontal scroll) ────────────────────────────────┤
+//    ├── LeafFilterChips (All · DM · Tasks · Decisions · Blockers · More…) ───┤
+//    └── feed body placeholder (G.6-G.11 dispatch fills in) ─────────────────┘
+//
+//  Environment dependencies:
+//    Already wired (S2/S4/S5/S6):
+//      WorkspaceReader, ActiveWorkspaceStore, DirectMessageInboxReader,
+//      TeamEventMirrorReader, SlackOAuthService, \.linearUsersResolver
+//    Phase H wires these new ones:
+//      TeamFeedReader, FeedFilterStore, CrossPostLogReader
+//
+//  Phase H gap: @Environment(TeamFeedReader.self) and
+//  @Environment(FeedFilterStore.self) will crash at runtime (not compile-time)
+//  if not injected. Phase H composition root wires them. Until then the app
+//  must not navigate to TeamView in a test run without the H injection.
+//
+//  Send entry:
+//    • Tapping a member pill opens SendDirectMessageSheet for that member.
+//    • [+ Send] toolbar button (G.6 dispatch will wire full recipient-picker).
+//
+//  S6 closure-injection pattern preserved 1:1 from OrganizationView:
+//    • onReauthorizeSlack  — SlackOAuthService.connect()
+//    • resolveLinearAssignee — LinearUsersResolver.resolve(displayName:)
 //
 
 import CryptoKit
@@ -16,196 +35,259 @@ import SwiftUI
 import LeafCore
 
 struct TeamView: View {
-    @Environment(WorkspaceReader.self) private var reader
-    @Environment(PendingInvitesReader.self) private var pendingReader
-    @Environment(WindowState.self) private var windowState
 
-    @State private var showingGenerateSheet: Bool = false
-    @State private var pendingRemoval: PendingRemoval?
-    @State private var myPubHex: String = ""
+    // MARK: - Environment (S2/S4/S5/S6 — already in composition root)
 
-    private struct PendingRemoval: Identifiable {
-        let id = UUID()
-        let memberID: String
-        let displayName: String
+    @Environment(WorkspaceReader.self)          private var workspaceReader
+    @Environment(ActiveWorkspaceStore.self)     private var activeWorkspaceStore
+    @Environment(DirectMessageInboxReader.self) private var inboxReader
+    @Environment(TeamEventMirrorReader.self)    private var teamEventMirrorReader
+    // S6 closure providers (identical wiring pattern to OrganizationView).
+    @Environment(SlackOAuthService.self)        private var slackOAuth
+    @Environment(\.linearUsersResolver)         private var linearUsersResolver
+
+    // MARK: - Phase H: new environment readers
+    //
+    // These will be injected by Phase H composition root.
+    // See LeafApp.swift — Phase H adds:
+    //   .environment(teamFeedReader)
+    //   .environment(feedFilterStore)
+    // Until Phase H ships, navigating to TeamView crashes with:
+    //   "No Observable of type TeamFeedReader found. A View.environment(_:) for
+    //    TeamFeedReader may be missing as an ancestor of this view."
+
+    @Environment(TeamFeedReader.self)  private var teamFeedReader
+    @Environment(FeedFilterStore.self) private var feedFilterStore
+
+    // MARK: - Local sheet state
+
+    @State private var sendSheetRecipient: SendRecipient? = nil
+
+    /// Identifiable wrapper for sheet(item:). TeamMember is Hashable+Sendable but
+    /// not Identifiable; wrap its id + member ref.
+    private struct SendRecipient: Identifiable {
+        let id: String       // matches TeamMember.id
+        let member: TeamMember
     }
 
+    // MARK: - Body
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: LeafSpace.xxl) {
-                content
+        Group {
+            switch workspaceReader.state {
+            case .loading:
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            case .empty:
+                emptyStatePlaceholder
+
+            case .loaded(_, let active, let members):
+                loadedContent(active: active, members: members)
+
+            case .error(let message):
+                errorContent(message: message)
+
+            case .removedFromActiveWorkspace:
+                // RootView preempts with RemovedFromTeamBanner.
+                EmptyView()
             }
-            .padding(LeafSpace.xxl)
         }
+        // S6 closure-injection pattern — preserved 1:1 from OrganizationView.
+        .sheet(item: $sendSheetRecipient) { r in
+            SendDirectMessageSheet(
+                recipient: r.member,
+                onReauthorizeSlack: { @MainActor in
+                    await slackOAuth.connect()
+                },
+                resolveLinearAssignee: { @MainActor displayName in
+                    try? await linearUsersResolver.resolve(displayName: displayName)
+                }
+            )
+        }
+        // Restore persisted filter selection + trigger initial feed load when
+        // the active workspace changes.
+        .task(id: activeWorkspaceStore.activeWorkspaceID) {
+            guard let wid = activeWorkspaceStore.activeWorkspaceID else { return }
+            feedFilterStore.loadForWorkspace(wid)
+            await teamFeedReader.loadInitial(
+                workspaceID: wid,
+                filters: feedFilterStore.selected,
+                selfPubkeyHex: selfPubkeyHex()
+            )
+        }
+        // Re-fetch when filter chip selection changes.
+        .onChange(of: feedFilterStore.selected) { _, newFilters in
+            guard let wid = activeWorkspaceStore.activeWorkspaceID else { return }
+            Task {
+                await teamFeedReader.refresh(
+                    workspaceID: wid,
+                    filters: newFilters,
+                    selfPubkeyHex: selfPubkeyHex()
+                )
+            }
+        }
+    }
+
+    // MARK: - G.2 Loaded content
+
+    @ViewBuilder
+    private func loadedContent(active: Workspace, members: [TeamMember]) -> some View {
+        VStack(alignment: .leading, spacing: LeafSpace.md) {
+            // G.3 — Toolbar: workspace name + member count + [+ Send] button
+            toolbar(active: active, memberCount: members.count)
+            // G.4 — Horizontal members pill-row (tap opens SendDirectMessageSheet)
+            membersPillRow(members: members)
+            // G.5 — Filter chips (All / DM / Open Tasks / Decisions / Blockers / More…)
+            FeedFilterChipsBindable(store: feedFilterStore)
+            // G.6-G.11 — Feed body (placeholder; dispatch fills)
+            feedBodyPlaceholder
+        }
+        .padding(LeafSpace.xxl)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .onAppear {
-            reader.refresh()
-            pendingReader.refresh()
-            loadMyPubHex()
+    }
+
+    // MARK: - G.3 Toolbar
+
+    @ViewBuilder
+    private func toolbar(active: Workspace, memberCount: Int) -> some View {
+        HStack(spacing: LeafSpace.md) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(active.name)
+                    .font(LeafType.title.medium)
+                    .foregroundStyle(LeafColor.text.primary)
+                    .lineLimit(1)
+                Text("\(memberCount) member\(memberCount == 1 ? "" : "s")")
+                    .font(LeafType.caption)
+                    .foregroundStyle(LeafColor.text.tertiary)
+            }
+            Spacer(minLength: 0)
+            // G.3 — [+ Send] button. ⌘N keyboard shortcut.
+            // G.6 dispatch wires to a recipient-picker flow for a "broadcast
+            // to whole team" send path. For now: no-op (recipient required).
+            LeafButton("+ Send", variant: .primary, size: .md) {
+                // G.6 will complete this action with a recipient-picker.
+            }
+            .keyboardShortcut("n", modifiers: .command)
         }
-        .sheet(isPresented: $showingGenerateSheet) {
-            GenerateInviteSheet()
-        }
-        .sheet(item: $pendingRemoval) { removal in
-            RemoveMemberSheet(memberID: removal.memberID, displayName: removal.displayName)
+    }
+
+    // MARK: - G.4 Members pill-row
+
+    @ViewBuilder
+    private func membersPillRow(members: [TeamMember]) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: LeafSpace.sm) {
+                ForEach(members, id: \.id) { member in
+                    memberPill(member)
+                }
+            }
         }
     }
 
     @ViewBuilder
-    private var content: some View {
-        switch reader.state {
-        case .loading:
-            HStack { Spacer(); ProgressView(); Spacer() }
-                .padding(.top, LeafSpace.xxxl)
-
-        case .empty:
-            emptyContent
-
-        case .loaded(_, _, let members):
-            loadedContent(members)
-
-        case .error(let message):
-            errorContent(message)
-
-        case .removedFromActiveWorkspace:
-            // RootView preempts via RemovedFromTeamBanner; defensive EmptyView
-            // for switch exhaustiveness.
-            EmptyView()
+    private func memberPill(_ member: TeamMember) -> some View {
+        Button {
+            sendSheetRecipient = SendRecipient(id: member.id, member: member)
+        } label: {
+            HStack(spacing: LeafSpace.xs) {
+                LeafAvatar(initials: initials(for: member.displayName), size: .sm)
+                Text(member.displayName)
+                    .font(LeafType.caption)
+                    .foregroundStyle(LeafColor.text.primary)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, LeafSpace.sm)
+            .padding(.vertical, LeafSpace.xs)
+            .background(LeafColor.surface.raised)
+            .clipShape(Capsule())
         }
+        .buttonStyle(.plain)
     }
 
-    // MARK: - Empty
+    // MARK: - Feed body placeholder (G.6-G.11 dispatch)
 
-    private var emptyContent: some View {
+    @ViewBuilder
+    private var feedBodyPlaceholder: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            Text("Team feed — coming in G.6")
+                .font(LeafType.caption)
+                .foregroundStyle(LeafColor.text.tertiary)
+                .frame(maxWidth: .infinity, alignment: .center)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Empty state placeholder (G.10 dispatch fills with full copy)
+
+    @ViewBuilder
+    private var emptyStatePlaceholder: some View {
         LeafEmptyState(
             icon: LeafIcons.nav.team,
-            title: "You're solo for now",
-            description: "Create an org or accept an invite to start sharing presence with teammates.",
-            ctaTitle: "Open Organization",
-            onCTA: { windowState.section = .organization }
+            title: "No team yet",
+            description: "Create a workspace or accept an invite to see your team's feed.",
+            ctaTitle: nil,
+            onCTA: nil
         )
     }
 
-    // MARK: - Loaded
+    // MARK: - Error state
 
-    private func loadedContent(_ members: [TeamMember]) -> some View {
-        VStack(alignment: .leading, spacing: LeafSpace.xxl) {
-            LeafSection(title: "Team · \(members.count) member\(members.count == 1 ? "" : "s")") {
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 240, maximum: 360), spacing: LeafSpace.md)],
-                    alignment: .leading,
-                    spacing: LeafSpace.md
-                ) {
-                    ForEach(members, id: \.id) { member in
-                        memberCard(member)
-                    }
-                }
-            } cta: {
-                addMemberButton
-            }
-
-            PendingInvitesSection()
-        }
-    }
-
-    private var addMemberButton: some View {
-        LeafButton(
-            "Add member",
-            variant: .primary,
-            size: .sm,
-            icon: .asset(LeafIcons.action.add),
-            action: { showingGenerateSheet = true }
-        )
-    }
-
-    private func memberCard(_ member: TeamMember) -> some View {
-        LeafCard(variant: .raised, padding: .regular) {
-            HStack(alignment: .center, spacing: LeafSpace.md) {
-                LeafAvatar(initials: avatarInitials(member.displayName), size: .md)
-
-                VStack(alignment: .leading, spacing: LeafSpace.xxs) {
-                    HStack(spacing: LeafSpace.sm) {
-                        Text(member.displayName)
-                            .font(LeafType.body.regular)
-                            .foregroundStyle(LeafColor.text.primary)
-                            .lineLimit(1)
-                        roleBadge(member.role)
-                    }
-                    Text(pubkeyShortHex(member.pubkeyHex))
-                        .font(LeafType.mono.small)
-                        .foregroundStyle(LeafColor.text.tertiary)
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 0)
-
-                if !myPubHex.isEmpty && member.pubkeyHex != myPubHex {
-                    overflowMenu(member)
-                }
-            }
-        }
-    }
-
-    private func overflowMenu(_ member: TeamMember) -> some View {
-        Menu {
-            Button("Remove from team…", role: .destructive) {
-                pendingRemoval = PendingRemoval(
-                    memberID: member.id,
-                    displayName: member.displayName
-                )
-            }
-        } label: {
-            LeafIcon(
-                systemName: "ellipsis",
-                size: .md,
-                tint: LeafColor.text.tertiary
-            )
-        }
-        .menuStyle(.borderlessButton)
-        .frame(width: LeafSpace.xxl)   // 32pt — taps space
-    }
-
-    private func roleBadge(_ role: TeamMemberRole) -> some View {
-        let variant: LeafBadgeTokens.Variant = (role == .admin) ? .accent : .neutral
-        return LeafBadge(text: role.rawValue.uppercased(), variant: variant)
-    }
-
-    // MARK: - Error
-
-    private func errorContent(_ message: String) -> some View {
+    @ViewBuilder
+    private func errorContent(message: String) -> some View {
         LeafBanner(
             tone: .danger,
             title: "Couldn't load team",
             description: message,
             ctaTitle: "Try again",
-            onCTA: { reader.refresh() }
+            onCTA: { workspaceReader.refresh() }
         )
+        .padding(LeafSpace.xxl)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     // MARK: - Helpers
 
-    private func loadMyPubHex() {
-        do {
-            let priv = try IdentityService.ensureLocalIdentity(at: TeamKeystore.defaultRoot())
-            myPubHex = priv.publicKey.rawRepresentation
-                .map { String(format: "%02x", $0) }.joined()
-        } catch {
-            myPubHex = ""
-        }
-    }
-
-    private func avatarInitials(_ displayName: String) -> String {
-        let parts = displayName
-            .split(separator: " ")
-            .prefix(2)
+    private func initials(for name: String) -> String {
+        let parts = name.split(separator: " ").prefix(2)
             .compactMap { $0.first.map(String.init) }
             .joined()
             .uppercased()
         return parts.isEmpty ? "?" : parts
     }
 
-    private func pubkeyShortHex(_ hex: String) -> String {
-        guard hex.count >= 16 else { return hex }
-        return "\(hex.prefix(8))…\(hex.suffix(8))"
+    /// Best-effort self pubkey for TeamFeedReader selfPubkeyHex parameter.
+    /// Falls back to "" — TeamFeedReader treats "" as "no self-exclusion" (graceful).
+    private func selfPubkeyHex() -> String {
+        guard let key = try? IdentityService.ensureLocalIdentity(at: TeamKeystore.defaultRoot()) else {
+            return ""
+        }
+        return key.publicKey.rawRepresentation
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
+}
+
+// MARK: - FeedFilterChipsBindable
+
+/// @Observable bridge: provides a manual `Binding<Set<FeedFilter>>` to `LeafFilterChips`
+/// that routes write-backs through `FeedFilterStore.applySelection(_:)` to ensure
+/// persistence is triggered. `@Bindable` alone generates a setter that writes directly
+/// to `store.selected`, bypassing persistence — this wrapper closes that gap.
+@MainActor
+private struct FeedFilterChipsBindable: View {
+    var store: FeedFilterStore
+
+    var body: some View {
+        LeafFilterChips(
+            visibleFilters: [.all, .directMessages, .openTasks, .decisions, .blockers],
+            popoverFilters: ShareSource.allCases.map { .shareSource($0) },
+            selected: Binding(
+                get: { store.selected },
+                set: { store.applySelection($0) }
+            )
+        )
     }
 }
