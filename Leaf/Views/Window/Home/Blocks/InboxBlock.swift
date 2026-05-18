@@ -21,7 +21,8 @@ struct InboxBlock: View {
                 LeafEmptyState(
                     icon: LeafIcons.brand.leaf,
                     title: "Things needing your attention",
-                    description: "Review requests, comments on your work, @-mentions, and open questions will appear here."
+                    description:
+                        "Review requests, comments on your work, @-mentions, and open questions will appear here."
                 )
             }
         }
