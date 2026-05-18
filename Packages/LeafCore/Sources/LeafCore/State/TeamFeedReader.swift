@@ -53,6 +53,13 @@ public final class TeamFeedReader {
 
     public private(set) var state: State = .loading
 
+    /// S7 Stage 6 fix B-I1 — last error from `loadOlder` surfaced as a side
+    /// channel so the UI can show a banner without wiping the current page of
+    /// loaded items. Matches the S4 `DirectMessageInboxReader.lastTickError`
+    /// pattern: state stays `.loaded`, the user keeps the rows they already
+    /// saw, and the banner reflects the transient pagination failure.
+    public private(set) var lastLoadOlderError: String?
+
     // MARK: - Dependencies
 
     private let queryService: TeamFeedQueryService
@@ -143,8 +150,17 @@ public final class TeamFeedReader {
             )
             let older = applyGrouping(raw)
             state = .loaded(items: current + older, hasMore: raw.count == limit)
+            lastLoadOlderError = nil
         } catch {
-            state = .error(String(describing: error))
+            // S7 Stage 6 fix B-I1 — preserve currently-visible items on
+            // pagination failure. The previous behaviour transitioned state
+            // to .error which wiped the entire feed from the UI — a flaky
+            // network during scroll would dump the user from a working feed
+            // into an empty error banner. Now: state stays .loaded with
+            // hasMore=false, lastLoadOlderError carries the surface message
+            // for the UI to render as a non-blocking banner.
+            state = .loaded(items: current, hasMore: false)
+            lastLoadOlderError = String(describing: error)
         }
     }
 
