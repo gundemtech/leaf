@@ -35,6 +35,17 @@ enum AgentMain {
 
         agentLogger.info("Leaf agent starting (prodConfig=\(usingProdConfig, privacy: .public))")
 
+        // First-launch AX trust prompt. Without `kAXTrustedCheckOptionPrompt`
+        // the agent silently reports `ax=false` forever — the user has no path
+        // to discover what's blocked. Calling once on startup spawns the
+        // system dialog the FIRST time and is a cheap no-op afterwards. The
+        // dialog auto-adds the running binary (current CDHash) to the
+        // Accessibility list, so dev-rebuild CDHash churn doesn't strand the
+        // user with stale Settings entries that can't even be removed.
+        let axOptions: NSDictionary = ["AXTrustedCheckOptionPrompt": true]
+        let axTrusted = AXIsProcessTrustedWithOptions(axOptions)
+        agentLogger.info("AX trust on startup: \(axTrusted, privacy: .public)")
+
         // Database
         let dbURL = DatabasePath.defaultURL()
         let database: Database
