@@ -38,6 +38,7 @@ struct InboxBlock: View {
                         populatedBody
                     }
                 }
+                .animation(.easeInOut(duration: 0.25), value: filteredItems)
             }
         }
     }
