@@ -108,7 +108,16 @@ public actor RealtimeWebSocketDriver {
     private var lastConnectURL: URL?
     /// Last JWT passed to `connect(url:jwt:)`. Same purpose as `lastConnectURL`.
     /// Used both for WS replay and for the phx_join `access_token` payload.
+    /// Also rotated in-place by `refreshAccessToken(_:)` so reconnect cycles
+    /// pick up the fresh token without a separate connect() round-trip.
     private var lastConnectJWT: String?
+
+    /// Service-injected closure invoked before each reconnect attempt to
+    /// supply a fresh JWT. Returning nil = caller couldn't refresh; the
+    /// driver falls back to `lastConnectJWT`. Set via `setJWTProvider(_:)`
+    /// from `LeafRealtimeService` — driver does NOT import SupabaseClient
+    /// (closes A-I3 carry-over without an actor-import cycle).
+    private var jwtProvider: (@Sendable () async -> String?)?
 
     // MARK: - Init
 
@@ -253,6 +262,38 @@ public actor RealtimeWebSocketDriver {
         currentChannelWorkspaceID = workspaceID
     }
 
+    /// Rotate the access_token in place on the currently-joined channel.
+    /// Sends a Phoenix `access_token` frame on `currentChannelTopic`.
+    ///
+    /// In-place rotation matters: a reconnect-driven refresh would tear the
+    /// WS down and start a backoff cycle (1/2/4/8/16s). Long-running Macs hit
+    /// JWT TTL every ~60min; without this in-place path, every TTL expiry
+    /// would silently reject phx_join on reconnect → reconnect storm.
+    ///
+    /// Updates `lastConnectJWT` so subsequent reconnect attempts (which DO
+    /// replay `lastConnectJWT` via `phx_join`) carry the rotated value.
+    ///
+    /// Silent no-op when no channel is currently joined (driver disconnected
+    /// or never joined). Caller is `LeafRealtimeService.refreshIfNeeded()`.
+    ///
+    /// Throws on send failure (network blip mid-rotation). Service-layer
+    /// caller swallows the error and retries on the next tick.
+    public func refreshAccessToken(_ accessToken: String) async throws {
+        // Always capture the rotated token so future reconnect cycles use it.
+        lastConnectJWT = accessToken
+        // Send the in-place rotation frame only if we have a joined channel.
+        // No channel → no-op; the captured `lastConnectJWT` covers the next
+        // connect/join cycle anyway.
+        guard let topic = currentChannelTopic, let task = wsTask else { return }
+        let ref = nextRef()
+        let frame = try RealtimePhoenixFrame.accessTokenRefresh(
+            topic: topic,
+            accessToken: accessToken,
+            ref: ref
+        )
+        try await task.send(.string(frame))
+    }
+
     /// Send a `phx_leave` for the currently-joined channel (no-op if none).
     /// Best-effort: errors are swallowed (we're tearing the channel down anyway).
     public func leaveCurrentChannel() async {
@@ -274,6 +315,22 @@ public actor RealtimeWebSocketDriver {
     /// Test-only inspector for the current missed-heartbeat counter.
     /// Production has no use for the raw count — it only acts on the threshold.
     public func currentMissedHeartbeats() -> Int { missedHeartbeats }
+
+    /// Install (or clear) the pre-reconnect JWT provider closure.
+    /// `LeafRealtimeService` calls this once at composition to wire in its
+    /// `SupabaseClient.ensureFreshSession()` path. The closure is invoked
+    /// before each `attemptReconnect()` so a long-running session always
+    /// reconnects with a non-expired JWT. nil disables the hook.
+    public func setJWTProvider(_ provider: (@Sendable () async -> String?)?) {
+        self.jwtProvider = provider
+    }
+
+    #if DEBUG
+    /// Test-only inspector for the captured lastConnectJWT.
+    /// Production has no use for the raw value — it is only used internally
+    /// for phx_join replay during reconnect.
+    public func currentConnectJWT() -> String? { lastConnectJWT }
+    #endif
 
     // MARK: - Receive loop + dispatch
 
@@ -531,7 +588,18 @@ public actor RealtimeWebSocketDriver {
     /// One reconnect attempt. Throws on failure to send phx_join (or if there's
     /// no URL/JWT captured). On success: state → `.connected`, heartbeat restarted,
     /// channel re-joined if there was a prior `currentChannelWorkspaceID`.
+    ///
+    /// P1 hot-fix — before each attempt, if a service-injected `jwtProvider` is
+    /// wired, ask it for a fresh JWT. Replaces the cached `lastConnectJWT` so
+    /// reconnect cycles never replay an expired token (the bug that caused
+    /// silent phx_join rejection storms on multi-hour Macs).
     private func attemptReconnect() async throws {
+        // Pre-reconnect JWT refresh (P1 hot-fix). Synchronous-feeling await
+        // inside the actor is fine — the reconnect Task is already async and
+        // each attempt sleeps backoff first.
+        if let provider = jwtProvider, let fresh = await provider() {
+            lastConnectJWT = fresh
+        }
         guard let url = lastConnectURL, let jwt = lastConnectJWT else {
             throw RealtimeError.notConnected
         }
@@ -545,9 +613,9 @@ public actor RealtimeWebSocketDriver {
             await self?.receiveLoop()
         }
         startHeartbeat()
-        // Re-join the prior channel if we had one. JWT used for phx_join is the
-        // one captured at connect() time — caller is expected to refresh it via
-        // a new connect() if it expired.
+        // Re-join the prior channel if we had one. JWT used for phx_join is
+        // either the freshly-provided one (if jwtProvider was wired) or the
+        // last-known `lastConnectJWT` as fallback.
         if let wid = currentChannelWorkspaceID {
             let ref = nextRef()
             let frame = try RealtimePhoenixFrame.phxJoin(

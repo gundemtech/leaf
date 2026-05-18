@@ -86,6 +86,9 @@ public final class LeafRealtimeService {
     // MARK: - Private state
 
     private var dispatchTask: Task<Void, Never>?
+    /// P1 hot-fix — handle on the 50min refresh loop. nil = no timer running.
+    /// Cancelled by `stopRefreshTimer()` and `suspend()`.
+    private var refreshTimerTask: Task<Void, Never>?
 
     // MARK: - Init
 
@@ -123,6 +126,20 @@ public final class LeafRealtimeService {
         self.realtimeURL = realtimeURL
         self.teamEventDecryptor = teamEventDecryptor
         self.directMessageDecryptor = directMessageDecryptor
+
+        // P1 hot-fix — install the pre-reconnect JWT provider closure on the
+        // driver. The closure asks SupabaseClient for a fresh JWT before each
+        // reconnect attempt (avoids replaying an expired lastConnectJWT). We
+        // can't `await driver.setJWTProvider(...)` from init, so install via
+        // a fire-and-forget Task. The driver retains the closure until cleared.
+        // `supabase` is an actor; capturing it strongly is safe (same lifetime
+        // as the service in practice, and the closure does not hold `self`).
+        let supabaseRef = supabase
+        Task { [weak driver] in
+            await driver?.setJWTProvider({
+                try? await supabaseRef.ensureFreshSession().accessToken
+            })
+        }
     }
 
     // MARK: - Public API
@@ -219,11 +236,62 @@ public final class LeafRealtimeService {
     /// S7 Stage 6 fix A-I5 — also tears down the dispatch loop so the suspended
     /// service holds no live AsyncStream consumer. resume() rebuilds the loop
     /// via subscribe() → ensureDispatchLoop().
+    ///
+    /// P1 hot-fix — also stops the refresh timer; resume() does NOT auto-restart
+    /// it (caller must re-`startRefreshTimer()` if needed). This keeps suspend
+    /// truly silent — no token churn on a backgrounded app.
     public func suspend() async {
         dispatchTask?.cancel()
         dispatchTask = nil
+        refreshTimerTask?.cancel()
+        refreshTimerTask = nil
         await driver.suspend()
         state = .suspended
+    }
+
+    // MARK: - P1 hot-fix — JWT refresh public API
+
+    /// Default refresh interval — 50min (sub-TTL, leaves 10min headroom under
+    /// the 60min Supabase default). Tests inject sub-second values.
+    public static let defaultRefreshIntervalSec: TimeInterval = 50 * 60
+
+    /// Start the periodic refresh loop. Cancels any prior loop first
+    /// (idempotent). Each tick calls `refreshIfNeeded()`.
+    ///
+    /// Composition root typically calls this once after the first successful
+    /// `subscribe()` lands. Tests inject sub-second intervals.
+    public func startRefreshTimer(intervalSec: TimeInterval = LeafRealtimeService.defaultRefreshIntervalSec) {
+        refreshTimerTask?.cancel()
+        let interval = max(intervalSec, 0)
+        refreshTimerTask = Task { [weak self] in
+            while !Task.isCancelled {
+                let nanos = UInt64(interval * 1_000_000_000)
+                if nanos > 0 {
+                    try? await Task.sleep(nanoseconds: nanos)
+                }
+                if Task.isCancelled { return }
+                await self?.refreshIfNeeded()
+            }
+        }
+    }
+
+    /// Cancel the periodic refresh loop (no-op if not running). Awaitable so
+    /// tests can confirm the loop teardown completes before assertions.
+    public func stopRefreshTimer() async {
+        refreshTimerTask?.cancel()
+        refreshTimerTask = nil
+    }
+
+    /// Refresh-on-demand. Pulls a fresh JWT via `SupabaseClient.ensureFreshSession()`
+    /// (which decides whether a `/auth/v1/token` round-trip is actually needed),
+    /// then asks the driver to send a Phoenix `access_token` rotation frame.
+    ///
+    /// Errors are swallowed — caller is the timer loop, which retries on the
+    /// next tick. Logging is intentionally absent (privacy invariant: token
+    /// values must never appear in logs).
+    public func refreshIfNeeded() async {
+        guard let fresh = try? await supabase.ensureFreshSession() else { return }
+        try? await driver.refreshAccessToken(fresh.accessToken)
     }
 
     /// Re-open the WS using the last-known workspace.

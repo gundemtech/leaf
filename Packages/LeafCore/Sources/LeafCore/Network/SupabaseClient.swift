@@ -28,6 +28,18 @@ public actor SupabaseClient {
 
     private var state: BootstrapState = .notAuthenticated
 
+    /// Wall-clock timestamp of the most recent successful token refresh (or
+    /// initial bootstrap completion). Used by `ensureFreshSession()` to guard
+    /// against NTP-skew drift: even if the JWT `exp` claim is far away, force
+    /// a refresh after ~55min so a long-running session never silently rides
+    /// past server-side expiry on a clock-skewed device.
+    private var lastRefreshAt: Date?
+
+    /// Coalescing slot for concurrent `ensureFreshSession()` callers. The
+    /// first caller installs a Task here; subsequent callers `await` the same
+    /// Task instead of firing a duplicate `/auth/v1/token` request.
+    private var inflightFreshSessionTask: Task<SupabaseAuthSession, Error>?
+
     public init(baseURL: URL,
                 anonKey: String,
                 urlSession: URLSession = .shared,
@@ -65,12 +77,102 @@ public actor SupabaseClient {
         do {
             let session = try await task.value
             state = .authenticated(session)
+            // Bootstrap finishes with a token-refresh round-trip; stamp here so
+            // ensureFreshSession's NTP-skew margin starts ticking from a known
+            // wall-clock anchor instead of the JWT's iat (which we don't read).
+            lastRefreshAt = now()
             return session
         } catch {
             state = .notAuthenticated
             throw error
         }
     }
+
+    // MARK: - ensureFreshSession (P1 hot-fix — JWT refresh for Realtime)
+
+    /// Refresh the access_token if it's near expiry OR the NTP-skew margin
+    /// has been exceeded; otherwise return the cached session unchanged.
+    ///
+    /// Refresh policy (matches P1 hot-fix spec §3.3):
+    /// * exp − now < 60s — explicit near-expiry trigger.
+    /// * lastRefreshAt + 55min < now — NTP-skew defense; covers devices
+    ///   whose clock drifts (asleep overnight, manual time changes) where
+    ///   the JWT exp claim looks far away but the server already considers
+    ///   the token expired.
+    ///
+    /// Concurrent callers coalesce on `inflightFreshSessionTask` — at most
+    /// one `/auth/v1/token` POST is in flight at a time. Errors are
+    /// surfaced to all coalesced callers identically.
+    ///
+    /// Throws `SupabaseError.unauthorized` if called before any successful
+    /// bootstrap (no cached session to refresh from). Caller is expected to
+    /// have driven `ensureAuthenticated()` at app startup.
+    public func ensureFreshSession() async throws -> SupabaseAuthSession {
+        // Coalesce: if a refresh is already in flight, await it.
+        if let task = inflightFreshSessionTask {
+            return try await task.value
+        }
+
+        // Need an existing session to refresh from.
+        guard case .authenticated(let current) = state else {
+            throw SupabaseError.unauthorized
+        }
+
+        // Should-we-refresh decision (cheap, runs every caller).
+        if !shouldRefresh(session: current) {
+            return current
+        }
+
+        // Install an inflight Task; concurrent callers share its value.
+        let refreshToken = current.refreshToken
+        let task = Task { [weak self] in
+            guard let self else { throw SupabaseError.unauthorized }
+            return try await self.performFreshSessionRefresh(refreshToken: refreshToken)
+        }
+        inflightFreshSessionTask = task
+        do {
+            let refreshed = try await task.value
+            // Successful completion: persist if a sessionStore is wired so
+            // app cold-start picks up the rotated refresh_token.
+            if let store = sessionStore {
+                persistSessionBestEffort(store: store, session: refreshed)
+            }
+            inflightFreshSessionTask = nil
+            return refreshed
+        } catch {
+            inflightFreshSessionTask = nil
+            throw error
+        }
+    }
+
+    /// Pure decision predicate. Extracted so it stays trivially testable and
+    /// the two trigger conditions are documented in one place.
+    private func shouldRefresh(session: SupabaseAuthSession) -> Bool {
+        let nowDate = now()
+        // Trigger 1: near expiry (< 60s remaining).
+        let secondsToExpiry = session.expiresAt.timeIntervalSince(nowDate)
+        if secondsToExpiry < 60 { return true }
+        // Trigger 2: NTP-skew margin exceeded (lastRefreshAt + 55min < now).
+        if let last = lastRefreshAt {
+            if nowDate.timeIntervalSince(last) > (55 * 60) { return true }
+        }
+        return false
+    }
+
+    /// Refresh path that ALSO updates the actor's state + lastRefreshAt.
+    /// Separated from `performTokenRefresh` so the bootstrap flow (which
+    /// owns its own state-transition logic) stays untouched.
+    private func performFreshSessionRefresh(refreshToken: String) async throws -> SupabaseAuthSession {
+        let refreshed = try await performTokenRefresh(refreshToken: refreshToken)
+        state = .authenticated(refreshed)
+        lastRefreshAt = now()
+        return refreshed
+    }
+
+    #if DEBUG
+    /// Test-only inspector for the lastRefreshAt timestamp.
+    public func lastRefreshAtForTesting() -> Date? { lastRefreshAt }
+    #endif
 
     private func performBootstrap() async throws -> SupabaseAuthSession {
         // Track 5 / S4 — try persisted refresh_token first (closes S3 carry-over I3).
