@@ -118,30 +118,46 @@ final class WorkspaceReader {
         refresh()
     }
 
-    // MARK: - Track 5 / S7 E.8 — leaveActiveWorkspace (closes S2 NIT-3)
+    // MARK: - Track 5 / S7 E.8 — leaveWorkspace (closes S2 NIT-3)
 
-    /// Soft-marks the currently-active workspace as left, re-resolves active
-    /// to the next alphabetical remaining workspace, and refreshes state.
+    /// Soft-marks the specified workspace as left. If the workspace being left
+    /// is currently active, re-resolves active to the next alphabetical
+    /// remaining workspace (or clears active if none remain).
     ///
     /// On success: state transitions to .loaded(newActive, ...) or .empty
     ///             (if no remaining workspaces after leaving).
     /// On failure: state transitions to .error(_).
-    /// No-ops when state is not .loaded (e.g., .loading, .empty, .error).
-    func leaveActiveWorkspace() async {
-        guard case .loaded(_, let active, _) = state else { return }
+    ///
+    /// S7 Stage 6 fix C-C2: accepts explicit workspaceID so callers don't have
+    /// to depend on `state.active`. Prevents the "Sidebar context-menu Leave on
+    /// a non-active workspace marks the *active* one instead" staleness bug
+    /// when callers had setActive(wid) immediately followed by leaveActive
+    /// (the setActive does not refresh the Reader's state.active).
+    func leaveWorkspace(workspaceID: String) async {
         do {
             let db = try ensureDatabase()
             let svc = WorkspaceService(database: db, keystoreRoot: keystoreRoot)
-            try svc.markLeft(workspaceID: active.id, at: Date())
-            let remaining = try svc.listWorkspaces(includeLeft: false)
-                .filter { $0.id != active.id }
-                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-            activeStore.setActive(remaining.first?.id)
+            try svc.markLeft(workspaceID: workspaceID, at: Date())
+            // Only re-resolve active when the workspace we left was the active one.
+            if activeStore.activeWorkspaceID == workspaceID {
+                let remaining = try svc.listWorkspaces(includeLeft: false)
+                    .filter { $0.id != workspaceID }
+                    .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+                activeStore.setActive(remaining.first?.id)
+            }
             refresh()
         } catch {
-            logger.error("WorkspaceReader.leaveActiveWorkspace failed: \(String(describing: error), privacy: .public)")
+            logger.error("WorkspaceReader.leaveWorkspace failed: \(String(describing: error), privacy: .public)")
             state = .error(message: userFacingMessage(for: error))
         }
+    }
+
+    /// Convenience wrapper: leave the workspace that is currently active.
+    /// Reads `state.active` so the active workspace must be resolved before
+    /// calling this method. Use `leaveWorkspace(workspaceID:)` for explicit ids.
+    func leaveActiveWorkspace() async {
+        guard case .loaded(_, let active, _) = state else { return }
+        await leaveWorkspace(workspaceID: active.id)
     }
 
     // MARK: - Track 5 / S7 E.6 — rename

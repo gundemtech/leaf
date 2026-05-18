@@ -60,12 +60,13 @@ struct Sidebar: View {
                 LeaveWorkspaceConfirmationModal(
                     workspaceName: workspace.name,
                     onConfirm: {
-                        if activeWorkspaceStore.activeWorkspaceID == wid {
-                            await workspaceReader.leaveActiveWorkspace()
-                        } else {
-                            activeWorkspaceStore.setActive(wid)
-                            await workspaceReader.leaveActiveWorkspace()
-                        }
+                        // S7 Stage 6 fix C-C2 — call leaveWorkspace(workspaceID:)
+                        // directly. The earlier `setActive(wid) + leaveActiveWorkspace()`
+                        // shape relied on WorkspaceReader.state.active being read
+                        // *after* setActive, but setActive does not refresh the
+                        // Reader's state — leaveActiveWorkspace() would read the
+                        // previous active workspace and mark the *wrong* row left.
+                        await workspaceReader.leaveWorkspace(workspaceID: wid)
                         leavePresented = false
                         leaveTargetWorkspaceID = nil
                     },
@@ -104,7 +105,11 @@ struct Sidebar: View {
             workspaces: sorted,
             activeWorkspaceID: activeWid,
             unreadCounts: inboxReader.unreadCountByWorkspace,
-            onSelect: { wid in activeWorkspaceStore.setActive(wid) },
+            // S7 Stage 6 fix C-C3 — route through switchActive(to:) so the
+            // Reader's state.active is refreshed alongside the store; otherwise
+            // TeamView renders the previous workspace's name and members
+            // because state.active is only re-resolved on refresh().
+            onSelect: { wid in workspaceReader.switchActive(to: wid) },
             onAddNew: { createWorkspacePresented = true },
             onLeave: { wid in
                 leaveTargetWorkspaceID = wid
