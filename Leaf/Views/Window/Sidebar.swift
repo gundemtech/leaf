@@ -66,7 +66,7 @@ struct Sidebar: View {
                         // *after* setActive, but setActive does not refresh the
                         // Reader's state — leaveActiveWorkspace() would read the
                         // previous active workspace and mark the *wrong* row left.
-                        await workspaceReader.leaveWorkspace(workspaceID: wid)
+                        workspaceReader.leaveWorkspace(workspaceID: wid)
                         leavePresented = false
                         leaveTargetWorkspaceID = nil
                     },

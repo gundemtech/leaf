@@ -133,7 +133,11 @@ final class WorkspaceReader {
     /// a non-active workspace marks the *active* one instead" staleness bug
     /// when callers had setActive(wid) immediately followed by leaveActive
     /// (the setActive does not refresh the Reader's state.active).
-    func leaveWorkspace(workspaceID: String) async {
+    /// S7 Stage 6 fix M4 — synchronous: the body is local-only
+    /// (WorkspaceService.markLeft + listWorkspaces + ActiveWorkspaceStore are
+    /// all synchronous). The earlier `async` was a leftover from when the
+    /// flow round-tripped a Supabase PATCH; now there is no awaitable work.
+    func leaveWorkspace(workspaceID: String) {
         do {
             let db = try ensureDatabase()
             let svc = WorkspaceService(database: db, keystoreRoot: keystoreRoot)
@@ -155,9 +159,9 @@ final class WorkspaceReader {
     /// Convenience wrapper: leave the workspace that is currently active.
     /// Reads `state.active` so the active workspace must be resolved before
     /// calling this method. Use `leaveWorkspace(workspaceID:)` for explicit ids.
-    func leaveActiveWorkspace() async {
+    func leaveActiveWorkspace() {
         guard case .loaded(_, let active, _) = state else { return }
-        await leaveWorkspace(workspaceID: active.id)
+        leaveWorkspace(workspaceID: active.id)
     }
 
     // MARK: - Track 5 / S7 E.6 — rename

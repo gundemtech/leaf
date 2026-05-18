@@ -122,7 +122,7 @@ struct WorkspaceSettingsSection: View {
                         // the underlying operation is local-only (markLeft +
                         // re-resolve active). state.error still drives the
                         // failure surface here pending future refactor.
-                        await workspaceReader.leaveActiveWorkspace()
+                        workspaceReader.leaveActiveWorkspace()
                         leavePresented = false
                     },
                     onCancel: { leavePresented = false }
