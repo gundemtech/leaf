@@ -23,6 +23,14 @@ public enum SupabaseError: Error, Sendable, Equatable {
     case decoding(reason: String)
     case transport(reason: String)
     case unexpected(status: Int)
+    /// S7 Stage 6 fix C-I9 — PostgREST returned 204 but Content-Range header
+    /// reports 0 rows affected. Happens when a RLS USING-clause filters out
+    /// the row (e.g., non-creator UPDATE silently touches 0 workspaces). The
+    /// HTTP status is "successful" but the operation didn't mutate anything;
+    /// for destructive ops (rename / soft-delete) this would silently diverge
+    /// local from server. Mapped to a user-facing "no permission" message in
+    /// WorkspaceReader.userFacingMessage.
+    case noRowsAffected
 
     public static func fromStatus(_ status: Int, body: Data?) -> SupabaseError {
         switch status {

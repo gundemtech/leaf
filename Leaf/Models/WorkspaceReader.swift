@@ -268,7 +268,11 @@ final class WorkspaceReader {
         }
         if let supErr = error as? SupabaseError {
             switch supErr {
-            case .forbidden:
+            case .forbidden, .noRowsAffected:
+                // S7 Stage 6 fix C-I9 — `noRowsAffected` is the silent
+                // PostgREST 204 outcome when the RLS USING-clause filters out
+                // the row (non-creator UPDATE / DELETE). User-facing message
+                // mirrors the explicit 403 path.
                 return "Only the workspace creator can perform this action."
             case .transport(let reason):
                 return "Network error: \(reason)"

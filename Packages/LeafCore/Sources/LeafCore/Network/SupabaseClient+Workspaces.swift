@@ -41,7 +41,7 @@ extension SupabaseClient {
         let url = SupabaseEndpoint.workspaceByID(id, baseURL: baseURL)
         var request = URLRequest(url: url)
         request.httpMethod = "PATCH"
-        for (k, v) in SupabaseEndpoint.postgrestPatchHeaders(
+        for (k, v) in SupabaseEndpoint.postgrestPatchHeadersWithCount(
             anonKey: anonKey, accessToken: session.accessToken
         ) {
             request.setValue(v, forHTTPHeaderField: k)
@@ -53,6 +53,8 @@ extension SupabaseClient {
         guard response.statusCode == 204 || response.statusCode == 200 else {
             throw SupabaseError.fromStatus(response.statusCode, body: data)
         }
+        // S7 Stage 6 fix C-I9 — detect silent-0-row RLS-deny outcomes.
+        try Self.assertContentRangeNonZero(response: response)
     }
 
     // MARK: - E.4: softDeleteWorkspace
@@ -70,7 +72,7 @@ extension SupabaseClient {
         let url = SupabaseEndpoint.workspaceByID(id, baseURL: baseURL)
         var request = URLRequest(url: url)
         request.httpMethod = "PATCH"
-        for (k, v) in SupabaseEndpoint.postgrestPatchHeaders(
+        for (k, v) in SupabaseEndpoint.postgrestPatchHeadersWithCount(
             anonKey: anonKey, accessToken: session.accessToken
         ) {
             request.setValue(v, forHTTPHeaderField: k)
@@ -81,6 +83,32 @@ extension SupabaseClient {
         let (data, response) = try await workspacesTransport(request, label: "softDeleteWorkspace")
         guard response.statusCode == 204 || response.statusCode == 200 else {
             throw SupabaseError.fromStatus(response.statusCode, body: data)
+        }
+        // S7 Stage 6 fix C-I9 — detect silent-0-row RLS-deny outcomes.
+        try Self.assertContentRangeNonZero(response: response)
+    }
+
+    /// PostgREST's `Prefer: count=exact` adds a `Content-Range` header in the
+    /// form `0-(N-1)/N` on success, or `*/0` when zero rows matched the
+    /// `?id=eq.<uuid>` filter (e.g., the RLS USING-clause filtered the row
+    /// out for this caller). We throw `.noRowsAffected` in the latter case so
+    /// callers can distinguish "looks like success but server didn't actually
+    /// mutate anything" from genuine success.
+    ///
+    /// Header missing → treat as success (older PostgREST versions or
+    /// non-Supabase mocks may not include the header).
+    private static func assertContentRangeNonZero(response: HTTPURLResponse) throws {
+        guard let range = response.value(forHTTPHeaderField: "Content-Range") else {
+            return
+        }
+        // Shape examples: "0-0/1", "*/0", "0-9/10".
+        // Affected count is the suffix after `/`.
+        let parts = range.split(separator: "/", maxSplits: 1)
+        guard parts.count == 2, let total = Int(parts[1]) else {
+            return  // unparseable → defensive success
+        }
+        if total == 0 {
+            throw SupabaseError.noRowsAffected
         }
     }
 

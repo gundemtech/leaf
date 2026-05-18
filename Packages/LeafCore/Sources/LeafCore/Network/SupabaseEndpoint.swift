@@ -267,4 +267,20 @@ public enum SupabaseEndpoint {
             "Prefer": "return=minimal",
         ]
     }
+
+    /// S7 Stage 6 fix C-I9 — PATCH variant that asks PostgREST to count
+    /// affected rows. With `Prefer: count=exact`, the response carries a
+    /// `Content-Range` header in the shape `0-(N-1)/N` (or `*/0` when
+    /// nothing was touched). Used by destructive workspace ops so RLS-deny
+    /// silent-zero-row outcomes become detectable.
+    public static func postgrestPatchHeadersWithCount(
+        anonKey: String, accessToken: String
+    ) -> [String: String] {
+        [
+            "apikey": anonKey,
+            "Authorization": "Bearer \(accessToken)",
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal, count=exact",
+        ]
+    }
 }

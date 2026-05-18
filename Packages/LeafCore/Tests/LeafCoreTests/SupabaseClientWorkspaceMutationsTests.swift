@@ -209,4 +209,85 @@ final class SupabaseClientWorkspaceMutationsTests: XCTestCase {
             XCTFail("expected SupabaseError.forbidden, got \(error)")
         }
     }
+
+    // MARK: - S7 Stage 6 fix C-I9 — silent-0-row RLS-deny detection
+
+    /// PostgREST returns 204 with `Content-Range: */0` when an RLS USING-clause
+    /// filters out the row (non-creator UPDATE on workspaces, etc.). Without
+    /// the C-I9 fix the client treated this as success — local layer would
+    /// happily UPDATE the workspace name while the server kept the old name.
+    /// With the fix, the client throws `.noRowsAffected` which
+    /// WorkspaceReader.userFacingMessage maps to the same "Only the workspace
+    /// creator can perform this action" message as an explicit 403.
+    func testPatchWorkspaceName_204WithZeroAffectedRows_ThrowsNoRowsAffected() async throws {
+        MockURLProtocol.handler = wrapWithBootstrap { request, _ in
+            return (HTTPURLResponse(
+                url: request.url!,
+                statusCode: 204,
+                httpVersion: nil,
+                headerFields: ["Content-Range": "*/0"]
+            )!,
+            Data())
+        }
+        let client = makeClient()
+        do {
+            try await client.patchWorkspaceName(id: "ws-no-perm", name: "Hack")
+            XCTFail("expected throw")
+        } catch SupabaseError.noRowsAffected {
+            // pass
+        } catch {
+            XCTFail("expected SupabaseError.noRowsAffected, got \(error)")
+        }
+    }
+
+    func testSoftDeleteWorkspace_204WithZeroAffectedRows_ThrowsNoRowsAffected() async throws {
+        MockURLProtocol.handler = wrapWithBootstrap { request, _ in
+            return (HTTPURLResponse(
+                url: request.url!,
+                statusCode: 204,
+                httpVersion: nil,
+                headerFields: ["Content-Range": "*/0"]
+            )!,
+            Data())
+        }
+        let client = makeClient()
+        do {
+            try await client.softDeleteWorkspace(id: "ws-no-perm")
+            XCTFail("expected throw")
+        } catch SupabaseError.noRowsAffected {
+            // pass
+        } catch {
+            XCTFail("expected SupabaseError.noRowsAffected, got \(error)")
+        }
+    }
+
+    /// Sanity: 204 with `Content-Range: 0-0/1` (one row affected) is still
+    /// success — coalescing the count parse logic correctly.
+    func testPatchWorkspaceName_204WithOneAffectedRow_Success() async throws {
+        MockURLProtocol.handler = wrapWithBootstrap { request, _ in
+            return (HTTPURLResponse(
+                url: request.url!,
+                statusCode: 204,
+                httpVersion: nil,
+                headerFields: ["Content-Range": "0-0/1"]
+            )!,
+            Data())
+        }
+        let client = makeClient()
+        try await client.patchWorkspaceName(id: "ws-ok", name: "Valid")
+        // No throw == success.
+    }
+
+    /// Defensive: if Content-Range header is absent (older PostgREST or
+    /// non-Supabase mocks), the client treats success as success and doesn't
+    /// over-throw. Preserves back-compat with the pre-fix mock pattern in
+    /// other tests above (which return 204 without a Content-Range header).
+    func testPatchWorkspaceName_204WithoutContentRange_TreatedAsSuccess() async throws {
+        MockURLProtocol.handler = wrapWithBootstrap { request, _ in
+            return (HTTPURLResponse(url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!,
+                    Data())
+        }
+        let client = makeClient()
+        try await client.patchWorkspaceName(id: "ws-id", name: "Valid")
+    }
 }
