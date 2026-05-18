@@ -19,7 +19,7 @@ struct LeafToolbarPreview: View {
                         LeafIconButton(asset: LeafIcons.nav.sidebar, variant: .ghost, size: .md, action: {})
                     },
                     center: {
-                        Text("Activity")
+                        Text("Analytics")
                             .font(LeafType.title.small)
                             .foregroundStyle(LeafColor.text.primary)
                     },

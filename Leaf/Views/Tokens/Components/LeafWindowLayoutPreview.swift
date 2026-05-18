@@ -21,7 +21,7 @@ struct LeafWindowLayoutPreview: View {
                     Text("Workspace")
                         .font(LeafType.label)
                         .foregroundStyle(LeafColor.text.tertiary)
-                    ForEach(["Activity", "Team", "Connections", "Settings"], id: \.self) { name in
+                    ForEach(["Analytics", "Team", "Connections", "Settings"], id: \.self) { name in
                         Text(name)
                             .font(LeafType.body.regular)
                             .foregroundStyle(LeafColor.text.primary)
@@ -40,7 +40,7 @@ struct LeafWindowLayoutPreview: View {
                     .frame(width: 1)
 
                 VStack(alignment: .leading, spacing: LeafSpace.lg) {
-                    Text("Activity")
+                    Text("Analytics")
                         .font(LeafType.title.large)
                         .foregroundStyle(LeafColor.text.primary)
                     LeafMetricAmbient(value: "27", label: "events today")
