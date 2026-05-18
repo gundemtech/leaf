@@ -25,7 +25,7 @@ enum WindowSection: String, CaseIterable, Hashable, Codable, Identifiable {
     var icon: String {
         switch self {
         case .home: LeafIcons.nav.home
-        case .activity: LeafIcons.nav.activity
+        case .activity: LeafIcons.nav.analytics
         case .team: LeafIcons.nav.team
         case .connections: LeafIcons.nav.connections
         case .organization: LeafIcons.nav.organizationSF

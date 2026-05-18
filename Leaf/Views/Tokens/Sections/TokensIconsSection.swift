@@ -57,7 +57,7 @@ struct TokensIconsSection: View {
             id: "nav", title: "Navigation",
             items: [
                 IconItem(id: "nav.home", label: "home", source: .asset(LeafIcons.nav.home)),
-                IconItem(id: "nav.activity", label: "activity", source: .asset(LeafIcons.nav.activity)),
+                IconItem(id: "nav.analytics", label: "analytics", source: .asset(LeafIcons.nav.analytics)),
                 IconItem(id: "nav.team", label: "team", source: .asset(LeafIcons.nav.team)),
                 IconItem(id: "nav.connections", label: "connections", source: .asset(LeafIcons.nav.connections)),
                 IconItem(id: "nav.settings", label: "settings", source: .asset(LeafIcons.nav.settings)),

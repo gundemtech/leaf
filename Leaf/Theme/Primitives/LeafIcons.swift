@@ -30,7 +30,7 @@ enum LeafIcon_Nav {
     static let home: String = "leaf-nav-home"
     static let team: String = "leaf-nav-team"
     static let settings: String = "leaf-nav-settings"
-    static let activity: String = "leaf-nav-activity"
+    static let analytics: String = "leaf-nav-analytics"
     static let connections: String = "leaf-nav-connections"
     static let profile: String = "leaf-nav-profile"
     // search / filter / organization intentionally remain SF Symbols.
