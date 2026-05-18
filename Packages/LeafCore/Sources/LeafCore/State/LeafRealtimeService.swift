@@ -179,7 +179,15 @@ public final class LeafRealtimeService {
             // WS, so this is cheap on subsequent calls.
             try await driver.joinWorkspaceChannel(workspaceID: workspaceID, accessToken: jwt)
             state = .connected
-            startDispatchLoop()
+            // S7 Stage 6 fix A-I5 — start the dispatch loop at most ONCE per
+            // service lifetime (driver instance), not per-subscribe. The prior
+            // pattern cancel+recreate the for-await on every workspace switch,
+            // racing with AsyncStream consumption in the cancellation window
+            // (events emitted between cancel-A and start-B could be lost).
+            // The C3 trust gate inside handleTeamEventInsert /
+            // handleDirectMessageInsert already filters cross-workspace events,
+            // so a single long-lived loop is correct.
+            ensureDispatchLoop()
         } catch {
             // Connect or join failed (e.g., URL bogus, transport error). The
             // driver's reconnect loop (D.6) takes over if the WS was up and
@@ -194,10 +202,12 @@ public final class LeafRealtimeService {
     /// Send phx_leave for the current channel; keeps the WS connection open.
     /// State transitions to `.disconnected` while the underlying WS stays up.
     /// Idempotent: no-op if nothing was subscribed.
+    ///
+    /// S7 Stage 6 fix A-I5 — does NOT cancel the dispatch loop. The loop is
+    /// pinned to the driver lifetime; while unsubscribed, C3 gate inside the
+    /// handlers drops any in-flight cross-workspace event silently.
     public func unsubscribe() async {
         await driver.leaveCurrentChannel()
-        dispatchTask?.cancel()
-        dispatchTask = nil
         currentWorkspaceID = nil
         state = .disconnected
     }
@@ -205,6 +215,10 @@ public final class LeafRealtimeService {
     /// Close the WS gracefully; cancel reconnect timers; transition to
     /// `.suspended`. Used when scenePhase ≠ .active to save battery.
     /// Idempotent.
+    ///
+    /// S7 Stage 6 fix A-I5 — also tears down the dispatch loop so the suspended
+    /// service holds no live AsyncStream consumer. resume() rebuilds the loop
+    /// via subscribe() → ensureDispatchLoop().
     public func suspend() async {
         dispatchTask?.cancel()
         dispatchTask = nil
@@ -231,8 +245,15 @@ public final class LeafRealtimeService {
 
     // MARK: - Dispatch loop (D.8)
 
-    private func startDispatchLoop() {
-        dispatchTask?.cancel()
+    /// S7 Stage 6 fix A-I5 — single-instance loop pinned to the driver/service
+    /// lifetime. First subscribe() on a non-suspended service starts the loop;
+    /// every subsequent subscribe() finds it already running and re-uses it.
+    /// suspend() tears it down, paired with driver.suspend(); resume() rebuilds
+    /// via the next subscribe() call. unsubscribe() does NOT touch the loop —
+    /// C3 inside the handlers drops cross-workspace events silently while
+    /// disconnected.
+    private func ensureDispatchLoop() {
+        guard dispatchTask == nil else { return }
         let stream = driver.events
         dispatchTask = Task { [weak self] in
             for await event in stream {
