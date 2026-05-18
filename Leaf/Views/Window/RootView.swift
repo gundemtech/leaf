@@ -62,7 +62,7 @@ struct RootView: View {
     private func detail(for section: WindowSection) -> some View {
         switch section {
         case .home: HomeView()
-        case .analytics: ActivityView()
+        case .analytics: AnalyticsView()
         case .team: TeamView()
         case .connections: ConnectionsView()
         case .organization: OrganizationView()
