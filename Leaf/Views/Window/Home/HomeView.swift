@@ -207,7 +207,7 @@ private struct HomeContent: View {
                 HStack(alignment: .top, spacing: LeafSpace.xl) {
                     YouNowBlock(state: snapshot.youNowState)
                         .frame(maxWidth: .infinity)
-                    WithYouOnThisBlock()
+                    WithYouOnThisBlock(matches: snapshot.sameTaskTeammates)
                         .frame(maxWidth: .infinity)
                 }
 
