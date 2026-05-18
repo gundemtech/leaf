@@ -136,6 +136,16 @@ public struct InsightsSnapshot: Sendable, Hashable {
     /// `InsightsReader.refresh()` writes the real value via
     /// `DerivedInsights.youNowState(now:)`.
     public let youNowState: YouNowState
+    /// Phase Track-8 P5 — teammates currently working on the same task
+    /// as the caller (same Linear issue / same branch / adjacent branch).
+    /// Sorted by `SameTaskMatcher` (confidence asc → lastActivityAtMs
+    /// desc → displayName asc). Default `[]` so existing call-sites keep
+    /// compiling without modification. Production `InsightsReader.refresh()`
+    /// writes the real value via
+    /// `DerivedInsights.sameTaskTeammates(rule: .hierarchical)` — returns
+    /// `[]` until Phase 5.4 wires a DB-backed `TeammatePresenceReader`
+    /// against `presence_history`.
+    public let sameTaskTeammates: [TeammateMatch]
 
     public init(
         topApps: [AppTimeEntry],
@@ -179,7 +189,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         googleCalendarActivity: GoogleCalendarActivityBreakdown? = nil,
         workState: WorkStateSummary? = nil,
         todayMetrics: TodayMetrics = .empty,
-        youNowState: YouNowState = .empty
+        youNowState: YouNowState = .empty,
+        sameTaskTeammates: [TeammateMatch] = []
     ) {
         self.topApps = topApps
         self.sessions = sessions
@@ -223,6 +234,7 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.workState = workState
         self.todayMetrics = todayMetrics
         self.youNowState = youNowState
+        self.sameTaskTeammates = sameTaskTeammates
     }
 
     /// Convenience init — рассчитывает `deepSessionsCount` по threshold'у.
@@ -273,7 +285,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         googleCalendarActivity: GoogleCalendarActivityBreakdown? = nil,
         workState: WorkStateSummary? = nil,
         todayMetrics: TodayMetrics = .empty,
-        youNowState: YouNowState = .empty
+        youNowState: YouNowState = .empty,
+        sameTaskTeammates: [TeammateMatch] = []
     ) {
         self.init(
             topApps: topApps,
@@ -317,7 +330,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
             googleCalendarActivity: googleCalendarActivity,
             workState: workState,
             todayMetrics: todayMetrics,
-            youNowState: youNowState
+            youNowState: youNowState,
+            sameTaskTeammates: sameTaskTeammates
         )
     }
 
