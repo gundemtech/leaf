@@ -4,7 +4,15 @@
 <dict>
 	<key>com.apple.security.app-sandbox</key>
 	<false/>
-	<key>aps-environment</key>
+	<key>com.apple.application-identifier</key>
+	<string>4LZ84Z78M7.tech.gundem.leaf</string>
+	<key>com.apple.developer.team-identifier</key>
+	<string>4LZ84Z78M7</string>
+	<key>com.apple.developer.aps-environment</key>
 	<string>production</string>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>4LZ84Z78M7.tech.gundem.leaf</string>
+	</array>
 </dict>
 </plist>
