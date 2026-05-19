@@ -44,13 +44,7 @@ struct InboxBlock: View {
     }
 
     private var filteredItems: [InboxItem] {
-        let trimmed = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return items.filter { item in
-            guard selectedFilter.admits(item.kind) else { return false }
-            guard !trimmed.isEmpty else { return true }
-            return item.title.lowercased().contains(trimmed)
-                || item.sourceMeta.lowercased().contains(trimmed)
-        }
+        InboxFiltering.filtered(items: items, filter: selectedFilter, query: searchQuery)
     }
 
     private var emptyDataState: some View {
@@ -62,8 +56,12 @@ struct InboxBlock: View {
     }
 
     private var noMatchState: some View {
+        // C-18 (Phase 8.9) — magnifying-glass SF Symbol differentiates the
+        // "search miss" state from the positive "All clear" leaf icon used by
+        // `emptyDataState`. Same `LeafEmptyState` shape; only the leading
+        // icon glyph changes.
         LeafEmptyState(
-            icon: LeafIcons.brand.leaf,
+            icon: LeafIcons.nav.searchSF,
             title: "No matches.",
             description: "Try a different filter or clear the search.",
             ctaTitle: "Clear filters",
