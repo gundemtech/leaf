@@ -488,12 +488,12 @@ TDD per carry helper: write test first → red → implement → green → commi
 
 | AC | Description | Verification |
 |---|---|---|
-| AC-1 | C-3 resolved — TodayBlock uses ViewThatFits with 5-cell wide / 3-cell narrow branches | Visual smoke at 480 / 560 / 720 / 1024pt |
+| AC-1 | C-3 resolved — TodayBlock uses ViewThatFits with 4-cell wide / 2×2 narrow grid branches | Visual smoke at 480 / 560 / 720 / 1024pt |
 | AC-2 | C-4 resolved — TodayBlock.sectionLabel uses `static let` cached DateFormatter | Grep `static let.*DateFormatter` in TodayBlock.swift |
-| AC-3 | C-7 resolved — YouNowBlock `.away` is Button-wrapped; YouNowTapModifier deleted | Grep `Button` in awayContent body; absent YouNowTapModifier file |
+| AC-3 | C-7 resolved — YouNowBlock `.away` uses `.contentShape + .onTapGesture + .accessibilityAction(named: "Resume")` per OQ-P9-1 (outer Button wrap reverted to avoid nested-Button conflict with inner Resume CTA Button); YouNowTapModifier kept | Grep `accessibilityAction.*Resume` in YouNowBlock.swift; YouNowTapModifier private struct retained |
 | AC-4 | C-17 resolved — InboxFiltering.filtered extracted to LeafCore; InboxBlock.filteredItems delegates to it; 10 new XCTest pass | `xcodebuild test -scheme LeafCore` includes `InboxFilteringTests` |
 | AC-5 | C-18 resolved — InboxBlock noMatchState uses `LeafIcons.nav.searchSF`; emptyDataState keeps `LeafIcons.brand.leaf` | Grep both icon usages in InboxBlock.swift |
-| AC-6 | C-22 resolved — HomeRelativeTimeFormatter.format used in all 3 prior callsites; per-block formatRelative dropped | Grep `func formatRelative` in `Leaf/Views/Window/Home/Blocks/` returns 0 hits |
+| AC-6 | C-22 resolved — HomeRelativeTimeFormatter.format used in all 3 prior callsites; per-block formatRelative bodies delegate to the shared helper (thin wrappers preserved in WithYouOnThisBlock + YouNowBlock to minimise callsite diff, full inline replacement in WhereStoppedBlock) | Grep `HomeRelativeTimeFormatter.format` in `Leaf/Views/Window/Home/Blocks/` returns ≥ 3 hits; remaining `formatRelative` wrappers all delegate to the shared helper |
 | AC-7 | HIG sweep findings triaged — inline fix count + Track-9 carry count reported in T6 commit body | Commit message |
 | AC-8 | A11y subagent audit findings triaged — same accounting in T7 commit body | Commit message |
 | AC-9 | Perf manual review findings triaged — same accounting in T8 commit body | Commit message |
