@@ -54,4 +54,45 @@ final class XcodeStateMachineTests: XCTestCase {
             Set(events.compactMap { $0.payload["event_kind"] }),
             ["xcode_active_doc_changed", "xcode_build_state_changed"])
     }
+
+    // MARK: - Track-9 T1: line field
+
+    func testStateMachineEmitsLineWhenProvided() {
+        var sm = XcodeStateMachine()
+        let obs = XcodeObservation(
+            activeDocPath: "/p/File.swift",
+            projectName: "Pj",
+            schemeName: "S",
+            buildState: .idle,
+            line: 142
+        )
+        let events = sm.observe(obs, nowMs: 1000)
+        let docEvent = events.first { $0.payload["event_kind"] == "xcode_active_doc_changed" }!
+        XCTAssertEqual(docEvent.payload["line"], "142")
+    }
+
+    func testStateMachineOmitsLineWhenNil() {
+        var sm = XcodeStateMachine()
+        let obs = XcodeObservation(
+            activeDocPath: "/p/File.swift",
+            projectName: "Pj",
+            schemeName: "S",
+            buildState: .idle,
+            line: nil
+        )
+        let events = sm.observe(obs, nowMs: 1000)
+        let docEvent = events.first { $0.payload["event_kind"] == "xcode_active_doc_changed" }!
+        XCTAssertNil(docEvent.payload["line"])
+    }
+
+    func testStateMachineDocChangeNotTriggeredByLineChange() {
+        var sm = XcodeStateMachine()
+        _ = sm.observe(
+            XcodeObservation(activeDocPath: "/p/File.swift", projectName: "Pj", schemeName: "S", buildState: .idle, line: 1),
+            nowMs: 1000)
+        let events = sm.observe(
+            XcodeObservation(activeDocPath: "/p/File.swift", projectName: "Pj", schemeName: "S", buildState: .idle, line: 50),
+            nowMs: 2000)
+        XCTAssertTrue(events.allSatisfy { $0.payload["event_kind"] != "xcode_active_doc_changed" })
+    }
 }
