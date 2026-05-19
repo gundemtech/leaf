@@ -253,10 +253,14 @@ struct YouNowBlock: View {
 
     // MARK: - Relative-time helper
 
+    /// C-22 (Phase 8.9) — migrated to `HomeRelativeTimeFormatter`. Thin
+    /// wrapper preserves both call sites (`meetingContent` / `awayContent`).
+    /// Bucket ladder now matches WhereStoppedBlock + WithYouOnThisBlock: the
+    /// formatDuration-based "X min ago" phrasing is replaced by canonical
+    /// "Nm ago / Nh ago / yesterday / N days ago / MMM d".
     private func formatRelative(msAgo: Int64) -> String {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
-        let delta = max(0, Int((nowMs - msAgo) / 1000))
-        return "\(formatDuration(TimeInterval(delta))) ago"
+        return HomeRelativeTimeFormatter.format(deltaMs: max(0, nowMs - msAgo), nowMs: nowMs)
     }
 
     // MARK: - Leading icon (app icon when known, fallback to SF chip)
