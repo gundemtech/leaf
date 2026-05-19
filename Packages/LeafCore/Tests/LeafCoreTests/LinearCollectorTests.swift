@@ -2113,4 +2113,66 @@ final class LinearCollectorTests: XCTestCase {
         )
         XCTAssertEqual(presence["workspace_slug"] as? String, "")
     }
+
+    // MARK: - Track-9 T2 — makeCommentToMeEvent factory
+
+    private func makeT2Snapshot(
+        issueKey: String = "LEA-200",
+        teamKey: String = "LEA",
+        incomingCommentCount: Int = 3
+    ) -> LinearIssueSnapshot {
+        LinearIssueSnapshot(
+            issueKey: issueKey,
+            title: "X",
+            status: "In Progress",
+            project: "",
+            teamKey: teamKey,
+            updatedAtMs: 1_715_900_000_000,
+            incomingCommentCount: incomingCommentCount
+        )
+    }
+
+    func test_makeCommentToMeEvent_payloadShape_withSlug_TrackT2() {
+        let issue = makeT2Snapshot(issueKey: "LEA-200", teamKey: "LEA", incomingCommentCount: 3)
+        let event = LinearCollector.makeCommentToMeEvent(
+            issue: issue,
+            periodEndMs: 1_715_900_500_000,
+            workspaceSlug: "my-team"
+        )
+        XCTAssertEqual(event.payload["event_kind"], "linear_comment_authored_to_me")
+        XCTAssertEqual(event.payload["source"], "linear")
+        XCTAssertEqual(event.payload["issue_key"], "LEA-200")
+        XCTAssertEqual(event.payload["team_key"], "LEA")
+        XCTAssertEqual(event.payload["to_me_count_in_window"], "3")
+        XCTAssertEqual(event.payload["period_end_ms"], "1715900500000")
+        XCTAssertEqual(
+            event.payload["linear_issue_url"],
+            "https://linear.app/my-team/issue/LEA-200")
+        XCTAssertEqual(event.signalType, .action)
+        XCTAssertNil(event.bundleID)
+    }
+
+    func test_makeCommentToMeEvent_omitsURL_whenSlugNil_TrackT2() {
+        let issue = makeT2Snapshot(incomingCommentCount: 2)
+        let event = LinearCollector.makeCommentToMeEvent(
+            issue: issue,
+            periodEndMs: 1_715_900_500_000,
+            workspaceSlug: nil
+        )
+        XCTAssertNil(event.payload["linear_issue_url"])
+        XCTAssertEqual(event.payload["event_kind"], "linear_comment_authored_to_me")
+        XCTAssertEqual(event.payload["to_me_count_in_window"], "2")
+    }
+
+    func test_makeCommentToMeEvent_omitsURL_whenSlugEmpty_TrackT2() {
+        // Defense-in-depth: empty string slug → URL omitted (Linear API guarantees
+        // urlKey is alphanumeric+dashes, but defensive parser path may pass "").
+        let issue = makeT2Snapshot()
+        let event = LinearCollector.makeCommentToMeEvent(
+            issue: issue,
+            periodEndMs: 1_715_900_500_000,
+            workspaceSlug: ""
+        )
+        XCTAssertNil(event.payload["linear_issue_url"])
+    }
 }

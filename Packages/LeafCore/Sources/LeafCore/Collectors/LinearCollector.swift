@@ -264,6 +264,16 @@ public actor LinearCollector {
             .filter { $0.commentCountInWindow > 0 }
             .map { Self.makeCommentEvent(issue: $0, periodEndMs: nowMs) }
         events.append(contentsOf: commentEvents)
+        // Track-9 T2 — discriminator sibling emission. Filter complementary to
+        // commentEvents (incoming vs outgoing comments). Same nowMs windowing.
+        // workspaceSlug pulled from actor state (captured at top of tick).
+        let commentToMeEvents = batch.issues
+            .filter { $0.incomingCommentCount > 0 }
+            .map {
+                Self.makeCommentToMeEvent(
+                    issue: $0, periodEndMs: nowMs, workspaceSlug: self.workspaceSlug)
+            }
+        events.append(contentsOf: commentToMeEvents)
         let workloadEvent = Self.makeAssignedWorkloadPulseEvent(
             snapshot: batch.workload, nowMs: nowMs
         )
@@ -414,6 +424,45 @@ public actor LinearCollector {
                 "count_in_window": String(issue.commentCountInWindow),
                 "period_end_ms": String(periodEndMs),
             ]
+        )
+    }
+
+    /// Track-9 T2 — RawEvent для linear_comment_authored_to_me aggregate.
+    /// Discriminator sibling to linear_comment_authored: per-issue count of
+    /// comments authored BY OTHERS on this viewer-touched issue during the
+    /// polling window (substrate seed для INBOX `commentOnMyWork` Linear branch).
+    ///
+    /// `linear_issue_url` field composed from cached `workspaceSlug` +
+    /// `issue.issueKey` (public-safe identifiers only). Omitted on cold-tick
+    /// before slug cache populates, on Linear free-tier accounts returning null
+    /// org, or on defensive empty-string slug. InboxItems deriver sourceURL
+    /// gracefully nils out when field missing.
+    ///
+    /// ADR-010: payload composed exclusively from `workspace_slug` (org
+    /// metadata) + `issue_key` (self-authored label) + structured counts /
+    /// timestamps. NEVER reads comments[].body / title / description / mention
+    /// text. Sentinel-injection test guards the invariant.
+    static func makeCommentToMeEvent(
+        issue: LinearIssueSnapshot,
+        periodEndMs: Int64,
+        workspaceSlug: String?
+    ) -> RawEvent {
+        var payload: [String: String] = [
+            "source": "linear",
+            "event_kind": "linear_comment_authored_to_me",
+            "issue_key": issue.issueKey,
+            "team_key": issue.teamKey,
+            "to_me_count_in_window": String(issue.incomingCommentCount),
+            "period_end_ms": String(periodEndMs),
+        ]
+        if let slug = workspaceSlug, !slug.isEmpty {
+            payload["linear_issue_url"] = "https://linear.app/\(slug)/issue/\(issue.issueKey)"
+        }
+        return RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(periodEndMs) / 1000.0),
+            signalType: .action,
+            bundleID: nil,
+            payload: payload
         )
     }
 
