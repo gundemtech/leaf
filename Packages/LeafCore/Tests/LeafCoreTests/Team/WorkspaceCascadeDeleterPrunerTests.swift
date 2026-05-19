@@ -152,4 +152,55 @@ final class WorkspaceCascadeDeleterPrunerTests: XCTestCase {
         XCTAssertNotNil(try db.readWorkspace(id: recent.id))
         XCTAssertNotNil(try db.readWorkspace(id: active.id))
     }
+
+    // MARK: - S8 review B-Imp-3 — tickIfDueDaily cooldown gate
+
+    /// First call to `tickIfDueDaily` runs the SELECT (lastPrunedAt = nil).
+    /// Immediate second call (no time advance) hits cooldown and returns [].
+    func testTickIfDueDaily_SecondCallWithinCooldown_NoOp() async throws {
+        let svc = makeService(now: nowDate)
+        let ws = try svc.createWorkspace(displayName: "Acme")
+        try svc.markLeft(
+            workspaceID: ws.id,
+            at: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0 - 31 * 86_400)
+        )
+
+        let deleter = makeDeleter(now: nowDate)
+        let first = try await deleter.tickIfDueDaily()
+        XCTAssertEqual(first, [ws.id], "first call wipes the expired workspace")
+        XCTAssertNil(try db.readWorkspace(id: ws.id))
+
+        // Re-create another expired row; immediate second call hits cooldown.
+        let ws2 = try svc.createWorkspace(displayName: "Beta")
+        try svc.markLeft(
+            workspaceID: ws2.id,
+            at: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0 - 31 * 86_400)
+        )
+        let second = try await deleter.tickIfDueDaily()
+        XCTAssertEqual(second, [], "cooldown blocks the second call within 24h")
+        XCTAssertNotNil(try db.readWorkspace(id: ws2.id),
+                        "ws2 must NOT be wiped while cooldown is in effect")
+    }
+
+    /// After 24h+1s elapses (currentTime arg advances), cooldown lifts and the
+    /// next `tickIfDueDaily` runs the SELECT again.
+    func testTickIfDueDaily_AfterCooldown_RunsAgain() async throws {
+        let svc = makeService(now: nowDate)
+        let deleter = makeDeleter(now: nowDate)
+        // Prime cooldown via initial empty-prune tick.
+        let initial = try await deleter.tickIfDueDaily()
+        XCTAssertEqual(initial, [])
+
+        // Seed an expired workspace + advance clock past cooldown boundary.
+        let ws = try svc.createWorkspace(displayName: "Gamma")
+        try svc.markLeft(
+            workspaceID: ws.id,
+            at: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0 - 31 * 86_400)
+        )
+        let pastCooldown = nowDate.addingTimeInterval(WorkspaceCascadeDeleter.dailyCooldownSeconds + 1)
+        let next = try await deleter.tickIfDueDaily(currentTime: pastCooldown)
+        XCTAssertEqual(next, [ws.id],
+                        "expired workspace must wipe on next tick after cooldown lifts")
+        XCTAssertNil(try db.readWorkspace(id: ws.id))
+    }
 }

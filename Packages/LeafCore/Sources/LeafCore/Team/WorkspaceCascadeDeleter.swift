@@ -43,10 +43,18 @@ public actor WorkspaceCascadeDeleter {
     /// workspaces.
     public static let retentionDays: Int = 30
 
+    /// S8 review B-Imp-3 — cooldown between automatic prune ticks driven by
+    /// `tickIfDueDaily(now:)`. Mirrors `PendingMarkDoneRetryService` pattern.
+    /// `RootView.task` fires every ~30s; this gate ensures the cascade SELECT
+    /// only runs once per 24h. Manual `pruneExpiredLeftWorkspaces()` calls
+    /// bypass the cooldown (useful for tests + admin force-prune surfaces).
+    public static let dailyCooldownSeconds: TimeInterval = 86_400
+
     private let database: LeafCore.Database
     private let keystoreRoot: URL
     private let now: @Sendable () -> Date
     private let logger: Logger
+    private(set) var lastPrunedAt: Date?
 
     public init(
         database: LeafCore.Database,
@@ -151,5 +159,22 @@ public actor WorkspaceCascadeDeleter {
             logger.info("auto-pruned \(expiredIDs.count, privacy: .public) expired workspace(s)")
         }
         return expiredIDs
+    }
+
+    /// S8 review B-Imp-3 — cooldown-gated wrapper around
+    /// `pruneExpiredLeftWorkspaces()`. Returns `[]` immediately if the last
+    /// prune fired within `dailyCooldownSeconds`. Used by `RootView.task` so
+    /// the per-30s polling loop doesn't repeatedly SELECT the workspaces
+    /// table when no workspace is anywhere near the 30d boundary.
+    /// Mirrors `PendingMarkDoneRetryService.tickIfDueDaily(now:)` pattern.
+    @discardableResult
+    public func tickIfDueDaily(currentTime: Date? = nil) throws -> [String] {
+        let stamp = currentTime ?? now()
+        if let last = lastPrunedAt, stamp.timeIntervalSince(last) < Self.dailyCooldownSeconds {
+            return []
+        }
+        let wiped = try pruneExpiredLeftWorkspaces()
+        lastPrunedAt = stamp
+        return wiped
     }
 }

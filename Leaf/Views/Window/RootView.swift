@@ -121,11 +121,15 @@ struct RootView: View {
                 // Track 5 / S8 / T8 — auto-prune workspaces past the 30-day
                 // retention window (left_at_ms OR deleted_at_ms). Idempotent;
                 // already-wiped rows no longer match the SELECT predicate.
+                // S8 review B-Imp-3 — `tickIfDueDaily` cooldown gates the
+                // SELECT to once per 24h so the per-30s polling loop doesn't
+                // hammer the workspaces table when no workspace is anywhere
+                // near the 30d boundary.
                 // If any wipes happened, refresh WorkspaceReader so a left
                 // workspace that just got pruned disappears from any UI
                 // surface that lists left/deleted workspaces.
                 if let deleter = workspaceCascadeDeleter {
-                    let wiped = (try? await deleter.pruneExpiredLeftWorkspaces()) ?? []
+                    let wiped = (try? await deleter.tickIfDueDaily()) ?? []
                     if !wiped.isEmpty {
                         workspaceReader.refresh()
                     }

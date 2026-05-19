@@ -142,6 +142,16 @@ struct AcceptInviteSheet: View {
                             variant: .primary,
                             size: .md,
                             action: {
+                                // S8 review B-Imp-2 — defence-in-depth: re-check tier in
+                                // the action handler to close the render→tap race window
+                                // (UserDefaults `tier` flip via `defaults write` + KVO
+                                // broadcast could land between body evaluation and Button
+                                // dispatch). Mirrors WorkspaceCreateSheet.createIfValid +
+                                // SendDirectMessageSheet.submit defence pattern.
+                                guard tierGate.canAcceptInvite else {
+                                    showUpgrade = true
+                                    return
+                                }
                                 let dn = displayNameInput.trimmingCharacters(in: .whitespacesAndNewlines)
                                 reader.join(displayName: dn, otp: nil)
                             }
