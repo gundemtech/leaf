@@ -88,6 +88,11 @@ struct LeafApp: App {
     /// write tech.gundem.leaf tier free` from Terminal flips UI live during
     /// QA — no app relaunch required.
     @State private var tierGateReader = TierGateReader()
+    /// Track 5 / S8 / T9 — @Observable wrapper around NotificationPrefsStore
+    /// (M026). Bound by NotificationsSettingsSection (4 sub-groups × 11
+    /// prefs). Opens its own writer DB handle lazily on first refresh;
+    /// best-effort server mirror via SupabaseClient for apns_push prefs hint.
+    @State private var notificationPrefsReader: NotificationPrefsReader
     /// Track 5 / S8 T6 — daily-tick retry queue for APNs `dm.markDone`
     /// actions whose optimistic local UPDATE succeeded but server PATCH
     /// failed. nil when Database open fails at LeafApp.init (graceful: tick
@@ -183,6 +188,11 @@ struct LeafApp: App {
         // Track 5 / S5 — Share Controls reader. Reads + writes share_rules
         // table (defaults via ShareRuleDefaults when row absent).
         _shareRulesReader = State(initialValue: ShareRulesReader(activeStore: active))
+
+        // Track 5 / S8 / T9 — Notification prefs reader. Reads + writes
+        // notification_prefs (M026); best-effort server mirror via Supabase
+        // for apns_push to skip pushes for disabled kinds.
+        _notificationPrefsReader = State(initialValue: NotificationPrefsReader(supabaseClient: supabase))
 
         // Track 5 / S5 — broadcast + mirror readers + 30s tick scheduling
         // (driven by OrganizationView .task per S4 DM inbox precedent).
@@ -473,6 +483,7 @@ struct LeafApp: App {
                 .environment(pendingInvitesReader)  // Phase 5.5.C
                 .environment(inviteURLHandler)  // Phase 5.5.B
                 .environment(tierGateReader)        // Track 5 / S8 / T3
+                .environment(notificationPrefsReader) // Track 5 / S8 / T9
                 // T4 — UpgradeModal callsites (Sheet/TeamView Free branch/Sidebar
                 // Free state) invoke `submitToWaitlist(email:)` via this env closure.
                 // SupabaseClient is an actor (not @Observable), so we wrap it in a

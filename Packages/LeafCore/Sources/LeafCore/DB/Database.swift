@@ -309,6 +309,47 @@ public final class Database: @unchecked Sendable {
         }
     }
 
+    // MARK: - Notification prefs (Track 5 / S8 / T1 + T9)
+
+    /// SELECT all rows + seed defaults from `NotificationKind.defaultEnabled`.
+    /// Used by `NotificationPrefsReader` (T9) to bind toggles in the
+    /// Notifications Settings section. Cheap — 11-row scan max.
+    public func readNotificationPrefs() throws -> [NotificationKind: Bool] {
+        try pool.read { rawDB in
+            try NotificationPrefsStore.readEffective(in: rawDB)
+        }
+    }
+
+    /// Convenience single-kind resolution incorporating defaults. Used by
+    /// callers (e.g., `apns_push` Edge Function mirror lookup) that only
+    /// want one kind's effective state.
+    public func isNotificationPrefEnabled(_ kind: NotificationKind) throws -> Bool {
+        try pool.read { rawDB in
+            try NotificationPrefsStore.isEnabled(kind, in: rawDB)
+        }
+    }
+
+    /// UPSERT toggle per `NotificationKind`. Rejects disabling a locked kind
+    /// (currently `.handoff`) via `NotificationPrefsStore.Error.cannotDisableLockedKind`.
+    /// Caller (`NotificationPrefsReader.setEnabled`) refreshes the in-memory map
+    /// after the write and surfaces the locked-kind error silently (UI shows
+    /// the lock icon + disabled toggle so the call shouldn't fire in normal flow).
+    public func setNotificationPref(
+        _ kind: NotificationKind,
+        enabled: Bool,
+        updatedAtMs: Int64
+    ) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { rawDB in
+            try NotificationPrefsStore.setEnabled(
+                kind,
+                enabled: enabled,
+                updatedAtMs: updatedAtMs,
+                in: rawDB
+            )
+        }
+    }
+
     // MARK: - Direct message mirror (Track 5 / S4 + S7)
 
     /// Single-pass aggregate: number of unread inbound DMs per workspace.
