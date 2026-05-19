@@ -396,14 +396,19 @@ Per privacy invariant (§6), APNs payload contains **title only** (no body excer
   "aps": {
     "alert": { "title": "Anton sent a handoff" },
     "sound": "default",
-    "thread-id": "<workspace_id>"
+    "thread-id": "<workspace_id>:<kind>",
+    "mutable-content": 1,
+    "category": "leaf.dm.<kind>"
   },
   "leaf_message_id": "<uuid>",
-  "leaf_workspace_id": "<uuid>"
+  "leaf_workspace_id": "<uuid>",
+  "leaf_is_reminder": false
 }
 ```
 
 App on receive: wake → fetch encrypted message from Supabase by `leaf_message_id` → decrypt → display in feed.
+
+> **Amendment 2026-05-19 (S8 spec):** §10.3 APNs payload shape extended with `aps.category` field (`"leaf.dm.<kind>"` for kind ∈ {handoff, task, ping}). Reason: UC-T5-3 «reply inline» + UC-T5-4 «click Mark done» require UNNotificationCategory + UNNotificationAction wiring; categories on standard alert push (per OQ-T5-4 resolution in S4) require `aps.category` field. Same amendment changes `aps.thread-id` format from `<workspace_id>` to `<workspace_id>:<kind>` to give separate Notification Center stacks per direct-message kind. Living-doc process per §18.
 
 ---
 
@@ -514,9 +519,11 @@ Retention cleanup: Supabase cron job `retention_purge` runs daily, deletes rows 
 
 ### 15.1 Tier check
 
-- Free tier — solo + read-only Team preview.
-- Team tier — full Track 5 functionality.
+- Free tier — solo + read-only Team preview. UserDefaults rawValue: `"free"`.
+- Team tier — full Track 5 functionality. UserDefaults rawValue: `"team"`.
 - Tier state stored in `UserDefaults.tier` (cached) + verified server-side via Supabase JWT custom claim on workspace creation / message send.
+
+> **Amendment 2026-05-19 (S8 spec):** §15.1 normalizes Tier value strings to `"free"` / `"team"` (matching §15.2 «Free tier» / «Team tier» display naming). Earlier S8 design drafts used `"pro"` — corrected before impl per cross-spec reviewer IMP-1. UserDefaults key remains `tier`. Default `"team"` for MVP per early-access semantics (contract §15.3 «post-launch Stripe»). Server-side JWT `tier` claim scaffolding shipped in S8 / T2 (Auth Hook `custom_access_token_hook` extension); flip-on with Stripe post-launch. Living-doc process per §18.
 
 ### 15.2 Free-tier behavior
 
