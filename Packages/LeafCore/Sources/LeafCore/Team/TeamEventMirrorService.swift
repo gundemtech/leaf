@@ -277,34 +277,66 @@ public actor TeamEventMirrorService {
 
 public actor TeamEventMirrorRetentionPruner {
 
+    /// Fallback value used by the convenience `init(database:retentionDays:)`
+    /// when no value is provided. Production callsites use the provider-closure
+    /// `init` which reads from `MirrorRetentionConfig.retentionDays()` (T10).
+    /// Kept as `defaultRetentionDays` for backwards-compat with pre-T10 tests +
+    /// `WorkspaceCascadeDeleter` doc-comment cross-ref.
     public static let defaultRetentionDays: Int = 90
 
     private let database: LeafCore.Database
-    private let retentionDays: Int
+    /// Per-tick retention provider. Production: `MirrorRetentionConfig.retentionDays`
+    /// (reads UserDefaults — user picker from `PrivacySettingsSection`).
+    /// Tests inject a fixed-value closure for determinism.
+    private let retentionDaysProvider: @Sendable () -> Int
     private let now: @Sendable () -> Date
     private let logger: Logger
 
+    /// Designated initializer — provider closure read fresh on each `prune()`
+    /// call so user picker changes take effect on the next daily tick without
+    /// requiring pruner reconstruction (matches LaunchAgent / OrganizationView
+    /// daily-tick scheduler lifetime).
     public init(
         database: LeafCore.Database,
-        retentionDays: Int = defaultRetentionDays,
+        retentionDaysProvider: @escaping @Sendable () -> Int = MirrorRetentionConfig.retentionDays,
         now: @escaping @Sendable () -> Date = { Date() },
         logger: Logger = Logger(subsystem: "tech.gundem.leaf.core", category: "team-event-mirror-pruner")
     ) {
         self.database = database
-        self.retentionDays = retentionDays
+        self.retentionDaysProvider = retentionDaysProvider
         self.now = now
         self.logger = logger
     }
 
+    /// Convenience init for tests that pin a fixed retention value (preserves
+    /// pre-T10 `init(database:retentionDays:now:)` callsite shape — wraps the
+    /// Int in a Sendable closure).
+    public init(
+        database: LeafCore.Database,
+        retentionDays: Int,
+        now: @escaping @Sendable () -> Date = { Date() },
+        logger: Logger = Logger(subsystem: "tech.gundem.leaf.core", category: "team-event-mirror-pruner")
+    ) {
+        self.init(
+            database: database,
+            retentionDaysProvider: { retentionDays },
+            now: now,
+            logger: logger
+        )
+    }
+
     /// Delete mirror rows where server_created_at_ms < now - retentionDays*86400000.
+    /// `retentionDays` resolved per-call via `retentionDaysProvider` (defaults to
+    /// `MirrorRetentionConfig.retentionDays()` reading UserDefaults).
     /// Returns count of rows removed.
     @discardableResult
     public func prune() throws -> Int {
+        let retentionDays = retentionDaysProvider()
         let nowMs = Int64(now().timeIntervalSince1970 * 1000)
         let cutoffMs = nowMs - Int64(retentionDays) * 86_400_000
         let removed = try database.deleteTeamEventMirrorOlderThan(cutoffMs: cutoffMs)
         if removed > 0 {
-            logger.info("mirror retention prune removed=\(removed, privacy: .public)")
+            logger.info("mirror retention prune removed=\(removed, privacy: .public) retention_days=\(retentionDays, privacy: .public)")
         }
         return removed
     }

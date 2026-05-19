@@ -83,4 +83,20 @@ public struct DefaultDenyList: Sendable {
     static func isAIContentKind(_ kind: String) -> Bool {
         kind.hasPrefix("ai_")
     }
+
+    /// Track 5 / S8 / T10 — user-facing copy for Settings → Privacy
+    /// «Never shared» display. 4 reasons per Track 5 contract §11.1 (S5).
+    ///
+    /// Mirrors the runtime guards in `matches(eventKind:payload:)` +
+    /// `ShareControlsSettingsSection.NeverSharedCard.NeverSharedItem.all`
+    /// (which has a longer description format). This array is the canonical
+    /// single-line reason list for the T10 Privacy section card; if the
+    /// runtime denylist changes, update both this property AND the runtime
+    /// guards together.
+    public static let userVisibleReasons: [String] = [
+        "Secrets-bearing files (.env, .git/config, .aws/credentials, .ssh/*)",
+        "Large files (>100 MB)",
+        "AI prompts and responses (Claude / Cursor / Windsurf / Continue)",
+        "Personal apps (Signal, Discord, Spotify, Messages, Telegram, …)",
+    ]
 }
