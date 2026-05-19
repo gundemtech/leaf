@@ -264,9 +264,14 @@ public actor LinearCollector {
             .filter { $0.commentCountInWindow > 0 }
             .map { Self.makeCommentEvent(issue: $0, periodEndMs: nowMs) }
         events.append(contentsOf: commentEvents)
+        // Track-9 T2 — capture workspaceSlug into actor state BEFORE downstream
+        // emission so tick-1 commentToMeEvents include linear_issue_url whenever
+        // the batch already carries a valid slug (avoids one-tick degrade gap).
+        if let slug = batch.workspaceSlug, !slug.isEmpty {
+            self.workspaceSlug = slug
+        }
         // Track-9 T2 — discriminator sibling emission. Filter complementary to
         // commentEvents (incoming vs outgoing comments). Same nowMs windowing.
-        // workspaceSlug pulled from actor state (captured at top of tick).
         let commentToMeEvents = batch.issues
             .filter { $0.incomingCommentCount > 0 }
             .map {
@@ -302,12 +307,9 @@ public actor LinearCollector {
         // / [[String: Any]]. Optional scalars defaulted к "" / 0 per plan literal
         // (downstream parser проверяет startedCount > 0 чтобы отличить empty от
         // populated, current_cycle dict пустой если no in-cycle teams).
-        // Track-9 T2 — capture workspaceSlug into actor state (first non-nil wins
-        // across the process lifetime). Used by makeCommentToMeEvent emission and
-        // presence dict write below.
-        if let slug = batch.workspaceSlug, !slug.isEmpty {
-            self.workspaceSlug = slug
-        }
+        // Track-9 T2 — workspaceSlug already captured into actor state above
+        // (before commentToMeEvents emission). Pass cached value to presence
+        // dict writer for cross-process readers.
         let linearPresence: [String: Any] = Self.buildLinearPresenceState(
             workload: batch.workload,
             cycles: batch.cycles,
