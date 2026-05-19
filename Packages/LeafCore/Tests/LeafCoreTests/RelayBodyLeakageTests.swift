@@ -3180,4 +3180,97 @@ final class RelayBodyLeakageTests: XCTestCase {
             }
         }
     }
+
+    // MARK: - Track-9 T2 sentinel-injection regression
+
+    /// Track-9 T2 — Linear `linear_comment_authored_to_me` event ships a
+    /// `linear_issue_url` field composed from cached `workspace_slug` (org
+    /// metadata) + `issue.issueKey` (self-authored label). The composition
+    /// path NEVER reads body / title / description / mention text. This test
+    /// exercises both surfaces:
+    ///   (1) the URL-composition factory at LinearCollector.makeCommentToMeEvent;
+    ///   (2) the event write boundary at writeEventsOffsetAndPresence.
+    /// In neither must the sentinel — injected as a hypothetical body capture
+    /// adjacent to the event — appear in the composed `linear_issue_url` field
+    /// nor in the broadcast `presence_state.linear.state_json`. Padded sentinel
+    /// keeps the test discriminating against partial truncation regressions.
+    func test_t2_walkback_linearCommentToMe_urlIsStructurallyComposed() throws {
+        let sentinel = "LEAKED_SENTINEL_LINEAR_T2"
+        let sentinelBody = "padding-prefix-padding-prefix-" + sentinel
+            + "-padding-suffix-padding-suffix"
+
+        // (1) Factory boundary — feed a snapshot adjacent to a slug carrying
+        // ordinary org-key shape; assert URL contains ONLY structural pieces.
+        let snap = LinearIssueSnapshot(
+            issueKey: "LEA-200",
+            title: "X",
+            status: "In Progress",
+            project: "",
+            teamKey: "LEA",
+            updatedAtMs: 1_715_900_000_000,
+            incomingCommentCount: 3
+        )
+        let factoryEvent = LinearCollector.makeCommentToMeEvent(
+            issue: snap,
+            periodEndMs: 1_715_900_500_000,
+            workspaceSlug: "my-team"
+        )
+        let factoryURL = factoryEvent.payload["linear_issue_url"] ?? ""
+        XCTAssertEqual(factoryURL, "https://linear.app/my-team/issue/LEA-200")
+        XCTAssertFalse(
+            factoryURL.contains(sentinel),
+            "T2 sentinel must not appear in composed linear_issue_url")
+
+        // (2) Write boundary — synthesize event with sentinel-bearing body
+        // payload (defense-in-depth: T2 collector never emits this shape, but
+        // upstream regression could). presence_state must remain structurally
+        // sanitized regardless of payload content.
+        let db = try Database.openForWrite(
+            at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let attackEvent = RawEvent(
+            timestamp: Date(),
+            signalType: .action,
+            bundleID: "com.linear.linear",
+            payload: [
+                "source": "linear",
+                "event_kind": "linear_comment_authored_to_me",
+                "issue_key": "LEA-200",
+                "team_key": "LEA",
+                "to_me_count_in_window": "3",
+                "period_end_ms": String(nowMs),
+                "linear_issue_url": factoryURL,
+                Schema.EventPayloadKeys.body: sentinelBody,
+            ]
+        )
+        let presenceState: [String: Any] = [
+            "workspace_slug": "my-team",
+            "started_issues_count": 1,
+        ]
+        try db.writeEventsOffsetAndPresence(
+            [attackEvent],
+            offset: makeOffset(
+                collectorID: CollectorID.linearPolling,
+                sourceID: "linear:t2-test", nowMs: nowMs),
+            presence: (provider: .linear, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+        try db.readSQL { rawDB in
+            let row = try Row.fetchOne(
+                rawDB,
+                sql: "SELECT state_json FROM presence_state WHERE provider='linear'"
+            )
+            let stateJSON = (row?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty)
+            XCTAssertFalse(
+                stateJSON.contains(sentinel),
+                "T2 sentinel must not appear in presence_state.linear.state_json")
+            XCTAssertFalse(
+                stateJSON.contains("\"body\""),
+                "Payload key 'body' must not appear in presence_state.state_json")
+            // presence_state SHOULD contain the structural workspace_slug field.
+            XCTAssertTrue(stateJSON.contains("\"workspace_slug\""))
+            XCTAssertTrue(stateJSON.contains("my-team"))
+        }
+    }
 }
