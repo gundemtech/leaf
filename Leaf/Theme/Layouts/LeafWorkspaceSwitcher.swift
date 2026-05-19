@@ -2,8 +2,16 @@
 //  LeafWorkspaceSwitcher.swift
 //  Track 5 / S7 — Organism. Sidebar bottom workspace picker. Renders one
 //  row per workspace (active checkmark + avatar initials + name + unread
-//  badge) plus an "Add workspace" footer row. Context menu per row:
-//  "Mark all read" (when unread > 0) + "Leave Workspace" (destructive).
+//  badge) plus "Add workspace" + "Join workspace" footer rows. Context menu
+//  per row: "Mark all read" (when unread > 0) + "Leave Workspace"
+//  (destructive).
+//
+//  Track 6 — `onJoin` row paired with `onAddNew` closes the UX gap where
+//  already-onboarded users had no in-app entry point to join a second
+//  workspace via `leaf://invite/...` link. Substrate (multi-workspace
+//  table, per-workspace TeamKeystore, ActiveWorkspaceStore, switcher) has
+//  been ready since Track 5 S2/S7; only the surface to AcceptInviteSheet
+//  outside Onboarding was missing.
 //
 //  Placed in Layouts/ (Organism tier) alongside LeafNavRow, LeafCard, etc.
 //
@@ -19,6 +27,9 @@ struct LeafWorkspaceSwitcher: View {
     let unreadCounts: [String: Int]
     let onSelect: (String) -> Void
     let onAddNew: () -> Void
+    /// Opens AcceptInviteSheet so the user can paste / use a
+    /// `leaf://invite/...` link from another workspace's admin.
+    let onJoin: () -> Void
     /// Shown in context menu — destructive.
     let onLeave: (String) -> Void
     let onMarkAllRead: (String) -> Void
@@ -29,6 +40,7 @@ struct LeafWorkspaceSwitcher: View {
         unreadCounts: [String: Int],
         onSelect: @escaping (String) -> Void,
         onAddNew: @escaping () -> Void,
+        onJoin: @escaping () -> Void,
         onLeave: @escaping (String) -> Void,
         onMarkAllRead: @escaping (String) -> Void
     ) {
@@ -37,6 +49,7 @@ struct LeafWorkspaceSwitcher: View {
         self.unreadCounts = unreadCounts
         self.onSelect = onSelect
         self.onAddNew = onAddNew
+        self.onJoin = onJoin
         self.onLeave = onLeave
         self.onMarkAllRead = onMarkAllRead
     }
@@ -48,6 +61,7 @@ struct LeafWorkspaceSwitcher: View {
             }
             Divider().opacity(LeafWorkspaceSwitcherTokens.dividerOpacity)
             addNewRow
+            joinRow
         }
         .padding(LeafWorkspaceSwitcherTokens.sectionPadding)
         .background(LeafColor.surface.inset)
@@ -117,6 +131,25 @@ struct LeafWorkspaceSwitcher: View {
         .frame(height: LeafWorkspaceSwitcherTokens.rowHeight)
         .contentShape(.rect)
         .onTapGesture(perform: onAddNew)
+    }
+
+    private var joinRow: some View {
+        HStack(spacing: LeafSpace.sm) {
+            Image(systemName: "link.circle")
+                .font(.system(size: LeafWorkspaceSwitcherTokens.activeIconSize))
+                .foregroundStyle(LeafColor.text.secondary)
+                .frame(
+                    width: LeafWorkspaceSwitcherTokens.activeIconSize,
+                    height: LeafWorkspaceSwitcherTokens.activeIconSize
+                )
+            Text("Join workspace")
+                .font(LeafType.body.regular)
+                .foregroundStyle(LeafColor.text.secondary)
+            Spacer()
+        }
+        .frame(height: LeafWorkspaceSwitcherTokens.rowHeight)
+        .contentShape(.rect)
+        .onTapGesture(perform: onJoin)
     }
 
     /// Derives up to 2 uppercase initials from a workspace name.

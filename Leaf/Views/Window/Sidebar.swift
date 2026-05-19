@@ -137,6 +137,8 @@ struct Sidebar: View {
             // because state.active is only re-resolved on refresh().
             onSelect: { wid in workspaceReader.switchActive(to: wid) },
             onAddNew: { createWorkspacePresented = true },
+            // Real binding lands in the follow-up commit (in-app AcceptInviteSheet).
+            onJoin: { },
             onLeave: { wid in
                 leaveTargetWorkspaceID = wid
                 leavePresented = true

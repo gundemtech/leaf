@@ -24,6 +24,7 @@ struct LeafWorkspaceSwitcherPreview: View {
                 unreadCounts: [:],
                 onSelect: { _ in },
                 onAddNew: { },
+                onJoin: { },
                 onLeave: { _ in },
                 onMarkAllRead: { _ in }
             )
@@ -37,6 +38,7 @@ struct LeafWorkspaceSwitcherPreview: View {
                 unreadCounts: [:],
                 onSelect: { _ in },
                 onAddNew: { },
+                onJoin: { },
                 onLeave: { _ in },
                 onMarkAllRead: { _ in }
             )
@@ -54,6 +56,7 @@ struct LeafWorkspaceSwitcherPreview: View {
                 unreadCounts: ["ws-a": 5],
                 onSelect: { _ in },
                 onAddNew: { },
+                onJoin: { },
                 onLeave: { _ in },
                 onMarkAllRead: { _ in }
             )
@@ -67,6 +70,7 @@ struct LeafWorkspaceSwitcherPreview: View {
                 unreadCounts: ["ws-2": 3, "ws-6": 12],
                 onSelect: { _ in },
                 onAddNew: { },
+                onJoin: { },
                 onLeave: { _ in },
                 onMarkAllRead: { _ in }
             )
@@ -83,6 +87,7 @@ struct LeafWorkspaceSwitcherPreview: View {
                 unreadCounts: [:],
                 onSelect: { _ in },
                 onAddNew: { },
+                onJoin: { },
                 onLeave: { _ in },
                 onMarkAllRead: { _ in }
             )
@@ -98,14 +103,15 @@ struct LeafWorkspaceSwitcherPreview: View {
                 unreadCounts: ["ws-flood": 127],
                 onSelect: { _ in },
                 onAddNew: { },
+                onJoin: { },
                 onLeave: { _ in },
                 onMarkAllRead: { _ in }
             )
             .frame(width: 260)
 
             TokensInlineSpec(
-                spec: "LeafWorkspaceSwitcher · 32pt rows · checkmark/circle indicator · LeafAvatar initials · LeafBadge(count:) · context menu (Mark all read + Leave) · soft-left dimmed",
-                codeSnippet: "LeafWorkspaceSwitcher(workspaces: ws, activeWorkspaceID: id, unreadCounts: counts, onSelect: {}, onAddNew: {}, onLeave: {}, onMarkAllRead: {})"
+                spec: "LeafWorkspaceSwitcher · 32pt rows · checkmark/circle indicator · LeafAvatar initials · LeafBadge(count:) · context menu (Mark all read + Leave) · soft-left dimmed · footer rows: Add workspace + Join workspace",
+                codeSnippet: "LeafWorkspaceSwitcher(workspaces: ws, activeWorkspaceID: id, unreadCounts: counts, onSelect: {}, onAddNew: {}, onJoin: {}, onLeave: {}, onMarkAllRead: {})"
             )
         }
         .padding(LeafSpace.lg)
