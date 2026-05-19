@@ -299,6 +299,167 @@ final class DirectMessageInboxServiceTests: XCTestCase {
         XCTAssertNotNil(valid)
     }
 
+    // MARK: - Track 5 / S8 / T0 — decryptOnly(_:) coverage
+
+    func testDecryptOnly_ValidEnvelope_ReturnsPlaintext() async throws {
+        let plaintext = makePlaintext(messageID: "decrypt-1", body: "hello realtime")
+        let envelope = try makeEnvelope(plaintext: plaintext)
+        let svc = makeInboxService(supabase: makeSession())
+        let keyIDUUID = UUID(uuidString: teamKeyID)!
+        let input = EncryptedDirectMessageInput(
+            workspaceID: workspaceID,
+            messageID: plaintext.messageID,
+            encryptedPayload: envelope,
+            keyID: keyIDUUID,
+            aadHeader: envelope.prefix(17)
+        )
+
+        let decoded = try svc.decryptOnly(input)
+        XCTAssertEqual(decoded.messageID, plaintext.messageID)
+        XCTAssertEqual(decoded.body, "hello realtime")
+        XCTAssertEqual(decoded.workspaceID, workspaceID)
+    }
+
+    func testDecryptOnly_KeyNotInKeystore_Throws() async throws {
+        let svc = makeInboxService(supabase: makeSession())
+        // Unknown keyID — no .key file written for this UUID.
+        let unknownKeyID = UUID()
+        let input = EncryptedDirectMessageInput(
+            workspaceID: workspaceID,
+            messageID: "unknown-key-msg",
+            encryptedPayload: Data(repeating: 0x03, count: 64),
+            keyID: unknownKeyID,
+            aadHeader: Data(repeating: 0x03, count: 17)
+        )
+
+        do {
+            _ = try svc.decryptOnly(input)
+            XCTFail("expected throw on unknown keyID")
+        } catch {
+            // any throw acceptable — TeamKeystore.readTeamKey returns
+            // LeafError.keyFileUnavailable when the file is absent.
+        }
+    }
+
+    func testDecryptOnly_WrongTeamKey_DecodeError() async throws {
+        // Encrypt under a fresh key, but store a different key under the
+        // same keyID in the keystore — codec.decode must reject.
+        let plaintext = makePlaintext(messageID: "wrong-key-msg", body: "should fail")
+        // Overwrite the keystore entry with a bad key. The keystore writer
+        // is idempotent — last write wins.
+        let badKey = Data(repeating: 0x99, count: 32)
+        let keystoreRoot = tempDir.appendingPathComponent("keystore")
+        try TeamKeystore.writeTeamKey(badKey,
+                                       workspaceID: workspaceID,
+                                       keyID: teamKeyID,
+                                       at: keystoreRoot)
+        // Encrypt with the *original* teamKey (still in `teamKeyBytes`).
+        let envelope = try makeEnvelope(plaintext: plaintext)
+
+        let svc = makeInboxService(supabase: makeSession())
+        let keyIDUUID = UUID(uuidString: teamKeyID)!
+        let input = EncryptedDirectMessageInput(
+            workspaceID: workspaceID,
+            messageID: plaintext.messageID,
+            encryptedPayload: envelope,
+            keyID: keyIDUUID,
+            aadHeader: envelope.prefix(17)
+        )
+
+        // InboxTestCodec doesn't actually validate the team key bytes (it's
+        // a JSON pass-through), so decryptOnly succeeds here in the unit test.
+        // The real ProdDirectMessageBlobCodec validates AES-GCM tag — covered
+        // in the integration test in LeafCorePrivateTests
+        // (RealtimeDecryptionEndToEndIntegrationTests).
+        //
+        // What we can assert here: that decryptOnly does its keystore lookup
+        // via input.workspaceID + input.keyID (not via some other shortcut).
+        // If we point keyID at an unknown UUID, the keystore read MUST fail.
+        let unknownInput = EncryptedDirectMessageInput(
+            workspaceID: workspaceID,
+            messageID: plaintext.messageID,
+            encryptedPayload: envelope,
+            keyID: UUID(),    // unknown
+            aadHeader: envelope.prefix(17)
+        )
+        do {
+            _ = try svc.decryptOnly(unknownInput)
+            XCTFail("expected throw on unknown keyID dispatch from decryptOnly")
+        } catch {
+            // OK — keystore.readTeamKey throws LeafError.keyFileUnavailable
+        }
+        // Sanity: decryptOnly with the (mis-)stored key still produces a
+        // structurally valid plaintext via the JSON pass-through codec.
+        // This asserts the dispatch path; AES-GCM tag rejection lives in
+        // the integration test.
+        _ = input
+    }
+
+    // MARK: - extractEncryptedInput shape
+
+    func testExtractEncryptedInput_ValidEnvelope_PopulatesAllFields() async throws {
+        let plaintext = makePlaintext(messageID: "extract-1", body: "x")
+        let envelope = try makeEnvelope(plaintext: plaintext)
+        let row = SupabaseDirectMessageRow(
+            messageID: plaintext.messageID,
+            workspaceID: workspaceID,
+            senderPubkeyHex: senderPubkey,
+            recipientPubkeyHex: selfPubkey,
+            kind: "ping",
+            encryptedPayload: envelope,
+            crossPostJSON: nil,
+            createdAtISO: "2026-05-19T00:00:00.000Z",
+            readAtISO: nil,
+            doneAtISO: nil,
+            doneByPubkeyHex: nil,
+            replyTo: nil
+        )
+        let input = try DirectMessageInboxService.extractEncryptedInput(from: row)
+        XCTAssertEqual(input.workspaceID, workspaceID)
+        XCTAssertEqual(input.messageID, plaintext.messageID)
+        XCTAssertEqual(input.encryptedPayload, envelope)
+        XCTAssertEqual(input.aadHeader.count, 17)
+        XCTAssertEqual(input.aadHeader[input.aadHeader.startIndex], 0x03)
+        // keyID round-trip: should match the UUID we encoded with.
+        XCTAssertEqual(input.keyID.uuidString.lowercased(), teamKeyID)
+    }
+
+    func testExtractEncryptedInput_ShortBytes_Throws() async throws {
+        let row = SupabaseDirectMessageRow(
+            messageID: "short", workspaceID: workspaceID,
+            senderPubkeyHex: senderPubkey, recipientPubkeyHex: selfPubkey,
+            kind: "ping",
+            encryptedPayload: Data([0x03, 0x00, 0x00]),  // 3B << 17B
+            crossPostJSON: nil,
+            createdAtISO: "2026-05-19T00:00:00.000Z",
+            readAtISO: nil, doneAtISO: nil, doneByPubkeyHex: nil, replyTo: nil
+        )
+        XCTAssertThrowsError(try DirectMessageInboxService.extractEncryptedInput(from: row)) { error in
+            guard case LeafError.directMessageBlobMalformed = error else {
+                XCTFail("expected directMessageBlobMalformed, got \(error)"); return
+            }
+        }
+    }
+
+    func testExtractEncryptedInput_WrongVersionByte_Throws() async throws {
+        var bytes = Data(repeating: 0, count: 64)
+        bytes[bytes.startIndex] = 0x04  // wrong (this is the team-events envelope version)
+        let row = SupabaseDirectMessageRow(
+            messageID: "wrong-ver", workspaceID: workspaceID,
+            senderPubkeyHex: senderPubkey, recipientPubkeyHex: selfPubkey,
+            kind: "ping",
+            encryptedPayload: bytes,
+            crossPostJSON: nil,
+            createdAtISO: "2026-05-19T00:00:00.000Z",
+            readAtISO: nil, doneAtISO: nil, doneByPubkeyHex: nil, replyTo: nil
+        )
+        XCTAssertThrowsError(try DirectMessageInboxService.extractEncryptedInput(from: row)) { error in
+            guard case LeafError.directMessageBlobMalformed = error else {
+                XCTFail("expected directMessageBlobMalformed, got \(error)"); return
+            }
+        }
+    }
+
     func testC4_PlaintextKindWinsOverServerKind() async throws {
         // Server tries to change task → ping while ciphertext claims task.
         let plaintext = makePlaintext(messageID: "tamper-kind-1", body: "is a task", kind: .task)

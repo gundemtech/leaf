@@ -97,6 +97,16 @@ final class TeamEventMirrorReader: RealtimeTeamEventAbsorbing {
         }
     }
 
+    /// Track 5 / S8 / T0 — Phase H Realtime decryption wiring.
+    ///
+    /// Forwarder for the injected decryptor closure used by LeafRealtimeService.
+    /// Delegates to the wrapped `TeamEventMirrorService.decryptOnly(_:)`. The
+    /// reader is the env-injected boundary; the service stays private.
+    func decryptOnly(_ input: EncryptedTeamEventInput) async throws -> TeamEventPlaintext {
+        let svc = try ensureMirror()
+        return try await svc.decryptOnly(input)
+    }
+
     func pruneIfDueDaily(now: Date = Date()) async {
         if let last = lastPrunedAt, now.timeIntervalSince(last) < 86_400 {
             return

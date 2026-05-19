@@ -276,23 +276,38 @@ struct LeafApp: App {
         )
         let realtimeURL = LeafApp.realtimeURL(forSupabase: supabase)
 
-        // Decryption closures — Phase H ships the substrate; the wire→plaintext
-        // mapping requires keystore lookup + AES-GCM decode which is identical to
-        // existing TeamEventMirrorService.tick / DirectMessageInboxService.tick
-        // logic but isn't currently exposed as a clean per-row closure. Until
-        // that refactor lands (carryover), the closures throw a marker error and
-        // the Realtime path silently drops pushes (see LeafRealtimeService.dispatch).
-        // The 30s polling tick on OrganizationView already covers latency-tolerant
-        // delivery; Realtime is a latency optimisation, not a delivery requirement.
-        let teamEventDecryptor: @Sendable (SupabaseTeamEventRow) async throws -> TeamEventMirrorRow = { _ in
-            throw NSError(domain: "S7.RealtimeDecrypt", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "TeamEvent decrypt wiring deferred to signed-build smoke (G19); falls back to 30s mirror tick"
-            ])
+        // Track 5 / S8 / T0 — Phase H Realtime decryption wiring.
+        //
+        // The closures forward an `EncryptedTeamEventInput` /
+        // `EncryptedDirectMessageInput` (narrow shape with NO senderPubkeyHex /
+        // kind / replyTo — compile-time fence, see EncryptedRow.swift) to the
+        // reader's `decryptOnly(_:)` method, which delegates to the wrapped
+        // service. Service performs keystore lookup + AES-GCM decode via the
+        // injected codec (Prod codec under LEAF_PROD; Unimplemented stub
+        // otherwise — non-LEAF_PROD builds will silently no-op on Realtime).
+        //
+        // The C2/C3 plaintext-trust gates run INSIDE
+        // `LeafRealtimeService.handleTeamEventInsert` /
+        // `handleDirectMessageInsert` AFTER the decryptor returns —
+        // structural fence makes it a compile-time impossibility for the
+        // closure to bypass them.
+        //
+        // 30s polling fallback (OrganizationView .task tick) remains as
+        // safety net for the cold-start case where Realtime hasn't connected
+        // yet, or LEAF_PROD-off dev builds.
+        let mirrorReader = _teamEventMirrorReader.wrappedValue
+        let teamEventDecryptor: LeafRealtimeService.TeamEventDecryptor = { [weak mirrorReader] input in
+            guard let mirrorReader else {
+                throw LeafError.notImplemented
+            }
+            return try await mirrorReader.decryptOnly(input)
         }
-        let directMessageDecryptor: @Sendable (SupabaseDirectMessageRow) async throws -> DirectMessageMirrorRow = { _ in
-            throw NSError(domain: "S7.RealtimeDecrypt", code: 2, userInfo: [
-                NSLocalizedDescriptionKey: "DirectMessage decrypt wiring deferred to signed-build smoke (G19); falls back to 30s inbox tick"
-            ])
+        let dmInboxReader = inboxReader
+        let directMessageDecryptor: LeafRealtimeService.DirectMessageDecryptor = { [weak dmInboxReader] input in
+            guard let dmInboxReader else {
+                throw LeafError.notImplemented
+            }
+            return try await dmInboxReader.decryptOnly(input)
         }
 
         let crossPostLog = _crossPostLogReader.wrappedValue

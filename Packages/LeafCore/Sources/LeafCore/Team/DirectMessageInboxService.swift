@@ -117,6 +117,67 @@ public struct DirectMessageInboxService: Sendable {
         }
     }
 
+    /// Track 5 / S8 / T0 — Phase H Realtime decryption wiring.
+    ///
+    /// Pure decryption: keystore lookup + codec.decode under the workspace
+    /// team key identified by `input.keyID`. No DB writes, no trust gates —
+    /// the caller (LeafRealtimeService) applies C2/C3 plaintext-trust gates
+    /// against RLS-attested wire fields after this returns.
+    ///
+    /// This is the same logic as the polling `tick(workspaceID:)` loop's
+    /// per-row `decryptRow` helper, factored into a public method so the
+    /// Realtime path can reuse it without duplicating envelope-peek logic.
+    ///
+    /// - Throws: `LeafError.keyFileUnavailable` if the keyID is unknown
+    ///   (keystore has no .key file for the workspace+keyID pair);
+    ///   `LeafError.directMessageBlobMalformed` (or codec-specific) on
+    ///   AES-GCM tag mismatch / JSON decode failure.
+    public func decryptOnly(_ input: EncryptedDirectMessageInput) throws -> DirectMessagePlaintext {
+        let keyIDStr = input.keyID.uuidString.lowercased()
+        let teamKey = try TeamKeystore.readTeamKey(
+            workspaceID: input.workspaceID, keyID: keyIDStr, at: keystoreRoot
+        )
+        return try codec.decode(input.encryptedPayload, teamKey: teamKey)
+    }
+
+    /// Extract `EncryptedDirectMessageInput` from a wire row.
+    ///
+    /// Static helper — used by the Realtime path (LeafRealtimeService injects
+    /// a decryptor closure constructed via `decryptOnly`; the closure first
+    /// calls this to peel the envelope header). The polling `tick` loop also
+    /// goes through this path via `decryptOnly` for code-path parity with
+    /// Realtime.
+    ///
+    /// - Throws: `LeafError.directMessageBlobMalformed` on short bytes
+    ///   (< 17B header) or non-DM envelope version byte (0x03 expected).
+    public static func extractEncryptedInput(
+        from row: SupabaseDirectMessageRow
+    ) throws -> EncryptedDirectMessageInput {
+        let bytes = row.encryptedPayload
+        guard bytes.count >= 17,
+              bytes[bytes.startIndex] == 0x03 else {
+            throw LeafError.directMessageBlobMalformed
+        }
+        let keyIDStart = bytes.index(bytes.startIndex, offsetBy: 1)
+        let keyIDEnd = bytes.index(keyIDStart, offsetBy: 16)
+        let keyIDData = Data(bytes[keyIDStart..<keyIDEnd])
+        guard keyIDData.count == 16 else {
+            throw LeafError.directMessageBlobMalformed
+        }
+        let uuid = keyIDData.withUnsafeBytes { ptr in
+            ptr.load(as: uuid_t.self)
+        }
+        let keyIDUUID = UUID(uuid: uuid)
+        let aadHeader = Data(bytes[bytes.startIndex..<keyIDEnd])
+        return EncryptedDirectMessageInput(
+            workspaceID: row.workspaceID,
+            messageID: row.messageID,
+            encryptedPayload: bytes,
+            keyID: keyIDUUID,
+            aadHeader: aadHeader
+        )
+    }
+
     // MARK: - Helpers
 
     private func decryptRow(

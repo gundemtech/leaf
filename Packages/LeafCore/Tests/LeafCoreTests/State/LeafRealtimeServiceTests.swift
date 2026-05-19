@@ -34,6 +34,10 @@ final class LeafRealtimeServiceTests: XCTestCase {
     private let supabaseBaseURL = URL(string: "https://test.supabase.co")!
     private let anonKey = "test-anon-key"
     private let pubkey = String(repeating: "42", count: 32)
+    /// Canonical recipient pubkey used by tests that fire DM postgres_changes
+    /// frames. Must match the literal in `recipient_pubkey` JSON fields below
+    /// so the C2/C3 plaintext-trust gates pass for happy-path tests.
+    private let recipientPubkey = String(repeating: "CC", count: 32)
     private let userID = "00000000-0000-0000-0000-000000000fff"
 
     override func tearDown() async throws {
@@ -112,6 +116,29 @@ final class LeafRealtimeServiceTests: XCTestCase {
         )
     }
 
+    /// Track 5 / S8 / T0 — Phase H. The Realtime dispatch path now extracts
+    /// `EncryptedTeamEventInput` from the wire row before invoking the
+    /// injected decryptor. The extraction requires a valid envelope header
+    /// (1B version=0x04 + 16B keyID) — minimum 17 bytes. Tests must produce
+    /// fixtures matching that shape, otherwise the handler short-circuits
+    /// before reaching the decryptor closure.
+    static let fixtureKeyIDBytes: [UInt8] = Array(repeating: 0xAA, count: 16)
+    static var fixtureTeamEventEnvelope: Data {
+        Data([0x04] + fixtureKeyIDBytes + [0xCD, 0xEF])
+    }
+    static var fixtureDirectMessageEnvelope: Data {
+        Data([0x03] + fixtureKeyIDBytes + [0x12, 0x34])
+    }
+    /// PostgreSQL `bytea` hex literal form of the team-event fixture envelope,
+    /// for use in raw `postgres_changes` Realtime frames embedded as JSON.
+    static var fixtureTeamEventEnvelopeHex: String {
+        "\\x" + fixtureTeamEventEnvelope.map { String(format: "%02x", $0) }.joined()
+    }
+    /// PostgreSQL `bytea` hex literal form of the DM fixture envelope.
+    static var fixtureDirectMessageEnvelopeHex: String {
+        "\\x" + fixtureDirectMessageEnvelope.map { String(format: "%02x", $0) }.joined()
+    }
+
     private func teamEventRow(eventID: String,
                               workspaceID: String,
                               senderPubkey: String) -> SupabaseTeamEventRow {
@@ -121,7 +148,7 @@ final class LeafRealtimeServiceTests: XCTestCase {
             senderPubkeyHex: senderPubkey,
             sourceKind: "git_commits",
             kind: "commit_authored",
-            encryptedPayload: Data([0x04, 0xAA, 0xBB]),
+            encryptedPayload: Self.fixtureTeamEventEnvelope,
             createdAtISO: "2026-05-18T12:00:00Z",
             createdAtMs: 1_716_000_000_000,
             expiresAtISO: nil
@@ -138,7 +165,7 @@ final class LeafRealtimeServiceTests: XCTestCase {
             senderPubkeyHex: senderPubkey,
             recipientPubkeyHex: recipientPubkey,
             kind: "handoff",
-            encryptedPayload: Data([0x04, 0xCC, 0xDD]),
+            encryptedPayload: Self.fixtureDirectMessageEnvelope,
             crossPostJSON: nil,
             createdAtISO: "2026-05-18T12:00:00Z",
             readAtISO: nil,
@@ -148,57 +175,67 @@ final class LeafRealtimeServiceTests: XCTestCase {
         )
     }
 
-    /// Build a TeamEventMirrorRow from the encrypted wire row, preserving the
-    /// claimed senderPubkeyHex/workspaceID so the C2/C3 trust gates in dispatch
-    /// can verify they match the column-attested values.
-    /// `nonisolated static` so test helpers can invoke from @Sendable closures
-    /// without main-actor capture.
-    nonisolated static func teamEventMirrorRowMatching(_ row: SupabaseTeamEventRow,
-                                                       claimedSender: String? = nil,
-                                                       claimedWorkspaceID: String? = nil) -> TeamEventMirrorRow {
-        TeamEventMirrorRow(
-            eventID: row.eventID,
-            workspaceID: claimedWorkspaceID ?? row.workspaceID,
-            senderPubkeyHex: claimedSender ?? row.senderPubkeyHex,
+    /// Track 5 / S8 / T0 — Phase H decryptor signature is now
+    /// `(EncryptedTeamEventInput) -> TeamEventPlaintext`. The narrow input
+    /// omits senderPubkeyHex / workspaceID-from-wire / kind — the test
+    /// decryptor synthesises a plaintext using `input.workspaceID` (which
+    /// is the RLS-attested wire workspace_id, copied during extraction) and
+    /// the `claimed*` overrides for negative-path scenarios. The C2/C3 trust
+    /// gates in dispatch compare returned plaintext fields against wire row
+    /// columns; tests that want to PASS the gates set `claimedSender` /
+    /// `claimedWorkspaceID` to the wire row's values.
+    nonisolated static func teamEventPlaintextMatching(_ input: EncryptedTeamEventInput,
+                                                        claimedSender: String,
+                                                        claimedWorkspaceID: String? = nil,
+                                                        eventID: String = "ev-X",
+                                                        kind: String = "commit_authored") -> TeamEventPlaintext {
+        TeamEventPlaintext(
+            eventID: eventID,
+            workspaceID: claimedWorkspaceID ?? input.workspaceID,
+            senderMemberID: "member-fixture",
+            senderPubkeyHex: claimedSender,
             source: .gitCommits,
-            kind: row.kind,
-            plaintextPayloadJSON: "{}",
-            serverCreatedAtMs: row.createdAtMs,
-            eventTsMs: row.createdAtMs,
-            receivedAtMs: row.createdAtMs
+            kind: kind,
+            payload: TeamEventPayload(fields: [:]),
+            eventTsMs: 1_716_000_000_000
         )
     }
 
-    nonisolated static func dmMirrorRowMatching(_ row: SupabaseDirectMessageRow,
-                                                claimedSender: String? = nil,
-                                                claimedWorkspaceID: String? = nil) -> DirectMessageMirrorRow {
-        DirectMessageMirrorRow(
-            messageID: row.messageID,
-            workspaceID: claimedWorkspaceID ?? row.workspaceID,
-            senderPubkeyHex: claimedSender ?? row.senderPubkeyHex,
+    nonisolated static func dmPlaintextMatching(_ input: EncryptedDirectMessageInput,
+                                                 claimedSender: String,
+                                                 claimedWorkspaceID: String? = nil,
+                                                 recipientPubkeyHex: String) -> DirectMessagePlaintext {
+        DirectMessagePlaintext(
+            messageID: input.messageID,
+            workspaceID: claimedWorkspaceID ?? input.workspaceID,
             senderMemberID: "member-fixture",
+            senderPubkeyHex: claimedSender,
             senderDisplayName: "Test User",
-            recipientPubkeyHex: row.recipientPubkeyHex,
+            recipientMemberID: nil,
+            recipientPubkeyHex: recipientPubkeyHex,
             kind: .handoff,
             body: "test body",
-            sentAtMs: 1_716_000_000_000,
-            serverCreatedAtMs: 1_716_000_000_000,
-            direction: .inbound,
-            lastSyncedAtMs: 1_716_000_000_000
+            attachment: nil,
+            replyTo: nil,
+            sentAtMs: 1_716_000_000_000
         )
     }
 
-    /// Default decryptor closures — identity-mirror transforms. Use the
-    /// nonisolated static so the closure stays @Sendable-friendly.
-    private nonisolated func defaultTeamEventDecryptor() -> @Sendable (SupabaseTeamEventRow) async throws -> TeamEventMirrorRow {
-        return { @Sendable row in
-            Self.teamEventMirrorRowMatching(row)
+    /// Default decryptor closures — synthesise plaintext that satisfies the
+    /// C2/C3 gates against the canonical `pubkey` constant + the wire
+    /// workspace id (which equals `input.workspaceID` post-extraction).
+    private nonisolated func defaultTeamEventDecryptor() -> LeafRealtimeService.TeamEventDecryptor {
+        let sender = self.pubkey
+        return { @Sendable input in
+            Self.teamEventPlaintextMatching(input, claimedSender: sender)
         }
     }
 
-    private nonisolated func defaultDirectMessageDecryptor() -> @Sendable (SupabaseDirectMessageRow) async throws -> DirectMessageMirrorRow {
-        return { @Sendable row in
-            Self.dmMirrorRowMatching(row)
+    private nonisolated func defaultDirectMessageDecryptor() -> LeafRealtimeService.DirectMessageDecryptor {
+        let sender = self.pubkey
+        let recipient = self.recipientPubkey
+        return { @Sendable input in
+            Self.dmPlaintextMatching(input, claimedSender: sender, recipientPubkeyHex: recipient)
         }
     }
 
@@ -209,8 +246,8 @@ final class LeafRealtimeServiceTests: XCTestCase {
         directMessageInboxReader: any RealtimeDirectMessageAbsorbing,
         teamEventMirrorReader: any RealtimeTeamEventAbsorbing,
         crossPostLogReader: CrossPostLogReader,
-        teamEventDecryptor: (@Sendable (SupabaseTeamEventRow) async throws -> TeamEventMirrorRow)? = nil,
-        directMessageDecryptor: (@Sendable (SupabaseDirectMessageRow) async throws -> DirectMessageMirrorRow)? = nil
+        teamEventDecryptor: LeafRealtimeService.TeamEventDecryptor? = nil,
+        directMessageDecryptor: LeafRealtimeService.DirectMessageDecryptor? = nil
     ) -> LeafRealtimeService {
         LeafRealtimeService(
             driver: driver,
@@ -459,12 +496,17 @@ final class LeafRealtimeServiceTests: XCTestCase {
         await driver.dispatchMessage(.string(okJSON))
 
         let recordJSON: [String: Any] = [
-            "event_id": "ev-1",
+            // Track 5 / S8 / T0 — Phase H. Mirror row's eventID is sourced from
+            // plaintext.eventID (matches `tick` polling-path discipline). Default
+            // decryptor synthesises `eventID="ev-X"`; we set the wire `event_id`
+            // to the same value so the production invariant (plaintext eventID ==
+            // wire eventID) holds in the test fixture.
+            "event_id": "ev-X",
             "workspace_id": "wid-A",
             "sender_pubkey": pubkey,
             "source_kind": "git_commits",
             "kind": "commit_authored",
-            "encrypted_payload": "\\x04AABB",
+            "encrypted_payload": Self.fixtureTeamEventEnvelopeHex,
             "created_at": "2026-05-18T12:00:00.123Z",
             "expires_at": "2026-06-17T12:00:00.123Z",
         ]
@@ -481,7 +523,7 @@ final class LeafRealtimeServiceTests: XCTestCase {
         // Wait for dispatch loop to drain.
         try await waitForCondition { teamStub.received.count == 1 }
         XCTAssertEqual(teamStub.received.count, 1)
-        XCTAssertEqual(teamStub.received.first?.eventID, "ev-1")
+        XCTAssertEqual(teamStub.received.first?.eventID, "ev-X")
         XCTAssertEqual(teamStub.received.first?.workspaceID, "wid-A")
         await service.suspend()
     }
@@ -513,7 +555,7 @@ final class LeafRealtimeServiceTests: XCTestCase {
             "sender_pubkey": pubkey,
             "source_kind": "git_commits",
             "kind": "commit_authored",
-            "encrypted_payload": "\\x04",
+            "encrypted_payload": Self.fixtureTeamEventEnvelopeHex,
             "created_at": "2026-05-18T12:00:00.123Z",
         ]
         let envelope: [String: Any] = [
@@ -540,7 +582,7 @@ final class LeafRealtimeServiceTests: XCTestCase {
         let dmStub = MockDirectMessageAbsorber()
         let teamStub = MockTeamEventAbsorber()
         let crossPost = CrossPostLogReader(supabase: supabase)
-        let failingDecryptor: @Sendable (SupabaseTeamEventRow) async throws -> TeamEventMirrorRow = { _ in
+        let failingDecryptor: LeafRealtimeService.TeamEventDecryptor = { _ in
             throw NSError(domain: "test.decrypt.fail", code: 1)
         }
         let service = makeService(
@@ -559,7 +601,8 @@ final class LeafRealtimeServiceTests: XCTestCase {
         let recordJSON: [String: Any] = [
             "event_id": "ev-X", "workspace_id": "wid-A",
             "sender_pubkey": pubkey, "source_kind": "git_commits", "kind": "commit_authored",
-            "encrypted_payload": "\\x04", "created_at": "2026-05-18T12:00:00.123Z",
+            "encrypted_payload": Self.fixtureTeamEventEnvelopeHex,
+            "created_at": "2026-05-18T12:00:00.123Z",
         ]
         let envelope: [String: Any] = [
             "topic": "realtime:leaf-workspace-wid-A",
@@ -586,8 +629,8 @@ final class LeafRealtimeServiceTests: XCTestCase {
         let teamStub = MockTeamEventAbsorber()
         let crossPost = CrossPostLogReader(supabase: supabase)
         // Decryptor that returns a plaintext claiming a different sender.
-        let mismatchSenderDecryptor: @Sendable (SupabaseTeamEventRow) async throws -> TeamEventMirrorRow = { row in
-            Self.teamEventMirrorRowMatching(row, claimedSender: String(repeating: "BB", count: 32))
+        let mismatchSenderDecryptor: LeafRealtimeService.TeamEventDecryptor = { input in
+            Self.teamEventPlaintextMatching(input, claimedSender: String(repeating: "BB", count: 32))
         }
         let service = makeService(
             driver: driver, supabase: supabase,
@@ -605,7 +648,8 @@ final class LeafRealtimeServiceTests: XCTestCase {
         let recordJSON: [String: Any] = [
             "event_id": "ev-X", "workspace_id": "wid-A",
             "sender_pubkey": pubkey, "source_kind": "git_commits", "kind": "commit_authored",
-            "encrypted_payload": "\\x04", "created_at": "2026-05-18T12:00:00.123Z",
+            "encrypted_payload": Self.fixtureTeamEventEnvelopeHex,
+            "created_at": "2026-05-18T12:00:00.123Z",
         ]
         let envelope: [String: Any] = [
             "topic": "realtime:leaf-workspace-wid-A",
@@ -646,7 +690,9 @@ final class LeafRealtimeServiceTests: XCTestCase {
             "sender_pubkey": pubkey,
             "recipient_pubkey": String(repeating: "CC", count: 32),
             "kind": "handoff",
-            "encrypted_payload": "\\x04CCDD",
+            // Track 5 / S8 / T0 — Phase H: must satisfy extractEncryptedInput's
+            // 17B minimum (1B version=0x03 + 16B keyID).
+            "encrypted_payload": Self.fixtureDirectMessageEnvelopeHex,
             "created_at": "2026-05-18T12:00:00.123Z",
         ]
         let envelope: [String: Any] = [
@@ -722,7 +768,8 @@ final class LeafRealtimeServiceTests: XCTestCase {
         let recordJSON: [String: Any] = [
             "message_id": "msg-xp", "workspace_id": "wid-A",
             "sender_pubkey": pubkey, "recipient_pubkey": String(repeating: "CC", count: 32),
-            "kind": "handoff", "encrypted_payload": "\\x04",
+            "kind": "handoff",
+            "encrypted_payload": Self.fixtureDirectMessageEnvelopeHex,
             "created_at": "2026-05-18T12:00:00.123Z",
         ]
         let envelope: [String: Any] = [
@@ -762,7 +809,8 @@ final class LeafRealtimeServiceTests: XCTestCase {
         let recordJSON: [String: Any] = [
             "message_id": "msg-2", "workspace_id": "wid-A",
             "sender_pubkey": pubkey, "recipient_pubkey": String(repeating: "CC", count: 32),
-            "kind": "handoff", "encrypted_payload": "\\x04",
+            "kind": "handoff",
+            "encrypted_payload": Self.fixtureDirectMessageEnvelopeHex,
             "created_at": "2026-05-18T12:00:00.123Z",
             "read_at": "2026-05-18T12:05:00.000Z",
         ]

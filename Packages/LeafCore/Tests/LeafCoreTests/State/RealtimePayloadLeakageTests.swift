@@ -79,8 +79,13 @@ final class RealtimePayloadLeakageTests: XCTestCase {
         let crossPost = CrossPostLogReader(supabase: supabase)
 
         // Decryptor always throws.
-        let failDecrypt: @Sendable (SupabaseTeamEventRow) async throws -> TeamEventMirrorRow = { _ in
+        // Track 5 / S8 / T0 — Phase H signature: input narrowed to
+        // EncryptedTeamEventInput (no sender / kind in scope).
+        let failDecrypt: LeafRealtimeService.TeamEventDecryptor = { _ in
             throw NSError(domain: "test.leak", code: 1)
+        }
+        let failDecryptDM: LeafRealtimeService.DirectMessageDecryptor = { _ in
+            throw NSError(domain: "test.leak", code: 2)
         }
 
         let service = LeafRealtimeService(
@@ -92,7 +97,7 @@ final class RealtimePayloadLeakageTests: XCTestCase {
             crossPostLogReader: crossPost,
             realtimeURL: supabaseBaseURL,
             teamEventDecryptor: failDecrypt,
-            directMessageDecryptor: { _ in throw NSError(domain: "test.leak", code: 2) }
+            directMessageDecryptor: failDecryptDM
         )
 
         await service.subscribe(workspaceID: "ws-sentinel")
@@ -152,8 +157,13 @@ final class RealtimePayloadLeakageTests: XCTestCase {
         let teamStub = MockTeamEventAbsorber()
         let crossPost = CrossPostLogReader(supabase: supabase)
 
-        let failDecrypt: @Sendable (SupabaseDirectMessageRow) async throws -> DirectMessageMirrorRow = { _ in
+        // Track 5 / S8 / T0 — Phase H signature: input narrowed to
+        // EncryptedDirectMessageInput (no sender / recipient / kind / replyTo in scope).
+        let failDecrypt: LeafRealtimeService.DirectMessageDecryptor = { _ in
             throw NSError(domain: "test.leak", code: 3)
+        }
+        let failDecryptTeam: LeafRealtimeService.TeamEventDecryptor = { _ in
+            throw NSError(domain: "test.leak", code: 4)
         }
 
         let service = LeafRealtimeService(
@@ -164,7 +174,7 @@ final class RealtimePayloadLeakageTests: XCTestCase {
             teamEventMirrorReader: teamStub,
             crossPostLogReader: crossPost,
             realtimeURL: supabaseBaseURL,
-            teamEventDecryptor: { _ in throw NSError(domain: "test.leak", code: 4) },
+            teamEventDecryptor: failDecryptTeam,
             directMessageDecryptor: failDecrypt
         )
 

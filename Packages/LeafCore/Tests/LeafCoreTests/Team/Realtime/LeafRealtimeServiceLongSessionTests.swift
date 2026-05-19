@@ -130,40 +130,22 @@ final class LeafRealtimeServiceLongSessionTests: XCTestCase {
         return client
     }
 
-    private nonisolated func defaultTeamEventDecryptor()
-        -> @Sendable (SupabaseTeamEventRow) async throws -> TeamEventMirrorRow {
-        return { @Sendable row in
-            TeamEventMirrorRow(
-                eventID: row.eventID,
-                workspaceID: row.workspaceID,
-                senderPubkeyHex: row.senderPubkeyHex,
-                source: .gitCommits,
-                kind: row.kind,
-                plaintextPayloadJSON: "{}",
-                serverCreatedAtMs: row.createdAtMs,
-                eventTsMs: row.createdAtMs,
-                receivedAtMs: row.createdAtMs
-            )
+    // Track 5 / S8 / T0 — Phase H. Decryptor signature is now
+    // `(EncryptedTeamEventInput) -> TeamEventPlaintext`. These long-session
+    // tests exercise JWT refresh + reconnect — they don't fire postgres_changes
+    // frames, so the decryptor is never actually invoked. Stub closures
+    // throw `LeafError.notImplemented`; if a future test attempts to push
+    // an envelope through this service, the throw surfaces as a test failure
+    // making the gap obvious.
+    private nonisolated func defaultTeamEventDecryptor() -> LeafRealtimeService.TeamEventDecryptor {
+        return { @Sendable _ in
+            throw LeafError.notImplemented
         }
     }
 
-    private nonisolated func defaultDirectMessageDecryptor()
-        -> @Sendable (SupabaseDirectMessageRow) async throws -> DirectMessageMirrorRow {
-        return { @Sendable row in
-            DirectMessageMirrorRow(
-                messageID: row.messageID,
-                workspaceID: row.workspaceID,
-                senderPubkeyHex: row.senderPubkeyHex,
-                senderMemberID: "x",
-                senderDisplayName: "x",
-                recipientPubkeyHex: row.recipientPubkeyHex,
-                kind: .handoff,
-                body: "",
-                sentAtMs: 0,
-                serverCreatedAtMs: 0,
-                direction: .inbound,
-                lastSyncedAtMs: 0
-            )
+    private nonisolated func defaultDirectMessageDecryptor() -> LeafRealtimeService.DirectMessageDecryptor {
+        return { @Sendable _ in
+            throw LeafError.notImplemented
         }
     }
 

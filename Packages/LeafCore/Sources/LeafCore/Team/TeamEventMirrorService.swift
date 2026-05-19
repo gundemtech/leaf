@@ -91,26 +91,30 @@ public actor TeamEventMirrorService {
         let receivedAtMs = Int64(now().timeIntervalSince1970 * 1000)
         for row in rows {
             do {
-                let bytes = row.encryptedPayload
-                guard bytes.count >= Self.envelopeHeaderSize,
-                      bytes[bytes.startIndex] == Self.teamEventEnvelopeVersion else {
+                // Build an EncryptedTeamEventInput from the wire row + decrypt.
+                // Same path as Realtime push (Phase H, T0 — see decryptOnly).
+                // On envelope shape failure, decryptOnly throws
+                // `LeafError.teamEventBlobMalformed`; treat as skip for this row.
+                let input: EncryptedTeamEventInput
+                do {
+                    input = try Self.extractEncryptedInput(from: row, workspaceID: workspaceID)
+                } catch {
                     logger.warning("mirror skip — bad envelope header for event=\(row.eventID, privacy: .public)")
                     continue
                 }
-                let keyIDStart = bytes.index(bytes.startIndex, offsetBy: 1)
-                let keyIDEnd = bytes.index(keyIDStart, offsetBy: 16)
-                let keyID = Data(bytes[keyIDStart..<keyIDEnd])
-                let keyIDStr = Self.keyIDDataToUUIDString(keyID)
-                let teamKey: Data
+                let plaintext: TeamEventPlaintext
                 do {
-                    teamKey = try TeamKeystore.readTeamKey(
-                        workspaceID: workspaceID, keyID: keyIDStr, at: keystoreRoot
-                    )
+                    plaintext = try decryptOnly(input)
                 } catch {
-                    logger.warning("mirror skip — unknown keyID for event=\(row.eventID, privacy: .public)")
-                    continue
+                    // Per S5 Stage 6 review tradition: unknown keyID logged as
+                    // a distinct warning (most common case); decode failures
+                    // logged below in the outer catch.
+                    if case LeafError.keyFileUnavailable(_) = error {
+                        logger.warning("mirror skip — unknown keyID for event=\(row.eventID, privacy: .public)")
+                        continue
+                    }
+                    throw error
                 }
-                let plaintext = try codec.decode(bytes, teamKey: teamKey)
                 decoded += 1
 
                 // C2 Stage 6 review fix — sender impersonation guard.
@@ -189,7 +193,67 @@ public actor TeamEventMirrorService {
         }
     }
 
+    /// Track 5 / S8 / T0 — Phase H Realtime decryption wiring.
+    ///
+    /// Pure decryption: keystore lookup + codec.decode under the workspace
+    /// team key identified by `input.keyID`. No DB writes, no trust gates —
+    /// the caller (LeafRealtimeService) applies C2/C3 plaintext-trust gates
+    /// against RLS-attested wire fields after this returns.
+    ///
+    /// This is the same logic as the polling `tick(workspaceID:)` loop's
+    /// per-row decryption block, factored into a single public method so the
+    /// Realtime path can reuse it without duplicating envelope-peek logic.
+    ///
+    /// - Throws: `LeafError.keyFileUnavailable` if the keyID is unknown
+    ///   (keystore has no .key file for the workspace+keyID pair);
+    ///   `LeafError.teamEventBlobMalformed` (or codec-specific) on AES-GCM
+    ///   tag mismatch / JSON decode failure.
+    public func decryptOnly(_ input: EncryptedTeamEventInput) throws -> TeamEventPlaintext {
+        let keyIDStr = input.keyID.uuidString.lowercased()
+        let teamKey = try TeamKeystore.readTeamKey(
+            workspaceID: input.workspaceID, keyID: keyIDStr, at: keystoreRoot
+        )
+        return try codec.decode(input.encryptedPayload, teamKey: teamKey)
+    }
+
     // MARK: - Internals
+
+    /// Extract `EncryptedTeamEventInput` from a wire row.
+    ///
+    /// Static helper — shared by `tick` (polling) and the Realtime path
+    /// (LeafRealtimeService injects a decryptor closure constructed via
+    /// `decryptOnly`; the closure first calls this to peel the envelope
+    /// header). Caller passes `workspaceID` explicitly because the polling
+    /// loop scopes per-tick; the wire row's workspace_id is also RLS-attested
+    /// and could in principle be used, but we mirror tick's discipline of
+    /// trusting the caller's scope param.
+    ///
+    /// - Throws: `LeafError.teamEventBlobMalformed` on short bytes or unknown
+    ///   version byte.
+    static func extractEncryptedInput(
+        from row: SupabaseTeamEventRow,
+        workspaceID: String
+    ) throws -> EncryptedTeamEventInput {
+        let bytes = row.encryptedPayload
+        guard bytes.count >= envelopeHeaderSize,
+              bytes[bytes.startIndex] == teamEventEnvelopeVersion else {
+            throw LeafError.teamEventBlobMalformed
+        }
+        let keyIDStart = bytes.index(bytes.startIndex, offsetBy: 1)
+        let keyIDEnd = bytes.index(keyIDStart, offsetBy: 16)
+        let keyIDData = Data(bytes[keyIDStart..<keyIDEnd])
+        let keyIDStr = keyIDDataToUUIDString(keyIDData)
+        guard let keyIDUUID = UUID(uuidString: keyIDStr) else {
+            throw LeafError.teamEventBlobMalformed
+        }
+        let aadHeader = Data(bytes[bytes.startIndex..<keyIDEnd])
+        return EncryptedTeamEventInput(
+            workspaceID: workspaceID,
+            encryptedPayload: bytes,
+            keyID: keyIDUUID,
+            aadHeader: aadHeader
+        )
+    }
 
     static func keyIDDataToUUIDString(_ data: Data) -> String {
         guard data.count == 16 else { return "" }

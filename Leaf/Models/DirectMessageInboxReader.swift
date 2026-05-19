@@ -111,6 +111,16 @@ final class DirectMessageInboxReader: RealtimeDirectMessageAbsorbing {
         }
     }
 
+    /// Track 5 / S8 / T0 — Phase H Realtime decryption wiring.
+    ///
+    /// Forwarder for the injected decryptor closure used by LeafRealtimeService.
+    /// Delegates to the wrapped `DirectMessageInboxService.decryptOnly(_:)`. The
+    /// reader is the env-injected boundary; the service stays private.
+    func decryptOnly(_ input: EncryptedDirectMessageInput) throws -> DirectMessagePlaintext {
+        let svc = try ensureService()
+        return try svc.decryptOnly(input)
+    }
+
     /// Realtime push handler — UPSERTs a single inbound DM row + refreshes counts.
     /// Called by LeafRealtimeService when a Realtime POSTGRES_CHANGES INSERT/UPDATE
     /// event fires on `direct_messages` for this device's pubkey.

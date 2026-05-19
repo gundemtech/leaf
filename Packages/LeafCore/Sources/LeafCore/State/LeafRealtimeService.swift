@@ -66,6 +66,23 @@ public final class LeafRealtimeService {
         case suspended
     }
 
+    // MARK: - Decryptor closure types
+    //
+    // Track 5 / S8 / T0 — Phase H Realtime decryption wiring.
+    //
+    // Decryptor closures receive an `EncryptedTeamEventInput` /
+    // `EncryptedDirectMessageInput` — a deliberately narrow view of the wire
+    // row that omits RLS-attested fields (senderPubkeyHex, kind, replyTo).
+    // The C2/C3 plaintext-trust gates compare the returned plaintext fields
+    // against the wire row's RLS-attested columns inside the handler — fence
+    // is structural (decryptor literally cannot see those columns to bypass
+    // a gate).
+    //
+    // See `EncryptedRow.swift` for the A-I4 carry-over fence rationale.
+
+    public typealias TeamEventDecryptor = @Sendable (EncryptedTeamEventInput) async throws -> TeamEventPlaintext
+    public typealias DirectMessageDecryptor = @Sendable (EncryptedDirectMessageInput) async throws -> DirectMessagePlaintext
+
     // MARK: - Published surface
 
     public private(set) var state: ConnectionState = .disconnected
@@ -80,8 +97,9 @@ public final class LeafRealtimeService {
     private weak var teamEventMirrorReader: (any RealtimeTeamEventAbsorbing)?
     private let crossPostLogReader: CrossPostLogReader
     private let realtimeURL: URL
-    private let teamEventDecryptor: @Sendable (SupabaseTeamEventRow) async throws -> TeamEventMirrorRow
-    private let directMessageDecryptor: @Sendable (SupabaseDirectMessageRow) async throws -> DirectMessageMirrorRow
+    private let teamEventDecryptor: TeamEventDecryptor
+    private let directMessageDecryptor: DirectMessageDecryptor
+    private let now: @Sendable () -> Date
 
     // MARK: - Private state
 
@@ -114,8 +132,9 @@ public final class LeafRealtimeService {
         teamEventMirrorReader: any RealtimeTeamEventAbsorbing,
         crossPostLogReader: CrossPostLogReader,
         realtimeURL: URL,
-        teamEventDecryptor: @escaping @Sendable (SupabaseTeamEventRow) async throws -> TeamEventMirrorRow,
-        directMessageDecryptor: @escaping @Sendable (SupabaseDirectMessageRow) async throws -> DirectMessageMirrorRow
+        teamEventDecryptor: @escaping TeamEventDecryptor,
+        directMessageDecryptor: @escaping DirectMessageDecryptor,
+        now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.driver = driver
         self.supabase = supabase
@@ -126,6 +145,7 @@ public final class LeafRealtimeService {
         self.realtimeURL = realtimeURL
         self.teamEventDecryptor = teamEventDecryptor
         self.directMessageDecryptor = directMessageDecryptor
+        self.now = now
 
         // P1 re-dispatch — Important-2 race fix. Composition root passes the
         // jwtProvider into RealtimeWebSocketDriver.init directly (no
@@ -410,43 +430,143 @@ public final class LeafRealtimeService {
     private func handleTeamEventInsert(_ row: SupabaseTeamEventRow) async {
         // C3 trust gate: workspace_id must match the workspace we subscribed to.
         // Defence vs compromised relay attempting cross-workspace fan-out.
+        // (Server RLS already filters by workspace membership; this is a
+        // belt-and-suspenders check against the case where the recipient is
+        // a member of multiple workspaces and the relay multiplexes events
+        // for the wrong channel.)
         guard row.workspaceID == currentWorkspaceID else { return }
-        let mirrorRow: TeamEventMirrorRow
+
+        // T0 Phase H — extract narrow `EncryptedTeamEventInput` (no
+        // senderPubkeyHex/kind in scope) and run injected decryptor.
+        let input: EncryptedTeamEventInput
         do {
-            mirrorRow = try await teamEventDecryptor(row)
+            input = try TeamEventMirrorService.extractEncryptedInput(
+                from: row, workspaceID: row.workspaceID
+            )
         } catch {
-            // Decryption failed (key not found, ciphertext malformed, etc.).
+            // Bad envelope header — skip silently. 30s polling fallback in
+            // TeamEventMirrorReader will retry; same row stays unconsumed in
+            // the wire feed until either pruner expiry or another tick.
+            return
+        }
+        let plaintext: TeamEventPlaintext
+        do {
+            plaintext = try await teamEventDecryptor(input)
+        } catch {
+            // Decryption failed (unknown keyID, ciphertext malformed, etc.).
             // Skip silently — don't poison the stream.
             return
         }
+
         // C2 plaintext-trust gate: the senderPubkeyHex carried inside the
         // decrypted plaintext must match the column-attested sender_pubkey
-        // (RLS enforces that column = JWT pubkey of inserter).
-        guard mirrorRow.senderPubkeyHex == row.senderPubkeyHex else { return }
-        // C3 plaintext-trust gate: workspaceID inside plaintext must also match.
-        guard mirrorRow.workspaceID == row.workspaceID else { return }
+        // (RLS enforces that column = JWT pubkey of inserter; a compromised
+        // relay cannot mutate the column without invalidating RLS). Compare
+        // lowercased — defence vs hex casing drift.
+        guard plaintext.senderPubkeyHex.lowercased()
+              == row.senderPubkeyHex.lowercased() else { return }
+        // C3 plaintext-trust gate: workspaceID inside plaintext must also
+        // match the wire workspaceID. Defence vs cross-workspace leak.
+        guard plaintext.workspaceID == row.workspaceID else { return }
+
+        // Construct mirror row from RLS-attested wire fields (workspaceID,
+        // senderPubkeyHex) + authenticated plaintext (source, kind, payload).
+        // Matches TeamEventMirrorService.tick discipline: server-controlled
+        // sourceKind/kind columns are NOT trusted (S5 C4 precedent).
+        let receivedAtMs = Int64(now().timeIntervalSince1970 * 1000)
+        let plaintextJSON: String
+        do {
+            plaintextJSON = try TeamEventMirrorService.payloadJSONString(plaintext.payload)
+        } catch {
+            return  // shouldn't happen — sortedKeys JSON of a Codable payload
+        }
+        let mirrorRow = TeamEventMirrorRow(
+            eventID: plaintext.eventID,
+            workspaceID: row.workspaceID,
+            senderPubkeyHex: row.senderPubkeyHex,
+            source: plaintext.source,
+            kind: plaintext.kind,
+            plaintextPayloadJSON: plaintextJSON,
+            serverCreatedAtMs: row.createdAtMs,
+            eventTsMs: plaintext.eventTsMs,
+            receivedAtMs: receivedAtMs
+        )
         await teamEventMirrorReader?.absorbRealtimePush(mirrorRow)
     }
 
     private func handleDirectMessageInsert(_ row: SupabaseDirectMessageRow) async {
-        // C3 trust gate: workspace_id must match.
+        // C3 trust gate: workspace_id must match the subscribed workspace.
         guard row.workspaceID == currentWorkspaceID else { return }
-        let mirrorRow: DirectMessageMirrorRow
+
+        // T0 Phase H — narrow extract + injected decryptor (no senderPubkey,
+        // kind, replyTo in decryptor scope).
+        let input: EncryptedDirectMessageInput
         do {
-            mirrorRow = try await directMessageDecryptor(row)
+            input = try DirectMessageInboxService.extractEncryptedInput(from: row)
         } catch {
-            return
+            return  // bad envelope header — skip silently
         }
-        // C2: plaintext sender must match column.
-        guard mirrorRow.senderPubkeyHex == row.senderPubkeyHex else { return }
-        // C3 plaintext: workspaceID must match.
-        guard mirrorRow.workspaceID == row.workspaceID else { return }
+        let plaintext: DirectMessagePlaintext
+        do {
+            plaintext = try await directMessageDecryptor(input)
+        } catch {
+            return  // unknown keyID / ciphertext malformed
+        }
+
+        // C2 plaintext-trust gate.
+        guard plaintext.senderPubkeyHex.lowercased()
+              == row.senderPubkeyHex.lowercased() else { return }
+        // C3 plaintext-trust gate.
+        guard plaintext.workspaceID == row.workspaceID else { return }
+
+        // Construct mirror row — RLS-attested wire fields for identity columns,
+        // authenticated plaintext for kind/replyTo/body (S4 C4 precedent).
+        // Server-only fields (read_at, done_at) come from `row` since they're
+        // written by recipient post-decrypt and aren't in plaintext.
+        let receivedAtMs = Int64(now().timeIntervalSince1970 * 1000)
+        let serverCreatedAtMs = parseISO8601Ms(row.createdAtISO) ?? plaintext.sentAtMs
+        let readAtMs = row.readAtISO.flatMap { parseISO8601Ms($0) }
+        let doneAtMs = row.doneAtISO.flatMap { parseISO8601Ms($0) }
+        let mirrorRow = DirectMessageMirrorRow(
+            messageID: row.messageID,
+            workspaceID: row.workspaceID,
+            senderPubkeyHex: row.senderPubkeyHex,         // RLS-attested
+            senderMemberID: plaintext.senderMemberID,
+            senderDisplayName: plaintext.senderDisplayName,
+            recipientPubkeyHex: row.recipientPubkeyHex,   // RLS-attested
+            kind: plaintext.kind,                          // C4 plaintext wins
+            body: plaintext.body,
+            attachment: plaintext.attachment,
+            replyTo: plaintext.replyTo,                    // C4 plaintext wins
+            sentAtMs: plaintext.sentAtMs,
+            serverCreatedAtMs: serverCreatedAtMs,
+            readAtMs: readAtMs,
+            doneAtMs: doneAtMs,
+            doneByPubkeyHex: row.doneByPubkeyHex,
+            direction: .inbound,
+            lastSyncedAtMs: receivedAtMs
+        )
         await directMessageInboxReader?.absorbRealtimePush(mirrorRow)
         // After the DM lands, fetch the cross-post log for it. The
         // CrossPostLogReader is cache-aware so this is a no-op if already
         // cached (typically true on first delivery — cross_post_log rows
         // arrive 1-2s after DM INSERT once the Edge Function completes).
-        await crossPostLogReader.loadForMessages([mirrorRow.messageID])
+        await crossPostLogReader.loadForMessages([row.messageID])
+    }
+
+    // MARK: - ISO8601 helper
+
+    private nonisolated func parseISO8601Ms(_ iso: String) -> Int64? {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = f.date(from: iso) {
+            return Int64(date.timeIntervalSince1970 * 1000)
+        }
+        f.formatOptions = [.withInternetDateTime]
+        if let date = f.date(from: iso) {
+            return Int64(date.timeIntervalSince1970 * 1000)
+        }
+        return nil
     }
 
     private func handleDirectMessageUpdate(_ row: SupabaseDirectMessageRow) async {
