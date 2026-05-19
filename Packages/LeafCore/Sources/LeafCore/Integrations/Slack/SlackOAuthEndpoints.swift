@@ -31,6 +31,11 @@ public enum SlackOAuthEndpoints {
     /// conversations.history). Вызывается per unique channel_id обнаруженный в
     /// search.messages response, filtered `user == self_user_id` client-side.
     public static let conversationsHistory = URL(string: "https://slack.com/api/conversations.history")!
+    /// `conversations.list` — Tier 2 (~20 RPM). Viewer's accessible channels +
+    /// metadata. Track 5 / S6 — used by `SlackChannelsReader` для cross-post channel
+    /// picker UI. Query `?types=public_channel,private_channel&exclude_archived=true`.
+    /// Required user-token scopes `channels:read`, `groups:read` уже в `requiredCore`.
+    public static let conversationsList = URL(string: "https://slack.com/api/conversations.list")!
     /// `users.getPresence` — Tier 3 (50+ req/min). Per-user presence ("active"|"away").
     /// Phase 4.7.B-9 — emits per-tick `slack_presence_state` pulse (mirror к GitHub
     /// `gh_notifications_pulse`). Self-only call (вызываем для авторизованного юзера).

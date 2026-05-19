@@ -200,12 +200,33 @@ struct LeafApp: App {
         _teamEventMirrorReader = State(initialValue: TeamEventMirrorReader(supabase: supabase))
 
         // Track 5 / S6 T13 — cross-post composition wiring.
-        // SlackChannels + LinearTeams use Stub providers (returns empty arrays)
-        // in non-LEAF_PROD builds; production HTTP impls live в LeafCorePrivate
-        // (gitignored moat) and are swapped в via #if LEAF_PROD when present.
-        // For initial T13 ship, all builds use Stub — Send sheet pickers show
-        // empty list; production provider wiring is incremental polish.
+        // Track 5 / S8 carry-over (M20) — Slack channel picker production wiring.
+        // ProdSlackChannelsProvider lives в LeafCorePrivate moat (gitignored);
+        // token resolution closure captures `sharedTeamFeedDB` opened above
+        // for the WorkspaceCascadeDeleter and reads the OAuth access_token
+        // from the IntegrationRecord on-demand per call — rotation pushed by
+        // SlackTokenRefresher подхватывается без re-construction.
+        // Non-LEAF_PROD builds fall back to the empty-list Stub.
+        #if LEAF_PROD
+        let slackTokenProvider: @Sendable () async throws -> String = { [sharedTeamFeedDB] in
+            guard let db = sharedTeamFeedDB else {
+                throw NSError(domain: "tech.gundem.leaf.token", code: 1, userInfo: [
+                    NSLocalizedDescriptionKey: "Database unavailable"
+                ])
+            }
+            guard let record = try db.readIntegration(provider: .slack) else {
+                throw NSError(domain: "tech.gundem.leaf.token", code: 2, userInfo: [
+                    NSLocalizedDescriptionKey: "Slack not connected"
+                ])
+            }
+            return record.accessToken
+        }
+        _slackChannelsReader = State(initialValue: SlackChannelsReader(
+            provider: ProdSlackChannelsProvider(tokenProvider: slackTokenProvider)
+        ))
+        #else
         _slackChannelsReader = State(initialValue: SlackChannelsReader(provider: StubSlackChannelsProvider()))
+        #endif
         _linearTeamsReader = State(initialValue: LinearTeamsReader(provider: StubLinearTeamsProvider()))
 
         // LinearScopesReader wraps LinearScopesService (DB-backed) + adapter
