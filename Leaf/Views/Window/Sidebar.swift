@@ -39,12 +39,25 @@ struct Sidebar: View {
     /// «Upgrade to add workspaces» row at the sidebar bottom.
     @Environment(TierGateReader.self) private var tierGate
     @Environment(\.submitToWaitlist) private var submitToWaitlist
+    /// Track 6 — observer for deep-link / clipboard-probe `reader.fetch(...)`
+    /// transitions out of `.idle`. Sidebar surfaces AcceptInviteSheet so an
+    /// already-onboarded user can join a second workspace. Onboarding's own
+    /// observer (`OnboardingView.swift`) is mutually exclusive — Onboarding
+    /// is gated by `hasCompletedOnboarding` AppStorage and lives in the
+    /// menu-bar popover scene, not the main Window where Sidebar renders.
+    @Environment(InviteAcceptReader.self) private var inviteAcceptReader
 
     @State private var leavePresented = false
     @State private var leaveTargetWorkspaceID: String?
     @State private var createWorkspacePresented = false
     /// T4 — per-callsite UpgradeModal flag for the Free-tier switcher row.
     @State private var showUpgrade = false
+    /// Track 6 — explicit-tap (footer "Join workspace" row) AND auto-open on
+    /// deep-link / clipboard-probe `inviteAcceptReader.state` transitions
+    /// share this presentation flag. Sheet's own state machine drives
+    /// in-sheet flow; Sidebar only ever flips this to `true`. Dismiss via
+    /// sheet's Discard / Done / Close → SwiftUI sets it back to `false`.
+    @State private var joinWorkspacePresented = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -99,6 +112,44 @@ struct Sidebar: View {
                 onSubmitEmail: { email in await submitToWaitlist(email) }
             )
         }
+        // Track 6 — in-app AcceptInviteSheet host. Two trigger paths:
+        //  (a) explicit user tap on the "Join workspace" switcher footer row
+        //  (b) `.onAppear` / `.onChange(of: inviteAcceptReader.state)` below,
+        //      which catches deep-link clicks (`leaf://invite/...` via
+        //      `.onOpenURL` in LeafApp) and scenePhase-clipboard probes
+        //      that fired `reader.fetch(...)` outside this view's lifetime.
+        .sheet(isPresented: $joinWorkspacePresented) {
+            AcceptInviteSheet()
+        }
+        .onAppear {
+            // Catch state already non-`.idle` when Sidebar first appears —
+            // e.g. user launched app via a `leaf://invite/...` URL and the
+            // `.onOpenURL` handler in LeafApp.swift fired `reader.fetch`
+            // before Sidebar was mounted.
+            if shouldOpenAcceptSheet(for: inviteAcceptReader.state) {
+                joinWorkspacePresented = true
+            }
+        }
+        .onChange(of: inviteAcceptReader.state) { _, newState in
+            // Open-only — never auto-dismiss. Sheet's Discard / Done /
+            // Close paths call `reader.reset()` which lands here as
+            // `.idle`; we let SwiftUI dismiss the sheet naturally when
+            // the user taps those buttons (sheet's `dismiss()` flips
+            // `joinWorkspacePresented` back to `false`).
+            if shouldOpenAcceptSheet(for: newState), !joinWorkspacePresented {
+                joinWorkspacePresented = true
+            }
+        }
+    }
+
+    /// True for any in-flight or terminal-non-idle state — auto-surface the
+    /// sheet so the user sees what's happening. `.idle` is the only state
+    /// that should NOT auto-open.
+    private func shouldOpenAcceptSheet(for state: InviteAcceptReader.State) -> Bool {
+        switch state {
+        case .idle: return false
+        case .previewing, .joining, .otpPrompt, .joined, .error: return true
+        }
     }
 
     // MARK: - Workspace Switcher
@@ -137,8 +188,7 @@ struct Sidebar: View {
             // because state.active is only re-resolved on refresh().
             onSelect: { wid in workspaceReader.switchActive(to: wid) },
             onAddNew: { createWorkspacePresented = true },
-            // Real binding lands in the follow-up commit (in-app AcceptInviteSheet).
-            onJoin: { },
+            onJoin: { joinWorkspacePresented = true },
             onLeave: { wid in
                 leaveTargetWorkspaceID = wid
                 leavePresented = true
