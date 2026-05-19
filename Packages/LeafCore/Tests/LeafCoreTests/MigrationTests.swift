@@ -483,7 +483,9 @@ final class MigrationTests: XCTestCase {
                 Schema.APNsTokenLocal.tableName,
                 Schema.ShareRules.tableName,
                 Schema.TeamEventsMirror.tableName,
-                Schema.TeamEventBroadcastOffsets.tableName
+                Schema.TeamEventBroadcastOffsets.tableName,
+                // Track-5 S8 T1 (M026): notification_prefs per-device singleton.
+                Schema.NotificationPrefs.tableName
             ]
             XCTAssertEqual(tables, expected)
         }

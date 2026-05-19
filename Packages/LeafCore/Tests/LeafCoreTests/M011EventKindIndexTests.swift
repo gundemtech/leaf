@@ -56,7 +56,8 @@ final class M011EventKindIndexTests: XCTestCase {
             // Track-5 S5: chain extended by M020 (messages_mirror) + M021 (apns_token_local) +
             // M022 (share_rules) + M023 (team_events_mirror) + M024 (team_event_broadcast_offsets).
             // Track-5 S7: M025 (workspaces.deleted_at_ms + idx_workspaces_active).
-            XCTAssertEqual(applied.count, 25)
+            // Track-5 S8 T1: M026 (notification_prefs + ALTER messages_mirror.pending_mark_done).
+            XCTAssertEqual(applied.count, 26)
         }
     }
 }

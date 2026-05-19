@@ -60,7 +60,9 @@ final class M020MessagesMirrorTests: XCTestCase {
                     Schema.MessagesMirror.doneAtMs,
                     Schema.MessagesMirror.doneByPubkeyHex,
                     Schema.MessagesMirror.direction,
-                    Schema.MessagesMirror.lastSyncedAtMs
+                    Schema.MessagesMirror.lastSyncedAtMs,
+                    // Track-5 S8 T1 (M026 ALTER): pending_mark_done retry queue flag.
+                    Schema.MessagesMirror.pendingMarkDone
                 ])
             )
 

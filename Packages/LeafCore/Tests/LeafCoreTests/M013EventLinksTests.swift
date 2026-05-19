@@ -69,7 +69,8 @@ final class M013EventLinksTests: XCTestCase {
             XCTAssertTrue(applied.contains("013_event_links"))
             // Track-5 S5: chain = 19 (S2) + M020+M021 (S4) + M022+M023+M024 (S5).
             // Track-5 S7: M025 (workspaces.deleted_at_ms + idx_workspaces_active).
-            XCTAssertEqual(applied.count, 25)
+            // Track-5 S8 T1: M026 (notification_prefs + ALTER messages_mirror.pending_mark_done).
+            XCTAssertEqual(applied.count, 26)
         }
     }
 }
