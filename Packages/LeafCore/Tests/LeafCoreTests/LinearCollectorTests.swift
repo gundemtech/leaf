@@ -2090,4 +2090,27 @@ final class LinearCollectorTests: XCTestCase {
                 }))
         }
     }
+
+    // MARK: - Track-9 T2 — workspaceSlug in presence dict
+
+    func test_buildLinearPresenceState_includesWorkspaceSlug_TrackT2() {
+        let presence = LinearCollector.buildLinearPresenceState(
+            workload: .empty,
+            cycles: .empty,
+            workspaceSlug: "my-team"
+        )
+        XCTAssertEqual(presence["workspace_slug"] as? String, "my-team")
+    }
+
+    func test_buildLinearPresenceState_nilSlug_emptyStringInDict_TrackT2() {
+        // Graceful degrade: nil slug → empty string in dict (mirrors existing
+        // `last_touched_issue_id` pattern). Downstream readers check non-empty
+        // before composing linear_issue_url.
+        let presence = LinearCollector.buildLinearPresenceState(
+            workload: .empty,
+            cycles: .empty,
+            workspaceSlug: nil
+        )
+        XCTAssertEqual(presence["workspace_slug"] as? String, "")
+    }
 }

@@ -41,6 +41,15 @@ public actor LinearCollector {
     private var loopTask: Task<Void, Never>?
     private var notifyToken: NSObjectProtocol?
 
+    /// Track-9 T2 — Linear organization urlKey cache. Populated from
+    /// `LinearIssueBatch.workspaceSlug` (extracted by provider parser from the
+    /// `viewer.organization { urlKey }` LeafPoll fragment). First non-nil seen
+    /// wins; persists across ticks until process restart. Consumed by
+    /// `makeCommentToMeEvent` to compose `linear_issue_url` payload field, and
+    /// written into `presence_state.linear.workspace_slug` JSON dict key for
+    /// cross-process readers.
+    private var workspaceSlug: String?
+
     public init(
         database: Database,
         provider: any LinearGraphQLProvider,
@@ -283,9 +292,16 @@ public actor LinearCollector {
         // / [[String: Any]]. Optional scalars defaulted к "" / 0 per plan literal
         // (downstream parser проверяет startedCount > 0 чтобы отличить empty от
         // populated, current_cycle dict пустой если no in-cycle teams).
+        // Track-9 T2 — capture workspaceSlug into actor state (first non-nil wins
+        // across the process lifetime). Used by makeCommentToMeEvent emission and
+        // presence dict write below.
+        if let slug = batch.workspaceSlug, !slug.isEmpty {
+            self.workspaceSlug = slug
+        }
         let linearPresence: [String: Any] = Self.buildLinearPresenceState(
             workload: batch.workload,
-            cycles: batch.cycles
+            cycles: batch.cycles,
+            workspaceSlug: self.workspaceSlug
         )
         do {
             try database.writeEventsOffsetAndPresence(
@@ -604,7 +620,8 @@ public actor LinearCollector {
     /// НЕ хранится: cycle.description, issue.title, comment bodies, attachment titles.
     static func buildLinearPresenceState(
         workload: LinearAssignedWorkloadSnapshot,
-        cycles: LinearCycleSnapshot
+        cycles: LinearCycleSnapshot,
+        workspaceSlug: String? = nil
     ) -> [String: Any] {
         let cyclesArray: [[String: Any]] = cycles.teams.map { team in
             [
@@ -628,6 +645,11 @@ public actor LinearCollector {
             "all_team_cycles": cyclesArray,
             "last_touched_issue_id": workload.lastTouchedIdentifier ?? "",
             "last_touched_ts": workload.lastTouchedTs ?? 0,
+            // Track-9 T2 — Linear organization urlKey for cross-process readers
+            // (UI, future MCP tool) that compose linear_issue_url. Empty string
+            // on cold-first-tick / free-tier / schema drift — readers gate on
+            // non-empty before URL composition.
+            "workspace_slug": workspaceSlug ?? "",
         ]
     }
 
