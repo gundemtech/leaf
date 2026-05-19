@@ -19,6 +19,17 @@ struct TodayBlock: View {
 
     private static let pillVisibleCap = 6
 
+    /// C-4 (Phase 8.9) — cached locale-aware "EEE d MMM" formatter so the
+    /// "TODAY · <date>" label doesn't allocate a `DateFormatter` per body
+    /// re-eval. Locale captured at first access; relaunch refreshes if the
+    /// user changes system locale mid-session (acceptable per spec §3.4).
+    private static let sectionDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = .current
+        f.setLocalizedDateFormatFromTemplate("EEE d MMM")
+        return f
+    }()
+
     var body: some View {
         VStack(alignment: .leading, spacing: LeafSpace.md) {
             Text(sectionLabel)
@@ -46,21 +57,38 @@ struct TodayBlock: View {
     }
 
     private var sectionLabel: String {
-        let formatter = DateFormatter()
-        formatter.locale = .current
-        formatter.setLocalizedDateFormatFromTemplate("EEE d MMM")
-        return "TODAY · \(formatter.string(from: Date()))"
+        "TODAY · \(Self.sectionDateFormatter.string(from: Date()))"
     }
 
     // MARK: - Metrics row
 
+    /// C-3 (Phase 8.9) — `ViewThatFits` picks the wide horizontal row when
+    /// it fits in the available width, otherwise falls through to a 2×2
+    /// grid. No `@State`, no GeometryReader, no fixed cutoff — SwiftUI
+    /// measures intrinsic content width per branch.
     private var metricsRow: some View {
-        HStack(alignment: .top, spacing: LeafSpace.lg) {
-            metricCell(value: focusValue, label: "focused")
-            metricCell(value: aiRatioValue, label: "AI ratio")
-            metricCell(value: "\(metrics.sessionsCount)", label: "sessions")
-            metricCell(value: "\(metrics.commitsCount)", label: "commits")
-            Spacer(minLength: 0)
+        ViewThatFits(in: .horizontal) {
+            // Wide branch — 4 cells horizontal (current shape).
+            HStack(alignment: .top, spacing: LeafSpace.lg) {
+                metricCell(value: focusValue, label: "focused")
+                metricCell(value: aiRatioValue, label: "AI ratio")
+                metricCell(value: "\(metrics.sessionsCount)", label: "sessions")
+                metricCell(value: "\(metrics.commitsCount)", label: "commits")
+                Spacer(minLength: 0)
+            }
+            // Narrow branch — 2×2 grid; same metric cells, no expand state.
+            VStack(alignment: .leading, spacing: LeafSpace.md) {
+                HStack(alignment: .top, spacing: LeafSpace.lg) {
+                    metricCell(value: focusValue, label: "focused")
+                    metricCell(value: aiRatioValue, label: "AI ratio")
+                    Spacer(minLength: 0)
+                }
+                HStack(alignment: .top, spacing: LeafSpace.lg) {
+                    metricCell(value: "\(metrics.sessionsCount)", label: "sessions")
+                    metricCell(value: "\(metrics.commitsCount)", label: "commits")
+                    Spacer(minLength: 0)
+                }
+            }
         }
     }
 
