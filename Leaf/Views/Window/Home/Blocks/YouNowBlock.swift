@@ -317,11 +317,17 @@ extension String {
     fileprivate var nilIfEmpty: String? { isEmpty ? nil : self }
 }
 
-/// Gate `.onTapGesture` behind `.away` only — non-away states currently
-/// no-op per master spec §3.4 (inMeeting `ical://` deep-link is P9
-/// carry-forward; active / deepWorkFocus are intentionally inert because
-/// they describe the user's own current state). Without this gate the
-/// cursor still hovers as if tappable, signalling a "dead" affordance.
+/// Gate the tap affordance behind `.away` only — non-away states stay
+/// non-interactive per master spec §3.4 (inMeeting `ical://` deep-link is
+/// Track-9 carry C-6; active / deepWorkFocus describe the user's own
+/// current state and are intentionally inert).
+///
+/// C-7 (Phase 8.9) — `.away` now wraps the card in a `Button(.plain)` so
+/// VoiceOver announces the affordance. `.buttonStyle(.plain)` preserves
+/// the visual styling (no system Button chrome added) and does not
+/// capture the nested Resume CTA Button's hit area. Non-away states
+/// render the bare content (no `.contentShape` / `.onTapGesture` =
+/// cursor doesn't signal a dead affordance).
 private struct YouNowTapModifier: ViewModifier {
     let state: YouNowState
     let handleTap: () -> Void
@@ -329,9 +335,11 @@ private struct YouNowTapModifier: ViewModifier {
     func body(content: Content) -> some View {
         switch state {
         case .away:
-            content
-                .contentShape(Rectangle())
-                .onTapGesture { handleTap() }
+            Button(action: handleTap) {
+                content
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(.isButton)
         case .active, .inMeeting, .deepWorkFocus:
             content
         }
