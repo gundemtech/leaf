@@ -35,7 +35,13 @@ struct InboxItemRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(item.sourceURL == nil)
+        // Phase 8.9 a11y: dropped `.disabled(item.sourceURL == nil)` —
+        // macOS removes disabled Buttons from the VoiceOver focus tree,
+        // making informational rows (D3-derived items without sourceURL)
+        // unreachable. `handleTap()` already guards on nil URL, so the
+        // tap is a safe no-op without `.disabled`. The conditional
+        // `.isButton` trait below keeps the trait off informational rows
+        // so VoiceOver doesn't announce a non-interactive button.
         .accessibilityLabel(a11yLabel)
         .accessibilityAddTraits(item.sourceURL == nil ? [] : .isButton)
     }

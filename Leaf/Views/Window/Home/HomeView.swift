@@ -175,6 +175,7 @@ private struct LoadingScaffold: View {
                     .foregroundStyle(LeafColor.text.secondary)
                 ProgressView()
                     .controlSize(.small)
+                    .accessibilityHidden(true)  // P9 a11y: redundant with "Reading recent activity…" above
             }
 
             // Muted shape placeholders — no shimmer (D1 §22).
@@ -187,6 +188,7 @@ private struct LoadingScaffold: View {
                         Spacer()
                     }
                 }
+                .accessibilityHidden(true)  // P9 a11y: decorative scaffold, em-dash would read literally
             }
         }
     }

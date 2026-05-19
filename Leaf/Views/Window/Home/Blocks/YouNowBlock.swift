@@ -185,6 +185,10 @@ struct YouNowBlock: View {
                     }
                 }
             }
+            // Phase 8.9 a11y: collapse title + line2 + line3 into one
+            // VoiceOver element so the YOU·NOW row reads as a single
+            // sentence rather than three separate texts.
+            .accessibilityElement(children: .combine)
             Spacer(minLength: 0)
         }
     }
@@ -280,6 +284,7 @@ struct YouNowBlock: View {
                 .accessibilityHidden(true)
         } else {
             LeafIconChip(systemName: systemName, size: .md, tint: tint)
+                .accessibilityHidden(true)
         }
     }
 
@@ -322,12 +327,13 @@ extension String {
 /// Track-9 carry C-6; active / deepWorkFocus describe the user's own
 /// current state and are intentionally inert).
 ///
-/// C-7 (Phase 8.9) — `.away` now wraps the card in a `Button(.plain)` so
-/// VoiceOver announces the affordance. `.buttonStyle(.plain)` preserves
-/// the visual styling (no system Button chrome added) and does not
-/// capture the nested Resume CTA Button's hit area. Non-away states
-/// render the bare content (no `.contentShape` / `.onTapGesture` =
-/// cursor doesn't signal a dead affordance).
+/// C-7 (Phase 8.9) — outer `.away` keeps `.contentShape + .onTapGesture`
+/// for the whole-card tap surface (cursor signal preserved). VoiceOver
+/// discoverability comes via `.accessibilityAction(named:)` — a rotor-
+/// addressable action attached to the implicit container element. This
+/// avoids the nested-Button anti-pattern that would clash with the inner
+/// `resumeCTA(for:)` Button (which keeps its own `.isButton` trait +
+/// label and stays independently focusable per macOS HIG).
 private struct YouNowTapModifier: ViewModifier {
     let state: YouNowState
     let handleTap: () -> Void
@@ -335,11 +341,10 @@ private struct YouNowTapModifier: ViewModifier {
     func body(content: Content) -> some View {
         switch state {
         case .away:
-            Button(action: handleTap) {
-                content
-            }
-            .buttonStyle(.plain)
-            .accessibilityAddTraits(.isButton)
+            content
+                .contentShape(Rectangle())
+                .onTapGesture { handleTap() }
+                .accessibilityAction(named: Text("Resume")) { handleTap() }
         case .active, .inMeeting, .deepWorkFocus:
             content
         }

@@ -101,6 +101,11 @@ struct TodayBlock: View {
                 .font(LeafType.body.small)
                 .foregroundStyle(LeafColor.text.tertiary)
         }
+        // Phase 8.9 a11y: combine "42m" + "focused" into a single
+        // VoiceOver element so the metric reads as "42m focused" rather
+        // than two adjacent elements losing unit context.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(value) \(label)")
     }
 
     private var focusValue: String {
