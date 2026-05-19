@@ -37,4 +37,4 @@ SLACK_OAUTH_CLIENT_ID = 10976749635137.11005549911623
 // Production project ref: jwxnhwyqjzjmjnmwpwyq (Frankfurt eu-central-1, free tier).
 // Local.xcconfig (gitignored) overrides for local-Supabase dev (`supabase start`).
 LEAF_SUPABASE_URL = https:/$()/jwxnhwyqjzjmjnmwpwyq.supabase.co
-LEAF_SUPABASE_ANON_KEY =
+LEAF_SUPABASE_ANON_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3eG5od3lxanpqbWpubXdwd3lxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2ODYwMDgsImV4cCI6MjA5NDI2MjAwOH0.f9gAEaU1H_3oQTIsiXqlGH9NE74oSRatTcKZ1JecCUs
