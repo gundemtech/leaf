@@ -267,11 +267,23 @@ struct LeafApp: App {
             reauthorizer: linearReauth
         ))
 
-        // LinearUsersResolver — fuzzy assignee resolution (T9). Stub provider
-        // returns empty list in dev; production HTTP impl via LeafCorePrivate.
+        // LinearUsersResolver — fuzzy assignee resolution (T9).
+        // Track 5 / S8 carry-over (M20) — swap Stub к ProdLinearAccessibleUsersClient
+        // under #if LEAF_PROD. The `linearTokenProvider` closure declared above
+        // (inside the LinearTeams #if LEAF_PROD block) is reused here — both
+        // call sites pull the same `IntegrationRecord(.linear).accessToken`.
+        // The closure is in lexical scope across #if-LEAF_PROD lines because
+        // Swift conditional compilation gates lines, not scopes. Stub fallback
+        // preserved for non-LEAF_PROD builds.
+        #if LEAF_PROD
+        _linearUsersResolver = State(initialValue: LinearUsersResolver(
+            provider: ProdLinearAccessibleUsersClient(tokenProvider: linearTokenProvider)
+        ))
+        #else
         _linearUsersResolver = State(initialValue: LinearUsersResolver(
             provider: StubLinearGraphQLProvider()
         ))
+        #endif
 
         // Track 5 / S7 H.1 — Team feed substrate composition.
         //
