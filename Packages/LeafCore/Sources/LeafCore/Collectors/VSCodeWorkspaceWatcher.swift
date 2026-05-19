@@ -1,8 +1,7 @@
 import Foundation
 
 /// Track-6 P6 — FSEvents watcher for VSCode-family `workspaceStorage/<hash>/`
-/// directory creation events. On CREATE: loads `workspace.json` (plain
-/// JSON, unlocked, atomic write per vscode upstream), URL-decodes
+/// directory creation events. On CREATE: loads `workspace.json`, URL-decodes
 /// `folder` URI, home-dir-sanitizes (`/Users/alice/...` → `~/...`),
 /// resolves against `WatchedFolderStore`, emits `vscode_workspace_opened`.
 ///
@@ -10,9 +9,15 @@ import Foundation
 ///   1. URL-decode percent escapes.
 ///   2. Replace $HOME prefix with `~/`.
 ///   3. Resolve against watched-folder bookmarks.
-///   4. Inside-watched → payload {workspace_name (basename), watched_folder_id, outside_watched_folder=false}.
-///   5. Outside-watched → payload {workspace_name (basename only), outside_watched_folder=true}.
-///   6. NEVER absolute path in payload (even when watched-folder match).
+///   4. Inside-watched → payload {workspace_name (basename), watched_folder_id,
+///      outside_watched_folder=false, workspace_root (~/-prefixed, Track-9 T1)}.
+///   5. Outside-watched → payload {workspace_name (basename only),
+///      outside_watched_folder=true, workspace_root (~/-prefixed, Track-9 T1)}.
+///   6. Track-9 T1: MAY emit tilde-prefixed sanitized workspace path (~/...)
+///      for substrate consumers' git-HEAD walk in T5 YOU·NOW deriver.
+///   7. NEVER bare absolute path with $HOME username (/Users/<name>/...) in payload.
+///   8. workspace_root field is gated by LocalAppsStore.ideWorkspacePathTrackingEnabled
+///      (default ON); when OFF, field is omitted (graceful degrade).
 ///
 /// TCC: zero new prompt — ~/Library/Application Support/<vendor>/ is
 /// outside FDA umbrella (P3 BrowserBookmarksWatcher pattern).
@@ -77,15 +82,16 @@ public actor VSCodeWorkspaceWatcher {
         return ParsedWorkspace(workspaceName: basename, sanitizedPath: path)
     }
 
-    /// Build the RawEvent. NEVER embeds absolute path. `sanitizedPath` arg
-    /// is for caller's logging/diagnostics; only `workspaceName` and the
-    /// gate fields reach the payload.
+    /// Build the RawEvent. `sanitizedPath` is tilde-prefixed (~/...) and
+    /// emitted as `workspace_root` when `workspaceRootEnabled` is true AND
+    /// the path starts with `~`. NEVER emits bare absolute /Users/... path.
     public static func buildEvent(
         bundleID: String,
         workspaceName: String,
-        sanitizedPath: String,  // for caller diagnostics only — NOT emitted
+        sanitizedPath: String,
         watchedFolderID: String?,
-        nowMs: Int64
+        nowMs: Int64,
+        workspaceRootEnabled: Bool = true
     ) -> RawEvent {
         var payload: [String: String] = [
             "event_kind": "vscode_workspace_opened",
@@ -97,6 +103,14 @@ public actor VSCodeWorkspaceWatcher {
             payload["outside_watched_folder"] = "false"
         } else {
             payload["outside_watched_folder"] = "true"
+        }
+        if workspaceRootEnabled {
+            // Defense-in-depth: only emit if path is tilde-prefixed.
+            // Bare absolute paths (/Users/<name>/...) must NEVER reach payload.
+            if sanitizedPath.hasPrefix("~") {
+                payload["workspace_root"] = sanitizedPath
+            }
+            // else (absolute /Users/... or empty): silently drop.
         }
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: Double(nowMs) / 1000.0),
@@ -118,17 +132,20 @@ public actor VSCodeWorkspaceWatcher {
     private let watchedFolderResolver: (_ path: String) -> String?
     private let eventSink: (RawEvent) -> Void
     private let clock: () -> Int64
+    private let localAppsStore: LocalAppsStore
 
     public init(
         homeDir: String = NSHomeDirectory(),
         watchedFolderResolver: @escaping (_ path: String) -> String?,
         eventSink: @escaping (RawEvent) -> Void,
-        clock: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
+        clock: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
+        localAppsStore: LocalAppsStore = LocalAppsStore()
     ) {
         self.homeDir = homeDir
         self.watchedFolderResolver = watchedFolderResolver
         self.eventSink = eventSink
         self.clock = clock
+        self.localAppsStore = localAppsStore
     }
 
     public func start() async {
@@ -154,12 +171,14 @@ public actor VSCodeWorkspaceWatcher {
         guard let bundleID = Self.inferBundleID(forVendorRoot: vendorRoot) else { return }
         guard let parsed = Self.parseWorkspaceJSON(workspaceJSONBody, homeDir: homeDir) else { return }
         let watchedID = watchedFolderResolver(parsed.sanitizedPath)
+        let workspaceRootEnabled = localAppsStore.ideWorkspacePathTrackingEnabled
         let event = Self.buildEvent(
             bundleID: bundleID,
             workspaceName: parsed.workspaceName,
             sanitizedPath: parsed.sanitizedPath,
             watchedFolderID: watchedID,
-            nowMs: clock()
+            nowMs: clock(),
+            workspaceRootEnabled: workspaceRootEnabled
         )
         eventSink(event)
     }

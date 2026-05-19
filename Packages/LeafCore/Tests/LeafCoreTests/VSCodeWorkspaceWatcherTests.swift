@@ -41,22 +41,26 @@ final class VSCodeWorkspaceWatcherTests: XCTestCase {
     }
 
     func test_buildEvent_outsideWatchedFolder_basenameOnly_noPath() {
+        // When workspace_root tracking is disabled (Track-9 T1 gate OFF),
+        // no path component should reach the payload.
         let event = VSCodeWorkspaceWatcher.buildEvent(
             bundleID: "com.microsoft.VSCode",
             workspaceName: "SecretWorkspace",
             sanitizedPath: "~/Desktop/SecretWorkspace",
             watchedFolderID: nil,
-            nowMs: 1_000
+            nowMs: 1_000,
+            workspaceRootEnabled: false
         )
         XCTAssertEqual(event.payload["event_kind"], "vscode_workspace_opened")
         XCTAssertEqual(event.payload["workspace_name"], "SecretWorkspace")
         XCTAssertEqual(event.payload["outside_watched_folder"], "true")
         XCTAssertNil(event.payload["watched_folder_id"])
-        // Sanitized path must NOT leak into payload when outside watched folder.
+        XCTAssertNil(event.payload["workspace_root"])
+        // With path tracking disabled, no path component leaks.
         for (_, v) in event.payload {
             XCTAssertFalse(
                 v.contains("Desktop"),
-                "leaked path component when outside_watched_folder=true: \(v)")
+                "leaked path component when workspaceRootEnabled=false: \(v)")
         }
     }
 
@@ -92,5 +96,60 @@ final class VSCodeWorkspaceWatcherTests: XCTestCase {
             VSCodeWorkspaceWatcher.inferBundleID(forVendorRoot: "VSCodium"),
             "com.visualstudio.code.oss")
         XCTAssertNil(VSCodeWorkspaceWatcher.inferBundleID(forVendorRoot: "UnknownEditor"))
+    }
+
+    // MARK: - Track-9 T1: workspace_root payload field
+
+    func testBuildEventIncludesWorkspaceRootWhenEnabled() {
+        let event = VSCodeWorkspaceWatcher.buildEvent(
+            bundleID: "com.microsoft.VSCode",
+            workspaceName: "leaf",
+            sanitizedPath: "~/Desktop/Leaf/leaf",
+            watchedFolderID: nil,
+            nowMs: 1000,
+            workspaceRootEnabled: true
+        )
+        XCTAssertEqual(event.payload["workspace_root"], "~/Desktop/Leaf/leaf")
+        XCTAssertEqual(event.payload["workspace_name"], "leaf")
+    }
+
+    func testBuildEventOmitsWorkspaceRootWhenDisabled() {
+        let event = VSCodeWorkspaceWatcher.buildEvent(
+            bundleID: "com.microsoft.VSCode",
+            workspaceName: "leaf",
+            sanitizedPath: "~/Desktop/Leaf/leaf",
+            watchedFolderID: nil,
+            nowMs: 1000,
+            workspaceRootEnabled: false
+        )
+        XCTAssertNil(event.payload["workspace_root"])
+        XCTAssertEqual(event.payload["workspace_name"], "leaf")
+    }
+
+    func testWorkspaceRootIsTildePrefixed() {
+        let event = VSCodeWorkspaceWatcher.buildEvent(
+            bundleID: "com.microsoft.VSCode",
+            workspaceName: "leaf",
+            sanitizedPath: "~/foo",
+            watchedFolderID: "fid",
+            nowMs: 1000,
+            workspaceRootEnabled: true
+        )
+        XCTAssertTrue(event.payload["workspace_root"]!.hasPrefix("~/"))
+        XCTAssertFalse(event.payload["workspace_root"]!.contains("/Users/"))
+    }
+
+    func testBuildEventDropsAbsolutePathDefensively() {
+        // Defense-in-depth: even if a caller mistakenly passes /Users/... path,
+        // buildEvent must NOT include it in workspace_root payload field.
+        let event = VSCodeWorkspaceWatcher.buildEvent(
+            bundleID: "com.microsoft.VSCode",
+            workspaceName: "leaf",
+            sanitizedPath: "/Users/alice/Desktop/leaf",
+            watchedFolderID: nil,
+            nowMs: 1000,
+            workspaceRootEnabled: true
+        )
+        XCTAssertNil(event.payload["workspace_root"])
     }
 }
