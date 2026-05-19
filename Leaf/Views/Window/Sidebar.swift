@@ -35,10 +35,16 @@ struct Sidebar: View {
     @Environment(WorkspaceReader.self) private var workspaceReader
     @Environment(ActiveWorkspaceStore.self) private var activeWorkspaceStore
     @Environment(DirectMessageInboxReader.self) private var inboxReader
+    /// T4 — tier gate. Free-tier swaps `LeafWorkspaceSwitcher` for an
+    /// «Upgrade to add workspaces» row at the sidebar bottom.
+    @Environment(TierGateReader.self) private var tierGate
+    @Environment(\.submitToWaitlist) private var submitToWaitlist
 
     @State private var leavePresented = false
     @State private var leaveTargetWorkspaceID: String?
     @State private var createWorkspacePresented = false
+    /// T4 — per-callsite UpgradeModal flag for the Free-tier switcher row.
+    @State private var showUpgrade = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -86,12 +92,32 @@ struct Sidebar: View {
                 onCancel: { createWorkspacePresented = false }
             )
         }
+        .sheet(isPresented: $showUpgrade) {
+            UpgradeModal(
+                reason: .createWorkspace,
+                onDismiss: { showUpgrade = false },
+                onSubmitEmail: { email in await submitToWaitlist(email) }
+            )
+        }
     }
 
     // MARK: - Workspace Switcher
 
     @ViewBuilder
     private var workspaceSwitcherSection: some View {
+        // T4 — Free-tier: replace LeafWorkspaceSwitcher with a single
+        // «Upgrade to add workspaces» row. Free user has no workspaces, so
+        // there's nothing to switch *to* anyway — the row serves both as
+        // empty state AND the upgrade CTA in one strike.
+        if !tierGate.canCreateWorkspace {
+            freeStateSwitcherRow
+        } else {
+            teamStateSwitcher
+        }
+    }
+
+    @ViewBuilder
+    private var teamStateSwitcher: some View {
         let workspaces: [Workspace] = {
             if case .loaded(let ws, _, _) = workspaceReader.state { return ws }
             return []
@@ -120,6 +146,30 @@ struct Sidebar: View {
                 // Wire: inboxReader.markAllReadForWorkspace(wid)
             }
         )
+    }
+
+    /// T4 — Free-tier switcher row. Visually rhymes with LeafWorkspaceSwitcher
+    /// internals (LeafColor.surface.inset background, similar padding/height)
+    /// so the sidebar bottom feels continuous between tiers.
+    @ViewBuilder
+    private var freeStateSwitcherRow: some View {
+        Button {
+            showUpgrade = true
+        } label: {
+            HStack(spacing: LeafSpace.sm) {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(LeafColor.status.warning)
+                Text("Upgrade to add workspaces")
+                    .font(LeafType.body.small)
+                    .foregroundStyle(LeafColor.text.primary)
+                Spacer(minLength: 0)
+            }
+            .padding(LeafSpace.md)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .background(LeafColor.surface.inset)
     }
 
     // MARK: - Helpers

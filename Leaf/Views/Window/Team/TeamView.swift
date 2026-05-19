@@ -67,6 +67,12 @@ struct TeamView: View {
     // S6 closure providers (identical wiring pattern to OrganizationView).
     @Environment(SlackOAuthService.self)        private var slackOAuth
     @Environment(\.linearUsersResolver)         private var linearUsersResolver
+    /// T4 — tier gate. Free-tier renders `TeamFeedFreePreview` mockup
+    /// instead of the regular feed; `.canSendDM` is the canonical Free signal
+    /// (matches gates used by SendDirectMessageSheet so the experience is
+    /// internally consistent — Free users see the same lock everywhere).
+    @Environment(TierGateReader.self)           private var tierGate
+    @Environment(\.submitToWaitlist)            private var submitToWaitlist
 
     // MARK: - Phase H: new environment readers
     //
@@ -148,6 +154,12 @@ struct TeamView: View {
     /// that as no self-exclusion (graceful).
     @State private var cachedSelfPubHex: String = ""
 
+    /// T4 — per-callsite UpgradeModal flag for the Free-tier preview branch.
+    /// `TeamFeedFreePreview.onUpgrade` flips this; UpgradeModal lives in the
+    /// same `.sheet(isPresented: $showUpgrade)` modifier as the rest of the
+    /// existing TeamView sheets.
+    @State private var showUpgrade: Bool = false
+
     // MARK: - Body
 
     /// S7 Stage 6 fix C-I6 — loads `cachedSelfPubHex` once per view appearance.
@@ -165,26 +177,24 @@ struct TeamView: View {
 
     var body: some View {
         Group {
-            switch workspaceReader.state {
-            case .loading:
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            case .empty:
-                // workspaceReader.empty = no workspaces at all; show invite/setup CTA.
-                emptyState(forMembers: 0)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            case .loaded(_, let active, let members):
-                loadedContent(active: active, members: members)
-
-            case .error(let message):
-                errorContent(message: message)
-
-            case .removedFromActiveWorkspace:
-                // RootView preempts with RemovedFromTeamBanner.
-                EmptyView()
+            // T4 — Free-tier branch: replace the entire feed body with the
+            // mockup preview + Upgrade CTA. We branch on `.canSendDM` (not
+            // `.tier == .free` directly) because DM-send is the primary value
+            // prop the user is paying to unlock; the gate label stays
+            // internally consistent across SendDirectMessageSheet + this view.
+            if !tierGate.canSendDM {
+                TeamFeedFreePreview(onUpgrade: { showUpgrade = true })
+            } else {
+                regularBody
             }
+        }
+        // T4 — per-callsite UpgradeModal sheet for the Free branch.
+        .sheet(isPresented: $showUpgrade) {
+            UpgradeModal(
+                reason: .sendMessage,
+                onDismiss: { showUpgrade = false },
+                onSubmitEmail: { email in await submitToWaitlist(email) }
+            )
         }
         // S6 closure-injection pattern — preserved 1:1 from OrganizationView.
         .sheet(item: $sendSheetRecipient) { r in
@@ -204,6 +214,9 @@ struct TeamView: View {
         // Restore persisted filter selection + trigger initial feed load when
         // the active workspace changes.
         .task(id: activeWorkspaceStore.activeWorkspaceID) {
+            // T4 — skip feed I/O when Free-tier preview is on screen; no
+            // workspaces exist for a Free user, and the mockup is static data.
+            guard tierGate.canSendDM else { return }
             // S7 Stage 6 fix C-I6 — prime the self-pubkey cache once; cheap
             // single filesystem read, then every directMessageCard render
             // reuses the @State value instead of re-reading the priv file.
@@ -219,7 +232,8 @@ struct TeamView: View {
         }
         // Re-fetch when filter chip selection changes.
         .onChange(of: feedFilterStore.selected) { _, newFilters in
-            guard let wid = activeWorkspaceStore.activeWorkspaceID else { return }
+            guard tierGate.canSendDM,
+                  let wid = activeWorkspaceStore.activeWorkspaceID else { return }
             Task {
                 await teamFeedReader.refresh(
                     workspaceID: wid,
@@ -228,6 +242,32 @@ struct TeamView: View {
                 )
                 await loadCrossPostsForVisibleDMs()
             }
+        }
+    }
+
+    /// Team-tier body — the regular feed surface. Extracted so the T4 Free
+    /// branch lives in `body` cleanly.
+    @ViewBuilder
+    private var regularBody: some View {
+        switch workspaceReader.state {
+        case .loading:
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+        case .empty:
+            // workspaceReader.empty = no workspaces at all; show invite/setup CTA.
+            emptyState(forMembers: 0)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+        case .loaded(_, let active, let members):
+            loadedContent(active: active, members: members)
+
+        case .error(let message):
+            errorContent(message: message)
+
+        case .removedFromActiveWorkspace:
+            // RootView preempts with RemovedFromTeamBanner.
+            EmptyView()
         }
     }
 

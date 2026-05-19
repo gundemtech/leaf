@@ -23,6 +23,12 @@ struct SendDirectMessageSheet: View {
 
     @Environment(DirectMessageSendReader.self) private var reader
     @Environment(\.dismiss) private var dismiss
+    /// T4 — tier gate. When `.canSendDM` is false, [Send] is disabled +
+    /// UpgradeChip overlay shows above the form + clicking [Upgrade] opens
+    /// UpgradeModal `.sheet`.
+    @Environment(TierGateReader.self) private var tierGate
+    /// T4 — composition-root waitlist closure for UpgradeModal.
+    @Environment(\.submitToWaitlist) private var submitToWaitlist
 
     /// Composition root supplies these closures so the sheet stays
     /// SwiftUI-pure (no actor dependencies, no OAuth services imported).
@@ -46,6 +52,9 @@ struct SendDirectMessageSheet: View {
     /// on identical input UUIDs). Regenerated when user discards and reopens
     /// the sheet for a fresh send.
     @State private var linearIdempotencyKey: UUID = UUID()
+    /// T4 — per-callsite UpgradeModal flag (NOT a WindowState global; mirrors
+    /// WorkspaceCreateSheet pattern).
+    @State private var showUpgrade: Bool = false
 
     init(
         recipient: TeamMember,
@@ -60,11 +69,43 @@ struct SendDirectMessageSheet: View {
     var body: some View {
         LeafSheetLayout(title: "Send to \(recipient.displayName)", onDismiss: discardAndDismiss) {
             VStack(alignment: .leading, spacing: LeafSpace.xl) {
+                // T4 — UpgradeChip when Free-tier blocks DM send. Form remains
+                // visible so user sees what unlocking gets them; [Send] disabled.
+                if !tierGate.canSendDM {
+                    upgradeChip(message: "Direct messages require Leaf Team")
+                }
                 content
                 Spacer(minLength: 0)
                 footer
             }
         }
+        .sheet(isPresented: $showUpgrade) {
+            UpgradeModal(
+                reason: .sendMessage,
+                onDismiss: { showUpgrade = false },
+                onSubmitEmail: { email in await submitToWaitlist(email) }
+            )
+        }
+    }
+
+    // MARK: - T4 UpgradeChip
+
+    @ViewBuilder
+    private func upgradeChip(message: String) -> some View {
+        HStack(spacing: LeafSpace.sm) {
+            Image(systemName: "lock.fill")
+                .foregroundStyle(LeafColor.status.warning)
+            Text(message)
+                .font(LeafType.body.small)
+                .foregroundStyle(LeafColor.text.primary)
+            Spacer()
+            LeafButton("Upgrade", variant: .primary, size: .sm) {
+                showUpgrade = true
+            }
+        }
+        .padding(LeafSpace.sm)
+        .background(LeafColor.status.warning.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: LeafRadius.sm, style: .continuous))
     }
 
     @ViewBuilder
@@ -208,6 +249,9 @@ struct SendDirectMessageSheet: View {
     }
 
     private var sendDisabled: Bool {
+        // T4 — Free-tier blocks Send entirely. We keep the rest of the gates
+        // active too so the disabled state is consistent across reasons.
+        if !tierGate.canSendDM { return true }
         if bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return true
         }
@@ -223,6 +267,13 @@ struct SendDirectMessageSheet: View {
     }
 
     private func submit() async {
+        // T4 — defence in depth: if user somehow bypasses the disabled state
+        // (Voice Control, automation), surface the upgrade modal instead of
+        // actually firing the network send.
+        guard tierGate.canSendDM else {
+            await MainActor.run { showUpgrade = true }
+            return
+        }
         // Capture immutable copies of the current toggle / picker state so a
         // late SwiftUI re-render mid-await doesn't see partial values.
         let slackRequest: SlackCrossPostRequest?

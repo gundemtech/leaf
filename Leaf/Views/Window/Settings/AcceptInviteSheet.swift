@@ -20,9 +20,16 @@ struct AcceptInviteSheet: View {
     @Environment(WorkspaceReader.self) private var workspaceReader
     @Environment(InviteURLHandler.self) private var urlHandler
     @Environment(\.dismiss) private var dismiss
+    /// T4 — tier gate. When `.canAcceptInvite` is false, the [Join] button on
+    /// preview / OTP cards is replaced with [Upgrade to accept] that opens
+    /// UpgradeModal `.sheet`.
+    @Environment(TierGateReader.self) private var tierGate
+    @Environment(\.submitToWaitlist) private var submitToWaitlist
     @State private var pasteInput: String = ""
     @State private var otpInput: String = ""
     @State private var displayNameInput: String = ""
+    /// T4 — per-callsite UpgradeModal flag.
+    @State private var showUpgrade: Bool = false
 
     private let otpRegex = /^\d{6}$/
 
@@ -37,6 +44,13 @@ struct AcceptInviteSheet: View {
         .onAppear {
             displayNameInput = reader.savedDisplayName.isEmpty ? NSFullUserName() : reader.savedDisplayName
             autoDetectFromClipboard()
+        }
+        .sheet(isPresented: $showUpgrade) {
+            UpgradeModal(
+                reason: .acceptInvite,
+                onDismiss: { showUpgrade = false },
+                onSubmitEmail: { email in await submitToWaitlist(email) }
+            )
         }
     }
 
@@ -120,16 +134,28 @@ struct AcceptInviteSheet: View {
 
                 HStack {
                     Spacer()
-                    LeafButton(
-                        "Join team",
-                        variant: .primary,
-                        size: .md,
-                        action: {
-                            let dn = displayNameInput.trimmingCharacters(in: .whitespacesAndNewlines)
-                            reader.join(displayName: dn, otp: nil)
-                        }
-                    )
-                    .disabled(disabled || displayNameInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    // T4 — when Free-tier blocks acceptance, swap [Join team]
+                    // for [Upgrade to accept] so the user sees what unlocking gets them.
+                    if tierGate.canAcceptInvite {
+                        LeafButton(
+                            "Join team",
+                            variant: .primary,
+                            size: .md,
+                            action: {
+                                let dn = displayNameInput.trimmingCharacters(in: .whitespacesAndNewlines)
+                                reader.join(displayName: dn, otp: nil)
+                            }
+                        )
+                        .disabled(disabled || displayNameInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    } else {
+                        LeafButton(
+                            "Upgrade to accept",
+                            variant: .primary,
+                            size: .md,
+                            icon: .system("lock.fill"),
+                            action: { showUpgrade = true }
+                        )
+                    }
                 }
             }
         }
@@ -171,17 +197,28 @@ struct AcceptInviteSheet: View {
 
                 HStack {
                     Spacer()
-                    LeafButton(
-                        "Join team",
-                        variant: .primary,
-                        size: .md,
-                        action: {
-                            let otp = otpInput.trimmingCharacters(in: .whitespacesAndNewlines)
-                            let dn = displayNameInput.trimmingCharacters(in: .whitespacesAndNewlines)
-                            reader.join(displayName: dn, otp: otp)
-                        }
-                    )
-                    .disabled(disabled || !isValidOTP || displayNameInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    // T4 — same Upgrade button swap as previewCard above.
+                    if tierGate.canAcceptInvite {
+                        LeafButton(
+                            "Join team",
+                            variant: .primary,
+                            size: .md,
+                            action: {
+                                let otp = otpInput.trimmingCharacters(in: .whitespacesAndNewlines)
+                                let dn = displayNameInput.trimmingCharacters(in: .whitespacesAndNewlines)
+                                reader.join(displayName: dn, otp: otp)
+                            }
+                        )
+                        .disabled(disabled || !isValidOTP || displayNameInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    } else {
+                        LeafButton(
+                            "Upgrade to accept",
+                            variant: .primary,
+                            size: .md,
+                            icon: .system("lock.fill"),
+                            action: { showUpgrade = true }
+                        )
+                    }
                 }
             }
         }

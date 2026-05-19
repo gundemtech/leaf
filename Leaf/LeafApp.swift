@@ -79,6 +79,14 @@ struct LeafApp: App {
     @State private var memberRemovalReader = MemberRemovalReader()  // Phase 5.3.E
     @State private var pendingInvitesReader = PendingInvitesReader()  // Phase 5.5.C
     @State private var inviteURLHandler = InviteURLHandler()  // Phase 5.5.B
+    /// Track 5 / S8 / T3 — local @Observable wrapper around TierGate static
+    /// read. UI surfaces consume `@Environment(TierGateReader.self)` for the
+    /// `canCreateWorkspace` / `canSendDM` / `canAcceptInvite` properties (T4
+    /// wires per-callsite UpgradeModal sheets when these return false). The
+    /// reader observes `UserDefaults.didChangeNotification` so `defaults
+    /// write tech.gundem.leaf tier free` from Terminal flips UI live during
+    /// QA — no app relaunch required.
+    @State private var tierGateReader = TierGateReader()
     @State private var windowState = WindowState()
     @Environment(\.scenePhase) private var scenePhase
 
@@ -389,6 +397,14 @@ struct LeafApp: App {
                 .environment(memberRemovalReader)  // Phase 5.3.E
                 .environment(pendingInvitesReader)  // Phase 5.5.C
                 .environment(inviteURLHandler)  // Phase 5.5.B
+                .environment(tierGateReader)        // Track 5 / S8 / T3
+                // T4 — UpgradeModal callsites (Sheet/TeamView Free branch/Sidebar
+                // Free state) invoke `submitToWaitlist(email:)` via this env closure.
+                // SupabaseClient is an actor (not @Observable), so we wrap it in a
+                // @Sendable closure here at composition-time; views stay SwiftUI-pure.
+                .environment(\.submitToWaitlist, { [supabaseClient] email in
+                    await supabaseClient.submitToWaitlist(email: email)
+                })
                 .environment(windowState)
                 .onAppear {
                     inviteURLHandler.wire(acceptReader: inviteAcceptReader,
