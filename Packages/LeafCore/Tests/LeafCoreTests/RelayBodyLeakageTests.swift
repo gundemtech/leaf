@@ -3021,4 +3021,163 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "Payload key 'body' should not appear in presence_state.state_json")
         }
     }
+
+    // MARK: - Track-9 T1 sentinel-injection regression tests
+
+    /// Track-9 T1 — `xcode_active_doc_changed.line` is strictly an Int row
+    /// index (via AXLineForIndex parameterized attribute). No document text
+    /// content is ever read. This test exercises the public emission surface
+    /// (the AX call sites live in the moat) and asserts the sentinel string
+    /// — even if construed by some future refactor as relevant content —
+    /// cannot reach payload.
+    func test_t1_walkback_xcodeActiveDocChanged_lineNeverLeaksContent() {
+        let sentinel = "LEAKED_SENTINEL_XCODE_T1_LINE_BODY"
+        let obs = XcodeObservation(
+            activeDocPath: "/p/x.swift",
+            projectName: "Pj",
+            schemeName: "S",
+            buildState: .idle,
+            line: 142
+        )
+        var sm = XcodeStateMachine()
+        let events = sm.observe(obs, nowMs: 1_000)
+        guard let event = events.first(where: { $0.payload["event_kind"] == "xcode_active_doc_changed" }) else {
+            XCTFail("doc_changed event not emitted"); return
+        }
+        for (key, value) in event.payload {
+            XCTAssertFalse(
+                value.contains(sentinel),
+                "sentinel leaked at \(key)=\(value)")
+        }
+        // Positive: line is a parseable Int.
+        XCTAssertNotNil(Int(event.payload["line"] ?? ""))
+        XCTAssertEqual(event.payload["line"], "142")
+    }
+
+    /// Track-9 T1 — `vscode_workspace_opened.workspace_root` is tilde-prefixed.
+    /// Sentinel injected at the USERNAME position (which MUST never leak per
+    /// ADR-010) is stripped by `parseWorkspaceJSON` home-dir sanitization.
+    func test_t1_walkback_vscodeWorkspaceOpened_workspaceRootIsTilde() {
+        let sentinel = "LEAKED_SENTINEL_VSCODE_T1_USER"
+        let mockHomeDir = "/Users/\(sentinel)"
+        let json = #"{"folder":"file://\#(mockHomeDir)/Desktop/proj"}"#
+        guard let parsed = VSCodeWorkspaceWatcher.parseWorkspaceJSON(json, homeDir: mockHomeDir) else {
+            XCTFail("parseWorkspaceJSON returned nil"); return
+        }
+        let event = VSCodeWorkspaceWatcher.buildEvent(
+            bundleID: "com.microsoft.VSCode",
+            workspaceName: parsed.workspaceName,
+            sanitizedPath: parsed.sanitizedPath,
+            watchedFolderID: nil,
+            nowMs: 1_000,
+            workspaceRootEnabled: true
+        )
+        XCTAssertEqual(event.payload["workspace_root"], "~/Desktop/proj")
+        for (key, value) in event.payload {
+            XCTAssertFalse(
+                value.contains(sentinel),
+                "username sentinel leaked at \(key)=\(value)")
+            XCTAssertFalse(
+                value.contains("/Users/"),
+                "absolute /Users/ leaked at \(key)=\(value)")
+        }
+    }
+
+    /// Track-9 T1 — `jetbrains_recent_project_observed.workspace_root` is
+    /// tilde-prefixed. Project sentinel (basename position) MAY appear (e.g.
+    /// in displayName / workspace_root); username sentinel MUST NOT appear.
+    /// Defense-in-depth: bare absolute path `/Users/...` passed to buildEvent
+    /// is silently dropped.
+    func test_t1_walkback_jetbrainsRecentProjectObserved_workspaceRootIsTilde() {
+        let usernameSentinel = "LEAKED_SENTINEL_JB_T1_USER"
+        let projectSentinel = "LEAKED_SENTINEL_JB_T1_PROJECT"
+        let event = JetBrainsRecentProjectsWatcher.buildEvent(
+            bundleID: "com.jetbrains.intellij",
+            versionDir: "IntelliJIdea2024.1",
+            displayName: projectSentinel,
+            activationTimestampMs: 1_715_800_000_000,
+            outsideWatchedFolder: true,
+            workspaceRoot: "~/Desktop/\(projectSentinel)",
+            workspaceRootEnabled: true
+        )
+        XCTAssertEqual(event.payload["workspace_root"], "~/Desktop/\(projectSentinel)")
+        // Project sentinel survives at displayName + workspace_root (basename
+        // position) — expected.
+        XCTAssertTrue(event.payload["project_name"]?.contains(projectSentinel) == true
+            || event.payload["display_name"]?.contains(projectSentinel) == true)
+        for (key, value) in event.payload {
+            XCTAssertFalse(
+                value.contains(usernameSentinel),
+                "username sentinel leaked at \(key)=\(value)")
+            XCTAssertFalse(
+                value.contains("/Users/"),
+                "absolute /Users/ leaked at \(key)=\(value)")
+        }
+    }
+
+    /// Track-9 T1 integration sweep — construct all three T1 events with
+    /// realistic fixtures + the three username-position sentinel strings.
+    /// Assert no forbidden sentinel ever appears in any payload field, and
+    /// no `/Users/` absolute prefix anywhere.
+    func test_t1_walkback_integrationSentinelSweep() {
+        let xcodeSentinel = "LEAKED_SENTINEL_XCODE_T1_SWEEP"
+        let vscodeSentinel = "LEAKED_SENTINEL_VSCODE_T1_USER_SWEEP"
+        let jbSentinel = "LEAKED_SENTINEL_JB_T1_USER_SWEEP"
+        let forbidden = [xcodeSentinel, vscodeSentinel, jbSentinel]
+
+        // Xcode — sentinel never crosses into XcodeObservation (AXLineForIndex
+        // returns Int directly, document text never read).
+        var xsm = XcodeStateMachine()
+        let xcodeEvents = xsm.observe(
+            XcodeObservation(
+                activeDocPath: "/p/x.swift",
+                projectName: "Pj",
+                schemeName: "S",
+                buildState: .idle,
+                line: 7
+            ),
+            nowMs: 1_000
+        )
+
+        // VSCode — sentinel at username position; parseWorkspaceJSON strips
+        // the /Users/<sentinel>/ prefix → ~/Desktop/ws.
+        let mockHomeDir = "/Users/\(vscodeSentinel)"
+        let json = #"{"folder":"file://\#(mockHomeDir)/Desktop/ws"}"#
+        guard let parsed = VSCodeWorkspaceWatcher.parseWorkspaceJSON(json, homeDir: mockHomeDir) else {
+            XCTFail("parseWorkspaceJSON returned nil"); return
+        }
+        let vscodeEvent = VSCodeWorkspaceWatcher.buildEvent(
+            bundleID: "com.microsoft.VSCode",
+            workspaceName: parsed.workspaceName,
+            sanitizedPath: parsed.sanitizedPath,
+            watchedFolderID: nil,
+            nowMs: 2_000,
+            workspaceRootEnabled: true
+        )
+
+        // JetBrains — username sentinel never injected; only realistic ~/path.
+        let jbEvent = JetBrainsRecentProjectsWatcher.buildEvent(
+            bundleID: "com.jetbrains.intellij",
+            versionDir: "IntelliJIdea2024.1",
+            displayName: "leaf",
+            activationTimestampMs: 1_715_800_000_000,
+            outsideWatchedFolder: true,
+            workspaceRoot: "~/Desktop/leaf",
+            workspaceRootEnabled: true
+        )
+
+        let allEvents = xcodeEvents + [vscodeEvent, jbEvent]
+        for event in allEvents {
+            for (key, value) in event.payload {
+                for sentinel in forbidden {
+                    XCTAssertFalse(
+                        value.contains(sentinel),
+                        "T1 sentinel \(sentinel) leaked at \(key)=\(value) in \(event.payload["event_kind"] ?? "?")")
+                }
+                XCTAssertFalse(
+                    value.contains("/Users/"),
+                    "absolute /Users/ leaked at \(key)=\(value)")
+            }
+        }
+    }
 }
