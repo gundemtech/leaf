@@ -227,7 +227,32 @@ struct LeafApp: App {
         #else
         _slackChannelsReader = State(initialValue: SlackChannelsReader(provider: StubSlackChannelsProvider()))
         #endif
+
+        // Track 5 / S8 carry-over (M20) — Linear team picker production wiring.
+        // ProdLinearTeamsProvider lives в LeafCorePrivate moat (gitignored);
+        // same token-provider pattern as ProdSlackChannelsProvider above —
+        // captures `sharedTeamFeedDB` and reads `IntegrationRecord(.linear)`
+        // accessToken on-demand. Stub fallback for non-LEAF_PROD builds.
+        #if LEAF_PROD
+        let linearTokenProvider: @Sendable () async throws -> String = { [sharedTeamFeedDB] in
+            guard let db = sharedTeamFeedDB else {
+                throw NSError(domain: "tech.gundem.leaf.token", code: 1, userInfo: [
+                    NSLocalizedDescriptionKey: "Database unavailable"
+                ])
+            }
+            guard let record = try db.readIntegration(provider: .linear) else {
+                throw NSError(domain: "tech.gundem.leaf.token", code: 2, userInfo: [
+                    NSLocalizedDescriptionKey: "Linear not connected"
+                ])
+            }
+            return record.accessToken
+        }
+        _linearTeamsReader = State(initialValue: LinearTeamsReader(
+            provider: ProdLinearTeamsProvider(tokenProvider: linearTokenProvider)
+        ))
+        #else
         _linearTeamsReader = State(initialValue: LinearTeamsReader(provider: StubLinearTeamsProvider()))
+        #endif
 
         // LinearScopesReader wraps LinearScopesService (DB-backed) + adapter
         // bridging the Sendable `LinearOAuthReauthorizing` protocol to the
