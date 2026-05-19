@@ -76,4 +76,21 @@ final class LinearGraphQLProviderTests: XCTestCase {
         )
         XCTAssertEqual(snap.incomingCommentCount, 3)
     }
+
+    // Track-9 T2 — workspaceSlug round-trip. urlKey piggybacks `organization { urlKey }`
+    // GraphQL fragment in LeafPoll viewer block (zero new HTTP). Parser-side cached in
+    // LinearCollector actor state; payload `linear_issue_url` composition consumes.
+    func test_linearIssueBatch_workspaceSlug_defaultsNil() {
+        let b = LinearIssueBatch(issues: [], cursorMs: nil)
+        XCTAssertNil(b.workspaceSlug)
+    }
+
+    func test_linearIssueBatch_workspaceSlug_roundTripsExplicit() {
+        let b = LinearIssueBatch(
+            issues: [],
+            cursorMs: nil,
+            workspaceSlug: "my-team"
+        )
+        XCTAssertEqual(b.workspaceSlug, "my-team")
+    }
 }

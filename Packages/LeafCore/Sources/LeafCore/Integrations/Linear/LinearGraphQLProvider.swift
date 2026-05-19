@@ -69,6 +69,12 @@ public struct LinearIssueBatch: Sendable, Hashable {
     public let relationRemovals: [LinearRelationSnapshot]
     public let triagePickedUp: [LinearTriageTransitionSnapshot]
     public let triageResolved: [LinearTriageTransitionSnapshot]
+    /// Track-9 T2 — Linear organization `urlKey` from `viewer.organization { urlKey }`
+    /// fragment in LeafPoll. Cached in `LinearCollector` actor state; used by
+    /// `makeCommentToMeEvent` parser to compose `linear_issue_url` payload field
+    /// (`https://linear.app/{slug}/issue/{key}`). `nil` on cold-first-tick before
+    /// the viewer fetch lands or on Linear free-tier accounts that return null org.
+    public let workspaceSlug: String?
 
     public init(
         issues: [LinearIssueSnapshot],
@@ -88,7 +94,8 @@ public struct LinearIssueBatch: Sendable, Hashable {
         relationAdditions: [LinearRelationSnapshot] = [],
         relationRemovals: [LinearRelationSnapshot] = [],
         triagePickedUp: [LinearTriageTransitionSnapshot] = [],
-        triageResolved: [LinearTriageTransitionSnapshot] = []
+        triageResolved: [LinearTriageTransitionSnapshot] = [],
+        workspaceSlug: String? = nil
     ) {
         self.issues = issues
         self.cursorMs = cursorMs
@@ -108,6 +115,7 @@ public struct LinearIssueBatch: Sendable, Hashable {
         self.relationRemovals = relationRemovals
         self.triagePickedUp = triagePickedUp
         self.triageResolved = triageResolved
+        self.workspaceSlug = workspaceSlug
     }
 
     public static let empty = Self(
