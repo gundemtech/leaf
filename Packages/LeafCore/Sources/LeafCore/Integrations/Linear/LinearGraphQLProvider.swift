@@ -266,6 +266,12 @@ public struct LinearIssueSnapshot: Sendable, Hashable {
     /// applied client-side в parser'е). 0 если не было моих comments.
     /// ADR-010: bodies НЕ запрашиваются — только id + createdAt + user.id для filter.
     public let commentCountInWindow: Int
+    /// Track-9 T2 — discriminator counterpart to `commentCountInWindow`: count comments
+    /// authored BY OTHERS (`comment.user.id != viewer.id`) on this viewer-touched issue
+    /// within the polling window. Substrate seed для `linear_comment_authored_to_me`
+    /// sibling event_kind. 0 если не было comments-to-me. ADR-010: same allowlist —
+    /// только id + createdAt + user.id для filter, bodies не trip'нут provider.
+    public let incomingCommentCount: Int
     /// Phase 4.7.B (B-8) — counts of GitHub PR attachments на этом issue, derived
     /// из `Issue.attachments(first: 10)` block'а парсером URL'ов. 0 если ни один
     /// attachment не matched GitHub PR pattern (или вообще не attached).
@@ -307,6 +313,7 @@ public struct LinearIssueSnapshot: Sendable, Hashable {
         updatedAtMs: Int64,
         completionSeconds: Int? = nil,
         commentCountInWindow: Int = 0,
+        incomingCommentCount: Int = 0,
         linkedGitHubPRCount: Int = 0,
         linkedGitHubTopRepo: String? = nil,
         linkedSlackMessageCount: Int = 0,
@@ -324,6 +331,7 @@ public struct LinearIssueSnapshot: Sendable, Hashable {
         self.updatedAtMs = updatedAtMs
         self.completionSeconds = completionSeconds
         self.commentCountInWindow = commentCountInWindow
+        self.incomingCommentCount = incomingCommentCount
         self.linkedGitHubPRCount = linkedGitHubPRCount
         self.linkedGitHubTopRepo = linkedGitHubTopRepo
         self.linkedSlackMessageCount = linkedSlackMessageCount
