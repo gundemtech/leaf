@@ -53,3 +53,45 @@ final class LocalAppsStoreTests: XCTestCase {
         XCTAssertTrue(store2.isSubFieldOptedIn("com.apple.mail", field: "mailboxName"))
     }
 }
+
+// MARK: - Track-9 T1 toggle properties
+
+final class LocalAppsStoreTrack9T1Tests: XCTestCase {
+    private var defaults: UserDefaults!
+    private var store: LocalAppsStore!
+
+    override func setUp() {
+        super.setUp()
+        let suiteName = "test.track-9-T1.\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suiteName)!
+        store = LocalAppsStore(defaults: defaults)
+    }
+
+    override func tearDown() {
+        super.tearDown()
+        defaults = nil
+        store = nil
+    }
+
+    func testAxLineCaptureDefaultsToTrue() {
+        XCTAssertTrue(store.axLineCaptureEnabled)
+    }
+
+    func testIdeWorkspacePathTrackingDefaultsToTrue() {
+        XCTAssertTrue(store.ideWorkspacePathTrackingEnabled)
+    }
+
+    func testAxLineCaptureToggleRoundTrip() {
+        store.axLineCaptureEnabled = false
+        XCTAssertFalse(store.axLineCaptureEnabled)
+        store.axLineCaptureEnabled = true
+        XCTAssertTrue(store.axLineCaptureEnabled)
+    }
+
+    func testIdeWorkspacePathTrackingToggleRoundTrip() {
+        store.ideWorkspacePathTrackingEnabled = false
+        XCTAssertFalse(store.ideWorkspacePathTrackingEnabled)
+        store.ideWorkspacePathTrackingEnabled = true
+        XCTAssertTrue(store.ideWorkspacePathTrackingEnabled)
+    }
+}
