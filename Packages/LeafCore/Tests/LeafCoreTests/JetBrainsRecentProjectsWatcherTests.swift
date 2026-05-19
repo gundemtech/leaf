@@ -146,4 +146,87 @@ final class JetBrainsRecentProjectsWatcherTests: XCTestCase {
         XCTAssertEqual(event.payload["activation_timestamp_ms"], "1747345678901")
         XCTAssertEqual(event.payload["outside_watched_folder"], "true")
     }
+
+    // MARK: - Track-9 T1: workspace_root extraction
+
+    func testWorkspaceRootExtractedFromUserHomeKey() {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <application>
+          <component name="RecentProjectsManager">
+            <option name="additionalInfo">
+              <map>
+                <entry key="$USER_HOME$/Desktop/Leaf/leaf">
+                  <value>
+                    <RecentProjectMetaInfo>
+                      <option name="displayName" value="leaf" />
+                      <option name="activationTimestamp" value="1715800000000" />
+                    </RecentProjectMetaInfo>
+                  </value>
+                </entry>
+              </map>
+            </option>
+          </component>
+        </application>
+        """
+        let parsed = JetBrainsRecentProjectsWatcher.parseRecentProjectsXML(xml)
+        XCTAssertEqual(parsed.count, 1)
+        XCTAssertEqual(parsed[0].workspaceRoot, "~/Desktop/Leaf/leaf")
+    }
+
+    func testWorkspaceRootNilForProjectDirKey() {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <application><component name="RecentProjectsManager">
+          <option name="additionalInfo"><map>
+            <entry key="$PROJECT_DIR$/subproject">
+              <value><RecentProjectMetaInfo>
+                <option name="displayName" value="sub" />
+              </RecentProjectMetaInfo></value>
+            </entry>
+          </map></option>
+        </component></application>
+        """
+        let parsed = JetBrainsRecentProjectsWatcher.parseRecentProjectsXML(xml)
+        XCTAssertEqual(parsed.first?.workspaceRoot, nil)
+    }
+
+    func testBuildEventIncludesWorkspaceRootWhenAvailableAndEnabled() {
+        let event = JetBrainsRecentProjectsWatcher.buildEvent(
+            bundleID: "com.jetbrains.intellij",
+            versionDir: "IntelliJIdea2024.1",
+            displayName: "leaf",
+            activationTimestampMs: 1_715_800_000_000,
+            outsideWatchedFolder: false,
+            workspaceRoot: "~/Desktop/Leaf/leaf",
+            workspaceRootEnabled: true
+        )
+        XCTAssertEqual(event.payload["workspace_root"], "~/Desktop/Leaf/leaf")
+    }
+
+    func testBuildEventOmitsWorkspaceRootWhenDisabled() {
+        let event = JetBrainsRecentProjectsWatcher.buildEvent(
+            bundleID: "com.jetbrains.intellij",
+            versionDir: "IntelliJIdea2024.1",
+            displayName: "leaf",
+            activationTimestampMs: 1_715_800_000_000,
+            outsideWatchedFolder: false,
+            workspaceRoot: "~/Desktop/Leaf/leaf",
+            workspaceRootEnabled: false
+        )
+        XCTAssertNil(event.payload["workspace_root"])
+    }
+
+    func testBuildEventDropsAbsolutePathDefensively() {
+        let event = JetBrainsRecentProjectsWatcher.buildEvent(
+            bundleID: "com.jetbrains.intellij",
+            versionDir: "IntelliJIdea2024.1",
+            displayName: "leaf",
+            activationTimestampMs: 1_715_800_000_000,
+            outsideWatchedFolder: false,
+            workspaceRoot: "/Users/alice/Desktop/leaf",
+            workspaceRootEnabled: true
+        )
+        XCTAssertNil(event.payload["workspace_root"])
+    }
 }
