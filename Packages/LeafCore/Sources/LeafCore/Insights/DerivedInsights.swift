@@ -190,6 +190,12 @@ public protocol DerivedInsights: Sendable {
     /// inMeeting > deepWorkFocus > away(screenLocked) > away(idle) > active.
     /// `now: Date` for testability. Default `.away(.idle, idleSec: 0)` for stubs.
     func youNowState(now: Date) throws -> YouNowState
+
+    // MARK: - Track-9 T1 — recent commit deriver
+
+    /// Track-9 T1 — most-recent observed gh_commit_pushed event within maxAgeMs.
+    /// Returns nil if no commit in window or DB read fails gracefully.
+    func recentLastCommit(maxAgeMs: Int64) throws -> RecentCommitSnapshot?
 }
 
 /// Default implementations — конформер'ы могут override'ить, но без явного
@@ -245,6 +251,11 @@ extension DerivedInsights {
     public func todayMetrics(now: Date) throws -> TodayMetrics { .empty }
 
     public func youNowState(now: Date) throws -> YouNowState { .empty }
+
+    // MARK: - Track-9 T1 defaults
+
+    /// Track-9 T1 stub default — returns nil; ProdInsights SQL impl in Task 3.
+    public func recentLastCommit(maxAgeMs: Int64) throws -> RecentCommitSnapshot? { nil }
 }
 
 /// Phase 1.1 / CI fallback. Все методы бросают .notImplemented.
@@ -282,4 +293,7 @@ public struct StubInsights: DerivedInsights {
     public func googleCalendarActivityBreakdown(period: DateInterval) throws -> GoogleCalendarActivityBreakdown {
         .empty
     }
+
+    // Track-9 T1 stub default — ProdInsights SQL impl lands in Task 3.
+    public func recentLastCommit(maxAgeMs: Int64) throws -> RecentCommitSnapshot? { nil }
 }
