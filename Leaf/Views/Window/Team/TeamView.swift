@@ -428,6 +428,36 @@ struct TeamView: View {
                             }
                         }
                     }
+                    // Track 5 / S8 T6 — observe focusReplyField raised by the
+                    // APNs `dm.reply` action handler in LeafAppDelegate. When
+                    // set true:
+                    //   • scroll to the deep-linked message (pendingMessageID
+                    //     was already set by the same handler call, so this
+                    //     supplements the pendingMessageID observer above —
+                    //     we still call scrollTo here defensively in case the
+                    //     observer above fired before this one).
+                    //   • Signal reply-focus intent. The inline reply
+                    //     textfield itself ships in Track 6 (S7 deferred inline
+                    //     reply per spec note). Until that lands, this is pure
+                    //     state plumbing — the observer fires, the flag clears,
+                    //     and the existing scroll/highlight pulse provides the
+                    //     visible deep-link acknowledgement. Once the inline
+                    //     reply UI lands, `@FocusState` binding here will
+                    //     hand focus to the textfield.
+                    .onChange(of: windowState.focusReplyField) { _, newValue in
+                        guard newValue, let messageID = windowState.pendingMessageID else {
+                            return
+                        }
+                        withAnimation {
+                            proxy.scrollTo(messageID, anchor: .center)
+                        }
+                        // Clear the transient signal — consumer (future inline
+                        // reply UI) will read it before this clear via the
+                        // same .onChange cycle. The pendingMessageID stays
+                        // set; the H.6 observer above clears it on its own 2s
+                        // timer alongside highlightedMessageID.
+                        windowState.focusReplyField = false
+                    }
                 }
             }
         }

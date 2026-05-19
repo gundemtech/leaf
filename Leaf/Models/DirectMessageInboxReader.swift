@@ -197,20 +197,77 @@ final class DirectMessageInboxReader: RealtimeDirectMessageAbsorbing {
         refreshUnreadCounts()
     }
 
-    /// Server PATCH for task done state.
-    /// Local mirror updated on next foreground tick (see markRead note).
+    /// Track 5 / S8 T6 — Optimistic local mark-done + server PATCH + retry-queue flag.
+    ///
+    /// Flow:
+    ///   1. Compute now timestamp + cached self pubkey.
+    ///   2. Local mirror UPDATE FIRST — done_at + done_by_pubkey + clears
+    ///      `pending_mark_done`. User sees the row marked done immediately;
+    ///      latency-tolerant whether server PATCH succeeds or not.
+    ///   3. Server PATCH attempt.
+    ///      - Success: nothing more to do (local already at desired state).
+    ///      - Failure (network / 5xx / RLS): set `pending_mark_done = 1` so
+    ///        `PendingMarkDoneRetryService.tick()` retries on the daily-tick
+    ///        scheduler driven from `RootView.task`.
+    ///   4. Refresh local UI snapshot so the done badge renders immediately.
+    ///
+    /// Called from:
+    ///   - In-app [Mark Done] button (TeamView Task message card).
+    ///   - APNs `dm.markDone` action handler (LeafAppDelegate) — runs WITHOUT
+    ///     opening the app; the optimistic write means recipient sees the
+    ///     correct state on next foreground without waiting for server PATCH.
     func markDone(messageID: String) async {
         let pubkey = cachedPubkey() ?? ""
+        let nowDate = Date()
+        let nowMs = Int64(nowDate.timeIntervalSince1970 * 1000)
         let nowISO: String = {
             let f = ISO8601DateFormatter()
             f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            return f.string(from: Date())
+            return f.string(from: nowDate)
         }()
-        try? await supabase.markDone(
-            messageID: messageID,
-            doneAtISO: nowISO,
-            doneByPubkeyHex: pubkey
-        )
+
+        // 1. Optimistic local UPDATE — UI reflects done immediately.
+        //    A DB-open failure here is silent-skip: extremely rare (only at
+        //    cold-boot races), and falling through to the server PATCH still
+        //    yields server-side correctness on the next inbox tick.
+        do {
+            let svc = try ensureService()
+            try svc.markDoneLocalOptimistic(
+                messageID: messageID,
+                atMs: nowMs,
+                doneByPubkeyHex: pubkey
+            )
+            refreshLocalStateIfActive(messageID: messageID)
+        } catch {
+            logger.warning("optimistic markDone local UPDATE failed: \(String(describing: error), privacy: .public)")
+        }
+
+        // 2. Attempt server PATCH.
+        do {
+            try await supabase.markDone(
+                messageID: messageID,
+                doneAtISO: nowISO,
+                doneByPubkeyHex: pubkey
+            )
+        } catch {
+            // 3. Network / RLS failure — flip retry-queue flag for daily tick.
+            //    A flag-set failure here is silent-skip: worst case the row
+            //    is not retried until the next time the user marks any task
+            //    done (which will trigger a fresh local UPDATE path).
+            do {
+                let svc = try ensureService()
+                try svc.setPendingMarkDoneFlag(messageID: messageID, pending: true)
+            } catch {
+                logger.warning("setPendingMarkDone failed (retry suppressed): \(String(describing: error), privacy: .public)")
+            }
+        }
+    }
+
+    /// Refresh local UI snapshot after an optimistic UPDATE so the done badge
+    /// renders without waiting for the next 30s tick. Cheap (single SELECT).
+    private func refreshLocalStateIfActive(messageID: String) {
+        guard let wid = activeWorkspaceStore.activeWorkspaceID else { return }
+        refreshLocalState(workspaceID: wid)
     }
 
     // MARK: - Internal

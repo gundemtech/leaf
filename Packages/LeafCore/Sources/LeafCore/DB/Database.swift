@@ -330,6 +330,51 @@ public final class Database: @unchecked Sendable {
         }
     }
 
+    // MARK: - Direct message pending_mark_done retry queue (Track 5 / S8 T6)
+
+    /// SELECT `message_id` rows where `pending_mark_done = 1`. Drives
+    /// `PendingMarkDoneRetryService.tick()`. Uses the M026 partial index for
+    /// O(pending) seek.
+    public func readPendingMarkDoneMessageIDs() throws -> [String] {
+        try pool.read { rawDB in
+            try MessagesMirrorStore.fetchPendingMarkDoneIDs(in: rawDB)
+        }
+    }
+
+    /// UPDATE `pending_mark_done` flag — set to 1 after the optimistic local
+    /// UPDATE landed but the server PATCH failed; cleared back to 0 by the
+    /// retry queue on a subsequent successful PATCH.
+    public func writePendingMarkDoneFlag(messageID: String, pending: Bool) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { rawDB in
+            try MessagesMirrorStore.setPendingMarkDone(
+                messageID: messageID, pending: pending, in: rawDB
+            )
+        }
+    }
+
+    /// Optimistic-local `markDone` — UPDATE done_at + done_by_pubkey + clear
+    /// pending_mark_done in one statement. Distinct from
+    /// `MessagesMirrorStore.markDone` (post-server-confirmed path) since this
+    /// variant runs FIRST in the APNs dm.markDone flow (server PATCH may fail
+    /// and a separate `writePendingMarkDoneFlag(pending: true)` writes the
+    /// retry-queue flag).
+    public func writeOptimisticMarkDone(
+        messageID: String,
+        atMs: Int64,
+        doneByPubkeyHex: String
+    ) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { rawDB in
+            try MessagesMirrorStore.markDoneLocalOptimistic(
+                messageID: messageID,
+                atMs: atMs,
+                doneByPubkeyHex: doneByPubkeyHex,
+                in: rawDB
+            )
+        }
+    }
+
     // MARK: - Collector offsets (Phase 2.3)
 
     /// Reads single offset by composite PK. Returns `nil` если записи нет —

@@ -38,6 +38,11 @@ struct RootView: View {
     @Environment(DirectMessageInboxReader.self) private var directMessageInboxReader
     @Environment(TeamEventBroadcastReader.self) private var teamEventBroadcastReader
     @Environment(TeamEventMirrorReader.self) private var teamEventMirrorReader
+    /// Track 5 / S8 T6 — daily-tick retry queue for APNs `dm.markDone`.
+    /// Optional because Database open at LeafApp.init can fail (graceful);
+    /// nil → skip the tick. Driven from the polling loop below alongside
+    /// the existing TeamEventMirrorRetentionPruner pruner tick.
+    @Environment(\.pendingMarkDoneRetryService) private var pendingMarkDoneRetryService
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -94,6 +99,17 @@ struct RootView: View {
                 await teamEventMirrorReader.tick(workspaceID: wid)
                 if Task.isCancelled { break }
                 await directMessageInboxReader.tick()
+                if Task.isCancelled { break }
+                // Track 5 / S5 — 24h-cooldown retention prune (mirror cleanup).
+                await teamEventMirrorReader.pruneIfDueDaily()
+                if Task.isCancelled { break }
+                // Track 5 / S8 T6 — 24h-cooldown APNs dm.markDone retry queue.
+                // Service-internal cooldown gate means the actual server-PATCH
+                // loop fires at most once per 24h; the per-30s outer loop just
+                // gives the actor a chance to check.
+                if let retry = pendingMarkDoneRetryService {
+                    try? await retry.tickIfDueDaily()
+                }
                 if Task.isCancelled { break }
                 try? await Task.sleep(nanoseconds: 30_000_000_000)
             }

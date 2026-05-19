@@ -196,6 +196,71 @@ public struct MessagesMirrorStore: Sendable {
         )
     }
 
+    // MARK: - Track 5 / S8 T6 — pending_mark_done retry queue (M026 column)
+
+    /// SELECT message_id WHERE `pending_mark_done = 1`.
+    ///
+    /// Drives `PendingMarkDoneRetryService.tick()` — daily-tick background
+    /// retry for rows where the optimistic local UPDATE landed but the
+    /// server PATCH (via `SupabaseClient.markDone`) failed (network /
+    /// transient 5xx). Uses the `idx_messages_mirror_pending_mark_done`
+    /// partial index for O(pending) seek (M026 / T1).
+    public static func fetchPendingMarkDoneIDs(in db: GRDB.Database) throws -> [String] {
+        try String.fetchAll(
+            db,
+            sql: """
+                SELECT \(Schema.MessagesMirror.messageID)
+                FROM \(Schema.MessagesMirror.tableName)
+                WHERE \(Schema.MessagesMirror.pendingMarkDone) = 1
+                """
+        )
+    }
+
+    /// UPDATE `pending_mark_done` flag (0 = cleared, 1 = needs retry).
+    /// `lastSyncedAtMs` is NOT touched — the flag itself does not represent
+    /// a server-confirmed state, so it would mis-signal sync recency.
+    public static func setPendingMarkDone(
+        messageID: String,
+        pending: Bool,
+        in db: GRDB.Database
+    ) throws {
+        try db.execute(
+            sql: """
+                UPDATE \(Schema.MessagesMirror.tableName)
+                SET \(Schema.MessagesMirror.pendingMarkDone) = ?
+                WHERE \(Schema.MessagesMirror.messageID) = ?
+                """,
+            arguments: [pending ? 1 : 0, messageID]
+        )
+    }
+
+    /// Optimistic-local `markDone` — UPDATE `done_at_ms` + `done_by_pubkey_hex`
+    /// AND clear `pending_mark_done` flag in one statement. Distinct from
+    /// `markDone(messageID:atMs:doneByPubkeyHex:)` (which is used by the
+    /// post-server-PATCH path) — this variant is for the APNs `dm.markDone`
+    /// flow where we set local state first and then attempt the server PATCH.
+    /// On a successful server PATCH, callers can just leave `pending_mark_done`
+    /// at the 0 default; on failure they call `setPendingMarkDone(pending: true)`
+    /// to flag the row for the retry queue.
+    public static func markDoneLocalOptimistic(
+        messageID: String,
+        atMs: Int64,
+        doneByPubkeyHex: String,
+        in db: GRDB.Database
+    ) throws {
+        try db.execute(
+            sql: """
+                UPDATE \(Schema.MessagesMirror.tableName)
+                SET \(Schema.MessagesMirror.doneAtMs) = ?,
+                    \(Schema.MessagesMirror.doneByPubkeyHex) = ?,
+                    \(Schema.MessagesMirror.lastSyncedAtMs) = ?,
+                    \(Schema.MessagesMirror.pendingMarkDone) = 0
+                WHERE \(Schema.MessagesMirror.messageID) = ?
+                """,
+            arguments: [atMs, doneByPubkeyHex, atMs, messageID]
+        )
+    }
+
     // MARK: - Private
 
     private static let selectAllSQL = """

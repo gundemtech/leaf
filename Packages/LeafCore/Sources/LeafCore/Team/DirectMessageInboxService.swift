@@ -140,6 +140,30 @@ public struct DirectMessageInboxService: Sendable {
         return try codec.decode(input.encryptedPayload, teamKey: teamKey)
     }
 
+    // MARK: - Track 5 / S8 T6 — optimistic markDone + pending_mark_done flag
+
+    /// Optimistic local markDone — UPDATE done_at + done_by + clears
+    /// `pending_mark_done` in one statement. Called BEFORE the server PATCH
+    /// from `DirectMessageInboxReader.markDone(messageID:)` so the user sees
+    /// the row marked done immediately regardless of network outcome.
+    public func markDoneLocalOptimistic(
+        messageID: String,
+        atMs: Int64,
+        doneByPubkeyHex: String
+    ) throws {
+        try database.writeOptimisticMarkDone(
+            messageID: messageID, atMs: atMs, doneByPubkeyHex: doneByPubkeyHex
+        )
+    }
+
+    /// Set the `pending_mark_done` retry-queue flag. Called from
+    /// `DirectMessageInboxReader.markDone(messageID:)` ONLY on server PATCH
+    /// failure — the retry walk runs via `PendingMarkDoneRetryService.tick()`
+    /// scheduled from `RootView.task`.
+    public func setPendingMarkDoneFlag(messageID: String, pending: Bool) throws {
+        try database.writePendingMarkDoneFlag(messageID: messageID, pending: pending)
+    }
+
     /// Extract `EncryptedDirectMessageInput` from a wire row.
     ///
     /// Static helper — used by the Realtime path (LeafRealtimeService injects

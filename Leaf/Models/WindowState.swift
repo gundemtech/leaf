@@ -53,4 +53,11 @@ final class WindowState {
     /// (via ActiveWorkspaceStore.setActive), then sets this for the UI to
     /// confirm/observe (e.g., for transient debugging surfaces).
     var pendingWorkspaceID: String?
+
+    /// Track 5 / S8 T6 — APNs `dm.reply` action toggles this `true` after the
+    /// deep-link plumbing (workspace switch + section = .team + pendingMessageID)
+    /// finishes. TeamView observes via `.onChange`, scrolls to `pendingMessageID`
+    /// + signals reply-focus intent, then clears the flag back to `false`.
+    /// Pure transient signal — never persisted, never read concurrently.
+    var focusReplyField: Bool = false
 }

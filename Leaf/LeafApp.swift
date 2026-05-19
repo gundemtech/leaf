@@ -3,6 +3,7 @@
 //  Leaf
 //
 
+import CryptoKit
 import SwiftUI
 import UserNotifications
 import os
@@ -87,6 +88,12 @@ struct LeafApp: App {
     /// write tech.gundem.leaf tier free` from Terminal flips UI live during
     /// QA — no app relaunch required.
     @State private var tierGateReader = TierGateReader()
+    /// Track 5 / S8 T6 — daily-tick retry queue for APNs `dm.markDone`
+    /// actions whose optimistic local UPDATE succeeded but server PATCH
+    /// failed. nil when Database open fails at LeafApp.init (graceful: tick
+    /// scheduler skips). Driven from `RootView.task(id:)` alongside the
+    /// existing TeamEventMirrorRetentionPruner pruner tick.
+    @State private var pendingMarkDoneRetryService: PendingMarkDoneRetryService?
     @State private var windowState = WindowState()
     @Environment(\.scenePhase) private var scenePhase
 
@@ -342,6 +349,48 @@ struct LeafApp: App {
         // scroll-to/highlight the message cell. Same static-ref bridge pattern.
         LeafAppDelegate.windowState = _windowState.wrappedValue
         LeafAppDelegate.activeWorkspaceStore = active
+        // Track 5 / S8 T6 — APNs `dm.markDone` action handler needs the
+        // SendReader reference (UI in-app [Mark Done] path delegates to
+        // InboxReader.markDone; the AppDelegate keeps a separate ref purely
+        // for symmetry with the static-bridge convention used by the other
+        // AppDelegate consumers and for future Track 6 reply-send wiring).
+        LeafAppDelegate.directMessageSendReader = sendReader
+
+        // Track 5 / S8 T6 — construct PendingMarkDoneRetryService over the
+        // shared Team feed DB handle (same SQLCipher events.sqlite file as the
+        // rest of the app). On DB open failure (`teamFeedQueryDB == nil`) the
+        // service stays nil — RootView's daily-tick scheduler honours nil
+        // and skips silently.
+        if let db = teamFeedQueryDB {
+            let keystoreRoot = TeamKeystore.defaultRoot()
+            let retryClient: PendingMarkDoneRetryService.MarkDoneClient = { [supabase] messageID in
+                // Resolve self pubkey lazily inside the closure so a key
+                // rotation between LeafApp.init and the retry tick still
+                // hands the current value. Throws on identity read failure
+                // — wrapped in actor.tick's catch; row stays pending for
+                // the next tick.
+                let priv = try IdentityService.ensureLocalIdentity(at: keystoreRoot)
+                let pubkeyHex = priv.publicKey.rawRepresentation
+                    .map { String(format: "%02x", $0) }
+                    .joined()
+                // Inline ISO8601 formatter — matches the format used by
+                // SupabaseClient.markDone callsites (see DirectMessageService.markDone
+                // + DirectMessageInboxReader.markDone). Avoids capturing a
+                // Sendable dependency on the reader-owned helpers.
+                let formatter = ISO8601DateFormatter()
+                formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                let nowISO = formatter.string(from: Date())
+                try await supabase.markDone(
+                    messageID: messageID,
+                    doneAtISO: nowISO,
+                    doneByPubkeyHex: pubkeyHex
+                )
+            }
+            _pendingMarkDoneRetryService = State(initialValue: PendingMarkDoneRetryService(
+                mirror: db,
+                markDone: retryClient
+            ))
+        }
 
         // D1 — idempotent register для post-update relaunch restoration.
         // Sparkle relaunch'ает app после bundle replace + cold launch без update flow:
@@ -405,6 +454,11 @@ struct LeafApp: App {
                 .environment(\.submitToWaitlist, { [supabaseClient] email in
                     await supabaseClient.submitToWaitlist(email: email)
                 })
+                // Track 5 / S8 T6 — PendingMarkDoneRetryService threaded as
+                // optional Sendable actor via custom EnvironmentKey (actors
+                // can't conform to Observation tracking). RootView's
+                // .task(id:) daily-tick scheduler reads + invokes .tickIfDueDaily.
+                .environment(\.pendingMarkDoneRetryService, pendingMarkDoneRetryService)
                 .environment(windowState)
                 .onAppear {
                     inviteURLHandler.wire(acceptReader: inviteAcceptReader,
@@ -623,6 +677,12 @@ final class LeafAppDelegate: NSObject, NSApplicationDelegate, UNUserNotification
     /// Populated by LeafApp.init before any APNs delivery can fire.
     @MainActor static weak var windowState: WindowState?
     @MainActor static weak var activeWorkspaceStore: ActiveWorkspaceStore?
+    /// Track 5 / S8 T6 — APNs `dm.markDone` action runs WITHOUT opening the
+    /// app. We dispatch into `DirectMessageInboxReader.markDone(messageID:)`
+    /// (the same reader that owns the in-app [Mark Done] button path) so the
+    /// optimistic local UPDATE + retry-queue flow runs identically whether
+    /// the user taps in-app or via banner action.
+    @MainActor static weak var directMessageSendReader: DirectMessageSendReader?
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag {
@@ -704,10 +764,19 @@ final class LeafAppDelegate: NSObject, NSApplicationDelegate, UNUserNotification
         return [.banner, .sound, .badge]
     }
 
-    /// User clicked notification → eager-fetch the referenced message AND
-    /// (Track 5 / S7 H.6) deep-link the UI to the Team tab, switch active
-    /// workspace if needed, and signal TeamView to scroll-to/highlight the
-    /// matching message cell via `WindowState.pendingMessageID`.
+    /// User clicked notification (default tap) OR a banner action button:
+    ///
+    /// - `UNNotificationDefaultActionIdentifier` (banner body tap) → Track 5
+    ///   / S7 H.6 deep-link: switch workspace + activate Team tab + signal
+    ///   scroll-to/highlight + eager-fetch the message via `tickOnce`.
+    /// - `dm.reply` (Track 5 / S8 T6) → same deep-link path PLUS
+    ///   `WindowState.focusReplyField = true` so TeamView observes the flag
+    ///   and signals reply-focus intent.
+    /// - `dm.markDone` (Track 5 / S8 T6) → does NOT open the app; dispatches
+    ///   `DirectMessageInboxReader.markDone(messageID:)` which runs the
+    ///   optimistic local UPDATE + server PATCH + retry-queue flag flow.
+    /// - Anything else → no-op (unknown action / category from a future
+    ///   server / forward-compat).
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 didReceive response: UNNotificationResponse) async {
         let userInfo = response.notification.request.content.userInfo
@@ -715,16 +784,60 @@ final class LeafAppDelegate: NSObject, NSApplicationDelegate, UNUserNotification
               let workspaceID = userInfo["leaf_workspace_id"] as? String else {
             return
         }
-        // Switch active workspace + drive UI to Team tab + signal scroll-to.
-        // Done before tickOnce so the UI renders pre-fetch (graceful empty
-        // until decryption lands the row).
+
+        switch response.actionIdentifier {
+        case NotificationCategoryRegistry.replyActionID:
+            // Reply action — same deep-link as default tap, plus focusReplyField
+            // signal so TeamView observers can hand focus to the reply UI.
+            // The reply textfield itself ships in a later Track (S7 deferred
+            // inline reply to Track 6); until then the flag plumbing is
+            // exercised by tests + scroll/highlight surfaces alone.
+            await deepLinkToMessage(
+                workspaceID: workspaceID,
+                messageID: messageID,
+                focusReply: true
+            )
+
+        case NotificationCategoryRegistry.markDoneActionID:
+            // Mark Done — explicitly does NOT open the app or modify
+            // WindowState. Dispatches into the inbox reader which owns the
+            // optimistic local UPDATE + server PATCH + retry-queue path.
+            // Switching the active workspace is intentionally avoided here:
+            // the user did not request a context switch (they tapped Done
+            // from a banner that may be cross-workspace) and the reader's
+            // markDone path operates on message_id directly.
+            await Self.directMessageInboxReader?.markDone(messageID: messageID)
+
+        case UNNotificationDefaultActionIdentifier:
+            // Default tap (banner body) — existing S7 H.6 deep-link.
+            await deepLinkToMessage(
+                workspaceID: workspaceID,
+                messageID: messageID,
+                focusReply: false
+            )
+
+        default:
+            // Unknown action identifier — forward-compat no-op.
+            break
+        }
+    }
+
+    /// Track 5 / S7 H.6 deep-link path shared by default-tap and dm.reply.
+    /// Switches active workspace if needed, drives UI to .team, sets
+    /// pendingMessageID for TeamView scroll/highlight, and (for dm.reply)
+    /// raises focusReplyField. Eager-fetches the message via tickOnce so
+    /// the local mirror has the row by the time scrollTo fires.
+    @MainActor
+    private func deepLinkToMessage(workspaceID: String, messageID: String, focusReply: Bool) async {
         if Self.activeWorkspaceStore?.activeWorkspaceID != workspaceID {
             Self.activeWorkspaceStore?.setActive(workspaceID)
         }
         Self.windowState?.section = .team
         Self.windowState?.pendingWorkspaceID = workspaceID
         Self.windowState?.pendingMessageID = messageID
-
+        if focusReply {
+            Self.windowState?.focusReplyField = true
+        }
         // Eager-fetch the message so it is in the local mirror by the time
         // TeamView's scrollTo fires. If the row already exists this is a no-op.
         await Self.directMessageInboxReader?.tickOnce(

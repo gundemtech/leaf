@@ -185,6 +185,63 @@ final class MessagesMirrorStoreTests: XCTestCase {
         XCTAssertEqual(fetched?.doneByPubkeyHex, "doneby")
     }
 
+    // MARK: - Track 5 / S8 T6 — pending_mark_done retry queue
+
+    func testFetchPendingMarkDoneIDs_EmptyByDefault() throws {
+        try db.writeSQL { rawDB in
+            try MessagesMirrorStore.upsert(makeRow(messageID: "task-1", kind: .task), in: rawDB)
+            try MessagesMirrorStore.upsert(makeRow(messageID: "task-2", kind: .task), in: rawDB)
+        }
+        let ids = try db.readSQL { try MessagesMirrorStore.fetchPendingMarkDoneIDs(in: $0) }
+        XCTAssertTrue(ids.isEmpty, "Default pending_mark_done = 0 → no rows returned")
+    }
+
+    func testSetPendingMarkDone_TogglesFlag() throws {
+        try db.writeSQL { rawDB in
+            try MessagesMirrorStore.upsert(makeRow(messageID: "task-1", kind: .task), in: rawDB)
+            try MessagesMirrorStore.setPendingMarkDone(messageID: "task-1", pending: true, in: rawDB)
+        }
+        let ids1 = try db.readSQL { try MessagesMirrorStore.fetchPendingMarkDoneIDs(in: $0) }
+        XCTAssertEqual(ids1, ["task-1"])
+
+        try db.writeSQL { rawDB in
+            try MessagesMirrorStore.setPendingMarkDone(messageID: "task-1", pending: false, in: rawDB)
+        }
+        let ids2 = try db.readSQL { try MessagesMirrorStore.fetchPendingMarkDoneIDs(in: $0) }
+        XCTAssertTrue(ids2.isEmpty)
+    }
+
+    func testMarkDoneLocalOptimistic_SetsDoneAndClearsPendingFlag() throws {
+        try db.writeSQL { rawDB in
+            try MessagesMirrorStore.upsert(makeRow(messageID: "task-1", kind: .task), in: rawDB)
+            // Pre-set the flag (simulating a previous failed attempt).
+            try MessagesMirrorStore.setPendingMarkDone(messageID: "task-1", pending: true, in: rawDB)
+            // Optimistic local UPDATE — should clear flag inline.
+            try MessagesMirrorStore.markDoneLocalOptimistic(
+                messageID: "task-1", atMs: 12_000, doneByPubkeyHex: "self", in: rawDB
+            )
+        }
+
+        let fetched = try db.readSQL { try MessagesMirrorStore.read(messageID: "task-1", in: $0) }
+        XCTAssertEqual(fetched?.doneAtMs, 12_000)
+        XCTAssertEqual(fetched?.doneByPubkeyHex, "self")
+        XCTAssertEqual(fetched?.lastSyncedAtMs, 12_000)
+        let pendingIDs = try db.readSQL { try MessagesMirrorStore.fetchPendingMarkDoneIDs(in: $0) }
+        XCTAssertTrue(pendingIDs.isEmpty, "Optimistic update clears retry flag in same statement")
+    }
+
+    func testFetchPendingMarkDoneIDs_MultipleRows() throws {
+        try db.writeSQL { rawDB in
+            try MessagesMirrorStore.upsert(makeRow(messageID: "task-1", kind: .task), in: rawDB)
+            try MessagesMirrorStore.upsert(makeRow(messageID: "task-2", kind: .task), in: rawDB)
+            try MessagesMirrorStore.upsert(makeRow(messageID: "task-3", kind: .task), in: rawDB)
+            try MessagesMirrorStore.setPendingMarkDone(messageID: "task-1", pending: true, in: rawDB)
+            try MessagesMirrorStore.setPendingMarkDone(messageID: "task-3", pending: true, in: rawDB)
+        }
+        let ids = try db.readSQL { try MessagesMirrorStore.fetchPendingMarkDoneIDs(in: $0) }
+        XCTAssertEqual(Set(ids), ["task-1", "task-3"])
+    }
+
     func testUpsertWithAttachment_RoundTripsAttachmentFields() throws {
         let row = DirectMessageMirrorRow(
             messageID: "att-1",
