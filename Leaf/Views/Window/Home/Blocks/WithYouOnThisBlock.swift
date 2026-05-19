@@ -179,17 +179,13 @@ struct WithYouOnThisBlock: View {
         return joined.isEmpty ? "?" : String(joined.prefix(2))
     }
 
-    /// Coarse "X ago" relative formatter. Block-private to avoid coupling
-    /// with `YouNowBlock`'s own `formatRelative` helper; extract to a
-    /// shared util when a 3rd caller appears.
+    /// C-22 (Phase 8.9) — migrated to `HomeRelativeTimeFormatter`. Kept as a
+    /// thin wrapper so existing call sites in the body stay one-liner; bucket
+    /// ladder semantics change from "Ns / Nm / Nh / Nd ago" to the canonical
+    /// "now / Nm ago / Nh ago / yesterday / N days ago / MMM d" shared with
+    /// WhereStoppedBlock + YouNowBlock.
     private func formatRelative(msAgo ms: Int64) -> String {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
-        let secs = max(0, Int((nowMs - ms) / 1000))
-        if secs < 60 { return "\(secs)s ago" }
-        let mins = secs / 60
-        if mins < 60 { return "\(mins)m ago" }
-        let hours = mins / 60
-        if hours < 24 { return "\(hours)h ago" }
-        return "\(hours / 24)d ago"
+        return HomeRelativeTimeFormatter.format(deltaMs: max(0, nowMs - ms), nowMs: nowMs)
     }
 }
