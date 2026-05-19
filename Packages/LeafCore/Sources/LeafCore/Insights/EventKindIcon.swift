@@ -116,6 +116,9 @@ public enum EventKindIcon {
         case "vscode_workspace_opened": return "folder.fill.badge.plus"
         case "jetbrains_recent_project_observed": return "chevron.left.forwardslash.chevron.right"
 
+        // Track-9 T2 — linear_comment_authored_to_me INBOX feeder.
+        case "linear_comment_authored_to_me": return "bubble.left.fill"
+
         default: return nil
         }
     }

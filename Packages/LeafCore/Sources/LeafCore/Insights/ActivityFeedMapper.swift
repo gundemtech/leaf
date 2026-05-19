@@ -293,6 +293,15 @@ public enum ActivityFeedMapper {
             let count = sanitize(payload["count_in_window"]) ?? "1"
             primary = "\(issueKey): \(count) comment\(count == "1" ? "" : "s")"
             secondary = team
+        // Track-9 T2 — incoming counterpart to linear_comment_authored. Reads only
+        // structured payload counters; never reads body / title / mention text /
+        // linear_issue_url contents (URL field stays in DB row, not surfaced here).
+        case "linear_comment_authored_to_me":
+            guard let issueKey else { return nil }
+            let count = sanitize(payload["to_me_count_in_window"]) ?? "1"
+            primary =
+                "\(issueKey): \(count) comment\(count == "1" ? "" : "s") to you"
+            secondary = team
         case "linear_document_edited":
             // ADR-010: document title is self-authored — surfacing allowed,
             // matches "issue title" allowance.

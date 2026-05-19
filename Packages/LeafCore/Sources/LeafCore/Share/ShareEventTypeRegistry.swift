@@ -45,6 +45,11 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     case slackThreadReplyAggregate = "slack_thread_reply_aggregate"
     case slackStatusChange = "slack_status_change"
     case linearCommentAuthored = "linear_comment_authored"
+    // Track-9 T2 — discriminator sibling: comments authored BY OTHERS on
+    // viewer-touched issues (assigned/created/touched). Default OFF
+    // (ADR-020) — substrate ships silent until user opts in via Privacy →
+    // Share Controls.
+    case linearCommentAuthoredToMe = "linear_comment_authored_to_me"
 
     // MARK: - Phase 4.7.B — presence-first first-class APIs (this commit)
     case githubNotificationsPulse = "gh_notifications_pulse"
@@ -326,6 +331,9 @@ public enum ShareEventTypeDefaults {
         .init(key: .slackThreadReplyAggregate, defaultEnabled: true),
         .init(key: .slackStatusChange, defaultEnabled: true),
         .init(key: .linearCommentAuthored, defaultEnabled: true),
+        // Track-9 T2 — discriminator sibling default OFF per ADR-020. INBOX
+        // feeder substrate; user opts in via Privacy → Share Controls.
+        .init(key: .linearCommentAuthoredToMe, defaultEnabled: false),
 
         // Phase 4.7.B — presence-first first-class APIs
         .init(key: .githubNotificationsPulse, defaultEnabled: true),
