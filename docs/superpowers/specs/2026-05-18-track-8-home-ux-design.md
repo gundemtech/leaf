@@ -382,6 +382,8 @@ Each phase ships behind a feature branch, gets independent code-review subagent 
 
 Items deferred from earlier phases. Append to this list during phase wrap so nothing falls through. P9 closes all entries or explicitly re-defers to v1.1.
 
+**P9 status pass (2026-05-19):** 6 view-only carries closed inline (C-3, C-4, C-7, C-17, C-18, C-22); remaining 18 deferred to Track-9 substrate enrichment stub at `docs/superpowers/specs/2026-05-19-track-9-substrate-enrichment.md` (groups by theme: YOU·NOW depth / empty-state enrichment / route + URL plumbing / WHERE STOPPED enrichment / Analytics surface / reader state machine / InboxBlock SQL re-fetch / localization) plus Phase 5.6 relay dep (C-11) and v1.1 deferred (C-8). See P9 spec `docs/superpowers/specs/2026-05-19-phase-8-9-polish.md` for resolution detail + a11y audit carry-forwards.
+
 **From P3 (TODAY block):**
 
 - **C-1 Hybrid surface pills** — replace current `SurfacePill.label`-only render with semantic per-surface units: capture-surfaces (Claude Code / Xcode / IDEs / Browsers / Zoom / Calendar) show attention-time (e.g. `Claude Code · 1h 47m`); Layer B providers (Linear / GitHub / Slack) show action-noun count (e.g. `Linear · 3 issues`, `GitHub · 5 commits`, `Slack · 12 msgs`). Requires substrate change: extend `SurfacePill` shape (decision: `displayValue: String` precomputed by substrate vs `kind` enum dispatched by view — brainstorm at P9), add 3 SQL queries in `ProdInsights+TodayMetrics.swift` (Linear distinct issues / GitHub commits / Slack messages today), and close **Phase 8.1 emission gap** — current substrate only emits capture-surface pills, never Layer B (router `LayerBProvider` branch is dead code today).
