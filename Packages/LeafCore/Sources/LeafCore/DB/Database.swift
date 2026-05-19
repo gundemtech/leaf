@@ -61,6 +61,7 @@ public final class Database: @unchecked Sendable {
         migrator.registerMigration023TeamEventsMirror()
         migrator.registerMigration024TeamEventBroadcastOffsets()
         migrator.registerMigration025WorkspaceSoftDelete()
+        migrator.registerMigration026S8Substrate()
         try migrator.migrate(pool)
 
         return Database(pool: pool, config: config, mode: .writer)

@@ -194,6 +194,12 @@ public enum Schema {
         public static let indexUnread = "idx_messages_mirror_unread"
         public static let indexOpenTasks = "idx_messages_mirror_open_tasks"
 
+        /// Track 5 / S8 / T1 — pending Mark Done retry queue flag (M026 ALTER).
+        /// 1 when APNs dm.markDone optimistic-update succeeded locally but the
+        /// server PATCH failed — background retry until success or row delete.
+        public static let pendingMarkDone = "pending_mark_done"
+        public static let indexPendingMarkDone = "idx_messages_mirror_pending_mark_done"
+
         public static let directionOutbound = "outbound"
         public static let directionInbound = "inbound"
     }
@@ -228,6 +234,20 @@ public enum Schema {
         public static let updatedAtMs = "updated_at_ms"
 
         public static let indexWorkspace = "idx_share_rules_workspace"
+    }
+
+    /// Track 5 / S8 / T1 — per-device notification preferences (M026).
+    /// Mirrors `ShareRules` normalized per-row + defaults map fallback pattern, but
+    /// keyed on a single `pref_kind` column (no workspace_id — toggles are
+    /// device-wide). Row absent → `NotificationKind.defaultEnabled` semantics.
+    /// `pref_kind` value space lives in `NotificationKind.rawValue`; CHECK constraint
+    /// intentionally omitted (registry source of truth is the Swift enum, mirroring
+    /// `ShareRules` design comment).
+    public enum NotificationPrefs {
+        public static let tableName = "notification_prefs"
+        public static let prefKind = "pref_kind"
+        public static let enabled = "enabled"
+        public static let updatedAtMs = "updated_at_ms"
     }
 
     /// Phase Track-5 S5 — auto-shared events local mirror (incoming from
