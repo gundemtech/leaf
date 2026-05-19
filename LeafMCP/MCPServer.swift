@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import LeafCore
 import LeafMCPProtocol
@@ -73,44 +74,100 @@ enum MCPMain {
             dbEncryption: dbEncryption, detectorMoat: detectorMoat
         )
 
+        // Track 5 / S8 / T7 — `leaf_query_team` tool. Constructs a
+        // reader-mode Database handle (MCPServer is a read-only process per
+        // ADR-019 — only the Agent writes to events.sqlite) plus the two
+        // provider closures the service needs: active workspace id from the
+        // UserDefaults key that the main app's `ActiveWorkspaceStore`
+        // persists (`ActiveWorkspaceStore.userDefaultsKey`), and self
+        // pubkey hex from the on-disk X25519 identity key (read via
+        // `IdentityService.ensureLocalIdentity` — idempotent: if the file
+        // exists this is a pure read).
+        let queryTeamTool: QueryTeamTool? = {
+            guard FileManager.default.fileExists(atPath: dbURL.path) else {
+                MCPLog.info("leaf_query_team: events.sqlite missing — tool not registered")
+                return nil
+            }
+            do {
+                let queryDB = try Database.openForRead(
+                    at: dbURL, config: dbConfig, encryption: dbEncryption
+                )
+                let activeWorkspaceProvider: TeamTimelineQueryService.ActiveWorkspaceProvider = {
+                    UserDefaults.standard.string(forKey: ActiveWorkspaceStore.userDefaultsKey)
+                }
+                let selfPubkeyProvider: TeamTimelineQueryService.SelfPubkeyProvider = {
+                    do {
+                        let priv = try IdentityService.ensureLocalIdentity()
+                        return priv.publicKey.rawRepresentation
+                            .map { String(format: "%02x", $0) }
+                            .joined()
+                    } catch {
+                        return nil
+                    }
+                }
+                let service = TeamTimelineQueryService(
+                    database: queryDB,
+                    activeWorkspaceProvider: activeWorkspaceProvider,
+                    selfPubkeyProvider: selfPubkeyProvider
+                )
+                return QueryTeamTool(queryService: service)
+            } catch {
+                MCPLog.error("leaf_query_team init failed: \(error.localizedDescription)")
+                return nil
+            }
+        }()
+
         // Notifications (`notifications/*`) обрабатываются Dispatcher'ом через
         // id == nil short-circuit — отдельный handler регистрировать не нужно.
+        // Track 5 / S8 / T7 — tools list + registry conditionally include
+        // `leaf_query_team` only when the Database open above succeeded.
+        // Without a DB handle the tool cannot serve any query; surfacing its
+        // schema in `tools/list` but failing every call is worse UX than
+        // omitting it (AI client will not advertise a feature that always
+        // errors). MCP tool count: 15 base + 1 (S8/T7) = 16 when active.
+        var toolDefinitions: [ToolDefinition] = [
+            GetTimelineTool.definition,
+            FindLastActivityTool.definition,
+            GetCurrentSessionTool.definition,
+            GetAiActivityTool.definition,
+            GetLinearActivityTool.definition,
+            GetGitHubActivityTool.definition,
+            GetSlackActivityTool.definition,
+            GetUninterruptedWindowTool.definition,
+            GetCurrentPresenceTool.definition,
+            GetWorkloadPulseTool.definition,
+            GetReviewActivityTool.definition,
+            GetCrossProviderThreadTool.definition,
+            QueryActivityTool.definition,
+            GetDecisionTool.definition,
+            CurrentWorkTool.definition
+        ]
+        var toolRegistry: [String: any ToolExecutor] = [
+            "get_timeline": timelineTool,
+            "find_last_activity": findLastActivityTool,
+            "get_current_session": currentSessionTool,
+            "get_ai_activity": aiActivityTool,
+            "get_linear_activity": linearActivityTool,
+            "get_github_activity": githubActivityTool,
+            "get_slack_activity": slackActivityTool,
+            "get_uninterrupted_window": uninterruptedWindowTool,
+            "get_current_presence": currentPresenceTool,
+            "get_workload_pulse": workloadPulseTool,
+            "get_review_activity": reviewActivityTool,
+            "get_cross_provider_thread": crossProviderThreadTool,
+            "leaf_query_activity": queryActivityTool,
+            "leaf_get_decision": getDecisionTool,
+            "leaf_current_work": currentWorkTool
+        ]
+        if let qtt = queryTeamTool {
+            toolDefinitions.append(QueryTeamTool.definition)
+            toolRegistry["leaf_query_team"] = qtt
+        }
+
         let dispatcher = Dispatcher(handlers: [
             "initialize": InitializeHandler(),
-            "tools/list": ToolsListHandler(tools: [
-                GetTimelineTool.definition,
-                FindLastActivityTool.definition,
-                GetCurrentSessionTool.definition,
-                GetAiActivityTool.definition,
-                GetLinearActivityTool.definition,
-                GetGitHubActivityTool.definition,
-                GetSlackActivityTool.definition,
-                GetUninterruptedWindowTool.definition,
-                GetCurrentPresenceTool.definition,
-                GetWorkloadPulseTool.definition,
-                GetReviewActivityTool.definition,
-                GetCrossProviderThreadTool.definition,
-                QueryActivityTool.definition,
-                GetDecisionTool.definition,
-                CurrentWorkTool.definition
-            ]),
-            "tools/call": ToolsCallHandler(registry: [
-                "get_timeline": timelineTool,
-                "find_last_activity": findLastActivityTool,
-                "get_current_session": currentSessionTool,
-                "get_ai_activity": aiActivityTool,
-                "get_linear_activity": linearActivityTool,
-                "get_github_activity": githubActivityTool,
-                "get_slack_activity": slackActivityTool,
-                "get_uninterrupted_window": uninterruptedWindowTool,
-                "get_current_presence": currentPresenceTool,
-                "get_workload_pulse": workloadPulseTool,
-                "get_review_activity": reviewActivityTool,
-                "get_cross_provider_thread": crossProviderThreadTool,
-                "leaf_query_activity": queryActivityTool,
-                "leaf_get_decision": getDecisionTool,
-                "leaf_current_work": currentWorkTool
-            ])
+            "tools/list": ToolsListHandler(tools: toolDefinitions),
+            "tools/call": ToolsCallHandler(registry: toolRegistry)
         ])
 
         let transport = StdioTransport(dispatcher: dispatcher)

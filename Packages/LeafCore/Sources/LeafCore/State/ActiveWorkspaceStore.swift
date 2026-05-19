@@ -14,7 +14,12 @@ import Observation
 @MainActor
 @Observable
 public final class ActiveWorkspaceStore {
-    public static let userDefaultsKey = "leaf.active_workspace_id"
+    /// `nonisolated` so non-UI processes (Agent, MCPServer) can read the
+    /// `UserDefaults` key from off-MainActor contexts without bouncing to
+    /// the MainActor first. Per the class doc-comment: this is a
+    /// concurrency-immutable string constant — accessing it does not race
+    /// with the @Observable instance state.
+    public nonisolated static let userDefaultsKey = "leaf.active_workspace_id"
 
     public private(set) var activeWorkspaceID: String?
 
