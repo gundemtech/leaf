@@ -56,7 +56,7 @@ final class TeamFeedItemTests: XCTestCase {
     }
 
     private func makeGroupedItem(
-        source: ShareSource = .linearIssues,
+        kind: String = "linear_issue_updated",
         senderPubkeyHex: String = "shex",
         spanStartMs: Int64 = 100,
         spanEndMs: Int64 = 999,
@@ -72,7 +72,7 @@ final class TeamFeedItemTests: XCTestCase {
             removedAt: nil
         )
         return .grouped(
-            kind: source,
+            kind: kind,
             sender: sender,
             count: count,
             spanStartMs: spanStartMs,
@@ -104,12 +104,12 @@ final class TeamFeedItemTests: XCTestCase {
 
     func testFeedItemGroupedID_EncodesKindSenderAndSpanStart() {
         let item = makeGroupedItem(
-            source: .linearIssues,
+            kind: "linear_issue_updated",
             senderPubkeyHex: "aabbcc",
             spanStartMs: 500,
             spanEndMs: 999
         )
-        XCTAssertEqual(item.id, "grouped-linear_issues-aabbcc-500")
+        XCTAssertEqual(item.id, "grouped-linear_issue_updated-aabbcc-500")
     }
 
     func testFeedItemGroupedID_DifferentSpanStartProducesDifferentID() {

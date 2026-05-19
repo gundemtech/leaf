@@ -336,9 +336,14 @@ final class TeamFeedPayloadLeakageTests: XCTestCase {
 
     // MARK: - (9) FeedItem grouped ID does not contain DM body content
 
-    /// The `.grouped` ID format is "grouped-<source_kind>-<sender_pubkeyHex>-<spanStartMs>".
+    /// The `.grouped` ID format is "grouped-<raw_event_kind>-<sender_pubkeyHex>-<spanStartMs>".
     /// pubkeyHex IS intentionally embedded (stable identifier). Verify that
     /// user-authored DM body content never leaks into a grouped item's ID.
+    ///
+    /// S8 T11: `kind` is the raw `event_kind` String from `team_events_mirror.kind`
+    /// (e.g. "gh_commit_pushed"), NOT a `ShareSource.rawValue`. Raw event_kinds
+    /// are themselves enum-style identifiers — they're injected by collector
+    /// switch statements over fixed strings — and can never contain user content.
     func testFeedItemGrouped_NoBodyContentInID() {
         let pubkeyHex = String(repeating: "ab", count: 32)
         let sender = TeamMember(
@@ -351,7 +356,7 @@ final class TeamFeedPayloadLeakageTests: XCTestCase {
             removedAt: nil
         )
         let grouped = FeedItem.grouped(
-            kind: .gitCommits,
+            kind: "gh_commit_pushed",
             sender: sender,
             count: 6,
             spanStartMs: 1_000_000,
@@ -359,11 +364,11 @@ final class TeamFeedPayloadLeakageTests: XCTestCase {
             items: []
         )
 
-        // The ID must contain the source kind and pubkey, but not any user content.
+        // The ID must contain the raw event_kind and pubkey, but not any user content.
         let id = grouped.id
         XCTAssertTrue(id.hasPrefix("grouped-"), "grouped ID must have 'grouped-' prefix")
         XCTAssertTrue(id.contains(pubkeyHex), "grouped ID must contain sender pubkeyHex (stable identifier)")
-        XCTAssertTrue(id.contains("git_commits"), "grouped ID must contain source kind rawValue")
+        XCTAssertTrue(id.contains("gh_commit_pushed"), "grouped ID must contain raw event_kind")
 
         // Must NOT contain any content-bearing strings.
         let contentSentinels = ["SECRET", "body", "payload_json", "plaintextPayload",

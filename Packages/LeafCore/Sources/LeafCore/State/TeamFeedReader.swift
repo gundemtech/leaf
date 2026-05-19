@@ -190,15 +190,22 @@ public final class TeamFeedReader {
 
     // MARK: - Grouping (spec §7.1)
 
-    /// Collapses consecutive same-sender + same-source team events within a
+    /// Collapses consecutive same-sender + same-kind team events within a
     /// 15-minute window (OQ-12) into a single `.grouped` item when the burst
     /// reaches the threshold of 5+ events.
+    ///
+    /// S8 T11 (cross-spec reviewer IMP-3): grouping key was historically
+    /// `(sender, ShareSource)`, which bundled all `git_*` event_kinds under
+    /// `ShareSource.gitCommits`. S7 spec §11.0:575 is unambiguous that
+    /// `FeedItem.grouped.kind` is a raw `String` (the `event_kind` itself).
+    /// Grouping is now per-(sender, raw event_kind, 15min) — finer-grain;
+    /// e.g. "gh_commit_pushed" no longer bundles with "gh_branch_pushed".
     ///
     /// Algorithm (items arrive in DESC order — newest first):
     ///   1. Walk items left-to-right (i.e., newest → oldest within a burst).
     ///   2. A new item extends the current burst when:
     ///        • It is a `.teamEvent` (DMs are never grouped)
-    ///        • `source` matches burst head's source
+    ///        • `kind` matches burst head's kind (raw event_kind)
     ///        • `senderPubkeyHex` matches burst head's sender
     ///        • |head.eventTsMs − row.eventTsMs| ≤ 15 min
     ///   3. Any mismatch → flush current burst, start new burst.
@@ -206,7 +213,7 @@ public final class TeamFeedReader {
     ///   5. Unresolvable sender → fall back to individual rows (no crash).
     public func applyGrouping(_ items: [FeedItem]) -> [FeedItem] {
         var result: [FeedItem] = []
-        // Accumulated same-sender/source burst in DESC order (head = newest).
+        // Accumulated same-sender/kind burst in DESC order (head = newest).
         var burst: [TeamEventMirrorRow] = []
 
         func flush() {
@@ -230,7 +237,7 @@ public final class TeamFeedReader {
             }
 
             result.append(.grouped(
-                kind: oldest.source,
+                kind: oldest.kind,
                 sender: sender,
                 count: burst.count,
                 spanStartMs: oldest.eventTsMs,
@@ -243,7 +250,7 @@ public final class TeamFeedReader {
             switch item {
             case .teamEvent(let row):
                 if let head = burst.first,
-                   head.source == row.source,
+                   head.kind == row.kind,
                    head.senderPubkeyHex == row.senderPubkeyHex,
                    abs(head.eventTsMs - row.eventTsMs) <= Self.groupingWindowMs {
                     burst.append(row)

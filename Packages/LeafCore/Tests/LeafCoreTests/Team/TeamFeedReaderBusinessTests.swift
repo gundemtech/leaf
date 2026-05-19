@@ -99,6 +99,7 @@ final class TeamFeedReaderBusinessTests: XCTestCase {
     private func makeEventRow(
         eventID: String = "evt-1",
         source: ShareSource = .gitCommits,
+        kind: String = "gh_commit_pushed",
         senderPubkeyHex: String = "shex",
         eventTsMs: Int64,
         serverCreatedAtMs: Int64? = nil
@@ -108,7 +109,7 @@ final class TeamFeedReaderBusinessTests: XCTestCase {
             workspaceID: "w1",
             senderPubkeyHex: senderPubkeyHex,
             source: source,
-            kind: "gh_commit_pushed",
+            kind: kind,
             plaintextPayloadJSON: #"{"fields":{}}"#,
             serverCreatedAtMs: serverCreatedAtMs ?? eventTsMs + 10,
             eventTsMs: eventTsMs,
@@ -274,6 +275,7 @@ final class TeamFeedReaderBusinessTests: XCTestCase {
     private func makeDescEvents(
         count: Int,
         source: ShareSource = .gitCommits,
+        kind: String = "gh_commit_pushed",
         senderPubkeyHex: String = "shex",
         baseEventTsMs: Int64 = 900_000,
         stepMs: Int64 = 60_000   // 1 minute apart
@@ -284,6 +286,7 @@ final class TeamFeedReaderBusinessTests: XCTestCase {
             let row = makeEventRow(
                 eventID: "e\(i)",
                 source: source,
+                kind: kind,
                 senderPubkeyHex: senderPubkeyHex,
                 eventTsMs: ts
             )
@@ -305,13 +308,16 @@ final class TeamFeedReaderBusinessTests: XCTestCase {
     }
 
     // G-2: 5 same-kind same-sender within 15m → 1 grouped row
+    // S8 T11: kind is now raw event_kind String, not ShareSource.rawValue.
+    // All makeDescEvents fixtures use `kind: "gh_commit_pushed"` regardless
+    // of `source:` parameter — that's the value the grouped case carries.
     func testApplyGrouping_FiveEvents_AtThreshold_SingleGroupedRow() {
         let reader = groupingReader()
         let items = makeDescEvents(count: 5)
         let result = reader.applyGrouping(items)
         XCTAssertEqual(result.count, 1)
         if case .grouped(let kind, _, let count, _, _, _) = result[0] {
-            XCTAssertEqual(kind, .gitCommits)
+            XCTAssertEqual(kind, "gh_commit_pushed")
             XCTAssertEqual(count, 5)
         } else {
             XCTFail("Expected .grouped, got \(result[0])")
@@ -379,13 +385,16 @@ final class TeamFeedReaderBusinessTests: XCTestCase {
         if case .directMessage = result[1] { /* ok */ } else { XCTFail("Expected .directMessage second") }
     }
 
-    // G-6: Different source (gitCommits vs linearIssues) — no cross-source group
-    func testApplyGrouping_DifferentSources_NoGroup() {
+    // G-6: Different raw event_kind — no cross-kind group
+    // S8 T11: grouping key changed from ShareSource → raw event_kind String.
+    // Two different kinds (3 each) stay individual under either scheme since
+    // both are below threshold.
+    func testApplyGrouping_DifferentKinds_NoGroup() {
         let reader = groupingReader()
-        let gitEvents = makeDescEvents(count: 3, source: .gitCommits, baseEventTsMs: 1_000, stepMs: 60_000)
-        let linEvents = makeDescEvents(count: 3, source: .linearIssues, baseEventTsMs: 700, stepMs: 60_000)
-        let items = gitEvents + linEvents
-        // Only 3 of each, below threshold — all individual rows
+        let commitEvents = makeDescEvents(count: 3, kind: "gh_commit_pushed", baseEventTsMs: 1_000, stepMs: 60_000)
+        let issueEvents  = makeDescEvents(count: 3, kind: "linear_status_changed", baseEventTsMs: 700, stepMs: 60_000)
+        let items = commitEvents + issueEvents
+        // Only 3 of each, below threshold — all individual rows.
         let result = reader.applyGrouping(items)
         XCTAssertEqual(result.count, 6)
         for item in result {
@@ -393,20 +402,43 @@ final class TeamFeedReaderBusinessTests: XCTestCase {
         }
     }
 
-    // G-6b: 5 gitCommits then 5 linearIssues → 2 separate groups (not merged)
-    func testApplyGrouping_FiveDifferentSources_TwoGroupsNotMerged() {
+    // G-6b: 5 of kind A then 5 of kind B → 2 separate groups (not merged)
+    // S8 T11: groups by raw event_kind (was: ShareSource). Verifies that
+    // distinct kinds do not bundle together even when reaching the threshold.
+    func testApplyGrouping_FiveDifferentKinds_TwoGroupsNotMerged() {
         let reader = groupingReader()
-        let gitEvents = makeDescEvents(count: 5, source: .gitCommits, baseEventTsMs: 1_000, stepMs: 60_000)
-        let linEvents = makeDescEvents(count: 5, source: .linearIssues, baseEventTsMs: 700, stepMs: 60_000)
-        let items = gitEvents + linEvents
+        let commitEvents = makeDescEvents(count: 5, kind: "gh_commit_pushed", baseEventTsMs: 1_000, stepMs: 60_000)
+        let issueEvents  = makeDescEvents(count: 5, kind: "linear_status_changed", baseEventTsMs: 700, stepMs: 60_000)
+        let items = commitEvents + issueEvents
         let result = reader.applyGrouping(items)
         XCTAssertEqual(result.count, 2)
         if case .grouped(let kind, _, _, _, _, _) = result[0] {
-            XCTAssertEqual(kind, .gitCommits)
-        } else { XCTFail("Expected gitCommits group first") }
+            XCTAssertEqual(kind, "gh_commit_pushed")
+        } else { XCTFail("Expected gh_commit_pushed group first") }
         if case .grouped(let kind, _, _, _, _, _) = result[1] {
-            XCTAssertEqual(kind, .linearIssues)
-        } else { XCTFail("Expected linearIssues group second") }
+            XCTAssertEqual(kind, "linear_status_changed")
+        } else { XCTFail("Expected linear_status_changed group second") }
+    }
+
+    // G-6c: 3 gh_commit_pushed + 3 gh_branch_pushed under SAME ShareSource
+    // (gitCommits maps both) — under pre-T11 ShareSource grouping these would
+    // have bundled together (6 total → 1 group). Under T11 raw-kind grouping
+    // each kind below threshold → 6 individual rows.
+    //
+    // This is the explicit semantic regression test for B-I4 / T11.
+    func testApplyGrouping_SameShareSourceDifferentKinds_NoCrossKindGroup() {
+        let reader = groupingReader()
+        let commitEvents = makeDescEvents(count: 3, kind: "gh_commit_pushed", baseEventTsMs: 1_000, stepMs: 60_000)
+        let branchEvents = makeDescEvents(count: 3, kind: "gh_branch_pushed", baseEventTsMs: 700, stepMs: 60_000)
+        let items = commitEvents + branchEvents
+        let result = reader.applyGrouping(items)
+        XCTAssertEqual(result.count, 6,
+            "Each raw kind below 5 threshold → emit individually (no ShareSource bundling)")
+        for item in result {
+            if case .teamEvent = item { /* ok */ } else {
+                XCTFail("Expected .teamEvent individual, got \(item)")
+            }
+        }
     }
 
     // G-7: Different senders — no cross-sender group

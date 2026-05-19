@@ -23,7 +23,7 @@ public enum FeedItem: Identifiable, Equatable, Sendable {
     case directMessage(DirectMessageMirrorRow)
     case teamEvent(TeamEventMirrorRow)
     case grouped(
-        kind: ShareSource,
+        kind: String,
         sender: TeamMember,
         count: Int,
         spanStartMs: Int64,
@@ -36,11 +36,17 @@ public enum FeedItem: Identifiable, Equatable, Sendable {
     /// Stable identity across re-fetches:
     ///   • `.directMessage` → messages_mirror PK (`message_id`)
     ///   • `.teamEvent`     → team_events_mirror composite key part (`event_id`)
-    ///   • `.grouped`       → synthetic "grouped-<source_kind>-<sender_pubkey>-<spanStartMs>"
+    ///   • `.grouped`       → synthetic "grouped-<raw_event_kind>-<sender_pubkey>-<spanStartMs>"
     ///
     /// DMs and events use UUIDs from different Supabase namespaces — collision is
     /// impossible in practice. The grouped prefix is unambiguous because UUIDs
     /// never start with "grouped-".
+    ///
+    /// S8 T11 (cross-spec reviewer IMP-3): `kind` is the raw `event_kind` String
+    /// from `team_events_mirror.kind` (e.g. "gh_commit_pushed", "linear_status_changed"),
+    /// NOT a `ShareSource.rawValue`. Grouping now collapses same-kind bursts only,
+    /// so "git_commit" rows no longer merge with "git_branch_pushed" rows under
+    /// `ShareSource.gitCommits` — finer-grain per S7 spec §11.0:575.
     public var id: String {
         switch self {
         case .directMessage(let row):
@@ -48,7 +54,7 @@ public enum FeedItem: Identifiable, Equatable, Sendable {
         case .teamEvent(let row):
             return row.eventID
         case .grouped(let kind, let sender, _, let spanStartMs, _, _):
-            return "grouped-\(kind.rawValue)-\(sender.pubkeyHex)-\(spanStartMs)"
+            return "grouped-\(kind)-\(sender.pubkeyHex)-\(spanStartMs)"
         }
     }
 

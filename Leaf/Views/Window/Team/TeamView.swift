@@ -474,7 +474,7 @@ struct TeamView: View {
             teamEventRow(row: row)
         case .grouped(let kind, let sender, let count, let spanStart, let spanEnd, let expandedItems):
             groupedRow(
-                source: kind,
+                kind: kind,
                 sender: sender,
                 count: count,
                 spanStart: spanStart,
@@ -619,14 +619,19 @@ struct TeamView: View {
 
     @ViewBuilder
     private func groupedRow(
-        source: ShareSource,
+        kind: String,
         sender: TeamMember,
         count: Int,
         spanStart: Int64,
         spanEnd: Int64,
         items: [TeamEventMirrorRow]
     ) -> some View {
-        let groupID = "grouped-\(source.rawValue)-\(sender.pubkeyHex)-\(spanStart)"
+        // S8 T11: FeedItem.grouped.kind is now the raw event_kind String per
+        // S7 spec §11.0:575. Group ID must mirror FeedItem.id format exactly
+        // — "grouped-<raw_event_kind>-<sender_pubkey>-<spanStartMs>" — or
+        // expand/collapse state keyed off this ID will diverge from the
+        // identity used by SwiftUI ForEach.
+        let groupID = "grouped-\(kind)-\(sender.pubkeyHex)-\(spanStart)"
         let isExpanded = Binding<Bool>(
             get: { expandedGroups.contains(groupID) },
             set: { newValue in
@@ -634,8 +639,16 @@ struct TeamView: View {
                 else        { expandedGroups.remove(groupID) }
             }
         )
+        // Derive ShareSource from raw event_kind for LeafFeedRow visual
+        // styling (icon + pluralized aggregate text). The classifier is the
+        // single source of truth for kind→source mapping; unmappable kinds
+        // (e.g. future detector kinds not yet wired) degrade to
+        // .rawGitHubActivity which renders as a neutral "GitHub activity"
+        // row rather than crashing. This is a display-only fallback —
+        // grouping semantics (per-raw-kind bursts) are unaffected.
+        let displaySource = ShareSourceClassifier().classify(eventKind: kind) ?? .rawGitHubActivity
         LeafFeedRow.grouped(
-            source: source,
+            source: displaySource,
             senderDisplayName: sender.displayName,
             senderPubkeyHex: sender.pubkeyHex,
             count: count,
