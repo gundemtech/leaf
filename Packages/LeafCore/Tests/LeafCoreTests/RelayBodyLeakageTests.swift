@@ -2828,9 +2828,15 @@ final class RelayBodyLeakageTests: XCTestCase {
     }
 
     func test_p6_walkback_vscodeWorkspaceOpened_pathNeverLeaks() {
-        let sentinel = "LEAKED_SENTINEL_VSCODE_P6_PATH"
-        let json = #"{"folder":"file:///Users/alice/Desktop/\#(sentinel)"}"#
-        guard let parsed = VSCodeWorkspaceWatcher.parseWorkspaceJSON(json, homeDir: "/Users/alice") else {
+        // Track-9 T1 refactor: post-T1, basename position MAY appear in payload
+        // via the new `workspace_root` field (~/-prefixed). Sentinel now lives
+        // at the USERNAME position (which MUST never leak per ADR-010). Assert
+        // both: the username sentinel never appears, AND no `/Users/` absolute
+        // prefix anywhere.
+        let sentinel = "LEAKED_SENTINEL_VSCODE_USERNAME"
+        let mockHomeDir = "/Users/\(sentinel)"
+        let json = #"{"folder":"file://\#(mockHomeDir)/Desktop/myws"}"#
+        guard let parsed = VSCodeWorkspaceWatcher.parseWorkspaceJSON(json, homeDir: mockHomeDir) else {
             XCTFail("parser failed; cannot test walkback")
             return
         }
@@ -2839,13 +2845,19 @@ final class RelayBodyLeakageTests: XCTestCase {
             workspaceName: parsed.workspaceName,
             sanitizedPath: parsed.sanitizedPath,
             watchedFolderID: nil,
-            nowMs: 1_000
+            nowMs: 1_000,
+            workspaceRootEnabled: true
         )
         for (key, value) in event.payload {
             XCTAssertFalse(
-                value.contains("/Users/alice"),
-                "absolute path leaked through walkback: \(key)=\(value)")
+                value.contains(sentinel),
+                "username sentinel leaked through walkback: \(key)=\(value)")
+            XCTAssertFalse(
+                value.contains("/Users/"),
+                "absolute /Users/ prefix leaked through walkback: \(key)=\(value)")
         }
+        // Positive check: sanitized form makes it into workspace_root.
+        XCTAssertEqual(event.payload["workspace_root"], "~/Desktop/myws")
     }
 
     func test_p6_walkback_ideWindowTitleObserved_titleSanitized() {
@@ -2912,7 +2924,7 @@ final class RelayBodyLeakageTests: XCTestCase {
     func test_p6_walkback_integrationSentinelSweep() {
         let sentinels = [
             "LEAKED_SENTINEL_VSCODE_P6_FILE_BODY",
-            "LEAKED_SENTINEL_VSCODE_P6_PATH",
+            "LEAKED_SENTINEL_VSCODE_USERNAME",
             "LEAKED_SENTINEL_VSCODE_P6_TITLE",
             "LEAKED_SENTINEL_JB_P6",
         ]
