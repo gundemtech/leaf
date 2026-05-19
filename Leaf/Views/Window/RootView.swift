@@ -43,6 +43,13 @@ struct RootView: View {
     /// nil → skip the tick. Driven from the polling loop below alongside
     /// the existing TeamEventMirrorRetentionPruner pruner tick.
     @Environment(\.pendingMarkDoneRetryService) private var pendingMarkDoneRetryService
+    /// Track 5 / S8 / T8 — daily-tick auto-pruner for workspaces past 30d
+    /// since left_at_ms OR deleted_at_ms. Optional for the same DB-open
+    /// graceful-degrade reason as `pendingMarkDoneRetryService`. The
+    /// per-30s outer loop just gives the actor a chance to check; the
+    /// pruner itself is idempotent (already-wiped rows no longer match the
+    /// SELECT predicate).
+    @Environment(\.workspaceCascadeDeleter) private var workspaceCascadeDeleter
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -109,6 +116,19 @@ struct RootView: View {
                 // gives the actor a chance to check.
                 if let retry = pendingMarkDoneRetryService {
                     try? await retry.tickIfDueDaily()
+                }
+                if Task.isCancelled { break }
+                // Track 5 / S8 / T8 — auto-prune workspaces past the 30-day
+                // retention window (left_at_ms OR deleted_at_ms). Idempotent;
+                // already-wiped rows no longer match the SELECT predicate.
+                // If any wipes happened, refresh WorkspaceReader so a left
+                // workspace that just got pruned disappears from any UI
+                // surface that lists left/deleted workspaces.
+                if let deleter = workspaceCascadeDeleter {
+                    let wiped = (try? await deleter.pruneExpiredLeftWorkspaces()) ?? []
+                    if !wiped.isEmpty {
+                        workspaceReader.refresh()
+                    }
                 }
                 if Task.isCancelled { break }
                 try? await Task.sleep(nanoseconds: 30_000_000_000)

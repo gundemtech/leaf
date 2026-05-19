@@ -94,6 +94,11 @@ struct LeafApp: App {
     /// scheduler skips). Driven from `RootView.task(id:)` alongside the
     /// existing TeamEventMirrorRetentionPruner pruner tick.
     @State private var pendingMarkDoneRetryService: PendingMarkDoneRetryService?
+    /// Track 5 / S8 / T8 — cache cascade DELETE + 30d auto-pruner. nil when
+    /// Database open fails at init (graceful: hardDelete surfaces an error;
+    /// daily tick is a no-op). Shared by WorkspaceReader.hardDelete (manual
+    /// wipe) and RootView's daily-tick scheduler (auto-prune past 30d).
+    @State private var workspaceCascadeDeleter: WorkspaceCascadeDeleter?
     @State private var windowState = WindowState()
     @Environment(\.scenePhase) private var scenePhase
 
@@ -132,9 +137,26 @@ struct LeafApp: App {
         // Track 5 S2 Task 10 — explicit init pair: ActiveWorkspaceStore владеет
         // active-workspace UD ключом, WorkspaceReader подписывается на неё. Оба
         // @MainActor — App.init implicitly @MainActor, конструкторы OK.
+        //
+        // Track 5 / S8 / T8 — WorkspaceCascadeDeleter share the same shared
+        // SQLCipher DB handle as the Team feed substrate. We open the handle
+        // first (was opened mid-init before T8), then construct the deleter,
+        // then construct WorkspaceReader with the deleter so the hardDelete
+        // path is wired from the moment any UI body renders. DB open failure
+        // is graceful — the deleter is nil and `WorkspaceReader.hardDelete`
+        // surfaces a user-facing error.
         let active = ActiveWorkspaceStore()
         _activeWorkspaceStore = State(initialValue: active)
-        _workspaceReader = State(initialValue: WorkspaceReader(activeStore: active))
+
+        let sharedTeamFeedDB = LeafApp.makeDatabaseForTeamFeed()
+        let cascadeDeleterLocal: WorkspaceCascadeDeleter? = sharedTeamFeedDB.map {
+            WorkspaceCascadeDeleter(database: $0)
+        }
+        _workspaceCascadeDeleter = State(initialValue: cascadeDeleterLocal)
+        _workspaceReader = State(initialValue: WorkspaceReader(
+            activeStore: active,
+            cascadeDeleter: cascadeDeleterLocal
+        ))
 
         // Track 5 / S3 — SupabaseClient is the first Mac client primitive talking to Supabase.
         // baseURL + anonKey read from Info.plist (xcconfig substitution).
@@ -211,9 +233,13 @@ struct LeafApp: App {
         //   6. RealtimeWebSocketDriver — actor; URLSession.shared by default.
         //   7. LeafRealtimeService — wraps driver + supabase + active store +
         //      inbox/mirror readers + cross-post reader + decryption closures.
+        // Track 5 / S8 / T8 — reuse `sharedTeamFeedDB` (opened above for the
+        // WorkspaceCascadeDeleter init) instead of opening a second handle.
+        // Single DB handle per app process — saves a file descriptor and keeps
+        // the writer-mode pool count predictable for cross-process locks.
         let attachmentResolver: AttachmentMetadataResolver?
         let teamFeedQueryDB: LeafCore.Database?
-        if let resolverDB = LeafApp.makeDatabaseForTeamFeed() {
+        if let resolverDB = sharedTeamFeedDB {
             attachmentResolver = AttachmentMetadataResolver(
                 database: resolverDB,
                 collectorsRegistry: nil  // Phase H+1: wire GitHub/Linear/Slack collector providers
@@ -459,6 +485,11 @@ struct LeafApp: App {
                 // can't conform to Observation tracking). RootView's
                 // .task(id:) daily-tick scheduler reads + invokes .tickIfDueDaily.
                 .environment(\.pendingMarkDoneRetryService, pendingMarkDoneRetryService)
+                // Track 5 / S8 / T8 — WorkspaceCascadeDeleter threaded the same
+                // way; RootView's daily-tick scheduler invokes
+                // `pruneExpiredLeftWorkspaces()` to wipe workspaces past the
+                // 30-day retention threshold (left_at_ms OR deleted_at_ms).
+                .environment(\.workspaceCascadeDeleter, workspaceCascadeDeleter)
                 .environment(windowState)
                 .onAppear {
                     inviteURLHandler.wire(acceptReader: inviteAcceptReader,

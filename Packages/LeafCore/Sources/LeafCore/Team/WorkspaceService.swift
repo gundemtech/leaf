@@ -217,6 +217,24 @@ public struct WorkspaceService: Sendable {
         try? FileManager.default.removeItem(at: keystoreDir)
     }
 
+    // MARK: - Track 5 / S8 / T8 — hardDelete (manual hard-wipe)
+
+    /// Hard-delete local workspace cache. Delegates to `WorkspaceCascadeDeleter.execute`.
+    ///
+    /// Preserves `team_members` + `team_keys` per audit invariant (sec C2;
+    /// matches `softDelete` line 168 contract). Only cache rows + the
+    /// workspace row itself + the per-workspace keystore sub-folder are
+    /// wiped. Forever-retained auth metadata stays available for forensic /
+    /// rejoin scenarios.
+    ///
+    /// This is the manual-wipe path triggered by the «Wipe cache data»
+    /// destructive action in Settings → Workspace (visible only when the
+    /// workspace has `left_at_ms` OR `deleted_at_ms` set). The auto-pruner
+    /// path uses `WorkspaceCascadeDeleter.pruneExpiredLeftWorkspaces` directly.
+    public func hardDelete(workspaceID: String, via deleter: WorkspaceCascadeDeleter) async throws {
+        try await deleter.execute(workspaceID: workspaceID)
+    }
+
     /// Default `randomBytes` factory: `SecRandomCopyBytes` под the hood.
     /// Mirrors `OrgService.secureRandom`.
     public static func secureRandom(_ count: Int) throws -> Data {

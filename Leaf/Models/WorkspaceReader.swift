@@ -42,6 +42,12 @@ final class WorkspaceReader {
     /// root (S7 Phase H). Nil during unit tests and early onboarding where
     /// Supabase may not yet be authenticated.
     private let supabase: SupabaseClient?
+    /// Track 5 / S8 / T8 — actor that performs cache cascade DELETE +
+    /// keystore wipe for the manual hard-wipe path. Optional so unit tests
+    /// (and the constructor's default) can omit it; `hardDelete` returns a
+    /// user-facing error when nil. Composition root constructs one shared
+    /// instance backed by the same DB handle used by the Team feed substrate.
+    private let cascadeDeleter: WorkspaceCascadeDeleter?
     private let logger = Logger(subsystem: "tech.gundem.leaf.app", category: "workspace")
 
     init(
@@ -50,7 +56,8 @@ final class WorkspaceReader {
         databaseEncryption: EncryptionOptions? = WorkspaceReader.defaultEncryption(),
         keystoreRoot: URL = TeamKeystore.defaultRoot(),
         activeStore: ActiveWorkspaceStore,
-        supabase: SupabaseClient? = nil
+        supabase: SupabaseClient? = nil,
+        cascadeDeleter: WorkspaceCascadeDeleter? = nil
     ) {
         self.databaseURL = databaseURL
         self.databaseConfig = databaseConfig
@@ -58,6 +65,7 @@ final class WorkspaceReader {
         self.keystoreRoot = keystoreRoot
         self.activeStore = activeStore
         self.supabase = supabase
+        self.cascadeDeleter = cascadeDeleter
     }
 
     /// Reads workspaces + active members from DB into state. Idempotent.
@@ -238,6 +246,49 @@ final class WorkspaceReader {
             return nil
         } catch {
             logger.error("WorkspaceReader.delete failed: \(String(describing: error), privacy: .public)")
+            let msg = userFacingMessage(for: error)
+            state = .error(message: msg)
+            return msg
+        }
+    }
+
+    // MARK: - Track 5 / S8 / T8 — hardDelete (manual cache wipe)
+
+    /// Orchestrate manual hard-wipe of local workspace cache. Delegates to the
+    /// shared `WorkspaceCascadeDeleter` actor and refreshes local state.
+    /// If the wiped workspace was active, re-resolves active to the next
+    /// alphabetical remaining workspace (or clears active if none remain).
+    ///
+    /// **Audit invariant (sec C2):** Preserves `team_keys` + `team_members`
+    /// rows. Only cache + the workspace row + per-workspace keystore folder
+    /// are wiped. Mirrors `WorkspaceService.softDelete` (Workspace.swift
+    /// line ~168) audit invariant.
+    ///
+    /// Returns: nil on success, otherwise a user-facing error message
+    /// (matches `delete` / `rename` per-op error contract from S7 fix C-I5).
+    ///
+    /// Closes S7 Stage 6 fix C-I7 — `LeaveWorkspaceConfirmationModal` honest
+    /// copy promised an on-device retention pruner; this is the manual side.
+    func hardDelete(workspaceID: String) async -> String? {
+        guard let cascadeDeleter else {
+            let msg = "Cache wipe is unavailable. Please restart the app."
+            state = .error(message: msg)
+            return msg
+        }
+        do {
+            try await cascadeDeleter.execute(workspaceID: workspaceID)
+            if activeStore.activeWorkspaceID == workspaceID {
+                let db = try ensureDatabase()
+                let svc = WorkspaceService(database: db, keystoreRoot: keystoreRoot)
+                let remaining = try svc.listWorkspaces(includeLeft: false)
+                    .filter { $0.id != workspaceID }
+                    .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+                activeStore.setActive(remaining.first?.id)
+            }
+            refresh()
+            return nil
+        } catch {
+            logger.error("WorkspaceReader.hardDelete failed: \(String(describing: error), privacy: .public)")
             let msg = userFacingMessage(for: error)
             state = .error(message: msg)
             return msg

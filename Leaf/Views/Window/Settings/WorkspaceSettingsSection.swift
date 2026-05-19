@@ -18,6 +18,8 @@ struct WorkspaceSettingsSection: View {
     @State private var createWorkspacePresented = false
     @State private var leavePresented = false
     @State private var deletePresented = false
+    /// Track 5 / S8 / T8 — Wipe cache data (hard-wipe) modal trigger.
+    @State private var hardWipePresented = false
     @State private var myPubHex: String = ""
     /// S7 Stage 6 fix C-I5 + C-I8 — most recent destructive-op error surfaced
     /// as an inline LeafBanner above the action buttons. Reads the operation
@@ -145,6 +147,40 @@ struct WorkspaceSettingsSection: View {
                     },
                     onCancel: { deletePresented = false }
                 )
+            }
+            // Track 5 / S8 / T8 — «Wipe cache data» destructive action visible
+            // only when the workspace has `left_at_ms` OR `deleted_at_ms` set.
+            // Closes S7 C-I7 honest-copy promise («auto-delete after 30 days»)
+            // by offering the manual wipe path immediately after Leave or
+            // admin Delete. Auto-pruner sweeps abandoned rows on the 30d
+            // schedule independently.
+            if active.leftAt != nil || active.deletedAt != nil {
+                HStack(spacing: LeafSpace.sm) {
+                    Spacer()
+                    LeafButton(
+                        "Wipe cache data",
+                        variant: .destructive,
+                        size: .md,
+                        icon: .system("trash.fill")
+                    ) {
+                        hardWipePresented = true
+                    }
+                }
+                .padding(.top, LeafSpace.sm)
+                .sheet(isPresented: $hardWipePresented) {
+                    WorkspaceHardWipeConfirmationModal(
+                        workspaceName: active.name,
+                        onConfirm: {
+                            let err = await workspaceReader.hardDelete(workspaceID: active.id)
+                            lastActionError = err
+                            if err == nil {
+                                hardWipePresented = false
+                            }
+                            return err
+                        },
+                        onCancel: { hardWipePresented = false }
+                    )
+                }
             }
             if let err = lastActionError {
                 LeafBanner(
