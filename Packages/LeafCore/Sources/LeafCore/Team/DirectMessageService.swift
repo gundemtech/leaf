@@ -145,7 +145,14 @@ public struct DirectMessageService: Sendable {
             try MessagesMirrorStore.upsert(outboundRow, in: db)
         }
 
-        // 7. (Optional) APNs trigger — fire-and-forget but capture status
+        // 7. (Optional) APNs trigger — fire-and-forget but capture status.
+        //
+        // Track 5 / S8 / T5 — `kind.rawValue` forwarded to the Edge Function
+        // for category binding (`aps.category = "leaf.dm.<kind>"`),
+        // thread-id format (`<workspace_id>:<kind>`), and notification_prefs
+        // server-side skip check. When the server returns `skipped_by_prefs`,
+        // the SDK reports `.sent` (recipient opted out is expected, not a
+        // failure — the message itself persisted successfully).
         let pushStatus: SentDirectMessage.PushDispatchStatus
         if notify {
             do {
@@ -153,7 +160,8 @@ public struct DirectMessageService: Sendable {
                     workspaceID: workspace.id,
                     recipientPubkeyHex: recipientPubkeyHex.lowercased(),
                     messageID: supabaseRow.messageID,
-                    titleText: pushTitle(sender: selfMember.displayName, kind: kind)
+                    titleText: pushTitle(sender: selfMember.displayName, kind: kind),
+                    kind: kind.rawValue
                 )
                 pushStatus = .sent
             } catch {

@@ -268,10 +268,12 @@ final class SupabaseClientDirectMessagesTests: XCTestCase {
             workspaceID: "ws-1",
             recipientPubkeyHex: String(repeating: "b", count: 64),
             messageID: "msg-1",
-            titleText: "Anton sent a handoff"
+            titleText: "Anton sent a handoff",
+            kind: "handoff"
         )
         XCTAssertEqual(result.devicesPushed, 2)
         XCTAssertTrue(result.errors.isEmpty)
+        XCTAssertFalse(result.skippedByPrefs)
     }
 
     func testTriggerAPNsPush_PartialFailure_CarriesErrors() async throws {
@@ -292,7 +294,8 @@ final class SupabaseClientDirectMessagesTests: XCTestCase {
             workspaceID: "ws-1",
             recipientPubkeyHex: String(repeating: "b", count: 64),
             messageID: "msg-1",
-            titleText: "Anton sent a handoff"
+            titleText: "Anton sent a handoff",
+            kind: "handoff"
         )
         XCTAssertEqual(result.devicesPushed, 1)
         XCTAssertEqual(result.errors.count, 1)
@@ -311,11 +314,73 @@ final class SupabaseClientDirectMessagesTests: XCTestCase {
                 workspaceID: "ws-1",
                 recipientPubkeyHex: String(repeating: "b", count: 64),
                 messageID: "msg-1",
-                titleText: "x"
+                titleText: "x",
+                kind: "handoff"
             )
             XCTFail("expected throw")
         } catch _ as SupabaseError {
             // pass
         }
+    }
+
+    // MARK: - T5 additions
+
+    /// Track 5 / S8 / T5 — verify body includes `kind` field forwarded to the
+    /// Edge Function (consumed for category, thread-id format, prefs lookup).
+    func testTriggerAPNsPush_Body_IncludesKind() async throws {
+        // Sendable capture box — handler closure is @Sendable.
+        actor BodyCapture {
+            var data: Data?
+            func set(_ d: Data) { data = d }
+        }
+        let capture = BodyCapture()
+        MockURLProtocol.handler = wrapWithBootstrap { request, requestBody in
+            // MockURLProtocol's second handler arg already provides the body
+            // (drains request.httpBodyStream into Data); reuse it directly
+            // instead of re-reading.
+            Task { await capture.set(requestBody) }
+            return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"ok":true,"devices_pushed":1,"errors":[]}"#.utf8))
+        }
+        let client = makeClient()
+        _ = try await client.triggerAPNsPush(
+            workspaceID: "ws-1",
+            recipientPubkeyHex: String(repeating: "b", count: 64),
+            messageID: "msg-1",
+            titleText: "Anton assigned a task",
+            kind: "task"
+        )
+        // Drain the actor-side Task that captured the body.
+        await Task.yield()
+        let body = await capture.data
+        guard let body else {
+            XCTFail("body not captured")
+            return
+        }
+        let parsed = try JSONSerialization.jsonObject(with: body) as? [String: Any]
+        XCTAssertEqual(parsed?["kind"] as? String, "task",
+                       "kind field is required for Edge Function category/prefs path")
+    }
+
+    /// Track 5 / S8 / T5 — server returns `skipped_by_prefs: true` when the
+    /// recipient has disabled this kind in `notification_prefs`. SDK reads
+    /// this flag (no error path — successful no-op).
+    func testTriggerAPNsPush_SkippedByPrefs_SurfacedInResult() async throws {
+        MockURLProtocol.handler = wrapWithBootstrap { request, _ in
+            return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"ok":true,"devices_pushed":0,"skipped_by_prefs":true}"#.utf8))
+        }
+        let client = makeClient()
+        let result = try await client.triggerAPNsPush(
+            workspaceID: "ws-1",
+            recipientPubkeyHex: String(repeating: "b", count: 64),
+            messageID: "msg-1",
+            titleText: "x",
+            kind: "ping"
+        )
+        XCTAssertEqual(result.devicesPushed, 0)
+        XCTAssertTrue(result.errors.isEmpty,
+                      "prefs-skip response omits errors array")
+        XCTAssertTrue(result.skippedByPrefs)
     }
 }

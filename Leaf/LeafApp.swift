@@ -641,6 +641,17 @@ final class LeafAppDelegate: NSObject, NSApplicationDelegate, UNUserNotification
         // (added separately for signed builds). In dev / unsigned builds, the
         // registration request silently no-ops on macOS.
         UNUserNotificationCenter.current().delegate = self
+
+        // Track 5 / S8 / T5 — bind UNNotificationCategory set so delivered
+        // pushes whose `aps.category = "leaf.dm.<kind>"` field matches an
+        // entry here render the listed actions (Reply / Mark Done) in the
+        // banner and Notification Center. Static config lives in
+        // `LeafCore/Notifications/NotificationCategoryRegistry`; action
+        // handlers wire in T6 via `userNotificationCenter(didReceive:)`.
+        UNUserNotificationCenter.current().setNotificationCategories(
+            Set(NotificationCategoryRegistry.all)
+        )
+
         UNUserNotificationCenter.current().requestAuthorization(
             options: [.alert, .sound, .badge]
         ) { granted, _ in

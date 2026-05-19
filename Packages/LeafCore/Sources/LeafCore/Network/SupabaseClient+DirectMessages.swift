@@ -66,6 +66,13 @@ public struct SupabaseDirectMessageRow: Sendable, Equatable {
 public struct SupabaseAPNsPushResult: Sendable, Equatable {
     public let devicesPushed: Int
     public let errors: [APNsPushDeviceError]
+    /// Track 5 / S8 / T5 — true when the Edge Function declined to push
+    /// because the recipient's `notification_prefs` row for the message
+    /// kind has `enabled=false`. devicesPushed will be 0; no errors row.
+    /// Surfaced for client-side telemetry / dev logs only — sender treats
+    /// this as a successful no-op (recipient opted out, that's the
+    /// expected outcome).
+    public let skippedByPrefs: Bool
 
     public struct APNsPushDeviceError: Sendable, Equatable {
         public let deviceID: String
@@ -79,9 +86,14 @@ public struct SupabaseAPNsPushResult: Sendable, Equatable {
         }
     }
 
-    public init(devicesPushed: Int, errors: [APNsPushDeviceError]) {
+    public init(
+        devicesPushed: Int,
+        errors: [APNsPushDeviceError],
+        skippedByPrefs: Bool = false
+    ) {
         self.devicesPushed = devicesPushed
         self.errors = errors
+        self.skippedByPrefs = skippedByPrefs
     }
 }
 
@@ -332,11 +344,24 @@ extension SupabaseClient {
     }
 
     /// Trigger APNs push via Edge Function — fire-and-forget after sender INSERTs.
+    ///
+    /// Track 5 / S8 / T5 — `kind` field added. Server uses it for two purposes:
+    ///   1. `aps.category = "leaf.dm.<kind>"` binding to UNNotificationCategory
+    ///      (Reply / Mark Done buttons rendered in banner per category config).
+    ///   2. `aps.thread-id = "<workspace_id>:<kind>"` to give Notification
+    ///      Center separate stacks per kind within the same workspace.
+    ///   3. `notification_prefs` row lookup for recipient pubkey + this kind
+    ///      → server-side skip with `skipped_by_prefs=true` if disabled.
+    ///
+    /// Caller (DirectMessageService.send) passes the current
+    /// `DirectMessageKind.rawValue`; the cron `task_reminders` Edge Function
+    /// internally hardcodes `kind: "task"` for the same reason.
     public func triggerAPNsPush(
         workspaceID: String,
         recipientPubkeyHex: String,
         messageID: String,
         titleText: String,
+        kind: String,
         isReminder: Bool = false
     ) async throws -> SupabaseAPNsPushResult {
         let session = try await ensureAuthenticated()
@@ -353,6 +378,7 @@ extension SupabaseClient {
             "recipient_pubkey": recipientPubkeyHex,
             "message_id": messageID,
             "title": titleText,
+            "kind": kind,
             "is_reminder": isReminder,
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -364,7 +390,12 @@ extension SupabaseClient {
         struct Body: Decodable {
             let ok: Bool
             let devices_pushed: Int
-            let errors: [DeviceErr]
+            // T5: optional — present (true) only when notification_prefs
+            // gates the push. Absent on normal success / partial failure.
+            let skipped_by_prefs: Bool?
+            // T5: optional — Edge Function omits `errors` on prefs skip.
+            // Default to empty for graceful decode.
+            let errors: [DeviceErr]?
             struct DeviceErr: Decodable {
                 let device_id: String
                 let status: Int
@@ -379,9 +410,10 @@ extension SupabaseClient {
         }
         return SupabaseAPNsPushResult(
             devicesPushed: parsed.devices_pushed,
-            errors: parsed.errors.map {
+            errors: (parsed.errors ?? []).map {
                 .init(deviceID: $0.device_id, status: $0.status, reason: $0.reason)
-            }
+            },
+            skippedByPrefs: parsed.skipped_by_prefs ?? false
         )
     }
 
