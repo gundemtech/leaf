@@ -180,38 +180,41 @@ Uses existing `InboxFilter.admits(_ kind: InboxKind) -> Bool` predicate (`Packag
 
 ### 3.3 C-3 — TodayBlock narrow-window ViewThatFits fallback
 
-**Current state.** `TodayBlock` renders 5 `LeafMetricAmbient` cells in a fixed `HStack(spacing: LeafSpace.lg)`. At popover width ≤ 520pt the row clips. No reflow.
+**Current state.** `TodayBlock.metricsRow` renders 4 cells in a fixed `HStack(alignment: .top, spacing: LeafSpace.lg)` via local `metricCell(value:label:)` helper — focused, AI ratio, sessions, commits — with trailing `Spacer(minLength: 0)`. (`TodayMetrics.switchCount` exists in substrate but isn't rendered as a cell today — out of P9 scope, separate carry candidate). At popover width ≤ 520pt the row clips.
 
-**Resolution.** Wrap the metrics `HStack` in `ViewThatFits` with two branches:
+**Resolution.** Wrap the metrics `HStack` in `ViewThatFits` with two branches — wide horizontal (current shape) and narrow 2×2 grid (no expand state needed):
 
 ```swift
-ViewThatFits(in: .horizontal) {
-    // Wide branch — 5 cells horizontal
-    HStack(spacing: LeafSpace.lg) {
-        focusedCell; aiRatioCell; sessionsCell; switchesCell; commitsCell
-    }
-    // Narrow branch — 3 cells horizontal + "+2 more" expand-inline pattern
-    VStack(alignment: .leading, spacing: LeafSpace.md) {
-        HStack(spacing: LeafSpace.lg) {
-            focusedCell; sessionsCell; commitsCell
+private var metricsRow: some View {
+    ViewThatFits(in: .horizontal) {
+        // Wide branch — 4 cells horizontal (current shape)
+        HStack(alignment: .top, spacing: LeafSpace.lg) {
+            metricCell(value: focusValue, label: "focused")
+            metricCell(value: aiRatioValue, label: "AI ratio")
+            metricCell(value: "\(metrics.sessionsCount)", label: "sessions")
+            metricCell(value: "\(metrics.commitsCount)", label: "commits")
+            Spacer(minLength: 0)
         }
-        if compactExpanded {
-            HStack(spacing: LeafSpace.lg) {
-                aiRatioCell; switchesCell
+        // Narrow branch — 2×2 grid
+        VStack(alignment: .leading, spacing: LeafSpace.md) {
+            HStack(alignment: .top, spacing: LeafSpace.lg) {
+                metricCell(value: focusValue, label: "focused")
+                metricCell(value: aiRatioValue, label: "AI ratio")
                 Spacer(minLength: 0)
             }
-        } else {
-            Button("+2 more") { compactExpanded = true }
-                .leafButtonStyle(.tertiary, size: .sm)
-                .accessibilityLabel("Show AI ratio and context switches")
+            HStack(alignment: .top, spacing: LeafSpace.lg) {
+                metricCell(value: "\(metrics.sessionsCount)", label: "sessions")
+                metricCell(value: "\(metrics.commitsCount)", label: "commits")
+                Spacer(minLength: 0)
+            }
         }
     }
 }
 ```
 
-New `@State private var compactExpanded: Bool = false`. Wide branch unchanged from current shipping; narrow branch reuses the same cell views (no duplication).
+No new `@State` (vs alternate "expand to show" pattern); grid renders all 4 cells always. Cells reused via existing private `metricCell` helper. Reading order preserved (focused → AI ratio → sessions → commits) for VoiceOver narrate consistency.
 
-**Threshold.** `ViewThatFits` measures intrinsic content width — no GeometryReader / fixed cutoff. Picks the first branch that fits; falls through to narrow when wide overflows. Tested visually in manual smoke (resize popover; verify graceful transition).
+**Threshold.** `ViewThatFits` measures intrinsic content width. Picks the first branch that fits; falls through to narrow when wide overflows.
 
 **Test.** No unit test for ViewThatFits selection (SwiftUI internal). Manual smoke at multiple popover widths (480 / 560 / 720 / 1024pt).
 
@@ -366,7 +369,7 @@ Spot-checks per Phase 8.3..8.8 specs §10. I launch Debug build via `open <Deriv
 
 | Phase | Spot-check | Expected behavior |
 |---|---|---|
-| P3 TODAY | 5 metric cells render with values; pill strip with `+N` expand; empty state when no data | LeafCard + LeafMetricAmbient + LeafPill render; ViewThatFits fallback at narrow widths |
+| P3 TODAY | 4 metric cells (focused / AI ratio / sessions / commits) render with values; pill strip with `+N` expand; empty state when no data | LeafCard + LeafPill render; ViewThatFits 4-wide ↔ 2×2 grid fallback at narrow widths |
 | P4 YOU·NOW | Active state shows app + context label + intensity bars; Away state shows Resume CTA tappable to relaunch app | Manual lock-screen test or wait for idle > 30 min for Away transition |
 | P5 WITH YOU | Empty state shows "→ Team" CTA; populated rows show avatar + confidence badge + relative time | Tap row → routes to Team tab via `windowState.section = .team` |
 | P6 INBOX | Search field + 4 filter chips + scrollable list; row tap → external URL via NSWorkspace; no-match icon distinct from empty | "Clear filters" CTA in no-match state; empty state has no CTA |
