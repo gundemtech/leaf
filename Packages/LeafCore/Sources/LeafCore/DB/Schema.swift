@@ -86,6 +86,32 @@ public enum Schema {
         public static let leftAtMs = "left_at_ms"
         public static let deletedAtMs = "deleted_at_ms"         // Track-5 S7 M025
         public static let indexActive = "idx_workspaces_active" // Track-5 S7 M025
+        // M027 — invite-redesign per-workspace defaults for new tokens.
+        public static let defaultInviteTtlSeconds = "default_invite_ttl_seconds"
+        public static let defaultSingleUse        = "default_single_use"
+    }
+
+    /// M027 — admin-generated invite tokens (closed-mode workspace gate).
+    /// Local SQLCipher mirror of the Supabase row for admin's own workspace
+    /// tokens — used for instant Active-tokens UI. Refreshed on workspace open
+    /// + on admin generate/delete action.
+    /// `code` PK — `LEAF-XXXX-XXXX-XXXX` 19-char base32 (excludes I/L/O/U/0/1).
+    /// `expires_at_ms` IS NULL = never expires. `max_uses` IS NULL = unlimited.
+    /// `deleted_at_ms` IS NULL = active; non-NULL = soft-deleted (row stays for audit).
+    public enum InviteTokens {
+        public static let tableName       = "invite_tokens"
+        public static let code            = "code"
+        public static let workspaceID     = "workspace_id"
+        public static let createdByPubkey = "created_by_pubkey"
+        public static let label           = "label"
+        public static let ttlSeconds      = "ttl_seconds"
+        public static let expiresAtMs     = "expires_at_ms"
+        public static let maxUses         = "max_uses"
+        public static let usedCount       = "used_count"
+        public static let deletedAtMs     = "deleted_at_ms"
+        public static let createdAtMs     = "created_at_ms"
+
+        public static let indexWorkspaceActive = "idx_invite_tokens_workspace_active"
     }
 
     /// Phase 5.1.A — long-term member identity + X25519 public key (contract §4, §7).
