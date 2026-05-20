@@ -42,6 +42,7 @@ struct WorkspaceSettingsSection: View {
             VStack(spacing: LeafSpace.md) {
                 workspaceHeaderRow
                 WorkspaceMembersAdminList()
+                ActiveTokensSection()  // M027 invite-redesign
                 PendingInvitesSection()
                 actionButtonsRow
             }

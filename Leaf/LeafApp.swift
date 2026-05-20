@@ -55,6 +55,8 @@ struct LeafApp: App {
     @State private var supabaseClient: SupabaseClient
     @State private var inviteOutboxReader: InviteOutboxReader
     @State private var inviteAcceptReader: InviteAcceptReader
+    /// M027 invite-redesign — admin's local mirror of own-workspace invite tokens.
+    @State private var inviteTokensReader: InviteTokensReader
     /// Track 5 / S4 — DM send + inbox + APNs registration readers.
     @State private var directMessageSendReader: DirectMessageSendReader
     @State private var directMessageInboxReader: DirectMessageInboxReader
@@ -176,6 +178,11 @@ struct LeafApp: App {
         _supabaseClient = State(initialValue: supabase)
         _inviteOutboxReader = State(initialValue: InviteOutboxReader(supabase: supabase))
         _inviteAcceptReader = State(initialValue: InviteAcceptReader(supabase: supabase))
+        _inviteTokensReader = State(initialValue: InviteTokensReader(
+            supabase: supabase,
+            workspaceReader: _workspaceReader.wrappedValue,
+            activeWorkspaceStore: active
+        ))
 
         // Track 5 / S4 — direct-messages substrate readers.
         let sendReader = DirectMessageSendReader(supabase: supabase, activeWorkspaceStore: active)
@@ -518,6 +525,7 @@ struct LeafApp: App {
                 // into readers via constructor. UI surfaces consume readers, not the client directly.
                 .environment(inviteOutboxReader)
                 .environment(inviteAcceptReader)
+                .environment(inviteTokensReader)         // M027 invite-redesign
                 .environment(directMessageSendReader)   // Track 5 / S4
                 .environment(directMessageInboxReader)  // Track 5 / S4
                 .environment(apnsRegistrationReader)    // Track 5 / S4

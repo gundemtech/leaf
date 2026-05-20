@@ -2,13 +2,14 @@
 //  GenerateInviteSheet.swift
 //  Leaf
 //
-//  Phase 5.5.B — admin invite-generation. Two input modes:
-//   1. Paste invitee Join code (clipboard auto-detect on appear; manual paste fallback).
-//   2. Send "ask to join" template — admin first шлёт invitee app + onboarding hint.
+//  M027 invite-redesign — admin generates a workspace-scoped invite token.
+//  Single primitive (the LEAF-XXXX-XXXX-XXXX code) rendered as both a
+//  clickable `leaf://invite/<code>` link AND a typeable short code.
 //
-//  Output: одна `leaf://invite/<token>#<otp>` deep-link с Copy / Mail / Messages кнопками + countdown.
-//
-//  Track 2 / D4 — migrated to LeafSheetLayout + LeafCard.raised + LeafTab inputMode picker.
+//  Workflow:
+//    1. Optional label + TTL picker (1h / 24h / 7d / 30d / Never) + single-use toggle
+//    2. [Generate] → result card with copy-link + copy-code + countdown + approval-hint
+//    3. [Done] dismisses
 //
 
 import SwiftUI
@@ -16,227 +17,260 @@ import AppKit
 import LeafCore
 
 struct GenerateInviteSheet: View {
-    @Environment(InviteOutboxReader.self) private var reader
+    @Environment(InviteTokensReader.self) private var reader
     @Environment(WorkspaceReader.self) private var workspaceReader
-    @Environment(InviteURLHandler.self) private var urlHandler
     @Environment(\.dismiss) private var dismiss
-    @State private var joinCodeInput: String = ""
-    @State private var inputMode: InputMode = .paste
-    /// Track 5 / S3 — opt-in OTP toggle. Default OFF. When ON, admin sees a separate
-    /// 6-digit code that must be sent through a different channel from the link itself.
-    @State private var requireOTP: Bool = false
 
-    enum InputMode: String, CaseIterable, Identifiable, Hashable {
-        case paste = "Paste Join code"
-        case template = "Send template"
+    @State private var label: String = ""
+    @State private var ttl: TTLPreset = .day1
+    @State private var singleUse: Bool = false
+
+    enum TTLPreset: String, CaseIterable, Identifiable, Hashable {
+        case hour1   = "1 hour"
+        case day1    = "24 hours"
+        case days7   = "7 days"
+        case days30  = "30 days"
+        case forever = "Never expires"
+
         var id: String { rawValue }
+
+        /// Seconds. 0 sentinel = «Never expires» — InviteTokenService translates
+        /// this to nil expires_at on the row.
+        var seconds: Int {
+            switch self {
+            case .hour1:   return 3600
+            case .day1:    return 86400
+            case .days7:   return 7 * 86400
+            case .days30:  return 30 * 86400
+            case .forever: return 0
+            }
+        }
     }
 
     var body: some View {
-        LeafSheetLayout(title: "Add a team member", onDismiss: discardAndDismiss) {
+        LeafSheetLayout(title: "Generate invite", onDismiss: { dismiss() }) {
             VStack(alignment: .leading, spacing: LeafSpace.xl) {
                 content
                 Spacer(minLength: 0)
                 footer
             }
         }
-        .onAppear {
-            if case .joinCode(let bytes) = urlHandler.probeClipboard(),
-               let formatted = try? JoinCode.encode(pubkey: bytes) {
-                joinCodeInput = formatted
-            }
-        }
+        .onDisappear { reader.dismissReady() }
     }
 
     @ViewBuilder
     private var content: some View {
         switch reader.state {
-        case .idle, .error:
-            modePicker
-            modeContent(disabled: false)
-            requireOTPToggle(disabled: false)
+        case .idle, .loaded, .loading, .error:
+            formCard
             if case .error(let m) = reader.state {
                 LeafBanner(tone: .danger, title: "Couldn't generate invite", description: m)
             }
         case .generating:
-            modePicker
-            modeContent(disabled: true)
-            requireOTPToggle(disabled: true)
+            formCard
+                .disabled(true)
+                .opacity(0.5)
             HStack { Spacer(); ProgressView(); Spacer() }
-        case .ready(let outbound):
-            readyOutput(outbound: outbound)
+        case .ready(let token):
+            readyOutput(token: token)
         }
     }
 
-    private func requireOTPToggle(disabled: Bool) -> some View {
-        LeafCard(variant: .raised, padding: .regular) {
-            Toggle(isOn: $requireOTP) {
-                VStack(alignment: .leading, spacing: LeafSpace.xs) {
-                    Text("REQUIRE OTP").leafSectionLabel().foregroundStyle(LeafColor.text.tertiary)
-                    Text("Adds a 6-digit code that must be sent through a separate channel.")
-                        .font(LeafType.body.small)
-                        .foregroundStyle(LeafColor.text.secondary)
-                }
-            }
-            .toggleStyle(.switch)
-            .disabled(disabled)
-            .onChange(of: requireOTP) { _, newValue in
-                reader.requireOTP = newValue
-            }
-        }
-    }
-
-    private var modePicker: some View {
-        LeafTab(
-            selection: $inputMode,
-            tabs: InputMode.allCases,
-            label: \.rawValue
-        )
-    }
+    // MARK: - Form (idle / pre-generate)
 
     @ViewBuilder
-    private func modeContent(disabled: Bool) -> some View {
-        switch inputMode {
-        case .paste:
-            LeafCard(variant: .raised, padding: .regular) {
-                VStack(alignment: .leading, spacing: LeafSpace.md) {
-                    Text("PASTE INVITEE'S JOIN CODE").leafSectionLabel().foregroundStyle(LeafColor.text.tertiary)
-                    TextField("ABCD-EFGH-…", text: $joinCodeInput, axis: .vertical)
+    private var formCard: some View {
+        LeafCard(variant: .raised, padding: .regular) {
+            VStack(alignment: .leading, spacing: LeafSpace.md) {
+                VStack(alignment: .leading, spacing: LeafSpace.xs) {
+                    Text("LABEL (OPTIONAL)").leafSectionLabel().foregroundStyle(LeafColor.text.tertiary)
+                    TextField("Team kickoff", text: $label)
                         .textFieldStyle(.roundedBorder)
-                        .font(LeafType.mono.regular)
-                        .lineLimit(2, reservesSpace: true)
-                        .disabled(disabled)
-                    HStack {
-                        Spacer()
-                        LeafButton(
-                            "Generate invite",
-                            variant: .primary,
-                            size: .md,
-                            action: { reader.generate(inviteeJoinCode: joinCodeInput) }
-                        )
-                        .disabled(disabled || joinCodeInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Text("Use to distinguish multiple active tokens.")
+                        .font(LeafType.caption)
+                        .foregroundStyle(LeafColor.text.tertiary)
+                }
+
+                VStack(alignment: .leading, spacing: LeafSpace.xs) {
+                    Text("TTL").leafSectionLabel().foregroundStyle(LeafColor.text.tertiary)
+                    Picker("TTL", selection: $ttl) {
+                        ForEach(TTLPreset.allCases) { preset in
+                            Text(preset.rawValue).tag(preset)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                }
+
+                Toggle(isOn: $singleUse) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Single-use")
+                            .font(LeafType.body.regular)
+                            .foregroundStyle(LeafColor.text.primary)
+                        Text("Token expires after 1 use")
+                            .font(LeafType.caption)
+                            .foregroundStyle(LeafColor.text.tertiary)
                     }
                 }
-            }
-        case .template:
-            LeafCard(variant: .raised, padding: .regular) {
-                VStack(alignment: .leading, spacing: LeafSpace.md) {
-                    Text("SEND ASK-TO-JOIN TEMPLATE").leafSectionLabel().foregroundStyle(LeafColor.text.tertiary)
-                    Text("Pick a teammate to invite. They'll install Leaf, copy their Join code, and send it back to you.")
-                        .font(LeafType.body.small)
-                        .foregroundStyle(LeafColor.text.secondary)
-                    ShareTemplateButton(
-                        templateBody: ShareTemplate.compose(.askToJoin(orgName: orgName)),
-                        mailSubject: "Join Leaf team — \(orgName)"
-                    )
-                }
+                .toggleStyle(.switch)
             }
         }
     }
 
+    // MARK: - Ready output (post-generate)
+
     @ViewBuilder
-    private func readyOutput(outbound: InviteOutbound) -> some View {
+    private func readyOutput(token: InviteToken) -> some View {
         VStack(alignment: .leading, spacing: LeafSpace.lg) {
+            // Link card — copyable URL.
             LeafCard(variant: .raised, padding: .regular) {
-                VStack(alignment: .leading, spacing: LeafSpace.lg) {
-                    Text("SEND INVITE LINK").leafSectionLabel().foregroundStyle(LeafColor.text.tertiary)
-                    Text(outbound.otp == nil
-                         ? "Anyone with this link can join in the next 24 hours."
-                         : "Send this link AND the 6-digit code separately (e.g. link via Slack, OTP via Telegram).")
+                VStack(alignment: .leading, spacing: LeafSpace.md) {
+                    Text("LINK").leafSectionLabel().foregroundStyle(LeafColor.text.tertiary)
+                    Text("Copy + share via Slack / iMessage / email.")
                         .font(LeafType.body.small)
                         .foregroundStyle(LeafColor.text.secondary)
 
-                    let url = outbound.url
+                    let url = inviteURL(for: token)
                     Text(url.absoluteString)
                         .font(LeafType.mono.small)
                         .foregroundStyle(LeafColor.text.primary)
                         .textSelection(.enabled)
-                        .lineLimit(3)
+                        .lineLimit(2)
 
-                    ShareTemplateButton(
-                        templateBody: ShareTemplate.compose(.adminShare(
-                            displayName: inviteeDisplayNameHint(),
-                            inviteURL: url
-                        )),
-                        mailSubject: "Your Leaf invite link"
-                    )
+                    HStack {
+                        Spacer()
+                        LeafButton("Copy link", variant: .secondary, size: .sm) {
+                            copyToPasteboard(url.absoluteString)
+                        }
+                    }
+                }
+            }
 
-                    TimelineView(.periodic(from: .now, by: 1)) { ctx in
-                        Text(countdownText(expiresAtMs: outbound.expiresAtMs, now: ctx.date))
+            // Code card — copyable short code (typeable in-app or readable over phone).
+            LeafCard(variant: .raised, padding: .regular) {
+                VStack(alignment: .leading, spacing: LeafSpace.md) {
+                    Text("CODE").leafSectionLabel().foregroundStyle(LeafColor.text.tertiary)
+                    Text("Read over phone / paste in-app.")
+                        .font(LeafType.body.small)
+                        .foregroundStyle(LeafColor.text.secondary)
+
+                    Text(token.code)
+                        .font(LeafType.mono.regular)
+                        .tracking(2)
+                        .foregroundStyle(LeafColor.text.primary)
+                        .textSelection(.enabled)
+
+                    HStack {
+                        Spacer()
+                        LeafButton("Copy code", variant: .secondary, size: .sm) {
+                            copyToPasteboard(token.code)
+                        }
+                    }
+                }
+            }
+
+            // Metadata card — countdown + max-uses + approval-required hint.
+            LeafCard(variant: .glass, padding: .regular) {
+                VStack(alignment: .leading, spacing: LeafSpace.sm) {
+                    if let expiresAt = token.expiresAt {
+                        TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                            HStack(spacing: LeafSpace.xs) {
+                                Image(systemName: "clock")
+                                    .foregroundStyle(LeafColor.text.tertiary)
+                                Text(countdownText(expiresAt: expiresAt, now: ctx.date))
+                                    .font(LeafType.body.small)
+                                    .foregroundStyle(LeafColor.text.tertiary)
+                            }
+                        }
+                    } else {
+                        HStack(spacing: LeafSpace.xs) {
+                            Image(systemName: "infinity")
+                                .foregroundStyle(LeafColor.text.tertiary)
+                            Text("Never expires")
+                                .font(LeafType.body.small)
+                                .foregroundStyle(LeafColor.text.tertiary)
+                        }
+                    }
+                    HStack(spacing: LeafSpace.xs) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .foregroundStyle(LeafColor.text.tertiary)
+                        Text(usesText(used: token.usedCount, max: token.maxUses))
+                            .font(LeafType.body.small)
+                            .foregroundStyle(LeafColor.text.tertiary)
+                    }
+                    HStack(spacing: LeafSpace.xs) {
+                        Image(systemName: "lock.shield")
+                            .foregroundStyle(LeafColor.text.tertiary)
+                        Text("Anyone using this needs your approval")
                             .font(LeafType.body.small)
                             .foregroundStyle(LeafColor.text.tertiary)
                     }
                 }
             }
-
-            if let otp = outbound.otp {
-                LeafCard(variant: .raised, padding: .regular) {
-                    VStack(alignment: .leading, spacing: LeafSpace.md) {
-                        Text("ONE-TIME CODE").leafSectionLabel().foregroundStyle(LeafColor.text.tertiary)
-                        Text("Send this 6-digit code through a different channel than the link.")
-                            .font(LeafType.body.small)
-                            .foregroundStyle(LeafColor.text.secondary)
-                        HStack {
-                            Text(otp)
-                                .font(LeafType.title.small)
-                                .tracking(4)
-                                .foregroundStyle(LeafColor.text.primary)
-                                .textSelection(.enabled)
-                            Spacer()
-                            LeafButton("Copy OTP", variant: .secondary, size: .sm, action: {
-                                let pb = NSPasteboard.general
-                                pb.clearContents()
-                                pb.setString(otp, forType: .string)
-                            })
-                        }
-                    }
-                }
-            }
         }
     }
 
+    // MARK: - Footer
+
     private var footer: some View {
         HStack {
-            LeafButton("Discard", variant: .secondary, size: .md, action: discardAndDismiss)
-            Spacer()
-            if case .ready = reader.state {
-                LeafButton(
-                    "Revoke + Done",
-                    variant: .primary,
-                    size: .md,
-                    action: {
-                        reader.revokeAndDismiss()
-                        dismiss()
-                    }
-                )
+            switch reader.state {
+            case .idle, .loaded, .loading, .error:
+                LeafButton("Cancel", variant: .secondary, size: .md) { dismiss() }
+                Spacer()
+                LeafButton("Generate", variant: .primary, size: .md) {
+                    let trimmedLabel = label.trimmingCharacters(in: .whitespacesAndNewlines)
+                    reader.generate(
+                        label: trimmedLabel.isEmpty ? nil : trimmedLabel,
+                        ttlSeconds: ttl.seconds,
+                        singleUse: singleUse
+                    )
+                }
+            case .generating:
+                LeafButton("Cancel", variant: .secondary, size: .md) { dismiss() }
+                    .disabled(true)
+                Spacer()
+                LeafButton("Generate", variant: .primary, size: .md, action: {})
+                    .disabled(true)
+            case .ready:
+                Spacer()
+                LeafButton("Done", variant: .primary, size: .md) {
+                    reader.refresh()
+                    dismiss()
+                }
             }
         }
     }
 
     // MARK: - Helpers
 
-    private func discardAndDismiss() {
-        reader.dismiss()
-        dismiss()
+    private func inviteURL(for token: InviteToken) -> URL {
+        URL(string: "leaf://invite/\(token.code)") ?? URL(string: "leaf://invite/UNKNOWN")!
     }
 
-    private var orgName: String {
-        if case .loaded(_, let active, _) = workspaceReader.state { return active.name }
-        return "your team"
+    private func copyToPasteboard(_ string: String) {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(string, forType: .string)
     }
 
-    private func inviteeDisplayNameHint() -> String {
-        return ""
-    }
-
-    private func countdownText(expiresAtMs: Int64, now: Date = Date()) -> String {
-        let nowMs = Int64(now.timeIntervalSince1970 * 1000)
-        let remainingSec = max(0, (expiresAtMs - nowMs) / 1000)
-        let h = remainingSec / 3600
-        let m = (remainingSec % 3600) / 60
-        let s = remainingSec % 60
+    private func countdownText(expiresAt: Date, now: Date) -> String {
+        let remaining = max(0, expiresAt.timeIntervalSince(now))
+        let total = Int(remaining)
+        let d = total / 86400
+        let h = (total % 86400) / 3600
+        let m = (total % 3600) / 60
+        let s = total % 60
+        if d > 0 { return "Expires in \(d)d \(h)h" }
         if h > 0 { return "Expires in \(h)h \(m)m" }
         if m > 0 { return "Expires in \(m)m \(s)s" }
-        return remainingSec > 0 ? "Expires in \(s)s" : "Expired"
+        return total > 0 ? "Expires in \(s)s" : "Expired"
+    }
+
+    private func usesText(used: Int, max: Int?) -> String {
+        if let max = max {
+            return "\(used) / \(max) uses"
+        }
+        return "\(used) / unlimited uses"
     }
 }
