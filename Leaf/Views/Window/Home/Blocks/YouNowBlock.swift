@@ -20,7 +20,6 @@ struct YouNowBlock: View {
     @StateObject private var localAppsStore = LocalAppsStore()
     @Environment(RouteCoordinator.self) private var coordinator
     @Environment(WindowState.self) private var windowState
-    @Environment(PermissionsService.self) private var permissions
 
     var body: some View {
         VStack(alignment: .leading, spacing: LeafSpace.md) {
