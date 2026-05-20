@@ -12,10 +12,10 @@ final class ShareEventTypeRegistryP5Tests: XCTestCase {
     func testRegistrySize155AfterP5() {
         // Track-6 integration combined: 152 baseline + 16 P1 + 8 P3 + 6 P4 + 6 P2 + 3 P5 + 4 P6 = 195.
         XCTAssertEqual(
-            ShareEventTypeKey.allCases.count, 196,
+            ShareEventTypeKey.allCases.count, 198,
             "Track-6 P1+P3+P4+P2+P5+P6 collective merge = 195")
         XCTAssertEqual(
-            ShareEventTypeDefaults.all.count, 196,
+            ShareEventTypeDefaults.all.count, 198,
             "defaults table must enumerate every ShareEventTypeKey case")
     }
 
