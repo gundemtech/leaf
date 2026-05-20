@@ -25,14 +25,24 @@ public struct TodayMetrics: Equatable, Hashable, Sendable {
     }
 }
 
+/// Track-9 T6 — discriminator. `.captureTime` carries duration in seconds
+/// (UI renders "Xh Ym" / "Nm" / "<1m"); `.actionNoun` carries discrete event
+/// count (UI renders "N"). Drives `TodayBlock` pillStrip label formatting.
+public enum SurfacePillKind: String, Equatable, Hashable, Sendable, Codable {
+    case captureTime
+    case actionNoun
+}
+
 public struct SurfacePill: Equatable, Hashable, Sendable, Identifiable {
     public let id: String
     public let label: String
     public let count: Int
+    public let kind: SurfacePillKind
 
-    public init(id: String, label: String, count: Int) {
+    public init(id: String, label: String, count: Int, kind: SurfacePillKind) {
         self.id = id
         self.label = label
         self.count = count
+        self.kind = kind
     }
 }

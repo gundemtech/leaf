@@ -23,4 +23,36 @@ final class SurfacePillRouterTests: XCTestCase {
     func test_emptyString_returnsNil() {
         XCTAssertNil(SurfacePillRouter.route(forPillID: ""))
     }
+
+    // MARK: - Track-9 T6 — PillFamily.rawValue routing parity
+
+    func test_pillFamily_claudeCode_routesToHomeSurface() {
+        XCTAssertEqual(
+            SurfacePillRouter.route(forPillID: PillFamily.claudeCode.rawValue),
+            .homeSurface(.claudeCode)
+        )
+    }
+
+    func test_pillFamily_linear_routesToLayerB() {
+        XCTAssertEqual(
+            SurfacePillRouter.route(forPillID: PillFamily.linear.rawValue),
+            .layerBProvider(.linear)
+        )
+    }
+
+    func test_pillFamily_mail_returnsNil() {
+        XCTAssertNil(SurfacePillRouter.route(forPillID: PillFamily.mail.rawValue))
+    }
+
+    func test_pillFamily_notes_returnsNil() {
+        XCTAssertNil(SurfacePillRouter.route(forPillID: PillFamily.notes.rawValue))
+    }
+
+    func test_pillFamily_music_returnsNil() {
+        XCTAssertNil(SurfacePillRouter.route(forPillID: PillFamily.music.rawValue))
+    }
+
+    func test_pillFamily_reminders_returnsNil() {
+        XCTAssertNil(SurfacePillRouter.route(forPillID: PillFamily.reminders.rawValue))
+    }
 }

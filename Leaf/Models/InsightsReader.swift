@@ -29,13 +29,23 @@ final class InsightsReader {
         case loading
         case loaded(snapshot: InsightsSnapshot, updated: Date)
         case empty(message: String)
-        case error(message: String)
+        /// Track-9 T6 (C-2 close) — error retains last successful snapshot so
+        /// `HomeView` can render banner + last-known cells gracefully instead
+        /// of replacing the whole view with a full-page banner. `lastKnown ==
+        /// nil` for cold-start errors (first refresh fails before any load).
+        case error(message: String, lastKnown: InsightsSnapshot?)
     }
 
     private(set) var state: State = .loading
 
     private var database: LeafCore.Database?
     private var currentTask: Task<Void, Never>?
+    /// Track-9 T6 (C-2) — last successful snapshot, updated on every `.loaded`
+    /// transition. Read by error path to populate `State.error.lastKnown`.
+    /// Instance field (not local) so overlapping refreshes (rapid double-tap on
+    /// "Refresh") don't lose the snapshot when call #2 sees `state == .loading`
+    /// set by call #1.
+    private var lastKnownSnapshot: InsightsSnapshot?
 
     private let databaseURL: URL
     private let databaseConfig: DatabaseConfig
@@ -243,6 +253,7 @@ final class InsightsReader {
                         message: "Collecting… activity will appear after a few app switches."
                     )
                 } else {
+                    self.lastKnownSnapshot = snapshot
                     self.state = .loaded(snapshot: snapshot, updated: Date())
                 }
             case .failure(let error):
@@ -252,7 +263,8 @@ final class InsightsReader {
                 self.logger.error("insights snapshot failed: \(String(describing: error), privacy: .public)")
                 self.database = nil
                 self.state = .error(
-                    message: "Couldn't read today's activity. Try Refresh."
+                    message: "Couldn't read today's activity. Try Refresh.",
+                    lastKnown: self.lastKnownSnapshot
                 )
             }
         }

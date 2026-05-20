@@ -2,6 +2,13 @@ import XCTest
 
 @testable import LeafCore
 
+// Track-9 T4 — Sentinel-injection regression tests are intentionally absent here.
+// T4 ships a deriver-only phase: `weeklyMetrics(now:)` reads existing aggregate
+// counts (commits / status transitions / huddle starts / focus sessions / heavy
+// pulse buckets) and emits numeric metrics + opaque day-start timestamps. No
+// body fields, file paths, message text, or other forbidden surfaces flow
+// through the deriver. See T4 spec §5.4 (`docs/superpowers/specs/2026-05-20-
+// track-9-T4-weekly-metrics-deriver.md`) for the explicit exemption rationale.
 final class WeeklyMetricsTests: XCTestCase {
     func testWeeklyMetricsEquatableRoundTrip() {
         let day = DailyMetric(

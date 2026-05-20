@@ -415,6 +415,7 @@ The 6 a11y findings from P9 polish audit subagent (master spec §9.1 last block)
 - **`recentActivity` substrate cleanup carry-forward** — T10 already addresses; no carry.
 - **Slack DM bucket routing** — conditional on T3 verify outcome.
 - **`get_weekly_metrics` MCP tool** — future if AI clients request Analytics queries.
+- **T5 multi-window editor accuracy** — `WorkspacePathResolver` returns the most-recently-opened VSCode/JetBrains workspace, not the currently-foregrounded one. When a user has multiple instances open and switches back to an earlier workspace, YOU·NOW renders the wrong branch / linearID until the user touches the active workspace again. Documented as a known accuracy limitation in `leaf-docs/docs/privacy-security/what-we-dont-capture.md` (Known accuracy limitations section). Fix requires per-IDE foreground-window resolution (AX-driven for VSCode-family, AppleScript-driven for JetBrains where available) — separate post-Track-9 track.
 
 ---
 

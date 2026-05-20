@@ -69,8 +69,17 @@ struct HomeView: View {
                     notConfiguredFullPage(msg)
                 case .empty(let msg):
                     emptyFullPage(msg)
-                case .error(let msg):
-                    errorBanner(msg)
+                case .error(let msg, let lastKnown):
+                    // Track-9 T6 (C-2 close) — banner above last-known content
+                    // when available; cold-error keeps banner-only UX preserved.
+                    if let snapshot = lastKnown {
+                        VStack(alignment: .leading, spacing: LeafSpace.lg) {
+                            errorBanner(msg)
+                            HomeContent(snapshot: snapshot)
+                        }
+                    } else {
+                        errorBanner(msg)
+                    }
                 case .loaded(let snapshot, _):
                     HomeContent(snapshot: snapshot)
                 }
