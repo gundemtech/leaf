@@ -61,6 +61,9 @@ struct LeafApp: App {
     /// can read allow-list emptiness for the Browsers surface enable-state.
     /// Single owner per app, both Settings and Home view it.
     @State private var browserAllowList = BrowserAllowListStore()
+    /// fix/dev-launch-reliability — Settings → Diagnostics shows main+agent
+    /// CDHash, AX trust, capture stats. Single owner per app.
+    @State private var diagnostics = DebugDiagnosticsService()
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -132,6 +135,7 @@ struct LeafApp: App {
                 .environment(windowState)
                 .environment(routeCoordinator)
                 .environment(browserAllowList)
+                .environment(diagnostics)
                 .onAppear {
                     inviteURLHandler.wire(
                         acceptReader: inviteAcceptReader,
@@ -183,6 +187,7 @@ struct LeafApp: App {
                 .environment(windowState)
                 .environment(routeCoordinator)
                 .environment(browserAllowList)
+                .environment(diagnostics)
         }
         .menuBarExtraStyle(.window)
     }
