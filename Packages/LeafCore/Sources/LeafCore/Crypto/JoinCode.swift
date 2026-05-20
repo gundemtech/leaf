@@ -201,4 +201,80 @@ public enum JoinCode {
 public enum JoinCodeError: Error, Sendable, Equatable {
     case malformed
     case checksumMismatch
+    case randomFailure
+}
+
+// MARK: - Invite token codes (M027 Invite Redesign)
+
+extension JoinCode {
+
+    /// 30-char invite-token alphabet — excludes I/L/O/U/0/1 per spec §3.1
+    /// for human readability when typed in-app or read over phone.
+    public static let inviteAlphabet: [Character] = Array("ABCDEFGHJKMNPQRSTVWXYZ23456789")
+
+    /// Generates a fresh `LEAF-XXXX-XXXX-XXXX` invite code (19 chars total,
+    /// 12-char payload split into 3 groups of 4). Payload is 11 cryptographically
+    /// random chars + 1 position-weighted checksum char at the last position
+    /// (catches single-char substitutions when verified client-side at paste).
+    ///
+    /// Throws `JoinCodeError.randomFailure` if `SecRandomCopyBytes` fails (rare —
+    /// indicates a critical platform RNG malfunction).
+    public static func generateRandom() throws -> String {
+        var rndBytes = [UInt8](repeating: 0, count: 11)
+        let status = SecRandomCopyBytes(kSecRandomDefault, 11, &rndBytes)
+        guard status == errSecSuccess else { throw JoinCodeError.randomFailure }
+
+        // Map 11 random bytes → 11 chars. Modulo bias here is tiny (256 % 30 = 16,
+        // bias <1 bit total) and acceptable for non-cryptographic invite codes.
+        let randomChars = rndBytes.map { byte in
+            inviteAlphabet[Int(byte) % inviteAlphabet.count]
+        }
+        let checksum = computeInviteChecksum(randomChars)
+        let payload = randomChars + [checksum]
+        precondition(payload.count == 12, "invite payload must be 12 chars")
+
+        let g1 = String(payload[0..<4])
+        let g2 = String(payload[4..<8])
+        let g3 = String(payload[8..<12])
+        return "LEAF-\(g1)-\(g2)-\(g3)"
+    }
+
+    /// Verifies that a code's format is valid AND its checksum char matches the
+    /// value recomputed from the preceding 11 chars. Returns false on any of:
+    /// wrong length, missing `LEAF-` prefix, any char outside `inviteAlphabet`,
+    /// checksum mismatch.
+    ///
+    /// Used client-side at paste-time to detect typos before round-tripping to
+    /// the server (spec §4.8).
+    public static func verifyChecksum(_ code: String) -> Bool {
+        guard code.count == 19, code.hasPrefix("LEAF-") else { return false }
+        // Strip "LEAF-" prefix + the 2 group separators.
+        let body = String(code.dropFirst("LEAF-".count))
+            .replacingOccurrences(of: "-", with: "")
+        guard body.count == 12 else { return false }
+        let chars = Array(body)
+        guard chars.allSatisfy({ inviteAlphabet.contains($0) }) else { return false }
+        let expected = computeInviteChecksum(Array(chars.prefix(11)))
+        return expected == chars[11]
+    }
+
+    /// Position-weighted modular polynomial over 30-char alphabet.
+    /// `acc = (acc * 31 + idx) mod 30` for each char index; result indexes into
+    /// `inviteAlphabet` to produce the checksum char. Single-char substitution
+    /// in input → different `acc` (different multiplier weight) → different
+    /// checksum. Single-char transposition: may or may not be caught depending
+    /// on values; sufficient for invite-code typo detection (spec §4.8).
+    private static func computeInviteChecksum(_ chars: [Character]) -> Character {
+        var acc = 0
+        for ch in chars {
+            guard let idx = inviteAlphabet.firstIndex(of: ch) else {
+                // Defensive: if input contains non-alphabet char, return first
+                // alphabet char as deterministic sentinel. Generator guarantees
+                // valid input so this branch should be unreachable in production.
+                return inviteAlphabet[0]
+            }
+            acc = (acc &* 31 &+ idx) % inviteAlphabet.count
+        }
+        return inviteAlphabet[acc]
+    }
 }

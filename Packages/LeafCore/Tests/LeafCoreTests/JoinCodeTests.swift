@@ -177,4 +177,97 @@ final class JoinCodeTests: XCTestCase {
         case .failure(let err): XCTAssertEqual(err, .malformed)
         }
     }
+
+    // MARK: - M027 Invite-token random code generator
+
+    func testGenerateRandom_ProducesExpected19CharShape() throws {
+        let code = try JoinCode.generateRandom()
+        XCTAssertTrue(code.hasPrefix("LEAF-"))
+        XCTAssertEqual(code.count, 19, "expected LEAF-XXXX-XXXX-XXXX 19 chars; got \(code.count): \(code)")
+        XCTAssertNotNil(code.range(of: #"^LEAF-[ABCDEFGHJKMNPQRSTVWXYZ2-9]{4}-[ABCDEFGHJKMNPQRSTVWXYZ2-9]{4}-[ABCDEFGHJKMNPQRSTVWXYZ2-9]{4}$"#,
+                                   options: .regularExpression),
+                       "code shape mismatch: \(code)")
+    }
+
+    func testGenerateRandom_AlphabetExcludesILOUZeroOne() throws {
+        // Sample many codes — none should ever emit an excluded char.
+        let excluded: Set<Character> = ["I", "L", "O", "U", "0", "1"]
+        for _ in 0..<400 {
+            let code = try JoinCode.generateRandom()
+            for ch in code where ch != "-" && !code.hasPrefix("\(ch)EAF") {
+                if ch == "L" {
+                    // Allowed only inside "LEAF-" prefix; the regex check above
+                    // separately ensures alphabet purity outside the prefix.
+                    continue
+                }
+                XCTAssertFalse(excluded.contains(ch),
+                               "code \(code) contains excluded char '\(ch)'")
+            }
+        }
+    }
+
+    func testGenerateRandom_ProducesUniqueValues() throws {
+        var seen = Set<String>()
+        for _ in 0..<400 {
+            let code = try JoinCode.generateRandom()
+            XCTAssertFalse(seen.contains(code), "duplicate code: \(code)")
+            seen.insert(code)
+        }
+    }
+
+    func testVerifyChecksum_AcceptsFreshlyGeneratedCode() throws {
+        for _ in 0..<50 {
+            let code = try JoinCode.generateRandom()
+            XCTAssertTrue(JoinCode.verifyChecksum(code),
+                          "freshly generated code should verify: \(code)")
+        }
+    }
+
+    func testVerifyChecksum_RejectsTypoAtLastPosition() throws {
+        let code = try JoinCode.generateRandom()
+        var chars = Array(code)
+        let lastIdx = chars.count - 1
+        let cur = chars[lastIdx]
+        // Flip to any other valid alphabet char.
+        let other = JoinCode.inviteAlphabet.first(where: { $0 != cur })!
+        chars[lastIdx] = other
+        let typoed = String(chars)
+        XCTAssertFalse(JoinCode.verifyChecksum(typoed),
+                       "typo at checksum position should fail verification: \(code) → \(typoed)")
+    }
+
+    func testVerifyChecksum_RejectsTypoInRandomBody() throws {
+        // Flipping ANY random body char (positions 5..15 in 19-char string, skipping
+        // hyphens at 4, 9, 14) should change recomputed checksum → verify fails.
+        for _ in 0..<20 {
+            let code = try JoinCode.generateRandom()
+            var chars = Array(code)
+            // Pick position 5 (first char of first 4-group); flip to neighbour in alphabet.
+            let cur = chars[5]
+            let curIdx = JoinCode.inviteAlphabet.firstIndex(of: cur)!
+            let nextIdx = (curIdx + 1) % JoinCode.inviteAlphabet.count
+            chars[5] = JoinCode.inviteAlphabet[nextIdx]
+            let typoed = String(chars)
+            XCTAssertFalse(JoinCode.verifyChecksum(typoed),
+                           "typo at random body should fail verification: \(code) → \(typoed)")
+        }
+    }
+
+    func testVerifyChecksum_RejectsWrongLength() {
+        XCTAssertFalse(JoinCode.verifyChecksum("LEAF-AAAA-BBBB"))           // too short
+        XCTAssertFalse(JoinCode.verifyChecksum("LEAF-AAAA-BBBB-CCCC-DDDD")) // too long
+        XCTAssertFalse(JoinCode.verifyChecksum(""))                         // empty
+    }
+
+    func testVerifyChecksum_RejectsMissingPrefix() {
+        XCTAssertFalse(JoinCode.verifyChecksum("XEAF-AAAA-BBBB-CCCC"))
+        XCTAssertFalse(JoinCode.verifyChecksum("AAAA-BBBB-CCCC-DDDD"))
+    }
+
+    func testVerifyChecksum_RejectsExcludedAlphabet() {
+        XCTAssertFalse(JoinCode.verifyChecksum("LEAF-AAA1-BBBB-CCCC"),
+                       "'1' is excluded → reject")
+        XCTAssertFalse(JoinCode.verifyChecksum("LEAF-LOOK-OUT2-XXXX"),
+                       "'L'/'O'/'U' excluded → reject")
+    }
 }

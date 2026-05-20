@@ -141,6 +141,9 @@ public struct InviteService: Sendable {
         case .success(let bytes): pubkey = bytes
         case .failure(.malformed): throw LeafError.joinCodeMalformed
         case .failure(.checksumMismatch): throw LeafError.joinCodeChecksumMismatch
+        // .randomFailure is thrown only by JoinCode.generateRandom (M027); decode()
+        // never emits it. Treat as malformed defensively.
+        case .failure(.randomFailure): throw LeafError.joinCodeMalformed
         }
         let hex = pubkey.map { String(format: "%02x", $0) }.joined()
         return try await generateInvite(

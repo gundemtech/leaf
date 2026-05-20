@@ -7,7 +7,7 @@
 //  `.shared`) — стандартный test-stub pattern (см. SlackTokenRefresher / 4.4).
 //
 //  Status mapping:
-//   - 201 (POST) → InviteToken
+//   - 201 (POST) → RelayInviteToken
 //   - 200 (GET)  → InviteFetched (blob base64url-decoded)
 //   - 204 (DELETE) → success (no body)
 //   - 400 → LeafError.inviteRequestRejected("bad-input")
@@ -34,7 +34,7 @@ public actor RelayClient: Sendable {
 
     public func postInvite(memberPubkeyHex: String,
                            blob: Data,
-                           expiresAtMs: Int64) async throws -> InviteToken {
+                           expiresAtMs: Int64) async throws -> RelayInviteToken {
         var request = URLRequest(url: baseURL.appendingPathComponent("v1/invite"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -218,14 +218,14 @@ public actor RelayClient: Sendable {
         return (data, http)
     }
 
-    private func parseInviteToken(from data: Data) throws -> InviteToken {
+    private func parseInviteToken(from data: Data) throws -> RelayInviteToken {
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let token = obj["token"] as? String
         else {
             throw LeafError.relayUnreachable(reason: "malformed-response")
         }
         let expiresAtMs = try parseInt64(obj["expires_at_ms"])
-        return InviteToken(value: token, expiresAtMs: expiresAtMs)
+        return RelayInviteToken(value: token, expiresAtMs: expiresAtMs)
     }
 
     private func parseInviteFetched(from data: Data) throws -> InviteFetched {
@@ -280,7 +280,10 @@ public actor RelayClient: Sendable {
     }
 }
 
-public struct InviteToken: Sendable, Hashable {
+/// Phase 5.5 / pre-Track 5 Cloudflare relay invite token. Replaced by Track 5
+/// `InviteToken` (M027) and Supabase magic-link flow; this struct stays for
+/// Phase 5.5 `RelayClient` test coverage and is deprecated for runtime use.
+public struct RelayInviteToken: Sendable, Hashable {
     public let value: String
     public let expiresAtMs: Int64
     public init(value: String, expiresAtMs: Int64) {
