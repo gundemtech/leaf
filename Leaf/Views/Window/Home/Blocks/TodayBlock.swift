@@ -145,18 +145,41 @@ struct TodayBlock: View {
 
     @ViewBuilder
     private func pillButton(_ pill: SurfacePill) -> some View {
+        let title = pillLabel(for: pill)
         if let route = SurfacePillRouter.route(forPillID: pill.id) {
             Button {
                 push(route)
             } label: {
-                LeafPill(title: pill.label)
+                LeafPill(title: title)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(pill.label) — open details")
+            .accessibilityLabel("\(title) — open details")
             .accessibilityAddTraits(.isButton)
         } else {
-            LeafPill(title: pill.label)
+            LeafPill(title: title)
         }
+    }
+
+    /// Track-9 T6 — kind-switched pill label format. `.captureTime` carries
+    /// seconds (rendered as "Xh Ym" / "Nm" / "<1m"); `.actionNoun` carries
+    /// discrete count (rendered as "N").
+    private func pillLabel(for pill: SurfacePill) -> String {
+        let suffix: String
+        switch pill.kind {
+        case .captureTime:
+            suffix = formatDurationCompact(seconds: pill.count)
+        case .actionNoun:
+            suffix = "\(pill.count)"
+        }
+        return "\(pill.label) \(suffix)"
+    }
+
+    private func formatDurationCompact(seconds: Int) -> String {
+        let h = seconds / 3600
+        let m = (seconds % 3600) / 60
+        if h > 0 { return "\(h)h \(m)m" }
+        if m > 0 { return "\(m)m" }
+        return "<1m"
     }
 
     private func overflowChip(remaining: Int) -> some View {
