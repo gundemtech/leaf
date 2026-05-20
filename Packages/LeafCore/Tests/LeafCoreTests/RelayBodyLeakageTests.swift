@@ -3273,4 +3273,310 @@ final class RelayBodyLeakageTests: XCTestCase {
             XCTAssertTrue(stateJSON.contains("my-team"))
         }
     }
+
+    // MARK: - Track-9 T3 sentinel-injection regression
+
+    /// Track-9 T3 — `pr_url` / `issue_url` / `comment_url` enrichment composes
+    /// strictly from `(repoFullName, number, comment_id)` triple (public refs).
+    /// Composition NEVER reads PR/issue title, body, or comment text. Even if a
+    /// sentinel-bearing body is captured in the same RawEvent (D1 body capture
+    /// is allowed at the events table), the URL slot must remain structurally
+    /// clean. presence_state.github must not bleed body content either.
+    func test_t3_walkback_GHURLEnrichment_urlIsStructurallyComposed() throws {
+        let sentinel = "LEAKED_SENTINEL_GH_T3_PR_BODY"
+        let sentinelBody = "padding-prefix-padding-prefix-" + sentinel
+            + "-padding-suffix-padding-suffix"
+
+        let db = try Database.openForWrite(
+            at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        // PR body carries the sentinel; pr_url is structurally composed.
+        let prURL = "https://github.com/gundemtech/leaf/pull/42"
+        let event = RawEvent(
+            timestamp: Date(),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "github",
+                "event_kind": "gh_pr_opened",
+                "repo": "gundemtech/leaf",
+                "repo_full_name": "gundemtech/leaf",
+                "number": "42",
+                "pr_url": prURL,
+                Schema.EventPayloadKeys.body: sentinelBody,
+            ]
+        )
+        let presenceState: [String: Any] = [
+            "viewer_login": "demoffsrmain",
+            "notifications_unread": 0,
+        ]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(
+                collectorID: CollectorID.githubPolling,
+                sourceID: "github:t3-pr-url", nowMs: nowMs),
+            presence: (provider: .github, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+        try db.readSQL { rawDB in
+            // events.payload_json: pr_url slot stays structurally clean.
+            let prURLValue: String = try Row.fetchOne(
+                rawDB,
+                sql: "SELECT json_extract(payload_json, '$.pr_url') FROM events WHERE json_extract(payload_json, '$.event_kind') = 'gh_pr_opened'"
+            )?[0] as String? ?? ""
+            XCTAssertEqual(prURLValue, prURL, "pr_url payload slot must be structurally composed")
+            XCTAssertFalse(
+                prURLValue.contains(sentinel),
+                "T3 sentinel must not appear in pr_url payload field")
+
+            // presence_state.github.state_json: sentinel never leaks here.
+            let row = try Row.fetchOne(
+                rawDB,
+                sql: "SELECT state_json FROM presence_state WHERE provider='github'"
+            )
+            let stateJSON = (row?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty)
+            XCTAssertFalse(
+                stateJSON.contains(sentinel),
+                "T3 sentinel must not appear in presence_state.github.state_json")
+            XCTAssertFalse(
+                stateJSON.contains("\"body\""),
+                "Payload key 'body' must not appear in presence_state.state_json")
+            XCTAssertTrue(stateJSON.contains("\"viewer_login\""))
+        }
+    }
+
+    /// Track-9 T3 — `gh_pr_review_requested` carries `requested_reviewer_login`
+    /// plaintext per D-5 pattern parity (Track-3 D2 PRMetadata.requestedReviewers).
+    /// The slot must contain ONLY a clean login string — no body content, no
+    /// title content, no special chars from adjacent payload fields.
+    func test_t3_walkback_GHReviewRequested_reviewerLoginIsClean() throws {
+        let sentinel = "LEAKED_SENTINEL_GH_T3_REVIEWER"
+        let sentinelBody = "padding-" + sentinel + "-padding"
+
+        let db = try Database.openForWrite(
+            at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let event = RawEvent(
+            timestamp: Date(),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "github",
+                "event_kind": "gh_pr_review_requested",
+                "repo": "gundemtech/leaf",
+                "repo_full_name": "gundemtech/leaf",
+                "number": "42",
+                "requested_reviewer_login": "octocat",
+                "pr_url": "https://github.com/gundemtech/leaf/pull/42",
+                Schema.EventPayloadKeys.body: sentinelBody,
+            ]
+        )
+        let presenceState: [String: Any] = ["viewer_login": "demoffsrmain"]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(
+                collectorID: CollectorID.githubPolling,
+                sourceID: "github:t3-rr", nowMs: nowMs),
+            presence: (provider: .github, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+        try db.readSQL { rawDB in
+            let loginValue: String = try Row.fetchOne(
+                rawDB,
+                sql: "SELECT json_extract(payload_json, '$.requested_reviewer_login') FROM events WHERE json_extract(payload_json, '$.event_kind') = 'gh_pr_review_requested'"
+            )?[0] as String? ?? ""
+            XCTAssertEqual(loginValue, "octocat")
+            XCTAssertFalse(
+                loginValue.contains(sentinel),
+                "T3 sentinel must not appear in requested_reviewer_login slot")
+            // GitHub logins are alphanumeric + dash; no spaces/special chars.
+            let pattern = #"^[a-zA-Z0-9-]+$"#
+            XCTAssertNotNil(
+                loginValue.range(of: pattern, options: .regularExpression),
+                "requested_reviewer_login must be structurally a clean login string"
+            )
+        }
+    }
+
+    /// Track-9 T3 — `presence_state.github.viewer_login` slot must contain ONLY
+    /// the OAuth-bootstrap-provided login. Sentinel injected as event body
+    /// content must never appear in the presence_state JSON view.
+    func test_t3_walkback_GHViewerLogin_slotDoesNotBleedFromEventBody() throws {
+        let sentinel = "LEAKED_SENTINEL_GH_T3_VIEWER_LOGIN"
+        let sentinelBody = "padding-" + sentinel + "-padding"
+
+        let db = try Database.openForWrite(
+            at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let event = RawEvent(
+            timestamp: Date(),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "github",
+                "event_kind": "gh_pr_opened",
+                "repo": "gundemtech/leaf",
+                "repo_full_name": "gundemtech/leaf",
+                "number": "42",
+                Schema.EventPayloadKeys.body: sentinelBody,
+            ]
+        )
+        // Real-shape viewer_login value — mirrors what GitHubCollector emits.
+        let presenceState: [String: Any] = [
+            "viewer_login": "octocat",
+            "notifications_unread": 0,
+        ]
+        try db.writeEventsOffsetAndPresence(
+            [event],
+            offset: makeOffset(
+                collectorID: CollectorID.githubPolling,
+                sourceID: "github:t3-viewer", nowMs: nowMs),
+            presence: (provider: .github, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+        try db.readSQL { rawDB in
+            let row = try Row.fetchOne(
+                rawDB,
+                sql: "SELECT state_json FROM presence_state WHERE provider='github'"
+            )
+            let stateJSON = (row?["state_json"] as String?) ?? ""
+            // (a) slot wiring — viewer_login carries the real value.
+            XCTAssertTrue(
+                stateJSON.contains("\"viewer_login\":\"octocat\""),
+                "viewer_login slot must contain bootstrap-provided login"
+            )
+            // (b) sentinel never bleeds from event body into the slot.
+            XCTAssertFalse(
+                stateJSON.contains(sentinel),
+                "T3 sentinel must not appear in presence_state.github.state_json"
+            )
+            XCTAssertFalse(
+                stateJSON.contains("\"body\""),
+                "Payload key 'body' must not appear in presence_state.state_json"
+            )
+        }
+    }
+
+    /// Track-9 T3 integration sweep — exercise all three invariants
+    /// simultaneously across emission paths; iterate events.payload_json +
+    /// presence_state.github.state_json checking cross-contamination.
+    func test_t3_walkback_GHIntegrationSweep() throws {
+        let sentinels = [
+            "LEAKED_SENTINEL_GH_T3_PR_BODY",
+            "LEAKED_SENTINEL_GH_T3_REVIEWER",
+            "LEAKED_SENTINEL_GH_T3_VIEWER_LOGIN",
+        ]
+        let combinedBody = sentinels.joined(separator: " ‖ ")
+
+        let db = try Database.openForWrite(
+            at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+
+        // 3 events: gh_pr_opened (URL slot) + gh_pr_review_requested (login slot)
+        // + gh_issue_comment_authored (comment_url overlay).
+        let events: [RawEvent] = [
+            RawEvent(
+                timestamp: Date(),
+                signalType: .action,
+                bundleID: nil,
+                payload: [
+                    "source": "github",
+                    "event_kind": "gh_pr_opened",
+                    "repo": "gundemtech/leaf",
+                    "repo_full_name": "gundemtech/leaf",
+                    "number": "42",
+                    "pr_url": "https://github.com/gundemtech/leaf/pull/42",
+                    Schema.EventPayloadKeys.body: combinedBody,
+                ]
+            ),
+            RawEvent(
+                timestamp: Date(),
+                signalType: .action,
+                bundleID: nil,
+                payload: [
+                    "source": "github",
+                    "event_kind": "gh_pr_review_requested",
+                    "repo": "gundemtech/leaf",
+                    "repo_full_name": "gundemtech/leaf",
+                    "number": "43",
+                    "requested_reviewer_login": "octocat",
+                    "pr_url": "https://github.com/gundemtech/leaf/pull/43",
+                ]
+            ),
+            RawEvent(
+                timestamp: Date(),
+                signalType: .action,
+                bundleID: nil,
+                payload: [
+                    "source": "github",
+                    "event_kind": "gh_issue_comment_authored",
+                    "repo": "gundemtech/leaf",
+                    "repo_full_name": "gundemtech/leaf",
+                    "number": "44",
+                    "issue_url": "https://github.com/gundemtech/leaf/issues/44",
+                    "comment_url": "https://github.com/gundemtech/leaf/issues/44#issuecomment-999",
+                    "action": "created",
+                    Schema.EventPayloadKeys.body: combinedBody,
+                ]
+            ),
+        ]
+        let presenceState: [String: Any] = [
+            "viewer_login": "demoffsrmain",
+            "notifications_unread": 0,
+        ]
+        try db.writeEventsOffsetAndPresence(
+            events,
+            offset: makeOffset(
+                collectorID: CollectorID.githubPolling,
+                sourceID: "github:t3-sweep", nowMs: nowMs),
+            presence: (provider: .github, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+        try db.readSQL { rawDB in
+            // Iterate URL slots — none must contain any sentinel.
+            let urlRows = try Row.fetchAll(
+                rawDB,
+                sql: """
+                    SELECT
+                        json_extract(payload_json, '$.pr_url') AS pr_url,
+                        json_extract(payload_json, '$.issue_url') AS issue_url,
+                        json_extract(payload_json, '$.comment_url') AS comment_url,
+                        json_extract(payload_json, '$.requested_reviewer_login') AS reviewer
+                    FROM events
+                    """
+            )
+            for row in urlRows {
+                let prURL = (row["pr_url"] as String?) ?? ""
+                let issueURL = (row["issue_url"] as String?) ?? ""
+                let commentURL = (row["comment_url"] as String?) ?? ""
+                let reviewer = (row["reviewer"] as String?) ?? ""
+                for sentinel in sentinels {
+                    XCTAssertFalse(prURL.contains(sentinel),
+                        "Sentinel \(sentinel) leaked into pr_url slot")
+                    XCTAssertFalse(issueURL.contains(sentinel),
+                        "Sentinel \(sentinel) leaked into issue_url slot")
+                    XCTAssertFalse(commentURL.contains(sentinel),
+                        "Sentinel \(sentinel) leaked into comment_url slot")
+                    XCTAssertFalse(reviewer.contains(sentinel),
+                        "Sentinel \(sentinel) leaked into requested_reviewer_login slot")
+                }
+            }
+
+            // presence_state.github clean across all sentinels.
+            let row = try Row.fetchOne(
+                rawDB,
+                sql: "SELECT state_json FROM presence_state WHERE provider='github'"
+            )
+            let stateJSON = (row?["state_json"] as String?) ?? ""
+            for sentinel in sentinels {
+                XCTAssertFalse(
+                    stateJSON.contains(sentinel),
+                    "Sentinel \(sentinel) leaked into presence_state.github.state_json"
+                )
+            }
+            XCTAssertFalse(stateJSON.contains("\"body\""))
+            XCTAssertTrue(stateJSON.contains("\"viewer_login\":\"demoffsrmain\""))
+        }
+    }
 }
