@@ -372,6 +372,17 @@ public enum ActivityFeedMapper {
             primary = formatPR(repo: repo, number: number, suffix: "thread resolved")
         case GitHubEventKindKey.prReviewSubmitted.rawValue:
             primary = formatPR(repo: repo, number: number, suffix: "review submitted")
+        // Track-9 T3 — PR review request lifecycle. Allowlist-only payload reads:
+        // repo / number (already extracted) + requested_reviewer_login (opaque plaintext
+        // login per Track-3 D2 PRMetadata.requestedReviewers precedent; NOT title or body).
+        case GitHubEventKindKey.prReviewRequested.rawValue:
+            let reviewer = sanitize(payload["requested_reviewer_login"])
+            let suffix = reviewer.map { "requested review (\($0))" } ?? "requested review"
+            primary = formatPR(repo: repo, number: number, suffix: suffix)
+        case GitHubEventKindKey.prReviewRequestRemoved.rawValue:
+            let reviewer = sanitize(payload["requested_reviewer_login"])
+            let suffix = reviewer.map { "dropped review request (\($0))" } ?? "dropped review request"
+            primary = formatPR(repo: repo, number: number, suffix: suffix)
         case GitHubEventKindKey.issueOpened.rawValue:
             primary = formatIssue(repo: repo, number: number, suffix: "issue opened")
         case GitHubEventKindKey.issueClosed.rawValue:

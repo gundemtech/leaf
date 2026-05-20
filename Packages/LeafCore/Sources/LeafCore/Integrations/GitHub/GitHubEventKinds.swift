@@ -25,6 +25,12 @@ public enum GitHubEventKindKey: String, CaseIterable, Sendable, Hashable {
     case discussionAuthored = "gh_discussion_authored"
     case discussionCommentAuthored = "gh_discussion_comment_authored"
     case prReviewThreadResolved = "gh_pr_review_thread_resolved"
+    // Track-9 T3 — PR review request lifecycle (outbound). Captured when
+    // PullRequestEvent payload.action ∈ {review_requested, review_request_removed}.
+    // Both default OFF per ADR-020 (substrate ships silent — user opts in via
+    // Privacy → Share Controls).
+    case prReviewRequested = "gh_pr_review_requested"
+    case prReviewRequestRemoved = "gh_pr_review_request_removed"
     case notificationsPulse = "gh_notifications_pulse"
     case prAwaitingReviewCount = "gh_pr_awaiting_review_count"
     case myOpenPRCount = "gh_my_open_pr_count"

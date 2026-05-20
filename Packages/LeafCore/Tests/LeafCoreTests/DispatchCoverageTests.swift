@@ -164,6 +164,10 @@ final class DispatchCoverageTests: XCTestCase {
         let nonBodyBearing = [
             GitHubEventKindKey.prReviewThreadResolved.rawValue,
             GitHubEventKindKey.prAwaitingReviewCount.rawValue,
+            // Track-9 T3 — PR review request lifecycle. NOT body-bearing —
+            // payload carries `requested_reviewer_login` + URL only, no body field.
+            GitHubEventKindKey.prReviewRequested.rawValue,
+            GitHubEventKindKey.prReviewRequestRemoved.rawValue,
         ]
         for raw in nonBodyBearing {
             XCTAssertNil(
@@ -209,6 +213,10 @@ final class DispatchCoverageTests: XCTestCase {
         let nonBodyBearing = [
             GitHubEventKindKey.prReviewThreadResolved.rawValue,
             GitHubEventKindKey.prAwaitingReviewCount.rawValue,
+            // Track-9 T3 — PR review request lifecycle. NOT body-bearing —
+            // payload carries `requested_reviewer_login` + URL only, no body field.
+            GitHubEventKindKey.prReviewRequested.rawValue,
+            GitHubEventKindKey.prReviewRequestRemoved.rawValue,
         ]
         for raw in nonBodyBearing {
             XCTAssertNil(
