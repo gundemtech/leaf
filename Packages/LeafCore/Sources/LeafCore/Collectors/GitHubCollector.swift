@@ -323,6 +323,10 @@ public actor GitHubCollector {
         // Это позволяет downstream readers различать "ключ отсутствует, поле
         // не отслеживается" от "поле известно, значение null" — важный сигнал
         // для presence broadcast / merged snapshot rendering в Phase 5.
+        // Track-9 T3 — viewer_login finalizes Phase 4.7.B partial. `login` already
+        // in scope (passed parameter into provider.fetch* methods since OAuth bootstrap).
+        // NSNull-on-empty mirrors prs_awaiting_top_repo / latest_push_check_status above
+        // — distinguishes "key absent, field not tracked" from "key present, value null".
         let githubPresence: [String: Any] = [
             "notifications_unread": notifSummary.totalUnread,
             "notifications_by_reason": notifSummary.byReason,
@@ -332,6 +336,7 @@ public actor GitHubCollector {
             "latest_push_check_status": latestPushCheckStatus.map { $0 as Any } ?? NSNull(),
             "contributions_today": lastContributionsToday,
             "active_repos_count": activeRepos.count,
+            "viewer_login": login.isEmpty ? NSNull() as Any : login,
         ]
 
         // 7. Atomic write — events + offset + presence_state в одной транзакции.
