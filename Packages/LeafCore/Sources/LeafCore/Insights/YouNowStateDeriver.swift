@@ -69,7 +69,9 @@ public enum YouNowStateDeriver {
                     modeName: inputs.focusModeName,
                     app: inputs.frontmostAppName,
                     contextLabel: inputs.contextLabel,
-                    durationSec: durationSec(from: inputs.activeSessionStartedAtMs, now: inputs.nowMs)
+                    durationSec: durationSec(from: inputs.activeSessionStartedAtMs, now: inputs.nowMs),
+                    branch: inputs.branch,
+                    linearID: inputs.linearID
                 ))
         }
 

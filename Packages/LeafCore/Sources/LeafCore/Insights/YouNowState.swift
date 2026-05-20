@@ -66,12 +66,23 @@ public struct YouNowFocus: Equatable, Hashable, Sendable {
     public let app: String?
     public let contextLabel: String?
     public let durationSec: Int
+    public let branch: String?
+    public let linearID: String?
 
-    public init(modeName: String?, app: String?, contextLabel: String?, durationSec: Int) {
+    public init(
+        modeName: String?,
+        app: String?,
+        contextLabel: String?,
+        durationSec: Int,
+        branch: String? = nil,
+        linearID: String? = nil
+    ) {
         self.modeName = modeName
         self.app = app
         self.contextLabel = contextLabel
         self.durationSec = durationSec
+        self.branch = branch
+        self.linearID = linearID
     }
 }
 

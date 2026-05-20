@@ -99,7 +99,8 @@ struct YouNowBlock: View {
             bundleIDForIcon: nil,
             title: "Deep work: \(f.modeName ?? "Focus")",
             titleTint: LeafColor.status.warning,
-            line2: [f.app, f.contextLabel].compactMap { $0 }.joined(separator: " · ").nilIfEmpty,
+            line2: [f.app, f.contextLabel, f.branch, f.linearID]
+                .compactMap { $0 }.joined(separator: " · ").nilIfEmpty,
             line3: formatDuration(TimeInterval(f.durationSec)),
             trailingBars: 0
         )
