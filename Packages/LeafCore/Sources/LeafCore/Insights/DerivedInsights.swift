@@ -196,6 +196,15 @@ public protocol DerivedInsights: Sendable {
     /// Track-9 T1 — most-recent observed gh_commit_pushed event within maxAgeMs.
     /// Returns nil if no commit in window or DB read fails gracefully.
     func recentLastCommit(maxAgeMs: Int64) throws -> RecentCommitSnapshot?
+
+    // MARK: - Track-9 T4 — weekly metrics deriver
+
+    /// Track-9 T4 — 7-day analytics aggregation anchored at local-TZ midnight.
+    /// Returns `dailySeries` (7 entries, oldest → newest), peakHour, single-metric
+    /// WoW delta (focused-min based), 5 streak counters.
+    /// `now: Date` for testability (window derives [today − 6d .. today]).
+    /// Default `.empty` for stubs / iOS-future.
+    func weeklyMetrics(now: Date) throws -> WeeklyMetrics
 }
 
 /// Default implementations — конформер'ы могут override'ить, но без явного
@@ -256,6 +265,11 @@ extension DerivedInsights {
 
     /// Track-9 T1 stub default — returns nil; ProdInsights SQL impl in Task 3.
     public func recentLastCommit(maxAgeMs: Int64) throws -> RecentCommitSnapshot? { nil }
+
+    // MARK: - Track-9 T4 defaults
+
+    /// Track-9 T4 stub default — returns `.empty`; ProdInsights SQL impl in LeafCorePrivate moat.
+    public func weeklyMetrics(now: Date) throws -> WeeklyMetrics { .empty }
 }
 
 /// Phase 1.1 / CI fallback. Все методы бросают .notImplemented.
@@ -296,4 +310,7 @@ public struct StubInsights: DerivedInsights {
 
     // Track-9 T1 stub default — ProdInsights SQL impl lands in Task 3.
     public func recentLastCommit(maxAgeMs: Int64) throws -> RecentCommitSnapshot? { nil }
+
+    // Track-9 T4 stub default — ProdInsights SQL impl in LeafCorePrivate moat.
+    public func weeklyMetrics(now: Date) throws -> WeeklyMetrics { .empty }
 }
