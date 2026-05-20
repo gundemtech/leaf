@@ -205,6 +205,90 @@ public enum SupabaseEndpoint {
         return components.url!
     }
 
+    // MARK: - PostgREST tables — M027 invite-redesign (invite_tokens + join_requests)
+
+    public static func inviteTokensInsert(baseURL: URL) -> URL {
+        baseURL.appendingPathComponent("rest/v1/invite_tokens")
+    }
+
+    /// GET /rest/v1/invite_tokens?workspace_id=eq.<id>&order=created_at.desc&select=*
+    /// RLS-gated by `invite_tokens_admin_write` — only workspace admin sees own rows.
+    public static func inviteTokensList(baseURL: URL, workspaceID: String) -> URL {
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("rest/v1/invite_tokens"),
+            resolvingAgainstBaseURL: false
+        )!
+        components.queryItems = [
+            URLQueryItem(name: "workspace_id", value: "eq.\(workspaceID)"),
+            URLQueryItem(name: "order", value: "created_at.desc"),
+            URLQueryItem(name: "select", value: "*"),
+        ]
+        return components.url!
+    }
+
+    /// PATCH /rest/v1/invite_tokens?code=eq.<code>
+    /// Used for soft-delete (`SupabaseClient.markInviteTokenDeleted` PATCH `deleted_at`).
+    public static func inviteTokensByCode(_ code: String, baseURL: URL) -> URL {
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("rest/v1/invite_tokens"),
+            resolvingAgainstBaseURL: false
+        )!
+        components.queryItems = [URLQueryItem(name: "code", value: "eq.\(code)")]
+        return components.url!
+    }
+
+    // MARK: - Edge Functions — M027 invite-redesign (closed-mode join handshake)
+
+    public static func createJoinRequest(baseURL: URL) -> URL {
+        baseURL.appendingPathComponent("functions/v1/create_join_request")
+    }
+
+    public static func cancelJoinRequest(baseURL: URL) -> URL {
+        baseURL.appendingPathComponent("functions/v1/cancel_join_request")
+    }
+
+    public static func approveJoinRequest(baseURL: URL) -> URL {
+        baseURL.appendingPathComponent("functions/v1/approve_join_request")
+    }
+
+    public static func declineJoinRequest(baseURL: URL) -> URL {
+        baseURL.appendingPathComponent("functions/v1/decline_join_request")
+    }
+
+    public static func deleteInviteToken(baseURL: URL) -> URL {
+        baseURL.appendingPathComponent("functions/v1/delete_invite_token")
+    }
+
+    /// GET /rest/v1/join_requests?workspace_id=eq.<id>&status=eq.pending&order=created_at.desc
+    public static func joinRequestsListPending(baseURL: URL, workspaceID: String) -> URL {
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("rest/v1/join_requests"),
+            resolvingAgainstBaseURL: false
+        )!
+        components.queryItems = [
+            URLQueryItem(name: "workspace_id", value: "eq.\(workspaceID)"),
+            URLQueryItem(name: "status", value: "eq.pending"),
+            URLQueryItem(name: "order", value: "created_at.desc"),
+            URLQueryItem(name: "select", value: "*"),
+        ]
+        return components.url!
+    }
+
+    /// GET /rest/v1/join_requests?request_id=eq.<id>&limit=1
+    /// RLS-gated by `join_requests_self_read` — invitee sees own row only.
+    public static func joinRequestByID(_ requestID: String, baseURL: URL) -> URL {
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("rest/v1/join_requests"),
+            resolvingAgainstBaseURL: false
+        )!
+        components.queryItems = [
+            URLQueryItem(name: "request_id", value: "eq.\(requestID)"),
+            URLQueryItem(name: "limit", value: "1"),
+            URLQueryItem(name: "select", value: "*"),
+        ]
+        return components.url!
+    }
+
     // MARK: - Header builders
 
     public static func anonHeaders(anonKey: String) -> [String: String] {
