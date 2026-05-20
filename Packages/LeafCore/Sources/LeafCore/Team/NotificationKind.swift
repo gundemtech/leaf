@@ -25,11 +25,15 @@ public enum NotificationKind: String, CaseIterable, Sendable, Codable, Hashable 
     case respectFocus = "respect_focus"
     case coalesce
     case sound
+    // M027 invite-redesign (2) — closed-mode invite push notifications
+    case inviteRequestReceived = "invite_request_received"
+    case inviteRequestApproved = "invite_request_approved"
 
-    /// Default ON per contract §10.2.
+    /// Default ON per contract §10.2. Invite kinds default ON per M027 spec §6.
     public var defaultEnabled: Bool {
         switch self {
-        case .handoff, .task, .ping, .decision, .blocker, .respectFocus, .coalesce, .sound:
+        case .handoff, .task, .ping, .decision, .blocker, .respectFocus, .coalesce, .sound,
+             .inviteRequestReceived, .inviteRequestApproved:
             return true
         case .openQuestion, .whereStopped, .rawActivity:
             return false
@@ -54,7 +58,9 @@ public enum NotificationKind: String, CaseIterable, Sendable, Codable, Hashable 
         case .rawActivity:   return "Commit / Linear / Slack mention"
         case .respectFocus:  return "Respect macOS Focus mode"
         case .coalesce:      return "Coalesce 3+/5min into single push"
-        case .sound:         return "Sound on direct messages"
+        case .sound:                  return "Sound on direct messages"
+        case .inviteRequestReceived:  return "Invite request received (admin)"
+        case .inviteRequestApproved:  return "Invite request approved (invitee)"
         }
     }
 }

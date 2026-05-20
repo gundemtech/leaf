@@ -9,10 +9,10 @@ import XCTest
 
 final class NotificationKindTests: XCTestCase {
 
-    // MARK: - 11-case shape regression
+    // MARK: - 13-case shape regression (11 S8 baseline + 2 M027 invite kinds)
 
-    func testNotificationKind_HasExactly11Cases() {
-        XCTAssertEqual(NotificationKind.allCases.count, 11)
+    func testNotificationKind_HasExactly13Cases() {
+        XCTAssertEqual(NotificationKind.allCases.count, 13)
     }
 
     func testNotificationKind_AllCasesPresent() {
@@ -21,14 +21,16 @@ final class NotificationKindTests: XCTestCase {
             "handoff", "task", "ping",
             "decision", "blocker", "open_question", "where_stopped",
             "raw_activity",
-            "respect_focus", "coalesce", "sound"
+            "respect_focus", "coalesce", "sound",
+            // M027 invite-redesign
+            "invite_request_received", "invite_request_approved",
         ]))
     }
 
     // MARK: - Default invariants
 
     func testNotificationKind_DefaultsMatchContractSection10_2() {
-        // Default ON
+        // Default ON (S8 baseline)
         XCTAssertTrue(NotificationKind.handoff.defaultEnabled)
         XCTAssertTrue(NotificationKind.task.defaultEnabled)
         XCTAssertTrue(NotificationKind.ping.defaultEnabled)
@@ -37,6 +39,9 @@ final class NotificationKindTests: XCTestCase {
         XCTAssertTrue(NotificationKind.respectFocus.defaultEnabled)
         XCTAssertTrue(NotificationKind.coalesce.defaultEnabled)
         XCTAssertTrue(NotificationKind.sound.defaultEnabled)
+        // Default ON (M027 invite-redesign per spec §6)
+        XCTAssertTrue(NotificationKind.inviteRequestReceived.defaultEnabled)
+        XCTAssertTrue(NotificationKind.inviteRequestApproved.defaultEnabled)
         // Default OFF
         XCTAssertFalse(NotificationKind.openQuestion.defaultEnabled)
         XCTAssertFalse(NotificationKind.whereStopped.defaultEnabled)

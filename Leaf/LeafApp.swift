@@ -57,6 +57,8 @@ struct LeafApp: App {
     @State private var inviteAcceptReader: InviteAcceptReader
     /// M027 invite-redesign — admin's local mirror of own-workspace invite tokens.
     @State private var inviteTokensReader: InviteTokensReader
+    /// M027 — admin queue + invitee waiting state machine.
+    @State private var joinRequestsReader: JoinRequestsReader
     /// Track 5 / S4 — DM send + inbox + APNs registration readers.
     @State private var directMessageSendReader: DirectMessageSendReader
     @State private var directMessageInboxReader: DirectMessageInboxReader
@@ -181,6 +183,10 @@ struct LeafApp: App {
         _inviteTokensReader = State(initialValue: InviteTokensReader(
             supabase: supabase,
             workspaceReader: _workspaceReader.wrappedValue,
+            activeWorkspaceStore: active
+        ))
+        _joinRequestsReader = State(initialValue: JoinRequestsReader(
+            supabase: supabase,
             activeWorkspaceStore: active
         ))
 
@@ -526,6 +532,7 @@ struct LeafApp: App {
                 .environment(inviteOutboxReader)
                 .environment(inviteAcceptReader)
                 .environment(inviteTokensReader)         // M027 invite-redesign
+                .environment(joinRequestsReader)         // M027 invite-redesign
                 .environment(directMessageSendReader)   // Track 5 / S4
                 .environment(directMessageInboxReader)  // Track 5 / S4
                 .environment(apnsRegistrationReader)    // Track 5 / S4
@@ -571,6 +578,11 @@ struct LeafApp: App {
                 .onAppear {
                     inviteURLHandler.wire(acceptReader: inviteAcceptReader,
                                           outboxReader: inviteOutboxReader)
+                    // M027 invite-redesign — late-bind reader + WindowState refs.
+                    inviteURLHandler.wireM027(
+                        joinRequestsReader: joinRequestsReader,
+                        windowState: windowState
+                    )
                 }
                 .onOpenURL { url in
                     inviteURLHandler.handle(url)
@@ -906,6 +918,17 @@ final class LeafAppDelegate: NSObject, NSApplicationDelegate, UNUserNotification
                 focusReply: true
             )
 
+        case NotificationCategoryRegistry.inviteApproveActionID:
+            // M027 — Approve action. Opens app + scrolls to Settings → Workspace
+            // → Pending requests. The actual approve flow runs in-app because
+            // ECDH+seal requires the local keystore to be unlocked.
+            await deepLinkToPendingQueue(workspaceID: workspaceID)
+
+        case NotificationCategoryRegistry.inviteDeclineActionID:
+            // M027 — Decline action. Opens app + scrolls to Pending requests.
+            // The actual decline call is also in-app for symmetry.
+            await deepLinkToPendingQueue(workspaceID: workspaceID)
+
         case NotificationCategoryRegistry.markDoneActionID:
             // Mark Done — explicitly does NOT open the app or modify
             // WindowState. Dispatches into the inbox reader which owns the
@@ -951,6 +974,19 @@ final class LeafAppDelegate: NSObject, NSApplicationDelegate, UNUserNotification
         await Self.directMessageInboxReader?.tickOnce(
             workspaceID: workspaceID, forMessageID: messageID
         )
+    }
+
+    /// M027 invite-redesign — deep-link from `leaf.invite.request` push action
+    /// (Approve / Decline) to Settings → Workspace → Pending requests.
+    @MainActor
+    private func deepLinkToPendingQueue(workspaceID: String) async {
+        if Self.activeWorkspaceStore?.activeWorkspaceID != workspaceID {
+            Self.activeWorkspaceStore?.setActive(workspaceID)
+        }
+        Self.windowState?.section = .settings
+        Self.windowState?.pendingWorkspaceID = workspaceID
+        // User reviews + approves/declines in PendingRequestsSection — the
+        // section's .onAppear refreshes the queue automatically.
     }
 }
 

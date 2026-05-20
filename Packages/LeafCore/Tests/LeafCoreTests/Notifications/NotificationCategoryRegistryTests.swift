@@ -19,14 +19,19 @@ final class NotificationCategoryRegistryTests: XCTestCase {
 
     // MARK: - Category set + identifiers
 
-    func testAll_ContainsExactlyThreeCategories() {
+    func testAll_ContainsExactlyFiveCategories() {
+        // 3 DM categories (handoff / task / ping) + 2 M027 invite categories
+        // (leaf.invite.request admin-side, leaf.invite.approved invitee-side).
         let cats = NotificationCategoryRegistry.all
-        XCTAssertEqual(cats.count, 3)
+        XCTAssertEqual(cats.count, 5)
     }
 
-    func testAll_IdentifiersMatchLeafDmPrefix() {
+    func testAll_IdentifiersMatchExpectedSet() {
         let ids = Set(NotificationCategoryRegistry.all.map { $0.identifier })
-        XCTAssertEqual(ids, Set(["leaf.dm.handoff", "leaf.dm.task", "leaf.dm.ping"]))
+        XCTAssertEqual(ids, Set([
+            "leaf.dm.handoff", "leaf.dm.task", "leaf.dm.ping",
+            "leaf.invite.request", "leaf.invite.approved",
+        ]))
     }
 
     func testCategoryID_ForKind_MatchesContract() {
@@ -72,19 +77,55 @@ final class NotificationCategoryRegistryTests: XCTestCase {
 
     // MARK: - Action options (foreground vs background)
 
-    func testReplyAction_HasForegroundOption_AllCategories() {
-        for cat in NotificationCategoryRegistry.all {
+    func testReplyAction_HasForegroundOption_DMCategories() {
+        // Only DM categories carry the reply action. M027 invite categories
+        // have their own action set (Approve/Decline for admin, no actions
+        // for invitee approved-notification).
+        let dmCategories = NotificationCategoryRegistry.all.filter {
+            $0.identifier.hasPrefix("leaf.dm.")
+        }
+        for cat in dmCategories {
             guard let reply = cat.actions.first(where: {
                 $0.identifier == NotificationCategoryRegistry.replyActionID
             }) else {
-                XCTFail("Category \(cat.identifier) missing reply action")
+                XCTFail("DM category \(cat.identifier) missing reply action")
                 continue
             }
             XCTAssertTrue(
                 reply.options.contains(.foreground),
-                "Reply action on \(cat.identifier) must open the app (deep-link via WindowState)"
+                "Reply action on \(cat.identifier) must open the app"
             )
         }
+    }
+
+    // MARK: - M027 invite categories
+
+    func testInviteRequestCategory_HasApproveAndDeclineActions() {
+        let req = NotificationCategoryRegistry.inviteRequest
+        let actionIDs = Set(req.actions.map { $0.identifier })
+        XCTAssertEqual(
+            actionIDs,
+            Set([
+                NotificationCategoryRegistry.inviteApproveActionID,
+                NotificationCategoryRegistry.inviteDeclineActionID,
+            ]),
+            "Admin-side invite-request push has Approve + Decline actions"
+        )
+    }
+
+    func testInviteApprovedCategory_HasNoActions() {
+        let approved = NotificationCategoryRegistry.inviteApproved
+        XCTAssertTrue(
+            approved.actions.isEmpty,
+            "Invitee-side approved push is notification-only (tap deep-links via default action)"
+        )
+    }
+
+    func testInviteActionIdentifiers_StableContractValues() {
+        XCTAssertEqual(NotificationCategoryRegistry.inviteApproveActionID, "invite.approve")
+        XCTAssertEqual(NotificationCategoryRegistry.inviteDeclineActionID, "invite.decline")
+        XCTAssertEqual(NotificationCategoryRegistry.inviteRequestCategoryID, "leaf.invite.request")
+        XCTAssertEqual(NotificationCategoryRegistry.inviteApprovedCategoryID, "leaf.invite.approved")
     }
 
     func testMarkDoneAction_NoForegroundOption() {

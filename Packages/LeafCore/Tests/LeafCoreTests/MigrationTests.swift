@@ -207,7 +207,9 @@ final class MigrationTests: XCTestCase {
                     Schema.Workspaces.createdAtMs,
                     Schema.Workspaces.createdByMemberID,
                     Schema.Workspaces.leftAtMs,
-                    Schema.Workspaces.deletedAtMs   // Track-5 S7 M025
+                    Schema.Workspaces.deletedAtMs,                  // Track-5 S7 M025
+                    Schema.Workspaces.defaultInviteTtlSeconds,      // M027 invite-redesign
+                    Schema.Workspaces.defaultSingleUse              // M027 invite-redesign
                 ])
             )
         }
@@ -485,7 +487,10 @@ final class MigrationTests: XCTestCase {
                 Schema.TeamEventsMirror.tableName,
                 Schema.TeamEventBroadcastOffsets.tableName,
                 // Track-5 S8 T1 (M026): notification_prefs per-device singleton.
-                Schema.NotificationPrefs.tableName
+                Schema.NotificationPrefs.tableName,
+                // M027 invite-redesign: invite_tokens (admin's local mirror) +
+                // workspaces ADD COLUMN defaults (no new table for that ALTER).
+                Schema.InviteTokens.tableName
             ]
             XCTAssertEqual(tables, expected)
         }

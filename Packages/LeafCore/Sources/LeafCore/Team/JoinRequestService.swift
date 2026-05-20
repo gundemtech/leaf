@@ -48,7 +48,7 @@ public struct JoinRequestService: Sendable {
     /// Function. Returns the inserted row (status=.pending). Throws on token
     /// invalidity (410 Gone surfaces as SupabaseError.gone — see fromStatus).
     public func submit(
-        workspaceID: String,
+        workspaceID: String? = nil,
         code: String,
         displayName: String
     ) async throws -> JoinRequest {

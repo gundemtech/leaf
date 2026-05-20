@@ -46,6 +46,10 @@ struct Sidebar: View {
     /// is gated by `hasCompletedOnboarding` AppStorage and lives in the
     /// menu-bar popover scene, not the main Window where Sidebar renders.
     @Environment(InviteAcceptReader.self) private var inviteAcceptReader
+    /// M027 invite-redesign — pendingInviteCode + joinRequestWaitingPresented
+    /// driven by link clicks (InviteURLHandler) and JoinWorkspaceByCodeSheet
+    /// post-Send dispatch (InviteURLHandler.handleCodePaste).
+    @Environment(WindowState.self) private var windowState
 
     @State private var leavePresented = false
     @State private var leaveTargetWorkspaceID: String?
@@ -120,6 +124,19 @@ struct Sidebar: View {
         //      that fired `reader.fetch(...)` outside this view's lifetime.
         .sheet(isPresented: $joinWorkspacePresented) {
             AcceptInviteSheet()
+        }
+        // M027 invite-redesign — link-click entry sets WindowState.pendingInviteCode;
+        // surface JoinWorkspaceByCodeSheet pre-filled with the code.
+        .sheet(isPresented: Binding(
+            get: { windowState.pendingInviteCode != nil },
+            set: { newValue in if !newValue { windowState.pendingInviteCode = nil } }
+        )) {
+            JoinWorkspaceByCodeSheet()
+        }
+        // M027 invite-redesign — after Send Request, the waiting card polls
+        // own request status (30s) until terminal state.
+        .sheet(isPresented: Bindable(windowState).joinRequestWaitingPresented) {
+            JoinRequestWaitingCard()
         }
         .onAppear {
             // Catch state already non-`.idle` when Sidebar first appears —

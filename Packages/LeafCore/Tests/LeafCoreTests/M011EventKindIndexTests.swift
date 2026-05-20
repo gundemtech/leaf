@@ -57,7 +57,8 @@ final class M011EventKindIndexTests: XCTestCase {
             // M022 (share_rules) + M023 (team_events_mirror) + M024 (team_event_broadcast_offsets).
             // Track-5 S7: M025 (workspaces.deleted_at_ms + idx_workspaces_active).
             // Track-5 S8 T1: M026 (notification_prefs + ALTER messages_mirror.pending_mark_done).
-            XCTAssertEqual(applied.count, 26)
+            // M027 invite-redesign: invite_tokens + workspaces ADD COLUMN defaults.
+            XCTAssertEqual(applied.count, 27)
         }
     }
 }

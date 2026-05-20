@@ -40,6 +40,16 @@ public enum NotificationCategoryRegistry {
     public static let replyActionID    = "dm.reply"
     public static let markDoneActionID = "dm.markDone"
 
+    // M027 invite-redesign — admin-side notification action IDs (consumed by
+    // AppDelegate handlers; foreground so click opens app + scrolls to queue).
+    public static let inviteApproveActionID = "invite.approve"
+    public static let inviteDeclineActionID = "invite.decline"
+
+    // M027 invite-redesign — category IDs (consumed by apns_push server-side
+    // via the categoryForKind() mapping in functions/apns_push/index.ts).
+    public static let inviteRequestCategoryID  = "leaf.invite.request"
+    public static let inviteApprovedCategoryID = "leaf.invite.approved"
+
     // MARK: - Direct-message kind → category configuration
 
     /// Mirrors `DirectMessageKind` value space exactly. We do NOT depend on
@@ -72,9 +82,46 @@ public enum NotificationCategoryRegistry {
     public static var task:    UNNotificationCategory { makeCategory(.task) }
     public static var ping:    UNNotificationCategory { makeCategory(.ping) }
 
+    // MARK: - M027 invite-redesign categories
+
+    /// Admin-side push when an invitee submits a join request. Actions deep-link
+    /// to PendingRequestsSection (foreground) — the actual approve/decline flow
+    /// runs in the app (ECDH+seal needs unlocked keystore for approve path).
+    public static var inviteRequest: UNNotificationCategory {
+        let approve = UNNotificationAction(
+            identifier: inviteApproveActionID,
+            title: "Approve",
+            options: [.foreground]
+        )
+        let decline = UNNotificationAction(
+            identifier: inviteDeclineActionID,
+            title: "Decline",
+            options: [.foreground, .destructive]
+        )
+        return UNNotificationCategory(
+            identifier: inviteRequestCategoryID,
+            actions: [approve, decline],
+            intentIdentifiers: [],
+            options: [.customDismissAction]
+        )
+    }
+
+    /// Invitee-side push when admin approves their request. No actions —
+    /// tap deep-links to the joined workspace via standard notification tap.
+    public static var inviteApproved: UNNotificationCategory {
+        UNNotificationCategory(
+            identifier: inviteApprovedCategoryID,
+            actions: [],
+            intentIdentifiers: [],
+            options: [.customDismissAction]
+        )
+    }
+
     /// Full set bound at launch via
     /// `UNUserNotificationCenter.current().setNotificationCategories(Set(...))`.
-    public static var all: [UNNotificationCategory] { [handoff, task, ping] }
+    public static var all: [UNNotificationCategory] {
+        [handoff, task, ping, inviteRequest, inviteApproved]
+    }
 
     // MARK: - Internal factory
 

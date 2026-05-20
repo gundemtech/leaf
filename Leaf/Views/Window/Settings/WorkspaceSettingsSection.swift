@@ -42,8 +42,9 @@ struct WorkspaceSettingsSection: View {
             VStack(spacing: LeafSpace.md) {
                 workspaceHeaderRow
                 WorkspaceMembersAdminList()
-                ActiveTokensSection()  // M027 invite-redesign
-                PendingInvitesSection()
+                ActiveTokensSection()       // M027 invite-redesign — admin token mgmt
+                PendingRequestsSection()    // M027 invite-redesign — admin queue
+                PendingInvitesSection()     // S3 legacy back-compat (deprecates ≤30d post-ship)
                 actionButtonsRow
             }
         }

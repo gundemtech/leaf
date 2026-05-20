@@ -26,7 +26,7 @@ extension SupabaseClient {
     /// (which pre-flights token validity → 410 Gone if expired/deleted/exhausted).
     /// Returns the inserted row on 201; throws on 4xx/5xx.
     public func invokeCreateJoinRequest(
-        workspaceID: String,
+        workspaceID: String? = nil,
         code: String,
         displayName: String
     ) async throws -> JoinRequest {
@@ -39,11 +39,17 @@ extension SupabaseClient {
         ) {
             request.setValue(v, forHTTPHeaderField: k)
         }
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "workspace_id": workspaceID,
+        // workspace_id omitted from body when nil — Edge Function derives from
+        // the code lookup. Useful when invitee only knows the LEAF-XXXX-XXXX-XXXX
+        // code (paste-code path) and not the workspace UUID.
+        var bodyDict: [String: Any] = [
             "code": code,
             "display_name": displayName,
-        ])
+        ]
+        if let workspaceID = workspaceID, !workspaceID.isEmpty {
+            bodyDict["workspace_id"] = workspaceID
+        }
+        request.httpBody = try JSONSerialization.data(withJSONObject: bodyDict)
         let (data, http) = try await joinRequestsTransport(request, label: "invokeCreateJoinRequest")
         guard http.statusCode == 201 else {
             throw SupabaseError.fromStatus(http.statusCode, body: data)

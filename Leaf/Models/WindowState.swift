@@ -60,4 +60,15 @@ final class WindowState {
     /// + signals reply-focus intent, then clears the flag back to `false`.
     /// Pure transient signal — never persisted, never read concurrently.
     var focusReplyField: Bool = false
+
+    /// M027 invite-redesign — link-click entry. InviteURLHandler detects the new
+    /// `leaf://invite/LEAF-XXXX-XXXX-XXXX` format and sets this to the bare code.
+    /// RootView observes + presents JoinWorkspaceByCodeSheet pre-filled with the
+    /// code (skipping the paste step). Cleared by the sheet on dismiss.
+    var pendingInviteCode: String?
+
+    /// M027 invite-redesign — true after invitee submits a join request via the
+    /// JoinWorkspaceByCodeSheet. RootView observes + presents JoinRequestWaitingCard
+    /// which 30s-polls JoinRequestsReader.pollOwn until terminal state.
+    var joinRequestWaitingPresented: Bool = false
 }
