@@ -187,13 +187,33 @@ final class InsightsReader {
                         // open questions + blockers via the moat impl.
                         let inboxItems = try insights.inboxItems(filter: .all, query: "")
                         try Task.checkCancellation()
-                        // Track-8 Phase 8.7 — WHERE STOPPED block snapshot.
-                        // Take first (most recent) row; substrate returns
-                        // most-recent-first per `ProdWhereStoppedDeriver`.
-                        // `nil` when substrate has no row (fresh DB, idle
-                        // gate not met, or non-prod StubInsights).
-                        let whereStopped = try insights.recentWhereStopped(limit: 1).first
+                        // Track-8 Phase 8.7 + Track-9 T7 — WHERE STOPPED snapshot
+                        // with Path B composition. Reader fetches the most
+                        // recent stop-point row (substrate returns most-recent-
+                        // first), then splices `recentLastCommit` from the
+                        // Track-9 T1 deriver. nil base → no commit composition.
+                        let whereStoppedBase = try insights.recentWhereStopped(limit: 1).first
                         try Task.checkCancellation()
+                        // Track-9 T7 — 4h cutoff per spec §9 call C.
+                        let recentLastCommit = try insights.recentLastCommit(
+                            maxAgeMs: 4 * 60 * 60 * 1000
+                        )
+                        try Task.checkCancellation()
+                        // Path B — splice commit into deriver's snapshot via
+                        // defaulted-init. Preserves anchorFilePath / anchorLine
+                        // populated by ProdInsights+RecentWhereStopped LEFT JOIN.
+                        let whereStopped: WhereStoppedSnapshot? = whereStoppedBase.map { base in
+                            WhereStoppedSnapshot(
+                                id: base.id,
+                                generatedAtMs: base.generatedAtMs,
+                                anchorEventId: base.anchorEventId,
+                                excerpt: base.excerpt,
+                                wipSignals: base.wipSignals,
+                                anchorFilePath: base.anchorFilePath,
+                                anchorLine: base.anchorLine,
+                                recentLastCommit: recentLastCommit
+                            )
+                        }
                         let snapshot = InsightsSnapshot(
                             topApps: topApps,
                             sessions: sessions,
