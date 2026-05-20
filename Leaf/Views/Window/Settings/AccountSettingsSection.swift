@@ -1,8 +1,8 @@
 //
 //  AccountSettingsSection.swift
 //  Track 5 / S8 / T9 — Settings page top section. Surfaces user identity
-//  (display name from active workspace's self-member if available; pubkey
-//  copy button) + current Tier chip + Free→Upgrade button.
+//  (display name from active workspace's self-member if available; Join
+//  code copy button) + current Tier chip + Free→Upgrade button.
 //
 //  Display name resolution: walks `WorkspaceReader.state` → active workspace
 //  members → first row where `pubkeyHex == self`. Falls back to "Anonymous"
@@ -13,9 +13,15 @@
 //    .free  → "Upgrade" LeafButton triggering UpgradeModal (reuses the
 //             T3/T4 modal + .submitToWaitlist env closure).
 //
-//  Pubkey copy: shows first 16 chars + "…", clipboard receives the FULL
-//  64-hex string. SF Symbol `doc.on.doc` for the copy affordance; `help()`
-//  tooltip clarifies intent.
+//  Join code: human-readable encoding (ABCD-EFGH-…) of the X25519 pubkey
+//  via JoinCode.encode. Shared with admins of *other* workspaces who want
+//  to invite you (they paste it into GenerateInviteSheet's "Paste Join
+//  code" field). The raw 64-hex pubkey is the same bytes in a different
+//  representation; admins of OTHER workspaces accept either form, but the
+//  Join code carries a checksum so typos are caught before invite
+//  generation. Pre-T11 this section showed truncated hex, which leaked
+//  the implementation form into the UI and gave admin-path users no
+//  visible way to be invited to a second workspace.
 //
 
 import AppKit
@@ -29,12 +35,13 @@ struct AccountSettingsSection: View {
     @Environment(\.submitToWaitlist) private var submitToWaitlist
 
     @State private var selfPubHex: String = ""
+    @State private var selfJoinCode: String = ""
     @State private var showUpgrade = false
 
     var body: some View {
         LeafSection(
             title: "Account",
-            description: "Your local identity. The pubkey is shared with workspaces you join; nothing else leaves your device by default."
+            description: "Your local identity. Send your Join code to anyone who wants to invite you to their workspace — they paste it into their invite sheet, then send the link back to you."
         ) {
             LeafCard(variant: .raised, padding: .regular) {
                 HStack(alignment: .top, spacing: LeafSpace.md) {
@@ -43,7 +50,7 @@ struct AccountSettingsSection: View {
                         Text(displayName)
                             .font(LeafType.title.small)
                             .foregroundStyle(LeafColor.text.primary)
-                        pubkeyRow
+                        joinCodeRow
                     }
                     Spacer(minLength: 0)
                     tierChip
@@ -58,7 +65,7 @@ struct AccountSettingsSection: View {
             )
         }
         .task {
-            loadSelfPubHex()
+            loadSelfIdentity()
         }
     }
 
@@ -72,27 +79,32 @@ struct AccountSettingsSection: View {
     }
 
     @ViewBuilder
-    private var pubkeyRow: some View {
-        if selfPubHex.isEmpty {
+    private var joinCodeRow: some View {
+        if selfJoinCode.isEmpty {
             Text("Generating identity…")
                 .font(LeafType.body.small)
                 .foregroundStyle(LeafColor.text.tertiary)
         } else {
-            HStack(spacing: LeafSpace.xs) {
-                Text(pubkeyDisplay)
-                    .font(LeafType.mono.small)
-                    .foregroundStyle(LeafColor.text.secondary)
-                    .textSelection(.enabled)
-                Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(selfPubHex, forType: .string)
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                        .font(.system(size: 12))
-                        .foregroundStyle(LeafColor.text.tertiary)
+            VStack(alignment: .leading, spacing: LeafSpace.xxs) {
+                Text("YOUR JOIN CODE")
+                    .leafSectionLabel()
+                    .foregroundStyle(LeafColor.text.tertiary)
+                HStack(spacing: LeafSpace.xs) {
+                    Text(selfJoinCode)
+                        .font(LeafType.mono.small)
+                        .foregroundStyle(LeafColor.text.primary)
+                        .textSelection(.enabled)
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(selfJoinCode, forType: .string)
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                            .font(.system(size: 12))
+                            .foregroundStyle(LeafColor.text.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Copy your Join code to clipboard")
                 }
-                .buttonStyle(.plain)
-                .help("Copy full pubkey to clipboard")
             }
         }
     }
@@ -138,27 +150,23 @@ struct AccountSettingsSection: View {
         return "Anonymous"
     }
 
-    /// Pubkey display: first 16 chars + ellipsis. Full hex available via copy
-    /// button + `textSelection(.enabled)` (the rendered substring is selectable
-    /// but the clipboard button is the primary path for the full value).
-    private var pubkeyDisplay: String {
-        guard selfPubHex.count > 16 else { return selfPubHex }
-        return String(selfPubHex.prefix(16)) + "…"
-    }
-
     /// Resolve self pubkey from `IdentityService.ensureLocalIdentity` via the
-    /// shared TeamKeystore root. Filesystem I/O — done once in `.task`.
-    private func loadSelfPubHex() {
+    /// shared TeamKeystore root + encode to Join code format. Filesystem I/O
+    /// — done once in `.task`. `selfPubHex` is kept for `displayName`
+    /// resolution (matching against `TeamMember.pubkeyHex` in the active
+    /// workspace member list).
+    private func loadSelfIdentity() {
         do {
             let priv = try IdentityService.ensureLocalIdentity(at: TeamKeystore.defaultRoot())
-            selfPubHex = priv.publicKey.rawRepresentation
-                .map { String(format: "%02x", $0) }
-                .joined()
+            let bytes = priv.publicKey.rawRepresentation
+            selfPubHex = bytes.map { String(format: "%02x", $0) }.joined()
+            selfJoinCode = try JoinCode.encode(pubkey: bytes)
         } catch {
-            // Leave selfPubHex empty → "Generating identity…" placeholder.
+            // Leave both empty → "Generating identity…" placeholder.
             // Composition root logs identity errors elsewhere; UI just shows
             // a neutral state instead of crashing.
             selfPubHex = ""
+            selfJoinCode = ""
         }
     }
 }
