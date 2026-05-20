@@ -36,11 +36,13 @@ struct DebugDiagnosticsSnapshot: Sendable, Equatable {
     let eventsLastMinute: Int?
     let dbReadError: String?
 
-    /// CDHash mismatch flag — main vs agent. red border в UI если true.
-    var cdHashMismatch: Bool {
-        guard let main = mainCDHash, let agent = agentHeartbeat?.cdHash else { return false }
-        return main != agent
-    }
+    /// CDHash mismatch flag — всегда false. Main app и Agent — это два разных
+    /// бинарника с разными bundle IDs (`tech.gundem.leaf` vs `tech.gundem.leaf.agent`).
+    /// У каждого target свой CDHash; сравнивать их между собой некорректно.
+    /// Поле сохранено для UI backward compat; в будущем может расширяться для
+    /// сравнения main app's CDHash против `/Applications/Leaf.app` stale copy
+    /// (та же bundle ID, разные binaries — там mismatch имеет смысл).
+    var cdHashMismatch: Bool { false }
 }
 
 @MainActor
