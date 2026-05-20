@@ -58,7 +58,7 @@ final class InboxItemTests: XCTestCase {
     }
 
     func testSurfacePillIdentifiable() {
-        let p = SurfacePill(id: "xcode", label: "Xcode", count: 5)
+        let p = SurfacePill(id: "xcode", label: "Xcode", count: 5, kind: .captureTime)
         XCTAssertEqual(p.id, "xcode")
         XCTAssertEqual(p.label, "Xcode")
         XCTAssertEqual(p.count, 5)
