@@ -109,7 +109,15 @@ struct MenuBarContent: View {
                 ProgressView().controlSize(.small)
                 Spacer()
             }
-        case .notConfigured(let msg), .empty(let msg), .error(let msg):
+        case .notConfigured(let msg), .empty(let msg):
+            Text(msg)
+                .font(LeafType.body.small)
+                .foregroundStyle(LeafColor.text.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        case .error(let msg, _):
+            // Track-9 T6 (C-2) — menubar compact view ignores lastKnown; the
+            // full Home window handles partial render. Menubar shows banner-text
+            // only since its surface is glanceable, not informational.
             Text(msg)
                 .font(LeafType.body.small)
                 .foregroundStyle(LeafColor.text.secondary)

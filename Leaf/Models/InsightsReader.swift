@@ -29,7 +29,11 @@ final class InsightsReader {
         case loading
         case loaded(snapshot: InsightsSnapshot, updated: Date)
         case empty(message: String)
-        case error(message: String)
+        /// Track-9 T6 (C-2 close) — error retains last successful snapshot so
+        /// `HomeView` can render banner + last-known cells gracefully instead
+        /// of replacing the whole view with a full-page banner. `lastKnown ==
+        /// nil` for cold-start errors (first refresh fails before any load).
+        case error(message: String, lastKnown: InsightsSnapshot?)
     }
 
     private(set) var state: State = .loading
@@ -70,6 +74,15 @@ final class InsightsReader {
             )
             return
         }
+
+        // Track-9 T6 (C-2) — capture previous loaded snapshot BEFORE `.loading`
+        // transition so the catch block can preserve it under `.error(_, lastKnown:)`.
+        // Local-scope variable — race-safe vs detached Task → catch reading
+        // self.state after self.state already changed during a separate refresh.
+        let previousLoaded: InsightsSnapshot? = {
+            if case .loaded(let snap, _) = self.state { return snap }
+            return nil
+        }()
 
         state = .loading
         let url = databaseURL
@@ -252,7 +265,8 @@ final class InsightsReader {
                 self.logger.error("insights snapshot failed: \(String(describing: error), privacy: .public)")
                 self.database = nil
                 self.state = .error(
-                    message: "Couldn't read today's activity. Try Refresh."
+                    message: "Couldn't read today's activity. Try Refresh.",
+                    lastKnown: previousLoaded
                 )
             }
         }
