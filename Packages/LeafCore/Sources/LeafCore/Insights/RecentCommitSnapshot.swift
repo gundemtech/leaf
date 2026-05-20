@@ -7,7 +7,7 @@ import Foundation
 /// Subject is the commit message first line (Layer B GitHub collector already
 /// captures only the first line per ADR-010 walkback). Branch is Optional —
 /// some GitHub Event API payloads (PushEvent stripped shape) omit `branch`.
-public struct RecentCommitSnapshot: Equatable, Sendable {
+public struct RecentCommitSnapshot: Equatable, Hashable, Sendable {
     public let subject: String
     public let branch: String?
     public let atMs: Int64
