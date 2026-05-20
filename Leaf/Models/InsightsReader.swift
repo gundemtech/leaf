@@ -40,6 +40,12 @@ final class InsightsReader {
 
     private var database: LeafCore.Database?
     private var currentTask: Task<Void, Never>?
+    /// Track-9 T6 (C-2) — last successful snapshot, updated on every `.loaded`
+    /// transition. Read by error path to populate `State.error.lastKnown`.
+    /// Instance field (not local) so overlapping refreshes (rapid double-tap on
+    /// "Refresh") don't lose the snapshot when call #2 sees `state == .loading`
+    /// set by call #1.
+    private var lastKnownSnapshot: InsightsSnapshot?
 
     private let databaseURL: URL
     private let databaseConfig: DatabaseConfig
@@ -74,15 +80,6 @@ final class InsightsReader {
             )
             return
         }
-
-        // Track-9 T6 (C-2) — capture previous loaded snapshot BEFORE `.loading`
-        // transition so the catch block can preserve it under `.error(_, lastKnown:)`.
-        // Local-scope variable — race-safe vs detached Task → catch reading
-        // self.state after self.state already changed during a separate refresh.
-        let previousLoaded: InsightsSnapshot? = {
-            if case .loaded(let snap, _) = self.state { return snap }
-            return nil
-        }()
 
         state = .loading
         let url = databaseURL
@@ -256,6 +253,7 @@ final class InsightsReader {
                         message: "Collecting… activity will appear after a few app switches."
                     )
                 } else {
+                    self.lastKnownSnapshot = snapshot
                     self.state = .loaded(snapshot: snapshot, updated: Date())
                 }
             case .failure(let error):
@@ -266,7 +264,7 @@ final class InsightsReader {
                 self.database = nil
                 self.state = .error(
                     message: "Couldn't read today's activity. Try Refresh.",
-                    lastKnown: previousLoaded
+                    lastKnown: self.lastKnownSnapshot
                 )
             }
         }

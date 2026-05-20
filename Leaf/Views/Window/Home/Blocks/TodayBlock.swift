@@ -17,7 +17,11 @@ struct TodayBlock: View {
     @Environment(RouteCoordinator.self) private var coordinator
     @State private var pillsExpanded = false
 
-    private static let pillVisibleCap = 6
+    /// Track-9 T6 — bumped to 8 from Phase 8.3 baseline of 6 to align with
+    /// substrate balance-by-kind cap (5 capture + 3 action-noun = 8). At 6,
+    /// heavy-capture days pushed Layer B pills into the `+N` overflow chip,
+    /// defeating the master spec §3.4 "predictable Layer B visibility" intent.
+    private static let pillVisibleCap = 8
 
     /// C-4 (Phase 8.9) — cached locale-aware "EEE d MMM" formatter so the
     /// "TODAY · <date>" label doesn't allocate a `DateFormatter` per body

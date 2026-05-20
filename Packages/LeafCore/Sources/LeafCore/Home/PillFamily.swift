@@ -56,9 +56,14 @@ public enum PillFamily: String, CaseIterable, Equatable, Hashable, Sendable {
     }
 
     public var kind: SurfacePillKind {
+        // Explicit per-case to force compile error if a future case is added
+        // without an explicit kind decision (e.g. another action-noun family).
         switch self {
-        case .linear, .github, .slack: .actionNoun
-        default: .captureTime
+        case .claudeCode, .xcode, .ides, .browsers, .zoom, .calendar,
+             .mail, .notes, .music, .reminders:
+            .captureTime
+        case .linear, .github, .slack:
+            .actionNoun
         }
     }
 }
