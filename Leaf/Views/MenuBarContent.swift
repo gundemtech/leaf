@@ -17,6 +17,7 @@ struct MenuBarContent: View {
     @Environment(PermissionsService.self) private var permissions
     @Environment(InsightsReader.self) private var reader
     @Environment(WindowState.self) private var windowState
+    @Environment(RouteCoordinator.self) private var routeCoordinator
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismiss
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
@@ -69,12 +70,23 @@ struct MenuBarContent: View {
     @ViewBuilder
     private var permissionsBanner: some View {
         if !permissions.axGranted {
-            LeafBanner(
-                tone: .warning,
-                title: "Accessibility disabled",
-                ctaTitle: "Grant",
-                onCTA: permissions.openAXSettings
-            )
+            VStack(alignment: .leading, spacing: LeafSpace.xs) {
+                LeafBanner(
+                    tone: .warning,
+                    title: "Accessibility disabled",
+                    ctaTitle: "Grant",
+                    onCTA: permissions.openAXSettings
+                )
+                // fix/dev-launch-reliability — стабильно ломается «галка ON в
+                // System Settings но AXIsProcessTrusted() → false» из-за CDHash
+                // drift между rebuilds. Diagnostics показывает почему.
+                Button(action: openDiagnostics) {
+                    Text("Diagnostics →")
+                        .font(LeafType.body.small)
+                        .foregroundStyle(LeafColor.text.tertiary)
+                }
+                .buttonStyle(.borderless)
+            }
         } else if !permissions.fdaGranted {
             LeafBanner(
                 tone: .warning,
@@ -84,6 +96,11 @@ struct MenuBarContent: View {
                 onCTA: permissions.openFDASettings
             )
         }
+    }
+
+    private func openDiagnostics() {
+        routeCoordinator.route(.settings(section: .diagnostics), windowState: windowState)
+        openMainWindow()
     }
 
     // MARK: - Hero
