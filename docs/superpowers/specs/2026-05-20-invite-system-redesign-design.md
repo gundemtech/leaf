@@ -1,6 +1,6 @@
 # Invite System Redesign — Closed Workspaces (MVP)
 
-**Status:** Draft v2 (2026-05-20). Brainstorm + 5 open questions resolved by Anton. **Closed-mode-only MVP.** Open mode deferred to post-launch (see §9.1).
+**Status:** Draft v3 (2026-05-20). Brainstorm + 5 open questions resolved + 3 follow-up amendments per Anton's review (unified token=code primitive, simplified tier-gate table, explicit Delete action). **Closed-mode-only MVP.** Open mode deferred to post-launch (see §9.1).
 **Owner:** Local Claude (Mac).
 **Branch:** TBD — implementation not yet scheduled. Spec lands first, plan + execution follow as separate phase.
 **Predecessor:** Track 5 / S3 magic-link invite (current per-invitee ECDH model with mandatory bilateral Join code exchange).
@@ -19,10 +19,10 @@ Workspace invite flow is **done** when:
 2. **All workspaces are closed by default and by sole option in MVP.** Anyone with link/code becomes a pending request that admin approves or declines.
 3. **30-50 person team kickoff** = one link in Slack #general + admin reviews queue. **NOT** 30 bilateral Join-code round-trips.
 4. **Admin's Mac online state at invitee click moment is irrelevant.** Closed-mode requests queue server-side. Admin reviews queue when convenient.
-5. **Link leak** drowns admin in pending requests from outsiders BUT grants no access — admin filters via approve UI. Admin can revoke compromised token + generate new one.
+5. **Link leak** drowns admin in pending requests from outsiders BUT grants no access — admin filters via approve UI. Admin can delete compromised token + generate new one.
 6. **TTL expiry** auto-invalidates tokens without admin action.
 7. **Multiple active tokens** coexist on one workspace (admin can have separate tokens for team + contractors + vendors with different TTLs).
-8. **Revoke** at any time, including before TTL.
+8. **Delete** any token at any time, including before TTL (soft-delete; row stays in DB for audit).
 9. **Crypto envelope unchanged** — reuses Track 5 / S3 v=1 ECDH-to-invitee at approval moment. No whitepaper-level decisions.
 10. **Manual smoke** (11 gates, §10 below) passes on signed two-Mac build.
 
@@ -102,13 +102,13 @@ After `[Generate]`:
 │                                             │
 │  📎 LINK (copy + share via Slack/iMessage) │
 │  ┌─────────────────────────────────────┐    │
-│  │ leaf://invite/abc123def456...       │    │
+│  │ leaf://invite/LEAF-A8X7-B3K9-Q2N4       │    │
 │  └─────────────────────────────────────┘    │
 │  [ Copy link ]                              │
 │                                             │
 │  🔢 CODE (read over phone / paste in-app)   │
 │  ┌─────────────────────────────────────┐    │
-│  │   LEAF-A8X7-B3K9                    │    │
+│  │   LEAF-A8X7-B3K9-Q2N4                    │    │
 │  └─────────────────────────────────────┘    │
 │  [ Copy code ]                              │
 │                                             │
@@ -122,14 +122,14 @@ After `[Generate]`:
 
 **Notes:**
 - ONE token, TWO renderings (link + code) — same primitive. Admin shares whichever suits the channel.
-- Token is added to **Active invite tokens** list (§2.5); admin can come back to copy it again or revoke.
+- Token is added to **Active invite tokens** list (§2.5); admin can come back to copy it again or delete.
 - TTL countdown updates live (TimelineView).
 - Footer line reminds admin that approval is required — predictable behavior.
 - Label is optional. Empty label → token shown as «Untitled token #1234» in Active tokens list.
 
 ### 2.3 Боб joins (invitee path)
 
-Алина shares link `leaf://invite/abc123...` (in Slack) or code `LEAF-A8X7-B3K9` (over phone) with Боб.
+Алина shares link `leaf://invite/LEAF-A8X7-B3K9-Q2N4` (in Slack) or code `LEAF-A8X7-B3K9-Q2N4` (over phone) with Боб. Link path = code; one primitive, two input methods.
 
 **Path A — link click in Slack:**
 
@@ -159,7 +159,7 @@ After `[Generate]`:
 │  Join workspace by code                     │
 │                                             │
 │  PASTE CODE                                 │
-│  [ LEAF-A8X7-B3K9                        ]  │
+│  [ LEAF-A8X7-B3K9-Q2N4                        ]  │
 │                                             │
 │         [ Cancel ]    [ Continue ]          │
 └─────────────────────────────────────────────┘
@@ -264,24 +264,24 @@ Settings → Workspace → Active invite tokens:
 │                                             │
 │  ┌─────────────────────────────────────┐    │
 │  │ Team kickoff                        │    │
-│  │ Code: LEAF-A8X7-B3K9                │    │
+│  │ Code: LEAF-A8X7-B3K9-Q2N4                │    │
 │  │ Expires in 22h 14m · 0/∞ uses       │    │
 │  │ [ Copy link ] [ Copy code ] [ ✕ ]  │    │
 │  └─────────────────────────────────────┘    │
 │  ┌─────────────────────────────────────┐    │
 │  │ Contractors                         │    │
-│  │ Code: LEAF-F2Q3-X8M1                │    │
+│  │ Code: LEAF-F2Q3-X8M1-J7P5                │    │
 │  │ Expires in 6d 14h · 0/3 uses        │    │
 │  │ [ Copy link ] [ Copy code ] [ ✕ ]  │    │
 │  └─────────────────────────────────────┘    │
 │  ┌─────────────────────────────────────┐    │
 │  │ Untitled token #4F2                 │    │
-│  │ Code: LEAF-K9L4-P5R8                │    │
+│  │ Code: LEAF-K9L4-P5R8-T3M9                │    │
 │  │ Expires in 23h 02m · 0/1 use        │    │
 │  │ [ Copy link ] [ Copy code ] [ ✕ ]  │    │
 │  └─────────────────────────────────────┘    │
 │                                             │
-│  [ + Generate new ]    [ Revoke all ]       │
+│  [ + Generate new ]    [ Delete all ]       │
 └─────────────────────────────────────────────┘
 ```
 
@@ -289,8 +289,8 @@ Settings → Workspace → Active invite tokens:
 - Optional admin-provided label (e.g. «Team kickoff»). Empty → «Untitled token #<short hash>» auto-display.
 - Code (short form)
 - Status: TTL countdown + uses counter (0/∞ for unlimited, 0/N for capped)
-- Per-token Copy + Revoke
-- `[Revoke]` — confirms via small modal «Revoke this invite? Anyone trying to use it will see «This invite was revoked».»
+- Per-token Copy + Delete
+- `[✕] Delete` — confirms via small modal «Delete this invite? Anyone trying to use it will see «This invite no longer exists».» Soft-delete (row stays in DB for audit; just disappears from Active tokens UI).
 
 Up to **10 active tokens** per workspace.
 
@@ -302,7 +302,7 @@ Up to **10 active tokens** per workspace.
 
 | Column | Type | Notes |
 |---|---|---|
-| `token_id` | uuid PK | UUIDv4, used as URL token + base32 → code |
+| `code` | text PK | base32 short code with checksum, e.g. `LEAF-A8X7-B3K9-Q2N4` (12 random chars + 4 checksum = 16 visible chars, ~70 bits entropy). Same string is BOTH the code (typed in-app) AND the URL path component (`leaf://invite/<code>`). |
 | `workspace_id` | uuid | FK workspaces |
 | `created_by_pubkey` | text | hex pubkey of admin who generated |
 | `label` | text NULL | optional admin-set label |
@@ -310,21 +310,21 @@ Up to **10 active tokens** per workspace.
 | `expires_at` | timestamptz | created_at + ttl_seconds (NULL if «Never expires») |
 | `max_uses` | int NULL | NULL = unlimited; 1 = single-use |
 | `used_count` | int default 0 | incremented atomically on approval |
-| `revoked_at` | timestamptz NULL | NULL = active; set on revoke |
+| `deleted_at` | timestamptz NULL | NULL = active; set on delete (soft-delete; row stays for audit) |
 | `created_at` | timestamptz | |
 
 **No crypto material on this table.** Token is a pure identifier; the teamKey blob is sealed at approve moment and stored on `join_requests` (§3.2).
 
 **Indexes:**
-- `(workspace_id) WHERE revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now())` — admin active list query
-- `(token_id)` — direct lookup at invitee click
+- `(workspace_id) WHERE deleted_at IS NULL AND (expires_at IS NULL OR expires_at > now())` — admin active list query
+- `(code)` — direct lookup at invitee click
 
 **RLS:**
-- `invite_tokens_admin_write` — workspace admin can INSERT / UPDATE (revoke) tokens for their workspace
+- `invite_tokens_admin_write` — workspace admin can INSERT / UPDATE (delete) tokens for their workspace
 - `invite_tokens_admin_list_read` — workspace admin can SELECT all tokens for their workspace (Active tokens UI)
-- `invite_tokens_public_read_by_id` — anyone with valid `token_id` can SELECT a single row for preview purposes (workspace name, admin name, mode indicator) IF token is still valid `(revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now()) AND (max_uses IS NULL OR used_count < max_uses))`
+- `invite_tokens_public_read_by_id` — anyone with valid `code` can SELECT a single row for preview purposes (workspace name, admin name, mode indicator) IF token is still valid `(deleted_at IS NULL AND (expires_at IS NULL OR expires_at > now()) AND (max_uses IS NULL OR used_count < max_uses))`
 
-**Local mirror:** admin's Mac mirrors `invite_tokens` rows for their workspace (cache for instant UI). Mirror refreshed on workspace open + on admin generate/revoke action.
+**Local mirror:** admin's Mac mirrors `invite_tokens` rows for their workspace (cache for instant UI). Mirror refreshed on workspace open + on admin generate/delete action.
 
 ### 3.2 New `join_requests` table — Supabase
 
@@ -332,7 +332,7 @@ Up to **10 active tokens** per workspace.
 |---|---|---|
 | `request_id` | uuid PK | |
 | `workspace_id` | uuid | FK |
-| `token_id` | uuid | FK invite_tokens — which token they used |
+| `code` | text | FK invite_tokens.code — which token they used |
 | `invitee_pubkey` | text | hex |
 | `invitee_display_name` | text | self-asserted |
 | `status` | text | `pending` / `approved` / `declined` / `cancelled` / `expired` |
@@ -352,7 +352,7 @@ Up to **10 active tokens** per workspace.
 - `join_requests_admin_update_approve` — workspace admin can set status='approved' AND populate `encrypted_team_key`
 - `join_requests_admin_update_decline` — workspace admin can set status='declined'
 - `join_requests_self_read` — invitee reads their own request (by pubkey match) — sees status + encrypted_team_key on approve
-- `join_requests_self_insert` — invitee creates row (with self-pubkey + valid token_id; Edge Function validates token before INSERT)
+- `join_requests_self_insert` — invitee creates row (with self-pubkey + valid code; Edge Function validates token before INSERT)
 - `join_requests_self_cancel` — invitee sets own row status='cancelled' while pending
 
 ### 3.3 `workspaces` table additions
@@ -379,7 +379,7 @@ Existing S3 table `pending_invites` (single-row-per-invitee ECDH model) stays fo
 - CREATE TABLE `invite_tokens` + RLS policies + indexes
 - CREATE TABLE `join_requests` + RLS policies + indexes
 - ALTER TABLE `workspaces` ADD COLUMN defaults
-- Edge Functions: `create_join_request`, `approve_join_request`, `decline_join_request`, `cancel_join_request`, `revoke_invite_token`, `expire_stale_join_requests` (daily cron)
+- Edge Functions: `create_join_request`, `approve_join_request`, `decline_join_request`, `cancel_join_request`, `delete_invite_token`, `expire_stale_join_requests` (daily cron)
 
 ---
 
@@ -421,7 +421,7 @@ Existing S3 table `pending_invites` (single-row-per-invitee ECDH model) stays fo
 8. Edge Function `approve_join_request` fires:
    - validates admin claim (JWT pubkey matches workspace admin)
    - atomically: increment invite_tokens.used_count; check max_uses if set
-   - if max_uses exhausted: mark token as «no longer accepting» (does NOT auto-revoke; admin's call)
+   - if max_uses exhausted: mark token as «no longer accepting» (does NOT auto-delete; admin's call)
    - sends APNs push to bob (kind=invite_request_approved)
 9. Bob's app on push:
    - fetches own join_requests row (RLS allows self-read)
@@ -460,14 +460,14 @@ Existing S3 table `pending_invites` (single-row-per-invitee ECDH model) stays fo
 5. No push to admin (silent withdrawal)
 ```
 
-### 4.5 Token revoke flow
+### 4.5 Token delete flow
 
 ```
-1. Admin taps [✕] on token in Active tokens list, confirms modal
-2. Local app PATCHes invite_tokens SET revoked_at=now()
-3. Edge Function `revoke_invite_token` validates admin claim
+1. Admin taps [✕ Delete] on token in Active tokens list, confirms modal
+2. Local app PATCHes invite_tokens SET deleted_at=now()
+3. Edge Function `delete_invite_token` validates admin claim
 4. Pending join_requests against this token: NOT auto-cancelled (admin reviews them as usual; new clicks against this token fail at create_join_request validation step)
-5. Future link clicks: Edge Function `create_join_request` checks token validity → returns 410 Gone → invitee sees «This invite was revoked»
+5. Future link clicks: Edge Function `create_join_request` checks token validity → returns 410 Gone → invitee sees «This invite no longer exists»
 ```
 
 ### 4.6 Single-use semantics
@@ -477,12 +477,12 @@ Existing S3 table `pending_invites` (single-row-per-invitee ECDH model) stays fo
 ```sql
 UPDATE invite_tokens
 SET used_count = used_count + 1
-WHERE token_id = $1
+WHERE code = $1
   AND (max_uses IS NULL OR used_count < max_uses)
-  AND revoked_at IS NULL
+  AND deleted_at IS NULL
   AND (expires_at IS NULL OR expires_at > now())
 RETURNING *;
--- If 0 rows: token consumed/expired/revoked, reject approval with 409 Conflict
+-- If 0 rows: token consumed/expired/deleted, reject approval with 409 Conflict
 ```
 
 Race between two simultaneous approvals: atomic UPDATE serializes; loser admin gets 409 → UI shows «Token has reached its usage limit».
@@ -494,14 +494,14 @@ Daily Supabase cron (`expire_stale_join_requests`):
 UPDATE join_requests SET status = 'expired'
 WHERE status = 'pending'
   AND created_at < (
-    SELECT expires_at FROM invite_tokens WHERE token_id = join_requests.token_id
+    SELECT expires_at FROM invite_tokens WHERE code = join_requests.code
   );
 ```
 Edge Function variant for non-cron environments. Cleanup is non-blocking; expired requests just stop being actionable.
 
 ### 4.8 Token brute-force resistance
 
-`token_id` = UUIDv4 (122 bits entropy). Brute-force unrealistic. Token URL has no checksum — code form `LEAF-XXXX-XXXX` includes 1-byte checksum for typo detection (reuse `JoinCode.encode` formatter, switching input from pubkey to token_id bytes).
+`code` ≈ 70 bits entropy (12 random base32 chars + 4 checksum chars; alphabet excludes I/L/O/U/0/1 to avoid visual confusion). Brute-force protected by RLS lookup rate-limit + token TTL (default 24h). Checksum chars enable client-side typo detection at paste time so the user sees «Invalid code» before hitting the server.
 
 ---
 
@@ -513,13 +513,13 @@ Edge Function variant for non-cron environments. Cleanup is non-blocking; expire
 |---|---|---|
 | `WorkspaceCreateSheet` (modify) | `Leaf/Views/Window/Settings/` | Add TTL preset + single-use default. No mode picker. |
 | `GenerateInviteSheet` (rewrite) | `Leaf/Views/Window/Team/` | Optional label + TTL override + dual link/code output. Remove Paste Join code tab + Send template tab. |
-| `ActiveTokensSection` | `Leaf/Views/Window/Settings/Workspace/` | List + copy + revoke per token, bulk revoke |
+| `ActiveTokensSection` | `Leaf/Views/Window/Settings/Workspace/` | List + copy + delete per token, bulk delete |
 | `PendingRequestsSection` | `Leaf/Views/Window/Settings/Workspace/` | List + approve/decline + bulk actions + confirmation modals |
 | `JoinWorkspaceByCodeSheet` | `Leaf/Views/Window/Settings/` | Invitee paste-code entry |
 | `JoinRequestWaitingCard` | `Leaf/Views/Window/Settings/` | Sub-view of `AcceptInviteSheet` for closed-mode wait + cancellable state |
 | `InviteTokensReader` | `Leaf/Models/` | @Observable wrapper around InviteTokenStore |
 | `JoinRequestsReader` | `Leaf/Models/` | @Observable admin-side queue + invitee-side own-request status |
-| `InviteTokenService` | `Packages/LeafCore/Sources/LeafCore/Team/` | Generate / list / revoke tokens |
+| `InviteTokenService` | `Packages/LeafCore/Sources/LeafCore/Team/` | Generate / list / delete tokens |
 | `JoinRequestService` | `Packages/LeafCore/Sources/LeafCore/Team/` | Submit / cancel / approve / decline + ECDH+seal at approve, ECDH+unseal at success |
 
 ### 5.2 Modified
@@ -574,7 +574,7 @@ APNs categories:
 | Default single-use | `false` (unlimited) | Toggle in `WorkspaceCreateSheet` |
 | TTL options | 1h / 24h / 7d / 30d / Never expires | Hardcoded enum; «Never» = NULL `expires_at` |
 | Max active tokens per workspace | 10 | Hardcoded; error on 11th generate attempt |
-| Token code format | `LEAF-XXXX-XXXX` (10 base32 chars, no I/L/O/U/0/1) | Single primitive; admin-facing UI prefers code, link is alt copy |
+| Token code format | `LEAF-XXXX-XXXX-XXXX` (12 random base32 chars + 4 checksum, no I/L/O/U/0/1) | Single primitive; link path `leaf://invite/<code>` embeds the exact code — same string, two input methods |
 | Token label | optional, empty default | Text input at generate time + edit in Active tokens list (post-MVP) |
 | Invitee display name default | `NSFullUserName()` | Editable in preview card |
 | Invitee can cancel pending request | yes | `[Cancel request]` button in waiting card |
@@ -583,21 +583,25 @@ APNs categories:
 | Bulk decline | yes | `[Decline all]` confirmation modal → silent (no pushes) |
 | Approve notifies invitee | YES (APNs push) | Non-toggleable in MVP |
 | Decline notifies invitee | NO (silent; UI updates via Realtime/poll) | Non-toggleable in MVP per §13.5 |
-| Token revoke notifies anyone | NO | Silent; future clicks fail at validation |
+| Token delete notifies anyone | NO | Silent; future clicks fail at validation. Existing pending requests against deleted token: admin still sees + decides in queue (deletion ≠ purge of in-flight requests). |
 
 ---
 
 ## 8. Tier-gate interaction (existing T3-T4 substrate)
 
+В MVP попасть в workspace можно **только** через invite — клик ссылки или ввод кода. Никакого отдельного «accept invite» action'а нет; submit-join-request это и есть единственный путь.
+
 | Action | Free | Team |
 |---|---|---|
 | Create workspace | ❌ Upgrade modal | ✅ |
-| Generate invite token | ❌ (because workspace creation gated) | ✅ |
-| Accept request to join (be approved as member) | ✅ | ✅ |
-| Approve pending request as admin | ❌ Upgrade modal (since only Team can be admin) | ✅ |
-| Decline / Cancel pending request | ✅ | ✅ |
+| Generate invite token (and delete it later) | ❌ (no workspace = no token) | ✅ |
+| Join workspace via link or code (submit join request) | ❌ Upgrade modal | ✅ |
+| Approve / Decline join requests as admin | ❌ (no workspace = no admin) | ✅ |
+| Cancel own pending request | ✅ (anyone can withdraw their own request) | ✅ |
 
-Tier gating enforced at action-handler level per existing `TierGate.canCreateWorkspace` / `canAcceptInvite` checks. New `TierGate.canApproveJoinRequest` mirrors `canCreateWorkspace`.
+В MVP default tier = `team` (per Track 5 / S8 контракт §15.3 early-access). Free колонка — substrate для post-Stripe rollout; в MVP юзеры никогда не падают на Free, поэтому Upgrade modal'ы — это просто scaffolding, реальный UX не задеваюшие.
+
+Tier gating enforced at action-handler level: existing `TierGate.canCreateWorkspace` / `canAcceptInvite` checks + new `TierGate.canApproveJoinRequest` (mirrors `canCreateWorkspace`).
 
 ---
 
@@ -645,13 +649,13 @@ Two-Mac signed-build session. Mac A = Алина (admin), Mac B = Боб (invite
 |---|---|---|
 | **G1** | Generate invite + share link | Алина: `+ Generate invite` → TTL=24h → got link + code. Active tokens list shows 1. |
 | **G2** | Closed-mode join via link | Боб clicks link in Slack → preview card → display name → `[Send request]` → waiting card. Алина gets push «Bob requested». |
-| **G3** | Closed-mode join via code paste | Same end-state via Sidebar `🔢 Join by code` → paste `LEAF-XXXX-YYYY` → waiting. |
+| **G3** | Closed-mode join via code paste | Same end-state via Sidebar `🔢 Join by code` → paste `LEAF-XXXX-XXXX-XXXX` → waiting. |
 | **G4** | Approve | Алина taps `[Approve]` on Bob → Bob gets push → app fetches blob → joined → TestRoom appears in Bob's workspace list. |
 | **G5** | Decline (silent) | Алина taps `[Decline]` → request status flips → Bob's waiting card silently updates to «Request declined» on next state poll. NO system notification on Bob's Mac. |
 | **G6** | Cancel pending request | Bob in waiting card taps `[Cancel request]` → Алина's queue refreshes → Bob's row gone. Алина got no notification. |
 | **G7** | TTL expiry | Token with TTL=1 minute → wait 70 seconds → Bob clicks → preview shows «This invite has expired». Existing pending requests against same token: status flips to `expired` on next cron sweep. |
-| **G8** | Revoke before TTL | Алина revokes from Active tokens list → confirms modal → Bob clicks revoked link → «This invite was revoked». |
-| **G9** | Multiple active tokens | Алина generates 3 tokens (Team kickoff / Contractors / unlabeled single-use) → revoke unlabeled → other two still accept new clicks. Active tokens list shows 2. |
+| **G8** | Delete before TTL | Алина deletes from Active tokens list → confirms modal → Bob clicks deleted link → «This invite no longer exists». |
+| **G9** | Multiple active tokens | Алина generates 3 tokens (Team kickoff / Contractors / unlabeled single-use) → delete unlabeled → other two still accept new clicks. Active tokens list shows 2. |
 | **G10** | Single-use token | Token `max_uses=1` → Bob joins (request approved) → Carol clicks same token → preview shows «This invite has reached its usage limit». |
 | **G11** | Admin offline at invitee click | Алина closes Mac → Bob clicks link → request enters queue → Алина opens Mac next day → queue shows Bob → approve → Bob joins. Bob's app continues to poll while Алина offline; no broken state. |
 | **G12** | Bulk approve | 5 pending requests → Алина `[Approve all]` → confirms modal → 5 sequential ECDH operations on Алина's Mac → all 5 invitees get push within ~5 seconds → all joined. |
@@ -665,9 +669,9 @@ Two-Mac signed-build session. Mac A = Алина (admin), Mac B = Боб (invite
 
 1. **Schema M027 — local + Supabase** with stubs (pgTAP for RLS on `invite_tokens` + `join_requests`, Edge Functions skeleton 200-OK stubs)
 2. **InviteToken value type + InviteTokenStore (local SQLCipher) + tests**
-3. **InviteTokenService.generate / list / revoke + tests** (no crypto — token is identifier only)
+3. **InviteTokenService.generate / list / delete + tests** (no crypto — token is identifier only)
 4. **Edge Functions: `create_join_request` / `cancel_join_request` (invitee side) + tests**
-5. **Edge Functions: `approve_join_request` / `decline_join_request` / `revoke_invite_token` / `expire_stale_join_requests` (admin + maintenance) + tests** — `approve_join_request` validates admin already populated `encrypted_team_key` (server doesn't generate it; admin's local device does ECDH)
+5. **Edge Functions: `approve_join_request` / `decline_join_request` / `delete_invite_token` / `expire_stale_join_requests` (admin + maintenance) + tests** — `approve_join_request` validates admin already populated `encrypted_team_key` on the row (server doesn't generate it; admin's local device does ECDH at click moment)
 6. **JoinRequestService — submit (invitee) + approve (admin local ECDH-seal) + decline + cancel + tests**
 7. **UI Phase A: WorkspaceCreateSheet update + GenerateInviteSheet rewrite + ActiveTokensSection**
 8. **UI Phase B: PendingRequestsSection + JoinWorkspaceByCodeSheet + JoinRequestWaitingCard + Sidebar wiring + AcceptInviteSheet dispatch + notification integration + manual smoke checklist**
@@ -682,7 +686,7 @@ Build green at each commit. Full xcodebuild 5-scheme regression at each commit. 
 - **Acceptance side:** `AcceptInviteSheet` URL dispatch:
   - URL with `?a=<64-hex>` query param → S3 v=1 path (existing flow — invitee pubkey is known to admin upfront, instant decrypt)
   - URL WITHOUT `?a=` query param OR `?` segment → new request flow → JoinRequestWaitingCard
-  - `LEAF-XXXX-XXXX` code → new request flow only (no S3-style code format existed)
+  - `LEAF-XXXX-XXXX-XXXX` code → new request flow only (no S3-style code format existed)
 - **Sunset:** 30 days post-ship, delete S3 generation code path entirely. Keep S3 acceptance for another 30 days (users may still have unaccepted S3 invites). After day 60, drop `pending_invites` table in cleanup migration.
 
 ---
@@ -709,7 +713,8 @@ Build green at each commit. Full xcodebuild 5-scheme regression at each commit. 
 - ✅ Out-of-scope explicit (§9)
 - ✅ 13 acceptance gates concrete + measurable
 - ✅ Implementation phases atomic (each commit builds green)
-- ✅ Tier-gate integration unambiguous (§8 table)
+- ✅ Tier-gate integration unambiguous (§8 table — simplified per v3 amendment: no separate «accept invite» action)
 - ✅ Notification + APNs categories enumerated; ABSENT pushes (decline, new_member, expire) explicitly listed as «not in MVP»
 - ✅ Default settings table complete (§7)
 - ✅ All 5 §13 open questions resolved
+- ✅ v3 amendments applied: token = code (single primitive, URL embeds it), `Revoke` → `Delete` in UI + Edge Function, §8 tier table simplified to 5 unambiguous rows
