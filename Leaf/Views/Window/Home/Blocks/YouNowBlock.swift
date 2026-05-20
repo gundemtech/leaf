@@ -18,6 +18,9 @@ import SwiftUI
 struct YouNowBlock: View {
     let state: YouNowState
     @StateObject private var localAppsStore = LocalAppsStore()
+    @Environment(RouteCoordinator.self) private var coordinator
+    @Environment(WindowState.self) private var windowState
+    @Environment(PermissionsService.self) private var permissions
 
     var body: some View {
         VStack(alignment: .leading, spacing: LeafSpace.md) {
@@ -65,16 +68,48 @@ struct YouNowBlock: View {
 
     @ViewBuilder
     private func activeContent(_ s: YouNowActive) -> some View {
-        rowLayout(
-            iconSystemName: "play.circle.fill",
-            tint: LeafColor.accent.primary,
-            bundleIDForIcon: s.bundleID,
-            title: s.app,
-            titleTint: LeafColor.accent.primary,
-            line2: [s.contextLabel, s.branch, s.linearID].compactMap { $0 }.joined(separator: " · ").nilIfEmpty,
-            line3: activeTimeLine(s),
-            trailingBars: s.intensityBars
-        )
+        VStack(alignment: .leading, spacing: LeafSpace.sm) {
+            rowLayout(
+                iconSystemName: "play.circle.fill",
+                tint: LeafColor.accent.primary,
+                bundleIDForIcon: s.bundleID,
+                title: s.app,
+                titleTint: LeafColor.accent.primary,
+                line2: [s.contextLabel, s.branch, s.linearID].compactMap { $0 }.joined(separator: " · ").nilIfEmpty,
+                line3: activeTimeLine(s),
+                trailingBars: s.intensityBars
+            )
+            if shouldShowIntensityHint(s) {
+                intensityHintLink
+            }
+        }
+    }
+
+    /// Track-9 T5 D-14 — hint condition: zero intensity bars.
+    ///
+    /// Proxy heuristic: `intensityBars == 0` covers both "TCC not granted"
+    /// (PermissionsService.inputMonitoringGranted == false) and "user toggle
+    /// OFF" (SystemObserversStore.isEnabled("intensity") == false). No single
+    /// `intensityAggregatorEnabled: Bool` property exists on the public API;
+    /// the proxy is correct for the intended UX — show hint whenever bars are
+    /// absent, regardless of the root cause. ADR-010: no key-content stored.
+    private func shouldShowIntensityHint(_ s: YouNowActive) -> Bool {
+        s.intensityBars == 0
+    }
+
+    private var intensityHintLink: some View {
+        Button {
+            coordinator.route(
+                .settings(section: .systemObservers, sub: nil),
+                windowState: windowState)
+        } label: {
+            Text("Enable intensity monitoring")
+                .font(LeafType.body.small)
+                .foregroundStyle(LeafColor.text.tertiary)
+                .underline()
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens Settings to enable intensity monitoring")
     }
 
     @ViewBuilder
@@ -129,13 +164,10 @@ struct YouNowBlock: View {
         }
     }
 
-    /// Compose the timing footer for `.active` — prefer `"Started 17:30 · 38m"`
-    /// when we know when the session began (gives a clearer temporal anchor than
-    /// raw duration), fall back to the duration string otherwise.
+    /// Track-9 T5 — mockup §3 wording: "42m focused" (drops "Started HH:MM ·"
+    /// surface; duration alone communicates session length per spec D-13).
     private func activeTimeLine(_ s: YouNowActive) -> String {
-        let duration = formatDuration(TimeInterval(s.durationSec))
-        guard let startMs = s.sessionStartedAtMs else { return duration }
-        return "Started \(Self.startTimeString(msSinceEpoch: startMs)) · \(duration)"
+        "\(formatDuration(TimeInterval(s.durationSec))) focused"
     }
 
     private func awayPresentation(for a: YouNowAway) -> (icon: String, title: String, footer: String) {
@@ -224,17 +256,20 @@ struct YouNowBlock: View {
         // `lastLinearID != nil` and `lastAppBundleID != nil`; `lastApp`
         // (display name) defaults to the bundle id when display lookup
         // misses, so we still want a final string fallback there.
-        let issue = a.lastLinearID ?? ""
+        // Track-9 T5 D-6: LinearID-aware CTA label — "Resume LEAF-204" when
+        // lastLinearID is known, generic "Resume" otherwise (4-gate eligibility
+        // is unchanged; only the visible text adapts).
+        let label = a.lastLinearID.map { "Resume \($0)" } ?? "Resume"
         let appLabel = a.lastApp ?? a.lastAppBundleID ?? "app"
         Button {
             triggerResume(for: a)
         } label: {
-            Text("→ Resume on \(issue) in \(appLabel)")
+            Text("→ \(label) in \(appLabel)")
                 .font(LeafType.body.small)
                 .foregroundStyle(LeafColor.accent.primary)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Resume work on \(issue) in \(appLabel)")
+        .accessibilityLabel("\(label) in \(appLabel)")
         .accessibilityAddTraits(.isButton)
     }
 
