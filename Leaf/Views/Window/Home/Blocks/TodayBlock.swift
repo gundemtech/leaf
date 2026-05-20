@@ -62,31 +62,38 @@ struct TodayBlock: View {
 
     // MARK: - Metrics row
 
-    /// C-3 (Phase 8.9) — `ViewThatFits` picks the wide horizontal row when
-    /// it fits in the available width, otherwise falls through to a 2×2
-    /// grid. No `@State`, no GeometryReader, no fixed cutoff — SwiftUI
-    /// measures intrinsic content width per branch.
+    /// Track-9 T6 (C-3 close) — 5-cell wide row + `Grid` 2-col × 3-row narrow.
+    /// `ViewThatFits` measures intrinsic content width and picks the first
+    /// branch that fits. `switches` cell (substrate-ready since Phase 8.3)
+    /// surfaced between `sessions` and `commits`. Narrow grid uses SwiftUI 4+
+    /// `Grid` for proper row alignment; bottom-right cell is `Color.clear`
+    /// (intentional gap, no 6th metric).
     private var metricsRow: some View {
         ViewThatFits(in: .horizontal) {
-            // Wide branch — 4 cells horizontal (current shape).
+            // Wide branch — 5 cells horizontal.
             HStack(alignment: .top, spacing: LeafSpace.lg) {
                 metricCell(value: focusValue, label: "focused")
                 metricCell(value: aiRatioValue, label: "AI ratio")
                 metricCell(value: "\(metrics.sessionsCount)", label: "sessions")
+                metricCell(value: "\(metrics.switchCount)", label: "switches")
                 metricCell(value: "\(metrics.commitsCount)", label: "commits")
                 Spacer(minLength: 0)
             }
-            // Narrow branch — 2×2 grid; same metric cells, no expand state.
-            VStack(alignment: .leading, spacing: LeafSpace.md) {
-                HStack(alignment: .top, spacing: LeafSpace.lg) {
+            // Narrow branch — Grid 2 cols × 3 rows, row-major reading order.
+            Grid(alignment: .topLeading, horizontalSpacing: LeafSpace.lg, verticalSpacing: LeafSpace.md) {
+                GridRow {
                     metricCell(value: focusValue, label: "focused")
                     metricCell(value: aiRatioValue, label: "AI ratio")
-                    Spacer(minLength: 0)
                 }
-                HStack(alignment: .top, spacing: LeafSpace.lg) {
+                GridRow {
                     metricCell(value: "\(metrics.sessionsCount)", label: "sessions")
+                    metricCell(value: "\(metrics.switchCount)", label: "switches")
+                }
+                GridRow {
                     metricCell(value: "\(metrics.commitsCount)", label: "commits")
-                    Spacer(minLength: 0)
+                    Color.clear
+                        .frame(width: 1, height: 1)
+                        .accessibilityHidden(true)
                 }
             }
         }
