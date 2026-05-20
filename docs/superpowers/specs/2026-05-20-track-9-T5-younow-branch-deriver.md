@@ -1,6 +1,6 @@
 # Track-9 T5 — YOU·NOW branch deriver + rich enrichment UI
 
-**Status:** APPROVED (Stage 3, awaiting user spec-review gate).
+**Status:** SHIPPED — Stage 5 done. 3 moat helpers (WorkspacePathResolver / GitHeadReader / currentTaskIdentity rewrite) + YouNowFocus enrichment + YouNowBlock UI batch (label tweak + intensity hint + Resume CTA) + 22 net new tests (5 public + 1 sentinel + 16 moat). All 4 substrate-purity zero-diff invariants verified. 5/5 xcodebuild Debug schemes green. Privacy walkback narrow grep — 0 hits. `just check-tokens` 3-tier clean.
 **Track-9 master design:** [`2026-05-19-track-9-substrate-enrichment-design.md`](./2026-05-19-track-9-substrate-enrichment-design.md) §T5 line 180-188.
 **T1 spec (precedent — payload field landing pattern):** [`2026-05-19-track-9-T1-collector-payload-extensions.md`](./2026-05-19-track-9-T1-collector-payload-extensions.md).
 **T4 spec (precedent — substrate-only deriver pattern):** [`2026-05-20-track-9-T4-weekly-metrics-deriver.md`](./2026-05-20-track-9-T4-weekly-metrics-deriver.md).

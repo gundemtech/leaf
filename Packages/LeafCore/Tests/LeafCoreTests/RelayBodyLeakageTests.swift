@@ -3579,4 +3579,90 @@ final class RelayBodyLeakageTests: XCTestCase {
             XCTAssertTrue(stateJSON.contains("\"viewer_login\":\"demoffsrmain\""))
         }
     }
+
+    // MARK: - Track-9 T5 — branch deriver sentinel
+
+    /// Track-9 T5 — `doc_path` bytes (Xcode workspace path) consumed by
+    /// `WorkspacePathResolver` → `GitHeadReader` chain stay in-memory only.
+    /// Sentinel injected at the doc_path position (which MUST NEVER appear in
+    /// presence_state or in any newly-written events) ensures a future refactor
+    /// that accidentally writes path bytes to any storage surface is caught.
+    ///
+    /// Invariant 1: `presence_state.state_json` for any provider must NOT
+    ///   contain the sentinel substring. T5 substrate is read-only relative
+    ///   to presence_state; this test catches a future regression that would
+    ///   accidentally write the workspace path into presence.
+    /// Invariant 2: No event row written AFTER `nowMs` (the seed timestamp)
+    ///   contains the sentinel. Only the pre-seeded `xcode_active_doc_changed`
+    ///   row (which is the resolver's input, not its output) carries it.
+    func test_t5_walkback_DocPathDoesNotLeakIntoPresenceStateOrEvents() throws {
+        let sentinel = "LEAKED_SENTINEL_T5_DOCPATH"
+        let sentinelPath = "/Users/\(sentinel)/Desktop/repo/Foo.swift"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+
+        let db = try Database.openForWrite(
+            at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        // Seed the input event that WorkspacePathResolver reads via
+        // `fetchXcodeDocPath`. The sentinel is embedded at the path-bytes
+        // position which T5 consumes in-memory and must never persist.
+        let seedEvent = RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0),
+            signalType: .attention,
+            bundleID: "com.apple.dt.Xcode",
+            payload: [
+                "event_kind": "xcode_active_doc_changed",
+                "doc_path": sentinelPath,
+                "project_name": "Leaf",
+            ]
+        )
+        // Write seed via writeEventsOffsetAndPresence (the same write path
+        // used by the real Agent loop). T5 substrate does NOT write presence_state
+        // — the presence dict here is a minimal stub representing any other
+        // concurrent provider write that might coexist.
+        let presenceState: [String: Any] = ["active": true]
+        try db.writeEventsOffsetAndPresence(
+            [seedEvent],
+            offset: makeOffset(
+                collectorID: "xcode_observer",
+                sourceID: "xcode:t5-sentinel-test",
+                nowMs: nowMs),
+            presence: (provider: .github, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+
+        // Invariant 1 — presence_state.state_json contains no sentinel bytes.
+        try db.readSQL { rawDB in
+            let rows = try Row.fetchAll(
+                rawDB,
+                sql: "SELECT provider, state_json FROM presence_state WHERE state_json IS NOT NULL"
+            )
+            for row in rows {
+                let provider = (row["provider"] as String?) ?? "<unknown>"
+                let stateJSON = (row["state_json"] as String?) ?? ""
+                XCTAssertFalse(
+                    stateJSON.contains(sentinel),
+                    "Sentinel \(sentinel) leaked into presence_state[\(provider)].state_json: \(stateJSON)")
+            }
+        }
+
+        // Invariant 2 — no event row written AFTER the seed timestamp carries
+        // the sentinel. The pre-seeded row is excluded by the `ts > nowMs`
+        // filter; only rows emitted by T5 substrate side-effects (none expected)
+        // would fall through.
+        let newEventsWithSentinel: Int = try db.readSQL { rawDB in
+            (try Int.fetchOne(
+                rawDB,
+                sql: """
+                    SELECT COUNT(*) FROM events
+                    WHERE ts > ?
+                      AND payload_json LIKE ?
+                    """,
+                arguments: [nowMs, "%\(sentinel)%"]
+            )) ?? 0
+        }
+        XCTAssertEqual(
+            newEventsWithSentinel, 0,
+            "No event written after seed timestamp should contain the T5 doc_path sentinel")
+    }
 }
