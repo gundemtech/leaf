@@ -139,8 +139,21 @@ struct WhereStoppedBlock: View {
     }
 
     private var accessibilityHint: String {
-        hasUsableSnapshot
-            ? "Opens decisions, open questions, blockers, and where-stopped history."
-            : "No recent stop-points. Opens full detector history."
+        guard hasUsableSnapshot, let snap = snapshot else {
+            return "No recent stop-points. Opens full detector history."
+        }
+        var parts = ["Opens decisions, open questions, blockers, and where-stopped history."]
+        if let basename = snap.anchorFilePath, !basename.isEmpty {
+            // basename — substrate contract per ProdInsights+RecentWhereStopped.
+            if let line = snap.anchorLine, line > 0 {
+                parts.append("Last touched \(basename) line \(line).")
+            } else {
+                parts.append("Last touched \(basename).")
+            }
+        }
+        if let commit = snap.recentLastCommit {
+            parts.append("Recent commit: \(commit.subject).")
+        }
+        return parts.joined(separator: " ")
     }
 }
