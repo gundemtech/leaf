@@ -129,14 +129,21 @@ struct WorkspaceSettingsSection: View {
   private var actionButtonsRow: some View {
     if case .loaded(_, let active, let members) = workspaceReader.state {
       let viewerIsAdmin = members.contains { $0.pubkeyHex == myPubHex && $0.role == .admin }
+      // A solo admin owns a workspace nobody else has joined yet — «leaving»
+      // would orphan the row with no possibility of rejoin (no one left to
+      // re-invite them). Force the destructive path through Delete Permanently
+      // instead. Mirrors the guard inside `WorkspaceReader.leaveWorkspace`.
+      let soloAdmin = viewerIsAdmin && members.count == 1
 
       HStack(spacing: LeafSpace.sm) {
         LeafButton("+ New Workspace", variant: .secondary, size: .md) {
           createWorkspacePresented = true
         }
         Spacer()
-        LeafButton("Leave Workspace", variant: .destructive, size: .md) {
-          leavePresented = true
+        if !soloAdmin {
+          LeafButton("Leave Workspace", variant: .destructive, size: .md) {
+            leavePresented = true
+          }
         }
         if viewerIsAdmin {
           LeafButton("Delete Permanently", variant: .destructive, size: .md) {
