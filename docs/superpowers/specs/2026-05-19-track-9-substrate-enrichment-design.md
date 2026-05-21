@@ -385,9 +385,9 @@ The 24 carries enumerated in `docs/superpowers/specs/2026-05-18-track-8-home-ux-
 | C-11 | Offline / stale footer | Phase 5.6 — out |
 | C-12 | Row tap routes to Team tab w/o teammate selection | Phase 5.4 — out |
 | C-13 | `TeammateMatch.durationSec` hardcoded | Phase 5.4 — out |
-| C-14 | Search debounce / SQL re-fetch | T8 evaluate (likely defer) |
-| C-15 | `RouteCoordinator.openURL` extraction | T8 (centralize if pattern repeats) |
-| C-16 | `InboxItem.sourceURL` nil for D3-derived | T8 universal sourceURL synthesis |
+| C-14 | Search debounce / SQL re-fetch | T8 evaluate (likely defer) — **[DEFERRED T8 — cardinality stays under 14d cutoff baseline; revisit if >1000 rows/day]** |
+| C-15 | `RouteCoordinator.openURL` extraction | T8 (centralize if pattern repeats) — **[DEFERRED T8 — single-callsite `NSWorkspace.shared.open` sufficient via existing InboxItemRow; centralize when 2+ blocks share]** |
+| C-16 | `InboxItem.sourceURL` nil for D3-derived | T8 universal sourceURL synthesis — **[RESOLVED T8 — commits `5179865f` + Task 7 D3 enrichment moat]** |
 | C-17 | filteredItems substring unit test | already-resolved P9 |
 | C-18 | empty/no-match icon differentiation | already-resolved P9 |
 | C-19 | Localization | out (separate track) |
