@@ -22,6 +22,16 @@ struct DebugDiagnosticsSection: View {
                 "Что-то не детектится? Эта панель показывает кто запущен, какой CDHash, есть ли AX trust, и пишутся ли события в БД. Используется при отладке."
         ) {
             VStack(alignment: .leading, spacing: LeafSpace.md) {
+                if service.snapshot.btmLikelyDisabled {
+                    LeafBanner(
+                        tone: .warning,
+                        title: "Agent не запускается — BTM parent disabled",
+                        description:
+                            "macOS Sequoia recurring bug: после sleep/wake или rebuild Login Items toggle ON визуально, но в BTM disabled. Открой Login Items → toggle OFF → подожди 3с → toggle ON.",
+                        ctaTitle: "Open Login Items",
+                        onCTA: service.openLoginItems
+                    )
+                }
                 if service.snapshot.cdHashMismatch {
                     LeafBanner(
                         tone: .warning,

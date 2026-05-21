@@ -36,6 +36,17 @@ struct DebugDiagnosticsSnapshot: Sendable, Equatable {
     let eventsLastMinute: Int?
     let dbReadError: String?
 
+    // launchd / BTM state
+    let agentLaunchd: DebugDiagnostics.AgentLaunchdState
+
+    /// Recurring Sequoia bug: BTM parent disposition сваливается в disabled
+    /// после sleep/wake/rebuild цикла. launchd показывает agent label loaded
+    /// но без running PID. Юзеру надо toggle Login Items OFF→ON чтобы
+    /// re-enable BTM parent.
+    var btmLikelyDisabled: Bool {
+        agentLaunchd.loaded && agentLaunchd.runningPID == nil
+    }
+
     /// CDHash mismatch flag — всегда false. Main app и Agent — это два разных
     /// бинарника с разными bundle IDs (`tech.gundem.leaf` vs `tech.gundem.leaf.agent`).
     /// У каждого target свой CDHash; сравнивать их между собой некорректно.
@@ -105,6 +116,8 @@ final class DebugDiagnosticsService {
             }
         }
 
+        let launchdState = DebugDiagnostics.agentLaunchdState()
+
         snapshot = DebugDiagnosticsSnapshot(
             mainBundlePath: mainPath,
             mainCDHash: mainHash,
@@ -118,8 +131,17 @@ final class DebugDiagnosticsService {
             totalEvents: totalEvents,
             lastEventAgeSec: lastEventAge,
             eventsLastMinute: eventsLastMin,
-            dbReadError: dbReadError
+            dbReadError: dbReadError,
+            agentLaunchd: launchdState
         )
+    }
+
+    /// Открыть System Settings → General → Login Items. Использует
+    /// `open` через NSWorkspace (без AppleScript). Доступ к pane
+    /// требует exact extension identifier — `com.apple.LoginItems-Settings.extension`.
+    func openLoginItems() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension") else { return }
+        NSWorkspace.shared.open(url)
     }
 
     /// Reveal a path в Finder (если файл существует).
@@ -208,7 +230,8 @@ final class DebugDiagnosticsService {
             totalEvents: nil,
             lastEventAgeSec: nil,
             eventsLastMinute: nil,
-            dbReadError: nil
+            dbReadError: nil,
+            agentLaunchd: DebugDiagnostics.AgentLaunchdState(loaded: false, runningPID: nil)
         )
     }
 

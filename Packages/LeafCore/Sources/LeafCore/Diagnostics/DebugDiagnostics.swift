@@ -44,6 +44,53 @@ public enum DebugDiagnostics {
         Bundle.main.bundleURL.path
     }
 
+    // MARK: - launchd / BTM state
+
+    /// Состояние Agent labels в user-domain launchd. Возвращается parse'ом
+    /// `launchctl list` (public API, без sudo). Когда BTM parent disposition
+    /// = disabled (recurring Sequoia bug после sleep/wake/rebuild), agent
+    /// label loaded в launchd но не запущен → `loaded=true, runningPID=nil`.
+    /// Это сигнал для UI показать «Open Login Items» banner.
+    public struct AgentLaunchdState: Sendable, Equatable {
+        public let loaded: Bool
+        public let runningPID: pid_t?
+
+        public init(loaded: Bool, runningPID: pid_t?) {
+            self.loaded = loaded
+            self.runningPID = runningPID
+        }
+    }
+
+    public static func agentLaunchdState(label: String = "tech.gundem.leaf.agent") -> AgentLaunchdState {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+        task.arguments = ["list"]
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = Pipe()
+        do {
+            try task.run()
+            task.waitUntilExit()
+        } catch {
+            return AgentLaunchdState(loaded: false, runningPID: nil)
+        }
+        guard let data = try? pipe.fileHandleForReading.readToEnd(),
+            let output = String(data: data, encoding: .utf8)
+        else {
+            return AgentLaunchdState(loaded: false, runningPID: nil)
+        }
+        for line in output.split(separator: "\n") {
+            let parts = line.split(separator: "\t", omittingEmptySubsequences: false)
+            guard parts.count >= 3 else { continue }
+            let lineLabel = String(parts[2]).trimmingCharacters(in: .whitespaces)
+            guard lineLabel == label else { continue }
+            let pidField = String(parts[0]).trimmingCharacters(in: .whitespaces)
+            let pid = pid_t(pidField)
+            return AgentLaunchdState(loaded: true, runningPID: pid)
+        }
+        return AgentLaunchdState(loaded: false, runningPID: nil)
+    }
+
     private static func cdHash(from code: SecCode) -> String? {
         let flags = SecCSFlags(rawValue: 0)
         var staticCode: SecStaticCode?
