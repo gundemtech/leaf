@@ -28,7 +28,8 @@ struct WindowSettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: LeafSpace.xxl) {
-                AccountSettingsSection()
+                // AccountSettingsSection moved to ProfileView (sidebar Profile tab)
+                // to separate identity / tier from operational settings.
                 WorkspaceSettingsSection()
                 ShareControlsSettingsSection()
                 NotificationsSettingsSection()

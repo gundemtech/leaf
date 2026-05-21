@@ -112,6 +112,9 @@ struct TeamView: View {
 
     @State private var sendSheetRecipient: SendRecipient? = nil
     @State private var generateInvitePresented: Bool = false
+    /// Surfaces the WorkspaceCreateSheet from Team's `.empty` workspace state
+    /// CTA (M027 invite-redesign — no-workspace path).
+    @State private var createWorkspacePresented: Bool = false
 
     /// Identifiable wrapper for sheet(item:). TeamMember is Hashable+Sendable but
     /// not Identifiable; wrap its id + member ref.
@@ -211,6 +214,15 @@ struct TeamView: View {
         .sheet(isPresented: $generateInvitePresented) {
             GenerateInviteSheet()
         }
+        .sheet(isPresented: $createWorkspacePresented) {
+            WorkspaceCreateSheet(
+                onCreated: {
+                    workspaceReader.refresh()
+                    createWorkspacePresented = false
+                },
+                onCancel: { createWorkspacePresented = false }
+            )
+        }
         // Restore persisted filter selection + trigger initial feed load when
         // the active workspace changes.
         .task(id: activeWorkspaceStore.activeWorkspaceID) {
@@ -255,8 +267,9 @@ struct TeamView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
         case .empty:
-            // workspaceReader.empty = no workspaces at all; show invite/setup CTA.
-            emptyState(forMembers: 0)
+            // workspaceReader.empty = no workspaces at all. Invite/share UI is
+            // meaningless without a workspace — show create-workspace CTA instead.
+            emptyStateNoWorkspace
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
         case .loaded(_, let active, let members):
@@ -681,6 +694,21 @@ struct TeamView: View {
             description: "Invite teammates to start sharing work together.",
             ctaTitle: "+ Invite teammate",
             onCTA: { generateInvitePresented = true }
+        )
+    }
+
+    /// State 0 — no workspace at all. Invite/share flows are meaningless without
+    /// one; surface a create-workspace CTA that opens WorkspaceCreateSheet.
+    /// Mirrors Sidebar's bottom-of-pane Add workspace / Join workspace rows but
+    /// makes the primary CTA discoverable from the main content area.
+    @ViewBuilder
+    private var emptyStateNoWorkspace: some View {
+        LeafEmptyState(
+            icon: LeafIcons.nav.team,
+            title: "No workspace yet",
+            description: "Create your first workspace to invite teammates and start sharing work.",
+            ctaTitle: "+ Create workspace",
+            onCTA: { createWorkspacePresented = true }
         )
     }
 

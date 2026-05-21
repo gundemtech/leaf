@@ -23,30 +23,15 @@ struct ProfileView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: LeafSpace.xxl) {
-                header
+                // Account block moved from Settings — surfaces Join code + Tier chip
+                // alongside identity stats. Single profile surface.
+                AccountSettingsSection()
                 statTiles
                 Spacer(minLength: 0)
             }
             .padding(LeafSpace.xxl)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-
-    // MARK: - Header
-
-    private var header: some View {
-        HStack(alignment: .center, spacing: LeafSpace.lg) {
-            LeafAvatar(initials: initials, size: .lg)
-            VStack(alignment: .leading, spacing: LeafSpace.xs) {
-                Text(fullName)
-                    .font(LeafType.title.medium)
-                    .foregroundStyle(LeafColor.text.primary)
-                Text("Leaf · Local user")
-                    .font(LeafType.body.regular)
-                    .foregroundStyle(LeafColor.text.secondary)
-            }
-            Spacer()
-        }
     }
 
     // MARK: - Stat tiles

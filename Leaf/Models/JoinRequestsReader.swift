@@ -303,9 +303,20 @@ final class JoinRequestsReader {
             case .forbidden: return "Not authorized for this action."
             case .noRowsAffected: return "This invite is no longer valid."
             case .transport(let reason): return "Network error: \(reason)"
-            default: return "Server error. Try again."
+            case .unauthorized: return "Not signed in to Supabase. Restart the app."
+            case .authBootstrapFailed(let reason): return "Auth bootstrap failed: \(reason)"
+            case .identityClaimMissing: return "JWT missing pubkey claim — Auth Hook race. Restart the app."
+            case .decoding(let reason): return "Response decoding failed: \(reason)"
+            case .unexpected(let status): return "Unexpected server status \(status)."
+            case .badRequest: return "Bad request — client sent invalid payload."
+            case .notFound: return "Endpoint not found — Edge Function may not be deployed."
+            case .conflict: return "Conflict — duplicate request."
+            case .rateLimited: return "Rate limited. Wait and try again."
+            case .serverError: return "Server error (5xx)."
+            case .pubkeyAlreadyRegistered: return "Pubkey collision."
+            case .inviteNotResolvable: return "Invite expired or claimed."
             }
         }
-        return "Something went wrong. Try again."
+        return "Something went wrong: \(String(describing: error).prefix(120))"
     }
 }

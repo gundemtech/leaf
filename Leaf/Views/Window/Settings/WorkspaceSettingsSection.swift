@@ -15,6 +15,8 @@ struct WorkspaceSettingsSection: View {
     @Environment(PendingInvitesReader.self) private var pendingInvitesReader
 
     @State private var generateInvitePresented = false
+    /// Surfaces WorkspaceCreateSheet from the no-workspace placeholder CTA + the
+    /// + New Workspace action button below the loaded surface.
     @State private var createWorkspacePresented = false
     @State private var leavePresented = false
     @State private var deletePresented = false
@@ -40,15 +42,52 @@ struct WorkspaceSettingsSection: View {
             description: "Your team workspace identity, members, and invites."
         ) {
             VStack(spacing: LeafSpace.md) {
-                workspaceHeaderRow
-                WorkspaceMembersAdminList()
-                ActiveTokensSection()       // M027 invite-redesign — admin token mgmt
-                PendingRequestsSection()    // M027 invite-redesign — admin queue
-                PendingInvitesSection()     // S3 legacy back-compat (deprecates ≤30d post-ship)
-                actionButtonsRow
+                if case .loaded(_, _, _) = workspaceReader.state {
+                    // Workspace exists — show full management surface.
+                    workspaceHeaderRow
+                    WorkspaceMembersAdminList()
+                    ActiveTokensSection()       // M027 invite-redesign — admin token mgmt
+                    PendingRequestsSection()    // M027 invite-redesign — admin queue
+                    PendingInvitesSection()     // S3 legacy back-compat (deprecates ≤30d post-ship)
+                    actionButtonsRow
+                } else {
+                    // No active workspace — invite/share/members UI is meaningless.
+                    // Surface a discoverable Create-workspace CTA matching Sidebar +
+                    // Team empty-state semantics.
+                    noWorkspacePlaceholder
+                }
             }
         }
         .onAppear { loadMyPubHex() }
+        .sheet(isPresented: $createWorkspacePresented) {
+            WorkspaceCreateSheet(
+                onCreated: {
+                    workspaceReader.refresh()
+                    createWorkspacePresented = false
+                },
+                onCancel: { createWorkspacePresented = false }
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var noWorkspacePlaceholder: some View {
+        LeafCard(variant: .raised, padding: .regular) {
+            VStack(alignment: .leading, spacing: LeafSpace.md) {
+                Text("No workspace yet")
+                    .font(LeafType.title.small)
+                    .foregroundStyle(LeafColor.text.primary)
+                Text("Create a workspace to invite teammates, generate invite tokens, and share work.")
+                    .font(LeafType.body.regular)
+                    .foregroundStyle(LeafColor.text.secondary)
+                HStack {
+                    LeafButton("+ Create workspace", variant: .primary, size: .md) {
+                        createWorkspacePresented = true
+                    }
+                    Spacer()
+                }
+            }
+        }
     }
 
     // MARK: - F.2 — Header row
@@ -112,12 +151,8 @@ struct WorkspaceSettingsSection: View {
             .sheet(isPresented: $generateInvitePresented) {
                 GenerateInviteSheet()
             }
-            .sheet(isPresented: $createWorkspacePresented) {
-                WorkspaceCreateSheet(
-                    onCreated: { createWorkspacePresented = false },
-                    onCancel: { createWorkspacePresented = false }
-                )
-            }
+            // $createWorkspacePresented sheet is attached at the body level
+            // (covers both .loaded actionButtonsRow + .empty placeholder).
             .sheet(isPresented: $leavePresented) {
                 LeaveWorkspaceConfirmationModal(
                     workspaceName: active.name,
