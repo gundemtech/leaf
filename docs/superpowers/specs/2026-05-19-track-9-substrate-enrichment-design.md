@@ -449,6 +449,17 @@ The 6 a11y findings from P9 polish audit subagent (master spec §9.1 last block)
 - **`get_weekly_metrics` MCP tool** — future if AI clients request Analytics queries.
 - **T5 multi-window editor accuracy** — `WorkspacePathResolver` returns the most-recently-opened VSCode/JetBrains workspace, not the currently-foregrounded one. When a user has multiple instances open and switches back to an earlier workspace, YOU·NOW renders the wrong branch / linearID until the user touches the active workspace again. Documented as a known accuracy limitation in `leaf-docs/docs/privacy-security/what-we-dont-capture.md` (Known accuracy limitations section). Fix requires per-IDE foreground-window resolution (AX-driven for VSCode-family, AppleScript-driven for JetBrains where available) — separate post-Track-9 track.
 
+#### T8 final-review carries (2026-05-21)
+
+- **C-26** `ProdInsights+InboxItems.swift` 795 LOC > 700 budget — split per-feeder files (`+GitHub` / `+Linear` / `+D3` / `+Local`) OR extract `synthesize*URL` static helpers to sibling `InboxURLSynthesis.swift` moat file. T10 wrap polish.
+- **C-27** `queryCIFailed` `MAX(failure)` semantic ambiguity — refactor to `ORDER BY ts DESC LIMIT 1` per (repo, sha) for true "current HEAD failed count" OR doc-fix to "highest in 24h window". T10 polish.
+- **C-28** `xcode://` URL scheme fictional — no registered macOS LSScheme, `NSWorkspace.shared.open(url)` fails silently. Either drop `.xcodeBuild` from `InboxSourceURLDeriver` until real deep-link mechanism lands OR document as known no-op. T10 polish or post-Track-9.
+- **C-29** `queryCommentsOnMyWork` viewer_login filter anticipatory (TODO at line 112) — currently surfaces user's own outbound comments as `.commentOnMyWork`. Either rename to `.myRecentComments` semantic split OR enforce `actor.login != viewerLogin` once collector emits `actor.login` in payload. Post-Track-9 substrate enrichment.
+- **C-30** Cutoff constants (`8h` build / `24h` CI / `4h` meeting / `14d` D3) hardcoded across feeders — extract to named `private static let` block for readability. T10 polish.
+- **C-31** `InboxSourceContextRef.xcodeBuild(projectPath:)` parameter naming misaligned with content (substrate emits project NAME, not path) — rename to `projectIdentifier`. T10 polish (breaking public API — coordinate with consumers).
+- **C-32** `liveMeeting` `started_at_ms` collision edge case (same-millisecond starts) — document as known limitation OR generate UUID-based `meeting_id` at substrate. Post-Track-9.
+- **C-33** `testInboxFilterValues` missing `.alerts.rawValue` assertion. T10 polish.
+
 ---
 
 ## 10. References
