@@ -11,6 +11,7 @@ import GRDB
 import XCTest
 
 @testable import LeafCore
+@testable import LeafCorePrivate
 
 final class RelayBodyLeakageTests: XCTestCase {
     private var tempDir: URL!
@@ -3664,5 +3665,92 @@ final class RelayBodyLeakageTests: XCTestCase {
         XCTAssertEqual(
             newEventsWithSentinel, 0,
             "No event written after seed timestamp should contain the T5 doc_path sentinel")
+    }
+
+    // MARK: - Track-9 T7 walkback
+
+    /// Track-9 T7 — `ProdInsights.recentWhereStopped` LEFT JOINs the anchor
+    /// event's `payload_json.doc_path` and surfaces ONLY the basename to the
+    /// public `WhereStoppedSnapshot.anchorFilePath`. First Track-9 phase to
+    /// read a structured payload field → new privacy surface.
+    ///
+    /// Invariants:
+    ///   (1) Public-facing `anchorFilePath` is basename-only — sentinel
+    ///       (injected at username position in absolute path) absent.
+    ///   (2) Public-facing `excerpt` (Track-1 D3 already walks bodies) is
+    ///       sentinel-free.
+    ///   (3) Raw substrate (`events.payload_json`) intentionally preserves
+    ///       the original absolute path — walkback applied at READ boundary
+    ///       (deriver-side JSON extraction + basename), not at write.
+    func test_t7_walkback_anchorDocPathBasenameOnlyDoesNotLeakAbsolutePath() throws {
+        let sentinel = "LEAKED_SENTINEL_T7_DOC_PATH"
+        let fullPath = "/Users/\(sentinel)/Desktop/secret_workspace/Foo.swift"
+
+        let db = try LeafCore.Database.openForWrite(
+            at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        // Seed Xcode anchor event with sentinel-bearing absolute path.
+        // payload shape mirrors production collector emission
+        // (`[String: String]` — line stored as stringified int).
+        let payload: [String: String] = [
+            "event_kind": "xcode_active_doc_changed",
+            "doc_path": fullPath,
+            "line": "42",
+        ]
+        let json = String(decoding: try JSONEncoder().encode(payload), as: UTF8.self)
+        let eventId: Int64 = try db.pool.write { rawDB in
+            try rawDB.execute(
+                sql: """
+                    INSERT INTO events (ts, signal_type, bundle_id, payload_json)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                arguments: [1_700_000_000_000, "attention", "com.apple.dt.Xcode", json])
+            return rawDB.lastInsertedRowID
+        }
+        try db.pool.write { rawDB in
+            try rawDB.execute(
+                sql: """
+                    INSERT INTO where_stopped_log
+                        (generated_at_ms, anchor_event_id, excerpt, wip_signals_json)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                arguments: [1_700_000_001_000, eventId, "Stopped at section §3", nil])
+        }
+
+        let prod = ProdInsights(database: db)
+        let snap = try XCTUnwrap(prod.recentWhereStopped(limit: 1).first)
+
+        // Invariant 1 — public anchorFilePath is basename-only.
+        XCTAssertEqual(snap.anchorFilePath, "Foo.swift",
+            "deriver LEFT JOIN must extract basename only, not absolute path")
+        XCTAssertEqual(snap.anchorLine, 42)
+        XCTAssertFalse(
+            (snap.anchorFilePath ?? "").contains(sentinel),
+            "T7 sentinel must NOT appear in WhereStoppedSnapshot.anchorFilePath")
+        XCTAssertFalse(
+            (snap.anchorFilePath ?? "").contains("/Users/"),
+            "absolute path prefix /Users/ must NOT leak into anchorFilePath")
+
+        // Invariant 2 — public excerpt is sentinel-free (Track-1 D3
+        // BodyExcerptCapPrivate walks bodies on detector run; we feed a clean
+        // excerpt here to lock the contract independently).
+        XCTAssertFalse(
+            snap.excerpt.contains(sentinel),
+            "T7 sentinel must NOT appear in WhereStoppedSnapshot.excerpt")
+
+        // Invariant 3 — raw substrate intentionally preserves the absolute
+        // path (walk applied at read boundary). If this assertion fails, the
+        // write path has started sanitizing payloads — re-think the privacy
+        // model (walkback semantics must be deliberate, not accidental).
+        let raw: String? = try db.readSQL { rawDB in
+            try String.fetchOne(
+                rawDB,
+                sql: "SELECT payload_json FROM events WHERE id = ?",
+                arguments: [eventId])
+        }
+        XCTAssertNotNil(raw, "seeded event must exist")
+        XCTAssertTrue(
+            raw!.contains(sentinel),
+            "raw events.payload_json intentionally preserves substrate — walk applied at deriver READ boundary, not at write")
     }
 }
