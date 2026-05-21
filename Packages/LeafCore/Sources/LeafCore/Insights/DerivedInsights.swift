@@ -120,14 +120,6 @@ public protocol DerivedInsights: Sendable {
     /// `nil` — semantically valid "нет данных", не error → не throws при empty result.
     func lastActivity(bundleID: String?) throws -> ActivitySnapshot?
 
-    /// Phase 4.10.A — chronological per-event feed for the Activity tab.
-    /// Returns up to `limit` most-recent events from `period`, mapped to
-    /// `ActivityFeedEntry` via `ActivityFeedMapper`. State-pulse event_kinds
-    /// (presence / workload / queue counters) are skipped — they belong on
-    /// the Live Presence widget. Default extension returns `[]` so StubInsights
-    /// stays no-op without override.
-    func recentActivity(period: DateInterval, limit: Int) throws -> [ActivityFeedEntry]
-
     /// Phase 4.10.B — aggregated work sessions for the Activity tab "Sessions"
     /// mode and the Home "Recent sessions" block. Reads `attention` events
     /// (+ `context` boundary markers) within `period`, aggregates via
@@ -220,10 +212,6 @@ extension DerivedInsights {
 
     /// Phase 4.6.B — default `nil` для StubInsights / iOS-future.
     public func linearCompletionRate(period: DateInterval) throws -> Double? { nil }
-
-    /// Phase 4.10.A — default empty feed для StubInsights / iOS-future / любого
-    /// конформера, который ещё не имплементил raw-events SELECT.
-    public func recentActivity(period: DateInterval, limit: Int) throws -> [ActivityFeedEntry] { [] }
 
     /// Phase 4.10.B — default empty list для StubInsights / iOS-future.
     public func recentSessions(period: DateInterval, limit: Int) throws -> [ActivitySession] { [] }
