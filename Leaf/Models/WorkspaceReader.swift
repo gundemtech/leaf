@@ -51,6 +51,17 @@ final class WorkspaceReader {
   private let cascadeDeleter: WorkspaceCascadeDeleter?
   private let logger = Logger(subsystem: "tech.gundem.leaf.app", category: "workspace")
 
+  /// IDs of workspaces that have already been (or are currently being)
+  /// best-effort pushed to Supabase during the current process lifetime.
+  /// Self-healing path for legacy workspaces created before Item #3's
+  /// `SupabaseClient.insertWorkspace` shipped — without a server row the
+  /// `is_workspace_admin` RLS helper returns false and every admin write
+  /// (invite_tokens, invites, etc.) is denied. We attempt one fire-and-
+  /// forget upsert per workspace per session at refresh time so the user
+  /// doesn't have to delete + recreate to unblock the invite flow.
+  /// Idempotent on the wire (409 → already there → success).
+  private var supabaseSyncedWorkspaceIDs: Set<String> = []
+
   init(
     databaseURL: URL = DatabasePath.defaultURL(),
     databaseConfig: DatabaseConfig = WorkspaceReader.defaultConfig(),
@@ -103,9 +114,55 @@ final class WorkspaceReader {
 
       let activeMembers = allMembers.filter { $0.removedAt == nil }
       state = .loaded(workspaces: workspaces, active: active, members: activeMembers)
+
+      // Self-heal pre-server-sync legacy rows. One best-effort upsert per
+      // workspace per session — 201 means we filled the gap, 409 means the
+      // server already had it. Any other failure logs and re-tries on the
+      // next session boundary.
+      ensureActiveWorkspaceSyncedToSupabase(
+        workspace: active, createdByPubkey: myPubHex
+      )
     } catch {
       logger.error("WorkspaceReader.refresh failed: \(String(describing: error), privacy: .public)")
       state = .error(message: userFacingMessage(for: error))
+    }
+  }
+
+  /// Fire-and-forget upsert of the active workspace to Supabase. Used by
+  /// `refresh` to back-fill rows for workspaces created before Item #3's
+  /// `SupabaseClient.insertWorkspace` shipped — without the server row,
+  /// `is_workspace_admin` returns false and every admin write (invite_tokens,
+  /// invites) is denied with the «Only the workspace creator can manage
+  /// invite tokens» message. Runs at most once per workspace per process
+  /// lifetime (tracked via `supabaseSyncedWorkspaceIDs`).
+  private func ensureActiveWorkspaceSyncedToSupabase(
+    workspace: Workspace, createdByPubkey: String
+  ) {
+    guard let supabase else { return }
+    guard !supabaseSyncedWorkspaceIDs.contains(workspace.id) else { return }
+    supabaseSyncedWorkspaceIDs.insert(workspace.id)
+    let id = workspace.id
+    let name = workspace.name
+    Task { @MainActor [weak self] in
+      do {
+        try await supabase.insertWorkspace(
+          id: id, name: name, createdByPubkey: createdByPubkey
+        )
+        self?.logger.info("supabase upsertWorkspace: \(id, privacy: .public) created")
+      } catch SupabaseError.conflict {
+        // Server already has the row (either from a prior session that
+        // synced, or another device under the same identity). Treat as
+        // success — the convergent state matches the local row.
+        self?.logger.info("supabase upsertWorkspace: \(id, privacy: .public) already present (409)")
+      } catch {
+        // Non-fatal — leave id IN the synced set so we don't spam retries
+        // every refresh; user can drop + recreate the workspace if the
+        // server-side row is genuinely required and the upsert keeps
+        // failing for some other reason (auth, network outage, etc.).
+        self?.logger.warning(
+          "supabase upsertWorkspace failed for \(id, privacy: .public): \(String(describing: error), privacy: .public)"
+        )
+      }
     }
   }
 
