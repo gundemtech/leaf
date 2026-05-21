@@ -396,6 +396,38 @@ The 24 carries enumerated in `docs/superpowers/specs/2026-05-18-track-8-home-ux-
 | C-22 | `formatRelative` unification | already-resolved P9 + T10 if new callsites |
 | C-23 | Analytics surface real content | T9 |
 | C-24 | `recentActivity` orphan drop | T10 |
+| C-25 | WhereStoppedDeriver sleep/wake idle gap | **NEW post-T7 carry — own phase (T7.5 or T9-adjacent)** |
+
+#### 9.1.C-25 — WhereStoppedDeriver sleep/wake gap (post-T7 discovery, 2026-05-21)
+
+**Symptom:** After Track-9 T7 UI ship, manual smoke revealed `where_stopped_log` table stays empty in the common "closed laptop for 30+ min" scenario, leaving the WHERE STOPPED block stuck on empty-state copy ("No recent stop-points captured.") even when the user clearly took a real break (`ушёл в универ`-class break).
+
+**Root cause:** `ProdWhereStoppedDeriver.derive()` (Track-1 D3) idle gate logic at `Packages/LeafCorePrivate/Sources/LeafCorePrivate/Prod/Detection/ProdWhereStoppedDeriver.swift`:
+
+```swift
+let latestTs = SELECT MAX(ts) FROM events
+guard untilMs - latestTs >= 30 * 60 * 1000 else { return nil }
+```
+
+Timeline of the failing scenario:
+- t=0 user closes laptop → `system_slept` event emitted → Agent process suspended.
+- t=30min user opens laptop → `system_woke` event emitted immediately → `MAX(ts)` ≈ now.
+- t=30min+ε `DetectorScheduler.runScheduled` ticks (every 5 min per `AgentThresholdsProd.detectorScheduledIntervalSec`) → `untilMs - latestTs ≈ 0` → idle gate FAILS → no snapshot ever appended.
+
+**Race window where snapshot CAN fire:** user walks away from an **awake** laptop (no sleep) for 30+ min → pipeline tick during that window finds `MAX(ts)` ≈ 30 min ago → gate triggers → snapshot emitted. Closed-laptop is the dominant case in practice and it's silently broken.
+
+**Why this is substrate gap, not T7 UI bug:** T7 verified path 4 (empty state) renders correctly when substrate returns nil. The 4-line / 3-line / 2-line population paths all work when rows exist in `where_stopped_log`. The gap is purely producer-side — `ProdWhereStoppedDeriver` doesn't account for sleep/wake semantics.
+
+**Proposed fix directions (decide in own phase brainstorm):**
+1. Treat the most recent `system_slept` event as a "synthetic idle marker" — use its ts as `latestTs` (or as a cap on `latestTs`) instead of raw `MAX(ts)`. Then `untilMs - sleep_ts` reflects the real wake gap.
+2. Emit a synthesis snapshot on wake itself — detect `system_woke` arrival, look back at paired `system_slept` event, append a `where_stopped_log` row attributing the pre-sleep state if the sleep window exceeded the idle threshold.
+3. Hybrid — `derive()` keeps current logic but adds a sleep-aware override: `effectiveLatestTs = (system_slept since last system_woke) ? system_slept.ts : MAX(ts)`.
+
+**Phase ownership:** post-T7 own phase. Suggestion: T7.5 (small surgical substrate phase) OR pulled into T9 wrap depending on cadence. Requires its own spec + sentinel-injection regression test (modifying the moat deriver touches new code paths in Track-1 D3 substrate that didn't have walkback coverage before T7's reading of `doc_path`).
+
+**Verification once fixed:** close laptop for 30+ min → open → WHERE STOPPED card automatically lit up with 4-line layout (anchor file:line + commit + WIP chips) using the pre-sleep activity context as the anchor.
+
+**Discovered:** 2026-05-21 manual smoke during T7 Stage 8 dev-launch verification. Owner: dima. Blocks "WHERE STOPPED feels useful day-to-day" UX promise (current behavior = always empty for most users on most days).
 
 ### 9.2 P9 a11y audit carry-forwards
 
