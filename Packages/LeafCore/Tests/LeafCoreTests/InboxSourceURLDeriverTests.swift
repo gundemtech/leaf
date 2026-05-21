@@ -68,13 +68,16 @@ final class InboxSourceURLDeriverTests: XCTestCase {
 
     // MARK: - Xcode
 
-    func testXcodeBuild_synthesizesCanonical() {
-        let url = InboxSourceURLDeriver.synthesize(.xcodeBuild(projectPath: "/Users/dima/Desktop/Leaf/leaf"))
-        XCTAssertEqual(url?.absoluteString, "xcode:///Users/dima/Desktop/Leaf/leaf")
+    // C-28 (T10): `xcode://` is a fictional URL scheme; deriver returns nil
+    // for `.xcodeBuild` regardless of `projectIdentifier` until a real macOS
+    // LSScheme deep-link mechanism lands.
+    func testXcodeBuild_returnsNilForFictionalScheme() {
+        let url = InboxSourceURLDeriver.synthesize(.xcodeBuild(projectIdentifier: "Leaf"))
+        XCTAssertNil(url)
     }
 
-    func testXcodeBuild_returnsNilWhenProjectPathAbsent() {
-        let url = InboxSourceURLDeriver.synthesize(.xcodeBuild(projectPath: nil))
+    func testXcodeBuild_returnsNilWhenProjectIdentifierAbsent() {
+        let url = InboxSourceURLDeriver.synthesize(.xcodeBuild(projectIdentifier: nil))
         XCTAssertNil(url)
     }
 
