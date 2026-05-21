@@ -60,8 +60,8 @@ Master spec §4 T2 line 159 to be amended in T10 wrap; T2 spec is the authoritat
 | D-7 | Cold-tick before workspace_slug cached | **Emit `linear_comment_authored_to_me` without `linear_issue_url` field** | Graceful degrade — sibling event_kind still ships; InboxItems deriver checks for url presence; rows without url get nil sourceURL (existing pattern). Single tick window. |
 | D-8 | `presence_state.linear.workspace_slug` write | **Add to existing `buildLinearPresenceState` composite dict** | JSON dict key, no schema change. UI / downstream readers consume. |
 | D-9 | ShareEventTypeKey delta | **+1 entry** `linearCommentAuthoredToMe`, default OFF | Confirmed by master spec §5.3 row T2. Registry 195 → 196. |
-| D-10 | `ProdInsights+InboxItems.queryCommentsOnMyWork` routing | **Replace `return []` stub with Linear branch** (LeafCorePrivate moat) | T3 later adds GitHub branch to same method. (kind, issue_key) aggregation across ticks via SUM(to_me_count_in_window). |
-| D-11 | InboxItem field mapping | `kind=.commentOnMyWork` / `severity=.muted` / `title="<issue_key>"` / `sourceMeta="Linear · <issue_key>"` / `sourceURL=URL(linear_issue_url)` (or nil) / `aggregatedCount=SUM` / `createdAtMs=MAX(period_end_ms)` | Severity `.muted` — comments informational, not urgent (mockup §3 INBOX styling). `.warn`/`.danger` reserved for blockers/questions. Title surfaces issue key, sourceMeta gives provider context. |
+| D-10 | `ProdInsights+InboxItems.queryCommentsOnMyWork` routing | **Replace `return []` stub with Linear branch** (LeafCorePrivate moat) | T3 later adds GitHub branch to same method. Per-(kind, issue_key) aggregation across ticks — total comment count summed from `to_me_count_in_window`. |
+| D-11 | InboxItem field mapping | `kind=.commentOnMyWork` / `severity=.muted` / `title="<issue_key>"` / `sourceMeta="Linear · <issue_key>"` / `sourceURL=URL(linear_issue_url)` (or nil) / `aggregatedCount=total` / `createdAtMs=latest period_end_ms` | Severity `.muted` — comments informational, not urgent (mockup §3 INBOX styling). `.warn`/`.danger` reserved for blockers/questions. Title surfaces issue key, sourceMeta gives provider context. |
 | D-12 | 4.7.C router event routing | **Deferred to T8** — see §1.1 | T8 owns InboxKind expansion. |
 | D-13 | Sentinel-injection test | **1 dedicated test** `testEventBodyDoesNotLeakIntoPresenceState_LinearCommentToMe` in `RelayBodyLeakageTests` | Inject `LEAKED_SENTINEL_LINEAR_T2` into `comments[i].body`. Assert sentinel absent from `events.payload_json`, `presence_state.linear.state_json`, AND `linear_issue_url` field. Pattern parity with T1 + Track-3 D1..D3 + Track-6 P1..P5. |
 | D-14 | DispatchCoverageTests parity fence | **Update existing fence** (test #20 — Linear enumeration) — add `linear_comment_authored_to_me` to all 4 aspect arrays | No new fence test, extend existing. |
@@ -98,9 +98,10 @@ Agent process
 MenuBarApp / MCP processes (read-only)
 └── ProdInsights+InboxItems.queryCommentsOnMyWork (LeafCorePrivate moat)
     ├── existing: return []
-    └── NEW: SQL → fetch linear_comment_authored_to_me events from cutoff window
-        ├── (kind, issue_key) aggregation → SUM(to_me_count_in_window), MAX(period_end_ms)
-        └── synth InboxItem with sourceURL = URL(linear_issue_url) or nil
+    └── NEW: read `linear_comment_authored_to_me` events from the cutoff
+        window, aggregating per issue (total count, latest period_end_ms,
+        representative `linear_issue_url`). Real query body in the moat.
+        Synthesize InboxItem with sourceURL = URL(linear_issue_url) or nil.
 ```
 
 ### 3.2 Data flow
@@ -218,41 +219,16 @@ static func makeCommentToMeEvent(
 
 ```swift
 private func queryCommentsOnMyWork(cutoffMs: Int64) throws -> [InboxItem] {
-    let rows: [(String, Int, Int64, String?)] = try database.readSQL { db in
-        try Row.fetchAll(
-            db,
-            sql: """
-                SELECT
-                    json_extract(payload_json, '$.issue_key') AS issue_key,
-                    SUM(CAST(json_extract(payload_json, '$.to_me_count_in_window') AS INTEGER)) AS total,
-                    MAX(CAST(json_extract(payload_json, '$.period_end_ms') AS INTEGER)) AS latest_ms,
-                    MAX(json_extract(payload_json, '$.linear_issue_url')) AS issue_url
-                FROM events
-                WHERE signal_type = 'action'
-                  AND json_extract(payload_json, '$.event_kind') = 'linear_comment_authored_to_me'
-                  AND CAST(json_extract(payload_json, '$.period_end_ms') AS INTEGER) >= ?
-                GROUP BY json_extract(payload_json, '$.issue_key')
-                ORDER BY latest_ms DESC
-                """,
-            arguments: [cutoffMs]
-        ).map { /* tuple */ }
-    }
-    return rows.map { (key, total, latestMs, urlStr) in
-        InboxItem(
-            id: "linearCommentToMe:\(key)",
-            kind: .commentOnMyWork,
-            severity: .muted,
-            title: key,
-            sourceMeta: "Linear · \(key)",
-            sourceURL: urlStr.flatMap { URL(string: $0) },
-            aggregatedCount: total,
-            createdAtMs: latestMs
-        )
-    }
+    // Real query body lives in LeafCorePrivate moat.
+    // Conceptually: read `linear_comment_authored_to_me` events from the
+    // action stream whose period_end_ms >= cutoffMs, aggregate per issue_key
+    // (total comment count, latest period_end_ms, representative
+    // linear_issue_url), order most-recent first, and map each row to an
+    // InboxItem(kind: .commentOnMyWork, severity: .muted, ...).
 }
 ```
 
-`json_extract` pattern matches sibling moat files (T1 `ProdInsights+LastCommit.swift` precedent — `json_extract(payload_json, '$.event_kind') = 'gh_commit_pushed'`).
+The event-kind discriminator pattern matches sibling moat files (T1 `ProdInsights+LastCommit.swift` precedent).
 
 ### 3.7 ActivityFeedMapper extension
 
@@ -435,7 +411,8 @@ func testEventBodyDoesNotLeakIntoPresenceState_LinearCommentToMe() throws {
             "T2 sentinel '\(sentinel)' MUST NOT appear in presence_state.linear.state_json")
 
         // Also verify linear_issue_url field in events row is sanitized
-        let eventRow = try Row.fetchOne(rawDB, sql: "SELECT payload_json FROM events WHERE json_extract(payload_json, '$.event_kind') = 'linear_comment_authored_to_me'")
+        // (read payload_json for the linear_comment_authored_to_me event; real query body in moat helper)
+        let eventRow = try Row.fetchOne(rawDB, sql: "<lookup linear_comment_authored_to_me payload>")
         let payloadJSON = (eventRow?["payload_json"] as String?) ?? ""
         // Find linear_issue_url field and assert sentinel absent from its value
         // (URL field is structured — workspace_slug + issue_key only)

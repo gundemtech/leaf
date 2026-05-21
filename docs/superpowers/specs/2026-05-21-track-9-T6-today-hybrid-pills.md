@@ -74,7 +74,7 @@ Six capture families plus Calendar use `DerivedInsights.timeInApp(period:)` outp
 - **Zoom** — `us.zoom.xos`
 - **Mail / Notes / Music / Reminders** — Track-4 S2 bundles (`com.apple.mail`, `com.apple.Notes`, `com.apple.Music`, `com.apple.reminders`)
 
-**Aggregation**: for each family `f`, `seconds[f] = SUM(entry.duration for entry in timeInAppOutput where entry.bundleID in familyBundles[f])`. Emit pill `SurfacePill(id: f.rawValue, label: f.displayName, count: Int(seconds[f]), kind: .captureTime)` when `seconds[f] > 0`.
+**Aggregation**: for each family `f`, the per-family total seconds is the sum of `entry.duration` over `timeInAppOutput` entries whose bundleID falls within `familyBundles[f]`. Emit pill `SurfacePill(id: f.rawValue, label: f.displayName, count: Int(seconds[f]), kind: .captureTime)` when `seconds[f] > 0`.
 
 **Accepted minor inefficiency**: `timeInApp(period:)` is already called by `InsightsReader.refresh()` line 91 for `topApps` snapshot field; T6 calls it again inside `todayMetrics(now:)` for pill aggregation — two SQL roundtrips for the same data per refresh. YAGNI vs signature change to thread cached output into `todayMetrics()`. Acceptable until profiling shows hotspot; revisit if `refresh()` exceeds 200ms p95.
 
@@ -83,15 +83,17 @@ Six capture families plus Calendar use `DerivedInsights.timeInApp(period:)` outp
 NEW private helper `queryMeetingTimeSec(startMs:endMs:)` in `ProdInsights+TodayMetrics.swift`:
 
 ```
-SQL semantic:
-  SUM(min(exited_ts, periodEnd) - max(entered_ts, periodStart))
-  WHERE  event_kind ∈ {meeting_state_entered, meeting_state_exited}
-    AND  ts ∈ [periodStart - 24h, periodEnd]    -- pull pairs straddling boundary
-  Pair entered_ts with following exited_ts in row order, clip to [periodStart, periodEnd].
-  Drop pairs entirely outside period. Drop unmatched dangling entered_ts (open meeting → use periodEnd).
+Semantic (real query body in LeafCorePrivate moat):
+  Total clipped meeting seconds within [periodStart, periodEnd].
+  Inputs: meeting_state_entered + meeting_state_exited events from the
+  expanded window [periodStart - 24h, periodEnd] (to catch pairs that
+  straddle the boundary). Pair each enter with the next exit in temporal
+  order; clip the resulting interval to [periodStart, periodEnd]; drop
+  pairs that fall entirely outside the period; an unmatched dangling
+  enter (open meeting) is closed at periodEnd.
 ```
 
-Implementation: fetch all `meeting_state_*` events in expanded window, walk in temporal order, accumulate clipped durations. Pure Swift pass after SELECT — no complex SQL window functions needed (Track-4 S1 substrate emits these). Cold-start before any meetings → returns 0 → no Calendar pill emitted.
+Implementation: fetch all `meeting_state_*` events in the expanded window, walk in temporal order, accumulate clipped durations. Pure Swift pass after the read — no complex windowing required (Track-4 S1 substrate emits these). Cold-start before any meetings → returns 0 → no Calendar pill emitted.
 
 Calendar pill emit: `SurfacePill(id: "calendar", label: "Calendar", count: clippedTotalSec, kind: .captureTime)` when > 0.
 
@@ -100,22 +102,17 @@ Calendar pill emit: `SurfacePill(id: "calendar", label: "Calendar", count: clipp
 Each returns `Int` row count, scoped to local-TZ today window via `todayInterval()` (existing helper, reused).
 
 ```
+Semantics (real query bodies live in LeafCorePrivate moat — each returns a row count in [startMs, endMs)):
+
 queryLinearIssuesCompletedCount(startMs:endMs:):
-  SELECT COUNT(*) FROM events
-  WHERE  ts ∈ [startMs, endMs)
-    AND  json_extract(payload_json, '$.source') = 'linear'
-    AND  json_extract(payload_json, '$.event_kind') = 'status_transition'
-    AND  json_extract(payload_json, '$.to_state_type') = 'completed'
+  Count of events whose source is 'linear' + event_kind 'status_transition'
+  + to_state_type 'completed' inside the today window.
 
 queryPRsMergedCount(startMs:endMs:):
-  SELECT COUNT(*) FROM events
-  WHERE  ts ∈ [startMs, endMs)
-    AND  json_extract(payload_json, '$.event_kind') = 'gh_pr_merged'
+  Count of `gh_pr_merged` events inside the today window.
 
 querySlackMessagesAuthoredCount(startMs:endMs:):
-  SELECT COUNT(*) FROM events
-  WHERE  ts ∈ [startMs, endMs)
-    AND  json_extract(payload_json, '$.event_kind') = 'slack_message_authored_aggregate'
+  Count of `slack_message_authored_aggregate` events inside the today window.
 ```
 
 Emit pattern (for each provider with count > 0):

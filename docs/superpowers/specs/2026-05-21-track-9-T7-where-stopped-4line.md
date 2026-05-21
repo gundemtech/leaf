@@ -25,7 +25,7 @@ T7 closes the WHERE STOPPED 4-line layout per master spec §3 mockup:
 Three carry closes from Phase 8.7 / master spec §9.1:
 
 1. **C-20 Line 2 last-commit subject** — `DerivedInsights.recentLastCommit(maxAgeMs:)` exists (Track-9 T1 ship); T7 wires `InsightsReader.refresh()` 20th sequential SQL call + plumbs through `InsightsSnapshot.recentLastCommit: RecentCommitSnapshot?` + renders as Line 3 when `commit.atMs >= now - 4h`.
-2. **C-21 anchorEventId → file path:line resolution** — `WhereStoppedSnapshot` gains `anchorFilePath: String?` + `anchorLine: Int?` Optional fields populated by `ProdWhereStoppedDeriver` via **deriver-side LEFT JOIN** against `events.payload_json` (no schema migration — preserves Track-9 zero-mig invariant). Line 2 renders `<filename>:<line>` (Xcode), `<filename>` (path-only fallback), or excerpt (anchor missing).
+2. **C-21 anchorEventId → file path:line resolution** — `WhereStoppedSnapshot` gains `anchorFilePath: String?` + `anchorLine: Int?` Optional fields populated by `ProdWhereStoppedDeriver` via a **deriver-side anchor-event lookup** against `events.payload_json` (no schema migration — preserves Track-9 zero-mig invariant). Line 2 renders `<filename>:<line>` (Xcode), `<filename>` (path-only fallback), or excerpt (anchor missing).
 3. **C-21 WIP chip styling** — wipSignals migrate from `Text` join to `LeafPill` chips with per-signal tone mapping.
 
 ### §1.1 Hard exclusion (out of scope)
@@ -55,7 +55,7 @@ T7 brainstorm resolved: **deriver-side JOIN**. Rationale documented in §3.2 bel
 | Layer | File | Touch |
 |-------|------|-------|
 | LeafCore types | `Packages/LeafCore/Sources/LeafCore/Home/WorkState/WhereStoppedSnapshot.swift` | Add 3 Optional fields (`anchorFilePath: String? = nil`, `anchorLine: Int? = nil`, `recentLastCommit: RecentCommitSnapshot? = nil`); all defaulted for backward-compat init at existing call sites |
-| LeafCore moat | `Packages/LeafCorePrivate/Sources/LeafCorePrivate/Prod/Insights/ProdInsights+RecentWhereStopped.swift` (or in-place in existing deriver — TBV at exec) | SQL refactor: existing `recentWhereStopped(limit:)` extended with `LEFT JOIN events ON w.anchor_event_id = events.id` + `json_extract(events.payload_json, '$.doc_path')` + `json_extract(..., '$.line')`; basename extraction in Swift post-fetch. Deriver returns snapshots with `anchorFilePath` + `anchorLine` populated, `recentLastCommit` always nil (composed Reader-side). |
+| LeafCore moat | `Packages/LeafCorePrivate/Sources/LeafCorePrivate/Prod/Insights/ProdInsights+RecentWhereStopped.swift` (or in-place in existing deriver — TBV at exec) | Read refactor (real query body in moat): existing `recentWhereStopped(limit:)` extended to also pull the matching anchor event's `doc_path` + `line` payload fields via an anchor-event lookup keyed on `anchor_event_id`; basename extraction in Swift post-fetch. Deriver returns snapshots with `anchorFilePath` + `anchorLine` populated, `recentLastCommit` always nil (composed Reader-side). |
 | App | `Leaf/Models/InsightsReader.swift` | 20th sequential SQL call `try insights.recentLastCommit(maxAgeMs: 4 * 60 * 60 * 1000)` after the existing `recentWhereStopped(limit: 1).first` fetch (line 195 today). **Path B composition**: Reader splices the commit into a new `WhereStoppedSnapshot` via defaulted-init when both substrate calls return non-nil. No deriver signature change. |
 | App | `Leaf/Views/Window/Home/Blocks/WhereStoppedBlock.swift` | 2-line populated layout → 4-line populated layout (header / `<filename>:<line>` or `<filename>` or excerpt / `Last commit: "..."` if non-nil / WIP chips via `LeafPill`); add helpers `lineLabel(for:)` / `wipSignalTone(_:)` / `commitSubjectLine(_:)` |
 
@@ -70,30 +70,19 @@ T7 brainstorm resolved: **deriver-side JOIN**. Rationale documented in §3.2 bel
 
 ---
 
-## §3 SQL refactor — deriver-side LEFT JOIN + 4-line layout
+## §3 Substrate refactor — deriver-side anchor-event lookup + 4-line layout
 
 ### §3.1 ProdWhereStoppedDeriver extension (moat)
 
-Existing impl reads M014 `where_stopped_log` rows and produces `WhereStoppedSnapshot` with `id / generatedAtMs / anchorEventId / excerpt / wipSignals`. T7 extends the fetch SQL with LEFT JOIN against events:
+Existing impl reads M014 `where_stopped_log` rows and produces `WhereStoppedSnapshot` with `id / generatedAtMs / anchorEventId / excerpt / wipSignals`. T7 extends the read so that, for each `where_stopped_log` row, the matching anchor event (when `anchor_event_id` is non-null) is looked up and its payload fields `doc_path` + `line` are projected onto the output rows. Real query body lives in the LeafCorePrivate moat.
 
-```sql
-SELECT
-    w.id, w.generated_at_ms, w.anchor_event_id, w.excerpt, w.wip_signals_json,
-    json_extract(e.payload_json, '$.doc_path')   AS anchor_doc_path,
-    json_extract(e.payload_json, '$.line')       AS anchor_line
-FROM where_stopped_log w
-LEFT JOIN events e ON w.anchor_event_id = e.id
-ORDER BY w.generated_at_ms DESC
-LIMIT ?
-```
+**Lookup rationale**: `anchor_event_id` is nullable in M014 (Phase Track-1 D3 design). Anchors may also be commit / ticket events without `doc_path`. Missing anchor doc_path → `anchorFilePath = nil` → Line 2 falls back to excerpt.
 
-**LEFT JOIN rationale**: anchor_event_id is nullable in M014 (Phase Track-1 D3 design). Anchors may also be commit / ticket events without doc_path. NULL `anchor_doc_path` → `anchorFilePath = nil` → Line 2 falls back to excerpt.
-
-**JOIN cost**: events.id is PRIMARY KEY (implicit unique index). Per-row JOIN is O(log N) lookup. Typical `recentWhereStopped(limit: 1)` → 1 JOIN per refresh. Cost negligible (~5-50µs per indexed PK lookup on SQLCipher).
+**Cost**: `events.id` is PRIMARY KEY (implicit unique index). Per-row anchor lookup is O(log N). Typical `recentWhereStopped(limit: 1)` → 1 lookup per refresh. Cost negligible (~5-50µs per indexed PK lookup on SQLCipher).
 
 **Filename extraction**: `(anchor_doc_path as NSString).lastPathComponent` applied post-fetch in Swift. Empty / nil path → nil filename → Line 2 falls back to excerpt.
 
-**Line number normalization**: `json_extract` returns Int64 directly when payload value is `String(Int)` per existing Xcode payload convention; tests cover both Int64 and String round-trip. Negative or zero → nil (defensive — substrate emits `>= 1` only per XcodeStateMachine T1 contract).
+**Line number normalization**: payload-side reads accept both Int64 and `String(Int)` forms per existing Xcode payload convention; tests cover both round-trips. Negative or zero → nil (defensive — substrate emits `>= 1` only per XcodeStateMachine T1 contract).
 
 ### §3.2 Why deriver-side JOIN, not M028 migration
 
@@ -325,7 +314,7 @@ private var accessibilityHint: String {
 - **MT-1** `recentWhereStopped_xcodeAnchor_yieldsPathAndLine` — seed `xcode_active_doc_changed` event with `doc_path="/Users/dev/Code/Foo.swift"` + `line="142"`; seed where_stopped_log row with `anchor_event_id = event.id`; assert `anchorFilePath == "Foo.swift"` (basename) + `anchorLine == 142`.
 - **MT-2** `recentWhereStopped_vscodeAnchor_yieldsPathOnly` — seed `vscode_workspace_opened` event with `workspace_root` (no `doc_path`); assert `anchorFilePath == nil` (no doc_path on this event_kind).
 - **MT-3** `recentWhereStopped_nullAnchor_yieldsNoPath` — seed where_stopped_log row with `anchor_event_id = NULL`; assert `anchorFilePath == nil` + `anchorLine == nil`.
-- **MT-4** `recentWhereStopped_missingAnchorEvent_gracefulFallback` — seed row with `anchor_event_id = 9999` (no matching event); LEFT JOIN yields NULL; assert no crash, both fields nil.
+- **MT-4** `recentWhereStopped_missingAnchorEvent_gracefulFallback` — seed row with `anchor_event_id = 9999` (no matching event); anchor lookup yields NULL; assert no crash, both fields nil.
 - **MT-5** `recentWhereStopped_zeroLine_normalizedToNil` — seed event with `line="0"`; assert `anchorLine == nil` (defensive normalization).
 - **MT-6** `recentWhereStopped_pathOnly_emptyBasenameSafe` — seed event with `doc_path=""`; assert `anchorFilePath == nil`.
 
@@ -364,7 +353,7 @@ func test_t7_walkback_anchorDocPathBasenameOnlyDoesNotLeakAbsolutePath() throws 
     }
     
     // 3. Raw substrate preserved — events.payload_json still contains sentinel (walked at read boundary only)
-    let raw = try db.read { try String.fetchOne($0, sql: "SELECT payload_json FROM events WHERE id = ?", arguments: [eventId]) }
+    let raw = try db.read { /* fetch payload_json for the seeded event_id; real read body in moat helper */ as String? }
     XCTAssertNotNil(raw)
     XCTAssertTrue(raw!.contains(sentinel), "raw events table preserves substrate (intentional — walked at deriver boundary)")
 }
@@ -451,7 +440,7 @@ T7 **does not** add / change / touch:
 - **`presence_state` writes** — T7 is read-only.
 - **VSCode/JetBrains line capture** — path-only fallback ships; per-file line = post-Track-9 IDE family enrichment.
 - **Multi-anchor diff annotation** — single anchor only.
-- **Stale-anchor UX nag** — silent fallback when LEFT JOIN yields NULL.
+- **Stale-anchor UX nag** — silent fallback when anchor lookup yields NULL.
 - **Resume CTA on Line 2** — informational only.
 - **WIP signal tone iteration palette polish** — 3-tone mapping enough.
 - **`InsightsSnapshot.recentLastCommit` field** — per §3.3 lock, dropped per YAGNI; stored only on `WhereStoppedSnapshot`.
@@ -465,7 +454,7 @@ T7 **does not** add / change / touch:
 | # | Decision | Locked call |
 |---|----------|-------------|
 | A | WhereStoppedSnapshot field additions | 3 Optional fields (`anchorFilePath`, `anchorLine`, `recentLastCommit`), all defaulted-nil |
-| B | Anchor resolution path | Deriver-side LEFT JOIN at recentWhereStopped read; basename extraction post-fetch in Swift; VSCode/JetBrains path-only fallback |
+| B | Anchor resolution path | Deriver-side anchor-event lookup at recentWhereStopped read; basename extraction post-fetch in Swift; VSCode/JetBrains path-only fallback |
 | C | recentLastCommit cutoff | 4 hours = `4 * 60 * 60 * 1000` ms (master spec §T7 lock) |
 | D | Line 2 display format | `"\(filename):\(line)"` when both present; `filename` when path-only; excerpt fallback when no anchor |
 | E | InsightsReader fetch | 20th sequential SQL call between Phase 8.7's whereStopped fetch and InsightsSnapshot init |
@@ -486,7 +475,7 @@ T7 **does not** add / change / touch:
 T7 closes Track-9 WHERE STOPPED scope:
 
 - **C-20 Line 3 last-commit subject** — wired existing T1 `recentLastCommit` deriver into InsightsReader → WhereStoppedSnapshot → 4-line UI
-- **C-21 anchor file:line resolution** — Optional fields populated via deriver-side LEFT JOIN; basename + line render on Line 2; graceful 3-line / 2-line / empty fallbacks
+- **C-21 anchor file:line resolution** — Optional fields populated via deriver-side anchor-event lookup; basename + line render on Line 2; graceful 3-line / 2-line / empty fallbacks
 - **C-21 WIP chip styling** — LeafPill reuse with semantic tone mapping
 
 Zero substrate (registry / migrations / event_kinds / MCP tools). Builds on T1-T6 patterns. First Track-9 phase to read structured payload field (doc_path) — sentinel-injection regression test mandatory.

@@ -67,7 +67,7 @@ Substrate gaps:
 
 Track-9 closes:
 - `SurfacePill { id, label, count: Int, kind: .captureTime | .actionNoun }` substrate shape (discriminator field).
-- Family-grouped aggregation SQL: per-family bundle ID set → SUM(attention-time) for capture surfaces; per-provider event_kind set → COUNT(*) for Layer B.
+- Family-grouped aggregation: per-family bundle ID set → attention-time totals for capture surfaces; per-provider event_kind set → event count for Layer B.
 - 13 candidate families: Claude / Xcode / IDEs (VSCode+JetBrains) / Browsers (Safari+Chrome+Arc) / Zoom / Calendar (Apple+Google) / Mail / Notes / Music / Reminders / Linear / GitHub / Slack. Substrate cap-8 preserved.
 - `LeafPill` count rendering: `.captureTime` → "Claude 14m" / `.actionNoun` → "Linear 3".
 - `TodayBlock.metricsRow` +1 cell (switches). ViewThatFits 5-cell wide + 2×3 / 3×2 narrow.
@@ -189,9 +189,9 @@ Track-9 closes:
 
 #### **T6 — TODAY hybrid pills + 5th cell + bonus C-2**
 - `SurfacePill { id, label, count: Int, kind: .captureTime | .actionNoun }` substrate shape (discriminator added).
-- `ProdInsights+TodayMetrics` SQL refactor: family-grouped aggregation (13 candidates per scope lock #6).
-- Per-surface attention-time SQL (capture surfaces): `SUM(duration_seconds) WHERE bundle_id IN (family_bundles)`.
-- Per-provider action-noun SQL (Layer B): `COUNT(*) WHERE event_kind IN (...) AND ts >= today_start AND ts < today_end`.
+- `ProdInsights+TodayMetrics` query refactor: family-grouped aggregation (13 candidates per scope lock #6); real query body lives in LeafCorePrivate moat.
+- Per-surface attention-time aggregation (capture surfaces): per-family bundle-ID-set duration totals.
+- Per-provider action-noun aggregation (Layer B): per-provider event_kind-set counts over the today window.
 - `LeafPill` count rendering: `.captureTime` → "Claude 14m", `.actionNoun` → "Linear 3".
 - `TodayBlock.metricsRow` +1 cell (switches). ViewThatFits 5-cell wide + 2×3 / 3×2 narrow.
 - C-2 bundled: `InsightsReader.State.error(message: String, lastKnown: InsightsSnapshot?)` refactor + `HomeContent` error banner above metrics + card renders last-known values gracefully (Phase 8.3 MS-5 contract closed).
@@ -398,7 +398,7 @@ The 24 carries enumerated in `docs/superpowers/specs/2026-05-18-track-8-home-ux-
 | C-24 | `recentActivity` orphan drop | **[RESOLVED T10 — commit `e0010f1b`]** |
 | C-25 | WhereStoppedDeriver sleep/wake idle gap | **[DEFERRED T10 — post-Track-9 own phase; requires dedicated brainstorm + sentinel test for moat ProdWhereStoppedDeriver change (3 fix directions documented §9.1.C-25)]** |
 | C-26 | Moat `ProdInsights+InboxItems.swift` 795 LOC > 700 budget | **[DEFERRED T10 — post-Track-9 moat hygiene phase; no public surface impact, doesn't block ship]** |
-| C-27 | `queryCIFailed` `MAX(failure)` semantic doc-fix | **[RESOLVED T10 — moat doc-comment update with carry-forward note for "current HEAD failed count" refinement if requirements clarify]** |
+| C-27 | `queryCIFailed` latest-pulse-wins semantic doc-fix | **[RESOLVED T10 — moat doc-comment update with carry-forward note for "current HEAD failed count" refinement if requirements clarify]** |
 | C-28 | `xcode://` fictional URL scheme | **[RESOLVED T10 — InboxSourceURLDeriver.xcodeBuild returns nil; commit `b4be3978`]** |
 | C-29 | `queryCommentsOnMyWork` viewer_login filter anticipatory | **[DEFERRED T10 — post-Track-9 substrate enrichment phase (collector payload extension)]** |
 | C-30 | Cutoff constants extraction | **[RESOLVED T10 — moat `buildCutoffMs`/`ciCutoffMs`/`meetingCutoffMs` private static lets]** |
@@ -421,26 +421,21 @@ The 24 carries enumerated in `docs/superpowers/specs/2026-05-18-track-8-home-ux-
 
 **Symptom:** After Track-9 T7 UI ship, manual smoke revealed `where_stopped_log` table stays empty in the common "closed laptop for 30+ min" scenario, leaving the WHERE STOPPED block stuck on empty-state copy ("No recent stop-points captured.") even when the user clearly took a real break (`ушёл в универ`-class break).
 
-**Root cause:** `ProdWhereStoppedDeriver.derive()` (Track-1 D3) idle gate logic at `Packages/LeafCorePrivate/Sources/LeafCorePrivate/Prod/Detection/ProdWhereStoppedDeriver.swift`:
-
-```swift
-let latestTs = SELECT MAX(ts) FROM events
-guard untilMs - latestTs >= 30 * 60 * 1000 else { return nil }
-```
+**Root cause:** `ProdWhereStoppedDeriver.derive()` (Track-1 D3) idle gate at `Packages/LeafCorePrivate/Sources/LeafCorePrivate/Prod/Detection/ProdWhereStoppedDeriver.swift`. Conceptually: read the most-recent event timestamp, then require at least the idle threshold (30 min) of elapsed time vs the current tick before emitting a snapshot. Real query body and threshold constant live in the moat.
 
 Timeline of the failing scenario:
 - t=0 user closes laptop → `system_slept` event emitted → Agent process suspended.
-- t=30min user opens laptop → `system_woke` event emitted immediately → `MAX(ts)` ≈ now.
-- t=30min+ε `DetectorScheduler.runScheduled` ticks (every 5 min per `AgentThresholdsProd.detectorScheduledIntervalSec`) → `untilMs - latestTs ≈ 0` → idle gate FAILS → no snapshot ever appended.
+- t=30min user opens laptop → `system_woke` event emitted immediately → most-recent event timestamp ≈ now.
+- t=30min+ε `DetectorScheduler.runScheduled` ticks (every 5 min per `AgentThresholdsProd.detectorScheduledIntervalSec`) → elapsed-since-latest-event ≈ 0 → idle gate FAILS → no snapshot ever appended.
 
-**Race window where snapshot CAN fire:** user walks away from an **awake** laptop (no sleep) for 30+ min → pipeline tick during that window finds `MAX(ts)` ≈ 30 min ago → gate triggers → snapshot emitted. Closed-laptop is the dominant case in practice and it's silently broken.
+**Race window where snapshot CAN fire:** user walks away from an **awake** laptop (no sleep) for 30+ min → pipeline tick during that window finds the latest event 30 min ago → gate triggers → snapshot emitted. Closed-laptop is the dominant case in practice and it's silently broken.
 
 **Why this is substrate gap, not T7 UI bug:** T7 verified path 4 (empty state) renders correctly when substrate returns nil. The 4-line / 3-line / 2-line population paths all work when rows exist in `where_stopped_log`. The gap is purely producer-side — `ProdWhereStoppedDeriver` doesn't account for sleep/wake semantics.
 
 **Proposed fix directions (decide in own phase brainstorm):**
-1. Treat the most recent `system_slept` event as a "synthetic idle marker" — use its ts as `latestTs` (or as a cap on `latestTs`) instead of raw `MAX(ts)`. Then `untilMs - sleep_ts` reflects the real wake gap.
+1. Treat the most recent `system_slept` event as a "synthetic idle marker" — use its timestamp (or as a cap on the latest-event timestamp) instead of the raw most-recent-event read. Then the gate reflects the real wake gap.
 2. Emit a synthesis snapshot on wake itself — detect `system_woke` arrival, look back at paired `system_slept` event, append a `where_stopped_log` row attributing the pre-sleep state if the sleep window exceeded the idle threshold.
-3. Hybrid — `derive()` keeps current logic but adds a sleep-aware override: `effectiveLatestTs = (system_slept since last system_woke) ? system_slept.ts : MAX(ts)`.
+3. Hybrid — `derive()` keeps current logic but adds a sleep-aware override: when a `system_slept` event exists with no matching subsequent `system_woke` (or only a fresh one), prefer the sleep timestamp; otherwise fall back to the raw latest event.
 
 **Phase ownership:** post-T7 own phase. Suggestion: T7.5 (small surgical substrate phase) OR pulled into T9 wrap depending on cadence. Requires its own spec + sentinel-injection regression test (modifying the moat deriver touches new code paths in Track-1 D3 substrate that didn't have walkback coverage before T7's reading of `doc_path`).
 
@@ -471,7 +466,7 @@ The 6 a11y findings from P9 polish audit subagent (master spec §9.1 last block)
 #### T8 final-review carries (2026-05-21) — Status at T10 wrap
 
 - **C-26** `ProdInsights+InboxItems.swift` 795 LOC > 700 budget — split per-feeder files (`+GitHub` / `+Linear` / `+D3` / `+Local`) OR extract `synthesize*URL` static helpers to sibling `InboxURLSynthesis.swift` moat file. **[DEFERRED T10 — post-Track-9 moat hygiene; no public surface impact]**
-- **C-27** `queryCIFailed` `MAX(failure)` semantic ambiguity. **[RESOLVED T10 — moat doc-comment update with carry-forward note for future `ORDER BY ts DESC LIMIT 1` refinement if requirements clarify]**
+- **C-27** `queryCIFailed` latest-pulse-wins semantic ambiguity. **[RESOLVED T10 — moat doc-comment update with carry-forward note for future "current-HEAD failed count" refinement if requirements clarify]**
 - **C-28** `xcode://` URL scheme fictional. **[RESOLVED T10 — deriver returns nil; commit `b4be3978`]**
 - **C-29** `queryCommentsOnMyWork` viewer_login filter anticipatory. **[DEFERRED T10 — post-Track-9 substrate enrichment phase (collector payload extension required)]**
 - **C-30** Cutoff constants extraction. **[RESOLVED T10 — moat `buildCutoffMs`/`ciCutoffMs`/`meetingCutoffMs` named constants]**

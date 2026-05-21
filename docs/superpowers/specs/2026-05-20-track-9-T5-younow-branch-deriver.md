@@ -111,19 +111,16 @@ LeafCorePrivate (moat, gitignored)
 ├── Prod/Insights/WorkspacePathResolver.swift    (NEW)
 │   └── enum WorkspacePathResolver
 │       └── static func resolve(bundleID:db:) throws -> String?
-│           ├── Xcode → SELECT json_extract(payload_json, '$.doc_path') FROM events
-│           │            WHERE signal_type='attention' AND bundle_id='com.apple.dt.Xcode'
-│           │              AND json_extract(payload_json, '$.event_kind')='xcode_active_doc_changed'
-│           │            ORDER BY ts DESC LIMIT 1
-│           ├── VSCode-family → SELECT json_extract(payload_json, '$.workspace_root') FROM events
-│           │                    WHERE bundle_id IN (VSCodeFamilyDispatcher.allBundleIDs)
-│           │                      AND json_extract(payload_json, '$.event_kind')='vscode_workspace_opened'
-│           │                    ORDER BY ts DESC LIMIT 1
-│           ├── JetBrains → SELECT json_extract(payload_json, '$.workspace_root') FROM events
-│           │                WHERE bundle_id IN IDEFamilyClassifier.jetbrainsBundleIDs
-│           │                  AND json_extract(payload_json, '$.event_kind')='jetbrains_recent_project_observed'
-│           │                ORDER BY ts DESC LIMIT 1
-│           └── unknown / no event → nil
+│           ├── Xcode → most-recent `xcode_active_doc_changed` event for
+│           │          com.apple.dt.Xcode in the attention stream → doc_path.
+│           ├── VSCode-family → most-recent `vscode_workspace_opened` event
+│           │                   for any VSCodeFamilyDispatcher bundle ID →
+│           │                   workspace_root.
+│           ├── JetBrains → most-recent `jetbrains_recent_project_observed`
+│           │               event for any JetBrains bundle ID →
+│           │               workspace_root.
+│           └── unknown / no event → nil.
+│           (Real query bodies live in the moat.)
 │
 ├── Prod/Insights/GitHeadReader.swift            (NEW)
 │   └── enum GitHeadReader
@@ -229,73 +226,21 @@ internal enum WorkspacePathResolver {
         }
     }
 
-    private static func fetchXcodeDocPath(db: Database, bundleID: String) throws -> String? {
-        guard bundleID == "com.apple.dt.Xcode" else { return nil }
-        return try db.readSQL { db in
-            try String.fetchOne(
-                db,
-                sql: """
-                    SELECT json_extract(payload_json, '$.doc_path')
-                    FROM events
-                    WHERE signal_type = 'attention'
-                      AND bundle_id = ?
-                      AND json_extract(payload_json, '$.event_kind') = 'xcode_active_doc_changed'
-                      AND json_extract(payload_json, '$.doc_path') IS NOT NULL
-                    ORDER BY ts DESC
-                    LIMIT 1
-                    """,
-                arguments: [bundleID]
-            )
-        }
-    }
-
-    private static func fetchVSCodeWorkspaceRoot(db: Database, bundleID: String) throws -> String? {
-        // Cross-bundle query — VSCode-family includes Code/Cursor/Insiders/VSCodium.
-        // workspace_root event emits per-workspace-OPEN regardless of which family
-        // bundle is foreground; we filter to the foreground family member's events
-        // when possible, but accept cross-family overlap (Code+Cursor share repos).
-        let familyBundles = VSCodeFamilyDispatcher.allBundleIDs
-        guard familyBundles.contains(bundleID) else { return nil }
-        return try db.readSQL { db in
-            try String.fetchOne(
-                db,
-                sql: """
-                    SELECT json_extract(payload_json, '$.workspace_root')
-                    FROM events
-                    WHERE bundle_id IN (\(placeholders(for: familyBundles)))
-                      AND json_extract(payload_json, '$.event_kind') = 'vscode_workspace_opened'
-                      AND json_extract(payload_json, '$.workspace_root') IS NOT NULL
-                    ORDER BY ts DESC
-                    LIMIT 1
-                    """,
-                arguments: StatementArguments(familyBundles)
-            )
-        }
-    }
-
-    private static func fetchJetBrainsWorkspaceRoot(db: Database, bundleID: String) throws -> String? {
-        guard IDEFamilyClassifier.jetbrainsBundleIDs.contains(bundleID) else { return nil }
-        let bundles = IDEFamilyClassifier.jetbrainsBundleIDs
-        return try db.readSQL { db in
-            try String.fetchOne(
-                db,
-                sql: """
-                    SELECT json_extract(payload_json, '$.workspace_root')
-                    FROM events
-                    WHERE bundle_id IN (\(placeholders(for: bundles)))
-                      AND json_extract(payload_json, '$.event_kind') = 'jetbrains_recent_project_observed'
-                      AND json_extract(payload_json, '$.workspace_root') IS NOT NULL
-                    ORDER BY ts DESC
-                    LIMIT 1
-                    """,
-                arguments: StatementArguments(Array(bundles))
-            )
-        }
-    }
-
-    private static func placeholders(for collection: any Collection) -> String {
-        Array(repeating: "?", count: collection.count).joined(separator: ", ")
-    }
+    // Real per-bundle resolver query bodies live in the LeafCorePrivate moat.
+    //
+    // Xcode resolver: most-recent `xcode_active_doc_changed` event for
+    // bundle_id == com.apple.dt.Xcode in the attention stream where doc_path
+    // is non-null → returns its doc_path.
+    //
+    // VSCode-family resolver: cross-bundle lookup across
+    // VSCodeFamilyDispatcher.allBundleIDs (Code / Cursor / Insiders / VSCodium)
+    // → most-recent `vscode_workspace_opened` event with non-null
+    // workspace_root → returns workspace_root. Cross-family overlap accepted
+    // (Code + Cursor share repos).
+    //
+    // JetBrains resolver: across IDEFamilyClassifier.jetbrainsBundleIDs →
+    // most-recent `jetbrains_recent_project_observed` event with non-null
+    // workspace_root → returns workspace_root.
 }
 ```
 

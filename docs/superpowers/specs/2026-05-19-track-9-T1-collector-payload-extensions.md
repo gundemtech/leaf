@@ -41,7 +41,7 @@ Adding `workspace_root` to this event requires either:
 
 **T1 emits `workspace_root` only on FSEvents-driven events** (`vscode_workspace_opened` + `jetbrains_recent_project_observed`), which natively have the absolute path in their parsing surface.
 
-**T5 deriver** (separate phase) consumes via DB-join — `SELECT workspace_root FROM events WHERE event_kind='vscode_workspace_opened' AND payload_json LIKE '%workspace_name=$X%' ORDER BY ts DESC LIMIT 1`. Single indexed SELECT, cheap, no cross-process state. Cold-start case: if no `workspace_opened` event yet (Agent just started + workspace was opened pre-Agent-launch), deriver gracefully falls back to no branch info, same as current behavior pre-T1.
+**T5 deriver** (separate phase) consumes via DB-join — looks up the most-recent `vscode_workspace_opened` event whose payload matches the given workspace_name and reads its `workspace_root` field. Single indexed lookup, cheap, no cross-process state. Cold-start case: if no `workspace_opened` event yet (Agent just started + workspace was opened pre-Agent-launch), deriver gracefully falls back to no branch info, same as current behavior pre-T1.
 
 Master spec to be amended in T10 wrap if the deviation is accepted; T1 spec is the authoritative implementation contract.
 
@@ -89,10 +89,9 @@ Agent process
 MenuBarApp / MCP processes (read-only)
 └── DerivedInsights.recentLastCommit(maxAgeMs:) → RecentCommitSnapshot?
     └── ProdInsights+LastCommit (moat)
-        └── SQL: SELECT payload_json, ts FROM events
-                 WHERE signal_type='action' AND payload_json LIKE '%"event_kind":"gh_commit_pushed"%'
-                   AND ts >= now_ms - maxAgeMs
-                 ORDER BY ts DESC LIMIT 1
+        └── Reads the most-recent `gh_commit_pushed` event from the action
+            stream within `maxAgeMs`, ordered newest first, limit 1.
+            Real query body lives in LeafCorePrivate.
         └── Decode payload_json → extract subject/branch/sha
 ```
 
@@ -175,40 +174,19 @@ public struct RecentCommitSnapshot: Equatable, Sendable {
 ```
 
 ```swift
-// DerivedInsights protocol method
+// DerivedInsights protocol method (public)
 func recentLastCommit(maxAgeMs: Int64) throws -> RecentCommitSnapshot?
 
 // StubInsights default — return nil
 func recentLastCommit(maxAgeMs: Int64) throws -> RecentCommitSnapshot? { nil }
 
-// ProdInsights+LastCommit.swift (LeafCorePrivate moat)
-extension ProdInsights {
-    public func recentLastCommit(maxAgeMs: Int64) throws -> RecentCommitSnapshot? {
-        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
-        let cutoffMs = nowMs - maxAgeMs
-        return try database.readSQL { db in
-            let row = try Row.fetchOne(db, sql: """
-                SELECT ts, payload_json FROM events
-                WHERE signal_type = 'action'
-                  AND payload_json LIKE '%"event_kind":"gh_commit_pushed"%'
-                  AND ts >= :cutoff
-                ORDER BY ts DESC LIMIT 1
-                """, arguments: ["cutoff": cutoffMs])
-            guard let row = row else { return nil }
-            let ts = row["ts"] as Int64
-            let json = row["payload_json"] as String
-            guard let data = json.data(using: .utf8),
-                  let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let subject = dict["title"] as? String
-            else { return nil }
-            let branch = dict["branch"] as? String
-            return RecentCommitSnapshot(subject: subject, branch: branch, atMs: ts)
-        }
-    }
-}
+// ProdInsights+LastCommit.swift (LeafCorePrivate moat) — real query body
+// lives in the moat. Conceptually: fetch the most-recent `gh_commit_pushed`
+// event from the action stream within `maxAgeMs`, ordered newest first,
+// limit 1, then decode payload_json → RecentCommitSnapshot {subject, branch, atMs}.
 ```
 
-Note: `payload_json LIKE '%"event_kind":"gh_commit_pushed"%'` is the existing pattern used by `ProdInsights+TodayMetrics.queryPills`. Adds an index hint to `idx_events_signal_type_ts` (existing). Future micro-optimization: separate `event_kind` virtual column or partial index — out of T1 scope.
+Note: the event-kind discriminator pattern reuses the existing approach from `ProdInsights+TodayMetrics.queryPills`. Uses existing index `idx_events_signal_type_ts`. Future micro-optimization: separate `event_kind` virtual column or partial index — out of T1 scope.
 
 ### 3.6 Settings UI
 

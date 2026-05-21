@@ -75,7 +75,7 @@ Master spec line 244 (`slack_dm_received`):
 | D-10 | ShareEventTypeKey delta | **+2 entries** (`githubPRReviewRequested`, `githubPRReviewRequestRemoved`), both default OFF. Registry 196 → 198. | Slack DM verify NEGATIVE (Q1.1) + `gh_notification_received` deriver-side (Q1.1) → only 2 registry rows added. Master spec §5.3 said +3 to +4; T3 ships +2. T10 amendment. |
 | D-11 | `ProdInsights+InboxItems` extension strategy | 3 separate methods: (a) **new** `queryReviewRequests(cutoffMs:)` — reads `gh_pr_review_requested` events client-side filter `actor.login != viewer_login` (see §3.4 nuance), routes к `.reviewRequest` InboxKind. (b) **extend** `queryCommentsOnMyWork` adding GitHub branch (T2 added separate `queryLinearCommentsOnMyWork` — symmetric pattern keeps method per provider). (c) **new** `queryGitHubNotifications(cutoffMs:)` — reads last-2-tick pulse rows + diffs reason counters → synthetic InboxItems. | T2 precedent (Linear separate method, not branched into shared method). Three methods symmetric — Linear/GitHub/notification synthesis isolated. |
 | D-12 | `queryReviewRequests` filter semantics | Phase 4.7.A `mapPullRequestEvent` emits `gh_pr_review_requested` events **только когда я был actor** (`/users/<login>/events` returns only viewer's events — see Discovery insight #1). Это **outbound** events. Inbound ("X requested MY review") уже surfaced через `gh_notifications_pulse.reason_review_requested_count`. So `queryReviewRequests` reads outbound events filtered by **recency** (cutoffMs window), not by actor identity. UI surfaces "I requested review N times this week". | Discovery confirmed: `/users/<login>/events` REST polling returns events viewer performed. `actor.login == viewer_login` by definition. Inbound flow uses notifications synthesis separately. |
-| D-13 | InboxItem field mapping для `gh_pr_review_requested` | `kind=.reviewRequest` / `severity=.muted` / `title="<repoFullName>#<number>"` / `sourceMeta="GitHub · <repoFullName>#<number>"` / `sourceURL=URL(pr_url)` / `aggregatedCount=COUNT(*) per (repoFullName, number)` / `createdAtMs=MAX(createdAt)`. | Aggregation key = PR identity. Multiple requests on same PR (e.g., re-request after dismiss) collapse to 1 row. Severity `.muted` — review request informational, not blocking. |
+| D-13 | InboxItem field mapping для `gh_pr_review_requested` | `kind=.reviewRequest` / `severity=.muted` / `title="<repoFullName>#<number>"` / `sourceMeta="GitHub · <repoFullName>#<number>"` / `sourceURL=URL(pr_url)` / `aggregatedCount=count per (repoFullName, number)` / `createdAtMs=latest createdAt`. | Aggregation key = PR identity. Multiple requests on same PR (e.g., re-request after dismiss) collapse to 1 row. Severity `.muted` — review request informational, not blocking. |
 | D-14 | InboxItem field mapping для GitHub notifications synthesis | One InboxItem per non-zero positive diff in `reason_X_count` between two consecutive pulse ticks. `kind` from reason: `review_requested → .reviewRequest`, `mention → .mention`, `comment → .commentOnMyWork`, `assigned → .commentOnMyWork` (carry: existing 5 enum cases — no exact "assigned" or "state_change" semantic; map к closest). | InboxKind expansion = T8 scope; T3 reuses existing 5 cases. Master spec §3.4 line 108 lists T8 InboxKind expansion as separate phase. Imperfect mapping accepted — T8 fixes. |
 | D-15 | Sentinel-injection test grouping | **3 per-invariant tests + 1 integration sweep** в `RelayBodyLeakageTests`. Per-invariant pinpoints regression. | T1 lineage (3 per-field + 1 sweep). T2 used single test потому что only 1 new payload field. T3 multiple new fields → per-invariant decomposition (URLs / review_requested+removed / viewer_login). |
 | D-16 | Sentinel constants | `LEAKED_SENTINEL_GH_T3_PR_BODY` (PR body injection → assert URL fields clean) / `LEAKED_SENTINEL_GH_T3_REVIEWER` (requested_reviewer position injection → assert no body field polluted) / `LEAKED_SENTINEL_GH_T3_VIEWER_LOGIN` (presence_state.github.viewer_login slot assert correct write + sentinel sweep). | T1 lineage username-position pattern (sentinel injected at position which MUST NOT leak; structurally-correct positions preserve). |
@@ -292,39 +292,12 @@ Reader side (`ProdInsights+InboxItems.queryCommentsOnMyWork`): reads `presence_s
 
 ```swift
 private func queryReviewRequests(cutoffMs: Int64) throws -> [InboxItem] {
-    let rows: [(String, Int, Int, Int64, String?)] = try database.readSQL { db in
-        try Row.fetchAll(
-            db,
-            sql: """
-                SELECT
-                    json_extract(payload_json, '$.repo_full_name') AS repo,
-                    CAST(json_extract(payload_json, '$.number') AS INTEGER) AS num,
-                    COUNT(*) AS aggregated,
-                    MAX(ts) AS latest_ms,
-                    MAX(json_extract(payload_json, '$.pr_url')) AS pr_url
-                FROM events
-                WHERE signal_type = 'action'
-                  AND json_extract(payload_json, '$.event_kind') = 'gh_pr_review_requested'
-                  AND ts >= ?
-                GROUP BY json_extract(payload_json, '$.repo_full_name'),
-                         json_extract(payload_json, '$.number')
-                ORDER BY latest_ms DESC
-                """,
-            arguments: [cutoffMs]
-        ).map { /* tuple */ }
-    }
-    return rows.map { (repo, num, count, latestMs, urlStr) in
-        InboxItem(
-            id: "ghReviewReq:\(repo)#\(num)",
-            kind: .reviewRequest,
-            severity: .muted,
-            title: "\(repo)#\(num)",
-            sourceMeta: "GitHub · \(repo)#\(num)",
-            sourceURL: urlStr.flatMap { URL(string: $0) },
-            aggregatedCount: count,
-            createdAtMs: latestMs
-        )
-    }
+    // Real query body lives in LeafCorePrivate moat.
+    // Conceptually: read `gh_pr_review_requested` events from the action
+    // stream with ts >= cutoffMs, aggregate per (repo_full_name, number)
+    // — count of requests, latest timestamp, representative pr_url —
+    // ordered most-recent first, mapped to InboxItem(kind: .reviewRequest,
+    // severity: .muted, ...).
 }
 ```
 
@@ -336,60 +309,20 @@ Replace `return []` stub with:
 
 ```swift
 private func queryCommentsOnMyWork(cutoffMs: Int64) throws -> [InboxItem] {
-    // Read viewer_login from presence_state.github for client-side filter.
-    let viewerLogin: String? = try database.readSQL { db in
-        let row = try Row.fetchOne(
-            db,
-            sql: "SELECT json_extract(state_json, '$.viewer_login') FROM presence_state WHERE provider='github'"
-        )
-        return row?[0] as? String
-    }
-
-    // If viewer_login absent — graceful degrade (return [], not crash).
-    guard let viewerLogin, !viewerLogin.isEmpty else { return [] }
-
-    // T3 GitHub branch: aggregate gh_pr_review_comment_authored + gh_issue_comment_authored
-    // events filtered by actor.login != viewer_login.
-    // NOTE: `/users/<login>/events` returns only viewer's events, so actor.login == viewer_login
-    // always. The filter here is anticipatory (T3 captures outbound comments); inbound comments
-    // arrive via notifications synthesis (queryGitHubNotifications). For now this method emits
-    // outbound comments aggregated by PR/issue — UI may surface them as "my recent comments"
-    // when InboxBlock T8 expands kind semantics. Carry T8 для UI surfacing decision.
-    let rows: [(String, Int, Int, Int64, String?, String)] = try database.readSQL { db in
-        try Row.fetchAll(
-            db,
-            sql: """
-                SELECT
-                    json_extract(payload_json, '$.repo_full_name') AS repo,
-                    CAST(json_extract(payload_json, '$.number') AS INTEGER) AS num,
-                    COUNT(*) AS aggregated,
-                    MAX(ts) AS latest_ms,
-                    COALESCE(MAX(json_extract(payload_json, '$.pr_url')),
-                             MAX(json_extract(payload_json, '$.issue_url'))) AS parent_url,
-                    json_extract(payload_json, '$.event_kind') AS kind
-                FROM events
-                WHERE signal_type = 'action'
-                  AND json_extract(payload_json, '$.event_kind') IN
-                      ('gh_pr_review_comment_authored', 'gh_issue_comment_authored')
-                  AND ts >= ?
-                GROUP BY repo, num
-                ORDER BY latest_ms DESC
-                """,
-            arguments: [cutoffMs]
-        ).map { /* tuple */ }
-    }
-    return rows.map { (repo, num, count, latestMs, urlStr, kind) in
-        InboxItem(
-            id: "ghCommentMine:\(repo)#\(num)",
-            kind: .commentOnMyWork,
-            severity: .muted,
-            title: "\(repo)#\(num)",
-            sourceMeta: "GitHub · \(repo)#\(num)",
-            sourceURL: urlStr.flatMap { URL(string: $0) },
-            aggregatedCount: count,
-            createdAtMs: latestMs
-        )
-    }
+    // Real query body lives in LeafCorePrivate moat.
+    //
+    // Step 1: read `viewer_login` from `presence_state.github.state_json`
+    // (graceful degrade to [] if absent or empty).
+    //
+    // Step 2: aggregate `gh_pr_review_comment_authored` +
+    // `gh_issue_comment_authored` events from the action stream with
+    // ts >= cutoffMs, grouped per (repo_full_name, number), capturing
+    // count, latest timestamp, and a representative parent URL (PR url
+    // when present else issue url). Actor-self-exclusion filter is
+    // anticipatory: `/users/<login>/events` REST polling currently
+    // returns viewer-as-actor only, so the filter is a no-op today. T8
+    // owns the InboxKind semantic split (.myRecentComments vs
+    // .commentsByOthersOnMyWork) once an inbound-comment surface lands.
 }
 ```
 
@@ -397,24 +330,11 @@ private func queryCommentsOnMyWork(cutoffMs: Int64) throws -> [InboxItem] {
 
 ```swift
 private func queryGitHubNotifications(cutoffMs: Int64) throws -> [InboxItem] {
-    // Read last 2 gh_notifications_pulse rows. Compute per-reason delta.
-    let rows: [(Int64, [String: Int])] = try database.readSQL { db in
-        try Row.fetchAll(
-            db,
-            sql: """
-                SELECT ts, payload_json
-                FROM events
-                WHERE signal_type = 'context'
-                  AND json_extract(payload_json, '$.event_kind') = 'gh_notifications_pulse'
-                  AND ts >= ?
-                ORDER BY ts DESC LIMIT 2
-                """,
-            arguments: [cutoffMs]
-        ).compactMap { row in
-            // Decode payload to extract reason_*_count keys
-            ...
-        }
-    }
+    // Real query body lives in LeafCorePrivate moat.
+    // Step 1: read the last 2 `gh_notifications_pulse` rows (context stream,
+    // ts >= cutoffMs, ordered newest first, limit 2). Decode each payload
+    // to extract `reason_*_count` keys.
+    let rows: [(Int64, [String: Int])] = try /* moat helper */ []
 
     guard rows.count == 2 else { return [] }    // Need 2 ticks to diff
 
@@ -695,7 +615,7 @@ T3 walkback enumeration:
 1. **`pr_url` / `issue_url` / `comment_url`** — composed from 3 sources only: `repoFullName` (public org/repo identifier), `number` (public PR/issue number), `comment_id` (numeric, public). Composition functions are pure string interpolation with hard-coded URL prefix `https://github.com/`. No PR/issue `title`, `body`, comment `body`, mention text ever reaches composition. Sentinel test §5.4 guards.
 2. **`requested_reviewer_login`** — plaintext GitHub login (public username). Pattern parity с PRMetadata.requestedReviewers (Track-3 D2 plaintext). NEVER reads PR title / body adjacent to login. Sentinel test §5.4 guards (sentinel injected into PR body, assert login field structurally clean).
 3. **`presence_state.github.viewer_login`** — string login, public GitHub username. Already passed parameter в каждый fetch method since OAuth bootstrap. Not new privacy surface, just new placement (existing field reused into composite dict).
-4. **`queryReviewRequests` / `queryCommentsOnMyWork` GitHub branch / `queryGitHubNotifications`** — read only `repo_full_name`, `number`, `event_kind`, `pr_url`/`issue_url`/`comment_url`, `ts`, `reason_*_count` keys. NEVER read `body` (D1 body capture field), `title`, `comment.body`. SQL `json_extract` with explicit key allow-list.
+4. **`queryReviewRequests` / `queryCommentsOnMyWork` GitHub branch / `queryGitHubNotifications`** — read only `repo_full_name`, `number`, `event_kind`, `pr_url`/`issue_url`/`comment_url`, `ts`, `reason_*_count` keys. NEVER read `body` (D1 body capture field), `title`, `comment.body`. Queries use an explicit payload-key allow-list (moat-side helper).
 
 **Privacy walkback grep AC (Stage 7 gate):**
 ```bash
