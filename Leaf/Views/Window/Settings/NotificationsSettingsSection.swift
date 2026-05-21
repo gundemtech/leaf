@@ -84,6 +84,15 @@ struct NotificationsSettingsSection: View {
         LeafButton("Send test notifications", variant: .secondary, size: .sm) {
           fireTestNotifications()
         }
+        if testStatusIsError {
+          LeafButton("Open System Settings", variant: .secondary, size: .sm) {
+            if let url = URL(
+              string: "x-apple.systempreferences:com.apple.preference.notifications")
+            {
+              NSWorkspace.shared.open(url)
+            }
+          }
+        }
         Spacer()
       }
       Text(
@@ -94,48 +103,106 @@ struct NotificationsSettingsSection: View {
       if let status = testStatus {
         Text(status)
           .font(LeafType.caption)
-          .foregroundStyle(LeafColor.status.success)
+          .foregroundStyle(
+            testStatusIsError ? LeafColor.status.danger : LeafColor.status.success
+          )
       }
     }
     .padding(.top, LeafSpace.md)
   }
 
+  /// Mirrors the colouring branch — `true` when the surfaced status is a
+  /// permission denial / system-block (so we render danger colour + show
+  /// the [Open System Settings] escape hatch) rather than a success path.
+  private var testStatusIsError: Bool {
+    guard let status = testStatus else { return false }
+    return status.contains("denied") || status.contains("blocked")
+      || status.contains("not granted") || status.contains("error")
+      || status.contains("Unknown")
+  }
+
   private func fireTestNotifications() {
     let center = UNUserNotificationCenter.current()
-    center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+    // Look up the current authorization first. `requestAuthorization` on a
+    // permanently-denied bundle (Settings → Notifications → Leaf off, or the
+    // bundle never got registered with the daemon because the dev build runs
+    // from DerivedData with an ad-hoc signature) returns the generic
+    // «Notifications are not allowed for this application» error and gives
+    // the user nowhere to go. Branching on the cached state lets us surface
+    // an actionable [Open System Settings] link instead.
+    center.getNotificationSettings { settings in
+      // Capture only the Sendable enum value — `UNNotificationSettings`
+      // itself isn't Sendable under Swift 6 strict concurrency.
+      let status = settings.authorizationStatus
       DispatchQueue.main.async {
-        if let error {
-          testStatus = "Authorization error: \(error.localizedDescription)"
-          return
+        switch status {
+        case .denied:
+          testStatus =
+            "Notifications denied for Leaf. Open System Settings → Notifications → Leaf → toggle Allow notifications ON, then try again."
+        case .notDetermined:
+          // First-time ask — request now and on grant, schedule.
+          center.requestAuthorization(options: [.alert, .sound, .badge]) {
+            granted, error in
+            DispatchQueue.main.async {
+              if let error {
+                testStatus = authorizationErrorMessage(error)
+                return
+              }
+              guard granted else {
+                testStatus = "Notifications not granted by user."
+                return
+              }
+              scheduleAllTestBanners()
+            }
+          }
+        case .authorized, .provisional, .ephemeral:
+          scheduleAllTestBanners()
+        @unknown default:
+          testStatus =
+            "Unknown notification authorization status — try System Settings → Notifications → Leaf."
         }
-        guard granted else {
-          testStatus = "Notifications not permitted (System Settings → Notifications → Leaf)."
-          return
-        }
-        scheduleTestBanner(
-          id: "leaf-dev-test-handoff",
-          title: "Test handoff from Anton",
-          body: "Leaf detected a context handoff",
-          categoryID: "leaf.dm.handoff",
-          in: 5
-        )
-        scheduleTestBanner(
-          id: "leaf-dev-test-task",
-          title: "Test task from Anton",
-          body: "Tap Mark Done to complete it without opening the app.",
-          categoryID: "leaf.dm.task",
-          in: 6
-        )
-        scheduleTestBanner(
-          id: "leaf-dev-test-invite",
-          title: "Test invite from Bob",
-          body: "Bob wants to join \u{201C}TestRoom\u{201D}.",
-          categoryID: "leaf.invite.request",
-          in: 7
-        )
-        testStatus = "Scheduled. ⌘-Tab away in the next 5 s to see banners."
       }
     }
+  }
+
+  /// Disambiguate the system's «not allowed» errors so the user sees a
+  /// recovery path instead of the cryptic default copy.
+  private func authorizationErrorMessage(_ error: Error) -> String {
+    let ns = error as NSError
+    // UNErrorCode 1 = .notificationsNotAllowed. Common on Xcode debug
+    // builds run from DerivedData — the bundle never gets registered
+    // with `usernotificationsd`, so the daemon refuses everything at
+    // request time without even surfacing Leaf in System Settings.
+    if ns.domain == "UNErrorDomain" && ns.code == 1 {
+      return
+        "Notifications blocked at the system level — Leaf isn't registered with the notification daemon. Common on Xcode debug builds from DerivedData (ad-hoc sign). Try: (a) build the app to /Applications via Xcode → Product → Archive, OR (b) System Settings → Notifications → toggle Leaf ON if it's listed."
+    }
+    return "Authorization error: \(error.localizedDescription)"
+  }
+
+  private func scheduleAllTestBanners() {
+    scheduleTestBanner(
+      id: "leaf-dev-test-handoff",
+      title: "Test handoff from Anton",
+      body: "Leaf detected a context handoff",
+      categoryID: "leaf.dm.handoff",
+      in: 5
+    )
+    scheduleTestBanner(
+      id: "leaf-dev-test-task",
+      title: "Test task from Anton",
+      body: "Tap Mark Done to complete it without opening the app.",
+      categoryID: "leaf.dm.task",
+      in: 6
+    )
+    scheduleTestBanner(
+      id: "leaf-dev-test-invite",
+      title: "Test invite from Bob",
+      body: "Bob wants to join \u{201C}TestRoom\u{201D}.",
+      categoryID: "leaf.invite.request",
+      in: 7
+    )
+    testStatus = "Scheduled. ⌘-Tab away in the next 5 s to see banners."
   }
 
   private func scheduleTestBanner(
