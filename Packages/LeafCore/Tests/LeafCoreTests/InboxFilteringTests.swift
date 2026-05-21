@@ -105,3 +105,23 @@ final class InboxFilteringTests: XCTestCase {
         )
     }
 }
+
+// MARK: - Track-9 T8: .alerts filter coverage
+extension InboxFilteringTests {
+
+    func testFilterAlerts_admitsBuildAndCIAndLiveMeeting_onlyThose() {
+        let now = Int64(1_700_000_000_000)
+        let items: [InboxItem] = [
+            InboxItem(id: "1", kind: .buildFailed, severity: .warn, title: "Build failed", sourceMeta: "Xcode", sourceURL: nil, aggregatedCount: 1, createdAtMs: now),
+            InboxItem(id: "2", kind: .ciFailed, severity: .danger, title: "CI red", sourceMeta: "GitHub", sourceURL: nil, aggregatedCount: 1, createdAtMs: now),
+            InboxItem(id: "3", kind: .liveMeeting, severity: .muted, title: "In Zoom", sourceMeta: "Zoom", sourceURL: nil, aggregatedCount: 1, createdAtMs: now),
+            InboxItem(id: "4", kind: .reviewRequest, severity: .warn, title: "Review", sourceMeta: "GH", sourceURL: nil, aggregatedCount: 1, createdAtMs: now),
+            InboxItem(id: "5", kind: .openQuestion, severity: .warn, title: "Q", sourceMeta: "Slack", sourceURL: nil, aggregatedCount: 1, createdAtMs: now),
+        ]
+
+        let result = InboxFiltering.filtered(items: items, filter: .alerts, query: "")
+
+        XCTAssertEqual(result.count, 3)
+        XCTAssertEqual(Set(result.map { $0.id }), Set(["1", "2", "3"]))
+    }
+}
