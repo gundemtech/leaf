@@ -145,12 +145,40 @@ final class InviteTokensReader {
       )
       return
     }
+    logger.info(
+      "upsert preflight workspace=\(active.id, privacy: .public) pubkey=\(pubkeyHex.prefix(16), privacy: .public)…"
+    )
     do {
       try await supabase.insertWorkspace(
         id: active.id, name: active.name, createdByPubkey: pubkeyHex
       )
+      logger.info("upsert preflight: 201 created")
     } catch SupabaseError.conflict {
-      // Already present — convergent state.
+      // 409 means the row's PK or (created_by_pubkey, name) UNIQUE
+      // matched something server-side. PK match against the SAME pubkey
+      // is convergent success. PK match against a DIFFERENT pubkey
+      // (e.g., legacy row created under a prior identity that survived
+      // local wipe) leaves the server's `created_by_pubkey` as the OLD
+      // one — `is_workspace_admin` then returns false for the NEW JWT
+      // pubkey claim, and the subsequent `invite_tokens.INSERT` 403s
+      // with the same friendly message regardless. We swallow .conflict
+      // optimistically and let the invite INSERT speak for itself — if
+      // it actually fails, surface the diagnostic so the user knows
+      // delete + recreate is the recovery path.
+      logger.info("upsert preflight: 409 — row already exists server-side")
+    } catch {
+      // Non-conflict failure (e.g., 403 because JWT pubkey claim is null
+      // — Auth Hook didn't pick up registration; or .transport on network
+      // blip). Surface a clearer message than the generic «manage invite
+      // tokens» so the user knows it's the workspace-sync step, not the
+      // permission gate, that's the actual fault.
+      logger.error(
+        "upsert preflight failed: \(String(describing: error), privacy: .public)"
+      )
+      throw LeafError.workspaceSyncFailed(
+        reason:
+          "Couldn't sync workspace to server: \(String(describing: error)). Try Settings → Workspace → Delete Permanently and recreate."
+      )
     }
   }
 
@@ -247,6 +275,13 @@ final class InviteTokensReader {
       return "Max active tokens reached (10). Delete one to create another."
     }
     if let leafErr = error as? LeafError {
+      // Distinguish workspace-sync upsert failure from the generic «manage
+      // invite tokens» 403 so the user knows it's the workspace-sync gate
+      // that's broken, not their permission. The recovery path is to
+      // delete + recreate the legacy workspace.
+      if case .workspaceSyncFailed(let reason) = leafErr {
+        return reason
+      }
       return leafErr.localizedDescription
     }
     if let supabaseErr = error as? SupabaseError {
