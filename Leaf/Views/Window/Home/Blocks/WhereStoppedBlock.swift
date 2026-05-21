@@ -89,9 +89,13 @@ struct WhereStoppedBlock: View {
 
     /// Track-9 T7 — Line 2 renderer. Xcode anchor → "name:line"; path-only
     /// anchor → "name"; no anchor → excerpt fallback.
+    ///
+    /// `snap.anchorFilePath` is guaranteed basename-only by the substrate
+    /// contract (`ProdInsights+RecentWhereStopped` extracts via
+    /// `(p as NSString).lastPathComponent` before populating the field).
+    /// No second derivation needed here — render directly.
     private func lineLabel(for snap: WhereStoppedSnapshot) -> String {
-        if let path = snap.anchorFilePath, !path.isEmpty {
-            let basename = (path as NSString).lastPathComponent
+        if let basename = snap.anchorFilePath, !basename.isEmpty {
             if let line = snap.anchorLine, line > 0 {
                 return "\(basename):\(line)"
             }
