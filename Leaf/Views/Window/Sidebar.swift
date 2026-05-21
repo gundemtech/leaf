@@ -24,270 +24,288 @@
 //  Layout: VStack { ScrollView (nav groups) + Spacer + switcher section }.
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct Sidebar: View {
-    @Binding var selection: WindowSection
+  @Binding var selection: WindowSection
 
-    @Environment(GitHubScopesReader.self) private var githubScopes
-    @Environment(SlackScopesReader.self) private var slackScopes
-    @Environment(WorkspaceReader.self) private var workspaceReader
-    @Environment(ActiveWorkspaceStore.self) private var activeWorkspaceStore
-    @Environment(DirectMessageInboxReader.self) private var inboxReader
-    /// T4 — tier gate. Free-tier swaps `LeafWorkspaceSwitcher` for an
-    /// «Upgrade to add workspaces» row at the sidebar bottom.
-    @Environment(TierGateReader.self) private var tierGate
-    @Environment(\.submitToWaitlist) private var submitToWaitlist
-    /// Track 6 — observer for deep-link / clipboard-probe `reader.fetch(...)`
-    /// transitions out of `.idle`. Sidebar surfaces AcceptInviteSheet so an
-    /// already-onboarded user can join a second workspace. Onboarding's own
-    /// observer (`OnboardingView.swift`) is mutually exclusive — Onboarding
-    /// is gated by `hasCompletedOnboarding` AppStorage and lives in the
-    /// menu-bar popover scene, not the main Window where Sidebar renders.
-    @Environment(InviteAcceptReader.self) private var inviteAcceptReader
-    /// M027 invite-redesign — pendingInviteCode + joinRequestWaitingPresented
-    /// driven by link clicks (InviteURLHandler) and JoinWorkspaceByCodeSheet
-    /// post-Send dispatch (InviteURLHandler.handleCodePaste).
-    @Environment(WindowState.self) private var windowState
+  @Environment(GitHubScopesReader.self) private var githubScopes
+  @Environment(SlackScopesReader.self) private var slackScopes
+  @Environment(WorkspaceReader.self) private var workspaceReader
+  @Environment(ActiveWorkspaceStore.self) private var activeWorkspaceStore
+  @Environment(DirectMessageInboxReader.self) private var inboxReader
+  /// T4 — tier gate. Free-tier swaps `LeafWorkspaceSwitcher` for an
+  /// «Upgrade to add workspaces» row at the sidebar bottom.
+  @Environment(TierGateReader.self) private var tierGate
+  @Environment(\.submitToWaitlist) private var submitToWaitlist
+  /// Track 6 — observer for deep-link / clipboard-probe `reader.fetch(...)`
+  /// transitions out of `.idle`. Sidebar surfaces AcceptInviteSheet so an
+  /// already-onboarded user can join a second workspace. Onboarding's own
+  /// observer (`OnboardingView.swift`) is mutually exclusive — Onboarding
+  /// is gated by `hasCompletedOnboarding` AppStorage and lives in the
+  /// menu-bar popover scene, not the main Window where Sidebar renders.
+  @Environment(InviteAcceptReader.self) private var inviteAcceptReader
+  /// M027 invite-redesign — pendingInviteCode + joinRequestWaitingPresented
+  /// driven by link clicks (InviteURLHandler) and JoinWorkspaceByCodeSheet
+  /// post-Send dispatch (InviteURLHandler.handleCodePaste).
+  @Environment(WindowState.self) private var windowState
 
-    @State private var leavePresented = false
-    @State private var leaveTargetWorkspaceID: String?
-    @State private var createWorkspacePresented = false
-    /// T4 — per-callsite UpgradeModal flag for the Free-tier switcher row.
-    @State private var showUpgrade = false
-    /// Track 6 — explicit-tap (footer "Join workspace" row) AND auto-open on
-    /// deep-link / clipboard-probe `inviteAcceptReader.state` transitions
-    /// share this presentation flag. Sheet's own state machine drives
-    /// in-sheet flow; Sidebar only ever flips this to `true`. Dismiss via
-    /// sheet's Discard / Done / Close → SwiftUI sets it back to `false`.
-    @State private var joinWorkspacePresented = false
+  @State private var leavePresented = false
+  @State private var leaveTargetWorkspaceID: String?
+  @State private var createWorkspacePresented = false
+  /// T4 — per-callsite UpgradeModal flag for the Free-tier switcher row.
+  @State private var showUpgrade = false
+  /// S3 legacy AcceptInviteSheet — driven exclusively by
+  /// `inviteAcceptReader.state` transitions when a legacy
+  /// `leaf://invite/<uuid>?a=<adminpub>` URL is opened (back-compat for
+  /// invites issued before M027 redesign). NOT wired to explicit-tap any
+  /// more — that path uses `joinByCodePresented` (M027 paste-code).
+  @State private var legacyAcceptInvitePresented = false
+  /// M027 invite-redesign — explicit-tap path from the workspace switcher
+  /// footer ("Join workspace" row). Opens JoinWorkspaceByCodeSheet with no
+  /// pre-filled code. The same sheet is also opened automatically when
+  /// `WindowState.pendingInviteCode` is set by InviteURLHandler on a
+  /// `leaf://invite/<LEAF-XXXX-XXXX-XXXX>` link click — both paths share
+  /// one sheet modifier via `joinByCodeBinding` below.
+  @State private var joinByCodePresented = false
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: LeafSpace.lg) {
-                    group(title: "LEAF", items: [.home, .activity])
-                    group(title: "COLLABORATION", items: [.team, .connections])
-                    group(title: "ACCOUNT", items: [.settings, .profile])
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, LeafSpace.md)
-            }
-            Spacer(minLength: 0)
-            workspaceSwitcherSection
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      ScrollView(.vertical, showsIndicators: false) {
+        VStack(alignment: .leading, spacing: LeafSpace.lg) {
+          group(title: "LEAF", items: [.home, .activity])
+          group(title: "COLLABORATION", items: [.team, .connections])
+          group(title: "ACCOUNT", items: [.settings, .profile])
         }
-        .sheet(isPresented: $leavePresented) {
-            if let wid = leaveTargetWorkspaceID,
-               let workspace = workspacesByID[wid] {
-                LeaveWorkspaceConfirmationModal(
-                    workspaceName: workspace.name,
-                    onConfirm: {
-                        // S7 Stage 6 fix C-C2 — call leaveWorkspace(workspaceID:)
-                        // directly. The earlier `setActive(wid) + leaveActiveWorkspace()`
-                        // shape relied on WorkspaceReader.state.active being read
-                        // *after* setActive, but setActive does not refresh the
-                        // Reader's state — leaveActiveWorkspace() would read the
-                        // previous active workspace and mark the *wrong* row left.
-                        workspaceReader.leaveWorkspace(workspaceID: wid)
-                        leavePresented = false
-                        leaveTargetWorkspaceID = nil
-                    },
-                    onCancel: {
-                        leavePresented = false
-                        leaveTargetWorkspaceID = nil
-                    }
-                )
-            }
-        }
-        .sheet(isPresented: $createWorkspacePresented) {
-            WorkspaceCreateSheet(
-                onCreated: {
-                    workspaceReader.refresh()
-                    createWorkspacePresented = false
-                },
-                onCancel: { createWorkspacePresented = false }
-            )
-        }
-        .sheet(isPresented: $showUpgrade) {
-            UpgradeModal(
-                reason: .createWorkspace,
-                onDismiss: { showUpgrade = false },
-                onSubmitEmail: { email in await submitToWaitlist(email) }
-            )
-        }
-        // Track 6 — in-app AcceptInviteSheet host. Two trigger paths:
-        //  (a) explicit user tap on the "Join workspace" switcher footer row
-        //  (b) `.onAppear` / `.onChange(of: inviteAcceptReader.state)` below,
-        //      which catches deep-link clicks (`leaf://invite/...` via
-        //      `.onOpenURL` in LeafApp) and scenePhase-clipboard probes
-        //      that fired `reader.fetch(...)` outside this view's lifetime.
-        .sheet(isPresented: $joinWorkspacePresented) {
-            AcceptInviteSheet()
-        }
-        // M027 invite-redesign — link-click entry sets WindowState.pendingInviteCode;
-        // surface JoinWorkspaceByCodeSheet pre-filled with the code.
-        .sheet(isPresented: Binding(
-            get: { windowState.pendingInviteCode != nil },
-            set: { newValue in if !newValue { windowState.pendingInviteCode = nil } }
-        )) {
-            JoinWorkspaceByCodeSheet()
-        }
-        // M027 invite-redesign — after Send Request, the waiting card polls
-        // own request status (30s) until terminal state.
-        .sheet(isPresented: Bindable(windowState).joinRequestWaitingPresented) {
-            JoinRequestWaitingCard()
-        }
-        .onAppear {
-            // Catch state already non-`.idle` when Sidebar first appears —
-            // e.g. user launched app via a `leaf://invite/...` URL and the
-            // `.onOpenURL` handler in LeafApp.swift fired `reader.fetch`
-            // before Sidebar was mounted.
-            if shouldOpenAcceptSheet(for: inviteAcceptReader.state) {
-                joinWorkspacePresented = true
-            }
-        }
-        .onChange(of: inviteAcceptReader.state) { _, newState in
-            // Open-only — never auto-dismiss. Sheet's Discard / Done /
-            // Close paths call `reader.reset()` which lands here as
-            // `.idle`; we let SwiftUI dismiss the sheet naturally when
-            // the user taps those buttons (sheet's `dismiss()` flips
-            // `joinWorkspacePresented` back to `false`).
-            if shouldOpenAcceptSheet(for: newState), !joinWorkspacePresented {
-                joinWorkspacePresented = true
-            }
-        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, LeafSpace.md)
+      }
+      Spacer(minLength: 0)
+      workspaceSwitcherSection
     }
-
-    /// True for any in-flight or terminal-non-idle state — auto-surface the
-    /// sheet so the user sees what's happening. `.idle` is the only state
-    /// that should NOT auto-open.
-    private func shouldOpenAcceptSheet(for state: InviteAcceptReader.State) -> Bool {
-        switch state {
-        case .idle: return false
-        case .previewing, .joining, .otpPrompt, .joined, .error: return true
-        }
-    }
-
-    // MARK: - Workspace Switcher
-
-    @ViewBuilder
-    private var workspaceSwitcherSection: some View {
-        // T4 — Free-tier: replace LeafWorkspaceSwitcher with a single
-        // «Upgrade to add workspaces» row. Free user has no workspaces, so
-        // there's nothing to switch *to* anyway — the row serves both as
-        // empty state AND the upgrade CTA in one strike.
-        if !tierGate.canCreateWorkspace {
-            freeStateSwitcherRow
-        } else {
-            teamStateSwitcher
-        }
-    }
-
-    @ViewBuilder
-    private var teamStateSwitcher: some View {
-        let workspaces: [Workspace] = {
-            if case .loaded(let ws, _, _) = workspaceReader.state { return ws }
-            return []
-        }()
-        let activeWid = activeWorkspaceStore.activeWorkspaceID
-        let sorted = workspaces
-            .filter { $0.leftAt == nil }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-
-        LeafWorkspaceSwitcher(
-            workspaces: sorted,
-            activeWorkspaceID: activeWid,
-            unreadCounts: inboxReader.unreadCountByWorkspace,
-            // S7 Stage 6 fix C-C3 — route through switchActive(to:) so the
-            // Reader's state.active is refreshed alongside the store; otherwise
-            // TeamView renders the previous workspace's name and members
-            // because state.active is only re-resolved on refresh().
-            onSelect: { wid in workspaceReader.switchActive(to: wid) },
-            onAddNew: { createWorkspacePresented = true },
-            onJoin: { joinWorkspacePresented = true },
-            onLeave: { wid in
-                leaveTargetWorkspaceID = wid
-                leavePresented = true
-            },
-            onMarkAllRead: { _ in
-                // TODO: Phase v1.1 — bulk mark-read
-                // Wire: inboxReader.markAllReadForWorkspace(wid)
-            }
+    .sheet(isPresented: $leavePresented) {
+      if let wid = leaveTargetWorkspaceID,
+        let workspace = workspacesByID[wid]
+      {
+        LeaveWorkspaceConfirmationModal(
+          workspaceName: workspace.name,
+          onConfirm: {
+            // S7 Stage 6 fix C-C2 — call leaveWorkspace(workspaceID:)
+            // directly. The earlier `setActive(wid) + leaveActiveWorkspace()`
+            // shape relied on WorkspaceReader.state.active being read
+            // *after* setActive, but setActive does not refresh the
+            // Reader's state — leaveActiveWorkspace() would read the
+            // previous active workspace and mark the *wrong* row left.
+            workspaceReader.leaveWorkspace(workspaceID: wid)
+            leavePresented = false
+            leaveTargetWorkspaceID = nil
+          },
+          onCancel: {
+            leavePresented = false
+            leaveTargetWorkspaceID = nil
+          }
         )
+      }
     }
-
-    /// T4 — Free-tier switcher row. Visually rhymes with LeafWorkspaceSwitcher
-    /// internals (LeafColor.surface.inset background, similar padding/height)
-    /// so the sidebar bottom feels continuous between tiers.
-    @ViewBuilder
-    private var freeStateSwitcherRow: some View {
-        Button {
-            showUpgrade = true
-        } label: {
-            HStack(spacing: LeafSpace.sm) {
-                Image(systemName: "lock.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(LeafColor.status.warning)
-                Text("Upgrade to add workspaces")
-                    .font(LeafType.body.small)
-                    .foregroundStyle(LeafColor.text.primary)
-                Spacer(minLength: 0)
-            }
-            .padding(LeafSpace.md)
-            .contentShape(.rect)
+    .sheet(isPresented: $createWorkspacePresented) {
+      WorkspaceCreateSheet(
+        onCreated: {
+          workspaceReader.refresh()
+          createWorkspacePresented = false
+        },
+        onCancel: { createWorkspacePresented = false }
+      )
+    }
+    .sheet(isPresented: $showUpgrade) {
+      UpgradeModal(
+        reason: .createWorkspace,
+        onDismiss: { showUpgrade = false },
+        onSubmitEmail: { email in await submitToWaitlist(email) }
+      )
+    }
+    // S3 legacy AcceptInviteSheet host — only deep-link / clipboard-probe
+    // path now (`.onAppear` / `.onChange(of: inviteAcceptReader.state)` below).
+    // Explicit-tap "Join workspace" no longer routes here — see
+    // `joinByCodePresented` for the M027 paste-code path.
+    .sheet(isPresented: $legacyAcceptInvitePresented) {
+      AcceptInviteSheet()
+    }
+    // M027 invite-redesign — unified JoinWorkspaceByCodeSheet host. Triggers:
+    //  (a) explicit user tap on the "Join workspace" switcher footer row
+    //      (sets `joinByCodePresented = true`)
+    //  (b) link-click via `leaf://invite/<LEAF-XXXX-XXXX-XXXX>` →
+    //      InviteURLHandler sets `WindowState.pendingInviteCode = code` →
+    //      sheet opens pre-filled at `.enterName` step
+    .sheet(
+      isPresented: Binding(
+        get: { joinByCodePresented || windowState.pendingInviteCode != nil },
+        set: { newValue in
+          if !newValue {
+            joinByCodePresented = false
+            windowState.pendingInviteCode = nil
+          }
         }
-        .buttonStyle(.plain)
-        .background(LeafColor.surface.inset)
+      )
+    ) {
+      JoinWorkspaceByCodeSheet()
     }
-
-    // MARK: - Helpers
-
-    /// True when any wired provider scope-status reader signals outdated.
-    /// D2 wires only GitHub; D3 adds Slack via OR-condition; Track 3 D4
-    /// generalizes per-provider scope status.
-    private var connectionsNeedsAttention: Bool {
-        if case .connectedScopeOutdated = githubScopes.state { return true }
-        if case .connectedScopeOutdated = slackScopes.state { return true }
-        return false
+    // M027 invite-redesign — after Send Request, the waiting card polls
+    // own request status (30s) until terminal state.
+    .sheet(isPresented: Bindable(windowState).joinRequestWaitingPresented) {
+      JoinRequestWaitingCard()
     }
-
-    private var workspacesByID: [String: Workspace] {
-        let workspaces: [Workspace] = {
-            if case .loaded(let ws, _, _) = workspaceReader.state { return ws }
-            return []
-        }()
-        return Dictionary(uniqueKeysWithValues: workspaces.map { ($0.id, $0) })
+    .onAppear {
+      // Catch state already non-`.idle` when Sidebar first appears —
+      // e.g. user launched app via a `leaf://invite/...` URL and the
+      // `.onOpenURL` handler in LeafApp.swift fired `reader.fetch`
+      // before Sidebar was mounted.
+      if shouldOpenAcceptSheet(for: inviteAcceptReader.state) {
+        legacyAcceptInvitePresented = true
+      }
     }
+    .onChange(of: inviteAcceptReader.state) { _, newState in
+      // Open-only — never auto-dismiss. Sheet's Discard / Done /
+      // Close paths call `reader.reset()` which lands here as
+      // `.idle`; we let SwiftUI dismiss the sheet naturally when
+      // the user taps those buttons (sheet's `dismiss()` flips
+      // `legacyAcceptInvitePresented` back to `false`).
+      if shouldOpenAcceptSheet(for: newState), !legacyAcceptInvitePresented {
+        legacyAcceptInvitePresented = true
+      }
+    }
+  }
 
-    @ViewBuilder
-    private func group(title: String, items: [WindowSection]) -> some View {
-        VStack(alignment: .leading, spacing: LeafSpace.xs) {
-            Text(title)
-                .leafSectionLabel()
-                .foregroundStyle(LeafColor.text.tertiary)
-                .padding(.horizontal, LeafSpace.md)
+  /// True for any in-flight or terminal-non-idle state — auto-surface the
+  /// sheet so the user sees what's happening. `.idle` is the only state
+  /// that should NOT auto-open.
+  private func shouldOpenAcceptSheet(for state: InviteAcceptReader.State) -> Bool {
+    switch state {
+    case .idle: return false
+    case .previewing, .joining, .otpPrompt, .joined, .error: return true
+    }
+  }
 
-            VStack(alignment: .leading, spacing: LeafSpace.xxs) {
-                ForEach(items) { item in
-                    LeafNavRow(
-                        icon: item.iconIsSystem ? .system(item.icon) : .asset(item.icon),
-                        title: item.title,
-                        isSelected: Binding(
-                            get: { selection == item },
-                            set: { if $0 { selection = item } }
-                        ),
-                        onTap: { selection = item }
-                    )
-                    .overlay(alignment: .topTrailing) {
-                        if item == .connections, connectionsNeedsAttention {
-                            LeafDot(tone: .danger, size: .sm)
-                                .padding(LeafSpace.sm)
-                                .accessibilityLabel("Attention required")
-                        }
-                    }
-                }
+  // MARK: - Workspace Switcher
+
+  @ViewBuilder
+  private var workspaceSwitcherSection: some View {
+    // T4 — Free-tier: replace LeafWorkspaceSwitcher with a single
+    // «Upgrade to add workspaces» row. Free user has no workspaces, so
+    // there's nothing to switch *to* anyway — the row serves both as
+    // empty state AND the upgrade CTA in one strike.
+    if !tierGate.canCreateWorkspace {
+      freeStateSwitcherRow
+    } else {
+      teamStateSwitcher
+    }
+  }
+
+  @ViewBuilder
+  private var teamStateSwitcher: some View {
+    let workspaces: [Workspace] = {
+      if case .loaded(let ws, _, _) = workspaceReader.state { return ws }
+      return []
+    }()
+    let activeWid = activeWorkspaceStore.activeWorkspaceID
+    let sorted =
+      workspaces
+      .filter { $0.leftAt == nil }
+      .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+
+    LeafWorkspaceSwitcher(
+      workspaces: sorted,
+      activeWorkspaceID: activeWid,
+      unreadCounts: inboxReader.unreadCountByWorkspace,
+      // S7 Stage 6 fix C-C3 — route through switchActive(to:) so the
+      // Reader's state.active is refreshed alongside the store; otherwise
+      // TeamView renders the previous workspace's name and members
+      // because state.active is only re-resolved on refresh().
+      onSelect: { wid in workspaceReader.switchActive(to: wid) },
+      onAddNew: { createWorkspacePresented = true },
+      onJoin: { joinByCodePresented = true },
+      onLeave: { wid in
+        leaveTargetWorkspaceID = wid
+        leavePresented = true
+      },
+      onMarkAllRead: { _ in
+        // TODO: Phase v1.1 — bulk mark-read
+        // Wire: inboxReader.markAllReadForWorkspace(wid)
+      }
+    )
+  }
+
+  /// T4 — Free-tier switcher row. Visually rhymes with LeafWorkspaceSwitcher
+  /// internals (LeafColor.surface.inset background, similar padding/height)
+  /// so the sidebar bottom feels continuous between tiers.
+  @ViewBuilder
+  private var freeStateSwitcherRow: some View {
+    Button {
+      showUpgrade = true
+    } label: {
+      HStack(spacing: LeafSpace.sm) {
+        Image(systemName: "lock.fill")
+          .font(.system(size: 14))
+          .foregroundStyle(LeafColor.status.warning)
+        Text("Upgrade to add workspaces")
+          .font(LeafType.body.small)
+          .foregroundStyle(LeafColor.text.primary)
+        Spacer(minLength: 0)
+      }
+      .padding(LeafSpace.md)
+      .contentShape(.rect)
+    }
+    .buttonStyle(.plain)
+    .background(LeafColor.surface.inset)
+  }
+
+  // MARK: - Helpers
+
+  /// True when any wired provider scope-status reader signals outdated.
+  /// D2 wires only GitHub; D3 adds Slack via OR-condition; Track 3 D4
+  /// generalizes per-provider scope status.
+  private var connectionsNeedsAttention: Bool {
+    if case .connectedScopeOutdated = githubScopes.state { return true }
+    if case .connectedScopeOutdated = slackScopes.state { return true }
+    return false
+  }
+
+  private var workspacesByID: [String: Workspace] {
+    let workspaces: [Workspace] = {
+      if case .loaded(let ws, _, _) = workspaceReader.state { return ws }
+      return []
+    }()
+    return Dictionary(uniqueKeysWithValues: workspaces.map { ($0.id, $0) })
+  }
+
+  @ViewBuilder
+  private func group(title: String, items: [WindowSection]) -> some View {
+    VStack(alignment: .leading, spacing: LeafSpace.xs) {
+      Text(title)
+        .leafSectionLabel()
+        .foregroundStyle(LeafColor.text.tertiary)
+        .padding(.horizontal, LeafSpace.md)
+
+      VStack(alignment: .leading, spacing: LeafSpace.xxs) {
+        ForEach(items) { item in
+          LeafNavRow(
+            icon: item.iconIsSystem ? .system(item.icon) : .asset(item.icon),
+            title: item.title,
+            isSelected: Binding(
+              get: { selection == item },
+              set: { if $0 { selection = item } }
+            ),
+            onTap: { selection = item }
+          )
+          .overlay(alignment: .topTrailing) {
+            if item == .connections, connectionsNeedsAttention {
+              LeafDot(tone: .danger, size: .sm)
+                .padding(LeafSpace.sm)
+                .accessibilityLabel("Attention required")
             }
+          }
         }
+      }
     }
+  }
 }
