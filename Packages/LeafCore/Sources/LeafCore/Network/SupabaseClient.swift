@@ -15,643 +15,683 @@ import CryptoKit
 import Foundation
 
 public actor SupabaseClient {
-    // Track 5 / S7 H.1 — `baseURL` and `anonKey` are immutable post-init and
-    // safely readable from nonisolated contexts (e.g., Realtime URL composition
-    // at LeafApp.init time). Marking `nonisolated let` makes them callable
-    // without an `await` actor hop.
-    public nonisolated let baseURL: URL
-    public nonisolated let anonKey: String
-    internal let urlSession: URLSession
-    private let identity: @Sendable () throws -> Curve25519.KeyAgreement.PrivateKey
-    internal let now: @Sendable () -> Date
-    private let sessionStore: SupabaseSessionStore?
+  // Track 5 / S7 H.1 — `baseURL` and `anonKey` are immutable post-init and
+  // safely readable from nonisolated contexts (e.g., Realtime URL composition
+  // at LeafApp.init time). Marking `nonisolated let` makes them callable
+  // without an `await` actor hop.
+  public nonisolated let baseURL: URL
+  public nonisolated let anonKey: String
+  internal let urlSession: URLSession
+  private let identity: @Sendable () throws -> Curve25519.KeyAgreement.PrivateKey
+  internal let now: @Sendable () -> Date
+  private let sessionStore: SupabaseSessionStore?
 
-    private var state: BootstrapState = .notAuthenticated
+  private var state: BootstrapState = .notAuthenticated
 
-    /// Wall-clock timestamp of the most recent successful token refresh (or
-    /// initial bootstrap completion). Used by `ensureFreshSession()` to guard
-    /// against NTP-skew drift: even if the JWT `exp` claim is far away, force
-    /// a refresh after ~55min so a long-running session never silently rides
-    /// past server-side expiry on a clock-skewed device.
-    private var lastRefreshAt: Date?
+  /// Wall-clock timestamp of the most recent successful token refresh (or
+  /// initial bootstrap completion). Used by `ensureFreshSession()` to guard
+  /// against NTP-skew drift: even if the JWT `exp` claim is far away, force
+  /// a refresh after ~55min so a long-running session never silently rides
+  /// past server-side expiry on a clock-skewed device.
+  private var lastRefreshAt: Date?
 
-    /// Coalescing slot for concurrent `ensureFreshSession()` callers. The
-    /// first caller installs a Task here; subsequent callers `await` the same
-    /// Task instead of firing a duplicate `/auth/v1/token` request.
-    private var inflightFreshSessionTask: Task<SupabaseAuthSession, Error>?
+  /// Coalescing slot for concurrent `ensureFreshSession()` callers. The
+  /// first caller installs a Task here; subsequent callers `await` the same
+  /// Task instead of firing a duplicate `/auth/v1/token` request.
+  private var inflightFreshSessionTask: Task<SupabaseAuthSession, Error>?
 
-    public init(baseURL: URL,
-                anonKey: String,
-                urlSession: URLSession = .shared,
-                identity: @escaping @Sendable () throws -> Curve25519.KeyAgreement.PrivateKey,
-                now: @escaping @Sendable () -> Date = { Date() },
-                sessionStore: SupabaseSessionStore? = nil) {
-        self.baseURL = baseURL
-        self.anonKey = anonKey
-        self.urlSession = urlSession
-        self.identity = identity
-        self.now = now
-        self.sessionStore = sessionStore
+  public init(
+    baseURL: URL,
+    anonKey: String,
+    urlSession: URLSession = .shared,
+    identity: @escaping @Sendable () throws -> Curve25519.KeyAgreement.PrivateKey,
+    now: @escaping @Sendable () -> Date = { Date() },
+    sessionStore: SupabaseSessionStore? = nil
+  ) {
+    self.baseURL = baseURL
+    self.anonKey = anonKey
+    self.urlSession = urlSession
+    self.identity = identity
+    self.now = now
+    self.sessionStore = sessionStore
+  }
+
+  public func currentSession() -> SupabaseAuthSession? {
+    if case .authenticated(let s) = state { return s }
+    return nil
+  }
+
+  public func signOut() {
+    state = .notAuthenticated
+  }
+
+  // MARK: - Public — ensureAuthenticated
+
+  /// Idempotent. Returns cached session if still valid; otherwise performs
+  /// 3-step bootstrap: signInAnonymously → registerPubkey → token refresh.
+  /// Concurrent callers share the in-flight bootstrap via .bootstrapping(task).
+  public func ensureAuthenticated() async throws -> SupabaseAuthSession {
+    if case .authenticated(let s) = state, s.expiresAt > now() { return s }
+    if case .bootstrapping(let task) = state { return try await task.value }
+
+    let task = Task { try await self.performBootstrap() }
+    state = .bootstrapping(task)
+    do {
+      let session = try await task.value
+      state = .authenticated(session)
+      // Bootstrap finishes with a token-refresh round-trip; stamp here so
+      // ensureFreshSession's NTP-skew margin starts ticking from a known
+      // wall-clock anchor instead of the JWT's iat (which we don't read).
+      lastRefreshAt = now()
+      return session
+    } catch {
+      state = .notAuthenticated
+      throw error
+    }
+  }
+
+  // MARK: - ensureFreshSession (P1 hot-fix — JWT refresh for Realtime)
+
+  /// Refresh the access_token if it's near expiry OR the NTP-skew margin
+  /// has been exceeded; otherwise return the cached session unchanged.
+  ///
+  /// Refresh policy (matches P1 hot-fix spec §3.3):
+  /// * exp − now < 60s — explicit near-expiry trigger.
+  /// * lastRefreshAt + 55min < now — NTP-skew defense; covers devices
+  ///   whose clock drifts (asleep overnight, manual time changes) where
+  ///   the JWT exp claim looks far away but the server already considers
+  ///   the token expired.
+  ///
+  /// Concurrent callers coalesce on `inflightFreshSessionTask` — at most
+  /// one `/auth/v1/token` POST is in flight at a time. Errors are
+  /// surfaced to all coalesced callers identically.
+  ///
+  /// Throws `SupabaseError.unauthorized` if called before any successful
+  /// bootstrap (no cached session to refresh from). Caller is expected to
+  /// have driven `ensureAuthenticated()` at app startup.
+  public func ensureFreshSession() async throws -> SupabaseAuthSession {
+    // Coalesce: if a refresh is already in flight, await it.
+    if let task = inflightFreshSessionTask {
+      return try await task.value
     }
 
-    public func currentSession() -> SupabaseAuthSession? {
-        if case .authenticated(let s) = state { return s }
-        return nil
+    // Cold-launch race (P1 code-review I1): a Realtime reconnect can fire
+    // ensureFreshSession concurrent with the very first
+    // ensureAuthenticated() bootstrap. Mirror ensureAuthenticated's
+    // pattern — await the in-flight Task instead of throwing
+    // .unauthorized. After the bootstrap returns, re-check shouldRefresh
+    // against the freshly-bootstrapped session. If refresh isn't needed
+    // (typical — bootstrap finishes with a token refresh, lastRefreshAt
+    // is freshly stamped), return it directly. Otherwise fall through to
+    // the refresh path which will read the now-`.authenticated` state.
+    if case .bootstrapping(let task) = state {
+      let bootstrapped = try await task.value
+      if !shouldRefresh(session: bootstrapped) {
+        return bootstrapped
+      }
     }
 
-    public func signOut() {
-        state = .notAuthenticated
+    // Need an existing session to refresh from.
+    guard case .authenticated(let current) = state else {
+      throw SupabaseError.unauthorized
     }
 
-    // MARK: - Public — ensureAuthenticated
-
-    /// Idempotent. Returns cached session if still valid; otherwise performs
-    /// 3-step bootstrap: signInAnonymously → registerPubkey → token refresh.
-    /// Concurrent callers share the in-flight bootstrap via .bootstrapping(task).
-    public func ensureAuthenticated() async throws -> SupabaseAuthSession {
-        if case .authenticated(let s) = state, s.expiresAt > now() { return s }
-        if case .bootstrapping(let task) = state { return try await task.value }
-
-        let task = Task { try await self.performBootstrap() }
-        state = .bootstrapping(task)
-        do {
-            let session = try await task.value
-            state = .authenticated(session)
-            // Bootstrap finishes with a token-refresh round-trip; stamp here so
-            // ensureFreshSession's NTP-skew margin starts ticking from a known
-            // wall-clock anchor instead of the JWT's iat (which we don't read).
-            lastRefreshAt = now()
-            return session
-        } catch {
-            state = .notAuthenticated
-            throw error
-        }
+    // Should-we-refresh decision (cheap, runs every caller).
+    if !shouldRefresh(session: current) {
+      return current
     }
 
-    // MARK: - ensureFreshSession (P1 hot-fix — JWT refresh for Realtime)
-
-    /// Refresh the access_token if it's near expiry OR the NTP-skew margin
-    /// has been exceeded; otherwise return the cached session unchanged.
-    ///
-    /// Refresh policy (matches P1 hot-fix spec §3.3):
-    /// * exp − now < 60s — explicit near-expiry trigger.
-    /// * lastRefreshAt + 55min < now — NTP-skew defense; covers devices
-    ///   whose clock drifts (asleep overnight, manual time changes) where
-    ///   the JWT exp claim looks far away but the server already considers
-    ///   the token expired.
-    ///
-    /// Concurrent callers coalesce on `inflightFreshSessionTask` — at most
-    /// one `/auth/v1/token` POST is in flight at a time. Errors are
-    /// surfaced to all coalesced callers identically.
-    ///
-    /// Throws `SupabaseError.unauthorized` if called before any successful
-    /// bootstrap (no cached session to refresh from). Caller is expected to
-    /// have driven `ensureAuthenticated()` at app startup.
-    public func ensureFreshSession() async throws -> SupabaseAuthSession {
-        // Coalesce: if a refresh is already in flight, await it.
-        if let task = inflightFreshSessionTask {
-            return try await task.value
-        }
-
-        // Cold-launch race (P1 code-review I1): a Realtime reconnect can fire
-        // ensureFreshSession concurrent with the very first
-        // ensureAuthenticated() bootstrap. Mirror ensureAuthenticated's
-        // pattern — await the in-flight Task instead of throwing
-        // .unauthorized. After the bootstrap returns, re-check shouldRefresh
-        // against the freshly-bootstrapped session. If refresh isn't needed
-        // (typical — bootstrap finishes with a token refresh, lastRefreshAt
-        // is freshly stamped), return it directly. Otherwise fall through to
-        // the refresh path which will read the now-`.authenticated` state.
-        if case .bootstrapping(let task) = state {
-            let bootstrapped = try await task.value
-            if !shouldRefresh(session: bootstrapped) {
-                return bootstrapped
-            }
-        }
-
-        // Need an existing session to refresh from.
-        guard case .authenticated(let current) = state else {
-            throw SupabaseError.unauthorized
-        }
-
-        // Should-we-refresh decision (cheap, runs every caller).
-        if !shouldRefresh(session: current) {
-            return current
-        }
-
-        // Install an inflight Task; concurrent callers share its value.
-        let refreshToken = current.refreshToken
-        let task = Task { [weak self] in
-            guard let self else { throw SupabaseError.unauthorized }
-            return try await self.performFreshSessionRefresh(refreshToken: refreshToken)
-        }
-        inflightFreshSessionTask = task
-        do {
-            let refreshed = try await task.value
-            // Successful completion: persist if a sessionStore is wired so
-            // app cold-start picks up the rotated refresh_token.
-            if let store = sessionStore {
-                persistSessionBestEffort(store: store, session: refreshed)
-            }
-            inflightFreshSessionTask = nil
-            return refreshed
-        } catch {
-            inflightFreshSessionTask = nil
-            throw error
-        }
+    // Install an inflight Task; concurrent callers share its value.
+    let refreshToken = current.refreshToken
+    let task = Task { [weak self] in
+      guard let self else { throw SupabaseError.unauthorized }
+      return try await self.performFreshSessionRefresh(refreshToken: refreshToken)
     }
-
-    /// Pure decision predicate. Extracted so it stays trivially testable and
-    /// the two trigger conditions are documented in one place.
-    private func shouldRefresh(session: SupabaseAuthSession) -> Bool {
-        let nowDate = now()
-        // Trigger 1: near expiry (< 60s remaining).
-        let secondsToExpiry = session.expiresAt.timeIntervalSince(nowDate)
-        if secondsToExpiry < 60 { return true }
-        // Trigger 2: NTP-skew margin exceeded (lastRefreshAt + 55min < now).
-        if let last = lastRefreshAt {
-            if nowDate.timeIntervalSince(last) > (55 * 60) { return true }
-        }
-        return false
+    inflightFreshSessionTask = task
+    do {
+      let refreshed = try await task.value
+      // Successful completion: persist if a sessionStore is wired so
+      // app cold-start picks up the rotated refresh_token.
+      if let store = sessionStore {
+        persistSessionBestEffort(store: store, session: refreshed)
+      }
+      inflightFreshSessionTask = nil
+      return refreshed
+    } catch {
+      inflightFreshSessionTask = nil
+      throw error
     }
+  }
 
-    /// Refresh path that ALSO updates the actor's state + lastRefreshAt.
-    /// Separated from `performTokenRefresh` so the bootstrap flow (which
-    /// owns its own state-transition logic) stays untouched.
-    private func performFreshSessionRefresh(refreshToken: String) async throws -> SupabaseAuthSession {
-        let refreshed = try await performTokenRefresh(refreshToken: refreshToken)
-        state = .authenticated(refreshed)
-        lastRefreshAt = now()
-        return refreshed
+  /// Pure decision predicate. Extracted so it stays trivially testable and
+  /// the two trigger conditions are documented in one place.
+  private func shouldRefresh(session: SupabaseAuthSession) -> Bool {
+    let nowDate = now()
+    // Trigger 1: near expiry (< 60s remaining).
+    let secondsToExpiry = session.expiresAt.timeIntervalSince(nowDate)
+    if secondsToExpiry < 60 { return true }
+    // Trigger 2: NTP-skew margin exceeded (lastRefreshAt + 55min < now).
+    if let last = lastRefreshAt {
+      if nowDate.timeIntervalSince(last) > (55 * 60) { return true }
     }
+    return false
+  }
 
-    #if DEBUG
+  /// Refresh path that ALSO updates the actor's state + lastRefreshAt.
+  /// Separated from `performTokenRefresh` so the bootstrap flow (which
+  /// owns its own state-transition logic) stays untouched.
+  private func performFreshSessionRefresh(refreshToken: String) async throws -> SupabaseAuthSession
+  {
+    let refreshed = try await performTokenRefresh(refreshToken: refreshToken)
+    state = .authenticated(refreshed)
+    lastRefreshAt = now()
+    return refreshed
+  }
+
+  #if DEBUG
     /// Test-only inspector for the lastRefreshAt timestamp.
     public func lastRefreshAtForTesting() -> Date? { lastRefreshAt }
-    #endif
+  #endif
 
-    private func performBootstrap() async throws -> SupabaseAuthSession {
-        // Track 5 / S4 — try persisted refresh_token first (closes S3 carry-over I3).
-        // If sessionStore present + has persisted session + refresh succeeds → reuse.
-        // Failure (no store / no persisted / 4xx on refresh) → fall through to fresh signup.
-        if let store = sessionStore, let persisted = readPersistedBestEffort(store: store) {
-            do {
-                let refreshed = try await performTokenRefresh(refreshToken: persisted.refreshToken)
-                persistSessionBestEffort(store: store, session: refreshed)
-                return refreshed
-            } catch {
-                // Persisted refresh failed; fall through to fresh signup below.
-                // (Don't clear yet — next successful auth will overwrite.)
-            }
-        }
-
-        let initial = try await performSignInAnonymously()
-        try await performRegisterPubkey(accessToken: initial.accessToken)
-        let refreshed = try await performTokenRefresh(refreshToken: initial.refreshToken)
-        if let store = sessionStore {
-            persistSessionBestEffort(store: store, session: refreshed)
-        }
+  private func performBootstrap() async throws -> SupabaseAuthSession {
+    // Track 5 / S4 — try persisted refresh_token first (closes S3 carry-over I3).
+    // If sessionStore present + has persisted session + refresh succeeds → reuse.
+    // Failure (no store / no persisted / 4xx on refresh) → fall through to fresh signup.
+    if let store = sessionStore, let persisted = readPersistedBestEffort(store: store) {
+      do {
+        let refreshed = try await performTokenRefresh(refreshToken: persisted.refreshToken)
+        persistSessionBestEffort(store: store, session: refreshed)
         return refreshed
+      } catch {
+        // Persisted refresh failed; fall through to fresh signup below.
+        // (Don't clear yet — next successful auth will overwrite.)
+      }
     }
 
-    private func readPersistedBestEffort(store: SupabaseSessionStore) -> PersistedSession? {
-        do {
-            return try store.read()
-        } catch {
-            // Log + proceed as if no persisted session.
-            return nil
-        }
+    let initial = try await performSignInAnonymously()
+    // Persist refresh_token from the initial signup BEFORE any further
+    // bootstrap step. If registerPubkey returns 409 (TOFU collision —
+    // most commonly: priv-file survived a partial local wipe while
+    // server-side `pubkey_registry` still holds the old auth_id), the
+    // next cold launch will refresh into THIS auth_id and either:
+    //  (a) hit register_pubkey's idempotent branch on retry (auth_id
+    //      PK already paired with the same pubkey → 200), or
+    //  (b) at minimum stay anchored to a single auth_id rather than
+    //      allocating a fresh one every cold launch that re-collides.
+    // Without this early persist, register failure leaves the user
+    // permanently stuck in a TOFU dead-end loop.
+    if let store = sessionStore {
+      persistSessionBestEffort(store: store, session: initial)
     }
-
-    private func persistSessionBestEffort(store: SupabaseSessionStore, session: SupabaseAuthSession) {
-        let persisted = PersistedSession(
-            refreshToken: session.refreshToken,
-            userID: session.userID.uuidString.lowercased(),
-            savedAtMs: Int64(now().timeIntervalSince1970 * 1000)
-        )
-        try? store.write(persisted)
+    try await performRegisterPubkey(accessToken: initial.accessToken)
+    let refreshed = try await performTokenRefresh(refreshToken: initial.refreshToken)
+    if let store = sessionStore {
+      persistSessionBestEffort(store: store, session: refreshed)
     }
+    return refreshed
+  }
 
-    // MARK: - Internal HTTP — signInAnonymously
-
-    /// Internal: signs in anonymously via Supabase Auth. Idempotent failure mode —
-    /// network error / 4xx / malformed body throw SupabaseError; state stays
-    /// .notAuthenticated for caller to retry.
-    private func performSignInAnonymously() async throws -> SupabaseAuthSession {
-        let url = SupabaseEndpoint.signupAnonymous(baseURL: baseURL)
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in SupabaseEndpoint.anonHeaders(anonKey: anonKey) {
-            request.setValue(v, forHTTPHeaderField: k)
-        }
-        request.httpBody = "{}".data(using: .utf8)
-        return try await decodeAuthResponse(request: request, label: "signupAnonymous")
+  private func readPersistedBestEffort(store: SupabaseSessionStore) -> PersistedSession? {
+    do {
+      return try store.read()
+    } catch {
+      // Log + proceed as if no persisted session.
+      return nil
     }
+  }
 
-    private func decodeAuthResponse(request: URLRequest, label: String) async throws -> SupabaseAuthSession {
-        let (data, response): (Data, URLResponse)
-        do {
-            (data, response) = try await urlSession.data(for: request)
-        } catch {
-            throw SupabaseError.transport(reason: "\(label): \(error)")
-        }
-        guard let http = response as? HTTPURLResponse else {
-            throw SupabaseError.transport(reason: "\(label): non-http")
-        }
-        guard http.statusCode == 200 else {
-            throw SupabaseError.fromStatus(http.statusCode, body: data)
-        }
-        struct Body: Decodable {
-            let access_token: String
-            let refresh_token: String
-            let user: User
-            let expires_at: Int64?
-            struct User: Decodable { let id: String }
-        }
-        let body: Body
-        do {
-            body = try JSONDecoder().decode(Body.self, from: data)
-        } catch {
-            throw SupabaseError.decoding(reason: "\(label): \(error)")
-        }
-        guard let userID = UUID(uuidString: body.user.id) else {
-            throw SupabaseError.decoding(reason: "\(label): bad user id")
-        }
-        let expiresAt = body.expires_at.map { Date(timeIntervalSince1970: TimeInterval($0)) }
-            ?? now().addingTimeInterval(60 * 60)
-        return SupabaseAuthSession(
-            accessToken: body.access_token,
-            refreshToken: body.refresh_token,
-            userID: userID,
-            expiresAt: expiresAt,
-            pubkeyClaim: nil
-        )
+  private func persistSessionBestEffort(store: SupabaseSessionStore, session: SupabaseAuthSession) {
+    let persisted = PersistedSession(
+      refreshToken: session.refreshToken,
+      userID: session.userID.uuidString.lowercased(),
+      savedAtMs: Int64(now().timeIntervalSince1970 * 1000)
+    )
+    try? store.write(persisted)
+  }
+
+  // MARK: - Internal HTTP — signInAnonymously
+
+  /// Internal: signs in anonymously via Supabase Auth. Idempotent failure mode —
+  /// network error / 4xx / malformed body throw SupabaseError; state stays
+  /// .notAuthenticated for caller to retry.
+  private func performSignInAnonymously() async throws -> SupabaseAuthSession {
+    let url = SupabaseEndpoint.signupAnonymous(baseURL: baseURL)
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    for (k, v) in SupabaseEndpoint.anonHeaders(anonKey: anonKey) {
+      request.setValue(v, forHTTPHeaderField: k)
     }
+    request.httpBody = "{}".data(using: .utf8)
+    return try await decodeAuthResponse(request: request, label: "signupAnonymous")
+  }
 
-    // MARK: - Internal HTTP — tokenRefresh
-
-    private func performTokenRefresh(refreshToken: String) async throws -> SupabaseAuthSession {
-        let url = SupabaseEndpoint.tokenRefresh(baseURL: baseURL)
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in SupabaseEndpoint.anonHeaders(anonKey: anonKey) {
-            request.setValue(v, forHTTPHeaderField: k)
-        }
-        let body: [String: String] = ["refresh_token": refreshToken]
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let session = try await decodeAuthResponse(request: request, label: "tokenRefresh")
-        // Populate pubkeyClaim from the new JWT's claims (best-effort decode).
-        return session.populatingPubkeyClaim()
+  private func decodeAuthResponse(request: URLRequest, label: String) async throws
+    -> SupabaseAuthSession
+  {
+    let (data, response): (Data, URLResponse)
+    do {
+      (data, response) = try await urlSession.data(for: request)
+    } catch {
+      throw SupabaseError.transport(reason: "\(label): \(error)")
     }
-
-    // MARK: - Internal HTTP — registerPubkey
-
-    private func performRegisterPubkey(accessToken: String) async throws {
-        let priv = try identity()
-        let pubkeyHex = priv.publicKey.rawRepresentation
-            .map { String(format: "%02x", $0) }.joined()
-
-        let url = SupabaseEndpoint.registerPubkey(baseURL: baseURL)
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in SupabaseEndpoint.authenticatedHeaders(anonKey: anonKey, accessToken: accessToken) {
-            request.setValue(v, forHTTPHeaderField: k)
-        }
-        let body: [String: String] = ["pubkey": pubkeyHex]
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-        let (data, response): (Data, URLResponse)
-        do {
-            (data, response) = try await urlSession.data(for: request)
-        } catch {
-            throw SupabaseError.transport(reason: "registerPubkey: \(error)")
-        }
-        guard let http = response as? HTTPURLResponse else {
-            throw SupabaseError.transport(reason: "registerPubkey: non-http")
-        }
-        if http.statusCode == 200 { return }
-        throw SupabaseError.fromRegisterPubkey(status: http.statusCode, body: data)
+    guard let http = response as? HTTPURLResponse else {
+      throw SupabaseError.transport(reason: "\(label): non-http")
     }
+    guard http.statusCode == 200 else {
+      throw SupabaseError.fromStatus(http.statusCode, body: data)
+    }
+    struct Body: Decodable {
+      let access_token: String
+      let refresh_token: String
+      let user: User
+      let expires_at: Int64?
+      struct User: Decodable { let id: String }
+    }
+    let body: Body
+    do {
+      body = try JSONDecoder().decode(Body.self, from: data)
+    } catch {
+      throw SupabaseError.decoding(reason: "\(label): \(error)")
+    }
+    guard let userID = UUID(uuidString: body.user.id) else {
+      throw SupabaseError.decoding(reason: "\(label): bad user id")
+    }
+    let expiresAt =
+      body.expires_at.map { Date(timeIntervalSince1970: TimeInterval($0)) }
+      ?? now().addingTimeInterval(60 * 60)
+    return SupabaseAuthSession(
+      accessToken: body.access_token,
+      refreshToken: body.refresh_token,
+      userID: userID,
+      expiresAt: expiresAt,
+      pubkeyClaim: nil
+    )
+  }
 
-    // MARK: - Test-only DEBUG surface (Task 2 transient — Task 3 superseded by ensureAuthenticated)
+  // MARK: - Internal HTTP — tokenRefresh
 
-    #if DEBUG
+  private func performTokenRefresh(refreshToken: String) async throws -> SupabaseAuthSession {
+    let url = SupabaseEndpoint.tokenRefresh(baseURL: baseURL)
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    for (k, v) in SupabaseEndpoint.anonHeaders(anonKey: anonKey) {
+      request.setValue(v, forHTTPHeaderField: k)
+    }
+    let body: [String: String] = ["refresh_token": refreshToken]
+    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+    let session = try await decodeAuthResponse(request: request, label: "tokenRefresh")
+    // Populate pubkeyClaim from the new JWT's claims (best-effort decode).
+    return session.populatingPubkeyClaim()
+  }
+
+  // MARK: - Internal HTTP — registerPubkey
+
+  private func performRegisterPubkey(accessToken: String) async throws {
+    let priv = try identity()
+    let pubkeyHex = priv.publicKey.rawRepresentation
+      .map { String(format: "%02x", $0) }.joined()
+
+    let url = SupabaseEndpoint.registerPubkey(baseURL: baseURL)
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    for (k, v) in SupabaseEndpoint.authenticatedHeaders(anonKey: anonKey, accessToken: accessToken)
+    {
+      request.setValue(v, forHTTPHeaderField: k)
+    }
+    let body: [String: String] = ["pubkey": pubkeyHex]
+    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+    let (data, response): (Data, URLResponse)
+    do {
+      (data, response) = try await urlSession.data(for: request)
+    } catch {
+      throw SupabaseError.transport(reason: "registerPubkey: \(error)")
+    }
+    guard let http = response as? HTTPURLResponse else {
+      throw SupabaseError.transport(reason: "registerPubkey: non-http")
+    }
+    if http.statusCode == 200 { return }
+    throw SupabaseError.fromRegisterPubkey(status: http.statusCode, body: data)
+  }
+
+  // MARK: - Test-only DEBUG surface (Task 2 transient — Task 3 superseded by ensureAuthenticated)
+
+  #if DEBUG
     public func performSignInAnonymouslyForTesting() async throws -> SupabaseAuthSession {
-        try await performSignInAnonymously()
+      try await performSignInAnonymously()
     }
-    #endif
+  #endif
 
-    enum BootstrapState {
-        case notAuthenticated
-        case bootstrapping(Task<SupabaseAuthSession, Error>)
-        case authenticated(SupabaseAuthSession)
-    }
+  enum BootstrapState {
+    case notAuthenticated
+    case bootstrapping(Task<SupabaseAuthSession, Error>)
+    case authenticated(SupabaseAuthSession)
+  }
 }
 
 // MARK: - IssuedInvite (Track 5 / S3 — postInvite response shape)
 
 public struct IssuedInvite: Sendable, Equatable {
-    public let tokenUUID: UUID
-    public let tokenBase64URL: String
-    public let workspaceID: String
-    public let expiresAtISO8601: String
+  public let tokenUUID: UUID
+  public let tokenBase64URL: String
+  public let workspaceID: String
+  public let expiresAtISO8601: String
 
-    public init(tokenUUID: UUID, tokenBase64URL: String, workspaceID: String, expiresAtISO8601: String) {
-        self.tokenUUID = tokenUUID
-        self.tokenBase64URL = tokenBase64URL
-        self.workspaceID = workspaceID
-        self.expiresAtISO8601 = expiresAtISO8601
-    }
+  public init(
+    tokenUUID: UUID, tokenBase64URL: String, workspaceID: String, expiresAtISO8601: String
+  ) {
+    self.tokenUUID = tokenUUID
+    self.tokenBase64URL = tokenBase64URL
+    self.workspaceID = workspaceID
+    self.expiresAtISO8601 = expiresAtISO8601
+  }
 }
 
 // MARK: - UUID ↔ base64url helpers
 
-public extension UUID {
-    /// 22-char base64url-no-padding encoding of the 16-byte raw UUID.
-    var base64URLString: String {
-        let bytes = withUnsafeBytes(of: self.uuid) { Data($0) }
-        return bytes.base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-    }
+extension UUID {
+  /// 22-char base64url-no-padding encoding of the 16-byte raw UUID.
+  public var base64URLString: String {
+    let bytes = withUnsafeBytes(of: self.uuid) { Data($0) }
+    return bytes.base64EncodedString()
+      .replacingOccurrences(of: "+", with: "-")
+      .replacingOccurrences(of: "/", with: "_")
+      .replacingOccurrences(of: "=", with: "")
+  }
 
-    init?(base64URLString: String) {
-        var s = base64URLString
-            .replacingOccurrences(of: "-", with: "+")
-            .replacingOccurrences(of: "_", with: "/")
-        let pad = (4 - s.count % 4) % 4
-        s += String(repeating: "=", count: pad)
-        guard let data = Data(base64Encoded: s), data.count == 16 else { return nil }
-        let uuid: uuid_t = data.withUnsafeBytes { rawPtr in
-            rawPtr.load(as: uuid_t.self)
-        }
-        self.init(uuid: uuid)
+  public init?(base64URLString: String) {
+    var s =
+      base64URLString
+      .replacingOccurrences(of: "-", with: "+")
+      .replacingOccurrences(of: "_", with: "/")
+    let pad = (4 - s.count % 4) % 4
+    s += String(repeating: "=", count: pad)
+    guard let data = Data(base64Encoded: s), data.count == 16 else { return nil }
+    let uuid: uuid_t = data.withUnsafeBytes { rawPtr in
+      rawPtr.load(as: uuid_t.self)
     }
+    self.init(uuid: uuid)
+  }
 }
 
 // MARK: - SupabaseClient.postInvite (admin path — Track 5 / S3)
 
 extension SupabaseClient {
-    /// Admin path — POST invite row to Supabase `invites` table via PostgREST.
-    /// Caller (InviteService) provides crypto blob bytes; we hex-encode for bytea wire.
-    /// Returns: IssuedInvite with both UUID and base64url representations of the server-issued token.
-    public func postInvite(workspaceID: String,
-                           adminPubkeyHex: String,
-                           encryptedTeamkey: Data,
-                           expiresAt: Date,
-                           requireOTP: Bool,
-                           otpHashBase64: String?) async throws -> IssuedInvite {
-        let session = try await ensureAuthenticated()
+  /// Admin path — POST invite row to Supabase `invites` table via PostgREST.
+  /// Caller (InviteService) provides crypto blob bytes; we hex-encode for bytea wire.
+  /// Returns: IssuedInvite with both UUID and base64url representations of the server-issued token.
+  public func postInvite(
+    workspaceID: String,
+    adminPubkeyHex: String,
+    encryptedTeamkey: Data,
+    expiresAt: Date,
+    requireOTP: Bool,
+    otpHashBase64: String?
+  ) async throws -> IssuedInvite {
+    let session = try await ensureAuthenticated()
 
-        let url = SupabaseEndpoint.postInvite(baseURL: baseURL)
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in SupabaseEndpoint.postgrestInsertHeaders(
-            anonKey: anonKey, accessToken: session.accessToken
-        ) {
-            request.setValue(v, forHTTPHeaderField: k)
-        }
-        let teamkeyHex = "\\x" + encryptedTeamkey.map { String(format: "%02x", $0) }.joined()
-        let iso = Self.iso8601(from: expiresAt)
-        var body: [String: Any] = [
-            "workspace_id": workspaceID,
-            "admin_pubkey": adminPubkeyHex,
-            "encrypted_teamkey": teamkeyHex,
-            "expires_at": iso,
-            "require_otp": requireOTP,
-        ]
-        if let otpHashBase64, let bytes = Data(base64Encoded: otpHashBase64) {
-            // PostgREST bytea: decode base64 → hex with \x prefix
-            body["otp_hash"] = "\\x" + bytes.map { String(format: "%02x", $0) }.joined()
-        }
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+    let url = SupabaseEndpoint.postInvite(baseURL: baseURL)
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    for (k, v) in SupabaseEndpoint.postgrestInsertHeaders(
+      anonKey: anonKey, accessToken: session.accessToken
+    ) {
+      request.setValue(v, forHTTPHeaderField: k)
+    }
+    let teamkeyHex = "\\x" + encryptedTeamkey.map { String(format: "%02x", $0) }.joined()
+    let iso = Self.iso8601(from: expiresAt)
+    var body: [String: Any] = [
+      "workspace_id": workspaceID,
+      "admin_pubkey": adminPubkeyHex,
+      "encrypted_teamkey": teamkeyHex,
+      "expires_at": iso,
+      "require_otp": requireOTP,
+    ]
+    if let otpHashBase64, let bytes = Data(base64Encoded: otpHashBase64) {
+      // PostgREST bytea: decode base64 → hex with \x prefix
+      body["otp_hash"] = "\\x" + bytes.map { String(format: "%02x", $0) }.joined()
+    }
+    request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response): (Data, URLResponse)
-        do {
-            (data, response) = try await urlSession.data(for: request)
-        } catch {
-            throw SupabaseError.transport(reason: "postInvite: \(error)")
-        }
-        guard let http = response as? HTTPURLResponse else {
-            throw SupabaseError.transport(reason: "postInvite: non-http")
-        }
-        guard http.statusCode == 201 else {
-            throw SupabaseError.fromStatus(http.statusCode, body: data)
-        }
-
-        struct Row: Decodable { let token: String; let workspace_id: String; let expires_at: String }
-        let rows: [Row]
-        do {
-            rows = try JSONDecoder().decode([Row].self, from: data)
-        } catch {
-            throw SupabaseError.decoding(reason: "postInvite: \(error)")
-        }
-        guard let first = rows.first,
-              let uuid = UUID(uuidString: first.token) else {
-            throw SupabaseError.decoding(reason: "postInvite: empty rows or bad uuid")
-        }
-        return IssuedInvite(
-            tokenUUID: uuid,
-            tokenBase64URL: uuid.base64URLString,
-            workspaceID: first.workspace_id,
-            expiresAtISO8601: first.expires_at
-        )
+    let (data, response): (Data, URLResponse)
+    do {
+      (data, response) = try await urlSession.data(for: request)
+    } catch {
+      throw SupabaseError.transport(reason: "postInvite: \(error)")
+    }
+    guard let http = response as? HTTPURLResponse else {
+      throw SupabaseError.transport(reason: "postInvite: non-http")
+    }
+    guard http.statusCode == 201 else {
+      throw SupabaseError.fromStatus(http.statusCode, body: data)
     }
 
-    private static func iso8601(from date: Date) -> String {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f.string(from: date)
+    struct Row: Decodable {
+      let token: String
+      let workspace_id: String
+      let expires_at: String
     }
+    let rows: [Row]
+    do {
+      rows = try JSONDecoder().decode([Row].self, from: data)
+    } catch {
+      throw SupabaseError.decoding(reason: "postInvite: \(error)")
+    }
+    guard let first = rows.first,
+      let uuid = UUID(uuidString: first.token)
+    else {
+      throw SupabaseError.decoding(reason: "postInvite: empty rows or bad uuid")
+    }
+    return IssuedInvite(
+      tokenUUID: uuid,
+      tokenBase64URL: uuid.base64URLString,
+      workspaceID: first.workspace_id,
+      expiresAtISO8601: first.expires_at
+    )
+  }
+
+  private static func iso8601(from date: Date) -> String {
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return f.string(from: date)
+  }
 }
 
 // MARK: - ResolvedInvite + InviteProbeStatus value types (Track 5 / S3)
 
 public struct ResolvedInvite: Sendable, Equatable {
-    public let encryptedTeamkey: Data        // decoded from base64url
-    public let adminPubkey: String           // 64-hex
-    public let workspaceID: String           // uuid
-    public let workspaceName: String
-    public let requireOTP: Bool
-    public let expiresAtISO8601: String
+  public let encryptedTeamkey: Data  // decoded from base64url
+  public let adminPubkey: String  // 64-hex
+  public let workspaceID: String  // uuid
+  public let workspaceName: String
+  public let requireOTP: Bool
+  public let expiresAtISO8601: String
 }
 
 public enum InviteProbeStatus: Sendable, Equatable {
-    case pending
-    case claimed(by: String, at: String)
-    case expired
-    case notFound
+  case pending
+  case claimed(by: String, at: String)
+  case expired
+  case notFound
 }
 
 // MARK: - resolveInvite + probeInvite (invitee path; no JWT)
 
 extension SupabaseClient {
-    public func resolveInvite(token: String, inviteePubkeyHex: String) async throws -> ResolvedInvite {
-        let url = SupabaseEndpoint.inviteResolve(baseURL: baseURL)
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        // Anon: no Authorization header (token is the auth at Edge Function layer), but
-        // Supabase production gateway (Kong) requires `apikey` header on every request.
-        // Local `supabase functions serve --no-verify-jwt` was permissive; production is not.
-        for (k, v) in SupabaseEndpoint.anonHeaders(anonKey: anonKey) {
-            request.setValue(v, forHTTPHeaderField: k)
-        }
-        let body: [String: Any] = [
-            "token": token,
-            "invitee_pubkey": inviteePubkeyHex,
-        ]
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-        let (data, response): (Data, URLResponse)
-        do { (data, response) = try await urlSession.data(for: request) }
-        catch { throw SupabaseError.transport(reason: "resolveInvite: \(error)") }
-        guard let http = response as? HTTPURLResponse else {
-            throw SupabaseError.transport(reason: "resolveInvite: non-http")
-        }
-        guard http.statusCode == 200 else {
-            throw SupabaseError.fromInviteResolve(status: http.statusCode, body: data)
-        }
-        struct Body: Decodable {
-            let encrypted_teamkey: String
-            let admin_pubkey: String
-            let workspace_id: String
-            let workspace_name: String
-            let require_otp: Bool
-            let expires_at: String
-        }
-        let parsed: Body
-        do { parsed = try JSONDecoder().decode(Body.self, from: data) }
-        catch { throw SupabaseError.decoding(reason: "resolveInvite: \(error)") }
-        guard let blobBytes = Self.base64URLDecode(parsed.encrypted_teamkey) else {
-            throw SupabaseError.decoding(reason: "resolveInvite: bad encrypted_teamkey")
-        }
-        return ResolvedInvite(
-            encryptedTeamkey: blobBytes,
-            adminPubkey: parsed.admin_pubkey,
-            workspaceID: parsed.workspace_id,
-            workspaceName: parsed.workspace_name,
-            requireOTP: parsed.require_otp,
-            expiresAtISO8601: parsed.expires_at
-        )
+  public func resolveInvite(token: String, inviteePubkeyHex: String) async throws -> ResolvedInvite
+  {
+    let url = SupabaseEndpoint.inviteResolve(baseURL: baseURL)
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    // Anon: no Authorization header (token is the auth at Edge Function layer), but
+    // Supabase production gateway (Kong) requires `apikey` header on every request.
+    // Local `supabase functions serve --no-verify-jwt` was permissive; production is not.
+    for (k, v) in SupabaseEndpoint.anonHeaders(anonKey: anonKey) {
+      request.setValue(v, forHTTPHeaderField: k)
     }
+    let body: [String: Any] = [
+      "token": token,
+      "invitee_pubkey": inviteePubkeyHex,
+    ]
+    request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-    public func probeInvite(token: String) async throws -> InviteProbeStatus {
-        let url = SupabaseEndpoint.inviteResolve(baseURL: baseURL)
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        // Anon: apikey required by Supabase production gateway (same shape as resolveInvite above).
-        for (k, v) in SupabaseEndpoint.anonHeaders(anonKey: anonKey) {
-            request.setValue(v, forHTTPHeaderField: k)
-        }
-        request.httpBody = try JSONSerialization.data(withJSONObject: ["token": token, "probe": true])
-
-        let (data, response): (Data, URLResponse)
-        do { (data, response) = try await urlSession.data(for: request) }
-        catch { throw SupabaseError.transport(reason: "probeInvite: \(error)") }
-        guard let http = response as? HTTPURLResponse else {
-            throw SupabaseError.transport(reason: "probeInvite: non-http")
-        }
-        guard http.statusCode == 200 else {
-            throw SupabaseError.fromStatus(http.statusCode, body: data)
-        }
-        struct Body: Decodable {
-            let status: String
-            let claimed_at: String?
-            let claimed_by_pubkey: String?
-            let expires_at: String?
-        }
-        let body: Body
-        do { body = try JSONDecoder().decode(Body.self, from: data) }
-        catch { throw SupabaseError.decoding(reason: "probeInvite: \(error)") }
-        switch body.status {
-        case "pending": return .pending
-        case "claimed":
-            return .claimed(by: body.claimed_by_pubkey ?? "", at: body.claimed_at ?? "")
-        case "expired": return .expired
-        case "not_found": return .notFound
-        default: throw SupabaseError.decoding(reason: "probeInvite: unknown status \(body.status)")
-        }
+    let (data, response): (Data, URLResponse)
+    do { (data, response) = try await urlSession.data(for: request) } catch {
+      throw SupabaseError.transport(reason: "resolveInvite: \(error)")
     }
-
-    static func base64URLDecode(_ s: String) -> Data? {
-        var t = s.replacingOccurrences(of: "-", with: "+")
-                 .replacingOccurrences(of: "_", with: "/")
-        let pad = (4 - t.count % 4) % 4
-        t += String(repeating: "=", count: pad)
-        return Data(base64Encoded: t)
+    guard let http = response as? HTTPURLResponse else {
+      throw SupabaseError.transport(reason: "resolveInvite: non-http")
     }
+    guard http.statusCode == 200 else {
+      throw SupabaseError.fromInviteResolve(status: http.statusCode, body: data)
+    }
+    struct Body: Decodable {
+      let encrypted_teamkey: String
+      let admin_pubkey: String
+      let workspace_id: String
+      let workspace_name: String
+      let require_otp: Bool
+      let expires_at: String
+    }
+    let parsed: Body
+    do { parsed = try JSONDecoder().decode(Body.self, from: data) } catch {
+      throw SupabaseError.decoding(reason: "resolveInvite: \(error)")
+    }
+    guard let blobBytes = Self.base64URLDecode(parsed.encrypted_teamkey) else {
+      throw SupabaseError.decoding(reason: "resolveInvite: bad encrypted_teamkey")
+    }
+    return ResolvedInvite(
+      encryptedTeamkey: blobBytes,
+      adminPubkey: parsed.admin_pubkey,
+      workspaceID: parsed.workspace_id,
+      workspaceName: parsed.workspace_name,
+      requireOTP: parsed.require_otp,
+      expiresAtISO8601: parsed.expires_at
+    )
+  }
+
+  public func probeInvite(token: String) async throws -> InviteProbeStatus {
+    let url = SupabaseEndpoint.inviteResolve(baseURL: baseURL)
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    // Anon: apikey required by Supabase production gateway (same shape as resolveInvite above).
+    for (k, v) in SupabaseEndpoint.anonHeaders(anonKey: anonKey) {
+      request.setValue(v, forHTTPHeaderField: k)
+    }
+    request.httpBody = try JSONSerialization.data(withJSONObject: ["token": token, "probe": true])
+
+    let (data, response): (Data, URLResponse)
+    do { (data, response) = try await urlSession.data(for: request) } catch {
+      throw SupabaseError.transport(reason: "probeInvite: \(error)")
+    }
+    guard let http = response as? HTTPURLResponse else {
+      throw SupabaseError.transport(reason: "probeInvite: non-http")
+    }
+    guard http.statusCode == 200 else {
+      throw SupabaseError.fromStatus(http.statusCode, body: data)
+    }
+    struct Body: Decodable {
+      let status: String
+      let claimed_at: String?
+      let claimed_by_pubkey: String?
+      let expires_at: String?
+    }
+    let body: Body
+    do { body = try JSONDecoder().decode(Body.self, from: data) } catch {
+      throw SupabaseError.decoding(reason: "probeInvite: \(error)")
+    }
+    switch body.status {
+    case "pending": return .pending
+    case "claimed":
+      return .claimed(by: body.claimed_by_pubkey ?? "", at: body.claimed_at ?? "")
+    case "expired": return .expired
+    case "not_found": return .notFound
+    default: throw SupabaseError.decoding(reason: "probeInvite: unknown status \(body.status)")
+    }
+  }
+
+  static func base64URLDecode(_ s: String) -> Data? {
+    var t = s.replacingOccurrences(of: "-", with: "+")
+      .replacingOccurrences(of: "_", with: "/")
+    let pad = (4 - t.count % 4) % 4
+    t += String(repeating: "=", count: pad)
+    return Data(base64Encoded: t)
+  }
 }
 
 // MARK: - insertWorkspaceMember (PostgREST INSERT via JWT)
 
 extension SupabaseClient {
-    public func insertWorkspaceMember(workspaceID: String,
-                                      pubkeyHex: String,
-                                      displayName: String) async throws {
-        let session = try await ensureAuthenticated()
-        let url = SupabaseEndpoint.insertWorkspaceMember(baseURL: baseURL)
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        for (k, v) in SupabaseEndpoint.postgrestInsertHeaders(
-            anonKey: anonKey, accessToken: session.accessToken
-        ) {
-            request.setValue(v, forHTTPHeaderField: k)
-        }
-        let body: [String: Any] = [
-            "workspace_id": workspaceID,
-            "pubkey": pubkeyHex,
-            "display_name": displayName,
-        ]
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-        let (data, response): (Data, URLResponse)
-        do { (data, response) = try await urlSession.data(for: request) }
-        catch { throw SupabaseError.transport(reason: "insertWorkspaceMember: \(error)") }
-        guard let http = response as? HTTPURLResponse else {
-            throw SupabaseError.transport(reason: "insertWorkspaceMember: non-http")
-        }
-        guard http.statusCode == 201 else {
-            throw SupabaseError.fromStatus(http.statusCode, body: data)
-        }
+  public func insertWorkspaceMember(
+    workspaceID: String,
+    pubkeyHex: String,
+    displayName: String
+  ) async throws {
+    let session = try await ensureAuthenticated()
+    let url = SupabaseEndpoint.insertWorkspaceMember(baseURL: baseURL)
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    for (k, v) in SupabaseEndpoint.postgrestInsertHeaders(
+      anonKey: anonKey, accessToken: session.accessToken
+    ) {
+      request.setValue(v, forHTTPHeaderField: k)
     }
+    let body: [String: Any] = [
+      "workspace_id": workspaceID,
+      "pubkey": pubkeyHex,
+      "display_name": displayName,
+    ]
+    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+    let (data, response): (Data, URLResponse)
+    do { (data, response) = try await urlSession.data(for: request) } catch {
+      throw SupabaseError.transport(reason: "insertWorkspaceMember: \(error)")
+    }
+    guard let http = response as? HTTPURLResponse else {
+      throw SupabaseError.transport(reason: "insertWorkspaceMember: non-http")
+    }
+    guard http.statusCode == 201 else {
+      throw SupabaseError.fromStatus(http.statusCode, body: data)
+    }
+  }
 }
 
 // MARK: - SupabaseAuthSession JWT claim extraction
 
 extension SupabaseAuthSession {
-    /// Returns a copy with pubkeyClaim populated from the access_token JWT (if present).
-    /// Failure (malformed JWT, no pubkey claim) returns self unchanged — caller can detect via nil.
-    func populatingPubkeyClaim() -> SupabaseAuthSession {
-        guard let claim = Self.extractPubkeyClaim(fromJWT: self.accessToken) else { return self }
-        return SupabaseAuthSession(
-            accessToken: self.accessToken,
-            refreshToken: self.refreshToken,
-            userID: self.userID,
-            expiresAt: self.expiresAt,
-            pubkeyClaim: claim
-        )
-    }
+  /// Returns a copy with pubkeyClaim populated from the access_token JWT (if present).
+  /// Failure (malformed JWT, no pubkey claim) returns self unchanged — caller can detect via nil.
+  func populatingPubkeyClaim() -> SupabaseAuthSession {
+    guard let claim = Self.extractPubkeyClaim(fromJWT: self.accessToken) else { return self }
+    return SupabaseAuthSession(
+      accessToken: self.accessToken,
+      refreshToken: self.refreshToken,
+      userID: self.userID,
+      expiresAt: self.expiresAt,
+      pubkeyClaim: claim
+    )
+  }
 
-    /// Decode the JWT payload without verifying the signature. The JWT
-    /// itself was issued by Supabase (HS256 signed with Supabase's secret)
-    /// and is validated server-side by PostgREST / Edge Functions on every
-    /// request — that is where signature verification happens. The local
-    /// extraction here is a convenience to read the `pubkey` claim out of
-    /// the token we already trust (we received it as the auth response).
-    /// Tampering would invalidate the JWT on the next server call.
-    static func extractPubkeyClaim(fromJWT jwt: String) -> String? {
-        let parts = jwt.split(separator: ".")
-        guard parts.count == 3 else { return nil }
-        var middle = String(parts[1])
-        middle = middle.replacingOccurrences(of: "-", with: "+")
-                       .replacingOccurrences(of: "_", with: "/")
-        let pad = (4 - middle.count % 4) % 4
-        middle += String(repeating: "=", count: pad)
-        guard let data = Data(base64Encoded: middle),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return nil
-        }
-        return json["pubkey"] as? String
+  /// Decode the JWT payload without verifying the signature. The JWT
+  /// itself was issued by Supabase (HS256 signed with Supabase's secret)
+  /// and is validated server-side by PostgREST / Edge Functions on every
+  /// request — that is where signature verification happens. The local
+  /// extraction here is a convenience to read the `pubkey` claim out of
+  /// the token we already trust (we received it as the auth response).
+  /// Tampering would invalidate the JWT on the next server call.
+  static func extractPubkeyClaim(fromJWT jwt: String) -> String? {
+    let parts = jwt.split(separator: ".")
+    guard parts.count == 3 else { return nil }
+    var middle = String(parts[1])
+    middle = middle.replacingOccurrences(of: "-", with: "+")
+      .replacingOccurrences(of: "_", with: "/")
+    let pad = (4 - middle.count % 4) % 4
+    middle += String(repeating: "=", count: pad)
+    guard let data = Data(base64Encoded: middle),
+      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else {
+      return nil
     }
+    return json["pubkey"] as? String
+  }
 }
