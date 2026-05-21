@@ -64,3 +64,61 @@ final class InboxItemTests: XCTestCase {
         XCTAssertEqual(p.count, 5)
     }
 }
+
+// MARK: - Track-9 T8: InboxKind 5 → 14 + InboxFilter .alerts chip
+// See docs/superpowers/specs/2026-05-21-track-9-T8-inbox-feeder-expansion.md §4.3
+extension InboxItemTests {
+
+    func testInboxKindCount_14CasesUnderT8() {
+        XCTAssertEqual(InboxKind.allCases.count, 14)
+        // Existing 5 (order preserved)
+        XCTAssertEqual(InboxKind.allCases[0], .reviewRequest)
+        XCTAssertEqual(InboxKind.allCases[1], .commentOnMyWork)
+        XCTAssertEqual(InboxKind.allCases[2], .mention)
+        XCTAssertEqual(InboxKind.allCases[3], .openQuestion)
+        XCTAssertEqual(InboxKind.allCases[4], .blocker)
+        // T8 viable new (3)
+        XCTAssertEqual(InboxKind.allCases[5], .buildFailed)
+        XCTAssertEqual(InboxKind.allCases[6], .ciFailed)
+        XCTAssertEqual(InboxKind.allCases[7], .liveMeeting)
+        // T8 placeholder (6)
+        XCTAssertEqual(InboxKind.allCases[8], .calInviteDeclined)
+        XCTAssertEqual(InboxKind.allCases[9], .calUpcoming15min)
+        XCTAssertEqual(InboxKind.allCases[10], .calConflict)
+        XCTAssertEqual(InboxKind.allCases[11], .mailUnreadBucket)
+        XCTAssertEqual(InboxKind.allCases[12], .reminderDueToday)
+        XCTAssertEqual(InboxKind.allCases[13], .slackDM)
+    }
+
+    func testInboxFilterAdmits_5FilterMatrix() {
+        // Table-driven: 5 filters × 14 kinds
+        let filters = InboxFilter.allCases
+        XCTAssertEqual(filters.count, 5)
+
+        // .all admits everything
+        for kind in InboxKind.allCases {
+            XCTAssertTrue(InboxFilter.all.admits(kind), "\(InboxFilter.all) should admit \(kind)")
+        }
+
+        // .reviews admits only .reviewRequest
+        for kind in InboxKind.allCases {
+            XCTAssertEqual(InboxFilter.reviews.admits(kind), kind == .reviewRequest)
+        }
+
+        // .questions admits only .openQuestion
+        for kind in InboxKind.allCases {
+            XCTAssertEqual(InboxFilter.questions.admits(kind), kind == .openQuestion)
+        }
+
+        // .mentions admits only .mention
+        for kind in InboxKind.allCases {
+            XCTAssertEqual(InboxFilter.mentions.admits(kind), kind == .mention)
+        }
+
+        // .alerts admits .buildFailed + .ciFailed + .liveMeeting only
+        let alertKinds: Set<InboxKind> = [.buildFailed, .ciFailed, .liveMeeting]
+        for kind in InboxKind.allCases {
+            XCTAssertEqual(InboxFilter.alerts.admits(kind), alertKinds.contains(kind))
+        }
+    }
+}

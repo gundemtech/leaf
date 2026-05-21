@@ -385,9 +385,9 @@ The 24 carries enumerated in `docs/superpowers/specs/2026-05-18-track-8-home-ux-
 | C-11 | Offline / stale footer | Phase 5.6 — out |
 | C-12 | Row tap routes to Team tab w/o teammate selection | Phase 5.4 — out |
 | C-13 | `TeammateMatch.durationSec` hardcoded | Phase 5.4 — out |
-| C-14 | Search debounce / SQL re-fetch | T8 evaluate (likely defer) |
-| C-15 | `RouteCoordinator.openURL` extraction | T8 (centralize if pattern repeats) |
-| C-16 | `InboxItem.sourceURL` nil for D3-derived | T8 universal sourceURL synthesis |
+| C-14 | Search debounce / SQL re-fetch | T8 evaluate (likely defer) — **[DEFERRED T8 — cardinality stays under 14d cutoff baseline; revisit if >1000 rows/day]** |
+| C-15 | `RouteCoordinator.openURL` extraction | T8 (centralize if pattern repeats) — **[DEFERRED T8 — single-callsite `NSWorkspace.shared.open` sufficient via existing InboxItemRow; centralize when 2+ blocks share]** |
+| C-16 | `InboxItem.sourceURL` nil for D3-derived | T8 universal sourceURL synthesis — **[RESOLVED T8 — commits `5179865f` + Task 7 D3 enrichment moat]** |
 | C-17 | filteredItems substring unit test | already-resolved P9 |
 | C-18 | empty/no-match icon differentiation | already-resolved P9 |
 | C-19 | Localization | out (separate track) |
@@ -396,6 +396,38 @@ The 24 carries enumerated in `docs/superpowers/specs/2026-05-18-track-8-home-ux-
 | C-22 | `formatRelative` unification | already-resolved P9 + T10 if new callsites |
 | C-23 | Analytics surface real content | T9 |
 | C-24 | `recentActivity` orphan drop | T10 |
+| C-25 | WhereStoppedDeriver sleep/wake idle gap | **NEW post-T7 carry — own phase (T7.5 or T9-adjacent)** |
+
+#### 9.1.C-25 — WhereStoppedDeriver sleep/wake gap (post-T7 discovery, 2026-05-21)
+
+**Symptom:** After Track-9 T7 UI ship, manual smoke revealed `where_stopped_log` table stays empty in the common "closed laptop for 30+ min" scenario, leaving the WHERE STOPPED block stuck on empty-state copy ("No recent stop-points captured.") even when the user clearly took a real break (`ушёл в универ`-class break).
+
+**Root cause:** `ProdWhereStoppedDeriver.derive()` (Track-1 D3) idle gate logic at `Packages/LeafCorePrivate/Sources/LeafCorePrivate/Prod/Detection/ProdWhereStoppedDeriver.swift`:
+
+```swift
+let latestTs = SELECT MAX(ts) FROM events
+guard untilMs - latestTs >= 30 * 60 * 1000 else { return nil }
+```
+
+Timeline of the failing scenario:
+- t=0 user closes laptop → `system_slept` event emitted → Agent process suspended.
+- t=30min user opens laptop → `system_woke` event emitted immediately → `MAX(ts)` ≈ now.
+- t=30min+ε `DetectorScheduler.runScheduled` ticks (every 5 min per `AgentThresholdsProd.detectorScheduledIntervalSec`) → `untilMs - latestTs ≈ 0` → idle gate FAILS → no snapshot ever appended.
+
+**Race window where snapshot CAN fire:** user walks away from an **awake** laptop (no sleep) for 30+ min → pipeline tick during that window finds `MAX(ts)` ≈ 30 min ago → gate triggers → snapshot emitted. Closed-laptop is the dominant case in practice and it's silently broken.
+
+**Why this is substrate gap, not T7 UI bug:** T7 verified path 4 (empty state) renders correctly when substrate returns nil. The 4-line / 3-line / 2-line population paths all work when rows exist in `where_stopped_log`. The gap is purely producer-side — `ProdWhereStoppedDeriver` doesn't account for sleep/wake semantics.
+
+**Proposed fix directions (decide in own phase brainstorm):**
+1. Treat the most recent `system_slept` event as a "synthetic idle marker" — use its ts as `latestTs` (or as a cap on `latestTs`) instead of raw `MAX(ts)`. Then `untilMs - sleep_ts` reflects the real wake gap.
+2. Emit a synthesis snapshot on wake itself — detect `system_woke` arrival, look back at paired `system_slept` event, append a `where_stopped_log` row attributing the pre-sleep state if the sleep window exceeded the idle threshold.
+3. Hybrid — `derive()` keeps current logic but adds a sleep-aware override: `effectiveLatestTs = (system_slept since last system_woke) ? system_slept.ts : MAX(ts)`.
+
+**Phase ownership:** post-T7 own phase. Suggestion: T7.5 (small surgical substrate phase) OR pulled into T9 wrap depending on cadence. Requires its own spec + sentinel-injection regression test (modifying the moat deriver touches new code paths in Track-1 D3 substrate that didn't have walkback coverage before T7's reading of `doc_path`).
+
+**Verification once fixed:** close laptop for 30+ min → open → WHERE STOPPED card automatically lit up with 4-line layout (anchor file:line + commit + WIP chips) using the pre-sleep activity context as the anchor.
+
+**Discovered:** 2026-05-21 manual smoke during T7 Stage 8 dev-launch verification. Owner: dima. Blocks "WHERE STOPPED feels useful day-to-day" UX promise (current behavior = always empty for most users on most days).
 
 ### 9.2 P9 a11y audit carry-forwards
 
@@ -416,6 +448,17 @@ The 6 a11y findings from P9 polish audit subagent (master spec §9.1 last block)
 - **Slack DM bucket routing** — conditional on T3 verify outcome.
 - **`get_weekly_metrics` MCP tool** — future if AI clients request Analytics queries.
 - **T5 multi-window editor accuracy** — `WorkspacePathResolver` returns the most-recently-opened VSCode/JetBrains workspace, not the currently-foregrounded one. When a user has multiple instances open and switches back to an earlier workspace, YOU·NOW renders the wrong branch / linearID until the user touches the active workspace again. Documented as a known accuracy limitation in `leaf-docs/docs/privacy-security/what-we-dont-capture.md` (Known accuracy limitations section). Fix requires per-IDE foreground-window resolution (AX-driven for VSCode-family, AppleScript-driven for JetBrains where available) — separate post-Track-9 track.
+
+#### T8 final-review carries (2026-05-21)
+
+- **C-26** `ProdInsights+InboxItems.swift` 795 LOC > 700 budget — split per-feeder files (`+GitHub` / `+Linear` / `+D3` / `+Local`) OR extract `synthesize*URL` static helpers to sibling `InboxURLSynthesis.swift` moat file. T10 wrap polish.
+- **C-27** `queryCIFailed` `MAX(failure)` semantic ambiguity — refactor to `ORDER BY ts DESC LIMIT 1` per (repo, sha) for true "current HEAD failed count" OR doc-fix to "highest in 24h window". T10 polish.
+- **C-28** `xcode://` URL scheme fictional — no registered macOS LSScheme, `NSWorkspace.shared.open(url)` fails silently. Either drop `.xcodeBuild` from `InboxSourceURLDeriver` until real deep-link mechanism lands OR document as known no-op. T10 polish or post-Track-9.
+- **C-29** `queryCommentsOnMyWork` viewer_login filter anticipatory (TODO at line 112) — currently surfaces user's own outbound comments as `.commentOnMyWork`. Either rename to `.myRecentComments` semantic split OR enforce `actor.login != viewerLogin` once collector emits `actor.login` in payload. Post-Track-9 substrate enrichment.
+- **C-30** Cutoff constants (`8h` build / `24h` CI / `4h` meeting / `14d` D3) hardcoded across feeders — extract to named `private static let` block for readability. T10 polish.
+- **C-31** `InboxSourceContextRef.xcodeBuild(projectPath:)` parameter naming misaligned with content (substrate emits project NAME, not path) — rename to `projectIdentifier`. T10 polish (breaking public API — coordinate with consumers).
+- **C-32** `liveMeeting` `started_at_ms` collision edge case (same-millisecond starts) — document as known limitation OR generate UUID-based `meeting_id` at substrate. Post-Track-9.
+- **C-33** `testInboxFilterValues` missing `.alerts.rawValue` assertion. T10 polish.
 
 ---
 

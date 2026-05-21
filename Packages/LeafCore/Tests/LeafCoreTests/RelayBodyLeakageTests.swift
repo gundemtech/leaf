@@ -3753,4 +3753,284 @@ final class RelayBodyLeakageTests: XCTestCase {
             raw!.contains(sentinel),
             "raw events.payload_json intentionally preserves substrate — walk applied at deriver READ boundary, not at write")
     }
+
+    // MARK: - Track-9 T8 sentinel-injection regression tests
+
+    /// Track-9 T8 — INBOX dispatcher walkback. Seeds sentinel-bearing body-position
+    /// payload fields across 3 viable T8 feeder kinds (`xcode_build_finished`,
+    /// `gh_check_runs_status`, `zoom_meeting_started`) PLUS upstream Linear comment
+    /// + open_question + blocker rows whose body fields are stripped before
+    /// surfacing through `DerivedInsights.inboxItems(...)`. Asserts NO returned
+    /// `InboxItem.{title, sourceMeta, sourceURL?.absoluteString}` carries the
+    /// sentinel substring.
+    ///
+    /// ADR-010 walkback discipline: the substrate intentionally keeps the raw
+    /// `events.payload_json` rows intact (walk is applied at READ boundary in
+    /// the dispatcher feeders — they read only allowlisted fields like `project`,
+    /// `repo`, `sha`, `started_at_ms`, `issue_key`). This test is the regression
+    /// fence that locks the contract: any future refactor mirroring a body field
+    /// into a feeder's `title` / `sourceMeta` / `sourceURL` MUST fail this test.
+    func test_t8_walkback_inboxItems_dispatcherDoesNotLeakSentinel() throws {
+        let sentinel = "LEAKED_SENTINEL_T8_INBOX_BODY"
+        let bodyText = "padding-prefix-padding-prefix-" + sentinel + "-padding-suffix"
+
+        let db = try LeafCore.Database.openForWrite(
+            at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let oneHourAgo = nowMs - 60 * 60 * 1000
+
+        // (1) xcode_build_finished — status=failed feeder. Inject sentinel in a
+        // body-position field (`errors_message`) substrate must never surface.
+        // Allowlisted reads: event_kind / status / project / ts.
+        let xcodeEvent = RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(oneHourAgo) / 1000),
+            signalType: .attention,
+            bundleID: "com.apple.dt.Xcode",
+            payload: [
+                "event_kind": "xcode_build_finished",
+                "status": "failed",
+                "project": "Leaf",
+                "run_destination_bucket": "macos",
+                // Body-position sentinel — must not flow into InboxItem fields.
+                "errors_message": bodyText,
+                Schema.EventPayloadKeys.body: bodyText,
+            ]
+        )
+
+        // (2) gh_check_runs_status — failure > 0 feeder. Inject sentinel in
+        // body-position fields (`output_text`, `commit_message`). Allowlisted
+        // reads: event_kind / repo / sha / failure / ts.
+        let ciEvent = RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(oneHourAgo + 1000) / 1000),
+            signalType: .context,
+            bundleID: nil,
+            payload: [
+                "source": "github",
+                "event_kind": "gh_check_runs_status",
+                "repo": "gundemtech/leaf",
+                "sha": "abc1234def5678",
+                "total": "3",
+                "failure": "2",
+                "success": "1",
+                "in_progress": "0",
+                "neutral": "0",
+                "observed_at_ms": String(oneHourAgo + 1000),
+                "output_text": bodyText,
+                "commit_message": bodyText,
+                Schema.EventPayloadKeys.body: bodyText,
+            ]
+        )
+
+        // (3) zoom_meeting_started — live-meeting feeder. Inject sentinel in
+        // `meeting_topic` body-position field. Allowlisted reads:
+        // event_kind / started_at_ms / ts.
+        let zoomStartedMs = nowMs - 10 * 60 * 1000
+        let zoomEvent = RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(zoomStartedMs) / 1000),
+            signalType: .context,
+            bundleID: "us.zoom.xos",
+            payload: [
+                "source": "zoom",
+                "event_kind": "zoom_meeting_started",
+                "started_at_ms": String(zoomStartedMs),
+                "meeting_topic": bodyText,
+                Schema.EventPayloadKeys.body: bodyText,
+            ]
+        )
+
+        // (4) linear_comment_authored_to_me — feeder reads issue_key only.
+        // Inject sentinel in `body` adjacent to allowlisted fields.
+        let linearEvent = RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(oneHourAgo + 2000) / 1000),
+            signalType: .action,
+            bundleID: "com.linear.linear",
+            payload: [
+                "source": "linear",
+                "event_kind": "linear_comment_authored_to_me",
+                "issue_key": "LEAF-77",
+                "to_me_count_in_window": "1",
+                "period_end_ms": String(oneHourAgo + 2000),
+                "linear_issue_url": "https://linear.app/leaf/issue/LEAF-77",
+                Schema.EventPayloadKeys.body: bodyText,
+            ]
+        )
+
+        try db.writeEventsOffsetAndPresence(
+            [xcodeEvent, ciEvent, zoomEvent, linearEvent],
+            offset: makeOffset(
+                collectorID: CollectorID.linearPolling,
+                sourceID: "t8-inbox-walkback",
+                nowMs: nowMs),
+            presence: (provider: .linear, state: [:] as [String: Any], derivedMode: nil),
+            nowMs: nowMs
+        )
+
+        // Seed an open_question + blocker row with sentinel-bearing body fields
+        // adjacent to the column substrate reads (question_excerpt /
+        // blocker_excerpt are bounded at write — but body-position payload
+        // sentinels in the events table must not bleed through the dispatcher).
+        try db.pool.write { rawDB in
+            try rawDB.execute(
+                sql: """
+                    INSERT INTO open_questions
+                        (event_id, question_excerpt, alternatives_json,
+                         slack_thread_ts, linear_issue_ref, github_pr_ref,
+                         resolved_by_event_id, opened_at_ms, resolved_at_ms)
+                    VALUES (?, ?, NULL, NULL, NULL, NULL, NULL, ?, NULL)
+                    """,
+                arguments: [
+                    1, "Clean question without sentinel", oneHourAgo + 3000,
+                ])
+            try rawDB.execute(
+                sql: """
+                    INSERT INTO blockers
+                        (target_kind, target_ref, blocker_kind, blocker_excerpt,
+                         detected_by_event_id, started_at_ms, resolved_at_ms,
+                         resolved_by_event_id)
+                    VALUES (?, ?, ?, ?, ?, ?, NULL, NULL)
+                    """,
+                arguments: [
+                    "linear_issue", "LEAF-99", "wait", "Clean blocker without sentinel",
+                    1, oneHourAgo + 4000,
+                ])
+        }
+
+        // Sanity — raw events table preserves sentinel (walk is read-boundary).
+        let rawCount: Int = try db.readSQL { rawDB in
+            try Int.fetchOne(
+                rawDB,
+                sql: """
+                    SELECT COUNT(*) FROM events
+                    WHERE payload_json LIKE '%' || ? || '%'
+                    """,
+                arguments: [sentinel]) ?? 0
+        }
+        XCTAssertGreaterThan(
+            rawCount, 0,
+            "Sanity: sentinel must be present in raw events.payload_json before asserting feeders strip it")
+
+        // INVARIANT — surface through dispatcher; no returned InboxItem
+        // field carries the sentinel substring.
+        let prod = ProdInsights(database: db)
+        let items = try prod.inboxItems(filter: .all, query: nil)
+
+        for item in items {
+            XCTAssertFalse(
+                item.title.contains(sentinel),
+                "T8 sentinel must NOT appear in InboxItem.title — kind=\(item.kind) id=\(item.id)")
+            XCTAssertFalse(
+                item.sourceMeta.contains(sentinel),
+                "T8 sentinel must NOT appear in InboxItem.sourceMeta — kind=\(item.kind) id=\(item.id)")
+            if let url = item.sourceURL?.absoluteString {
+                XCTAssertFalse(
+                    url.contains(sentinel),
+                    "T8 sentinel must NOT appear in InboxItem.sourceURL — kind=\(item.kind) id=\(item.id)")
+            }
+            XCTAssertFalse(
+                item.id.contains(sentinel),
+                "T8 sentinel must NOT appear in InboxItem.id — kind=\(item.kind)")
+        }
+    }
+
+    /// Track-9 T8 — presence-state walkback. Distinct sentinel injected via the
+    /// public `writeEventsOffsetAndPresence(...)` API into body-position payload
+    /// fields of `xcode_build_finished` + `zoom_meeting_started` events.
+    /// Asserts (1) sentinel NOT in `presence_state.{zoom}.state_json` (the
+    /// relay-broadcast surface — Xcode has no presence_state composite row), and
+    /// (2) sentinel STILL present in raw `events.payload_json` (walk applied at
+    /// READ boundary, not write — preserves substrate for future reprocessing).
+    ///
+    /// Mirrors the T7 read/write asymmetry contract: substrate intentionally
+    /// preserves the original payload; the privacy invariant is at the
+    /// downstream consumer boundary.
+    func test_t8_walkback_buildFailedAndLiveMeeting_payloadsDoNotLeakIntoPresenceState() throws {
+        let sentinel = "LEAKED_SENTINEL_T8_PAYLOAD_TO_PRESENCE_GUARD"
+        let bodyText = "leading-padding-" + sentinel + "-trailing-padding"
+
+        let db = try LeafCore.Database.openForWrite(
+            at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+
+        // Xcode build_failed event with sentinel-bearing body fields.
+        let xcodeEvent = RawEvent(
+            timestamp: Date(),
+            signalType: .attention,
+            bundleID: "com.apple.dt.Xcode",
+            payload: [
+                "event_kind": "xcode_build_finished",
+                "status": "failed",
+                "project": "Leaf",
+                "errors_message": bodyText,
+                Schema.EventPayloadKeys.body: bodyText,
+            ]
+        )
+
+        // Zoom meeting_started event with sentinel-bearing topic/body.
+        let zoomStartedMs = nowMs - 5 * 60 * 1000
+        let zoomEvent = RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(zoomStartedMs) / 1000),
+            signalType: .context,
+            bundleID: "us.zoom.xos",
+            payload: [
+                "source": "zoom",
+                "event_kind": "zoom_meeting_started",
+                "started_at_ms": String(zoomStartedMs),
+                "meeting_topic": bodyText,
+                Schema.EventPayloadKeys.body: bodyText,
+            ]
+        )
+
+        // Structured presence state only — counts/buckets, no body text.
+        let presenceState: [String: Any] = [
+            "presence": "active",
+            "active_meeting_started_at_ms": zoomStartedMs,
+        ]
+        try db.writeEventsOffsetAndPresence(
+            [xcodeEvent, zoomEvent],
+            offset: makeOffset(
+                collectorID: CollectorID.linearPolling,
+                sourceID: "t8-presence-walkback",
+                nowMs: nowMs),
+            presence: (provider: .zoom, state: presenceState, derivedMode: nil),
+            nowMs: nowMs
+        )
+
+        // Invariant 1 — presence_state.zoom.state_json is sentinel-free.
+        try db.readSQL { rawDB in
+            let row = try Row.fetchOne(
+                rawDB,
+                sql: "SELECT state_json FROM presence_state WHERE provider='zoom'")
+            let stateJSON = (row?["state_json"] as String?) ?? ""
+            XCTAssertFalse(stateJSON.isEmpty, "presence_state.zoom row should exist after upsert")
+            XCTAssertFalse(
+                stateJSON.contains(sentinel),
+                "T8 sentinel must NOT appear in presence_state.zoom.state_json")
+            XCTAssertFalse(
+                stateJSON.contains("\"body\""),
+                "Payload key 'body' should not appear in presence_state.state_json")
+            XCTAssertFalse(
+                stateJSON.contains("\"meeting_topic\""),
+                "Payload key 'meeting_topic' should not appear in presence_state.state_json")
+            XCTAssertFalse(
+                stateJSON.contains("\"errors_message\""),
+                "Payload key 'errors_message' should not appear in presence_state.state_json")
+        }
+
+        // Invariant 2 — raw substrate intentionally preserves the body field
+        // (walk applied at deriver READ boundary, not at write). If this
+        // assertion fails, the write path has started sanitizing payloads —
+        // re-think the privacy model.
+        let rawCount: Int = try db.readSQL { rawDB in
+            try Int.fetchOne(
+                rawDB,
+                sql: """
+                    SELECT COUNT(*) FROM events
+                    WHERE payload_json LIKE '%' || ? || '%'
+                    """,
+                arguments: [sentinel]) ?? 0
+        }
+        XCTAssertEqual(
+            rawCount, 2,
+            "raw events.payload_json intentionally preserves substrate — walkback semantics deliberate, not accidental")
+    }
 }

@@ -1,8 +1,9 @@
 //
 //  InboxFilterRow.swift
-//  Track 8 / Phase 8.6 — INBOX filter chip row. 4 LeafPill chips
-//  (All / Reviews / Questions / Mentions) bound to a Binding<InboxFilter>.
+//  Track 8 / Phase 8.6 — INBOX filter chip row. LeafPill chips
+//  (All / Reviews / Questions / Mentions / Alerts) bound to a Binding<InboxFilter>.
 //  Selected chip uses `.accent` tone, others `.neutral`.
+//  Track-9 T8 — added `.alerts` chip (buildFailed + ciFailed + liveMeeting umbrella).
 //
 
 import LeafCore
@@ -16,6 +17,7 @@ struct InboxFilterRow: View {
         (.reviews, "Reviews"),
         (.questions, "Questions"),
         (.mentions, "Mentions"),
+        (.alerts, "Alerts"),
     ]
 
     var body: some View {
