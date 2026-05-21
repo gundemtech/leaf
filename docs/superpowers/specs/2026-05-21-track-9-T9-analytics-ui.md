@@ -75,6 +75,12 @@ Net deltas updated:
 
 Master spec §T9 amendment owned by T10 wrap.
 
+**Additional deviations discovered during Stage 6 independent review:**
+
+**(5) `DailyFocusedChart` ships single-Y-axis с `aiRatio × 100` rendering trick (NOT true dual-axis per Q-5).** macOS 14 SwiftUI Charts API does not natively support dual-Y-axis (`chartYAxis` accepts single axis configuration); real dual-axis requires custom `ChartContent` work или macOS 15+ API features. Author shipped single-axis с aiRatio percent rendering against the same focused-min auto-scale + legend label "AI ratio (%)" clarifying the convention. Visual compression of aiRatio LineMark on weeks with ≥200 focused-min/day is acknowledged — trend slope still readable, peak position visible. **Carry C-44 (post-Track-9 polish):** real dual-axis с separate Y scales once macOS 15+ baseline lands, или custom `Chart.chartOverlay { ... GeometryReader ... }` approach if pre-baseline. Q-5 amendment T10 wrap.
+
+**(6) `AnalyticsContent` empty-state branch uses `isLogicallyEmpty` predicate (NOT raw `metrics == .empty` Equatable check per Q-8).** Substrate behavior: `ProdInsights.weeklyMetrics(now:)` always populates `dailySeries[*].dayStartMs` with real local-TZ midnight timestamps for the past 7 days, even on a fresh cold DB. `WeeklyMetrics.empty` static carries `dayStartMs = 0` placeholders. Resulting prod-shipped snapshot fails Equatable check against `.empty`, so the friendly "Not enough data yet" empty-state would never fire on real users. Fix: `AnalyticsContent.isLogicallyEmpty` computed predicate checks `dailySeries.allSatisfy { $0.focusedMin == 0 && ... }` AND all streaks zero AND `peakHour == nil` AND `wowDelta == nil`. UX semantic preserved; substrate semantic unchanged. Q-8 amendment T10 wrap.
+
 ---
 
 ## 2. Decisions taken (Stage 2 brainstorm output)
@@ -97,7 +103,7 @@ Master spec §T9 amendment owned by T10 wrap.
 | Q-14 | Animation | **`.easeInOut(duration: 0.25)` on `value: metrics`** (Equatable). Charts API auto-animates internal marks. | Parity P3/P4/P5/P6/P7 precedent. WeeklyMetrics Hashable/Equatable auto-synth holds. |
 | Q-15 | A11y | **Per-block `accessibilityElement(children:.combine)` + `accessibilityLabel`** composing visible text. No per-bar a11y in chart — Charts default rotor sufficient. | P9 sweep pattern. Minimal — block-level only. |
 | Q-16 | Tests strategy | **3 public LeafCoreTests** (InsightsSnapshot defaulted-init roundtrip + Equatable verify + .empty propagation) + **5-6 view-init tests** (block primitives accept their data shape, render without crash; minimal coverage matching codebase precedent). **No sentinel-injection** — T9 reads aggregate metrics only, не body fields (pattern parity P3/P4/P5/P7 — exempted per Track-9 master spec §6 line 285). | Codebase precedent: view tests sparse, substrate tests thorough. T9 substrate already verified в T4 (13 net new tests). T9 ship verifies UI consumer pattern. |
-| Q-17 | Token discipline for Charts | **Wrap all Charts color/style API calls в Leaf tokens** (`.foregroundStyle(LeafColor.accent.primary)`, `.font(LeafType.label.regular)`). No raw `Color.blue` / `.font(.system(...))` inside Charts blocks. | `check-tokens` MIGRATION tier covers `Leaf/Views/` including new `Analytics/Blocks/`. Tier 1+2+3 clean. |
+| Q-17 | Token discipline for Charts | **Wrap all Charts color/style API calls в Leaf tokens** (`.foregroundStyle(LeafColor.accent.primary)`, `.font(LeafType.label)`). No raw `Color.blue` / `.font(.system(...))` inside Charts blocks. | `check-tokens` MIGRATION tier covers `Leaf/Views/` including new `Analytics/Blocks/`. Tier 1+2+3 clean. |
 | Q-18 | Refresh trigger | **Existing `InsightsReader.refresh()` flow** — `AnalyticsView.onAppear { reader.refresh() }` mirror HomeView line 91. | Same reader instance, same refresh cadence. Single source of truth. |
 | Q-19 | Branch off | **`feature/track-9-substrate` at T8 wrap tip `470cc0da`**. FF after T9 acceptance per `current-state.md` workflow. | Parallel: also merged into `fix/dev-launch-reliability` after ship via T8 proven workflow (для dev smoke). |
 
@@ -498,7 +504,7 @@ struct WoWDeltaCallout: View {
                 sparkline.frame(width: 160, height: 40)
                 VStack(alignment: .leading, spacing: LeafSpace.xxs) {
                     Text(deltaText).font(LeafType.title.medium).foregroundStyle(deltaTone)
-                    Text("vs last week").font(LeafType.label.regular).foregroundStyle(LeafColor.text.tertiary)
+                    Text("vs last week").font(LeafType.label).foregroundStyle(LeafColor.text.tertiary)
                 }
                 Spacer()
             }

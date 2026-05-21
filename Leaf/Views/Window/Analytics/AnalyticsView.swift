@@ -62,7 +62,21 @@ struct AnalyticsView: View {
                 )
             }
         case .error(let msg, let lastKnown):
-            VStack(alignment: .leading, spacing: LeafSpace.lg) {
+            // NIT-3 fix: mirror HomeView — render banner-only when no
+            // last-known snapshot. Avoids the contradictory "error +
+            // friendly empty-state" double-message.
+            if let snapshot = lastKnown {
+                VStack(alignment: .leading, spacing: LeafSpace.lg) {
+                    LeafBanner(
+                        tone: .danger,
+                        title: "Couldn't load analytics",
+                        description: msg,
+                        ctaTitle: "Try again",
+                        onCTA: { reader.refresh() }
+                    )
+                    AnalyticsContent(metrics: snapshot.weeklyMetrics)
+                }
+            } else {
                 LeafBanner(
                     tone: .danger,
                     title: "Couldn't load analytics",
@@ -70,7 +84,6 @@ struct AnalyticsView: View {
                     ctaTitle: "Try again",
                     onCTA: { reader.refresh() }
                 )
-                AnalyticsContent(metrics: lastKnown?.weeklyMetrics ?? .empty)
             }
         case .loaded(let snapshot, _):
             AnalyticsContent(metrics: snapshot.weeklyMetrics)
