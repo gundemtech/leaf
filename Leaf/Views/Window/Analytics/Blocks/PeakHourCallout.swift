@@ -15,8 +15,12 @@ struct PeakHourCallout: View {
         LeafCard(padding: .regular) {
             VStack(alignment: .leading, spacing: LeafSpace.sm) {
                 Text("PEAK HOUR").leafSectionLabel()
-                dotStrip
-                hourLabels
+                // T10 a11y IMPORTANT-1: hide decorative 24-Capsule strip + tick
+                // labels from VoiceOver — parent `.accessibilityLabel`
+                // summarizes the peak hour already, no value in narrating each
+                // of 24 capsules + axis ticks.
+                dotStrip.accessibilityHidden(true)
+                hourLabels.accessibilityHidden(true)
                 Text(peakHourLabel)
                     .font(LeafType.title.medium)
                     .foregroundStyle(LeafColor.text.primary)

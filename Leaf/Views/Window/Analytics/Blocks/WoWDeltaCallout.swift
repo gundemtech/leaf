@@ -17,8 +17,14 @@ struct WoWDeltaCallout: View {
     var body: some View {
         LeafCard(padding: .regular) {
             HStack(spacing: LeafSpace.lg) {
+                // T10 a11y IMPORTANT-2: hide decorative sparkline Chart from
+                // VoiceOver — parent `.accessibilityLabel` summarizes delta
+                // direction + magnitude ("up 12 percent"); Chart with no
+                // axis labels would otherwise emit per-LineMark "value 12,
+                // value 18…" announcements.
                 sparkline
                     .frame(width: 160, height: 40)
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: LeafSpace.xxs) {
                     Text(deltaText)
                         .font(LeafType.title.medium)

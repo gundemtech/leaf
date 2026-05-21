@@ -42,6 +42,20 @@ struct StreaksCard: View {
             }
         }
         .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilitySummary)
+    }
+
+    // T10 a11y IMPORTANT-3: provide explicit summary label so VoiceOver
+    // narrates "Streaks: Commits 3 days, Issues closed 1 day…" with header
+    // context instead of bare concatenated row text.
+    private var accessibilitySummary: String {
+        var parts: [String] = ["Streaks"]
+        parts.append("Commits \(streakText(metrics.commitStreak))")
+        parts.append("Issues closed \(streakText(metrics.issueCloseStreak))")
+        parts.append("Huddles \(streakText(metrics.huddleStreak))")
+        parts.append("Focus sessions \(streakText(metrics.focusSessionStreak))")
+        parts.append("Heavy days \(streakText(metrics.heavyPulseStreak))")
+        return parts.joined(separator: ", ")
     }
 
     private func streakRow(icon: String, label: String, count: Int) -> some View {
