@@ -163,6 +163,17 @@ public struct InsightsSnapshot: Sendable, Hashable {
     /// substrate has no row (fresh DB, idle gate not met, or non-prod
     /// `StubInsights` returning `[]`).
     public let whereStopped: WhereStoppedSnapshot?
+    /// Phase Track-9 T9 — Analytics surface 7-day weekly metrics
+    /// (focus minutes / AI ratio / sessions / commits per day +
+    /// peak hour + WoW delta + 5 streaks). Default `.empty` mirrors
+    /// P3 todayMetrics / P4 youNowState pattern: substrate ships
+    /// `WeeklyMetrics.empty` first-class, callsites read
+    /// `weeklyMetrics == .empty` Equatable check for AnalyticsContent
+    /// empty-state branching. Production `InsightsReader.refresh()`
+    /// writes the real value via `DerivedInsights.weeklyMetrics(now:)`
+    /// (T4 substrate; `StubInsights` default returns `.empty` for
+    /// non-prod / iOS-future paths).
+    public let weeklyMetrics: WeeklyMetrics
 
     public init(
         topApps: [AppTimeEntry],
@@ -209,7 +220,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         youNowState: YouNowState = .empty,
         sameTaskTeammates: [TeammateMatch] = [],
         inboxItems: [InboxItem] = [],
-        whereStopped: WhereStoppedSnapshot? = nil
+        whereStopped: WhereStoppedSnapshot? = nil,
+        weeklyMetrics: WeeklyMetrics = .empty
     ) {
         self.topApps = topApps
         self.sessions = sessions
@@ -256,6 +268,7 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.sameTaskTeammates = sameTaskTeammates
         self.inboxItems = inboxItems
         self.whereStopped = whereStopped
+        self.weeklyMetrics = weeklyMetrics
     }
 
     /// Convenience init — рассчитывает `deepSessionsCount` по threshold'у.
@@ -309,7 +322,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         youNowState: YouNowState = .empty,
         sameTaskTeammates: [TeammateMatch] = [],
         inboxItems: [InboxItem] = [],
-        whereStopped: WhereStoppedSnapshot? = nil
+        whereStopped: WhereStoppedSnapshot? = nil,
+        weeklyMetrics: WeeklyMetrics = .empty
     ) {
         self.init(
             topApps: topApps,
@@ -356,7 +370,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
             youNowState: youNowState,
             sameTaskTeammates: sameTaskTeammates,
             inboxItems: inboxItems,
-            whereStopped: whereStopped
+            whereStopped: whereStopped,
+            weeklyMetrics: weeklyMetrics
         )
     }
 
