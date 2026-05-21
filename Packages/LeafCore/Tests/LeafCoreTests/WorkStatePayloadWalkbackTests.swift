@@ -150,6 +150,9 @@ final class WorkStatePayloadWalkbackTests: XCTestCase {
             Set(labels),
             [
                 "id", "generatedAtMs", "anchorEventId", "excerpt", "wipSignals",
+                // Track-9 T7 — anchor file:line resolution + Reader-side Path B
+                // commit composition. All 3 defaulted nil for backward-compat.
+                "anchorFilePath", "anchorLine", "recentLastCommit",
             ])
     }
 }
