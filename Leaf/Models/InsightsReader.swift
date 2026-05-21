@@ -199,6 +199,11 @@ final class InsightsReader {
                             maxAgeMs: 4 * 60 * 60 * 1000
                         )
                         try Task.checkCancellation()
+                        // Track-9 T9 — Analytics weekly metrics (7-day window
+                        // anchored at local-TZ midnight). Pure read; T4 ships
+                        // ProdInsights+WeeklyMetrics with 5 streaks + WoW.
+                        let weeklyMetrics = try insights.weeklyMetrics(now: Date())
+                        try Task.checkCancellation()
                         // Path B — splice commit into deriver's snapshot via
                         // defaulted-init. Preserves anchorFilePath / anchorLine
                         // populated by ProdInsights+RecentWhereStopped LEFT JOIN.
@@ -255,7 +260,8 @@ final class InsightsReader {
                             youNowState: youNowState,
                             sameTaskTeammates: sameTaskTeammates,
                             inboxItems: inboxItems,
-                            whereStopped: whereStopped
+                            whereStopped: whereStopped,
+                            weeklyMetrics: weeklyMetrics
                         )
                         return .success((db, snapshot))
                     } catch {

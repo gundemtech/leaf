@@ -739,4 +739,39 @@ final class InsightsSnapshotTests: XCTestCase {
         )
         XCTAssertEqual(snapshot.whereStopped, row)
     }
+
+    // MARK: - Phase Track-9 T9 — WEEKLY METRICS (Analytics surface)
+
+    func testSnapshotDefaultsWeeklyMetricsToEmpty() {
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500
+        )
+        XCTAssertEqual(snapshot.weeklyMetrics, .empty)
+    }
+
+    func testSnapshotRoundTripsWeeklyMetrics() {
+        let custom = WeeklyMetrics(
+            dailySeries: Array(repeating: DailyMetric.empty, count: 7),
+            peakHour: 14,
+            wowDelta: 0.12,
+            commitStreak: 3,
+            issueCloseStreak: 2,
+            huddleStreak: 1,
+            focusSessionStreak: 4,
+            heavyPulseStreak: 0
+        )
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500,
+            weeklyMetrics: custom
+        )
+        XCTAssertEqual(snapshot.weeklyMetrics, custom)
+        XCTAssertEqual(snapshot.weeklyMetrics.peakHour, 14)
+        XCTAssertEqual(snapshot.weeklyMetrics.commitStreak, 3)
+    }
 }
