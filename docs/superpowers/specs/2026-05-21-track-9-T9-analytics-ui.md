@@ -1,6 +1,6 @@
 # Track-9 T9 — Analytics UI surface (Mid-tier MVP)
 
-**Status:** SPEC — Stage 3 writing.
+**Status:** SHIPPED — Stage 8 done. 6 public commits = 1 docs spec + 4 atomic feat (Task 1 InsightsSnapshot field + Task 2 InsightsReader 23rd call + Tasks 3+4 AnalyticsView+Content pair + Tasks 5-10 6 block views) + 1 Stage 6 review-fix bundle. +2 net new public tests (InsightsSnapshotTests defaulted-init + roundtrip — SPM 2990 total, T8 baseline 2988 +2). 5/5 xcodebuild Debug schemes SUCCESS. All 10 AC gates green. Substrate-purity T1-T8 streak preserved (9 phases). `just check-tokens` 3-tier clean. Master spec §9.1 C-23 RESOLVED T9. Stage 6 independent review verdict APPROVE-WITH-NITS — IMP-1 + NIT-3 + spec §1.1 amendments (5)+(6) applied; remaining NITs carry to Track-9 polish (C-44..).
 **Track-9 master design:** [`2026-05-19-track-9-substrate-enrichment-design.md`](./2026-05-19-track-9-substrate-enrichment-design.md) §3.5 + §T9 (lines 215-220).
 **T4 spec (substrate consumed):** [`2026-05-20-track-9-T4-weekly-metrics-deriver.md`](./2026-05-20-track-9-T4-weekly-metrics-deriver.md) — `WeeklyMetrics` + `DailyMetric` shape, `.empty` static, `DerivedInsights.weeklyMetrics(now:)` API.
 **T7 spec (parity precedent — defaulted-init snapshot wiring):** [`2026-05-21-track-9-T7-where-stopped-4line.md`](./2026-05-21-track-9-T7-where-stopped-4line.md) §3.3 Path B composition pattern.
