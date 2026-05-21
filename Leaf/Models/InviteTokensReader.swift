@@ -32,6 +32,13 @@ final class InviteTokensReader {
   private(set) var state: State = .idle
 
   private var service: InviteTokenService?
+  /// Workspace id the cached `service` was constructed against. Invalidates
+  /// the cache when the user switches workspaces — without this the
+  /// `InviteTokenService` keeps its first-seen `workspaceID` private,
+  /// `listActive()` returns rows from the wrong workspace, and active
+  /// tokens leak across the sidebar switcher (dogfooding round 6: invite
+  /// «уаыва» generated on workspace «anton» appeared verbatim under «5555»).
+  private var cachedServiceWorkspaceID: String?
   private var database: LeafCore.Database?
 
   private let supabase: SupabaseClient
@@ -172,11 +179,18 @@ final class InviteTokensReader {
   // MARK: - Lazy init
 
   private func ensureService() throws -> InviteTokenService {
-    if let svc = service { return svc }
-    let db = try ensureDatabase()
     guard let workspaceID = activeWorkspaceStore.activeWorkspaceID else {
       throw LeafError.databaseUnavailable
     }
+    // Reuse the cached service only when it was constructed against the
+    // currently-active workspace. Sidebar switcher → different active id →
+    // rebuild against the new workspace; otherwise listActive / generate /
+    // delete all run against the wrong `workspace_id` and the user sees
+    // tokens from one workspace bleed into another's Active list.
+    if let svc = service, cachedServiceWorkspaceID == workspaceID {
+      return svc
+    }
+    let db = try ensureDatabase()
     // Admin's own pubkey from local team_members (creator = first row).
     let members = try db.readTeamMembers(workspaceID: workspaceID, includeRemoved: false)
     guard let selfMember = members.first else {
@@ -189,6 +203,7 @@ final class InviteTokensReader {
       createdByPubkeyHex: selfMember.pubkeyHex
     )
     service = svc
+    cachedServiceWorkspaceID = workspaceID
     return svc
   }
 
