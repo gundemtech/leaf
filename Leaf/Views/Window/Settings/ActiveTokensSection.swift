@@ -131,13 +131,17 @@ struct ActiveTokensSection: View {
             .font(LeafType.body.regular)
             .foregroundStyle(LeafColor.text.primary)
           Spacer()
-          Button {
+          // Round 8 — per-row delete unified to LeafButton.destructive .sm
+          // so the kill-switch reads as the same family of button as
+          // Workspace's Leave / Delete Permanently CTAs.
+          LeafButton(
+            "Delete",
+            variant: .destructive,
+            size: .sm,
+            icon: .system("xmark.circle")
+          ) {
             deleteCandidateCode = token.code
-          } label: {
-            Image(systemName: "xmark.circle")
-              .foregroundStyle(LeafColor.status.danger)
           }
-          .buttonStyle(.plain)
           .help("Delete invite token")
         }
 

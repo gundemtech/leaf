@@ -334,18 +334,11 @@ struct TeamView: View {
           .foregroundStyle(LeafColor.text.tertiary)
       }
       Spacer(minLength: 0)
-      // G.3 — Invite CTA. Visually emphasized only while the workspace is
-      // still in onboarding mode (≤1 member); once teammates have joined,
-      // invite is a rare action and drops to secondary so the toolbar
-      // stops competing with the feed/message-pill row for attention.
-      // The "broadcast to whole team" send path (recipient-picker) lives
-      // in Phase H — invite stays the only toolbar action for now.
-      let inviteIsPrimary = memberCount <= 1
-      LeafButton(
-        inviteIsPrimary ? "+ Invite teammate" : "+ Invite",
-        variant: inviteIsPrimary ? .primary : .secondary,
-        size: .md
-      ) {
+      // G.3 — Invite CTA. Round 8 — user wants all create/new/generate/
+      // invite CTAs styled identically (primary .md) across the app for
+      // visual consistency; the round-4 secondary-when-populated variant
+      // was overruled.
+      LeafButton("+ Invite teammate", variant: .primary, size: .md) {
         generateInvitePresented = true
       }
       .keyboardShortcut("n", modifiers: .command)

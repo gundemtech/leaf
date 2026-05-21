@@ -136,7 +136,8 @@ struct WorkspaceSettingsSection: View {
       let soloAdmin = viewerIsAdmin && members.count == 1
 
       HStack(spacing: LeafSpace.sm) {
-        LeafButton("+ New Workspace", variant: .secondary, size: .md) {
+        // Round 8 — create CTAs unified to primary .md across the app.
+        LeafButton("+ New Workspace", variant: .primary, size: .md) {
           createWorkspacePresented = true
         }
         Spacer()

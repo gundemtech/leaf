@@ -114,42 +114,39 @@ struct LeafWorkspaceSwitcher: View {
     }
   }
 
+  // Round 8 — user feedback: footer rows now use LeafButton.secondary so
+  // they read as proper buttons (matching the rest of the design system)
+  // instead of bare HStack tap-targets. Full-width via .frame
+  // maxWidth:.infinity + label HStack so the icon stays leading and the
+  // hit area covers the whole sidebar column.
   private var addNewRow: some View {
-    HStack(spacing: LeafSpace.sm) {
-      Image(systemName: "plus.circle")
-        .font(.system(size: LeafWorkspaceSwitcherTokens.activeIconSize))
-        .foregroundStyle(LeafColor.text.secondary)
-        .frame(
-          width: LeafWorkspaceSwitcherTokens.activeIconSize,
-          height: LeafWorkspaceSwitcherTokens.activeIconSize
-        )
-      Text("Add workspace")
-        .font(LeafType.body.regular)
-        .foregroundStyle(LeafColor.text.secondary)
-      Spacer()
+    LeafButton(
+      variant: .secondary,
+      size: .sm,
+      icon: .system("plus.circle"),
+      action: onAddNew
+    ) {
+      HStack {
+        Text("Add workspace")
+        Spacer(minLength: 0)
+      }
     }
-    .frame(height: LeafWorkspaceSwitcherTokens.rowHeight)
-    .contentShape(.rect)
-    .onTapGesture(perform: onAddNew)
+    .frame(maxWidth: .infinity)
   }
 
   private var joinRow: some View {
-    HStack(spacing: LeafSpace.sm) {
-      Image(systemName: "link.circle")
-        .font(.system(size: LeafWorkspaceSwitcherTokens.activeIconSize))
-        .foregroundStyle(LeafColor.text.secondary)
-        .frame(
-          width: LeafWorkspaceSwitcherTokens.activeIconSize,
-          height: LeafWorkspaceSwitcherTokens.activeIconSize
-        )
-      Text("Join workspace")
-        .font(LeafType.body.regular)
-        .foregroundStyle(LeafColor.text.secondary)
-      Spacer()
+    LeafButton(
+      variant: .secondary,
+      size: .sm,
+      icon: .system("link.circle"),
+      action: onJoin
+    ) {
+      HStack {
+        Text("Join workspace")
+        Spacer(minLength: 0)
+      }
     }
-    .frame(height: LeafWorkspaceSwitcherTokens.rowHeight)
-    .contentShape(.rect)
-    .onTapGesture(perform: onJoin)
+    .frame(maxWidth: .infinity)
   }
 
   /// Derives initials from a workspace name. Multi-word names get the
