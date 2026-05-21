@@ -391,8 +391,8 @@ The 24 carries enumerated in `docs/superpowers/specs/2026-05-18-track-8-home-ux-
 | C-17 | filteredItems substring unit test | already-resolved P9 |
 | C-18 | empty/no-match icon differentiation | already-resolved P9 |
 | C-19 | Localization | out (separate track) |
-| C-20 | Line 2 last-commit subject | T7 (`recentLastCommit` deriver T1) |
-| C-21 | anchorEventId → file path:line | T7 + T1 |
+| C-20 | Line 2 last-commit subject | **[RESOLVED T7 — commit `da917399` + `408a2f04`]** |
+| C-21 | anchorEventId → file path:line | **[RESOLVED T7 — commit `da917399` + moat ProdInsights+RecentWhereStopped]** |
 | C-22 | `formatRelative` unification | already-resolved P9 + T10 if new callsites |
 | C-23 | Analytics surface real content | T9 |
 | C-24 | `recentActivity` orphan drop | T10 |
