@@ -349,17 +349,34 @@ final class WorkspaceReader {
   /// new name. The caller's banner should hint at "Restart app to retry
   /// sync"; structural rollback is deferred to a future startup-sync pass.
   func rename(workspaceID: String, newName: String) async -> String? {
-    guard let supabase else {
-      let msg = "No network connection. Please sign in first."
-      state = .error(message: msg)
-      return msg
-    }
     do {
-      try await supabase.patchWorkspaceName(id: workspaceID, name: newName)
+      // Local-first rename (mirrors `delete` after the round-5 fix and
+      // `leaveWorkspace` discipline). The server-first ordering doc-comment
+      // above (C-I5 carry-over) was the rename twin of the delete deadlock
+      // — `patchWorkspaceName` throws `.noRowsAffected` for legacy
+      // workspaces whose server row was never created, so the local UPDATE
+      // never ran and the user saw the stale name forever. Local commit
+      // first; server convergence is best-effort under do/catch.
       let db = try ensureDatabase()
       let svc = WorkspaceService(database: db, keystoreRoot: keystoreRoot)
       try svc.updateName(workspaceID: workspaceID, newName: newName)
       refresh()
+      if let supabase {
+        do {
+          try await supabase.patchWorkspaceName(id: workspaceID, name: newName)
+        } catch SupabaseError.noRowsAffected {
+          // Workspace missing server-side (pre-`insertWorkspace` legacy
+          // row). Self-heal upsert in `refresh` will create it on next
+          // tick with the now-renamed value; convergent state.
+          logger.info(
+            "patchWorkspaceName 0 rows — workspace not on server (legacy); rename committed locally"
+          )
+        } catch {
+          logger.warning(
+            "patchWorkspaceName failed: \(String(describing: error), privacy: .public) — local rename committed; server will converge later"
+          )
+        }
+      }
       return nil
     } catch {
       logger.error("WorkspaceReader.rename failed: \(String(describing: error), privacy: .public)")
