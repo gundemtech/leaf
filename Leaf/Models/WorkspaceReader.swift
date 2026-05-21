@@ -184,75 +184,82 @@ final class WorkspaceReader {
   /// local row stays and the user gets a banner explaining the divergence;
   /// they need to delete + recreate (or wait for a follow-up that retries
   /// the sync on next refresh).
-  func createWorkspace(displayName: String) {
-    Task { @MainActor [weak self] in
-      guard let self else { return }
-      do {
-        let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, trimmed.count <= 80 else {
-          state = .error(message: "Workspace name can’t be empty or too long.")
-          return
-        }
-
-        let db = try ensureDatabase()
-
-        // Item #5 — client-side uniqueness check against existing
-        // non-left workspaces. localizedCaseInsensitiveCompare matches
-        // the server-side UNIQUE (created_by_pubkey, name) constraint
-        // intent without the round-trip cost.
-        let existing = try db.listWorkspaces(includeLeft: false)
-        if existing.contains(where: {
-          $0.name.localizedCaseInsensitiveCompare(trimmed) == .orderedSame
-        }) {
-          state = .error(
-            message: "A workspace named “\(trimmed)” already exists. Pick a different name."
-          )
-          return
-        }
-
-        let svc = WorkspaceService(database: db, keystoreRoot: keystoreRoot)
-        let workspace = try svc.createWorkspace(displayName: trimmed)
-
-        // Item #3 — server-side workspaces row. Required so
-        // `is_workspace_admin(workspace_id, jwt_pubkey)` returns true
-        // for any subsequent admin write (invite_tokens / invites /
-        // workspace_members). Skip when supabase is nil (unit tests).
-        if let supabase {
-          let priv = try IdentityService.ensureLocalIdentity(at: keystoreRoot)
-          let pubkeyHex = priv.publicKey.rawRepresentation
-            .map { String(format: "%02x", $0) }.joined()
-          do {
-            try await supabase.insertWorkspace(
-              id: workspace.id,
-              name: workspace.name,
-              createdByPubkey: pubkeyHex
-            )
-          } catch SupabaseError.conflict {
-            // Server already has a row for this (admin, name) pair
-            // — either a previous attempt synced and we re-tried,
-            // or another device under the same identity beat us
-            // to it. Either way, the row exists; treat as success.
-            logger.warning("insertWorkspace 409 — server row already exists, proceeding")
-          } catch {
-            logger.error(
-              "WorkspaceReader.insertWorkspace failed: \(String(describing: error), privacy: .public)"
-            )
-            state = .error(
-              message:
-                "Workspace created locally but couldn’t sync with the server. Invites will fail until you delete it and try again. (\(userFacingMessage(for: error)))"
-            )
-            return
-          }
-        }
-
-        activeStore.setActive(workspace.id)
-        refresh()
-      } catch {
-        logger.error(
-          "WorkspaceReader.createWorkspace failed: \(String(describing: error), privacy: .public)"
-        )
-        state = .error(message: userFacingMessage(for: error))
+  /// Creates a new workspace. **Returns `nil` on success, a user-facing
+  /// error message on failure** — sheet-local (no `state` mutation on
+  /// validation failures). Round-7 dogfooding: previously a duplicate-name
+  /// validation flipped `state = .error(...)`, which cascaded through
+  /// every view gated on `.loaded` (Sidebar lost its workspaces, Team tab
+  /// went to «Couldn't load team», Settings rendered `noWorkspacePlaceholder`)
+  /// — the whole app pretended workspaces vanished because a single sheet
+  /// rejected a name. Validation errors are now scoped to the caller's
+  /// banner; only post-success refresh + server-sync diagnostics touch
+  /// state.
+  @discardableResult
+  func createWorkspace(displayName: String) async -> String? {
+    do {
+      let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !trimmed.isEmpty, trimmed.count <= 80 else {
+        return "Workspace name can’t be empty or too long."
       }
+
+      let db = try ensureDatabase()
+
+      // Item #5 — client-side uniqueness check against existing
+      // non-left workspaces. localizedCaseInsensitiveCompare matches
+      // the server-side UNIQUE (created_by_pubkey, name) constraint
+      // intent without the round-trip cost.
+      let existing = try db.listWorkspaces(includeLeft: false)
+      if existing.contains(where: {
+        $0.name.localizedCaseInsensitiveCompare(trimmed) == .orderedSame
+      }) {
+        return "A workspace named “\(trimmed)” already exists. Pick a different name."
+      }
+
+      let svc = WorkspaceService(database: db, keystoreRoot: keystoreRoot)
+      let workspace = try svc.createWorkspace(displayName: trimmed)
+
+      // Item #3 — server-side workspaces row. Required so
+      // `is_workspace_admin(workspace_id, jwt_pubkey)` returns true
+      // for any subsequent admin write (invite_tokens / invites /
+      // workspace_members). Skip when supabase is nil (unit tests).
+      if let supabase {
+        let priv = try IdentityService.ensureLocalIdentity(at: keystoreRoot)
+        let pubkeyHex = priv.publicKey.rawRepresentation
+          .map { String(format: "%02x", $0) }.joined()
+        do {
+          try await supabase.insertWorkspace(
+            id: workspace.id,
+            name: workspace.name,
+            createdByPubkey: pubkeyHex
+          )
+        } catch SupabaseError.conflict {
+          // Server already has a row for this (admin, name) pair —
+          // either a previous attempt synced and we re-tried, or
+          // another device under the same identity beat us to it.
+          // Either way, the row exists; treat as success.
+          logger.warning("insertWorkspace 409 — server row already exists, proceeding")
+        } catch {
+          logger.error(
+            "WorkspaceReader.insertWorkspace failed: \(String(describing: error), privacy: .public)"
+          )
+          // Server-sync failure: roll back so the local DB doesn't accumulate
+          // ghost rows the user can't invite teammates against. Surface the
+          // specific reason so the sheet's inline banner explains why the
+          // create didn't take.
+          try? svc.softDelete(workspaceID: workspace.id, at: Date())
+          return
+            "Couldn't sync workspace to server: \(userFacingMessage(for: error)). Try again."
+        }
+      }
+
+      activeStore.setActive(workspace.id)
+      refresh()
+      return nil
+    } catch {
+      logger.error(
+        "WorkspaceReader.createWorkspace failed: \(String(describing: error), privacy: .public)"
+      )
+      return userFacingMessage(for: error)
     }
   }
 

@@ -12,125 +12,133 @@
 //  showUpgrade` lives here.
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 struct WorkspaceCreateSheet: View {
-    let onCreated: () -> Void
-    let onCancel: () -> Void
+  let onCreated: () -> Void
+  let onCancel: () -> Void
 
-    @Environment(WorkspaceReader.self) private var workspaceReader
-    /// T4 — read tier gate to disable [Create] + show UpgradeChip when Free.
-    @Environment(TierGateReader.self) private var tierGate
-    /// T4 — composition-root closure that wraps SupabaseClient.submitToWaitlist.
-    @Environment(\.submitToWaitlist) private var submitToWaitlist
+  @Environment(WorkspaceReader.self) private var workspaceReader
+  /// T4 — read tier gate to disable [Create] + show UpgradeChip when Free.
+  @Environment(TierGateReader.self) private var tierGate
+  /// T4 — composition-root closure that wraps SupabaseClient.submitToWaitlist.
+  @Environment(\.submitToWaitlist) private var submitToWaitlist
 
-    @State private var nameDraft = ""
-    @State private var isCreating = false
-    @State private var errorMessage: String?
-    /// T4 — per-callsite UpgradeModal state. Mirrors S6 cross-post sheet pattern.
-    @State private var showUpgrade = false
-    @FocusState private var isFocused: Bool
+  @State private var nameDraft = ""
+  @State private var isCreating = false
+  @State private var errorMessage: String?
+  /// T4 — per-callsite UpgradeModal state. Mirrors S6 cross-post sheet pattern.
+  @State private var showUpgrade = false
+  @FocusState private var isFocused: Bool
 
-    private var canCreate: Bool {
-        let trimmed = nameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !trimmed.isEmpty && trimmed.count <= 80
+  private var canCreate: Bool {
+    let trimmed = nameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+    return !trimmed.isEmpty && trimmed.count <= 80
+  }
+
+  var body: some View {
+    VStack(spacing: LeafSpace.md) {
+      Text("Create new workspace")
+        .font(LeafType.title.small)
+        .foregroundStyle(LeafColor.text.primary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+
+      // T4 — inline UpgradeChip shown ABOVE form when Free-tier blocks creation.
+      // Form fields remain visible (Free user can still see the UI surface +
+      // understand what unlocking gets them) but [Create] is disabled.
+      if !tierGate.canCreateWorkspace {
+        upgradeChip(message: "Workspace creation requires Leaf Team")
+      }
+
+      VStack(alignment: .leading, spacing: LeafSpace.xs) {
+        Text("Workspace name")
+          .font(LeafType.caption)
+          .foregroundStyle(LeafColor.text.tertiary)
+        TextField("Acme Team", text: $nameDraft)
+          .textFieldStyle(.roundedBorder)
+          .focused($isFocused)
+          .onSubmit { createIfValid() }
+      }
+
+      if let err = errorMessage {
+        LeafBanner(tone: .danger, title: err, description: nil, onDismiss: { errorMessage = nil })
+      }
+
+      HStack(spacing: LeafSpace.sm) {
+        LeafButton("Cancel", variant: .secondary, size: .md) {
+          onCancel()
+        }
+        .disabled(isCreating)
+        Spacer()
+        LeafButton("Create Workspace", variant: .primary, size: .md) {
+          createIfValid()
+        }
+        .disabled(!tierGate.canCreateWorkspace || !canCreate || isCreating)
+      }
     }
-
-    var body: some View {
-        VStack(spacing: LeafSpace.md) {
-            Text("Create new workspace")
-                .font(LeafType.title.small)
-                .foregroundStyle(LeafColor.text.primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            // T4 — inline UpgradeChip shown ABOVE form when Free-tier blocks creation.
-            // Form fields remain visible (Free user can still see the UI surface +
-            // understand what unlocking gets them) but [Create] is disabled.
-            if !tierGate.canCreateWorkspace {
-                upgradeChip(message: "Workspace creation requires Leaf Team")
-            }
-
-            VStack(alignment: .leading, spacing: LeafSpace.xs) {
-                Text("Workspace name")
-                    .font(LeafType.caption)
-                    .foregroundStyle(LeafColor.text.tertiary)
-                TextField("Acme Team", text: $nameDraft)
-                    .textFieldStyle(.roundedBorder)
-                    .focused($isFocused)
-                    .onSubmit { createIfValid() }
-            }
-
-            if let err = errorMessage {
-                LeafBanner(tone: .danger, title: err, description: nil, onDismiss: { errorMessage = nil })
-            }
-
-            HStack(spacing: LeafSpace.sm) {
-                LeafButton("Cancel", variant: .secondary, size: .md) {
-                    onCancel()
-                }
-                .disabled(isCreating)
-                Spacer()
-                LeafButton("Create Workspace", variant: .primary, size: .md) {
-                    createIfValid()
-                }
-                .disabled(!tierGate.canCreateWorkspace || !canCreate || isCreating)
-            }
-        }
-        .padding(LeafSpace.lg)
-        .frame(width: 440)
-        .onAppear { isFocused = true }
-        .sheet(isPresented: $showUpgrade) {
-            UpgradeModal(
-                reason: .createWorkspace,
-                onDismiss: { showUpgrade = false },
-                onSubmitEmail: { email in await submitToWaitlist(email) }
-            )
-        }
+    .padding(LeafSpace.lg)
+    .frame(width: 440)
+    .onAppear { isFocused = true }
+    .sheet(isPresented: $showUpgrade) {
+      UpgradeModal(
+        reason: .createWorkspace,
+        onDismiss: { showUpgrade = false },
+        onSubmitEmail: { email in await submitToWaitlist(email) }
+      )
     }
+  }
 
-    // MARK: - Helpers
+  // MARK: - Helpers
 
-    /// T4 — small inline UpgradeChip used as the disabled-state overlay. Kept
-    /// inline (vs new LeafKit atom) because no other callsite needs this shape:
-    /// SendDirectMessageSheet uses the same pattern, AcceptInviteSheet
-    /// replaces the [Join] button entirely instead.
-    @ViewBuilder
-    private func upgradeChip(message: String) -> some View {
-        HStack(spacing: LeafSpace.sm) {
-            Image(systemName: "lock.fill")
-                .foregroundStyle(LeafColor.status.warning)
-            Text(message)
-                .font(LeafType.body.small)
-                .foregroundStyle(LeafColor.text.primary)
-            Spacer()
-            LeafButton("Upgrade", variant: .primary, size: .sm) {
-                showUpgrade = true
-            }
-        }
-        .padding(LeafSpace.sm)
-        .background(LeafColor.status.warning.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: LeafRadius.sm, style: .continuous))
+  /// T4 — small inline UpgradeChip used as the disabled-state overlay. Kept
+  /// inline (vs new LeafKit atom) because no other callsite needs this shape:
+  /// SendDirectMessageSheet uses the same pattern, AcceptInviteSheet
+  /// replaces the [Join] button entirely instead.
+  @ViewBuilder
+  private func upgradeChip(message: String) -> some View {
+    HStack(spacing: LeafSpace.sm) {
+      Image(systemName: "lock.fill")
+        .foregroundStyle(LeafColor.status.warning)
+      Text(message)
+        .font(LeafType.body.small)
+        .foregroundStyle(LeafColor.text.primary)
+      Spacer()
+      LeafButton("Upgrade", variant: .primary, size: .sm) {
+        showUpgrade = true
+      }
     }
+    .padding(LeafSpace.sm)
+    .background(LeafColor.status.warning.opacity(0.1))
+    .clipShape(RoundedRectangle(cornerRadius: LeafRadius.sm, style: .continuous))
+  }
 
-    private func createIfValid() {
-        // T4 — defence in depth: if user somehow bypasses the disabled state
-        // (keyboard submit, accessibility), block here too.
-        guard tierGate.canCreateWorkspace else {
-            showUpgrade = true
-            return
-        }
-        guard canCreate, !isCreating else { return }
-        let trimmed = nameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        isCreating = true
-        errorMessage = nil
-        workspaceReader.createWorkspace(displayName: trimmed)
-        // Reflect any error that WorkspaceReader transitioned into.
-        if case .error(let msg) = workspaceReader.state {
-            errorMessage = msg
-            isCreating = false
-        } else {
-            onCreated()
-        }
+  private func createIfValid() {
+    // T4 — defence in depth: if user somehow bypasses the disabled state
+    // (keyboard submit, accessibility), block here too.
+    guard tierGate.canCreateWorkspace else {
+      showUpgrade = true
+      return
     }
+    guard canCreate, !isCreating else { return }
+    let trimmed = nameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+    isCreating = true
+    errorMessage = nil
+    Task { @MainActor in
+      // `createWorkspace` returns `nil` on success or a sheet-local
+      // error string on failure (validation / server-sync). Round-7
+      // dogfooding: previously the reader mutated `state = .error`
+      // on dup-name, which knocked the Sidebar / Team / Settings
+      // into a «no workspace» pretend-empty state across the whole
+      // app. Now the failure stays inside the sheet's banner and
+      // the rest of the UI keeps its existing `.loaded` rendering.
+      let err = await workspaceReader.createWorkspace(displayName: trimmed)
+      isCreating = false
+      if let err {
+        errorMessage = err
+      } else {
+        onCreated()
+      }
+    }
+  }
 }
