@@ -55,23 +55,72 @@ struct WhereStoppedBlock: View {
     private func populatedBody(_ snap: WhereStoppedSnapshot) -> some View {
         let cleanWipSignals = snap.wipSignals
             .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-        return VStack(alignment: .leading, spacing: LeafSpace.sm) {
-            Text(snap.excerpt)
+        return VStack(alignment: .leading, spacing: LeafSpace.xs) {
+            // Line 2 — anchor file:line (Xcode), filename only (path-only
+            // fallback for VSCode/JetBrains anchors), or excerpt (commit /
+            // ticket / no-anchor cases).
+            Text(lineLabel(for: snap))
                 .font(LeafType.title.small)
                 .foregroundStyle(LeafColor.text.primary)
                 .lineLimit(2)
                 .truncationMode(.tail)
                 .multilineTextAlignment(.leading)
 
-            if !cleanWipSignals.isEmpty {
-                Text(cleanWipSignals.joined(separator: " · "))
+            // Line 3 — last commit subject (4h cutoff applied Reader-side).
+            if let commit = snap.recentLastCommit {
+                Text(commitSubjectLine(commit))
                     .font(LeafType.body.small)
-                    .foregroundStyle(LeafColor.text.tertiary)
+                    .foregroundStyle(LeafColor.text.secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
+
+            // Line 4 — WIP signals as LeafPill chips (3-tone mapping).
+            if !cleanWipSignals.isEmpty {
+                HStack(spacing: LeafSpace.xs) {
+                    ForEach(cleanWipSignals, id: \.self) { signal in
+                        LeafPill(title: signal, tone: wipSignalTone(signal))
+                    }
+                }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Track-9 T7 — Line 2 renderer. Xcode anchor → "name:line"; path-only
+    /// anchor → "name"; no anchor → excerpt fallback.
+    ///
+    /// `snap.anchorFilePath` is guaranteed basename-only by the substrate
+    /// contract (`ProdInsights+RecentWhereStopped` extracts via
+    /// `(p as NSString).lastPathComponent` before populating the field).
+    /// No second derivation needed here — render directly.
+    private func lineLabel(for snap: WhereStoppedSnapshot) -> String {
+        if let basename = snap.anchorFilePath, !basename.isEmpty {
+            if let line = snap.anchorLine, line > 0 {
+                return "\(basename):\(line)"
+            }
+            return basename
+        }
+        return snap.excerpt
+    }
+
+    /// Track-9 T7 — Line 3 renderer. Trim + 60-char cap + ellipsis,
+    /// wrapped in quotes per spec §4.3 / master spec §9.1 C-20.
+    private func commitSubjectLine(_ commit: RecentCommitSnapshot) -> String {
+        let trimmed = commit.subject.trimmingCharacters(in: .whitespaces)
+        let capped = trimmed.count > 60 ? String(trimmed.prefix(60)) + "…" : trimmed
+        return "Last commit: \"\(capped)\""
+    }
+
+    /// Track-9 T7 — WIP pill tone mapping. Per-signal semantic intent;
+    /// unknown signals fall back to neutral (safe default for future deriver
+    /// extensions like `ciFailing`, currently always false per Track-1 D3).
+    private func wipSignalTone(_ signal: String) -> LeafPillTokens.Tone {
+        switch signal {
+        case "commitWip": return .warning
+        case "midEdit":   return .accent
+        default:          return .neutral
+        }
     }
 
     /// Treats a snapshot with empty `excerpt` as no-data — header drops age
@@ -90,8 +139,21 @@ struct WhereStoppedBlock: View {
     }
 
     private var accessibilityHint: String {
-        hasUsableSnapshot
-            ? "Opens decisions, open questions, blockers, and where-stopped history."
-            : "No recent stop-points. Opens full detector history."
+        guard hasUsableSnapshot, let snap = snapshot else {
+            return "No recent stop-points. Opens full detector history."
+        }
+        var parts = ["Opens decisions, open questions, blockers, and where-stopped history."]
+        if let basename = snap.anchorFilePath, !basename.isEmpty {
+            // basename — substrate contract per ProdInsights+RecentWhereStopped.
+            if let line = snap.anchorLine, line > 0 {
+                parts.append("Last touched \(basename) line \(line).")
+            } else {
+                parts.append("Last touched \(basename).")
+            }
+        }
+        if let commit = snap.recentLastCommit {
+            parts.append("Recent commit: \(commit.subject).")
+        }
+        return parts.joined(separator: " ")
     }
 }
