@@ -16,6 +16,9 @@ final class InboxItemTests: XCTestCase {
         XCTAssertEqual(InboxFilter.reviews.rawValue, "reviews")
         XCTAssertEqual(InboxFilter.questions.rawValue, "questions")
         XCTAssertEqual(InboxFilter.mentions.rawValue, "mentions")
+        // C-33 (T10): parity assertion for .alerts case added in T8 — guards
+        // against accidental rename that would silently change persisted state.
+        XCTAssertEqual(InboxFilter.alerts.rawValue, "alerts")
     }
 
     func testInboxFilterAdmits() {
