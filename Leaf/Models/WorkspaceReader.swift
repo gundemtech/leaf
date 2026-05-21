@@ -324,13 +324,21 @@ final class WorkspaceReader {
   ///
   /// S7 Stage 6 fix C-I5 + C-I8 — explicit return value (mirrors rename).
   func delete(workspaceID: String) async -> String? {
-    guard let supabase else {
-      let msg = "No network connection. Please sign in first."
-      state = .error(message: msg)
-      return msg
-    }
     do {
-      try await supabase.softDeleteWorkspace(id: workspaceID)
+      // Local-first delete (mirrors `leaveWorkspace` discipline). The local
+      // SQLCipher DB is the source of truth; the server-side
+      // `workspaces.deleted_at_ms` PATCH below is best-effort convergence.
+      //
+      // Earlier server-first pattern broke dogfooding: workspaces created
+      // before Item #3 (`SupabaseClient.insertWorkspace`) landed never had a
+      // server row, so `softDeleteWorkspace`'s `Content-Range: */0` threw
+      // `.noRowsAffected` → state went to `.error("Only the workspace
+      // creator can perform this action")` → local delete never ran → user
+      // saw the workspace «vanish» (actionButtonsRow stopped rendering and
+      // its `.sheet` modifier unmounted with it) but the row sat in
+      // SQLCipher, so the next `refresh()` resurrected the entire workspace
+      // list — exactly the «Try again brought them back» symptom from
+      // dogfooding round 5.
       let db = try ensureDatabase()
       let svc = WorkspaceService(database: db, keystoreRoot: keystoreRoot)
       try svc.softDelete(workspaceID: workspaceID, at: Date())
@@ -341,6 +349,26 @@ final class WorkspaceReader {
         activeStore.setActive(remaining.first?.id)
       }
       refresh()
+      // Best-effort server convergence. Failure here does NOT roll back the
+      // local delete — divergence is logged but the user's perceived state
+      // (workspace gone) is preserved. Out-of-band cleanup will reconcile
+      // server-side later (cron / next session).
+      if let supabase {
+        do {
+          try await supabase.softDeleteWorkspace(id: workspaceID)
+        } catch SupabaseError.noRowsAffected {
+          // No matching row server-side (workspace was never POSTed — e.g.,
+          // created before Item #3 server-INSERT shipped). Local delete
+          // already committed; nothing further to do.
+          logger.info(
+            "softDeleteWorkspace 0 rows — workspace not present server-side (pre-server-sync legacy row)"
+          )
+        } catch {
+          logger.warning(
+            "softDeleteWorkspace server PATCH failed: \(String(describing: error), privacy: .public) — local delete committed; server will converge later"
+          )
+        }
+      }
       return nil
     } catch {
       logger.error("WorkspaceReader.delete failed: \(String(describing: error), privacy: .public)")
