@@ -238,3 +238,38 @@ Carries from T1 to apply at Track-10 wrap polish phase:
 - `.claude/shared/architecture.md` — Track-9 SHIPPED substrate (registry 198, 30 SQLCipher tables, 15 MCP tools).
 - `.claude/shared/conventions.md` § "Одна phase = одна сессия" — 8-stage workflow.
 - ADR-010 walkback discipline — `RelayBodyLeakageTests` sentinel-injection lineage.
+
+---
+
+## 11. Post-ship gaps + T2.5 closure (2026-05-22)
+
+T1 C3 reduced the switches counter from ~58k → 853 (70× win, dimensionally
+correct) but the new SQL had **no min-hold gate** — it counted every distinct
+bundle transition including rapid Cmd-Tab flickers. Real-data smoke on Dima's
+Mac (Fri 2026-05-22, ~5h workday) showed 853, still ~30-85× the UX target
+"~10-30 expected" promised in §1.
+
+Root cause: the post-T1 query body explicitly omitted a dwell gate
+(`queryAttentionTransitionsCount` comment "skips the rate division and the
+min-hold gate"). Promise unmet.
+
+**T2.5 fix** (in `feature/track-10-T2-5-operational-followup`):
+
+- SQL extended with `LEAD(ts) OVER (ORDER BY ts) AS next_ts` and an
+  inclusive `(next_ts IS NULL OR next_ts - ts >= ?)` gate measuring
+  destination dwell.
+- `contextSwitchMinHoldMs` constant (60_000 ms) lives in the same moat
+  extension for easy retune.
+- Test seeds updated: existing "60s spacing" test re-documented as
+  "at-threshold, exercises inclusive `>=` bound"; four new fence tests
+  cover flicker rejection / dwell just below threshold / dwell exactly at
+  threshold / open-dwell at end of window.
+
+**Acceptance criterion update**: switches < 50 on a typical 8h workday
+(loosened from "~10-30" because the threshold approach still over-counts
+return-to-base patterns — `A → B(<60s) → A` rejects the flicker A→B leg
+but the return leg B→A still counts since A's own dwell qualifies).
+Q1 risk-accept in the T2.5 spec; carry to a possible sustained-state-
+machine follow-up if over-count becomes a UX issue.
+
+T2.5 spec: `docs/superpowers/specs/2026-05-22-track-10-T2-5-operational-followup.md`.

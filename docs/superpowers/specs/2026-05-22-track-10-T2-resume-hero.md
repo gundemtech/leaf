@@ -327,3 +327,42 @@ T2 emits these into Track-10 carries (apply at T9 wrap):
 - `.claude/shared/architecture.md` — substrate baseline.
 - `.claude/shared/conventions.md` — 8-stage workflow.
 - ADR-010 walkback discipline — sentinel-injection lineage.
+
+---
+
+## 7. Post-ship gaps + T2.5 closure (2026-05-22)
+
+Real-data smoke on Dima's Mac (Fri 2026-05-22, post-T3 SHIPPED) surfaced two
+issues:
+
+**View-bug — RESUME hero rendered blank shell.** When `taskIdentity` was
+non-nil and `!isEmpty` (e.g. `workspacePath` or `linearWorkspaceSlug` set)
+but `linearID == nil && branch == nil`, AND `snapshot.excerpt` was empty:
+`taskLine` joined an empty `parts` array into `""`; the `else if isEmpty ==
+true` condition was FALSE; emptyState was skipped. WIP line nil. ctaRow
+hidden. Net: fully blank card.
+
+**Substrate-bug — gitDelta nil when Leaf.app foreground.**
+`currentWorkspacePath()` resolved against the frontmost bundleID only.
+`WorkspacePathResolver.resolve("tech.gundem.leaf", ...)` returns nil
+(no IDE classifier match) → `GitDeltaReader.read(nil)` returns nil → WIP
+line + Diff CTA hidden — even when Dima had an Xcode workspace in
+attention history minutes earlier.
+
+**T2.5 fix** (in `feature/track-10-T2-5-operational-followup`):
+
+- **F2 view** — `taskLineHasVisibleContent(_:)` static predicate gates
+  both the render and the emptyState fall-through; `taskLine` becomes
+  `@ViewBuilder` and guards on `parts.isEmpty`. Blank-shell case routes
+  to emptyState; populated states unchanged.
+- **F3 substrate** — `currentWorkspacePath()` adds a MRU-IDE fallback.
+  Distinct attention bundles ordered by `MAX(ts) DESC`, capped to 24h
+  lookback; first one that resolves wins. Non-IDE bundles short-circuit
+  via resolver (resolver returns nil for them). Path bytes stay
+  in-memory only — D-8 preserved.
+
+T2 sentinel test stays green (producer surface widened; consumer
+surface unchanged). Carry §8 in T2.5 spec emits a follow-up sentinel
+test for the new producer path.
+
+T2.5 spec: `docs/superpowers/specs/2026-05-22-track-10-T2-5-operational-followup.md`.
