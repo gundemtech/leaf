@@ -28,7 +28,7 @@ struct InboxBlock: View {
                         placeholder: "Search inbox…",
                         prefixIcon: .system("magnifyingglass")
                     )
-                    InboxFilterRow(selected: $selectedFilter)
+                    InboxFilterRow(selected: $selectedFilter, counts: counts(for: items))
                     LeafDivider()
                     if items.isEmpty {
                         emptyDataState
@@ -45,6 +45,22 @@ struct InboxBlock: View {
 
     private var filteredItems: [InboxItem] {
         InboxFiltering.filtered(items: items, filter: selectedFilter, query: searchQuery)
+    }
+
+    /// Per-chip counts for the filter strip. Each chip's `· N` reflects the
+    /// exact list a user would see after tapping it (filter ∩ query). Reuses
+    /// `InboxFiltering.filtered` as the single source of truth so chip counts
+    /// can never drift from the rendered list. ≤30 items × 6 filters per
+    /// render is negligible on M-series; profile only if narrow Macs surface
+    /// stutter under sustained typing (carry C-T4-2).
+    private func counts(for items: [InboxItem]) -> [InboxFilter: Int] {
+        var dict: [InboxFilter: Int] = [:]
+        for filter in InboxFilter.allCases {
+            dict[filter] = InboxFiltering.filtered(
+                items: items, filter: filter, query: searchQuery
+            ).count
+        }
+        return dict
     }
 
     private var emptyDataState: some View {
