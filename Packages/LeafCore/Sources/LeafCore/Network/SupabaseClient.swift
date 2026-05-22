@@ -40,13 +40,25 @@ public actor SupabaseClient {
   /// Task instead of firing a duplicate `/auth/v1/token` request.
   private var inflightFreshSessionTask: Task<SupabaseAuthSession, Error>?
 
+  /// Phase M-I — transient-failure retry policy applied to GET/PATCH (idempotent)
+  /// callers of `performHTTP`. POST callers pass `retryable: false` and bypass
+  /// the retry loop entirely (waiting on M-II server-side Idempotency-Key dedup).
+  internal let retryPolicy: RetryPolicy
+
+  /// Phase M-I — clock injection for retry-loop sleeps. Production default uses
+  /// cancellation-aware `Task.sleep(for:)`; tests inject a no-op or a throwing
+  /// variant to verify cancellation propagation without wall-clock waits.
+  internal let sleep: @Sendable (Duration) async throws -> Void
+
   public init(
     baseURL: URL,
     anonKey: String,
     urlSession: URLSession = .shared,
     identity: @escaping @Sendable () throws -> Curve25519.KeyAgreement.PrivateKey,
     now: @escaping @Sendable () -> Date = { Date() },
-    sessionStore: SupabaseSessionStore? = nil
+    sessionStore: SupabaseSessionStore? = nil,
+    retryPolicy: RetryPolicy = .default,
+    sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
   ) {
     self.baseURL = baseURL
     self.anonKey = anonKey
@@ -54,6 +66,8 @@ public actor SupabaseClient {
     self.identity = identity
     self.now = now
     self.sessionStore = sessionStore
+    self.retryPolicy = retryPolicy
+    self.sleep = sleep
   }
 
   public func currentSession() -> SupabaseAuthSession? {
