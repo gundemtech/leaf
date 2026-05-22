@@ -231,30 +231,36 @@ private func groupedActionText(source: ShareSource, count: Int) -> String {
     case .detectedOpenQuestions:
         return "\(count) open question\(count == 1 ? "" : "s")"
     case .detectedWhereStopped:
-        return "\(count) where-stopped\(count == 1 ? "" : " snapshots")"
+        return "\(count) where-stopped snapshot\(count == 1 ? "" : "s")"
     case .rawGitHubActivity:
         return "\(count) GitHub event\(count == 1 ? "" : "s")"
     }
 }
 
+/// Hoisted to file-level so per-row `body` rebuilds reuse one CFLocale +
+/// formatter cache instead of allocating per row per render — long Team feed
+/// scrolls were burning the entire CPU budget on `RelativeDateTimeFormatter`
+/// init/teardown.
+private let abbreviatedRelativeFormatter: RelativeDateTimeFormatter = {
+    let f = RelativeDateTimeFormatter()
+    f.unitsStyle = .abbreviated
+    return f
+}()
+
 /// Timeline span label "5m ago — 18m ago" using abbreviated relative format.
 private func timelineSpan(startMs: Int64, endMs: Int64) -> String {
-    let formatter = RelativeDateTimeFormatter()
-    formatter.unitsStyle = .abbreviated
     let now = Date()
     let startDate = Date(timeIntervalSince1970: TimeInterval(startMs) / 1000)
     let endDate   = Date(timeIntervalSince1970: TimeInterval(endMs)   / 1000)
-    let startStr  = formatter.localizedString(for: startDate, relativeTo: now)
-    let endStr    = formatter.localizedString(for: endDate,   relativeTo: now)
+    let startStr  = abbreviatedRelativeFormatter.localizedString(for: startDate, relativeTo: now)
+    let endStr    = abbreviatedRelativeFormatter.localizedString(for: endDate,   relativeTo: now)
     return "\(endStr) — \(startStr)"
 }
 
 /// Relative timestamp for a single event. Abbreviated format ("5m ago").
 private func relativeTimestamp(_ ms: Int64) -> String {
     let date = Date(timeIntervalSince1970: TimeInterval(ms) / 1000)
-    let formatter = RelativeDateTimeFormatter()
-    formatter.unitsStyle = .abbreviated
-    return formatter.localizedString(for: date, relativeTo: Date())
+    return abbreviatedRelativeFormatter.localizedString(for: date, relativeTo: Date())
 }
 
 /// Best-effort JSON payload parse. Returns empty dict on failure.

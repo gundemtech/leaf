@@ -951,11 +951,14 @@ final class LeafAppDelegate: NSObject, NSApplicationDelegate, UNUserNotification
     didReceive response: UNNotificationResponse
   ) async {
     let userInfo = response.notification.request.content.userInfo
-    guard let messageID = userInfo["leaf_message_id"] as? String,
-      let workspaceID = userInfo["leaf_workspace_id"] as? String
-    else {
+    // `leaf_workspace_id` is carried by every push family we route here
+    // (DM + M027 invite request/approved). `leaf_message_id` is DM-only;
+    // gated per-branch below so invite Approve/Decline actions don't get
+    // dropped by an over-tight entry guard.
+    guard let workspaceID = userInfo["leaf_workspace_id"] as? String else {
       return
     }
+    let messageID = userInfo["leaf_message_id"] as? String
 
     switch response.actionIdentifier {
     case NotificationCategoryRegistry.replyActionID:
@@ -964,6 +967,7 @@ final class LeafAppDelegate: NSObject, NSApplicationDelegate, UNUserNotification
       // The reply textfield itself ships in a later Track (S7 deferred
       // inline reply to Track 6); until then the flag plumbing is
       // exercised by tests + scroll/highlight surfaces alone.
+      guard let messageID else { return }
       await deepLinkToMessage(
         workspaceID: workspaceID,
         messageID: messageID,
@@ -989,15 +993,29 @@ final class LeafAppDelegate: NSObject, NSApplicationDelegate, UNUserNotification
       // the user did not request a context switch (they tapped Done
       // from a banner that may be cross-workspace) and the reader's
       // markDone path operates on message_id directly.
+      guard let messageID else { return }
       await Self.directMessageInboxReader?.markDone(messageID: messageID)
 
     case UNNotificationDefaultActionIdentifier:
-      // Default tap (banner body) — existing S7 H.6 deep-link.
-      await deepLinkToMessage(
-        workspaceID: workspaceID,
-        messageID: messageID,
-        focusReply: false
-      )
+      // Default tap (banner body). Three families:
+      //   DM (`leaf.dm.<kind>`) → S7 H.6 deep-link with scroll/highlight.
+      //   `leaf.invite.request` (admin-side) → PendingRequestsSection.
+      //   `leaf.invite.approved` (invitee-side) → switch + Team view.
+      let categoryID = response.notification.request.content.categoryIdentifier
+      switch categoryID {
+      case NotificationCategoryRegistry.inviteRequestCategoryID:
+        await deepLinkToPendingQueue(workspaceID: workspaceID)
+      case NotificationCategoryRegistry.inviteApprovedCategoryID:
+        await deepLinkToWorkspace(workspaceID: workspaceID)
+      default:
+        // DM family — keep S7 H.6 contract.
+        guard let messageID else { return }
+        await deepLinkToMessage(
+          workspaceID: workspaceID,
+          messageID: messageID,
+          focusReply: false
+        )
+      }
 
     default:
       // Unknown action identifier — forward-compat no-op.
@@ -1039,6 +1057,18 @@ final class LeafAppDelegate: NSObject, NSApplicationDelegate, UNUserNotification
     Self.windowState?.pendingWorkspaceID = workspaceID
     // User reviews + approves/declines in PendingRequestsSection — the
     // section's .onAppear refreshes the queue automatically.
+  }
+
+  /// `leaf.invite.approved` invitee-side default tap — switch into the
+  /// freshly-joined workspace and land in Team view. The workspace was
+  /// materialised locally by `JoinRequestService.acceptApproved` before
+  /// this notification ever fires, so `setActive` resolves cleanly.
+  private func deepLinkToWorkspace(workspaceID: String) async {
+    if Self.activeWorkspaceStore?.activeWorkspaceID != workspaceID {
+      Self.activeWorkspaceStore?.setActive(workspaceID)
+    }
+    Self.windowState?.section = .team
+    Self.windowState?.pendingWorkspaceID = workspaceID
   }
 }
 

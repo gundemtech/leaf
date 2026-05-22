@@ -30,6 +30,12 @@ struct AcceptInviteSheet: View {
     @State private var displayNameInput: String = ""
     /// T4 — per-callsite UpgradeModal flag.
     @State private var showUpgrade: Bool = false
+    /// Surfaces unparseable paste — empty input is already gated by the
+    /// button's `.disabled` modifier, so this only fires when the user
+    /// typed something the legacy `leaf://invite/<22>?w=&a=` parser
+    /// doesn't recognize (incl. M027 `LEAF-XXXX-XXXX-XXXX` URLs, which
+    /// belong in JoinWorkspaceByCodeSheet).
+    @State private var pasteError: String? = nil
 
     private let otpRegex = /^\d{6}$/
 
@@ -93,6 +99,10 @@ struct AcceptInviteSheet: View {
                     .font(LeafType.mono.regular)
                     .lineLimit(2, reservesSpace: true)
                     .disabled(disabled)
+                    .onChange(of: pasteInput) { _, _ in pasteError = nil }
+                if let err = pasteError {
+                    LeafBanner(tone: .danger, title: err, description: nil, density: .compact)
+                }
                 HStack {
                     Spacer()
                     LeafButton(
@@ -101,7 +111,10 @@ struct AcceptInviteSheet: View {
                         size: .md,
                         action: {
                             if let url = parseInviteURL(from: pasteInput) {
+                                pasteError = nil
                                 reader.fetch(inviteURL: url)
+                            } else {
+                                pasteError = "Couldn't recognize this invite link. Check for typos or paste a leaf://invite/... URL."
                             }
                         }
                     )

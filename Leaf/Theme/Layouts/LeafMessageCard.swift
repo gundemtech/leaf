@@ -354,8 +354,16 @@ public struct LeafMessageCard: View {
 
     private func relativeTimestamp(_ ms: Int64) -> String {
         let date = Date(timeIntervalSince1970: TimeInterval(ms) / 1000)
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: date, relativeTo: Date())
+        return leafMessageCardRelativeFormatter.localizedString(for: date, relativeTo: Date())
     }
 }
+
+/// File-level cache so per-row `body` rebuilds don't allocate
+/// `RelativeDateTimeFormatter` (and the CFLocale inside) each invocation.
+/// Realtime DM bursts re-render the whole TeamView feed under @Observable
+/// invalidation; this turns one alloc-storm into a single shared instance.
+private let leafMessageCardRelativeFormatter: RelativeDateTimeFormatter = {
+    let f = RelativeDateTimeFormatter()
+    f.unitsStyle = .abbreviated
+    return f
+}()

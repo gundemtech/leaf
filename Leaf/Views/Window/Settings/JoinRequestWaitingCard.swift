@@ -31,7 +31,7 @@ struct JoinRequestWaitingCard: View {
         footer
       }
     }
-    .onAppear { startPoll() }
+    .task { await startPoll() }
   }
 
   @ViewBuilder
@@ -138,9 +138,14 @@ struct JoinRequestWaitingCard: View {
     HStack {
       switch reader.inviteeState {
       case .pending(let row):
+        // Gate `Cancel request` while the cancel PATCH is mid-flight so
+        // a double-tap on slow Wi-Fi doesn't queue two HTTP roundtrips
+        // (the second 410'd against an already-cancelled row, surfacing
+        // an error banner over a successful cancel).
         LeafButton("Cancel request", variant: .secondary, size: .md) {
           reader.cancelOwn(requestID: row.requestID)
         }
+        .disabled(reader.isCancelOwnInFlight)
         Spacer()
         LeafButton("Done", variant: .primary, size: .md) { dismiss() }
       case .approved:
@@ -169,30 +174,38 @@ struct JoinRequestWaitingCard: View {
     }
   }
 
-  private func startPoll() {
-    // .task(id:) with periodic awakening — keeps polling alive only while
-    // the card is visible. Stop polling once a terminal state is reached.
-    Task { @MainActor in
-      while !Task.isCancelled {
-        if case .pending(let row) = reader.inviteeState {
-          reader.pollOwn(requestID: row.requestID)
-        }
-        try? await Task.sleep(nanoseconds: UInt64(pollIntervalSeconds) * 1_000_000_000)
-        // .approved is transient (materialisation in flight) — keep
-        // looping so we re-poll if the server confirms again; the
-        // dedup set in JoinRequestsReader prevents double-materialise.
-        if case .joined = reader.inviteeState { break }
-        if case .declined = reader.inviteeState { break }
-        if case .cancelled = reader.inviteeState { break }
-        if case .expired = reader.inviteeState { break }
-        if case .error = reader.inviteeState { break }
+  /// Wired via `.task { await startPoll() }` so SwiftUI auto-cancels the
+  /// loop on sheet disappear (Done button, swipe-dismiss, sheet teardown).
+  /// Bare `Task { ... }` would have leaked the loop past view lifetime
+  /// because `Task.isCancelled` only flips when the Task handle is sent
+  /// `cancel()` — and a discarded handle never receives one.
+  @MainActor
+  private func startPoll() async {
+    while !Task.isCancelled {
+      if case .pending(let row) = reader.inviteeState {
+        await reader.pollOwn(requestID: row.requestID)
       }
+      try? await Task.sleep(nanoseconds: UInt64(pollIntervalSeconds) * 1_000_000_000)
+      // .approved is transient (materialisation in flight) — keep
+      // looping so we re-poll if the server confirms again; the
+      // dedup set in JoinRequestsReader prevents double-materialise.
+      if case .joined = reader.inviteeState { break }
+      if case .declined = reader.inviteeState { break }
+      if case .cancelled = reader.inviteeState { break }
+      if case .expired = reader.inviteeState { break }
+      if case .error = reader.inviteeState { break }
     }
   }
 
   private func timeAgo(date: Date) -> String {
-    let f = RelativeDateTimeFormatter()
-    f.unitsStyle = .full
-    return f.localizedString(for: date, relativeTo: Date())
+    joinRequestWaitingFullRelativeFormatter.localizedString(for: date, relativeTo: Date())
   }
 }
+
+/// Hoisted out of `timeAgo` so the 30s poll tick — which re-evaluates the
+/// pending row body — doesn't allocate `RelativeDateTimeFormatter` each tick.
+private let joinRequestWaitingFullRelativeFormatter: RelativeDateTimeFormatter = {
+    let f = RelativeDateTimeFormatter()
+    f.unitsStyle = .full
+    return f
+}()

@@ -219,16 +219,20 @@ final class InviteTokensReader {
       return svc
     }
     let db = try ensureDatabase()
-    // Admin's own pubkey from local team_members (creator = first row).
-    let members = try db.readTeamMembers(workspaceID: workspaceID, includeRemoved: false)
-    guard let selfMember = members.first else {
-      throw LeafError.databaseUnavailable
-    }
+    // Self pubkey via IdentityService — same source the JWT pubkey claim
+    // is derived from, so `created_by_pubkey == jwt.pubkey` RLS holds.
+    // Earlier shape read `members.first` ordered by `added_at_ms ASC`,
+    // which on invitee devices is the admin's row (workspace creator's
+    // earlier timestamp), not self. RLS masks the misbehaviour today but
+    // the code carried a future foot-gun.
+    let selfPriv = try IdentityService.ensureLocalIdentity(at: TeamKeystore.defaultRoot())
+    let selfPubHex = selfPriv.publicKey.rawRepresentation
+      .map { String(format: "%02x", $0) }.joined()
     let svc = InviteTokenService(
       database: db,
       supabase: supabase,
       workspaceID: workspaceID,
-      createdByPubkeyHex: selfMember.pubkeyHex
+      createdByPubkeyHex: selfPubHex
     )
     service = svc
     cachedServiceWorkspaceID = workspaceID
@@ -302,6 +306,7 @@ final class InviteTokensReader {
       case .serverError: return "Server error (5xx)."
       case .pubkeyAlreadyRegistered: return "Pubkey already registered to another auth_id."
       case .inviteNotResolvable: return "Invite no longer valid."
+      case .gone(let code): return "Invite no longer available (\(code))."
       }
     }
     return "Something went wrong: \(String(describing: error).prefix(120))"

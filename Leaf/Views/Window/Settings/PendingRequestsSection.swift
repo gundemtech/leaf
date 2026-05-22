@@ -141,13 +141,19 @@ struct PendingRequestsSection: View {
         }
 
         HStack(spacing: LeafSpace.sm) {
+          // Per-row Approve/Decline gate `.disabled` while the request's
+          // network + ECDH+seal pipeline is in flight so a double-tap on
+          // a slow connection doesn't queue two POSTs against the same
+          // `request_id`.
           LeafButton("Decline", variant: .secondary, size: .sm) {
             reader.decline(requestID: request.requestID)
           }
+          .disabled(reader.isInFlight(request.requestID) || reader.isBulkOpRunning)
           Spacer()
           LeafButton("Approve", variant: .primary, size: .sm) {
             reader.approve(request: request)
           }
+          .disabled(reader.isInFlight(request.requestID) || reader.isBulkOpRunning)
         }
       }
     }
@@ -159,10 +165,12 @@ struct PendingRequestsSection: View {
       LeafButton("Decline all", variant: .secondary, size: .md) {
         bulkDeclineConfirming = true
       }
+      .disabled(reader.isBulkOpRunning)
       Spacer()
       LeafButton("Approve all (\(count))", variant: .primary, size: .md) {
         bulkApproveConfirming = true
       }
+      .disabled(reader.isBulkOpRunning)
     }
     .padding(.top, LeafSpace.sm)
   }
@@ -170,8 +178,15 @@ struct PendingRequestsSection: View {
   // MARK: - Helpers
 
   private func timeAgo(date: Date) -> String {
-    let f = RelativeDateTimeFormatter()
-    f.unitsStyle = .full
-    return "Requested \(f.localizedString(for: date, relativeTo: Date()))"
+    "Requested \(pendingRequestsFullRelativeFormatter.localizedString(for: date, relativeTo: Date()))"
   }
 }
+
+/// Hoisted out of `timeAgo` so the pending-request queue (can grow to dozens
+/// under spam tokens) doesn't alloc a fresh `RelativeDateTimeFormatter` per
+/// row per body re-evaluation.
+private let pendingRequestsFullRelativeFormatter: RelativeDateTimeFormatter = {
+    let f = RelativeDateTimeFormatter()
+    f.unitsStyle = .full
+    return f
+}()

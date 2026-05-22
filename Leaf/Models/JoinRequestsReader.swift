@@ -48,6 +48,24 @@ final class JoinRequestsReader {
   private(set) var adminQueue: AdminQueueState = .idle
   private(set) var inviteeState: InviteeWaitingState = .idle
 
+  /// Per-request in-flight set for Approve / Decline tap dedupe. Surfaces
+  /// to PendingRequestsSection via `isInFlight(_:)` so the row's buttons
+  /// gate `.disabled` while the network round-trip + ECDH+seal pipeline
+  /// for that request is mid-flight. Earlier shape kept buttons enabled —
+  /// double-tap landed two POSTs against the same `request_id`, second
+  /// 400'd / 410'd after the first committed, user saw an error banner
+  /// over a successfully-approved row.
+  private(set) var inFlightRequestIDs: Set<String> = []
+  /// True while `approveAll` / `declineAll` is iterating. Bulk buttons gate
+  /// `.disabled` to avoid two concurrent loops racing on `adminQueue` writes.
+  private(set) var isBulkOpRunning: Bool = false
+  /// True while invitee-side `submit` POST is in flight. JoinWorkspaceByCodeSheet
+  /// Send button gates `.disabled` — trackpad bounce / double-tap → single POST.
+  private(set) var isSubmitInFlight: Bool = false
+  /// True while invitee-side `cancelOwn` PATCH is in flight. JoinRequestWaitingCard
+  /// Cancel button gates `.disabled`.
+  private(set) var isCancelOwnInFlight: Bool = false
+
   private var service: JoinRequestService?
   private var database: LeafCore.Database?
   /// Request IDs whose materialisation is in-flight or already committed.
@@ -106,9 +124,22 @@ final class JoinRequestsReader {
     }
   }
 
+  /// True while the per-row `approve`/`decline` for `requestID` is mid-flight.
+  /// Surfaces to `PendingRequestsSection` for `.disabled` gating on the row's
+  /// Approve / Decline buttons.
+  func isInFlight(_ requestID: String) -> Bool {
+    inFlightRequestIDs.contains(requestID)
+  }
+
   func approve(request: JoinRequest) {
+    // Per-request inflight guard. Second tap on the same row while the
+    // first is mid-pipeline becomes a no-op instead of pumping a duplicate
+    // ECDH+seal+POST round-trip.
+    guard !inFlightRequestIDs.contains(request.requestID) else { return }
+    inFlightRequestIDs.insert(request.requestID)
     Task { @MainActor [weak self] in
       guard let self else { return }
+      defer { self.inFlightRequestIDs.remove(request.requestID) }
       do {
         let svc = try self.ensureService()
         try await svc.approve(
@@ -125,8 +156,11 @@ final class JoinRequestsReader {
   }
 
   func decline(requestID: String) {
+    guard !inFlightRequestIDs.contains(requestID) else { return }
+    inFlightRequestIDs.insert(requestID)
     Task { @MainActor [weak self] in
       guard let self else { return }
+      defer { self.inFlightRequestIDs.remove(requestID) }
       do {
         let svc = try self.ensureService()
         try await svc.decline(requestID: requestID)
@@ -139,8 +173,13 @@ final class JoinRequestsReader {
   }
 
   func approveAll(requests: [JoinRequest]) {
+    // Bulk-button inflight guard so a quick double-tap doesn't spawn two
+    // concurrent loops racing on `adminQueue` writes.
+    guard !isBulkOpRunning else { return }
+    isBulkOpRunning = true
     Task { @MainActor [weak self] in
       guard let self else { return }
+      defer { self.isBulkOpRunning = false }
       do {
         let svc = try self.ensureService()
         for req in requests {
@@ -159,8 +198,11 @@ final class JoinRequestsReader {
   }
 
   func declineAll(requestIDs: [String]) {
+    guard !isBulkOpRunning else { return }
+    isBulkOpRunning = true
     Task { @MainActor [weak self] in
       guard let self else { return }
+      defer { self.isBulkOpRunning = false }
       do {
         let svc = try self.ensureService()
         for id in requestIDs {
@@ -177,8 +219,14 @@ final class JoinRequestsReader {
   // MARK: - Invitee waiting-card API
 
   func submit(workspaceID: String? = nil, code: String, displayName: String) {
+    // Trackpad bounce / double-tap on Send → single POST. `inviteeState`
+    // also already gates UI (`.submitting`) but this guard short-circuits
+    // re-entries before they even mutate state.
+    guard !isSubmitInFlight else { return }
+    isSubmitInFlight = true
     Task { @MainActor [weak self] in
       guard let self else { return }
+      defer { self.isSubmitInFlight = false }
       self.inviteeState = .submitting
       do {
         let svc = try self.ensureService()
@@ -194,8 +242,11 @@ final class JoinRequestsReader {
   }
 
   func cancelOwn(requestID: String) {
+    guard !isCancelOwnInFlight else { return }
+    isCancelOwnInFlight = true
     Task { @MainActor [weak self] in
       guard let self else { return }
+      defer { self.isCancelOwnInFlight = false }
       do {
         let svc = try self.ensureService()
         try await svc.cancel(requestID: requestID)
@@ -213,36 +264,41 @@ final class JoinRequestsReader {
   /// post-approval materialisation pipeline (`JoinRequestService.acceptApproved`).
   /// Subsequent polls for the same `requestID` short-circuit via
   /// `materialisationInFlightRequestIDs`.
-  func pollOwn(requestID: String) {
-    Task { @MainActor [weak self] in
-      guard let self else { return }
-      do {
-        let svc = try self.ensureService()
-        guard let row = try await svc.fetchOwn(requestID: requestID) else {
-          // Row vanished — treat as cancelled (most likely path: invitee
-          // cancelled from another device, OR admin hard-deleted token
-          // and request cascades).
-          self.inviteeState = .cancelled
-          return
-        }
-        switch row.status {
-        case .pending: self.inviteeState = .pending(row)
-        case .approved:
-          // Dedup: keep the first .approved observation as the trigger;
-          // future polls just refresh the visible state without re-running
-          // ECDH + INSERTs.
-          if self.materialisationInFlightRequestIDs.insert(row.requestID).inserted {
-            self.inviteeState = .approved(row)
-            await self.materialiseApproved(row: row, service: svc)
-          }
-        case .declined: self.inviteeState = .declined
-        case .cancelled: self.inviteeState = .cancelled
-        case .expired: self.inviteeState = .expired
-        }
-      } catch {
-        self.logger.error("pollOwn: \(String(describing: error), privacy: .public)")
-        self.inviteeState = .error(message: friendlyMessage(for: error))
+  ///
+  /// `async` so the caller's structured `.task` lifetime owns the in-flight
+  /// HTTP + ECDH pipeline. Earlier shape spawned a detached `Task { ... }`
+  /// here, which escaped `.task` cancellation on sheet dismiss — leading to
+  /// post-dismiss `inviteeState` writes and (worst case) silent workspace
+  /// materialisation after the user gave up. Keep this function `async`;
+  /// the poll loop in `JoinRequestWaitingCard.startPoll` awaits it directly
+  /// inside its `.task` so SwiftUI cancels everything atomically.
+  func pollOwn(requestID: String) async {
+    do {
+      let svc = try ensureService()
+      guard let row = try await svc.fetchOwn(requestID: requestID) else {
+        // Row vanished — treat as cancelled (most likely path: invitee
+        // cancelled from another device, OR admin hard-deleted token
+        // and request cascades).
+        inviteeState = .cancelled
+        return
       }
+      switch row.status {
+      case .pending: inviteeState = .pending(row)
+      case .approved:
+        // Dedup: keep the first .approved observation as the trigger;
+        // future polls just refresh the visible state without re-running
+        // ECDH + INSERTs.
+        if materialisationInFlightRequestIDs.insert(row.requestID).inserted {
+          inviteeState = .approved(row)
+          await materialiseApproved(row: row, service: svc)
+        }
+      case .declined: inviteeState = .declined
+      case .cancelled: inviteeState = .cancelled
+      case .expired: inviteeState = .expired
+      }
+    } catch {
+      logger.error("pollOwn: \(String(describing: error), privacy: .public)")
+      inviteeState = .error(message: friendlyMessage(for: error))
     }
   }
 
@@ -365,8 +421,31 @@ final class JoinRequestsReader {
       case .serverError: return "Server error (5xx)."
       case .pubkeyAlreadyRegistered: return "Pubkey collision."
       case .inviteNotResolvable: return "Invite expired or claimed."
+      case .gone(let code): return friendlyInviteGoneMessage(for: code)
       }
     }
     return "Something went wrong: \(String(describing: error).prefix(120))"
+  }
+
+  /// Maps the M027 `create_join_request` Edge Function's 410 error codes
+  /// (sourced from `consume_invite_and_create_join_request` RPC P0001 MESSAGE)
+  /// to user-facing copy shown in the JoinRequestWaitingCard banner.
+  private func friendlyInviteGoneMessage(for code: String) -> String {
+    switch code {
+    case "invite_not_found":
+      return "This invite code doesn't exist. Check for typos or ask the admin for a new one."
+    case "invite_deleted":
+      return "This invite was deleted by the workspace admin. Ask them for a new one."
+    case "invite_expired":
+      return "This invite has expired. Ask the admin to generate a new one."
+    case "invite_exhausted":
+      return "This invite has reached its usage limit. Ask the admin for a new one."
+    case "workspace_mismatch":
+      return "This invite belongs to a different workspace."
+    case "request_already_pending":
+      return "You already have a pending request for this invite. Wait for the admin to approve it."
+    default:
+      return "This invite is no longer available. (\(code))"
+    }
   }
 }

@@ -70,11 +70,18 @@ struct ActivityRow: View {
             let h = Int(interval / 3600)
             return "\(h)h ago"
         }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
-        return formatter.string(from: entry.timestamp)
+        return activityRowHourMinuteFormatter.string(from: entry.timestamp)
     }
 }
+
+/// Hoisted out of `relativeTime` (called per row per body re-eval) so the
+/// scroll path doesn't allocate `DateFormatter` + parse its dateFormat
+/// pattern every render. Activity feed can hold ~200 rows.
+private let activityRowHourMinuteFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "HH:mm"
+    return f
+}()
 
 // MARK: - Provider icon (neutralised)
 
