@@ -19,11 +19,11 @@ extension SupabaseClient {
   /// - `retryable: true`  → loop per `self.retryPolicy`; honors Retry-After
   ///   header AND `{"retry_after_seconds": N}` body field on 429.
   ///
-  /// Returns the FINAL response (data, http) to the caller for its existing
-  /// status-code switch + SupabaseError.fromStatus path. On exhaustion of
-  /// retries the last response IS returned (caller throws `.serverError`
-  /// or `.rateLimited` via fromStatus). On URLError exhaustion this throws
-  /// `SupabaseError.transport(reason:)`.
+  /// On exhaustion of the retry budget the LAST attempt's response is
+  /// returned (caller's existing `guard http.statusCode == 200` switch then
+  /// throws `.serverError` / `.rateLimited` via `SupabaseError.fromStatus`).
+  /// On URLError exhaustion this throws `SupabaseError.transport(reason:)`.
+  /// `CancellationError` from injected `sleep` propagates as-is.
   internal func performHTTP(
     _ request: URLRequest,
     retryable: Bool,
@@ -32,9 +32,67 @@ extension SupabaseClient {
     if !retryable {
       return try await performOneShot(request, label: label)
     }
-    // Retry loop wired in Task 3; for Task 2 the scaffold is one-shot only
-    // so we can verify the POST pass-through path independently.
-    return try await performOneShot(request, label: label)
+    // Retry loop. Calls urlSession.data(for:) directly (bypassing
+    // performOneShot's .transport wrapping) so the URLError catch branch
+    // sees the raw URLError for classifier dispatch.
+    var attempt = 0
+    while attempt < retryPolicy.maxAttempts {
+      do {
+        let (data, response) = try await urlSession.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+          throw SupabaseError.transport(reason: "\(label): non-http")
+        }
+        let hint: Duration? =
+          (http.statusCode == 429)
+          ? parseRetryAfter(headers: http, body: data)
+          : nil
+        let jitterLow = -retryPolicy.jitterFraction
+        let jitterHigh = retryPolicy.jitterFraction
+        let multiplier = 1.0 + Double.random(in: jitterLow...jitterHigh)
+        let decision = classify(
+          response: http,
+          error: nil,
+          attempt: attempt,
+          policy: retryPolicy,
+          retryAfterHint: hint,
+          nextDelayJitterMultiplier: multiplier
+        )
+        switch decision {
+        case .giveUp:
+          return (data, http)
+        case .retry(let delay):
+          try await sleep(delay)
+          attempt += 1
+          continue
+        }
+      } catch let urlError as URLError {
+        let jitterLow = -retryPolicy.jitterFraction
+        let jitterHigh = retryPolicy.jitterFraction
+        let multiplier = 1.0 + Double.random(in: jitterLow...jitterHigh)
+        let decision = classify(
+          response: nil,
+          error: urlError,
+          attempt: attempt,
+          policy: retryPolicy,
+          retryAfterHint: nil,
+          nextDelayJitterMultiplier: multiplier
+        )
+        switch decision {
+        case .giveUp:
+          throw SupabaseError.transport(reason: "\(label): \(urlError)")
+        case .retry(let delay):
+          try await sleep(delay)
+          attempt += 1
+          continue
+        }
+      }
+      // Note: CancellationError propagates naturally out of `try await
+      // sleep(...)` and `try await urlSession.data(for:)` — neither
+      // matches `as URLError`, so it escapes the catch chain unchanged.
+    }
+    // Unreachable in practice (decision .giveUp returns/throws inside loop);
+    // defensive fallback.
+    throw SupabaseError.transport(reason: "\(label): retry budget exhausted")
   }
 
   /// One HTTP attempt. Surfaces URLSession.data(for:) outcomes via the
@@ -57,5 +115,23 @@ extension SupabaseClient {
       throw SupabaseError.transport(reason: "\(label): non-http")
     }
     return (data, http)
+  }
+
+  /// Parses `Retry-After: N` HTTP header (seconds), falling back to JSON
+  /// body field `{"retry_after_seconds": N}` (Slack/Edge convention used
+  /// by `triggerSlackPost`). HTTP-date format intentionally unsupported
+  /// (Supabase / Cloudflare both emit numeric Retry-After).
+  internal func parseRetryAfter(headers: HTTPURLResponse, body: Data) -> Duration? {
+    if let h = headers.value(forHTTPHeaderField: "Retry-After"),
+      let secs = Double(h)
+    {
+      return .milliseconds(Int(secs * 1000))
+    }
+    if let obj = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+      let secs = obj["retry_after_seconds"] as? Double
+    {
+      return .milliseconds(Int(secs * 1000))
+    }
+    return nil
   }
 }

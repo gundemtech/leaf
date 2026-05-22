@@ -197,6 +197,219 @@ final class SupabaseClientRetryTests: XCTestCase {
     }
   }
 
+  /// Task 3 — GET retries on transient 502, succeeds on 3rd attempt.
+  func test_getRetriesOnTransient502_succeedsOnThirdAttempt() async throws {
+    let client = makeClient()
+    let calls = RetryCallCounter()
+    bootstrap(adminPubkey: String(repeating: "a", count: 64)) { request, _ in
+      let path = request.url?.path ?? ""
+      if path == "/rest/v1/join_requests" {
+        calls.bump()
+        let status = (calls.value < 3) ? 502 : 200
+        let r = HTTPURLResponse(
+          url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
+        let body = (status == 200) ? "[]".data(using: .utf8)! : Data()
+        return (r, body)
+      }
+      XCTFail("unexpected path \(path)")
+      return (
+        HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!,
+        Data()
+      )
+    }
+    let rows = try await client.listPendingJoinRequests(workspaceID: workspaceID)
+    XCTAssertEqual(rows.count, 0)
+    XCTAssertEqual(calls.value, 3, "expected 3 attempts (2× 502 + 1× 200)")
+  }
+
+  /// Task 3 — GET exhausts retry budget on persistent 503, throws .serverError
+  /// after the configured maxAttempts (default = 4).
+  func test_getExhaustsOn503_throwsServerError_fourCalls() async throws {
+    let client = makeClient()
+    let calls = RetryCallCounter()
+    bootstrap(adminPubkey: String(repeating: "a", count: 64)) { request, _ in
+      let path = request.url?.path ?? ""
+      if path == "/rest/v1/join_requests" {
+        calls.bump()
+        let r = HTTPURLResponse(
+          url: request.url!, statusCode: 503, httpVersion: nil, headerFields: nil)!
+        return (r, Data())
+      }
+      return (
+        HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!,
+        Data()
+      )
+    }
+    do {
+      _ = try await client.listPendingJoinRequests(workspaceID: workspaceID)
+      XCTFail("expected throw")
+    } catch SupabaseError.serverError {
+      // expected
+    }
+    XCTAssertEqual(calls.value, 4, "expected 4 attempts (maxAttempts = 4)")
+  }
+
+  /// Task 3 — 429 with Retry-After: N header sleeps for N seconds verbatim
+  /// (no jitter applied) before the next attempt.
+  func test_get429HonorsRetryAfterHeader_secondAttemptSucceeds() async throws {
+    let captured = DurationCapture()
+    let client = SupabaseClient(
+      baseURL: baseURL,
+      anonKey: anonKey,
+      urlSession: makeSession(),
+      identity: {
+        try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: Data(repeating: 0xAA, count: 32))
+      },
+      sleep: { duration in captured.append(duration) }
+    )
+    let calls = RetryCallCounter()
+    bootstrap(adminPubkey: String(repeating: "a", count: 64)) { request, _ in
+      let path = request.url?.path ?? ""
+      if path == "/rest/v1/join_requests" {
+        calls.bump()
+        if calls.value == 1 {
+          let r = HTTPURLResponse(
+            url: request.url!, statusCode: 429, httpVersion: nil,
+            headerFields: ["Retry-After": "2"])!
+          return (r, Data())
+        }
+        let r = HTTPURLResponse(
+          url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        return (r, "[]".data(using: .utf8)!)
+      }
+      return (
+        HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!,
+        Data()
+      )
+    }
+    _ = try await client.listPendingJoinRequests(workspaceID: workspaceID)
+    XCTAssertEqual(captured.values.first, .seconds(2), "Retry-After: 2 → 2s sleep, verbatim")
+  }
+
+  /// Task 3 — 429 with `{"retry_after_seconds": N}` body field (Slack/Edge
+  /// convention used by triggerSlackPost) is honored when the HTTP header is
+  /// absent. Same verbatim semantics — no jitter.
+  func test_get429HonorsRetryAfterBodyField() async throws {
+    let captured = DurationCapture()
+    let client = SupabaseClient(
+      baseURL: baseURL,
+      anonKey: anonKey,
+      urlSession: makeSession(),
+      identity: {
+        try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: Data(repeating: 0xAA, count: 32))
+      },
+      sleep: { duration in captured.append(duration) }
+    )
+    let calls = RetryCallCounter()
+    bootstrap(adminPubkey: String(repeating: "a", count: 64)) { request, _ in
+      let path = request.url?.path ?? ""
+      if path == "/rest/v1/join_requests" {
+        calls.bump()
+        if calls.value == 1 {
+          let r = HTTPURLResponse(
+            url: request.url!, statusCode: 429, httpVersion: nil, headerFields: nil)!
+          return (r, #"{"retry_after_seconds": 1}"#.data(using: .utf8)!)
+        }
+        let r = HTTPURLResponse(
+          url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        return (r, "[]".data(using: .utf8)!)
+      }
+      return (
+        HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!,
+        Data()
+      )
+    }
+    _ = try await client.listPendingJoinRequests(workspaceID: workspaceID)
+    XCTAssertEqual(captured.values.first, .seconds(1))
+  }
+
+  /// Task 3 — 401 is M-III's job, not M-I. Single attempt → .unauthorized.
+  func test_getNoRetryOn401_throwsUnauthorized_singleCall() async throws {
+    let client = makeClient()
+    let calls = RetryCallCounter()
+    bootstrap(adminPubkey: String(repeating: "a", count: 64)) { request, _ in
+      let path = request.url?.path ?? ""
+      if path == "/rest/v1/join_requests" {
+        calls.bump()
+        let r = HTTPURLResponse(
+          url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!
+        return (r, Data())
+      }
+      return (
+        HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!,
+        Data()
+      )
+    }
+    do {
+      _ = try await client.listPendingJoinRequests(workspaceID: workspaceID)
+      XCTFail("expected throw")
+    } catch SupabaseError.unauthorized {
+      // expected
+    }
+    XCTAssertEqual(calls.value, 1, "401 must not retry — M-III's job")
+  }
+
+  /// Task 3 — 404 is permanent. Single attempt → .notFound.
+  func test_getNoRetryOn404_throwsNotFound_singleCall() async throws {
+    let client = makeClient()
+    let calls = RetryCallCounter()
+    bootstrap(adminPubkey: String(repeating: "a", count: 64)) { request, _ in
+      let path = request.url?.path ?? ""
+      if path == "/rest/v1/join_requests" {
+        calls.bump()
+        let r = HTTPURLResponse(
+          url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!
+        return (r, Data())
+      }
+      return (
+        HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!,
+        Data()
+      )
+    }
+    do {
+      _ = try await client.listPendingJoinRequests(workspaceID: workspaceID)
+      XCTFail("expected throw")
+    } catch SupabaseError.notFound {
+      // expected
+    }
+    XCTAssertEqual(calls.value, 1)
+  }
+
+  /// Task 3 — Outer Task cancellation while retry loop is sleeping propagates
+  /// CancellationError, aborts the loop after the first HTTP attempt.
+  func test_cancellation_propagatesDuringSleep() async throws {
+    let client = SupabaseClient(
+      baseURL: baseURL,
+      anonKey: anonKey,
+      urlSession: makeSession(),
+      identity: {
+        try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: Data(repeating: 0xAA, count: 32))
+      },
+      sleep: { _ in throw CancellationError() }
+    )
+    let calls = RetryCallCounter()
+    bootstrap(adminPubkey: String(repeating: "a", count: 64)) { request, _ in
+      let path = request.url?.path ?? ""
+      if path == "/rest/v1/join_requests" {
+        calls.bump()
+        let r = HTTPURLResponse(
+          url: request.url!, statusCode: 502, httpVersion: nil, headerFields: nil)!
+        return (r, Data())
+      }
+      return (
+        HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!,
+        Data()
+      )
+    }
+    do {
+      _ = try await client.listPendingJoinRequests(workspaceID: workspaceID)
+      XCTFail("expected CancellationError")
+    } catch is CancellationError {
+      // expected — sleep threw, retry loop propagates
+    }
+    XCTAssertEqual(calls.value, 1, "cancellation aborts retry — only the first HTTP attempt ran")
+  }
+
   /// Task 2 — proves POST scope: 502 on create_join_request triggers a single
   /// attempt, NOT 4 retries. Confirms `retryable: false` pass-through path.
   func test_postNotRetriedOn502_throwsServerError_singleCall() async throws {
@@ -238,4 +451,13 @@ private final class RetryCallCounter: @unchecked Sendable {
   private var _value = 0
   var value: Int { lock.withLock { _value } }
   func bump() { lock.withLock { _value += 1 } }
+}
+
+/// Thread-safe Duration accumulator for inspecting `sleep` closure
+/// invocations from retry loop. Same NSLock-backed pattern.
+private final class DurationCapture: @unchecked Sendable {
+  private let lock = NSLock()
+  private var _values: [Duration] = []
+  var values: [Duration] { lock.withLock { _values } }
+  func append(_ d: Duration) { lock.withLock { _values.append(d) } }
 }

@@ -109,7 +109,8 @@ extension SupabaseClient {
     ) {
       request.setValue(v, forHTTPHeaderField: k)
     }
-    let (data, http) = try await joinRequestsTransport(request, label: "listPendingJoinRequests")
+    let (data, http) = try await joinRequestsTransport(
+      request, label: "listPendingJoinRequests", retryable: true)
     guard http.statusCode == 200 else {
       throw SupabaseError.fromStatus(http.statusCode, body: data)
     }
