@@ -1,7 +1,10 @@
 //
-//  InboxBlock.swift
-//  Track 8 / Phase 8.6 — INBOX dashboard block. Wires
-//  `DerivedInsights.inboxItems(filter:query:)` substrate through
+//  NeedsYouBlock.swift
+//  Track 8 / Phase 8.6 — originally InboxBlock. Track-10 T4 — renamed and
+//  scope-tightened: default filter flipped from `.all` to `.actionable`
+//  so Home opens on the 7-kind "needs YOUR response NOW" subset; `[All]`
+//  chip remains the escape hatch for the 7 dropped informational kinds.
+//  Wires `DerivedInsights.inboxItems(filter:query:)` substrate through
 //  `InsightsSnapshot.inboxItems`. Filter + search are view-side @State;
 //  no SQL re-fetch on keystroke (≤100 items per 14-day cutoff).
 //
@@ -9,15 +12,15 @@
 import LeafCore
 import SwiftUI
 
-struct InboxBlock: View {
+struct NeedsYouBlock: View {
     let items: [InboxItem]
 
-    @State private var selectedFilter: InboxFilter = .all
+    @State private var selectedFilter: InboxFilter = .actionable
     @State private var searchQuery: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: LeafSpace.md) {
-            Text("INBOX")
+            Text("NEEDS YOU")
                 .leafSectionLabel()
                 .foregroundStyle(LeafColor.text.tertiary)
 
@@ -66,14 +69,13 @@ struct InboxBlock: View {
     private var emptyDataState: some View {
         LeafEmptyState(
             icon: LeafIcons.brand.leaf,
-            title: "All clear.",
-            description: "No reviews, questions, or mentions right now."
+            title: "Nothing waiting on you right now."
         )
     }
 
     private var noMatchState: some View {
         // C-18 (Phase 8.9) — magnifying-glass SF Symbol differentiates the
-        // "search miss" state from the positive "All clear" leaf icon used by
+        // "search miss" state from the all-clear leaf icon used by
         // `emptyDataState`. Same `LeafEmptyState` shape; only the leading
         // icon glyph changes.
         LeafEmptyState(
@@ -82,7 +84,9 @@ struct InboxBlock: View {
             description: "Try a different filter or clear the search.",
             ctaTitle: "Clear filters",
             onCTA: {
-                selectedFilter = .all
+                // T4 — reset target is `.actionable` (the new default), not
+                // `.all`. "Clear filters" returns user to the fresh NEEDS YOU view.
+                selectedFilter = .actionable
                 searchQuery = ""
             }
         )

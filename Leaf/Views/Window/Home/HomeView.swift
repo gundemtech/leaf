@@ -1,12 +1,12 @@
 //
 //  HomeView.swift
 //  Track 8 / Phase 8.2 — Operational console. Post-Track-10 composition
-//  (T2 hero promote + T3 YOU·NOW badge inline):
+//  (T2 hero promote + T3 YOU·NOW badge inline + T4 NEEDS YOU rename):
 //
 //    1. RESUME HERO                        (full width)
 //    2. TODAY (with inline state badge)    (full width)
 //    3. WITH YOU ON THIS                   (full width — T6 → TeamN)
-//    4. INBOX                              (full width)
+//    4. NEEDS YOU                          (full width — T4 from INBOX)
 //
 //  Block bodies were placeholders in P2; P3-P7 wired Phase 8.1 substrate.
 //
@@ -232,7 +232,7 @@ private struct HomeContent: View {
                 // promotes to full-width interim; T6 will replace it.
                 WithYouOnThisBlock(matches: snapshot.sameTaskTeammates)
 
-                InboxBlock(items: snapshot.inboxItems)
+                NeedsYouBlock(items: snapshot.inboxItems)
             }
             .navigationDestination(for: HomeSurface.self) { surface in
                 detail(for: surface)
