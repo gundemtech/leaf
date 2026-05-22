@@ -78,19 +78,29 @@ struct TodayBlock: View {
                     YouNowStateBadge(state: youNowState)
                 }
             }
-            // Narrow branch — Grid 2 cols × 3 rows; badge fills the
-            // previously-empty bottom-right cell (no layout shift).
-            Grid(alignment: .topLeading, horizontalSpacing: LeafSpace.lg, verticalSpacing: LeafSpace.md) {
-                GridRow {
-                    metricCell(value: focusValue, label: "focused")
-                    metricCell(value: aiRatioValue, label: "AI ratio")
+            // Narrow branch — Grid 2 cols × 3 rows; badge on its own
+            // trailing row below the Grid (mirrors the wide branch).
+            // The Grid bottom-right cell stays an empty placeholder so
+            // metric-cell row alignment isn't broken by a non-metric pill.
+            VStack(alignment: .leading, spacing: LeafSpace.sm) {
+                Grid(alignment: .topLeading, horizontalSpacing: LeafSpace.lg, verticalSpacing: LeafSpace.md) {
+                    GridRow {
+                        metricCell(value: focusValue, label: "focused")
+                        metricCell(value: aiRatioValue, label: "AI ratio")
+                    }
+                    GridRow {
+                        metricCell(value: "\(metrics.sessionsCount)", label: "sessions")
+                        metricCell(value: "\(metrics.switchCount)", label: "switches")
+                    }
+                    GridRow {
+                        metricCell(value: "\(metrics.commitsCount)", label: "commits")
+                        Color.clear
+                            .frame(width: 1, height: 1)
+                            .accessibilityHidden(true)
+                    }
                 }
-                GridRow {
-                    metricCell(value: "\(metrics.sessionsCount)", label: "sessions")
-                    metricCell(value: "\(metrics.switchCount)", label: "switches")
-                }
-                GridRow {
-                    metricCell(value: "\(metrics.commitsCount)", label: "commits")
+                HStack(spacing: 0) {
+                    Spacer(minLength: 0)
                     YouNowStateBadge(state: youNowState)
                 }
             }

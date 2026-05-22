@@ -102,8 +102,8 @@ struct YouNowStateBadge: View {
 
     /// VoiceOver-friendly verbalisation of a duration. Compact `formatDuration`
     /// ("1h 32m", "12m", "30s") is hard to read aloud — expand to natural English
-    /// units. Stays file-private until T6 actually reuses (YAGNI).
-    fileprivate func accessibilityDurationPhrase(_ sec: Int) -> String {
+    /// units. Stays private until T6 actually reuses (YAGNI).
+    private func accessibilityDurationPhrase(_ sec: Int) -> String {
         let total = max(0, sec)
         if total >= 3600 {
             let h = total / 3600
@@ -131,7 +131,7 @@ struct YouNowStateBadge: View {
         return df
     }()
 
-    fileprivate static func hourMinuteString(_ msSinceEpoch: Int64) -> String {
+    private static func hourMinuteString(_ msSinceEpoch: Int64) -> String {
         hourMinuteFormatter.string(
             from: Date(timeIntervalSince1970: TimeInterval(msSinceEpoch) / 1000))
     }

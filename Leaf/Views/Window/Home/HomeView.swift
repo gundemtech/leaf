@@ -1,13 +1,14 @@
 //
 //  HomeView.swift
-//  Track 8 / Phase 8.2 — Operational console. 5-block composition:
+//  Track 8 / Phase 8.2 — Operational console. Post-Track-10 composition
+//  (T2 hero promote + T3 YOU·NOW badge inline):
 //
-//    1. TODAY                              (full width)
-//    2. YOU·NOW    ‖    WITH YOU ON THIS   (2-column grid row)
-//    3. INBOX                              (full width)
-//    4. WHERE YOU STOPPED                  (full width)
+//    1. RESUME HERO                        (full width)
+//    2. TODAY (with inline state badge)    (full width)
+//    3. WITH YOU ON THIS                   (full width — T6 → TeamN)
+//    4. INBOX                              (full width)
 //
-//  Block bodies are placeholders in P2; P3-P7 wire Phase 8.1 substrate.
+//  Block bodies were placeholders in P2; P3-P7 wired Phase 8.1 substrate.
 //
 //  State-machine UX (InsightsReader.State):
 //    .loading        → LoadingScaffold with muted shape placeholders.
