@@ -1,18 +1,20 @@
 //
-//  InboxItemRow.swift
-//  Track 8 / Phase 8.6 — INBOX item row. Severity dot leading edge,
-//  title (+ inline `(N)` aggregation suffix when count > 1) +
+//  NeedsYouRow.swift
+//  Track 8 / Phase 8.6 — originally InboxItemRow. Severity dot leading
+//  edge, title (+ inline `(N)` aggregation suffix when count > 1) +
 //  sourceMeta line, whole-row Button tap routes to
 //  `NSWorkspace.shared.open(sourceURL)` when sourceURL non-nil.
 //  Items with nil sourceURL (D3-derived open questions / blockers
 //  pre-Phase 4.8/4.9 enrichment) render as inert informational rows.
+//  Track-10 T4 — struct + file renamed to NeedsYouRow for parity with
+//  NeedsYouBlock. Logic unchanged.
 //
 
 import AppKit
 import LeafCore
 import SwiftUI
 
-struct InboxItemRow: View {
+struct NeedsYouRow: View {
     let item: InboxItem
 
     var body: some View {

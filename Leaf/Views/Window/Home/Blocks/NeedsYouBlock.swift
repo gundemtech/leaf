@@ -31,7 +31,7 @@ struct NeedsYouBlock: View {
                         placeholder: "Search inbox…",
                         prefixIcon: .system("magnifyingglass")
                     )
-                    InboxFilterRow(selected: $selectedFilter, counts: counts(for: items))
+                    NeedsYouFilterRow(selected: $selectedFilter, counts: counts(for: items))
                     LeafDivider()
                     if items.isEmpty {
                         emptyDataState
@@ -96,7 +96,7 @@ struct NeedsYouBlock: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: LeafSpace.xs) {
                 ForEach(filteredItems) { item in
-                    InboxItemRow(item: item)
+                    NeedsYouRow(item: item)
                 }
             }
         }
