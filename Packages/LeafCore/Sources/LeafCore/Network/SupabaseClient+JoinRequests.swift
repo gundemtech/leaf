@@ -50,7 +50,8 @@ extension SupabaseClient {
       bodyDict["workspace_id"] = workspaceID
     }
     request.httpBody = try JSONSerialization.data(withJSONObject: bodyDict)
-    let (data, http) = try await joinRequestsTransport(request, label: "invokeCreateJoinRequest")
+    let (data, http) = try await joinRequestsTransport(
+      request, label: "invokeCreateJoinRequest", retryable: false, refreshable: true)
     guard http.statusCode == 201 else {
       throw SupabaseError.fromStatus(http.statusCode, body: data)
     }

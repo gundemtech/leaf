@@ -416,6 +416,51 @@ final class SupabaseClientRetryTests: XCTestCase {
 
   // MARK: - M-III tests — 401 auto-refresh + retry-once
 
+  /// M-III — Anon paths (refreshable=false default) MUST NOT trigger a
+  /// refresh on 401. probeInvite uses anonHeaders + has no JWT — a 401
+  /// from the Edge Function should surface directly. Closes spec §3 test
+  /// #4 coverage gap noted in independent review.
+  func test_anon401_doesNotRefresh_singleCall() async throws {
+    let client = makeClient()
+    let probeCalls = RetryCallCounter()
+    let tokenCalls = RetryCallCounter()
+    MockURLProtocol.handler = { request, _ in
+      let path = request.url?.path ?? ""
+      switch path {
+      case "/auth/v1/token":
+        tokenCalls.bump()
+        // Anon callsite doesn't authenticate; this should never fire.
+        let r = HTTPURLResponse(
+          url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        return (
+          r,
+          """
+          {"access_token":"tok","refresh_token":"ref","user":{"id":"00000000-0000-0000-0000-000000000222"},"expires_at":9999999999}
+          """.data(using: .utf8)!
+        )
+      case "/functions/v1/invite_resolve":
+        probeCalls.bump()
+        let r = HTTPURLResponse(
+          url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!
+        return (r, Data())
+      default:
+        return (
+          HTTPURLResponse(
+            url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!,
+          Data()
+        )
+      }
+    }
+    do {
+      _ = try await client.probeInvite(token: "fake-token")
+      XCTFail("expected throw")
+    } catch SupabaseError.unauthorized {
+      // expected — anon path surfaces 401 as .unauthorized directly
+    }
+    XCTAssertEqual(probeCalls.value, 1, "anon 401 must NOT retry — refreshable=false")
+    XCTAssertEqual(tokenCalls.value, 0, "anon 401 must NOT trigger /auth/v1/token refresh")
+  }
+
   /// Stateful bootstrap variant. The `/auth/v1/token` endpoint rotates JWTs:
   /// first call returns `jwt1` (initial bootstrap); subsequent calls return
   /// `jwt2` (refresh path). Non-auth paths delegate to `pathHandler`.

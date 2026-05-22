@@ -154,6 +154,15 @@ public actor SupabaseClient {
     }
 
     // Need an existing session to refresh from.
+    //
+    // M-III review note: under `force=true` with concurrent
+    // `ensureAuthenticated` bootstrap in flight, both awaiters resume FIFO
+    // on the actor. The bootstrap's creator (ensureAuthenticated:80-86)
+    // writes `state = .authenticated(session)` before this `force=true`
+    // continuation reaches the guard, so the guard succeeds. A concurrent
+    // `signOut()` interleaved between those two resumptions could land us
+    // in `.notAuthenticated` and throw `.unauthorized` — acceptable: the
+    // user explicitly signed out, so a forced refresh is meaningless.
     guard case .authenticated(let current) = state else {
       throw SupabaseError.unauthorized
     }
