@@ -67,7 +67,8 @@ extension SupabaseClient {
     ]
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-    let (data, response) = try await workspacesTransport(request, label: "insertWorkspace")
+    let (data, response) = try await workspacesTransport(
+      request, label: "insertWorkspace", retryable: false)
     guard response.statusCode == 201 else {
       throw SupabaseError.fromStatus(response.statusCode, body: data)
     }
@@ -104,7 +105,8 @@ extension SupabaseClient {
     }
     request.httpBody = try JSONSerialization.data(withJSONObject: ["name": trimmed])
 
-    let (data, response) = try await workspacesTransport(request, label: "patchWorkspaceName")
+    let (data, response) = try await workspacesTransport(
+      request, label: "patchWorkspaceName", retryable: true)
     // PostgREST PATCH returns 204 No Content on success when Prefer: return=minimal.
     guard response.statusCode == 204 || response.statusCode == 200 else {
       throw SupabaseError.fromStatus(response.statusCode, body: data)
@@ -136,7 +138,8 @@ extension SupabaseClient {
     let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
     request.httpBody = try JSONSerialization.data(withJSONObject: ["deleted_at_ms": nowMs])
 
-    let (data, response) = try await workspacesTransport(request, label: "softDeleteWorkspace")
+    let (data, response) = try await workspacesTransport(
+      request, label: "softDeleteWorkspace", retryable: true)
     guard response.statusCode == 204 || response.statusCode == 200 else {
       throw SupabaseError.fromStatus(response.statusCode, body: data)
     }
@@ -175,17 +178,9 @@ extension SupabaseClient {
   /// wrapper to avoid cross-file visibility issues with the actor's internals.
   private func workspacesTransport(
     _ request: URLRequest,
-    label: String
+    label: String,
+    retryable: Bool = false
   ) async throws -> (Data, HTTPURLResponse) {
-    let (data, response): (Data, URLResponse)
-    do {
-      (data, response) = try await urlSession.data(for: request)
-    } catch {
-      throw SupabaseError.transport(reason: "\(label): \(error)")
-    }
-    guard let http = response as? HTTPURLResponse else {
-      throw SupabaseError.transport(reason: "\(label): non-http")
-    }
-    return (data, http)
+    try await performHTTP(request, retryable: retryable, label: label)
   }
 }
