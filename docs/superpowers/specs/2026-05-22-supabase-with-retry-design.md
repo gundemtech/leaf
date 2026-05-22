@@ -146,7 +146,7 @@ Decision matrix:
 | Input | `.retry(after:)` | `.giveUp` |
 |---|---|---|
 | `attempt + 1 >= policy.maxAttempts` | — | always |
-| `error?.code` ∈ {`.timedOut`, `.networkConnectionLost`, `.notConnectedToInternet`, `.dnsLookupFailed`, `.cannotConnectToHost`, `.cannotFindHost`, `.networkUnreachable`} | retry with `policy.delays[attempt] * multiplier` | — |
+| `error?.code` ∈ {`.timedOut`, `.networkConnectionLost`, `.notConnectedToInternet`, `.dnsLookupFailed`, `.cannotConnectToHost`, `.cannotFindHost`} | retry with `policy.delays[attempt] * multiplier` | — |
 | `error?.code` ∈ {`.cancelled`, `.userCancelledAuthentication`, `.secureConnectionFailed`, `.clientCertificateRejected`, `.badServerResponse`} | — | always |
 | `response.statusCode == 429` | retry with `retryAfterHint` if present, else `policy.delays[attempt] * multiplier` | — |
 | `response.statusCode` ∈ {500, 502, 503, 504, 505, 506, 507, 508, 510, 511} | retry with `policy.delays[attempt] * multiplier` | — |

@@ -66,6 +66,12 @@ extension SupabaseClient {
           continue
         }
       } catch let urlError as URLError {
+        // Independent-review IMPORTANT — distinguish outer Task cancellation
+        // (where the surrounding Task is cancelled and URLSession surfaces
+        // `URLError(.cancelled)`) from genuine connection-cancelled errors.
+        // Without this, a user-cancelled tick masquerades as `.transport`
+        // instead of `CancellationError`, losing observability.
+        try Task.checkCancellation()
         let jitterLow = -retryPolicy.jitterFraction
         let jitterHigh = retryPolicy.jitterFraction
         let multiplier = 1.0 + Double.random(in: jitterLow...jitterHigh)
