@@ -114,7 +114,7 @@ extension SupabaseClient {
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
     let (data, http) = try await crossPostTransport(
-      request, label: "triggerSlackPost", retryable: false)
+      request, label: "triggerSlackPost", retryable: false, refreshable: true)
     guard http.statusCode == 200 else {
       throw SupabaseError.fromStatus(http.statusCode, body: data)
     }
@@ -201,7 +201,7 @@ extension SupabaseClient {
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
     let (data, http) = try await crossPostTransport(
-      request, label: "triggerLinearCreate", retryable: false)
+      request, label: "triggerLinearCreate", retryable: false, refreshable: true)
     guard http.statusCode == 200 else {
       throw SupabaseError.fromStatus(http.statusCode, body: data)
     }
@@ -235,8 +235,10 @@ extension SupabaseClient {
   private func crossPostTransport(
     _ request: URLRequest,
     label: String,
-    retryable: Bool = false
+    retryable: Bool = false,
+    refreshable: Bool = false
   ) async throws -> (Data, HTTPURLResponse) {
-    try await performHTTP(request, retryable: retryable, label: label)
+    try await performHTTP(
+      request, retryable: retryable, refreshable: refreshable, label: label)
   }
 }

@@ -129,7 +129,7 @@ extension SupabaseClient {
       request.setValue(v, forHTTPHeaderField: k)
     }
     let (data, http) = try await joinRequestsTransport(
-      request, label: "fetchOwnJoinRequest", retryable: true)
+      request, label: "fetchOwnJoinRequest", retryable: true, refreshable: true)
     guard http.statusCode == 200 else {
       throw SupabaseError.fromStatus(http.statusCode, body: data)
     }
@@ -153,7 +153,8 @@ extension SupabaseClient {
       request.setValue(v, forHTTPHeaderField: k)
     }
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
-    let (data, http) = try await joinRequestsTransport(request, label: label)
+    let (data, http) = try await joinRequestsTransport(
+      request, label: label, retryable: false, refreshable: true)
     guard http.statusCode == 200 else {
       throw SupabaseError.fromStatus(http.statusCode, body: data)
     }

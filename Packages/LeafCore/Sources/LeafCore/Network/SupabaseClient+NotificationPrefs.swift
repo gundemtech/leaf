@@ -68,7 +68,7 @@ extension SupabaseClient {
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
     let (data, http) = try await performHTTP(
-      request, retryable: false, label: "upsertNotificationPref")
+      request, retryable: false, refreshable: true, label: "upsertNotificationPref")
     // 201 Created — fresh row.
     // 200 / 204 — overwrite via merge-duplicates (Prefer: return=minimal collapses body).
     switch http.statusCode {

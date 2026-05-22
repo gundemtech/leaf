@@ -42,7 +42,7 @@ extension SupabaseClient {
     request.httpBody = try Self.encodeInviteTokenBody(token)
 
     let (data, response) = try await inviteTokensTransport(
-      request, label: "insertInviteToken", retryable: false)
+      request, label: "insertInviteToken", retryable: false, refreshable: true)
     guard response.statusCode == 201 else {
       throw SupabaseError.fromStatus(response.statusCode, body: data)
     }
@@ -67,7 +67,7 @@ extension SupabaseClient {
     }
 
     let (data, response) = try await inviteTokensTransport(
-      request, label: "listInviteTokens", retryable: true)
+      request, label: "listInviteTokens", retryable: true, refreshable: true)
     guard response.statusCode == 200 else {
       throw SupabaseError.fromStatus(response.statusCode, body: data)
     }
@@ -91,7 +91,7 @@ extension SupabaseClient {
     ])
 
     let (data, response) = try await inviteTokensTransport(
-      request, label: "markInviteTokenDeleted", retryable: true)
+      request, label: "markInviteTokenDeleted", retryable: true, refreshable: true)
     guard response.statusCode == 204 || response.statusCode == 200 else {
       throw SupabaseError.fromStatus(response.statusCode, body: data)
     }
@@ -189,8 +189,10 @@ extension SupabaseClient {
   private func inviteTokensTransport(
     _ request: URLRequest,
     label: String,
-    retryable: Bool = false
+    retryable: Bool = false,
+    refreshable: Bool = false
   ) async throws -> (Data, HTTPURLResponse) {
-    try await performHTTP(request, retryable: retryable, label: label)
+    try await performHTTP(
+      request, retryable: retryable, refreshable: refreshable, label: label)
   }
 }

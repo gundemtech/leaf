@@ -461,7 +461,8 @@ extension SupabaseClient {
     }
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-    let (data, http) = try await performHTTP(request, retryable: false, label: "postInvite")
+    let (data, http) = try await performHTTP(
+      request, retryable: false, refreshable: true, label: "postInvite")
     guard http.statusCode == 201 else {
       throw SupabaseError.fromStatus(http.statusCode, body: data)
     }
@@ -632,7 +633,7 @@ extension SupabaseClient {
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
     let (data, http) = try await performHTTP(
-      request, retryable: false, label: "insertWorkspaceMember")
+      request, retryable: false, refreshable: true, label: "insertWorkspaceMember")
     guard http.statusCode == 201 else {
       throw SupabaseError.fromStatus(http.statusCode, body: data)
     }

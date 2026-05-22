@@ -102,7 +102,7 @@ extension SupabaseClient {
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
     let (data, response) = try await teamEventsTransport(
-      request, label: "sendTeamEvent", retryable: false)
+      request, label: "sendTeamEvent", retryable: false, refreshable: true)
     // C4: with resolution=merge-duplicates, PostgREST returns 200 (not
     // 201) when the row already exists. Both are success in our retry
     // path — server has the row, client moves on.
@@ -152,7 +152,7 @@ extension SupabaseClient {
     }
 
     let (data, response) = try await teamEventsTransport(
-      request, label: "fetchInboundTeamEvents", retryable: true)
+      request, label: "fetchInboundTeamEvents", retryable: true, refreshable: true)
     guard response.statusCode == 200 else {
       throw SupabaseError.fromStatus(response.statusCode, body: data)
     }
@@ -192,9 +192,11 @@ extension SupabaseClient {
   private func teamEventsTransport(
     _ request: URLRequest,
     label: String,
-    retryable: Bool = false
+    retryable: Bool = false,
+    refreshable: Bool = false
   ) async throws -> (Data, HTTPURLResponse) {
-    try await performHTTP(request, retryable: retryable, label: label)
+    try await performHTTP(
+      request, retryable: retryable, refreshable: refreshable, label: label)
   }
 
   /// Build a fresh ISO8601 formatter per call — ISO8601DateFormatter is

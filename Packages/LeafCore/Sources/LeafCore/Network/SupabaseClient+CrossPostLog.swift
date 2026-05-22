@@ -39,7 +39,7 @@ extension SupabaseClient {
     }
 
     let (data, http) = try await performHTTP(
-      request, retryable: true, label: "fetchCrossPostLog")
+      request, retryable: true, refreshable: true, label: "fetchCrossPostLog")
     guard http.statusCode == 200 else {
       throw SupabaseError.fromStatus(http.statusCode, body: data)
     }
