@@ -213,6 +213,14 @@ private struct HomeContent: View {
         @Bindable var coord = coordinator
         NavigationStack(path: $coord.homePath) {
             VStack(alignment: .leading, spacing: LeafSpace.xl) {
+                // Track-10 T2 — RESUME hero promoted to top of Home. Replaces
+                // the Track-9 T7 bottom WhereStoppedBlock (deleted in T2).
+                ResumeHeroBlock(
+                    snapshot: snapshot.whereStopped,
+                    gitDelta: snapshot.gitDelta,
+                    taskIdentity: snapshot.currentTaskIdentity
+                )
+
                 TodayBlock(metrics: snapshot.todayMetrics)
 
                 HStack(alignment: .top, spacing: LeafSpace.xl) {
@@ -223,8 +231,6 @@ private struct HomeContent: View {
                 }
 
                 InboxBlock(items: snapshot.inboxItems)
-
-                WhereStoppedBlock(snapshot: snapshot.whereStopped)
             }
             .navigationDestination(for: HomeSurface.self) { surface in
                 detail(for: surface)
