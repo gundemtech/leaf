@@ -158,9 +158,9 @@ extension InboxFilteringTests {
     }
 
     func testFilterActionable_withQuery_intersectsAdmitsAndQuery() {
-        // "build" matches a5 title ("Build failed") and a4 title ("Sasha input
-        // on relay rotation") — wait, no, "build" matches only a5 + d3? Let me
-        // recheck: a5 title "Build failed" ✓; nothing else. So result == [a5].
+        // Query "build" matches only a5 title ("Build failed") across the
+        // 10-item fixture; the .actionable filter is permissive over a5
+        // (it's in the 7-kind whitelist) so intersection = [a5].
         let result = InboxFiltering.filtered(
             items: actionableMixedFixtures, filter: .actionable, query: "build")
         XCTAssertEqual(result.map { $0.id }, ["a5"])
