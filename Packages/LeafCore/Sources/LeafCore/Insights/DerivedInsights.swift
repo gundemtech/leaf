@@ -160,6 +160,14 @@ public protocol DerivedInsights: Sendable {
     /// Default `nil` for stubs / iOS-future.
     func currentTaskIdentity() throws -> TaskIdentity?
 
+    /// Track-10 T2 — caller's current workspace absolute path (ephemeral, in-memory).
+    /// Returned separately from `TaskIdentity` because ADR-010 keeps absolute path
+    /// bytes OUT of `TaskIdentity` (which flows into `InsightsSnapshot` and could be
+    /// MCP-serialized — Track-9 T5 D-8). Consumed by `InsightsReader.refresh()` to
+    /// pass into `GitDeltaReader.read(forWorkspacePath:)`; never stored on the
+    /// snapshot. Default `nil` for stubs / iOS-future.
+    func currentWorkspacePath() throws -> String?
+
     /// Track-8 P1 — teammates currently working on the same task as caller. Matching
     /// rule is hierarchical (same Linear issue → same branch → adjacent branch).
     /// Returns `[]` when no `presence_history` substrate (pre-Phase 5.4) or no match.
@@ -240,6 +248,10 @@ extension DerivedInsights {
     // MARK: - Track 8 P1 defaults
 
     public func currentTaskIdentity() throws -> TaskIdentity? { nil }
+
+    /// Track-10 T2 — default `nil` for stubs / iOS-future. Prod impl reuses
+    /// `WorkspacePathResolver.resolve(bundleID:db:)` ephemeral lookup.
+    public func currentWorkspacePath() throws -> String? { nil }
 
     public func sameTaskTeammates(rule: MatchRule) throws -> [TeammateMatch] { [] }
 

@@ -17,6 +17,11 @@ public struct WhereStoppedSnapshot: Equatable, Hashable, Sendable {
     public let anchorFilePath: String?
     public let anchorLine: Int?
     public let recentLastCommit: RecentCommitSnapshot?
+    /// Track-10 T2 — bundle ID of the anchor event's foreground app (read from
+    /// `events.bundle_id` via the existing reader-side LEFT JOIN). Powers the
+    /// RESUME hero "Resume" CTA — target app to relaunch when the user clicks.
+    /// `nil` ↔ anchor missing / orphaned (anchor event swept) / pre-T2 row.
+    public let anchorBundleID: String?
 
     public init(
         id: Int64,
@@ -26,7 +31,8 @@ public struct WhereStoppedSnapshot: Equatable, Hashable, Sendable {
         wipSignals: [String],
         anchorFilePath: String? = nil,
         anchorLine: Int? = nil,
-        recentLastCommit: RecentCommitSnapshot? = nil
+        recentLastCommit: RecentCommitSnapshot? = nil,
+        anchorBundleID: String? = nil
     ) {
         self.id = id
         self.generatedAtMs = generatedAtMs
@@ -36,5 +42,6 @@ public struct WhereStoppedSnapshot: Equatable, Hashable, Sendable {
         self.anchorFilePath = anchorFilePath
         self.anchorLine = anchorLine
         self.recentLastCommit = recentLastCommit
+        self.anchorBundleID = anchorBundleID
     }
 }
