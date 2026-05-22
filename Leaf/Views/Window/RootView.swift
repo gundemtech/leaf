@@ -79,13 +79,18 @@ struct RootView: View {
         // Track 5 / S7 H.5 — Suspend/resume Realtime on scenePhase boundary to
         // save battery in background. resume() recovers via persisted active
         // workspace; suspend() closes WS + cancels reconnect timers.
-        .onChange(of: scenePhase) { _, phase in
-            Task {
-                if phase == .active {
-                    await realtimeService.resume()
-                } else {
-                    await realtimeService.suspend()
-                }
+        //
+        // `.task(id: scenePhase)` instead of `.onChange + Task { }` so SwiftUI
+        // cancels the prior dispatch when scenePhase flips fast (lid-flip /
+        // rapid sleep-wake). The earlier `.onChange` shape spawned an
+        // unstructured Task per transition; concurrent resume/suspend pairs
+        // could race past the `subscribe` idempotency guard and stack
+        // phx_join frames on the WS.
+        .task(id: scenePhase) {
+            if scenePhase == .active {
+                await realtimeService.resume()
+            } else {
+                await realtimeService.suspend()
             }
         }
         // Track 5 / S7 Stage 6 fix C-C1 — 30s polling tick scheduler for
