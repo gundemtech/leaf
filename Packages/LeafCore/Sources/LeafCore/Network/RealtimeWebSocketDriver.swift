@@ -79,6 +79,17 @@ public actor RealtimeWebSocketDriver {
     private let reconnectBaseDelayMs: Int64
     /// Cap on reconnect delay (steady-state after 5th attempt).
     private let reconnectMaxDelayMs: Int64
+    /// Hard cap on reconnect attempts before the driver transitions to
+    /// `.disconnected` terminal. Prevents (a) battery drain on permanent
+    /// server-down, (b) the reconnect loop running forever with no UX
+    /// indicator past `.reconnecting(attempt:)`. Set to 0 = unbounded
+    /// (back-compat for tests that need to observe many attempts).
+    private let maxReconnectAttempts: Int
+    /// ± jitter factor multiplied onto each backoff delay so a fleet of
+    /// clients that simultaneously dropped (DO restart, project redeploy)
+    /// doesn't thunder back on the exact wallclock grid. `0` = deterministic
+    /// schedule (tests pin via `delayForReconnectAttempt`).
+    private let reconnectJitterFraction: Double
 
     // MARK: - Private state
 
@@ -129,6 +140,8 @@ public actor RealtimeWebSocketDriver {
         missingHeartbeatLimit: Int = 3,
         reconnectBaseDelayMs: Int64 = 1_000,
         reconnectMaxDelayMs: Int64 = 16_000,
+        maxReconnectAttempts: Int = 20,
+        reconnectJitterFraction: Double = 0.5,
         jwtProvider: (@Sendable () async -> String?)? = nil
     ) {
         var continuationCapture: AsyncStream<RealtimeEvent>.Continuation!
@@ -141,6 +154,8 @@ public actor RealtimeWebSocketDriver {
         self.missingHeartbeatLimit = missingHeartbeatLimit
         self.reconnectBaseDelayMs = reconnectBaseDelayMs
         self.reconnectMaxDelayMs = reconnectMaxDelayMs
+        self.maxReconnectAttempts = max(0, maxReconnectAttempts)
+        self.reconnectJitterFraction = max(0, reconnectJitterFraction)
         // P1 re-dispatch — Important-2 race fix. Install the provider at init
         // time so the actor has it immediately, no async install Task → no
         // race window where a transport-level reconnect could fire before
@@ -567,17 +582,30 @@ public actor RealtimeWebSocketDriver {
     }
 
     /// Backoff loop. State transitions to `.reconnecting(attempt: N)` and stays
-    /// there until either (a) reconnect succeeds (→ `.connected`) or (b) the
+    /// there until either (a) reconnect succeeds (→ `.connected`), (b) the
     /// user explicitly cancels via `disconnect()` / `suspend()` (which calls
-    /// `stopReconnectLoop`). Each attempt sleeps the computed backoff before
-    /// trying.
+    /// `stopReconnectLoop`), or (c) `maxReconnectAttempts` is exhausted — in
+    /// which case the driver transitions to terminal `.disconnected` and the
+    /// caller (LeafRealtimeService) is expected to surface a banner / require
+    /// explicit `resume()`. Each attempt sleeps the computed backoff before
+    /// trying; the sleep delay is jittered by ±`reconnectJitterFraction` to
+    /// prevent thundering-herd reconnect after a DO restart.
     private func startReconnectLoop() async {
         reconnectTask?.cancel()
+        let cap = maxReconnectAttempts
         reconnectTask = Task { [weak self] in
             guard let self else { return }
             var attempt = 1
             while !Task.isCancelled {
-                let delayMs = await self.reconnectDelay(attempt: attempt)
+                if cap > 0 && attempt > cap {
+                    // Hard-cap exhausted — give up and surface a terminal
+                    // .disconnected so the user / service layer can react.
+                    await self.terminateReconnectLoop(
+                        reason: "reconnect cap exhausted after \(cap) attempts"
+                    )
+                    return
+                }
+                let delayMs = await self.reconnectDelayJittered(attempt: attempt)
                 await self.setState(.reconnecting(attempt: attempt))
                 let sleepNanos = UInt64(delayMs) &* 1_000_000
                 try? await Task.sleep(nanoseconds: sleepNanos)
@@ -599,6 +627,30 @@ public actor RealtimeWebSocketDriver {
     /// instance-scoped `delayForReconnectAttempt` with the configured base/max.
     private func reconnectDelay(attempt: Int) -> Int64 {
         Self.delayForReconnectAttempt(attempt, baseMs: reconnectBaseDelayMs, maxMs: reconnectMaxDelayMs)
+    }
+
+    /// Production-side wrapper that applies jitter on top of the pure
+    /// `delayForReconnectAttempt` schedule. Pure function stays
+    /// deterministic for unit tests; jitter is opt-in via init param.
+    private func reconnectDelayJittered(attempt: Int) -> Int64 {
+        let base = reconnectDelay(attempt: attempt)
+        guard reconnectJitterFraction > 0 else { return base }
+        // Multiply by Double.random(in: (1 - f)...(1 + f)).
+        let lo = max(0.0, 1.0 - reconnectJitterFraction)
+        let hi = 1.0 + reconnectJitterFraction
+        let scaled = Double(base) * Double.random(in: lo...hi)
+        return Int64(scaled)
+    }
+
+    /// Tear down the reconnect loop after hitting the attempt cap.
+    /// Yields a `.disconnected` event with the cap reason so the consumer
+    /// can show "couldn't reconnect" instead of a perpetual spinner.
+    /// `async` so the caller's await syntax composes with the rest of the
+    /// loop's actor-hopped state transitions even though `setState` itself
+    /// is sync — keeps the API uniform with `setState(.reconnecting(...))`.
+    private func terminateReconnectLoop(reason: String) async {
+        setState(.disconnected)
+        eventContinuation.yield(.disconnected(reason: reason))
     }
 
     /// One reconnect attempt. Throws on failure to send phx_join (or if there's
