@@ -46,7 +46,7 @@ struct ResumeHeroBlock: View {
     @ViewBuilder
     private var cardContent: some View {
         VStack(alignment: .leading, spacing: LeafSpace.xs) {
-            if let taskIdentity, !taskIdentity.isEmpty {
+            if let taskIdentity, Self.taskLineHasVisibleContent(taskIdentity) {
                 taskLine(taskIdentity)
             }
             if let snap = snapshot, !snap.excerpt.isEmpty {
@@ -58,7 +58,7 @@ struct ResumeHeroBlock: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
-            } else if taskIdentity == nil || taskIdentity?.isEmpty == true {
+            } else if !Self.taskLineHasVisibleContent(taskIdentity) {
                 emptyState
             }
             if let wipText = composeWipLine() {
@@ -76,15 +76,34 @@ struct ResumeHeroBlock: View {
 
     // MARK: - Lines
 
+    /// Track-10 T2.5 — gate predicate for both `taskLine` render and the
+    /// emptyState fall-through. `TaskIdentity.isEmpty` returns false when
+    /// only `workspacePath` / `linearWorkspaceSlug` is set (linearID and
+    /// branch nil); the taskLine would then render an empty string and
+    /// the emptyState branch would skip — a blank card. Gate on the
+    /// fields that actually produce visible text instead.
+    static func taskLineHasVisibleContent(_ id: TaskIdentity?) -> Bool {
+        guard let id else { return false }
+        return id.linearID != nil || id.branch != nil
+    }
+
+    @ViewBuilder
     private func taskLine(_ id: TaskIdentity) -> some View {
+        let parts = Self.taskLineParts(id)
+        if !parts.isEmpty {
+            Text(parts.joined(separator: " · "))
+                .font(LeafType.title.small)
+                .foregroundStyle(LeafColor.text.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+    }
+
+    private static func taskLineParts(_ id: TaskIdentity) -> [String] {
         var parts: [String] = []
         if let linearID = id.linearID { parts.append(linearID) }
         if let branch = id.branch { parts.append(branch) }
-        return Text(parts.joined(separator: " · "))
-            .font(LeafType.title.small)
-            .foregroundStyle(LeafColor.text.primary)
-            .lineLimit(1)
-            .truncationMode(.tail)
+        return parts
     }
 
     private func anchorLine(_ snap: WhereStoppedSnapshot) -> some View {

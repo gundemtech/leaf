@@ -49,3 +49,19 @@ lint-fix:
 
 # Composite gate — оба check'а sequentially.
 check-style: format-check lint
+
+# === Dev launch — fix/dev-launch-reliability. См. scripts/dev-launch.sh. ===
+
+# Idempotent Debug launch: kill stale agent, unregister /Applications hijack,
+# lsregister Debug build, print CDHash, open, stream Agent log.
+dev:
+    @./scripts/dev-launch.sh
+
+# Reset Accessibility TCC + remove /Applications/Leaf.app, then dev-launch.
+# Use when CDHash drift has accumulated и нужен clean slate. Requires confirm.
+dev-clean:
+    @./scripts/dev-reset-tcc.sh && ./scripts/dev-launch.sh
+
+# Stream both main app + agent logs (Ctrl-C to detach).
+dev-log:
+    @log stream --predicate 'subsystem CONTAINS "tech.gundem.leaf"' --info

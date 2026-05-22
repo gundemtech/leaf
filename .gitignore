@@ -5,6 +5,9 @@
 .claude/plans/
 # Superpowers git worktrees — генерируются using-git-worktrees skill, локально
 .claude/worktrees/
+# Claude session bookmarks — personal references на конкретные working sessions
+# (session ID + что внутри). Не sync'аются между машинами по определению.
+.claude/sessions/
 # Superpowers tactical plans — содержат полные Swift implementation блоки с moat-чувствительным контентом
 # (regex patterns, tuned numeric thresholds, byte caps). Specs (API-only) — committed; plans — нет.
 docs/superpowers/plans/

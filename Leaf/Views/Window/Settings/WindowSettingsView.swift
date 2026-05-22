@@ -39,6 +39,8 @@ struct WindowSettingsView: View {
                         .id(SettingsSection.updates)
                     PrivacySettingsSection()
                         .id(SettingsSection.privacy)
+                    DebugDiagnosticsSection()
+                        .id(SettingsSection.diagnostics)
                 }
                 .padding(LeafSpace.xxl)
             }

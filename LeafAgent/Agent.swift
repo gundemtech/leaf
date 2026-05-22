@@ -779,6 +779,13 @@ enum AgentMain {
         Task { await rotationFetchScheduler.start() }
         Task { await detectorScheduler.start() }
 
+        // fix/dev-launch-reliability — heartbeat writer для cross-process
+        // status pipe. Atomic write раз в 30с с PID + ax_trusted + CDHash +
+        // bundlePath. Main app читает из Settings → Diagnostics.
+        let heartbeatWriter = HeartbeatWriter()
+        AgentLifetime.heartbeatWriter = heartbeatWriter
+        Task { await heartbeatWriter.start() }
+
         // Shutdown порядок: maintenance → fsEvents → claudeCode → linear → github → slack → writer.
         // fsEvents первым из collectors — закрываем приём callback'ов до того как
         // остальные collectors flush'ят. claudeCode / linear / github / slack flush'ят свои
@@ -860,6 +867,11 @@ enum AgentMain {
             // separate transactions inside `tick()`; loop sleeps cancel
             // cooperatively via Task.cancel).
             if let gcc = AgentLifetime.googleCalendarCollector { await gcc.stop() }
+            // fix/dev-launch-reliability — heartbeat writer cooperatively
+            // cancels on Task. Stop before writer flush — heartbeat is
+            // independent of DB, fine to drop on shutdown without последний
+            // tick.
+            if let h = AgentLifetime.heartbeatWriter { await h.stop() }
             if let w = AgentLifetime.writer {
                 await w.flush()
                 await w.stop()
@@ -882,6 +894,7 @@ enum AgentLifetime {
     nonisolated(unsafe) static var activeAppCollector: ActiveAppCollector?
     nonisolated(unsafe) static var idleCollector: IdleCollector?
     nonisolated(unsafe) static var maintenance: MaintenanceScheduler?
+    nonisolated(unsafe) static var heartbeatWriter: HeartbeatWriter?
     nonisolated(unsafe) static var claudeCodeCollector: ClaudeCodeCollector?
     // Track-6 P1 (Task 17) — hook bridge listener retains the unix-domain
     // socket FD + DispatchSources for the lifetime of the agent. LEAF_PROD

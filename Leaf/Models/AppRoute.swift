@@ -25,6 +25,10 @@ enum SettingsSection: String, Hashable, Sendable {
     case advanced
     case updates
     case privacy
+    /// fix/dev-launch-reliability — diagnostics section показывает CDHash main+agent,
+    /// AX status обоих процессов, DB capture stats. Deep-link target из
+    /// MenuBarContent «Accessibility disabled» баннера.
+    case diagnostics
 }
 
 /// Fine-grained intra-section anchor. Optional — used to scroll past the
