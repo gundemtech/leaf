@@ -7,11 +7,14 @@ import GRDB
 public struct PendingInvitesStore: Sendable {
 
     /// INSERT new pending invite. Throws on UNIQUE PK conflict.
+    /// Writes `workspace_id` so `WorkspaceCascadeDeleter` / `WorkspaceService`
+    /// `DELETE FROM pending_invites WHERE workspace_id = ?` catches the row.
     public static func insert(_ row: PendingInvite, in db: GRDB.Database) throws {
         try db.execute(
             sql: """
                 INSERT INTO \(Schema.PendingInvites.tableName) (
                     \(Schema.PendingInvites.token),
+                    \(Schema.PendingInvites.workspaceID),
                     \(Schema.PendingInvites.otp),
                     \(Schema.PendingInvites.inviteePubkeyHex),
                     \(Schema.PendingInvites.inviteeDisplayNameHint),
@@ -19,10 +22,11 @@ public struct PendingInvitesStore: Sendable {
                     \(Schema.PendingInvites.expiresAtMs),
                     \(Schema.PendingInvites.status),
                     \(Schema.PendingInvites.lastPolledAtMs)
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
             arguments: [
                 row.token,
+                row.workspaceID,
                 row.otp,
                 row.inviteePubkeyHex,
                 row.inviteeDisplayNameHint,
@@ -40,6 +44,7 @@ public struct PendingInvitesStore: Sendable {
             db,
             sql: """
                 SELECT \(Schema.PendingInvites.token),
+                       \(Schema.PendingInvites.workspaceID),
                        \(Schema.PendingInvites.otp),
                        \(Schema.PendingInvites.inviteePubkeyHex),
                        \(Schema.PendingInvites.inviteeDisplayNameHint),
@@ -108,6 +113,7 @@ public struct PendingInvitesStore: Sendable {
             db,
             sql: """
                 SELECT \(Schema.PendingInvites.token),
+                       \(Schema.PendingInvites.workspaceID),
                        \(Schema.PendingInvites.otp),
                        \(Schema.PendingInvites.inviteePubkeyHex),
                        \(Schema.PendingInvites.inviteeDisplayNameHint),
@@ -201,11 +207,16 @@ public struct PendingInvitesStore: Sendable {
             let status = PendingInviteStatus(rawValue: statusRaw)
         else { return nil }
 
+        // workspaceID column added by M019 with `DEFAULT ''`. Empty-string
+        // sentinel survives for legacy rows inserted before this fix; new
+        // rows ship a real workspace_id (see `insert` above).
+        let workspaceID = (row[Schema.PendingInvites.workspaceID] as String?) ?? ""
         let displayHint = row[Schema.PendingInvites.inviteeDisplayNameHint] as String?
         let lastPolledAtMs = row[Schema.PendingInvites.lastPolledAtMs] as Int64?
 
         return PendingInvite(
             token: token,
+            workspaceID: workspaceID,
             otp: otp,
             inviteePubkeyHex: inviteePubkeyHex,
             inviteeDisplayNameHint: displayHint,

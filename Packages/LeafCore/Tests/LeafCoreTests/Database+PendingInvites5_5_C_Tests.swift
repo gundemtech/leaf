@@ -27,11 +27,13 @@ final class DatabasePendingInvites5_5_C_Tests: XCTestCase {
 
     private func sample(
         token: String,
+        workspaceID: String = "wkspc_test",
         createdAtMs: Int64 = 1_700_000_000_000,
         status: PendingInviteStatus = .pending
     ) -> PendingInvite {
         PendingInvite(
             token: token,
+            workspaceID: workspaceID,
             otp: "123456",
             inviteePubkeyHex: String(repeating: "a", count: 64),
             inviteeDisplayNameHint: nil,

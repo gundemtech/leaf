@@ -23,12 +23,14 @@ final class PendingInvitesStoreTests: XCTestCase {
 
     private func sample(
         token: String = "tok-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        workspaceID: String = "wkspc_test",
         otp: String = "123456",
         createdAtMs: Int64 = 1_700_000_000_000,
         status: PendingInviteStatus = .pending
     ) -> PendingInvite {
         PendingInvite(
             token: token,
+            workspaceID: workspaceID,
             otp: otp,
             inviteePubkeyHex: String(repeating: "a", count: 64),
             inviteeDisplayNameHint: "Anton",

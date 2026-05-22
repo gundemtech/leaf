@@ -76,7 +76,7 @@ final class InviteOutboxReader {
                     inviteePubkeyHex: trimmed,
                     requireOTP: self.requireOTP
                 )
-                self.persistPendingInvite(outbound)
+                self.persistPendingInvite(outbound, workspaceID: workspaceID)
                 self.state = .ready(outbound)
             } catch {
                 self.logger.error("generateInvite failed: \(String(describing: error), privacy: .public)")
@@ -98,7 +98,7 @@ final class InviteOutboxReader {
                     workspaceID: workspaceID,
                     inviteeJoinCode: trimmed
                 )
-                self.persistPendingInvite(outbound)
+                self.persistPendingInvite(outbound, workspaceID: workspaceID)
                 self.state = .ready(outbound)
             } catch {
                 self.logger.error("generateInvite(joinCode) failed: \(String(describing: error), privacy: .public)")
@@ -142,11 +142,12 @@ final class InviteOutboxReader {
 
     // MARK: - Pending invites persistence (Phase 5.5.B)
 
-    private func persistPendingInvite(_ outbound: InviteOutbound) {
+    private func persistPendingInvite(_ outbound: InviteOutbound, workspaceID: String) {
         guard let db = self.database else { return }
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         let row = PendingInvite(
             token: outbound.token,
+            workspaceID: workspaceID,
             otp: outbound.otp ?? "",
             inviteePubkeyHex: outbound.inviteePubkeyHex,
             inviteeDisplayNameHint: nil,

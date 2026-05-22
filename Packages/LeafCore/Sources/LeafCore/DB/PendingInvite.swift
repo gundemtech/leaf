@@ -5,6 +5,11 @@ import Foundation
 /// mirroring `PresenceStateWriter` pattern.
 public struct PendingInvite: Sendable, Equatable {
     public let token: String
+    /// Track-5 S2 (M019). Empty-string sentinel allowed only for legacy rows
+    /// inserted before M027 — new inserts MUST populate the active workspace
+    /// id so cascade-delete in `WorkspaceCascadeDeleter` / `WorkspaceService`
+    /// actually catches the row.
+    public let workspaceID: String
     public let otp: String
     public let inviteePubkeyHex: String
     public let inviteeDisplayNameHint: String?
@@ -15,6 +20,7 @@ public struct PendingInvite: Sendable, Equatable {
 
     public init(
         token: String,
+        workspaceID: String,
         otp: String,
         inviteePubkeyHex: String,
         inviteeDisplayNameHint: String? = nil,
@@ -24,6 +30,7 @@ public struct PendingInvite: Sendable, Equatable {
         lastPolledAtMs: Int64? = nil
     ) {
         self.token = token
+        self.workspaceID = workspaceID
         self.otp = otp
         self.inviteePubkeyHex = inviteePubkeyHex
         self.inviteeDisplayNameHint = inviteeDisplayNameHint
