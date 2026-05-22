@@ -170,6 +170,16 @@ public struct InsightsSnapshot: Sendable, Hashable {
     /// (T4 substrate; `StubInsights` default returns `.empty` for
     /// non-prod / iOS-future paths).
     public let weeklyMetrics: WeeklyMetrics
+    /// Track-10 T2 — in-process git delta info for the caller's current workspace
+    /// (commits ahead/behind merge base + uncommitted count + parsed remote ref).
+    /// Default `nil` ↔ workspace path unknown / not a git repo / subprocess failure.
+    /// Powers the RESUME hero block's WIP signal line + "Diff with main" CTA.
+    public let gitDelta: GitDeltaSnapshot?
+    /// Track-10 T2 — current `TaskIdentity` resolved from the most recent attention
+    /// event (linearID + branch + repo + workspacePath + linearWorkspaceSlug). Default
+    /// `nil` ↔ no attention event in the freshness window. Powers the RESUME hero
+    /// task line + Resume/Linear CTAs.
+    public let currentTaskIdentity: TaskIdentity?
 
     public init(
         topApps: [AppTimeEntry],
@@ -216,7 +226,9 @@ public struct InsightsSnapshot: Sendable, Hashable {
         sameTaskTeammates: [TeammateMatch] = [],
         inboxItems: [InboxItem] = [],
         whereStopped: WhereStoppedSnapshot? = nil,
-        weeklyMetrics: WeeklyMetrics = .empty
+        weeklyMetrics: WeeklyMetrics = .empty,
+        gitDelta: GitDeltaSnapshot? = nil,
+        currentTaskIdentity: TaskIdentity? = nil
     ) {
         self.topApps = topApps
         self.sessions = sessions
@@ -263,6 +275,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.inboxItems = inboxItems
         self.whereStopped = whereStopped
         self.weeklyMetrics = weeklyMetrics
+        self.gitDelta = gitDelta
+        self.currentTaskIdentity = currentTaskIdentity
     }
 
     /// Convenience init — рассчитывает `deepSessionsCount` по threshold'у.
@@ -315,7 +329,9 @@ public struct InsightsSnapshot: Sendable, Hashable {
         sameTaskTeammates: [TeammateMatch] = [],
         inboxItems: [InboxItem] = [],
         whereStopped: WhereStoppedSnapshot? = nil,
-        weeklyMetrics: WeeklyMetrics = .empty
+        weeklyMetrics: WeeklyMetrics = .empty,
+        gitDelta: GitDeltaSnapshot? = nil,
+        currentTaskIdentity: TaskIdentity? = nil
     ) {
         self.init(
             topApps: topApps,
@@ -362,7 +378,9 @@ public struct InsightsSnapshot: Sendable, Hashable {
             sameTaskTeammates: sameTaskTeammates,
             inboxItems: inboxItems,
             whereStopped: whereStopped,
-            weeklyMetrics: weeklyMetrics
+            weeklyMetrics: weeklyMetrics,
+            gitDelta: gitDelta,
+            currentTaskIdentity: currentTaskIdentity
         )
     }
 
