@@ -48,6 +48,7 @@ struct LeafApp: App {
     )
     @State private var permissions = PermissionsService()
     @State private var updater: UpdaterController
+    @State private var lastSeenCursor = LastSeenCursor()
     @State private var reader = InsightsReader()
     @State private var orgReader = OrgReader()
     @State private var inviteOutboxReader = InviteOutboxReader()
@@ -136,6 +137,7 @@ struct LeafApp: App {
                 .environment(permissions)
                 .environment(updater)
                 .environment(reader)
+                .environment(lastSeenCursor)  // Track-10 T5
                 .environment(orgReader)
                 .environment(inviteOutboxReader)
                 .environment(inviteAcceptReader)
