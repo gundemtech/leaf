@@ -255,9 +255,8 @@ min-hold gate"). Promise unmet.
 
 **T2.5 fix** (in `feature/track-10-T2-5-operational-followup`):
 
-- SQL extended with `LEAD(ts) OVER (ORDER BY ts) AS next_ts` and an
-  inclusive `(next_ts IS NULL OR next_ts - ts >= ?)` gate measuring
-  destination dwell.
+- Query extended with a destination-dwell gate via SQL window function;
+  inclusive `>=` bound semantic. Implementation body in `LeafCorePrivate`.
 - `contextSwitchMinHoldMs` constant (60_000 ms) lives in the same moat
   extension for easy retune.
 - Test seeds updated: existing "60s spacing" test re-documented as

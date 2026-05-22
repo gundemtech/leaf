@@ -43,7 +43,7 @@ Three precise fixes + two spec amendments:
 
 | # | Surface | Change | Files |
 |---|---|---|---|
-| **F1** | moat — switches counter | Add `min_hold_ms` gate (60_000 ms) to SQL via `LEAD(ts) OVER (...)`; tunable constant `contextSwitchMinHoldMs` in moat. | `ProdInsights+TodayMetrics.swift` + tests |
+| **F1** | moat — switches counter | Add `min_hold_ms` gate (60_000 ms) on destination dwell via SQL window function; tunable constant `contextSwitchMinHoldMs` in moat. | `ProdInsights+TodayMetrics.swift` + tests |
 | **F2** | public view — render bug | `taskLine` becomes `@ViewBuilder`-gated on `parts.isEmpty`; cardContent's emptyState condition reads `taskLineHasVisibleContent(_:)` instead of `taskIdentity == nil OR isEmpty == true`. Eliminates blank shell. | `ResumeHeroBlock.swift` |
 | **F3** | moat — workspace fallback | `currentWorkspacePath()` returns frontmost-resolved path; on nil, falls back via `resolveMostRecentIDEWorkspacePath()` — distinct recent attention bundles ordered by `MAX(ts) DESC`, first resolvable wins; 24h lookback cap. | `ProdInsights+CurrentTaskIdentity.swift` + tests |
 
@@ -55,26 +55,7 @@ Three precise fixes + two spec amendments:
 
 ### 3.1 SQL change (moat)
 
-`Packages/LeafCore/Sources/LeafCorePrivate/Prod/Insights/ProdInsights+TodayMetrics.swift` — `queryAttentionTransitionsCount` extended with `LEAD(ts)` + inclusive `>=` dwell gate:
-
-```sql
-WITH ev AS (
-    SELECT bundle_id,
-           ts,
-           LAG(bundle_id) OVER (ORDER BY ts) AS prev_bundle,
-           LEAD(ts)       OVER (ORDER BY ts) AS next_ts
-    FROM events
-    WHERE signal_type = 'attention'
-      AND bundle_id IS NOT NULL
-      AND ts >= ? AND ts < ?
-)
-SELECT COUNT(*) FROM ev
-WHERE prev_bundle IS NOT NULL
-  AND bundle_id != prev_bundle
-  AND (next_ts IS NULL OR next_ts - ts >= ?)
-```
-
-Third bound = `Self.contextSwitchMinHoldMs` (60_000 ms, private static let).
+`Packages/LeafCore/Sources/LeafCorePrivate/Prod/Insights/ProdInsights+TodayMetrics.swift` — `queryAttentionTransitionsCount` extended with a destination-dwell gate via a window-function predicate. Threshold sourced from a private `contextSwitchMinHoldMs: Int64 = 60_000` constant in the same moat extension. Implementation body lives in `LeafCorePrivate`; this spec describes only the semantic.
 
 **Semantic**: transition `prev → curr` counts when `curr` held foreground ≥ 60s before the next event, OR `curr` is the latest event in the window (open dwell — user is still on it). Brief Cmd-Tab glances to Slack and back don't count; the return-to-IDE leg still does because the IDE's own dwell qualifies.
 
@@ -212,7 +193,7 @@ Two passes — initial pass surfaced HIGH/MEDIUM items; second pass (per explici
 
 All CRITICAL/HIGH addressed inline; risk-accepts dispositioned with rationale; defers emit §7 carries. Highest-impact finding:
 
-- **Critical (second-pass)** — first-pass §3.3 seed `A@0, B@30, A@200` with `expect=1` was arithmetically wrong: with `LEAD(ts)` measuring destination dwell, B's dwell = next_ts − ts = 200 − 30 = 170s ≥ 60 → counted; A's open dwell also counts → actual 2, not 1. Test would have RED'd for the wrong reason; a sloppy implementer could have "fixed" by removing the gate. **FIXED INLINE** with `A@0, B@30_000, A@45_000` (B's dwell = 15s, rejects flicker; A's open dwell counts; total = 1). Per-row dwell walkthrough added to every fence test docstring as a future-CTO regression-prevention pattern.
+- **Critical (second-pass)** — first-pass §3.3 seed `A@0, B@30, A@200` with `expect=1` was arithmetically wrong: the gate measures destination dwell (time until next event), so B's dwell = 200 − 30 = 170s ≥ 60 → counted; A's open dwell also counts → actual 2, not 1. Test would have RED'd for the wrong reason; a sloppy implementer could have "fixed" by removing the gate. **FIXED INLINE** with `A@0, B@30_000, A@45_000` (B's dwell = 15s, rejects flicker; A's open dwell counts; total = 1). Per-row dwell walkthrough added to every fence test docstring as a future-CTO regression-prevention pattern.
 
 Full first-pass findings table preserved in plan `~/.claude/plans/track-10-t2-5-typed-hoare.md` § "CTO review findings".
 
