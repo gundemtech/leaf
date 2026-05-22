@@ -221,7 +221,10 @@ private struct HomeContent: View {
                     taskIdentity: snapshot.currentTaskIdentity
                 )
 
-                TodayBlock(metrics: snapshot.todayMetrics)
+                TodayBlock(
+                    metrics: snapshot.todayMetrics,
+                    youNowState: snapshot.youNowState
+                )
 
                 HStack(alignment: .top, spacing: LeafSpace.xl) {
                     YouNowBlock(state: snapshot.youNowState)

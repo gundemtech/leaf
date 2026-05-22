@@ -16,6 +16,7 @@ import SwiftUI
 
 struct TodayBlock: View {
     let metrics: TodayMetrics
+    let youNowState: YouNowState
 
     /// C-4 (Phase 8.9) — cached locale-aware "EEE d MMM" formatter so the
     /// "TODAY · <date>" label doesn't allocate a `DateFormatter` per body
@@ -62,16 +63,23 @@ struct TodayBlock: View {
     /// (intentional gap, no 6th metric).
     private var metricsRow: some View {
         ViewThatFits(in: .horizontal) {
-            // Wide branch — 5 cells horizontal.
-            HStack(alignment: .top, spacing: LeafSpace.lg) {
-                metricCell(value: focusValue, label: "focused")
-                metricCell(value: aiRatioValue, label: "AI ratio")
-                metricCell(value: "\(metrics.sessionsCount)", label: "sessions")
-                metricCell(value: "\(metrics.switchCount)", label: "switches")
-                metricCell(value: "\(metrics.commitsCount)", label: "commits")
-                Spacer(minLength: 0)
+            // Wide branch — 5 cells horizontal + badge on its own trailing row.
+            VStack(alignment: .leading, spacing: LeafSpace.sm) {
+                HStack(alignment: .top, spacing: LeafSpace.lg) {
+                    metricCell(value: focusValue, label: "focused")
+                    metricCell(value: aiRatioValue, label: "AI ratio")
+                    metricCell(value: "\(metrics.sessionsCount)", label: "sessions")
+                    metricCell(value: "\(metrics.switchCount)", label: "switches")
+                    metricCell(value: "\(metrics.commitsCount)", label: "commits")
+                    Spacer(minLength: 0)
+                }
+                HStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    YouNowStateBadge(state: youNowState)
+                }
             }
-            // Narrow branch — Grid 2 cols × 3 rows, row-major reading order.
+            // Narrow branch — Grid 2 cols × 3 rows; badge fills the
+            // previously-empty bottom-right cell (no layout shift).
             Grid(alignment: .topLeading, horizontalSpacing: LeafSpace.lg, verticalSpacing: LeafSpace.md) {
                 GridRow {
                     metricCell(value: focusValue, label: "focused")
@@ -83,9 +91,7 @@ struct TodayBlock: View {
                 }
                 GridRow {
                     metricCell(value: "\(metrics.commitsCount)", label: "commits")
-                    Color.clear
-                        .frame(width: 1, height: 1)
-                        .accessibilityHidden(true)
+                    YouNowStateBadge(state: youNowState)
                 }
             }
         }
