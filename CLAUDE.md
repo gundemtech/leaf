@@ -38,34 +38,15 @@
 
 Branch protection на `leaf-docs` пока нет — push прямой в `main`. Когда появится — PR-flow.
 
-## Pre-push чек-лист для `gundemtech/leaf` (app-репо, ПУБЛИЧНЫЙ)
+## Pre-push в `gundemtech/leaf` (публичный app-репо)
 
-App-репо **публичный**. Перед каждым `git push` в `gundemtech/leaf` Claude Code **обязательно** пробегает diff по чек-листу. Если хоть одно ❌ — **остановись, покажи юзеру, спроси**.
+Перед каждым `git push` в `gundemtech/leaf` — **обязательно** `/pre-push-leaf`. Если хоть одно ❌ → остановись, покажи юзеру, спроси.
 
-### ❌ НЕ коммитить в `leaf`
-- **Секреты:** OAuth client secrets, EdDSA/Sparkle signing keys, Cloudflare tokens, team keys, keychain raw values, GitHub PAT. → GitHub Secrets / Keychain / `.env` (в `.gitignore`).
-- **SQL-запросы Derived Insights Engine** (тела функций `timeInApp`, `focusSessions`, `contextSwitchRate`, `teamPresenceOverlap`, `aiRatio` и т.д.) — moat. Коммить сигнатуры, тела держать в приватном модуле `LeafCore/Private/` (в `.gitignore`) или obfuscated.
-- **Точные пороги и числа:** idle threshold, polling intervals (5 мин Linear), heartbeat (60с), WAL checkpoint (15 мин / 4MB), SQLCipher pragma values, KDF params. → `Config.swift` с публичными именами, значения из `.env` / build settings.
-- **Share Controls preset** (bundle IDs "common dev defaults" — Xcode, Cursor, Slack…) — хардкод = reverse engineer. → runtime-конфиг с сервера при onboarding.
-- **Cloudflare Worker / relay TypeScript код** — отдельный приватный репо `gundemtech/leaf-relay`. В `leaf` только клиент WebSocket.
-- **Crypto envelope имплементация:** exact nonce generation, HKDF info strings, AAD content, byte layouts — приватный модуль.
-- **Git polling command** (exact `git log --format=...`, parsing logic) — moat над конкурентами.
-- **Claude Code hooks parser** (JSON schema, fallback `~/.claude/projects/*.jsonl` handler) — moat.
-- **Коммит-сообщения и PR descriptions:** без имён сотрудников, ship dates, внутренних дискуссий, клиентских деталей, competitive intel.
-- **TODO/FIXME c внутренним контекстом** ("hack because Linear quirk X") → Linear issue, не в код.
+❌ Не коммитим: секреты (OAuth secrets, Sparkle keys, CF tokens, team keys, PAT), SQL DI bodies (`timeInApp`/`focusSessions`/etc — moat), точные пороги (idle, polling, heartbeat, WAL checkpoint, SQLCipher pragma, KDF params), Share Controls preset bundle IDs, Cloudflare Worker / relay код (приватный `gundemtech/leaf-relay`), crypto envelope details (nonce gen / HKDF info / AAD / byte layouts), git polling command, Claude Code hooks parser, commit messages с именами/датами/клиентскими деталями.
 
-### ✅ Можно в коммит
-- Архитектурный каркас: имена модулей (Agent / LeafCore / MenuBarApp / MCPServer), имена таблиц БД, имена 8 MCP tools, имена 12 функций Derived Insights Engine — это уже в whitepaper.
-- Публичные версии библиотек (GRDB 7, Sparkle 2.6+, CryptoKit, Swift 6) — видны в `Package.swift` всё равно.
-- High-level комменты со ссылками на whitepaper: `// See: leaf-docs/03-architecture/share-controls.md`.
-- Generic patterns: Keychain access errors, AX permission flow, WAL checkpoint discipline (известно в OSS), Linear now-30s clock skew.
-- UI-код: SwiftUI views, layouts, styling, Liquid Glass — витрина продукта, moat не тут.
+✅ OK: имена модулей / таблиц / MCP tools / DI функций (уже в whitepaper), public lib versions, generic patterns (Keychain errors, AX flow, WAL discipline), UI-код.
 
-### Механизм
-
-Ручной проход diff — команда `/pre-push-leaf` (см. `.claude/commands/pre-push-leaf.md`). Запускать **перед каждым** `git push` в `gundemtech/leaf`.
-
-Автоматический: добавим `gitleaks` pre-commit hook когда появится код.
+Полный чек-лист (что ❌ / что ✅) — `.claude/commands/pre-push-leaf.md`. Автоматический `gitleaks` hook — добавим когда появится код.
 
 ## Команды
 
@@ -75,32 +56,13 @@ App-репо **публичный**. Перед каждым `git push` в `gund
 
 ## leaf-internal — internal dashboard
 
-Этот репо подаёт данные на внутренний дашборд `leaf-internal.gundem.tech` (приватный, под basic auth, только Антон + Дима).
+Репо подаёт данные на внутренний дашборд `leaf-internal.gundem.tech` (приватный, basic auth). Settings.json hook автоматом sanitize-публикует изменения `~/Desktop/Leaf/leaf-internal/architecture.yaml` (после добавления нового компонента в LeafCore — добавь component узел с status/owner) и `roadmap.yaml` (после закрытия milestone — phase status → done + completed_at + progress_pct).
 
-### Когда обновлять architecture.yaml
-
-После добавления нового компонента в `Packages/LeafCore/Sources/LeafCore/{Detection,Collectors,DB,MCP,E2E}/...`:
-
-1. Открой `~/Desktop/Leaf/leaf-internal/architecture.yaml`.
-2. Найди соответствующий layer (или создай новый).
-3. Добавь component узел (status: in-progress / done / planned / blocked, owner: dima / anton / claude-vps).
-4. Сохрани — settings.json hook автоматом sanitize-публикует и пушит в leaf-internal.
-
-### Когда обновлять roadmap.yaml
-
-После закрытия milestone (Phase X.Y wrap, Track X done): обнови phase-узел status → done + completed_at, parent's progress_pct.
-
-### Handoff/blocked-комменты в плане
-
-В `~/Desktop/Leaf/leaf/.claude/plans/<plan>.md`:
+Handoff/blocked-комменты в `.claude/plans/<plan>.md` — дашборд парсит и выводит на «Требует внимания»:
 
 - `<!-- @anton: возьми с Task 12 -->` — handoff
 - `<!-- BLOCKED: ждём merge PR #142 -->` — блокер
 - `<!-- TBD -->` — фаза не расписана
-
-Дашборд парсит и выводит на главной «Требует внимания».
-
-### Spec
 
 Полное описание — [leaf-docs/infra/specs/2026-05-10-leaf-internal-dashboard-design.md](https://github.com/gundemtech/leaf-docs/blob/main/infra/specs/2026-05-10-leaf-internal-dashboard-design.md).
 
