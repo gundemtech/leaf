@@ -323,8 +323,10 @@ final class SupabaseClientRetryTests: XCTestCase {
     XCTAssertEqual(captured.values.first, .seconds(1))
   }
 
-  /// Task 3 — 401 is M-III's job, not M-I. Single attempt → .unauthorized.
-  func test_getNoRetryOn401_throwsUnauthorized_singleCall() async throws {
+  /// M-III — Persistent 401 on refreshable callsite: first 401 triggers
+  /// ensureFreshSession (force), second 401 with new JWT proves the
+  /// problem isn't a stale token. Caller throws .unauthorized after 2 attempts.
+  func test_persistent401OnRefreshable_throwsUnauthorized_twoCalls() async throws {
     let client = makeClient()
     let calls = RetryCallCounter()
     bootstrap(adminPubkey: String(repeating: "a", count: 64)) { request, _ in
@@ -346,7 +348,9 @@ final class SupabaseClientRetryTests: XCTestCase {
     } catch SupabaseError.unauthorized {
       // expected
     }
-    XCTAssertEqual(calls.value, 1, "401 must not retry — M-III's job")
+    XCTAssertEqual(
+      calls.value, 2,
+      "M-III refreshable: 1 attempt + 1 retry after forced refresh = 2 attempts")
   }
 
   /// Task 3 — 404 is permanent. Single attempt → .notFound.
@@ -410,6 +414,222 @@ final class SupabaseClientRetryTests: XCTestCase {
     XCTAssertEqual(calls.value, 1, "cancellation aborts retry — only the first HTTP attempt ran")
   }
 
+  // MARK: - M-III tests — 401 auto-refresh + retry-once
+
+  /// Stateful bootstrap variant. The `/auth/v1/token` endpoint rotates JWTs:
+  /// first call returns `jwt1` (initial bootstrap); subsequent calls return
+  /// `jwt2` (refresh path). Non-auth paths delegate to `pathHandler`.
+  /// Lets tests verify the Authorization header was actually rotated after
+  /// ensureFreshSession.
+  private func bootstrapWithRotatingJWT(
+    adminPubkey: String,
+    jwt1: String,
+    jwt2: String,
+    _ pathHandler: @escaping @Sendable (URLRequest, Data) -> (HTTPURLResponse, Data)
+  ) {
+    let tokenCalls = RetryCallCounter()
+    MockURLProtocol.handler = { request, body in
+      let path = request.url?.path ?? ""
+      switch path {
+      case "/auth/v1/signup":
+        let r = HTTPURLResponse(
+          url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        let d = """
+          {"access_token":"tok-1","refresh_token":"ref-1","user":{"id":"00000000-0000-0000-0000-000000000222"},"expires_at":9999999999}
+          """.data(using: .utf8)!
+        return (r, d)
+      case "/functions/v1/register_pubkey":
+        let r = HTTPURLResponse(
+          url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        return (r, #"{"ok":true}"#.data(using: .utf8)!)
+      case "/auth/v1/token":
+        tokenCalls.bump()
+        let jwt = (tokenCalls.value == 1) ? jwt1 : jwt2
+        let r = HTTPURLResponse(
+          url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        let d = """
+          {"access_token":"\(jwt)","refresh_token":"ref-\(tokenCalls.value + 1)","user":{"id":"00000000-0000-0000-0000-000000000222"},"expires_at":9999999999}
+          """.data(using: .utf8)!
+        return (r, d)
+      default:
+        return pathHandler(request, body)
+      }
+    }
+  }
+
+  /// M-III happy path — 401 with old JWT → ensureFreshSession(force:true)
+  /// → server returns new JWT → retry with new Authorization Bearer → 200.
+  /// Verifies (a) 2 calls to list, (b) second call carries new JWT.
+  func test_401WithRefreshable_callsEnsureFreshSession_andRetriesWithNewJWT() async throws {
+    let client = makeClient()
+    let pubkey = String(repeating: "a", count: 64)
+    let jwt1 = makeJWT(pubkey: pubkey)
+    let jwt2 = makeJWT(pubkey: String(repeating: "b", count: 64))  // distinct claim
+    let calls = RetryCallCounter()
+    let observedAuthHeaders = AuthHeaderCapture()
+    bootstrapWithRotatingJWT(adminPubkey: pubkey, jwt1: jwt1, jwt2: jwt2) { request, _ in
+      let path = request.url?.path ?? ""
+      if path == "/rest/v1/join_requests" {
+        calls.bump()
+        observedAuthHeaders.append(request.value(forHTTPHeaderField: "Authorization") ?? "")
+        if calls.value == 1 {
+          let r = HTTPURLResponse(
+            url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!
+          return (r, Data())
+        }
+        let r = HTTPURLResponse(
+          url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        return (r, "[]".data(using: .utf8)!)
+      }
+      return (
+        HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!,
+        Data()
+      )
+    }
+    let rows = try await client.listPendingJoinRequests(workspaceID: workspaceID)
+    XCTAssertEqual(rows.count, 0)
+    XCTAssertEqual(calls.value, 2, "expected 1 attempt + 1 retry after refresh")
+    let headers = observedAuthHeaders.values
+    XCTAssertEqual(headers.count, 2)
+    XCTAssertEqual(headers[0], "Bearer \(jwt1)", "first attempt uses initial bootstrap JWT")
+    XCTAssertEqual(headers[1], "Bearer \(jwt2)", "second attempt uses refreshed JWT")
+  }
+
+  /// M-III — Refresh endpoint itself errors (5xx during /auth/v1/token).
+  /// Underlying server error propagates; original 401 is NOT silently swallowed.
+  func test_401Refresh_endpointFails_propagatesRefreshError() async throws {
+    let client = makeClient()
+    let pubkey = String(repeating: "a", count: 64)
+    let initialJWT = makeJWT(pubkey: pubkey)
+    let tokenCalls = RetryCallCounter()
+    let listCalls = RetryCallCounter()
+    MockURLProtocol.handler = { request, _ in
+      let path = request.url?.path ?? ""
+      switch path {
+      case "/auth/v1/signup":
+        let r = HTTPURLResponse(
+          url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        let d = """
+          {"access_token":"tok-1","refresh_token":"ref-1","user":{"id":"00000000-0000-0000-0000-000000000222"},"expires_at":9999999999}
+          """.data(using: .utf8)!
+        return (r, d)
+      case "/functions/v1/register_pubkey":
+        return (
+          HTTPURLResponse(
+            url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+          #"{"ok":true}"#.data(using: .utf8)!
+        )
+      case "/auth/v1/token":
+        tokenCalls.bump()
+        // First /auth/v1/token = bootstrap (success); second = refresh after
+        // 401 (return 503 to simulate refresh-endpoint outage).
+        if tokenCalls.value == 1 {
+          let r = HTTPURLResponse(
+            url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+          let d = """
+            {"access_token":"\(initialJWT)","refresh_token":"ref-2","user":{"id":"00000000-0000-0000-0000-000000000222"},"expires_at":9999999999}
+            """.data(using: .utf8)!
+          return (r, d)
+        }
+        let r = HTTPURLResponse(
+          url: request.url!, statusCode: 503, httpVersion: nil, headerFields: nil)!
+        return (r, Data())
+      case "/rest/v1/join_requests":
+        listCalls.bump()
+        let r = HTTPURLResponse(
+          url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!
+        return (r, Data())
+      default:
+        return (
+          HTTPURLResponse(
+            url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!,
+          Data()
+        )
+      }
+    }
+    do {
+      _ = try await client.listPendingJoinRequests(workspaceID: workspaceID)
+      XCTFail("expected throw")
+    } catch SupabaseError.serverError {
+      // expected — refresh /auth/v1/token returned 503
+    } catch SupabaseError.unauthorized {
+      XCTFail("got .unauthorized — refresh error should propagate, not be swallowed")
+    }
+    XCTAssertEqual(listCalls.value, 1, "only the initial 401 — refresh failed before retry")
+  }
+
+  /// M-III — Concurrent 401s share ONE refresh call (proves
+  /// inflightFreshSessionTask coalescing under M-III's force=true path).
+  func test_concurrent401_sharesOneRefreshCall() async throws {
+    let client = makeClient()
+    let pubkey = String(repeating: "a", count: 64)
+    let jwt1 = makeJWT(pubkey: pubkey)
+    let jwt2 = makeJWT(pubkey: String(repeating: "c", count: 64))
+    let listCalls = RetryCallCounter()
+    let tokenCalls = RetryCallCounter()
+    MockURLProtocol.handler = { request, _ in
+      let path = request.url?.path ?? ""
+      switch path {
+      case "/auth/v1/signup":
+        return (
+          HTTPURLResponse(
+            url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+          """
+          {"access_token":"tok-1","refresh_token":"ref-1","user":{"id":"00000000-0000-0000-0000-000000000222"},"expires_at":9999999999}
+          """.data(using: .utf8)!
+        )
+      case "/functions/v1/register_pubkey":
+        return (
+          HTTPURLResponse(
+            url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+          #"{"ok":true}"#.data(using: .utf8)!
+        )
+      case "/auth/v1/token":
+        tokenCalls.bump()
+        let jwt = (tokenCalls.value == 1) ? jwt1 : jwt2
+        return (
+          HTTPURLResponse(
+            url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+          """
+          {"access_token":"\(jwt)","refresh_token":"ref-\(tokenCalls.value + 1)","user":{"id":"00000000-0000-0000-0000-000000000222"},"expires_at":9999999999}
+          """.data(using: .utf8)!
+        )
+      case "/rest/v1/join_requests":
+        listCalls.bump()
+        let status = (listCalls.value <= 3) ? 401 : 200
+        let r = HTTPURLResponse(
+          url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
+        let body = (status == 200) ? "[]".data(using: .utf8)! : Data()
+        return (r, body)
+      default:
+        return (
+          HTTPURLResponse(
+            url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!,
+          Data()
+        )
+      }
+    }
+    // Bootstrap once so tokenCalls=1 before parallel fan-out.
+    _ = try await client.ensureAuthenticated()
+
+    // Sendable-safe parallel fan-out via TaskGroup (avoids `async let` +
+    // self-capture data-race warning under Swift 6 strict concurrency).
+    let wid = workspaceID  // local Sendable copy
+    try await withThrowingTaskGroup(of: Void.self) { group in
+      for _ in 0..<3 {
+        group.addTask {
+          _ = try await client.listPendingJoinRequests(workspaceID: wid)
+        }
+      }
+      try await group.waitForAll()
+    }
+
+    // 3 fan-out calls × (401 + 200) = 6 list calls total.
+    XCTAssertEqual(listCalls.value, 6, "expected 3 initial 401s + 3 retries")
+    // Bootstrap (1) + ONE refresh (1) shared by 3 concurrent 401 paths = 2 total.
+    XCTAssertEqual(tokenCalls.value, 2, "expected 1 bootstrap + 1 coalesced refresh")
+  }
+
   /// Task 2 — proves POST scope: 502 on create_join_request triggers a single
   /// attempt, NOT 4 retries. Confirms `retryable: false` pass-through path.
   func test_postNotRetriedOn502_throwsServerError_singleCall() async throws {
@@ -460,4 +680,12 @@ private final class DurationCapture: @unchecked Sendable {
   private var _values: [Duration] = []
   var values: [Duration] { lock.withLock { _values } }
   func append(_ d: Duration) { lock.withLock { _values.append(d) } }
+}
+
+/// Thread-safe Authorization-header capture for M-III tests. Same pattern.
+private final class AuthHeaderCapture: @unchecked Sendable {
+  private let lock = NSLock()
+  private var _values: [String] = []
+  var values: [String] { lock.withLock { _values } }
+  func append(_ s: String) { lock.withLock { _values.append(s) } }
 }

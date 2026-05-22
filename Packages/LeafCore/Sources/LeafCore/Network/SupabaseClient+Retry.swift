@@ -27,20 +27,46 @@ extension SupabaseClient {
   internal func performHTTP(
     _ request: URLRequest,
     retryable: Bool,
+    refreshable: Bool = false,
     label: String
   ) async throws -> (Data, HTTPURLResponse) {
-    if !retryable {
+    if !retryable && !refreshable {
       return try await performOneShot(request, label: label)
     }
     // Retry loop. Calls urlSession.data(for:) directly (bypassing
     // performOneShot's .transport wrapping) so the URLError catch branch
     // sees the raw URLError for classifier dispatch.
+    //
+    // M-III state: `refreshAttempted` flag bounds 401-refresh to at most one
+    // per outer call. `currentRequest` is a mutable copy whose Authorization
+    // header is swapped after a successful refresh. The flag is orthogonal
+    // to the M-I `attempt` budget — refresh-retry doesn't consume it.
     var attempt = 0
+    var refreshAttempted = false
+    var currentRequest = request
     while attempt < retryPolicy.maxAttempts {
       do {
-        let (data, response) = try await urlSession.data(for: request)
+        let (data, response) = try await urlSession.data(for: currentRequest)
         guard let http = response as? HTTPURLResponse else {
           throw SupabaseError.transport(reason: "\(label): non-http")
+        }
+        // M-III — 401 auto-refresh path (orthogonal to retryable budget).
+        // `force: true` bypasses ensureFreshSession's local shouldRefresh
+        // heuristic — a 401 from the server is authoritative proof that
+        // the cached JWT is rejected, regardless of exp/NTP-skew margin.
+        if refreshable, http.statusCode == 401, !refreshAttempted {
+          refreshAttempted = true
+          let fresh = try await ensureFreshSession(force: true)
+          currentRequest.setValue(
+            "Bearer \(fresh.accessToken)", forHTTPHeaderField: "Authorization")
+          continue  // re-attempt with new JWT; do NOT increment attempt
+        }
+        // For non-retryable callers, return the response immediately so
+        // their existing status-code switch handles 4xx/5xx mapping. This
+        // covers the refreshable=true + retryable=false combination
+        // (most authenticated POSTs in M-I scope).
+        if !retryable {
+          return (data, http)
         }
         let hint: Duration? =
           (http.statusCode == 429)

@@ -110,7 +110,7 @@ extension SupabaseClient {
       request.setValue(v, forHTTPHeaderField: k)
     }
     let (data, http) = try await joinRequestsTransport(
-      request, label: "listPendingJoinRequests", retryable: true)
+      request, label: "listPendingJoinRequests", retryable: true, refreshable: true)
     guard http.statusCode == 200 else {
       throw SupabaseError.fromStatus(http.statusCode, body: data)
     }
@@ -162,9 +162,11 @@ extension SupabaseClient {
   private func joinRequestsTransport(
     _ request: URLRequest,
     label: String,
-    retryable: Bool = false
+    retryable: Bool = false,
+    refreshable: Bool = false
   ) async throws -> (Data, HTTPURLResponse) {
-    try await performHTTP(request, retryable: retryable, label: label)
+    try await performHTTP(
+      request, retryable: retryable, refreshable: refreshable, label: label)
   }
 
   /// Wire JSON shape from PostgREST `join_requests` table OR Edge Function

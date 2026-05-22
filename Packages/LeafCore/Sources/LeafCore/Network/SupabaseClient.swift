@@ -123,7 +123,15 @@ public actor SupabaseClient {
   /// Throws `SupabaseError.unauthorized` if called before any successful
   /// bootstrap (no cached session to refresh from). Caller is expected to
   /// have driven `ensureAuthenticated()` at app startup.
-  public func ensureFreshSession() async throws -> SupabaseAuthSession {
+  ///
+  /// - Parameter force: M-III addition. When `true`, bypasses the
+  ///   `shouldRefresh` predicate and forces a fresh `/auth/v1/token` POST.
+  ///   Used by the 401-recovery path in `performHTTP`: a 401 from the
+  ///   server means the cached JWT is rejected regardless of what
+  ///   `shouldRefresh`'s local heuristics think (server-side rotation /
+  ///   revocation / out-of-band invalidation). Still coalesces concurrent
+  ///   callers via `inflightFreshSessionTask`.
+  public func ensureFreshSession(force: Bool = false) async throws -> SupabaseAuthSession {
     // Coalesce: if a refresh is already in flight, await it.
     if let task = inflightFreshSessionTask {
       return try await task.value
@@ -140,7 +148,7 @@ public actor SupabaseClient {
     // the refresh path which will read the now-`.authenticated` state.
     if case .bootstrapping(let task) = state {
       let bootstrapped = try await task.value
-      if !shouldRefresh(session: bootstrapped) {
+      if !force, !shouldRefresh(session: bootstrapped) {
         return bootstrapped
       }
     }
@@ -150,8 +158,10 @@ public actor SupabaseClient {
       throw SupabaseError.unauthorized
     }
 
-    // Should-we-refresh decision (cheap, runs every caller).
-    if !shouldRefresh(session: current) {
+    // Should-we-refresh decision (cheap, runs every caller). Bypassed when
+    // `force=true` — caller (typically the 401-recovery path) has out-of-
+    // band evidence that the cached JWT is no longer accepted by the server.
+    if !force, !shouldRefresh(session: current) {
       return current
     }
 
