@@ -295,6 +295,8 @@ InboxBlock renamed + filter scope changes:
 
 T4 scope: ~5 atomic commits. Acceptance: rename build-clean (all callsites point to new names) · filter-actionable unit test · 5/5 schemes · manual smoke (NEEDS YOU shows review-request / blocker / openQuestion if seeded; commentOnMyWork visible via "All" chip).
 
+**SHIPPED 2026-05-22 · review-fix tip `e76f5e70`** (impl C4 `172c1135`; housekeeping merge `8408574b` brought T2.5 + dev-launch-reliability into operational-home before T4 C1). Per-phase spec: `docs/superpowers/specs/2026-05-22-track-10-T4-needs-you.md`. Net `+158 / −30 LOC` across 7 files (3 view renames detected at 78%/81%/90% + LeafCore enum + 2 test files + HomeView callsite). Zero substrate diff (DB/MCP/Registry/InboxFiltering all 0-line). Sentinel-injection EXEMPT per §6.
+
 ### **T5 — SINCE YOU WERE LAST ACTIVE**
 
 New block + UserDefaults cursor:
