@@ -61,6 +61,17 @@ final class SlackOAuthService {
     private let databaseEncryption: EncryptionOptions?
     private let restartTriggerName: String
     private var database: Database?
+    /// Observer token kept so `deinit` can `removeObserver`. Earlier shape
+    /// discarded the token and leaked the observer for process lifetime.
+    /// `nonisolated(unsafe)` because Swift 6 deinit runs in a nonisolated
+    /// context and can't touch MainActor-isolated storage. The token is
+    /// written exactly once inside `subscribeToIntegrationChangedNotification()`
+    /// (called from MainActor `init`) and read exactly once from deinit —
+    /// no concurrent mutation, no race.
+    private nonisolated(unsafe) var integrationChangedObserver: NSObjectProtocol?
+    /// Coalescing flag so notification storms (Worker / relay restart cycles)
+    /// don't pump a sync `reload()` chain through @MainActor.
+    private var reloadInFlight: Bool = false
 
     init(
         databaseURL: URL = DatabasePath.defaultURL(),
@@ -73,6 +84,12 @@ final class SlackOAuthService {
         self.databaseEncryption = databaseEncryption
         self.restartTriggerName = restartTriggerName
         subscribeToIntegrationChangedNotification()
+    }
+
+    deinit {
+        if let token = integrationChangedObserver {
+            DistributedNotificationCenter.default().removeObserver(token)
+        }
     }
 
     // MARK: - Public API
@@ -366,10 +383,19 @@ final class SlackOAuthService {
 
     private func subscribeToIntegrationChangedNotification() {
         let name = NSNotification.Name(restartTriggerName)
-        DistributedNotificationCenter.default().addObserver(
+        // Stored token → `deinit` removes the observer. `reloadInFlight`
+        // coalesces back-to-back firings so a relay/Worker restart storm
+        // doesn't pump a chain of sync DB reads on @MainActor.
+        integrationChangedObserver = DistributedNotificationCenter.default().addObserver(
             forName: name, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.reload() }
+            Task { @MainActor in
+                guard let self else { return }
+                if self.reloadInFlight { return }
+                self.reloadInFlight = true
+                self.reload()
+                self.reloadInFlight = false
+            }
         }
     }
 

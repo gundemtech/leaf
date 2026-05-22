@@ -50,6 +50,15 @@ final class LinearOAuthService {
     private let databaseEncryption: EncryptionOptions?
     private let restartTriggerName: String
     private var database: Database?
+    /// Observer token kept so `deinit` can `removeObserver`. Earlier shape
+    /// discarded the token and leaked the observer for process lifetime.
+    /// `nonisolated(unsafe)` because Swift 6 deinit runs nonisolated and
+    /// can't touch MainActor-isolated storage; token is written once
+    /// during MainActor init and read once during deinit.
+    private nonisolated(unsafe) var integrationChangedObserver: NSObjectProtocol?
+    /// Coalescing flag so notification storms (Worker / relay restart cycles)
+    /// don't pump a sync `reload()` chain through @MainActor.
+    private var reloadInFlight: Bool = false
 
     init(
         databaseURL: URL = DatabasePath.defaultURL(),
@@ -62,6 +71,12 @@ final class LinearOAuthService {
         self.databaseEncryption = databaseEncryption
         self.restartTriggerName = restartTriggerName
         subscribeToIntegrationChangedNotification()
+    }
+
+    deinit {
+        if let token = integrationChangedObserver {
+            DistributedNotificationCenter.default().removeObserver(token)
+        }
     }
 
     // MARK: - Public API
@@ -326,13 +341,21 @@ final class LinearOAuthService {
     /// Subscribe на DistributedNotification от Refresher (cross-process) и
     /// own connect/disconnect (intra-process). Когда flag flip'ится → reload()
     /// видит новое state. Без observer'а юзер увидел бы stale state до next
-    /// `.onAppear` Settings view.
+    /// `.onAppear` Settings view. Token хранится — `deinit` removeObserver'ит.
+    /// `reloadInFlight` коалесит back-to-back firings (e.g., relay restart
+    /// pump'ит notification N раз в секунду).
     private func subscribeToIntegrationChangedNotification() {
         let name = NSNotification.Name(restartTriggerName)
-        DistributedNotificationCenter.default().addObserver(
+        integrationChangedObserver = DistributedNotificationCenter.default().addObserver(
             forName: name, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.reload() }
+            Task { @MainActor in
+                guard let self else { return }
+                if self.reloadInFlight { return }
+                self.reloadInFlight = true
+                self.reload()
+                self.reloadInFlight = false
+            }
         }
     }
 

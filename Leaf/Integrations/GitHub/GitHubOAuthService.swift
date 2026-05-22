@@ -80,6 +80,17 @@ final class GitHubOAuthService {
     private let restartTriggerName: String
     private var database: Database?
     private var pollingTask: Task<Void, Never>?
+    /// Observer token kept around so `deinit` can call `removeObserver`.
+    /// Earlier shape discarded the token immediately, leaking the observer
+    /// for the process lifetime. `nonisolated(unsafe)` because Swift 6 deinit
+    /// runs in a nonisolated context; the token is written once during init
+    /// and read once during deinit — no concurrent mutation, no race.
+    private nonisolated(unsafe) var integrationChangedObserver: NSObjectProtocol?
+    /// Coalescing guard — if a notification storm fires `reload()` calls
+    /// back-to-back (e.g., Worker / relay restart cycle), the second-and-
+    /// subsequent firings short-circuit instead of hammering `ensureDatabase()`
+    /// + `readIntegration` synchronously on @MainActor.
+    private var reloadInFlight: Bool = false
 
     init(
         databaseURL: URL = DatabasePath.defaultURL(),
@@ -92,6 +103,12 @@ final class GitHubOAuthService {
         self.databaseEncryption = databaseEncryption
         self.restartTriggerName = restartTriggerName
         subscribeToIntegrationChangedNotification()
+    }
+
+    deinit {
+        if let token = integrationChangedObserver {
+            DistributedNotificationCenter.default().removeObserver(token)
+        }
     }
 
     // MARK: - Public API
@@ -456,10 +473,20 @@ final class GitHubOAuthService {
 
     private func subscribeToIntegrationChangedNotification() {
         let name = NSNotification.Name(restartTriggerName)
-        DistributedNotificationCenter.default().addObserver(
+        // Store the returned token so `deinit` can `removeObserver`. The
+        // closure also debounces back-to-back firings via `reloadInFlight`
+        // — without it, a relay/Worker restart that pumps the notification
+        // 10× in a second pumps 10 sync DB reads on @MainActor.
+        integrationChangedObserver = DistributedNotificationCenter.default().addObserver(
             forName: name, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.reload() }
+            Task { @MainActor in
+                guard let self else { return }
+                if self.reloadInFlight { return }
+                self.reloadInFlight = true
+                self.reload()
+                self.reloadInFlight = false
+            }
         }
     }
 
