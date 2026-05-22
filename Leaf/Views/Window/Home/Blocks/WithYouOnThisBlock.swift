@@ -183,7 +183,7 @@ struct WithYouOnThisBlock: View {
     /// thin wrapper so existing call sites in the body stay one-liner; bucket
     /// ladder semantics change from "Ns / Nm / Nh / Nd ago" to the canonical
     /// "now / Nm ago / Nh ago / yesterday / N days ago / MMM d" shared with
-    /// WhereStoppedBlock + YouNowBlock.
+    /// WhereStoppedBlock.
     private func formatRelative(msAgo ms: Int64) -> String {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         return HomeRelativeTimeFormatter.format(deltaMs: max(0, nowMs - ms), nowMs: nowMs)

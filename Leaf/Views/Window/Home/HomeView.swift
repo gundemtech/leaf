@@ -226,12 +226,10 @@ private struct HomeContent: View {
                     youNowState: snapshot.youNowState
                 )
 
-                HStack(alignment: .top, spacing: LeafSpace.xl) {
-                    YouNowBlock(state: snapshot.youNowState)
-                        .frame(maxWidth: .infinity)
-                    WithYouOnThisBlock(matches: snapshot.sameTaskTeammates)
-                        .frame(maxWidth: .infinity)
-                }
+                // Track-10 T3 — YouNowBlock retired; state surfaces as an
+                // inline badge inside TodayBlock. WithYouOnThisBlock
+                // promotes to full-width interim; T6 will replace it.
+                WithYouOnThisBlock(matches: snapshot.sameTaskTeammates)
 
                 InboxBlock(items: snapshot.inboxItems)
             }
