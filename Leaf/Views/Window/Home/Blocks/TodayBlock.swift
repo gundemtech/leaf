@@ -1,11 +1,14 @@
 //
 //  TodayBlock.swift
 //  Track 8 / Phase 8.3 — TODAY anchor block. Renders the glanceable today
-//  snapshot (focused / AI ratio / sessions / switches / commits) and a
-//  surface pill strip routing to detail screens via SurfacePillRouter.
-//  Phase 8.1 substrate produces the metrics via
-//  DerivedInsights.todayMetrics(now:); InsightsReader.refresh() invokes it
-//  once per refresh and threads the result through InsightsSnapshot.
+//  snapshot (focused / AI ratio / sessions / switches / commits). Phase 8.1
+//  substrate produces the metrics via DerivedInsights.todayMetrics(now:);
+//  InsightsReader.refresh() invokes it once per refresh and threads the
+//  result through InsightsSnapshot.
+//
+//  Track-10 T1 — per-app `pillStrip` removed from the body (substrate
+//  `surfacePills` emission preserved as YAGNI-reserve; no current MCP
+//  consumer, cleanup carry post-Track-10).
 //
 
 import LeafCore
@@ -13,15 +16,6 @@ import SwiftUI
 
 struct TodayBlock: View {
     let metrics: TodayMetrics
-
-    @Environment(RouteCoordinator.self) private var coordinator
-    @State private var pillsExpanded = false
-
-    /// Track-9 T6 — bumped to 8 from Phase 8.3 baseline of 6 to align with
-    /// substrate balance-by-kind cap (5 capture + 3 action-noun = 8). At 6,
-    /// heavy-capture days pushed Layer B pills into the `+N` overflow chip,
-    /// defeating the master spec §3.4 "predictable Layer B visibility" intent.
-    private static let pillVisibleCap = 8
 
     /// C-4 (Phase 8.9) — cached locale-aware "EEE d MMM" formatter so the
     /// "TODAY · <date>" label doesn't allocate a `DateFormatter` per body
@@ -48,13 +42,7 @@ struct TodayBlock: View {
                         description: "Activity will appear here as the day goes on."
                     )
                 } else {
-                    VStack(alignment: .leading, spacing: LeafSpace.md) {
-                        metricsRow
-                        if !metrics.surfacePills.isEmpty {
-                            LeafDivider()
-                            pillStrip
-                        }
-                    }
+                    metricsRow
                 }
             }
         }
@@ -131,85 +119,5 @@ struct TodayBlock: View {
     private var aiRatioValue: String {
         let pct = Int((max(0, min(1, metrics.aiRatio)) * 100).rounded())
         return "\(pct)%"
-    }
-
-    // MARK: - Pill strip
-
-    private var pillStrip: some View {
-        let pills = metrics.surfacePills
-        let overflow = pills.count > Self.pillVisibleCap
-        let visible: [SurfacePill] =
-            (pillsExpanded || !overflow)
-            ? pills : Array(pills.prefix(Self.pillVisibleCap))
-        let hiddenCount = pills.count - visible.count
-
-        return HStack(spacing: LeafSpace.sm) {
-            ForEach(visible) { pill in
-                pillButton(pill)
-            }
-            if overflow && !pillsExpanded {
-                overflowChip(remaining: hiddenCount)
-            }
-        }
-        .animation(.default, value: pillsExpanded)
-    }
-
-    @ViewBuilder
-    private func pillButton(_ pill: SurfacePill) -> some View {
-        let title = pillLabel(for: pill)
-        if let route = SurfacePillRouter.route(forPillID: pill.id) {
-            Button {
-                push(route)
-            } label: {
-                LeafPill(title: title)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("\(title) — open details")
-            .accessibilityAddTraits(.isButton)
-        } else {
-            LeafPill(title: title)
-        }
-    }
-
-    /// Track-9 T6 — kind-switched pill label format. `.captureTime` carries
-    /// seconds (rendered as "Xh Ym" / "Nm" / "<1m"); `.actionNoun` carries
-    /// discrete count (rendered as "N").
-    private func pillLabel(for pill: SurfacePill) -> String {
-        let suffix: String
-        switch pill.kind {
-        case .captureTime:
-            suffix = formatDurationCompact(seconds: pill.count)
-        case .actionNoun:
-            suffix = "\(pill.count)"
-        }
-        return "\(pill.label) \(suffix)"
-    }
-
-    private func formatDurationCompact(seconds: Int) -> String {
-        let h = seconds / 3600
-        let m = (seconds % 3600) / 60
-        if h > 0 { return "\(h)h \(m)m" }
-        if m > 0 { return "\(m)m" }
-        return "<1m"
-    }
-
-    private func overflowChip(remaining: Int) -> some View {
-        Button {
-            pillsExpanded = true
-        } label: {
-            LeafPill(title: "+\(remaining)")
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Show \(remaining) more surfaces")
-        .accessibilityAddTraits(.isButton)
-    }
-
-    private func push(_ route: SurfacePillRoute) {
-        switch route {
-        case .homeSurface(let surface):
-            coordinator.pushHome(surface)
-        case .layerBProvider(let provider):
-            coordinator.pushHomeLayerBProvider(provider)
-        }
     }
 }
