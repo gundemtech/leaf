@@ -145,7 +145,11 @@ public struct DirectMessageService: Sendable {
             try MessagesMirrorStore.upsert(outboundRow, in: db)
         }
 
-        // 7. (Optional) APNs trigger — fire-and-forget but capture status.
+        // 7. (Optional) APNs trigger — fired in parallel with the cross-post
+        // legs below so the Send wall-clock is `max(apns, slack, linear)`,
+        // not their sum. The DM row already persisted on line 144-146; APNs
+        // is purely best-effort and its outcome reported via
+        // `pushDispatchStatus` (the `.failed(_)` variant never throws).
         //
         // Track 5 / S8 / T5 — `kind.rawValue` forwarded to the Edge Function
         // for category binding (`aps.category = "leaf.dm.<kind>"`),
@@ -153,8 +157,8 @@ public struct DirectMessageService: Sendable {
         // server-side skip check. When the server returns `skipped_by_prefs`,
         // the SDK reports `.sent` (recipient opted out is expected, not a
         // failure — the message itself persisted successfully).
-        let pushStatus: SentDirectMessage.PushDispatchStatus
-        if notify {
+        async let apnsStatus: SentDirectMessage.PushDispatchStatus = {
+            guard notify else { return .skipped }
             do {
                 _ = try await supabase.triggerAPNsPush(
                     workspaceID: workspace.id,
@@ -163,13 +167,11 @@ public struct DirectMessageService: Sendable {
                     titleText: pushTitle(sender: selfMember.displayName, kind: kind),
                     kind: kind.rawValue
                 )
-                pushStatus = .sent
+                return .sent
             } catch {
-                pushStatus = .failed(String(describing: error))
+                return .failed(String(describing: error))
             }
-        } else {
-            pushStatus = .skipped
-        }
+        }()
 
         // 8. (Optional) Cross-post triggers — S6.
         //
@@ -182,13 +184,16 @@ public struct DirectMessageService: Sendable {
         // Failure semantics (§9.3): each leg captures its error into the
         // result struct. Throws are NEVER propagated; the DM row remains
         // valid regardless of cross-post outcome.
-        let crossPostStatuses = await runCrossPosts(
+        async let crossPostStatusesTask = runCrossPosts(
             workspaceID: workspace.id,
             messageID: supabaseRow.messageID,
             body: body,
             crossPostSlack: crossPostSlack,
             crossPostLinear: crossPostLinear
         )
+
+        let pushStatus = await apnsStatus
+        let crossPostStatuses = await crossPostStatusesTask
 
         return SentDirectMessage(
             messageID: supabaseRow.messageID,
