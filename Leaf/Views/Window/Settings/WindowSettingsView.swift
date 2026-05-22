@@ -33,6 +33,8 @@ struct WindowSettingsView: View {
                         .id(SettingsSection.aiTools)
                     BrowserAllowListSection(store: browserAllowListStore)
                         .id(SettingsSection.browserAllowList)
+                    AdvancedSettingsSection()
+                        .id(SettingsSection.advanced)
                     UpdatesSection(updater: updater)
                         .id(SettingsSection.updates)
                     PrivacySettingsSection()

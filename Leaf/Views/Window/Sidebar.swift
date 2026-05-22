@@ -27,11 +27,20 @@ struct Sidebar: View {
 
     @Environment(GitHubScopesReader.self) private var githubScopes
     @Environment(SlackScopesReader.self) private var slackScopes
+    // Track-10 T1 — gates Analytics sidebar row. `@AppStorage` must be a View
+    // instance property (NOT inside a computed prop closure) so SwiftUI binds
+    // the property wrapper to the View invalidation graph and reflows the
+    // sidebar when the toggle in Settings → Advanced flips.
+    @AppStorage("leaf.ui.showAnalyticsSection") private var showAnalyticsSection: Bool = false
+
+    private var leafGroupItems: [WindowSection] {
+        showAnalyticsSection ? [.home, .analytics] : [.home]
+    }
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: LeafSpace.lg) {
-                group(title: "LEAF", items: [.home, .analytics])
+                group(title: "LEAF", items: leafGroupItems)
                 group(title: "COLLABORATION", items: [.team, .connections, .organization])
                 group(title: "ACCOUNT", items: [.settings, .profile])
             }
