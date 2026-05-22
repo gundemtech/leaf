@@ -128,7 +128,8 @@ extension SupabaseClient {
     ) {
       request.setValue(v, forHTTPHeaderField: k)
     }
-    let (data, http) = try await joinRequestsTransport(request, label: "fetchOwnJoinRequest")
+    let (data, http) = try await joinRequestsTransport(
+      request, label: "fetchOwnJoinRequest", retryable: true)
     guard http.statusCode == 200 else {
       throw SupabaseError.fromStatus(http.statusCode, body: data)
     }
