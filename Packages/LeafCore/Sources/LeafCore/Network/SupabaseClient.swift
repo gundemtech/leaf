@@ -282,15 +282,7 @@ public actor SupabaseClient {
   private func decodeAuthResponse(request: URLRequest, label: String) async throws
     -> SupabaseAuthSession
   {
-    let (data, response): (Data, URLResponse)
-    do {
-      (data, response) = try await urlSession.data(for: request)
-    } catch {
-      throw SupabaseError.transport(reason: "\(label): \(error)")
-    }
-    guard let http = response as? HTTPURLResponse else {
-      throw SupabaseError.transport(reason: "\(label): non-http")
-    }
+    let (data, http) = try await performHTTP(request, retryable: false, label: label)
     guard http.statusCode == 200 else {
       throw SupabaseError.fromStatus(http.statusCode, body: data)
     }
@@ -355,15 +347,7 @@ public actor SupabaseClient {
     let body: [String: String] = ["pubkey": pubkeyHex]
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-    let (data, response): (Data, URLResponse)
-    do {
-      (data, response) = try await urlSession.data(for: request)
-    } catch {
-      throw SupabaseError.transport(reason: "registerPubkey: \(error)")
-    }
-    guard let http = response as? HTTPURLResponse else {
-      throw SupabaseError.transport(reason: "registerPubkey: non-http")
-    }
+    let (data, http) = try await performHTTP(request, retryable: false, label: "registerPubkey")
     if http.statusCode == 200 { return }
     throw SupabaseError.fromRegisterPubkey(status: http.statusCode, body: data)
   }
@@ -467,15 +451,7 @@ extension SupabaseClient {
     }
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-    let (data, response): (Data, URLResponse)
-    do {
-      (data, response) = try await urlSession.data(for: request)
-    } catch {
-      throw SupabaseError.transport(reason: "postInvite: \(error)")
-    }
-    guard let http = response as? HTTPURLResponse else {
-      throw SupabaseError.transport(reason: "postInvite: non-http")
-    }
+    let (data, http) = try await performHTTP(request, retryable: false, label: "postInvite")
     guard http.statusCode == 201 else {
       throw SupabaseError.fromStatus(http.statusCode, body: data)
     }
@@ -549,13 +525,7 @@ extension SupabaseClient {
     ]
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-    let (data, response): (Data, URLResponse)
-    do { (data, response) = try await urlSession.data(for: request) } catch {
-      throw SupabaseError.transport(reason: "resolveInvite: \(error)")
-    }
-    guard let http = response as? HTTPURLResponse else {
-      throw SupabaseError.transport(reason: "resolveInvite: non-http")
-    }
+    let (data, http) = try await performHTTP(request, retryable: false, label: "resolveInvite")
     guard http.statusCode == 200 else {
       throw SupabaseError.fromInviteResolve(status: http.statusCode, body: data)
     }
@@ -594,13 +564,7 @@ extension SupabaseClient {
     }
     request.httpBody = try JSONSerialization.data(withJSONObject: ["token": token, "probe": true])
 
-    let (data, response): (Data, URLResponse)
-    do { (data, response) = try await urlSession.data(for: request) } catch {
-      throw SupabaseError.transport(reason: "probeInvite: \(error)")
-    }
-    guard let http = response as? HTTPURLResponse else {
-      throw SupabaseError.transport(reason: "probeInvite: non-http")
-    }
+    let (data, http) = try await performHTTP(request, retryable: false, label: "probeInvite")
     guard http.statusCode == 200 else {
       throw SupabaseError.fromStatus(http.statusCode, body: data)
     }
@@ -657,13 +621,8 @@ extension SupabaseClient {
     ]
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-    let (data, response): (Data, URLResponse)
-    do { (data, response) = try await urlSession.data(for: request) } catch {
-      throw SupabaseError.transport(reason: "insertWorkspaceMember: \(error)")
-    }
-    guard let http = response as? HTTPURLResponse else {
-      throw SupabaseError.transport(reason: "insertWorkspaceMember: non-http")
-    }
+    let (data, http) = try await performHTTP(
+      request, retryable: false, label: "insertWorkspaceMember")
     guard http.statusCode == 201 else {
       throw SupabaseError.fromStatus(http.statusCode, body: data)
     }
