@@ -199,9 +199,25 @@ final class InsightsReader {
                         // ProdInsights+WeeklyMetrics with 5 streaks + WoW.
                         let weeklyMetrics = try insights.weeklyMetrics(now: Date())
                         try Task.checkCancellation()
+                        // Track-10 T2 — task identity (linearID / branch / repo /
+                        // linearWorkspaceSlug) for RESUME hero CTAs. workspacePath
+                        // intentionally NOT carried on the struct (T5 D-8) — see
+                        // currentWorkspacePath() below for the ephemeral fetch.
+                        let taskIdentity = try insights.currentTaskIdentity()
+                        try Task.checkCancellation()
+                        // Track-10 T2 — ephemeral workspace path → in-process git
+                        // delta read (ahead/behind/uncommitted + parsed remote).
+                        // Path bytes stay scoped to this `await`; only counts +
+                        // structured ref strings + parsed remote propagate into the
+                        // snapshot. Stub fallback (non-LEAF_PROD) returns nil.
+                        let workspacePath = try insights.currentWorkspacePath()
+                        let gitDelta = await GitDeltaReaderFactory.make()
+                            .read(forWorkspacePath: workspacePath)
+                        try Task.checkCancellation()
                         // Path B — splice commit into deriver's snapshot via
                         // defaulted-init. Preserves anchorFilePath / anchorLine
                         // populated by ProdInsights+RecentWhereStopped LEFT JOIN.
+                        // Track-10 T2 — also preserves anchorBundleID from same row.
                         let whereStopped: WhereStoppedSnapshot? = whereStoppedBase.map { base in
                             WhereStoppedSnapshot(
                                 id: base.id,
@@ -211,7 +227,8 @@ final class InsightsReader {
                                 wipSignals: base.wipSignals,
                                 anchorFilePath: base.anchorFilePath,
                                 anchorLine: base.anchorLine,
-                                recentLastCommit: recentLastCommit
+                                recentLastCommit: recentLastCommit,
+                                anchorBundleID: base.anchorBundleID
                             )
                         }
                         let snapshot = InsightsSnapshot(
@@ -255,7 +272,9 @@ final class InsightsReader {
                             sameTaskTeammates: sameTaskTeammates,
                             inboxItems: inboxItems,
                             whereStopped: whereStopped,
-                            weeklyMetrics: weeklyMetrics
+                            weeklyMetrics: weeklyMetrics,
+                            gitDelta: gitDelta,
+                            currentTaskIdentity: taskIdentity
                         )
                         return .success((db, snapshot))
                     } catch {
