@@ -206,8 +206,13 @@ private struct AppIconView: View {
     let bundleID: String
 
     var body: some View {
-        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
+        // Route through `AppIconResolver.shared` so repeated body re-evals
+        // (12 cards × @Observable invalidation under Settings sub-section
+        // refresh) hit the in-memory NSImage cache instead of re-running
+        // LaunchServices `urlForApplication(withBundleIdentifier:)` +
+        // `icon(forFile:)` per render.
+        if let nsImage = AppIconResolver.shared.icon(for: bundleID, size: 28) {
+            Image(nsImage: nsImage)
                 .resizable()
                 .frame(width: 28, height: 28)
                 .clipShape(RoundedRectangle(cornerRadius: LeafRadius.sm, style: .continuous))
