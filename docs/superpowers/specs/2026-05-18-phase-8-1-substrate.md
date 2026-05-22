@@ -414,7 +414,7 @@ let surfacePills = try queryEventCountsBySurface(today: today, surfaces: HomeSur
 return TodayMetrics(...)
 ```
 
-`queryCommitCountToday`: `SELECT COUNT(*) FROM events WHERE ts_ms >= ? AND ts_ms < ? AND json_extract(payload_json, '$.event_kind') IN ('git_commit', 'gh_push')` — broad union; `gh_push` collapses to 1 commit but de-duplicating against local-git-commit events is left to whichever collector ships the canonical local-commit kind. (See R-1 in §10.)
+`queryCommitCountToday`: counts events in the `[startMs, endMs)` window whose event_kind is one of `git_commit` or `gh_push` (broad union). `gh_push` collapses to 1 commit but de-duplicating against local-git-commit events is left to whichever collector ships the canonical local-commit kind. Real query body lives in LeafCorePrivate moat. (See R-1 in §10.)
 
 `queryEventCountsBySurface`: iterates `HomeSurface.allCases` and emits one `SurfacePill` per surface with non-zero count using the existing per-surface event_kind union map already in Track-7 P2 surface view models. Sorted by count desc, capped at 8 entries (UI handles overflow).
 

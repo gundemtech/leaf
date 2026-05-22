@@ -1,13 +1,14 @@
 //
 //  HomeView.swift
-//  Track 8 / Phase 8.2 — Operational console. 5-block composition:
+//  Track 8 / Phase 8.2 — Operational console. Post-Track-10 composition
+//  (T2 hero promote + T3 YOU·NOW badge inline):
 //
-//    1. TODAY                              (full width)
-//    2. YOU·NOW    ‖    WITH YOU ON THIS   (2-column grid row)
-//    3. INBOX                              (full width)
-//    4. WHERE YOU STOPPED                  (full width)
+//    1. RESUME HERO                        (full width)
+//    2. TODAY (with inline state badge)    (full width)
+//    3. WITH YOU ON THIS                   (full width — T6 → TeamN)
+//    4. INBOX                              (full width)
 //
-//  Block bodies are placeholders in P2; P3-P7 wire Phase 8.1 substrate.
+//  Block bodies were placeholders in P2; P3-P7 wired Phase 8.1 substrate.
 //
 //  State-machine UX (InsightsReader.State):
 //    .loading        → LoadingScaffold with muted shape placeholders.
@@ -213,18 +214,25 @@ private struct HomeContent: View {
         @Bindable var coord = coordinator
         NavigationStack(path: $coord.homePath) {
             VStack(alignment: .leading, spacing: LeafSpace.xl) {
-                TodayBlock(metrics: snapshot.todayMetrics)
+                // Track-10 T2 — RESUME hero promoted to top of Home. Replaces
+                // the Track-9 T7 bottom WhereStoppedBlock (deleted in T2).
+                ResumeHeroBlock(
+                    snapshot: snapshot.whereStopped,
+                    gitDelta: snapshot.gitDelta,
+                    taskIdentity: snapshot.currentTaskIdentity
+                )
 
-                HStack(alignment: .top, spacing: LeafSpace.xl) {
-                    YouNowBlock(state: snapshot.youNowState)
-                        .frame(maxWidth: .infinity)
-                    WithYouOnThisBlock(matches: snapshot.sameTaskTeammates)
-                        .frame(maxWidth: .infinity)
-                }
+                TodayBlock(
+                    metrics: snapshot.todayMetrics,
+                    youNowState: snapshot.youNowState
+                )
+
+                // Track-10 T3 — YouNowBlock retired; state surfaces as an
+                // inline badge inside TodayBlock. WithYouOnThisBlock
+                // promotes to full-width interim; T6 will replace it.
+                WithYouOnThisBlock(matches: snapshot.sameTaskTeammates)
 
                 InboxBlock(items: snapshot.inboxItems)
-
-                WhereStoppedBlock(snapshot: snapshot.whereStopped)
             }
             .navigationDestination(for: HomeSurface.self) { surface in
                 detail(for: surface)

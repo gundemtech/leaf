@@ -218,48 +218,36 @@ public enum InboxFilter: String, Equatable, Hashable, Sendable, CaseIterable {
 
 #### 4.4.1 `queryBuildFailed()` — `.warn` severity
 
-- SQL: `SELECT id, ts, payload_json FROM events WHERE json_extract(payload_json, '$.event_kind')='xcode_build_finished' AND json_extract(payload_json, '$.result')='failed' AND ts >= ?cutoff ORDER BY ts DESC`
+- Read semantic (real query body lives in LeafCorePrivate moat): pull `xcode_build_finished` events from the action stream with a failed result inside the cutoff window, ordered newest first.
 - Cutoff: `nowMs - 8 * 3600 * 1000` (**8h rationale:** local build errors are fixed in minutes-to-hours; >8h = user gave up or moved on, stale)
-- Aggregation: group by `payload_json.project_path` (if present); SUM rows per project
+- Aggregation: group by `payload_json.project_path` (if present); aggregate row counts per project
 - Per-row InboxItem:
   - `kind = .buildFailed`
   - `severity = .warn`
   - `title = "Build failed: \(projectName)"` where `projectName` = basename of `project_path` (substrate-trust, no NSString re-derivation in row producer — Track-9 T7 lineage)
   - `sourceMeta = "Xcode · \(error_count) errors"`
   - `sourceURL = InboxSourceURLDeriver.synthesize(.xcodeBuild(projectPath: payload.project_path))` — may be nil if path absent
-  - `aggregatedCount = COUNT(*)` from SQL aggregation
-  - `createdAtMs = MAX(ts)`
+  - `aggregatedCount` = per-project count from the aggregation
+  - `createdAtMs` = latest event timestamp in the group
 - Forbidden: error message text from `payload.errors[].message` — ADR-010 walkback (substrate today doesn't capture per-Track-6 P2 §B `errors[].message` walked at parser boundary)
 
 #### 4.4.2 `queryCIFailed()` — `.danger` severity
 
-- SQL: read latest `gh_check_runs_status` per `(repo, sha)` pair where `json_extract(payload_json, '$.conclusion') IN ('failure', 'timed_out', 'cancelled')` AND ts >= cutoff
+- Read semantic (real query body lives in LeafCorePrivate moat): for each `(repo, sha)` pair, keep the latest `gh_check_runs_status` pulse and filter to those whose conclusion indicates a failing state (failure / timed_out / cancelled), restricted to ts >= cutoff.
 - Cutoff: `nowMs - 24 * 3600 * 1000` (**24h rationale:** CI runs ~10min; user may be offline overnight; 24h covers typical "return to work, see red CI" pattern. Tighter risks missing user; looser bloats INBOX. Post-Track-9 may tighten to 12h if cardinality shows >50 stale rows/day)
-- Aggregation: group by `(repo, sha)` from `payload.repo` + `payload.sha`. PR mapping **NOT** performed in T8 (substrate gap — `gh_check_runs_status` payload carries `(repo, sha)` only; PR number derivation requires JOIN against `gh_pr_synchronize` events which adds Stage 5 complexity)
+- Aggregation: group by `(repo, sha)`. PR mapping **NOT** performed in T8 (substrate gap — `gh_check_runs_status` payload carries `(repo, sha)` only; PR number derivation requires cross-referencing against `gh_pr_synchronize` events which adds Stage 5 complexity)
 - Per-row InboxItem:
   - `kind = .ciFailed`
   - `severity = .danger`
   - `title = "CI failed: \(repo) @\(sha_short)"` (always sha-based — no PR linking in T8)
   - `sourceMeta = "GitHub · \(failed_check_count) checks failed"`
-  - `sourceURL = nil` for T8 (graceful — sha→PR mapping deferred; tap behavior degrades to non-tappable row, matches existing D3 sourceURL=nil pattern). **Post-Track-9 carry:** substrate-side `(sha → pr_number)` lookup table or JOIN substrate enrichment phase
-  - `aggregatedCount = COUNT(*)` of distinct (sha, check_run_id) pairs
+  - `sourceURL = nil` for T8 (graceful — sha→PR mapping deferred; tap behavior degrades to non-tappable row, matches existing D3 sourceURL=nil pattern). **Post-Track-9 carry:** substrate-side `(sha → pr_number)` lookup table or cross-reference substrate enrichment phase
+  - `aggregatedCount` = count of distinct (sha, check_run_id) pairs
 - Forbidden: commit message text, check output text — ADR-010 walkback (substrate `gh_check_runs_status` parser today strips `output.title` / `output.summary` / `output.text` at write boundary per Phase 4.7.B)
 
 #### 4.4.3 `queryLiveMeeting()` — `.muted` severity
 
-- SQL pattern (`WHERE NOT EXISTS` subquery to avoid O(N²) scan):
-  ```sql
-  SELECT id, ts, payload_json FROM events AS started
-  WHERE json_extract(payload_json, '$.event_kind') = 'zoom_meeting_started'
-    AND ts >= ?cutoff
-    AND NOT EXISTS (
-      SELECT 1 FROM events AS ended
-      WHERE json_extract(ended.payload_json, '$.event_kind') = 'zoom_meeting_ended'
-        AND json_extract(ended.payload_json, '$.meeting_id') = json_extract(started.payload_json, '$.meeting_id')
-        AND ended.ts > started.ts
-    )
-  ORDER BY started.ts DESC
-  ```
+- Read semantic (real query body lives in LeafCorePrivate moat): find `zoom_meeting_started` events inside the cutoff window that do **not** have a matching `zoom_meeting_ended` partner (same `meeting_id`, later timestamp). Uses an unmatched-pair subquery pattern (O(N) on the started feed, not O(N²)).
 - Cutoff: `nowMs - 4 * 3600 * 1000` (**4h rationale:** Zoom auto-disconnects after 30hr paid / 40min free; most meetings <2h; 4h covers all-hands long sessions; >4h likely indicates missed `_ended` event due to crash, stale)
 - Aggregation: at most 1 row per `meeting_id` (live meetings don't aggregate — at most one active per user)
 - Per-row InboxItem:
@@ -332,7 +320,7 @@ Read `context_ref_kind` + `context_ref` columns from M014 tables. Dispatch into 
 - `context_ref_kind = 'slack_thread'` → parse `"team/channel/ts"` → `.slackThread(teamID:, channelID:, ts:)`
 - Other ref kinds (zoom / cal / xcode) → graceful nil if D3 doesn't currently populate; future-proofs without enforcement
 
-Linear `workspaceSlug` resolution: read `presence_state.linear.workspace_slug` via `json_extract` (graceful nil if absent — D3 row falls back to sourceURL=nil, preserved current behavior).
+Linear `workspaceSlug` resolution: read `presence_state.linear.workspace_slug` from the presence row (graceful nil if absent — D3 row falls back to sourceURL=nil, preserved current behavior).
 
 **LOC budget for ProdInsights+InboxItems.swift:** ≤700 (current 400; +~200 viable + ~80 placeholder + ~20 D3 enrichment).
 
@@ -350,7 +338,7 @@ Add 5th `LeafPill` button for `.alerts` filter. Same render pattern as existing 
 
 **Modify:** main dispatch method in `ProdInsights+InboxItems.swift`.
 
-Append results from 14 feeders (5 viable existing + 3 viable new + 6 placeholder). Aggregation kernel `(kind, sourceURL)` GROUP BY with SUM already active — no kernel change.
+Append results from 14 feeders (5 viable existing + 3 viable new + 6 placeholder). The aggregation kernel — keyed on `(kind, sourceURL)` with summed aggregate counts — already exists and is unchanged.
 
 Sort order preserved: severity ASC (`.danger=0 → .warn=1 → .muted=2`), then `createdAtMs` DESC.
 

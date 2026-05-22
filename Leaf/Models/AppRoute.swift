@@ -22,6 +22,7 @@ enum SettingsSection: String, Hashable, Sendable {
     case systemObservers
     case aiTools
     case browserAllowList
+    case advanced
     case updates
     case privacy
     /// fix/dev-launch-reliability — diagnostics section показывает CDHash main+agent,

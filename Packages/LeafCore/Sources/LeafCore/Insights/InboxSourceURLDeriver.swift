@@ -47,9 +47,18 @@ public enum InboxSourceURLDeriver {
             guard !meetingID.isEmpty else { return nil }
             return URL(string: "zoommtg://zoom.us/join?confno=\(meetingID)")
 
-        case .xcodeBuild(let projectPath):
-            guard let path = projectPath, !path.isEmpty else { return nil }
-            return URL(string: "xcode://\(path)")
+        case .xcodeBuild:
+            // C-28 (T10): `xcode://` is a fictional URL scheme — there is no
+            // registered macOS LSScheme handler for it, so `NSWorkspace.shared.open()`
+            // would fail silently. Until a real Xcode deep-link mechanism lands
+            // (e.g. Apple ships an `xcdeeplink://` or third-party tools register
+            // a scheme), INBOX rows for xcode build events stay non-tappable
+            // (`sourceURL = nil` → row renders without tap target per T8
+            // baseline graceful behavior). Enum case kept (no breaking
+            // surface change) — `projectIdentifier` associated value is
+            // accepted but ignored. Carry post-Track-9 when real deep-link
+            // mechanism becomes available.
+            return nil
 
         case .mailMailbox(let accountID, let mailboxID):
             guard !accountID.isEmpty, !mailboxID.isEmpty else { return nil }

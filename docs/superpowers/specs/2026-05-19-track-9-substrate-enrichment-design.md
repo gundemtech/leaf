@@ -67,7 +67,7 @@ Substrate gaps:
 
 Track-9 closes:
 - `SurfacePill { id, label, count: Int, kind: .captureTime | .actionNoun }` substrate shape (discriminator field).
-- Family-grouped aggregation SQL: per-family bundle ID set → SUM(attention-time) for capture surfaces; per-provider event_kind set → COUNT(*) for Layer B.
+- Family-grouped aggregation: per-family bundle ID set → attention-time totals for capture surfaces; per-provider event_kind set → event count for Layer B.
 - 13 candidate families: Claude / Xcode / IDEs (VSCode+JetBrains) / Browsers (Safari+Chrome+Arc) / Zoom / Calendar (Apple+Google) / Mail / Notes / Music / Reminders / Linear / GitHub / Slack. Substrate cap-8 preserved.
 - `LeafPill` count rendering: `.captureTime` → "Claude 14m" / `.actionNoun` → "Linear 3".
 - `TodayBlock.metricsRow` +1 cell (switches). ViewThatFits 5-cell wide + 2×3 / 3×2 narrow.
@@ -189,9 +189,9 @@ Track-9 closes:
 
 #### **T6 — TODAY hybrid pills + 5th cell + bonus C-2**
 - `SurfacePill { id, label, count: Int, kind: .captureTime | .actionNoun }` substrate shape (discriminator added).
-- `ProdInsights+TodayMetrics` SQL refactor: family-grouped aggregation (13 candidates per scope lock #6).
-- Per-surface attention-time SQL (capture surfaces): `SUM(duration_seconds) WHERE bundle_id IN (family_bundles)`.
-- Per-provider action-noun SQL (Layer B): `COUNT(*) WHERE event_kind IN (...) AND ts >= today_start AND ts < today_end`.
+- `ProdInsights+TodayMetrics` query refactor: family-grouped aggregation (13 candidates per scope lock #6); real query body lives in LeafCorePrivate moat.
+- Per-surface attention-time aggregation (capture surfaces): per-family bundle-ID-set duration totals.
+- Per-provider action-noun aggregation (Layer B): per-provider event_kind-set counts over the today window.
 - `LeafPill` count rendering: `.captureTime` → "Claude 14m", `.actionNoun` → "Linear 3".
 - `TodayBlock.metricsRow` +1 cell (switches). ViewThatFits 5-cell wide + 2×3 / 3×2 narrow.
 - C-2 bundled: `InsightsReader.State.error(message: String, lastKnown: InsightsSnapshot?)` refactor + `HomeContent` error banner above metrics + card renders last-known values gracefully (Phase 8.3 MS-5 contract closed).
@@ -214,8 +214,8 @@ Track-9 closes:
 
 #### **T9 — Analytics UI surface (Mid-tier MVP)**
 - Replace `AnalyticsView.swift` placeholder with real surface.
-- Components: `WeekChipStrip` (8 day chips) + `DailyFocusedChart` (SwiftUI Charts) + `StreaksCard` (5 streaks) + `PeakHourCallout` (24h mini-heatmap) + `TopToolsCard` (week-scoped pills) + `WoWDeltaCallout` (sparkline).
-- `InsightsReader` extension fetches `weeklyMetrics(now:)` in `refresh()` → `InsightsSnapshot.weeklyMetrics: WeeklyMetrics?` defaulted Optional field.
+- Components: `WeekChipStrip` (**7 day chips** — substrate fidelity per T4 D-8 `WeeklyMetrics.dailySeries` ships 7 entries; **C-35 RESOLVED T10**) + `DailyFocusedChart` (SwiftUI Charts BarMark + LineMark, **single-Y-axis with `aiRatio × 100` rendering trick** — macOS 14 baseline doesn't natively support dual-Y-axis; real dual-axis carry **C-44**) + `StreaksCard` (5 streaks) + `PeakHourCallout` (**24-Capsule strip** — substrate ships `peakHour: Int?` only; heatmap carry **C-39**; **C-37 RESOLVED T10**) + `TopToolsPlaceholder` (**honest "Coming soon" placeholder** — substrate gap C-38; T6 SurfacePill discriminator coupling cost > value; **C-36 RESOLVED T10**) + `WoWDeltaCallout` (sparkline).
+- `InsightsReader` extension fetches `weeklyMetrics(now:)` in `refresh()` → `InsightsSnapshot.weeklyMetrics: WeeklyMetrics = .empty` **defaulted field** (T4 substrate ships `.empty` first-class; defaulted-init blast-radius parity with P3 todayMetrics — 6th iteration of defaulted-init discipline; **C-34 RESOLVED T10**).
 - `AnalyticsContent(snapshot:)` consumer.
 - Substrate-only fidelity (`just check-tokens` 3-tier clean, no raw `Color.` / `.font(.system(`).
 
@@ -393,35 +393,49 @@ The 24 carries enumerated in `docs/superpowers/specs/2026-05-18-track-8-home-ux-
 | C-19 | Localization | out (separate track) |
 | C-20 | Line 2 last-commit subject | **[RESOLVED T7 — commit `da917399` + `408a2f04`]** |
 | C-21 | anchorEventId → file path:line | **[RESOLVED T7 — commit `da917399` + moat ProdInsights+RecentWhereStopped]** |
-| C-22 | `formatRelative` unification | already-resolved P9 + T10 if new callsites |
-| C-23 | Analytics surface real content | T9 |
-| C-24 | `recentActivity` orphan drop | T10 |
-| C-25 | WhereStoppedDeriver sleep/wake idle gap | **NEW post-T7 carry — own phase (T7.5 or T9-adjacent)** |
+| C-22 | `formatRelative` unification | **[RESOLVED T10 — verified zero new callsites in T5..T9; 3 existing callsites use HomeRelativeTimeFormatter directly or as thin wrappers per P9 intentional shape]** |
+| C-23 | Analytics surface real content | **[RESOLVED T9]** |
+| C-24 | `recentActivity` orphan drop | **[RESOLVED T10 — commit `e0010f1b`]** |
+| C-25 | WhereStoppedDeriver sleep/wake idle gap | **[DEFERRED T10 — post-Track-9 own phase; requires dedicated brainstorm + sentinel test for moat ProdWhereStoppedDeriver change (3 fix directions documented §9.1.C-25)]** |
+| C-26 | Moat `ProdInsights+InboxItems.swift` 795 LOC > 700 budget | **[DEFERRED T10 — post-Track-9 moat hygiene phase; no public surface impact, doesn't block ship]** |
+| C-27 | `queryCIFailed` latest-pulse-wins semantic doc-fix | **[RESOLVED T10 — moat doc-comment update with carry-forward note for "current HEAD failed count" refinement if requirements clarify]** |
+| C-28 | `xcode://` fictional URL scheme | **[RESOLVED T10 — InboxSourceURLDeriver.xcodeBuild returns nil; commit `b4be3978`]** |
+| C-29 | `queryCommentsOnMyWork` viewer_login filter anticipatory | **[DEFERRED T10 — post-Track-9 substrate enrichment phase (collector payload extension)]** |
+| C-30 | Cutoff constants extraction | **[RESOLVED T10 — moat `buildCutoffMs`/`ciCutoffMs`/`meetingCutoffMs` private static lets]** |
+| C-31 | `xcodeBuild(projectPath:)` → `projectIdentifier` rename | **[RESOLVED T10 — commit `b4be3978`]** |
+| C-32 | `liveMeeting` ms-collision edge case doc | **[RESOLVED T10 — moat doc-comment update; UUID-based meeting_id carry post-Track-9]** |
+| C-33 | `InboxFilter.alerts.rawValue` test assertion | **[RESOLVED T10 — commit `59c3d776`]** |
+| C-34 | Master spec §T9 wording — defaulted `WeeklyMetrics = .empty` (NOT Optional) | **[RESOLVED T10 — §T9 line 218 amendment in this spec]** |
+| C-35 | Master spec §T9 wording — 7 chips (NOT 8) | **[RESOLVED T10 — §T9 line 217 amendment]** |
+| C-36 | Master spec §T9 wording — TopToolsPlaceholder (NOT TopToolsCard) | **[RESOLVED T10 — §T9 line 217 amendment]** |
+| C-37 | Master spec §T9 wording — 24-Capsule strip (NOT mini-heatmap) | **[RESOLVED T10 — §T9 line 217 amendment]** |
+| C-38 | Real TopToolsCard substrate addition | **[DEFERRED T10 — post-Track-9 substrate phase; coupled with T6 SurfacePill discriminator refactor]** |
+| C-39 | Per-hour distribution PeakHour heatmap substrate | **[DEFERRED T10 — post-Track-9 substrate enrichment phase]** |
+| C-40 | Per-day chart drill-down tap → detail screen | **[DEFERRED T10 — post-Track-9 if user demand emerges]** |
+| C-41 | Multi-week variant (30d / 90d) — parallel `metrics(period:)` API | **[DEFERRED T10 — post-Track-9 if user ask]** |
+| C-42 | Localization (T9 specific) | **[DEFERRED T10 — separate localization track (Track-8 P9 C-19 family)]** |
+| C-43 | View-layer test coverage | **[DEFERRED T10 — codebase precedent allows skipping; opportunistic add post-Track-9]** |
+| C-44 | Real dual-axis Chart for DailyFocusedChart | **[DEFERRED T10 — macOS 15+ baseline или custom `ChartContent` work]** |
 
 #### 9.1.C-25 — WhereStoppedDeriver sleep/wake gap (post-T7 discovery, 2026-05-21)
 
 **Symptom:** After Track-9 T7 UI ship, manual smoke revealed `where_stopped_log` table stays empty in the common "closed laptop for 30+ min" scenario, leaving the WHERE STOPPED block stuck on empty-state copy ("No recent stop-points captured.") even when the user clearly took a real break (`ушёл в универ`-class break).
 
-**Root cause:** `ProdWhereStoppedDeriver.derive()` (Track-1 D3) idle gate logic at `Packages/LeafCorePrivate/Sources/LeafCorePrivate/Prod/Detection/ProdWhereStoppedDeriver.swift`:
-
-```swift
-let latestTs = SELECT MAX(ts) FROM events
-guard untilMs - latestTs >= 30 * 60 * 1000 else { return nil }
-```
+**Root cause:** `ProdWhereStoppedDeriver.derive()` (Track-1 D3) idle gate at `Packages/LeafCorePrivate/Sources/LeafCorePrivate/Prod/Detection/ProdWhereStoppedDeriver.swift`. Conceptually: read the most-recent event timestamp, then require at least the idle threshold (30 min) of elapsed time vs the current tick before emitting a snapshot. Real query body and threshold constant live in the moat.
 
 Timeline of the failing scenario:
 - t=0 user closes laptop → `system_slept` event emitted → Agent process suspended.
-- t=30min user opens laptop → `system_woke` event emitted immediately → `MAX(ts)` ≈ now.
-- t=30min+ε `DetectorScheduler.runScheduled` ticks (every 5 min per `AgentThresholdsProd.detectorScheduledIntervalSec`) → `untilMs - latestTs ≈ 0` → idle gate FAILS → no snapshot ever appended.
+- t=30min user opens laptop → `system_woke` event emitted immediately → most-recent event timestamp ≈ now.
+- t=30min+ε `DetectorScheduler.runScheduled` ticks (every 5 min per `AgentThresholdsProd.detectorScheduledIntervalSec`) → elapsed-since-latest-event ≈ 0 → idle gate FAILS → no snapshot ever appended.
 
-**Race window where snapshot CAN fire:** user walks away from an **awake** laptop (no sleep) for 30+ min → pipeline tick during that window finds `MAX(ts)` ≈ 30 min ago → gate triggers → snapshot emitted. Closed-laptop is the dominant case in practice and it's silently broken.
+**Race window where snapshot CAN fire:** user walks away from an **awake** laptop (no sleep) for 30+ min → pipeline tick during that window finds the latest event 30 min ago → gate triggers → snapshot emitted. Closed-laptop is the dominant case in practice and it's silently broken.
 
 **Why this is substrate gap, not T7 UI bug:** T7 verified path 4 (empty state) renders correctly when substrate returns nil. The 4-line / 3-line / 2-line population paths all work when rows exist in `where_stopped_log`. The gap is purely producer-side — `ProdWhereStoppedDeriver` doesn't account for sleep/wake semantics.
 
 **Proposed fix directions (decide in own phase brainstorm):**
-1. Treat the most recent `system_slept` event as a "synthetic idle marker" — use its ts as `latestTs` (or as a cap on `latestTs`) instead of raw `MAX(ts)`. Then `untilMs - sleep_ts` reflects the real wake gap.
+1. Treat the most recent `system_slept` event as a "synthetic idle marker" — use its timestamp (or as a cap on the latest-event timestamp) instead of the raw most-recent-event read. Then the gate reflects the real wake gap.
 2. Emit a synthesis snapshot on wake itself — detect `system_woke` arrival, look back at paired `system_slept` event, append a `where_stopped_log` row attributing the pre-sleep state if the sleep window exceeded the idle threshold.
-3. Hybrid — `derive()` keeps current logic but adds a sleep-aware override: `effectiveLatestTs = (system_slept since last system_woke) ? system_slept.ts : MAX(ts)`.
+3. Hybrid — `derive()` keeps current logic but adds a sleep-aware override: when a `system_slept` event exists with no matching subsequent `system_woke` (or only a fresh one), prefer the sleep timestamp; otherwise fall back to the raw latest event.
 
 **Phase ownership:** post-T7 own phase. Suggestion: T7.5 (small surgical substrate phase) OR pulled into T9 wrap depending on cadence. Requires its own spec + sentinel-injection regression test (modifying the moat deriver touches new code paths in Track-1 D3 substrate that didn't have walkback coverage before T7's reading of `doc_path`).
 
@@ -449,16 +463,42 @@ The 6 a11y findings from P9 polish audit subagent (master spec §9.1 last block)
 - **`get_weekly_metrics` MCP tool** — future if AI clients request Analytics queries.
 - **T5 multi-window editor accuracy** — `WorkspacePathResolver` returns the most-recently-opened VSCode/JetBrains workspace, not the currently-foregrounded one. When a user has multiple instances open and switches back to an earlier workspace, YOU·NOW renders the wrong branch / linearID until the user touches the active workspace again. Documented as a known accuracy limitation in `leaf-docs/docs/privacy-security/what-we-dont-capture.md` (Known accuracy limitations section). Fix requires per-IDE foreground-window resolution (AX-driven for VSCode-family, AppleScript-driven for JetBrains where available) — separate post-Track-9 track.
 
-#### T8 final-review carries (2026-05-21)
+#### T8 final-review carries (2026-05-21) — Status at T10 wrap
 
-- **C-26** `ProdInsights+InboxItems.swift` 795 LOC > 700 budget — split per-feeder files (`+GitHub` / `+Linear` / `+D3` / `+Local`) OR extract `synthesize*URL` static helpers to sibling `InboxURLSynthesis.swift` moat file. T10 wrap polish.
-- **C-27** `queryCIFailed` `MAX(failure)` semantic ambiguity — refactor to `ORDER BY ts DESC LIMIT 1` per (repo, sha) for true "current HEAD failed count" OR doc-fix to "highest in 24h window". T10 polish.
-- **C-28** `xcode://` URL scheme fictional — no registered macOS LSScheme, `NSWorkspace.shared.open(url)` fails silently. Either drop `.xcodeBuild` from `InboxSourceURLDeriver` until real deep-link mechanism lands OR document as known no-op. T10 polish or post-Track-9.
-- **C-29** `queryCommentsOnMyWork` viewer_login filter anticipatory (TODO at line 112) — currently surfaces user's own outbound comments as `.commentOnMyWork`. Either rename to `.myRecentComments` semantic split OR enforce `actor.login != viewerLogin` once collector emits `actor.login` in payload. Post-Track-9 substrate enrichment.
-- **C-30** Cutoff constants (`8h` build / `24h` CI / `4h` meeting / `14d` D3) hardcoded across feeders — extract to named `private static let` block for readability. T10 polish.
-- **C-31** `InboxSourceContextRef.xcodeBuild(projectPath:)` parameter naming misaligned with content (substrate emits project NAME, not path) — rename to `projectIdentifier`. T10 polish (breaking public API — coordinate with consumers).
-- **C-32** `liveMeeting` `started_at_ms` collision edge case (same-millisecond starts) — document as known limitation OR generate UUID-based `meeting_id` at substrate. Post-Track-9.
-- **C-33** `testInboxFilterValues` missing `.alerts.rawValue` assertion. T10 polish.
+- **C-26** `ProdInsights+InboxItems.swift` 795 LOC > 700 budget — split per-feeder files (`+GitHub` / `+Linear` / `+D3` / `+Local`) OR extract `synthesize*URL` static helpers to sibling `InboxURLSynthesis.swift` moat file. **[DEFERRED T10 — post-Track-9 moat hygiene; no public surface impact]**
+- **C-27** `queryCIFailed` latest-pulse-wins semantic ambiguity. **[RESOLVED T10 — moat doc-comment update with carry-forward note for future "current-HEAD failed count" refinement if requirements clarify]**
+- **C-28** `xcode://` URL scheme fictional. **[RESOLVED T10 — deriver returns nil; commit `b4be3978`]**
+- **C-29** `queryCommentsOnMyWork` viewer_login filter anticipatory. **[DEFERRED T10 — post-Track-9 substrate enrichment phase (collector payload extension required)]**
+- **C-30** Cutoff constants extraction. **[RESOLVED T10 — moat `buildCutoffMs`/`ciCutoffMs`/`meetingCutoffMs` named constants]**
+- **C-31** `xcodeBuild(projectPath:)` → `projectIdentifier` rename. **[RESOLVED T10 — commit `b4be3978`]**
+- **C-32** `liveMeeting` ms-collision edge case. **[RESOLVED T10 — moat doc-comment update; substrate UUID `meeting_id` carry post-Track-9]**
+- **C-33** `testInboxFilterValues` missing `.alerts.rawValue` assertion. **[RESOLVED T10 — commit `59c3d776`]**
+
+#### T9 final-review + Stage 6 discovered carries (2026-05-21) — Status at T10 wrap
+
+- **C-34** Master spec §T9 wording — defaulted `WeeklyMetrics = .empty` (NOT Optional). **[RESOLVED T10 — §T9 line 218 amendment]**
+- **C-35** Master spec §T9 wording — 7 chips (NOT 8). **[RESOLVED T10 — §T9 line 217 amendment]**
+- **C-36** Master spec §T9 wording — TopToolsPlaceholder (NOT TopToolsCard). **[RESOLVED T10 — §T9 line 217 amendment]**
+- **C-37** Master spec §T9 wording — 24-Capsule strip (NOT mini-heatmap). **[RESOLVED T10 — §T9 line 217 amendment]**
+- **C-38** Real `TopToolsCard` substrate addition. **[DEFERRED T10 — post-Track-9 substrate phase; coupled with T6 SurfacePill discriminator refactor]**
+- **C-39** Per-hour distribution `PeakHourCallout` heatmap substrate. **[DEFERRED T10 — post-Track-9 substrate enrichment phase]**
+- **C-40** Per-day chart drill-down tap → detail screen + `RouteCoordinator.pushAnalytics*`. **[DEFERRED T10 — post-Track-9 if user demand emerges]**
+- **C-41** Multi-week variant (30d / 90d). **[DEFERRED T10 — post-Track-9 if user ask]**
+- **C-42** Localization (T9 specific — labels hardcoded English). **[DEFERRED T10 — separate localization track (Track-8 P9 C-19 family)]**
+- **C-43** View-layer test coverage. **[DEFERRED T10 — codebase precedent allows skipping]**
+- **C-44** Real dual-axis Chart for `DailyFocusedChart`. **[DEFERRED T10 — macOS 15+ baseline OR custom `ChartContent` work]**
+
+#### T10 a11y sweep carry-forwards (2026-05-21)
+
+8 NITs identified by Stage 6 a11y subagent — all deferred post-Track-9:
+- Design-system primitive a11y audit (LeafPill / LeafInput / LeafIconChip as Button labels)
+- Section labels (`Text("YOU · NOW")` / `"TODAY · …"` / `"INBOX"` / `"WHERE YOU STOPPED"` / `"Analytics"`) missing `.accessibilityAddTraits(.isHeader)` — sweep across all Home blocks
+- WeekChipStrip today chip — `.isSelected` trait parity with InboxFilterRow
+- WhereStoppedBlock `headerText` not `.updatesFrequently` (Timer-driven refresh — already tracked as P9 carry-forward)
+- YouNowBlock `awayPresentation` footer phrasing consistency ("ago" vs no "ago") — copy polish
+- TopToolsPlaceholder label includes "placeholder" word — UX copy refinement
+- InboxBlock `LeafInput` search field placeholder vs proper `.accessibilityLabel("Search inbox")` — design-system primitive a11y audit
+- AnalyticsView loading state — `.accessibilityAddTraits(.updatesFrequently)` for state transition narration
 
 ---
 

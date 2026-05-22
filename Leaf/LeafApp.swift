@@ -89,6 +89,16 @@ struct LeafApp: App {
         // dependencies, куда флаг не пропагируется).
         #if LEAF_PROD
         DerivedInsightsFactory.register { LeafCorePrivate.ProdInsights(database: $0) }
+        // Track-10 T1 C5 — moat-resident preset list ("common dev team
+        // defaults") used by the onboarding `.shareControls` step. Public
+        // builds fall through to `EmptyOnboardingShareTemplateProvider`,
+        // which renders a "configure later in Settings" fallback panel.
+        OnboardingShareTemplateFactory.register(LeafCorePrivate.ProdOnboardingShareTemplate())
+        // Track-10 T2 — register subprocess-backed git delta reader for the RESUME
+        // hero card. Stub builds (non-LEAF_PROD) fall through to StubGitDeltaReader
+        // (returns nil) and the hero card hides its WIP signal line + "Diff with
+        // main" CTA gracefully.
+        GitDeltaReaderFactory.register { LeafCorePrivate.ProdGitDeltaReader() }
         #endif
 
         // D13 (Phase 3.1) — explicit _state = State(initialValue:) pattern для

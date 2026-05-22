@@ -143,11 +143,6 @@ final class InsightsReader {
                         // поэтому popover просто не рендерит row.
                         let uninterruptedWindow = try insights.longestUninterruptedWindow(period: today)
                         try Task.checkCancellation()
-                        // Phase 4.10.A — chronological per-event feed для Activity tab.
-                        // 14-я sequential query; default impl = [] (StubInsights),
-                        // поэтому Activity tab рендерит empty state на CI / no-prod.
-                        let recentActivity = try insights.recentActivity(period: today, limit: 200)
-                        try Task.checkCancellation()
                         // Phase 4.10.B — aggregated sessions для Activity tab
                         // ("Sessions" mode) и Home Recent Sessions block. Default
                         // impl = [] (StubInsights / pre-prod), поэтому UI просто
@@ -204,9 +199,26 @@ final class InsightsReader {
                         // ProdInsights+WeeklyMetrics with 5 streaks + WoW.
                         let weeklyMetrics = try insights.weeklyMetrics(now: Date())
                         try Task.checkCancellation()
+                        // Track-10 T2 — task identity (linearID / branch / repo /
+                        // linearWorkspaceSlug) for RESUME hero CTAs. workspacePath
+                        // intentionally NOT carried on the struct (T5 D-8) — see
+                        // currentWorkspacePath() below for the ephemeral fetch.
+                        let taskIdentity = try insights.currentTaskIdentity()
+                        try Task.checkCancellation()
+                        // Track-10 T2 — ephemeral workspace path → in-process git
+                        // delta read (ahead/behind/uncommitted + parsed remote).
+                        // Path bytes stay scoped to this `await`; only counts +
+                        // structured ref strings + parsed remote propagate into the
+                        // snapshot. Stub fallback (non-LEAF_PROD) returns nil.
+                        let workspacePath = try insights.currentWorkspacePath()
+                        try Task.checkCancellation()
+                        let gitDelta = await GitDeltaReaderFactory.make()
+                            .read(forWorkspacePath: workspacePath)
+                        try Task.checkCancellation()
                         // Path B — splice commit into deriver's snapshot via
                         // defaulted-init. Preserves anchorFilePath / anchorLine
                         // populated by ProdInsights+RecentWhereStopped LEFT JOIN.
+                        // Track-10 T2 — also preserves anchorBundleID from same row.
                         let whereStopped: WhereStoppedSnapshot? = whereStoppedBase.map { base in
                             WhereStoppedSnapshot(
                                 id: base.id,
@@ -216,7 +228,8 @@ final class InsightsReader {
                                 wipSignals: base.wipSignals,
                                 anchorFilePath: base.anchorFilePath,
                                 anchorLine: base.anchorLine,
-                                recentLastCommit: recentLastCommit
+                                recentLastCommit: recentLastCommit,
+                                anchorBundleID: base.anchorBundleID
                             )
                         }
                         let snapshot = InsightsSnapshot(
@@ -253,7 +266,6 @@ final class InsightsReader {
                             // read внутри). Snapshot mirror'ит для UI/MCP consumers.
                             linearTransitions: linear.transitions,
                             linearCompletionRate: linear.completionRate,
-                            recentActivity: recentActivity,
                             presenceState: presenceState,
                             recentSessions: recentSessions,
                             todayMetrics: todayMetrics,
@@ -261,7 +273,9 @@ final class InsightsReader {
                             sameTaskTeammates: sameTaskTeammates,
                             inboxItems: inboxItems,
                             whereStopped: whereStopped,
-                            weeklyMetrics: weeklyMetrics
+                            weeklyMetrics: weeklyMetrics,
+                            gitDelta: gitDelta,
+                            currentTaskIdentity: taskIdentity
                         )
                         return .success((db, snapshot))
                     } catch {

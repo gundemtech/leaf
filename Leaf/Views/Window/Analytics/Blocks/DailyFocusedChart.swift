@@ -25,8 +25,16 @@ struct DailyFocusedChart: View {
             VStack(alignment: .leading, spacing: LeafSpace.sm) {
                 Text("FOCUS THIS WEEK")
                     .leafSectionLabel()
+                // T10 a11y IMPORTANT-4: hide Chart from VoiceOver — parent
+                // `.accessibilityLabel` provides daily-series summary; Charts
+                // emits each BarMark + LineMark as a focusable element by
+                // default, producing noisy per-day announcements with no
+                // header context. Future enhancement carry post-Track-9:
+                // adopt `.accessibilityChartDescriptor` for proper rotor
+                // navigation through the data series.
                 chart
                     .frame(height: 200)
+                    .accessibilityHidden(true)
                 legend
             }
         }

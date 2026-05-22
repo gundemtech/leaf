@@ -16,7 +16,7 @@ public enum InboxSourceContextRef: Equatable, Sendable {
     case slackChannel(teamID: String, channelID: String)
     case calendarEvent(eventID: String)
     case zoomMeeting(meetingID: String)
-    case xcodeBuild(projectPath: String?)
+    case xcodeBuild(projectIdentifier: String?)
     case mailMailbox(accountID: String, mailboxID: String)
     case reminderList(listID: String)
 }

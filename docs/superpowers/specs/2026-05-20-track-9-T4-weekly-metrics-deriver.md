@@ -74,7 +74,7 @@ Master spec §T4 to be amended в T10 wrap. T4 spec is the authoritative impleme
 | D-8 | `dailySeries` window | **7 entries, anchored at local-TZ midnight from `now`.** `today = startOfDay(now)`, series spans `[today − 6d .. today]` inclusive. | Q1 + Q4 lock. Master spec "8 day chips" UI artifact composed in T9 by appending today's `TodayMetrics` если нужно (or expanding dailySeries в T9 phase). Substrate ship 7 days, simple invariant. |
 | D-9 | `peakHour` source | **Hour-of-day bucket from attention-time** (events where `signal_type='attention'`) aggregated за all 7 days в local-TZ hour buckets. Tie-break: lowest hour wins (determinism lock). nil iff total attention minutes across week ≤ insignificant threshold (`< 5 min` raw cap — guards against single random event). | UI shows 24h mini-heatmap callout. Hour-of-day pattern across week — single peak. Tie-break determinism critical для testability. |
 | D-10 | `wowDelta` metric | **Focused-min based.** `this_week_focused = sum(dailySeries[0..6].focusedMin)`, `last_week_focused = sum(focusedMin from days[-7..-13])`. | Master spec §T9 `WoWDeltaCallout` rendered sparkline of focus-time. Other metrics (aiRatio / sessions / commits) future expansion if UI asks. |
-| D-11 | Streak source: `commitStreak` | `gh_commit_pushed` event_kind. SQL predicate: `signal_type='action' AND event_kind='gh_commit_pushed' AND ts_ms >= dayStart AND ts_ms < dayEnd`. | Track-9 T1 `recentLastCommit` precedent (uses `gh_commit_pushed` via `json_extract`). |
+| D-11 | Streak source: `commitStreak` | `gh_commit_pushed` event_kind in the action stream, scoped to the [dayStart, dayEnd) window. Real query body in moat. | Track-9 T1 `recentLastCommit` precedent (same event-kind discriminator). |
 | D-12 | Streak source: `issueCloseStreak` | `linear_status_transition` event_kind WHERE `payload_json.transition_type='completed'`. Phase 4.6.B precedent. | Mutually-exclusive transition bucketing (Phase 4.6.B). "Completed" = `WorkflowState.type='completed'`. |
 | D-13 | Streak source: `huddleStreak` | `slack_huddle_state_change` event_kind WHERE `payload_json.state='started'` (NOT every state change — counts huddle-initiation days). Phase 4.4 precedent. | Symmetric с focus-session streak (counts initiation days, not continuous-presence days). |
 | D-14 | Streak source: `focusSessionStreak` | Derived focus sessions ≥10 min duration. Computed via reuse of existing `focusSessions(period:)` semantics (read attention events, aggregate via `FocusSessionAggregator` logic). Counts days where ≥1 focus session ≥10 min landed. | Existing substrate primitive. Threshold 10 min aligns с Phase 4.6.A focus session min cutoff. |
@@ -251,13 +251,13 @@ public struct DailyMetric: Equatable, Hashable, Sendable {
 
 ### 3.4 Streak event-source mapping
 
-| Field | SQL/Source | Predicate per day |
+| Field | Source | Predicate per day (high-level — real query body in LeafCorePrivate moat) |
 |---|---|---|
-| `commitStreak` | `events` table (signal_type='action') | `event_kind='gh_commit_pushed' AND ts_ms >= dayStart AND ts_ms < dayEnd` |
-| `issueCloseStreak` | `events` table | `event_kind='linear_status_transition' AND json_extract(payload_json, '$.transition_type')='completed' AND ts_ms IN [start, end)` |
-| `huddleStreak` | `events` table | `event_kind='slack_huddle_state_change' AND json_extract(payload_json, '$.state')='started' AND ts_ms IN [start, end)` |
+| `commitStreak` | `events` table (action stream) | `gh_commit_pushed` events landing inside the day window |
+| `issueCloseStreak` | `events` table | `linear_status_transition` events with `transition_type=completed` inside the day window |
+| `huddleStreak` | `events` table | `slack_huddle_state_change` events with `state=started` inside the day window |
 | `focusSessionStreak` | derived via focus session aggregation (reuses `focusSessions(period:)` internal logic) | ≥1 session ≥10 min in [start, end) |
-| `heavyPulseStreak` | `intensity_aggregates` table (M018, columns `minute_bucket_ms` / `keystrokes` / `mouse_moves` / `app_switches`) | Predicate: `minute_bucket_ms IN [start, end) AND (keystrokes >= 60 OR mouse_moves >= 120 OR app_switches >= 5)` — T4 heavy threshold const |
+| `heavyPulseStreak` | `intensity_aggregates` table (M018) | At least one minute-bucket in [start, end) crossing the T4 "heavy" thresholds for keystrokes / mouse_moves / app_switches (constants in moat) |
 
 All counts evaluated **per-day** then collapsed via `streakBackFromDay` helper:
 
@@ -282,14 +282,14 @@ internal func streakBackFromDay(eventCountPerDay: [Int]) -> Int {
 /// Returns hour 0..23 with maximum minutes, or nil if total attention < 5 min.
 /// Tie-break: lowest hour wins.
 internal func computePeakHour(weekStartMs: Int64, weekEndMs: Int64, db: Database) throws -> Int? {
-    // SQL: SELECT (ts_ms-localOffset)/3600000 % 24 AS hour, SUM(duration_ms) FROM attention_events
-    //      WHERE ts_ms BETWEEN ? AND ? GROUP BY hour ORDER BY SUM DESC, hour ASC LIMIT 1
-    // (concrete query in moat impl)
-    ...
+    // Real query body lives in LeafCorePrivate moat.
+    // Conceptually: bucket attention-event minutes by local-TZ hour-of-day
+    // (0..23) inside [weekStartMs, weekEndMs), pick the bucket with the
+    // largest total duration. Lowest hour wins on ties.
 }
 ```
 
-Tie-break determinism: `ORDER BY SUM(duration_ms) DESC, hour ASC LIMIT 1`. Lowest hour breaks ties.
+Tie-break determinism: deterministic — among hours sharing the maximum total duration, the lowest hour wins.
 
 Threshold guard: aggregate total minutes < 5 → return nil.
 

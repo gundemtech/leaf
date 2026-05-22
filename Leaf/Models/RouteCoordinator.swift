@@ -5,6 +5,7 @@
 //  NavigationStack from outside the view (lets Recent Sessions / Today /
 //  banners push a detail destination without nesting NavigationLink calls).
 
+import AppKit
 import Foundation
 import LeafCore
 import Observation
@@ -60,5 +61,13 @@ final class RouteCoordinator {
         let snapshot = pendingSettingsTarget
         pendingSettingsTarget = nil
         return snapshot
+    }
+
+    /// Track-10 T2 — opens an external URL via `NSWorkspace`. Centralized helper so
+    /// view layer doesn't import AppKit just to fire a browser open. Reused by
+    /// RESUME hero "Linear" + "Diff with main" CTAs; ready for T5 SINCE timeline
+    /// row-tap reuse.
+    func openExternalURL(_ url: URL) {
+        NSWorkspace.shared.open(url)
     }
 }
