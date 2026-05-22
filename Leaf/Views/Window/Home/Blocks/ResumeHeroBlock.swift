@@ -176,15 +176,16 @@ struct ResumeHeroBlock: View {
 
     private func composeWipLine() -> String? {
         guard let delta = gitDelta else { return nil }
+        let ref = delta.mergeBase.map(Self.refBasename)
         var clauses: [String] = []
         if delta.uncommittedCount > 0 {
             clauses.append("\(delta.uncommittedCount) uncommitted")
         }
-        if delta.commitsAhead > 0, let ref = delta.mergeBase.map(Self.refBasename) {
+        if delta.commitsAhead > 0, let ref {
             clauses.append("\(delta.commitsAhead) commits ahead of \(ref)")
         }
-        if delta.commitsBehind > 0, let ref = delta.mergeBase.map(Self.refBasename) {
-            clauses.append("\(delta.commitsBehind) behind")
+        if delta.commitsBehind > 0, let ref {
+            clauses.append("\(delta.commitsBehind) commits behind \(ref)")
         }
         return clauses.isEmpty ? nil : "WIP: " + clauses.joined(separator: " · ")
     }

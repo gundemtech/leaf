@@ -211,6 +211,7 @@ final class InsightsReader {
                         // structured ref strings + parsed remote propagate into the
                         // snapshot. Stub fallback (non-LEAF_PROD) returns nil.
                         let workspacePath = try insights.currentWorkspacePath()
+                        try Task.checkCancellation()
                         let gitDelta = await GitDeltaReaderFactory.make()
                             .read(forWorkspacePath: workspacePath)
                         try Task.checkCancellation()
