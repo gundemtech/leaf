@@ -125,3 +125,55 @@ extension InboxFilteringTests {
         XCTAssertEqual(Set(result.map { $0.id }), Set(["1", "2", "3"]))
     }
 }
+
+// MARK: - Track-10 T4: .actionable filter coverage
+// See docs/superpowers/specs/2026-05-22-track-10-T4-needs-you.md §3.1 / §3.6.
+extension InboxFilteringTests {
+
+    /// 10-item mixed fixture: 7 kinds in the .actionable whitelist (one each)
+    /// + 3 kinds from the 7-dropped set (sampled).
+    private var actionableMixedFixtures: [InboxItem] {
+        let now = Int64(1_700_000_000_000)
+        return [
+            // Admits whitelist (7) — one item per kind
+            InboxItem(id: "a1", kind: .reviewRequest, severity: .warn, title: "Review PR #42", sourceMeta: "github · PR #42", sourceURL: nil, aggregatedCount: 1, createdAtMs: now),
+            InboxItem(id: "a2", kind: .mention, severity: .warn, title: "Anton mentioned you", sourceMeta: "slack · #design", sourceURL: nil, aggregatedCount: 1, createdAtMs: now),
+            InboxItem(id: "a3", kind: .openQuestion, severity: .warn, title: "Ship narrow fallback?", sourceMeta: "slack · #design", sourceURL: nil, aggregatedCount: 1, createdAtMs: now),
+            InboxItem(id: "a4", kind: .blocker, severity: .danger, title: "Sasha input on relay rotation", sourceMeta: "linear · LEAF-187", sourceURL: nil, aggregatedCount: 1, createdAtMs: now),
+            InboxItem(id: "a5", kind: .buildFailed, severity: .warn, title: "Build failed", sourceMeta: "Xcode", sourceURL: nil, aggregatedCount: 1, createdAtMs: now),
+            InboxItem(id: "a6", kind: .ciFailed, severity: .danger, title: "CI red", sourceMeta: "github · checks", sourceURL: nil, aggregatedCount: 1, createdAtMs: now),
+            InboxItem(id: "a7", kind: .liveMeeting, severity: .muted, title: "In Zoom", sourceMeta: "Zoom", sourceURL: nil, aggregatedCount: 1, createdAtMs: now),
+            // Dropped (3 of 7 sampled) — visible only via .all chip
+            InboxItem(id: "d1", kind: .commentOnMyWork, severity: .muted, title: "New comment", sourceMeta: "github · PR #41", sourceURL: nil, aggregatedCount: 1, createdAtMs: now),
+            InboxItem(id: "d2", kind: .calUpcoming15min, severity: .muted, title: "Standup at 10:00", sourceMeta: "calendar", sourceURL: nil, aggregatedCount: 1, createdAtMs: now),
+            InboxItem(id: "d3", kind: .slackDM, severity: .muted, title: "DM from PM", sourceMeta: "slack · DM", sourceURL: nil, aggregatedCount: 1, createdAtMs: now),
+        ]
+    }
+
+    func testFilterActionable_admitsSevenKinds_dropsThree() {
+        let result = InboxFiltering.filtered(
+            items: actionableMixedFixtures, filter: .actionable, query: "")
+        XCTAssertEqual(result.count, 7)
+        XCTAssertEqual(Set(result.map { $0.id }), Set(["a1", "a2", "a3", "a4", "a5", "a6", "a7"]))
+    }
+
+    func testFilterActionable_withQuery_intersectsAdmitsAndQuery() {
+        // "build" matches a5 title ("Build failed") and a4 title ("Sasha input
+        // on relay rotation") — wait, no, "build" matches only a5 + d3? Let me
+        // recheck: a5 title "Build failed" ✓; nothing else. So result == [a5].
+        let result = InboxFiltering.filtered(
+            items: actionableMixedFixtures, filter: .actionable, query: "build")
+        XCTAssertEqual(result.map { $0.id }, ["a5"])
+    }
+
+    func testFilterActionable_allDropped_returnsEmpty() {
+        let now = Int64(1_700_000_000_000)
+        let droppedOnly: [InboxItem] = [
+            InboxItem(id: "d1", kind: .commentOnMyWork, severity: .muted, title: "Comment", sourceMeta: "gh", sourceURL: nil, aggregatedCount: 1, createdAtMs: now),
+            InboxItem(id: "d2", kind: .reminderDueToday, severity: .muted, title: "Reminder", sourceMeta: "rem", sourceURL: nil, aggregatedCount: 1, createdAtMs: now),
+            InboxItem(id: "d3", kind: .mailUnreadBucket, severity: .muted, title: "5 unread", sourceMeta: "mail", sourceURL: nil, aggregatedCount: 1, createdAtMs: now),
+        ]
+        let result = InboxFiltering.filtered(items: droppedOnly, filter: .actionable, query: "")
+        XCTAssertEqual(result.count, 0)
+    }
+}

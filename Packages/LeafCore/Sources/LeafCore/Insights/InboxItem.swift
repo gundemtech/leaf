@@ -64,6 +64,7 @@ public enum InboxSeverity: String, Equatable, Hashable, Sendable {
 
 public enum InboxFilter: String, Equatable, Hashable, Sendable, CaseIterable {
     case all
+    case actionable  // T4 — "needs YOUR response NOW" umbrella over 7 of 14 InboxKinds
     case reviews
     case questions
     case mentions
@@ -72,7 +73,20 @@ public enum InboxFilter: String, Equatable, Hashable, Sendable, CaseIterable {
     /// Returns true if the filter admits this kind.
     public func admits(_ kind: InboxKind) -> Bool {
         switch self {
-        case .all: return true
+        case .all:
+            return true
+        case .actionable:
+            // Exhaustive switch on InboxKind is the compile-time fence:
+            // adding a 15th kind forces explicit triage on this arm, no
+            // silent "default: false" that would surprise a user.
+            switch kind {
+            case .reviewRequest, .mention, .openQuestion, .blocker,
+                 .buildFailed, .ciFailed, .liveMeeting:
+                return true
+            case .commentOnMyWork, .calInviteDeclined, .calUpcoming15min,
+                 .calConflict, .mailUnreadBucket, .reminderDueToday, .slackDM:
+                return false
+            }
         case .reviews: return kind == .reviewRequest
         case .questions: return kind == .openQuestion
         case .mentions: return kind == .mention
