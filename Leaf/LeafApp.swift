@@ -86,6 +86,11 @@ struct LeafApp: App {
         // dependencies, куда флаг не пропагируется).
         #if LEAF_PROD
         DerivedInsightsFactory.register { LeafCorePrivate.ProdInsights(database: $0) }
+        // Track-10 T1 C5 — moat-resident preset list ("common dev team
+        // defaults") used by the onboarding `.shareControls` step. Public
+        // builds fall through to `EmptyOnboardingShareTemplateProvider`,
+        // which renders a "configure later in Settings" fallback panel.
+        OnboardingShareTemplateFactory.register(LeafCorePrivate.ProdOnboardingShareTemplate())
         #endif
 
         // D13 (Phase 3.1) — explicit _state = State(initialValue:) pattern для
