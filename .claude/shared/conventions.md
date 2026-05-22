@@ -2,7 +2,7 @@
 
 ## Код
 - Язык: Swift
-- Отступы: 4 пробела
+- Отступы: **2 пробела** — enforced by swift-lsp plugin formatter (PostToolUse hook reformats on every Edit/Write). Не пытайся писать 4-space, hook всё равно перепишет.
 - Стиль: TBD _(дополнять по мере накопления решений)_
 
 ## Git — app-репо (`gundemtech/leaf`, ПУБЛИЧНЫЙ)
