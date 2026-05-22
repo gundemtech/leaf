@@ -279,6 +279,8 @@ Compact TODAY anchor row keeps 5 metrics, drops per-app pill strip (already done
 
 T3 scope: ~4 atomic commits. Acceptance: badge renders in 4 visual states · existing YOU·NOW state machine tests stay green · 5/5 schemes · LOC budget preserved.
 
+**SHIPPED 2026-05-22 · commit `5f3badc7`** (review-fix tip; impl C3 `99486842`). Per-phase spec: `docs/superpowers/specs/2026-05-22-track-10-T3-younow-badge.md`. Net `≈ −194 LOC` across Home views. Zero substrate diff.
+
 ### **T4 — NEEDS YOU rename + scope tighten**
 
 InboxBlock renamed + filter scope changes:
