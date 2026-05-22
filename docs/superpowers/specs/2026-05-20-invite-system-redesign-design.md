@@ -1,6 +1,6 @@
 # Invite System Redesign — Closed Workspaces (MVP)
 
-**Status:** Draft v3 (2026-05-20). Brainstorm + 5 open questions resolved + 3 follow-up amendments per Anton's review (unified token=code primitive, simplified tier-gate table, explicit Delete action). **Closed-mode-only MVP.** Open mode deferred to post-launch (see §9.1).
+**Status:** Draft v3 (2026-05-20) + Amendment 2026-05-22 (consume-at-submit, never-refund counter semantics — see §15). Brainstorm + 5 open questions resolved + 3 follow-up amendments per Anton's review (unified token=code primitive, simplified tier-gate table, explicit Delete action). **Closed-mode-only MVP.** Open mode deferred to post-launch (see §9.1).
 **Owner:** Local Claude (Mac).
 **Branch:** TBD — implementation not yet scheduled. Spec lands first, plan + execution follow as separate phase.
 **Predecessor:** Track 5 / S3 magic-link invite (current per-invitee ECDH model with mandatory bilateral Join code exchange).
@@ -309,7 +309,7 @@ Up to **10 active tokens** per workspace.
 | `ttl_seconds` | int | TTL chosen at generate time |
 | `expires_at` | timestamptz | created_at + ttl_seconds (NULL if «Never expires») |
 | `max_uses` | int NULL | NULL = unlimited; 1 = single-use |
-| `used_count` | int default 0 | incremented atomically on approval |
+| `used_count` | int default 0 | incremented atomically when invitee submits join request (consume-at-submit per Amendment 2026-05-22). Never refunded on decline/cancel/expire — counter tracks intent-to-join, not approvals. For single-use tokens this hard-caps pending+approved requests to max_uses (the second invitee racing the first gets `invite_exhausted` instead of queuing). |
 | `deleted_at` | timestamptz NULL | NULL = active; set on delete (soft-delete; row stays for audit) |
 | `created_at` | timestamptz | |
 
@@ -420,9 +420,10 @@ Existing S3 table `pending_invites` (single-row-per-invitee ECDH model) stays fo
 7. Local app PATCHes join_requests SET status='approved', encrypted_team_key=blob, decided_at=now()
 8. Edge Function `approve_join_request` fires:
    - validates admin claim (JWT pubkey matches workspace admin)
-   - atomically: increment invite_tokens.used_count; check max_uses if set
-   - if max_uses exhausted: mark token as «no longer accepting» (does NOT auto-delete; admin's call)
    - sends APNs push to bob (kind=invite_request_approved)
+   - **Does NOT touch invite_tokens.used_count** — that was bumped at submit time
+     by `create_join_request` / `consume_invite_and_create_join_request` RPC.
+     Per Amendment 2026-05-22 the counter tracks intent-to-join, not approvals.
 9. Bob's app on push:
    - fetches own join_requests row (RLS allows self-read)
    - reads encrypted_team_key
@@ -440,7 +441,9 @@ Existing S3 table `pending_invites` (single-row-per-invitee ECDH model) stays fo
 2. Local app PATCHes join_requests SET status='declined', decided_at=now()
 3. Edge Function `decline_join_request` fires:
    - validates admin claim
-   - DOES NOT touch invite_tokens.used_count (declined ≠ used)
+   - DOES NOT touch invite_tokens.used_count (counter was bumped at submit time
+     and is never refunded per Amendment 2026-05-22 — decline does not restore
+     the slot on a single-use token)
    - DOES NOT send push (per Anton's §13.5 decision)
 4. Bob's app picks up status change via:
    - Supabase Realtime subscription (if app is open) — instant flip to «Declined» UI
@@ -472,20 +475,36 @@ Existing S3 table `pending_invites` (single-row-per-invitee ECDH model) stays fo
 
 ### 4.6 Single-use semantics
 
-`max_uses=1` enforced via atomic UPDATE in `approve_join_request`:
+`max_uses=1` enforced via atomic RPC `consume_invite_and_create_join_request`
+invoked from `create_join_request` Edge Function at SUBMIT time (per Amendment
+2026-05-22). The RPC `SELECT FOR UPDATE`s the token row, validates state, and
+performs `UPDATE used_count += 1` + `INSERT join_requests` in a single
+transaction:
 
 ```sql
-UPDATE invite_tokens
-SET used_count = used_count + 1
-WHERE code = $1
-  AND (max_uses IS NULL OR used_count < max_uses)
-  AND deleted_at IS NULL
-  AND (expires_at IS NULL OR expires_at > now())
-RETURNING *;
--- If 0 rows: token consumed/expired/deleted, reject approval with 409 Conflict
+-- inside RPC (plpgsql, SECURITY DEFINER)
+SELECT * INTO v_token FROM invite_tokens WHERE code = $1 FOR UPDATE;
+IF v_token.max_uses IS NOT NULL AND v_token.used_count >= v_token.max_uses THEN
+    RAISE EXCEPTION 'invite_exhausted' USING ERRCODE = 'P0001';
+END IF;
+UPDATE invite_tokens SET used_count = used_count + 1 WHERE code = $1;
+INSERT INTO join_requests (...) VALUES (...);
 ```
 
-Race between two simultaneous approvals: atomic UPDATE serializes; loser admin gets 409 → UI shows «Token has reached its usage limit».
+**Race between two simultaneous submits on `max_uses=1`:** Postgres row-level
+lock serializes; the loser's RPC raises `invite_exhausted` → Edge Function
+returns HTTP 410 Gone with `error: invite_exhausted` → UI shows «This invite
+has reached its usage limit».
+
+**No second-chance:** because the counter is bumped at submit time and never
+refunded on decline/cancel/expire, a single-use token cannot be «re-used» if
+the admin declines or the invitee cancels. This is intentional — it caps the
+admin's review queue at `max_uses` per token (no spammy pile-up of pending
+requests on one code).
+
+**`approve_join_request` does NOT touch `used_count`** — its only counter-side
+job is to UPDATE `join_requests.status` and fire APNs. No 409 Conflict path
+on approve.
 
 ### 4.7 TTL expiry cleanup
 
@@ -718,3 +737,65 @@ Build green at each commit. Full xcodebuild 5-scheme regression at each commit. 
 - ✅ Default settings table complete (§7)
 - ✅ All 5 §13 open questions resolved
 - ✅ v3 amendments applied: token = code (single primitive, URL embeds it), `Revoke` → `Delete` in UI + Edge Function, §8 tier table simplified to 5 unambiguous rows
+- ✅ Amendment 2026-05-22 applied: consume-at-submit + never-refund counter semantics (see §15)
+
+---
+
+## 15. Amendments
+
+### 2026-05-22 — Consume-at-submit + never-refund counter semantics
+
+**Was:** `invite_tokens.used_count` was bumped inside `approve_join_request`
+Edge Function via `increment_invite_token_used_count(p_code)` RPC at the moment
+the admin clicked [Approve]. Two simultaneous submits on a `max_uses=1` token
+would both create pending `join_requests` rows; both admins clicking [Approve]
+in parallel would race inside the RPC and the loser would get HTTP 409 with the
+join request rolled back to pending.
+
+**Now:** `used_count` is bumped at SUBMIT time, inside a new atomic RPC
+`consume_invite_and_create_join_request(code, invitee_pubkey, display_name, workspace_id_claim)`
+invoked from `create_join_request` Edge Function. The RPC does `SELECT FOR UPDATE`
+on the token row, validates state (`not deleted`, `not expired`, `used_count < max_uses`,
+optional `workspace_id_claim` match), then performs `UPDATE used_count += 1` and
+`INSERT join_requests` in a single transaction. Validation failures `RAISE EXCEPTION`
+with `ERRCODE = 'P0001'` and one of: `invite_not_found` / `invite_deleted` /
+`invite_expired` / `invite_exhausted` / `workspace_mismatch`. The Edge Function maps
+each to HTTP 410 Gone with `error: <message>`.
+
+`approve_join_request` no longer touches `used_count`, no longer calls the old
+RPC, and no longer has a race-rollback path — its only counter-side responsibility
+is gone. `decline_join_request` and `cancel_join_request` continue not to touch
+the counter; the daily TTL-sweep cron `expire_stale_join_requests_fn` also does
+not touch it.
+
+**Counter never refunded.** Decline, cancel, and TTL expiry leave `used_count`
+where consume-at-submit set it. For single-use tokens this means the slot stays
+consumed regardless of the admin's decision — re-issuing requires generating a
+new token.
+
+**Why:** the previous behavior allowed N invitees to queue pending requests on
+a single-use code (counter wasn't bumped until approve). Consume-at-submit
+hard-caps the queue at `max_uses` per token — second invitee paste-in racing
+the first gets `invite_exhausted` immediately instead of queuing behind a
+request the admin might decline anyway. Never-refund favors anti-spam
+robustness over admin-undo-friendliness; an erroneous decline costs a fresh
+token instead of opening a window for a leaked link to be re-claimed.
+
+**Migration impact:** M027 (`20260601120000_invite_system_redesign.sql`) had
+already been applied on production by the time this amendment was authored,
+so the RPC swap ships as a separate forward-only migration
+`20260602120000_invite_consume_at_create.sql` that `DROP FUNCTION IF EXISTS
+public.increment_invite_token_used_count(text)` + `CREATE FUNCTION
+public.consume_invite_and_create_join_request(...)`. New pgTAP file
+`270_consume_invite_atomic.test.sql` covers happy path + 4 error modes +
+never-refund regression. RLS policy `join_requests_self_insert` is retained
+as defence-in-depth (e.g. a direct PostgREST `INSERT` bypassing the Edge
+Function still gets validated against the live token state — though it would
+no longer bump the counter; the Edge Function path is the only one that does).
+
+Deployed to production `jwxnhwyqjzjmjnmwpwyq` on 2026-05-22 (this session):
+`supabase db push` (new migration) + `supabase functions deploy
+create_join_request approve_join_request`. Existing pending join_requests
+created under the previous behavior carry `used_count = 0` until the next
+submit on the same token (which bumps it to 1 atomically), then approvals
+proceed normally without further bumps. No data backfill required.

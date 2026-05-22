@@ -57,3 +57,6 @@ build/releases/
 *.eddsa
 .envrc
 .env
+
+# Supabase CLI workspace cache (created when supabase CLI is run from leaf/)
+supabase/
