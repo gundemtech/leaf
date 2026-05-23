@@ -543,7 +543,7 @@ Per scope locks + brainstorm:
 
 | Carry | Description | Track-10 disposition |
 |---|---|---|
-| Track-9 §9.3 C-25 | Sleep/wake `ProdWhereStoppedDeriver` substrate bug | OUT — own substrate phase post-Track-10 |
+| Track-9 §9.3 C-25 | Sleep/wake `ProdWhereStoppedDeriver` substrate bug | **RESOLVED Track-10 Phase C** (GUN-C 2026-05-23) — Direction 1 (filter 4 system-edge event_kinds from `MAX(ts)`) + 3 sentinel tests |
 | Track-9 §9.3 (Track-9 wrap section) | TODAY 58022 broken switches | **RESOLVED T1** (substrate query fix) |
 | Track-9 §9.3 (Track-9 wrap section) | TODAY pills missing Terminal | **OBVIATED T1** (pill strip dropped) |
 | Track-9 §9.3 (Track-9 wrap section) | YOU·NOW branch + Linear ID empty for Terminal | **GRACEFUL T7 empty state** (carry substrate phase) |

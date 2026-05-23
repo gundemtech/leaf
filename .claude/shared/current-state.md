@@ -4,7 +4,7 @@ _Срез "где мы сейчас" за 30 секунд. Детали кажд
 
 ## Последнее обновление
 
-**2026-05-23 — Track-10 wrapped (T1..T9 complete) + Phase A + Phase B SHIPPED.** Ветка `feature/track-10-operational-home` ahead of `origin/dev` ~65 commits, **ready for collective merge** (Дима sanity check + push сам). Master smoke per master spec §7.3 — async gate. Phase A (GUN-A) закрыл 4 carries (T9-A11Y / T9-HIG / T9-A11Y-PRIMITIVES / T7-A11Y) через `LeafEmptyState.compact` + `leafChipAccessibility` modifier + 11 NITs. **Phase B (GUN-B · Claude Code workflow first-class в YOU'RE ON) закрыл 3 carries** (T7H1 / T7H2 / T7H3) — `SessionSource` enum + `CurrentTaskSession.sessionSource` 15th defaulted-init iteration + symmetric `ideCandidateToday`/`aiCandidateToday` dispatcher with brainstorm-gate "AI wins if more recent" + `IDEFamilyClassifier.terminalFamilyBundleIDs` public hoist + 2 sentinel-injection tests. Zero substrate touch (registry 198 / 30 tables / 15 MCP tools frozen).
+**2026-05-23 — Track-10 wrapped (T1..T9 complete) + Phase A + Phase B + Phase C SHIPPED.** Ветка `feature/track-10-operational-home` ahead of `origin/dev` ~70 commits, **ready for collective merge** (Дима sanity check + push сам). Master smoke per master spec §7.3 — async gate. **Marathon closure ship:** Phase A (GUN-A) закрыл 4 carries (T9-A11Y / T9-HIG / T9-A11Y-PRIMITIVES / T7-A11Y) через `LeafEmptyState.compact` + `leafChipAccessibility` modifier + 11 NITs. Phase B (GUN-B · Claude Code workflow first-class в YOU'RE ON) закрыл 3 carries (T7H1 / T7H2 / T7H3) — `SessionSource` enum + `CurrentTaskSession.sessionSource` 15th defaulted-init iteration + symmetric `ideCandidateToday`/`aiCandidateToday` dispatcher with brainstorm-gate "AI wins if more recent" + `IDEFamilyClassifier.terminalFamilyBundleIDs` public hoist + 2 sentinel tests. **Phase C (GUN-C · C-25 sleep/wake substrate idle gap) закрыл C-25** — Direction 1 selected: `ProdWhereStoppedDeriver.derive()` `MAX(ts)` SQL augmented с `NOT (signal_type = 'context' AND event_kind IN ('system_slept', 'system_woke', 'system_locked', 'system_unlocked'))` filter + 3 sentinel-injection regression tests. Zero substrate touch (registry 198 / 30 tables / 15 MCP tools frozen). **8 carries closed across 3 phases**; Track-10 master spec §9.2 + Track-9 §9.1.C-25 fully resolved.
 
 **Cumulative net T1..T9:**
 - 0 net event_kinds. Registry frozen **198** (Track-9 baseline preserved).
@@ -18,10 +18,12 @@ _Срез "где мы сейчас" за 30 секунд. Детали кажд
 - T9 polish: 5 a11y IMPORTANTs + 1 HIG IMPORTANT + 2 a11y NITs applied inline (0 BLOCKERS across sweeps). Perf sweep clean (`check-tokens` 3-tier · DateFormatter static-cached · 0 `ForEach.indices` · 0 raw `Color.`/.font system literals). Privacy walkback 0 hits across 12 forbidden patterns.
 - ADR-010 sentinel-injection discipline preserved (T2/T5/T7 lineage; T1/T3/T4/T6/T8/T9 §6 EXEMPT per aggregate-only / polish-only reads).
 
-**Deferred post-Track-10** (carries в master spec §9.2):
-- ~~C-T10-EMIT-T7H1/H2/H3~~ → **RESOLVED Phase B** (this session, 3 carries closed)
-- ~~C-T10-EMIT-T9-A11Y/HIG/A11Y-PRIMITIVES + C-T10-EMIT-T7-A11Y~~ → **RESOLVED Phase A** (this session, 4 carries closed)
-- **C-25 sleep/wake substrate idle gap** → **Phase C planned (this session)**
+**Resolved this session** (Track-10 closure marathon):
+- ~~C-T10-EMIT-T9-A11Y/HIG/A11Y-PRIMITIVES + C-T10-EMIT-T7-A11Y~~ — Phase A (4 carries)
+- ~~C-T10-EMIT-T7H1/H2/H3~~ — Phase B (3 carries)
+- ~~C-25~~ — Phase C (1 carry, Track-9 §9.1)
+
+**Open backlog** (no longer Track-10-blocking):
 - Phase 5.4 DB-backed TeammatePresenceReader (lights up TEAM·N automatically)
 - LinearIDPrefixCache v1.1 — deferred to multi-workspace onboarding trigger
 - C-T10-EMIT-STANDUP-HOURS (v1.1 Settings) · C-T10-EMIT-MCP-STANDUP (future) · C-T10-EMIT-FLAKE (test-infra triage) · C-T10-EMIT-LOC-RESUMEHERO (informational tracker)
@@ -101,9 +103,9 @@ _Один bullet на phase. Детали — git log + спек по дате/�
 
 - **Track-10 collective merge to `main`** — `feature/track-10-operational-home` ready, ~56 commits ahead of `origin/dev`. Master smoke per master spec §7.3 mockup parity per zone — async gate (Дима clicks; deviations honest: WHERE STOPPED → RESUME state per C-25 / TEAM·N empty per Phase 5.4 dep). Push to `origin/dev` first (Дима); then separate-session `--no-ff` merge to `main` + `/sync-docs track-10-wrap` whitepaper sync.
 - **Track-9 collective merge to `main`** — `feature/track-9-substrate` ready, ~170 commits ahead. Same flow (manual smoke + no-ff merge + push + `/sync-docs track-9-wrap`). Two independent collective merges queued.
-- **"Claude Code workflow first-class в YOU'RE ON" own phase** (subsumes C-T10-EMIT-T7H1/H2/H3) — substrate brainstorm gate: should aiCollaboration fallback ever WIN over IDE match? Local moat hot-fixes landed during T7 post-ship smoke (LinearIDPrefixCache · cwd fallback · terminalFamily dwell) but NOT committed; need own spec + sentinel-injection regression for aiCollaboration `cwd` → workspace match.
+- ~~"Claude Code workflow first-class в YOU'RE ON" own phase~~ — **DONE Phase B (this session)** — SessionSource enum + symmetric `ideCandidateToday`/`aiCandidateToday` dispatcher (AI wins if more recent) + `IDEFamilyClassifier.terminalFamilyBundleIDs` public hoist + 2 sentinel tests.
 - ~~"Track-10 design-system polish + a11y close-out" own phase~~ — **DONE Phase A (this session)** — `LeafEmptyState.compact` variant + `leafChipAccessibility(label:isSelected:)` modifier + 11 NITs landed (4 carries C-T10-EMIT-T9-A11Y/HIG/A11Y-PRIMITIVES + T7-A11Y RESOLVED). Zero substrate touch.
-- **C-25 sleep/wake gap (post-Track-9 own phase)** — `ProdWhereStoppedDeriver.derive()` idle gate fails on closed-laptop scenario (master spec §9.1.C-25 — 3 fix directions). Blocks "WHERE STOPPED feels useful day-to-day" UX promise — most users see empty most days. Own phase brainstorm + sentinel test (touches Track-1 D3 substrate without walkback coverage before T7).
+- ~~C-25 sleep/wake gap~~ — **RESOLVED Track-10 Phase C** (this session) — `ProdWhereStoppedDeriver` `MAX(ts)` SQL filters 4 system-edge context event_kinds + 3 sentinel tests added.
 - **Post-Track-9 substrate backlog**: C-26 (moat 795 LOC reorg), C-29 (`queryCommentsOnMyWork` viewer_login enrichment), C-32 UUID-based `meeting_id`, C-38 (TopToolsCard real substrate), C-39 (per-hour heatmap), C-44 (dual-axis Chart macOS 15+).
 - **Post-Track-9 UI backlog**: C-40 (per-day chart drill-down), C-41 (multi-week 30d/90d Analytics), C-5 (LocalAppsStore reactivity), C-8 (Resume CTA branch staleness v1.1).
 - **C-T10-EMIT-STANDUP-HOURS** (v1.1) — Settings → Standup: "RECAP window" + "EOD window" pickers (currently hardcoded `[6,11)` / `[17,23)`).
