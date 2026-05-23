@@ -195,6 +195,13 @@ public struct InsightsSnapshot: Sendable, Hashable {
     /// `nil` ↔ no current task identifiable (Terminal-only work, no IDE foreground
     /// in attention history) → YOU'RE ON block renders empty state.
     public let currentSession: CurrentTaskSession?
+    /// Track-10 T8 — bundled value type powering the Home Zone-5 RECAP + EOD
+    /// standup helper. Composed once per `InsightsReader.refresh()` via
+    /// `StandupComposer.compose(...)`. `nil` ↔ composer received all-zero
+    /// inputs (cold DB / non-prod stub) → both blocks render empty-state
+    /// path. 14th iteration of defaulted-init blast-radius; tail position
+    /// preserves T2..T7 callsite back-compat.
+    public let standupRecap: StandupSnapshot?
 
     public init(
         topApps: [AppTimeEntry],
@@ -246,7 +253,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         sinceLastActiveItems: [SinceLastActiveItem] = [],
         activeTeammates: [TeammateSnapshot] = [],
         memberCount: Int = 1,
-        currentSession: CurrentTaskSession? = nil
+        currentSession: CurrentTaskSession? = nil,
+        standupRecap: StandupSnapshot? = nil
     ) {
         self.topApps = topApps
         self.sessions = sessions
@@ -298,6 +306,7 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.activeTeammates = activeTeammates
         self.memberCount = memberCount
         self.currentSession = currentSession
+        self.standupRecap = standupRecap
     }
 
     /// Convenience init — рассчитывает `deepSessionsCount` по threshold'у.
@@ -355,7 +364,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         sinceLastActiveItems: [SinceLastActiveItem] = [],
         activeTeammates: [TeammateSnapshot] = [],
         memberCount: Int = 1,
-        currentSession: CurrentTaskSession? = nil
+        currentSession: CurrentTaskSession? = nil,
+        standupRecap: StandupSnapshot? = nil
     ) {
         self.init(
             topApps: topApps,
@@ -407,7 +417,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
             sinceLastActiveItems: sinceLastActiveItems,
             activeTeammates: activeTeammates,
             memberCount: memberCount,
-            currentSession: currentSession
+            currentSession: currentSession,
+            standupRecap: standupRecap
         )
     }
 

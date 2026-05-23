@@ -797,6 +797,36 @@ final class InsightsSnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.weeklyMetrics, .empty)
     }
 
+    // MARK: - Track-10 T8 — standupRecap defaulted init (14th iteration)
+
+    /// Defaulted `standupRecap: StandupSnapshot? = nil` matches the T7
+    /// `currentSession` precedent. Existing fixture/test callsites stay
+    /// unmodified — `emptySnapshot()` returns nil for the new field without
+    /// any signature change.
+    func testSnapshotDefaultsStandupRecapToNil() {
+        XCTAssertNil(emptySnapshot().standupRecap)
+    }
+
+    func testSnapshotCarriesStandupRecap() {
+        let recap = StandupRecap(
+            yesterdayCommitsCount: 3,
+            yesterdayClosedLinearKeys: ["GUN-204"],
+            yesterdayReviewedPRsCount: 2,
+            todayContinuing: nil,
+            waitingItems: [],
+            openBlockers: []
+        )
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500,
+            standupRecap: StandupSnapshot(recap: recap, eod: nil)
+        )
+        XCTAssertEqual(snapshot.standupRecap?.recap, recap)
+        XCTAssertNil(snapshot.standupRecap?.eod)
+    }
+
     func testSnapshotRoundTripsWeeklyMetrics() {
         let custom = WeeklyMetrics(
             dailySeries: Array(repeating: DailyMetric.empty, count: 7),
