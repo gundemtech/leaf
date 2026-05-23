@@ -21,7 +21,7 @@ import Observation
 @MainActor
 @Observable
 final class WorkspaceReader {
-  enum State: Equatable {
+  enum State: Equatable, Sendable {
     case loading
     case empty  // no workspaces — onboarding
     case loaded(workspaces: [Workspace], active: Workspace, members: [TeamMember])
@@ -62,6 +62,13 @@ final class WorkspaceReader {
   /// Idempotent on the wire (409 → already there → success).
   private var supabaseSyncedWorkspaceIDs: Set<String> = []
 
+  /// M-IV — cancel-prior coalescing handle for `refresh()`. Each refresh
+  /// cancels the previous detached load before starting a new one, so rapid
+  /// sidebar switching ends on the latest workspace's data with no races.
+  /// Only `refresh()` uses this; destructive mutations spawn their own
+  /// standalone (never-cancelled) tasks so their writes always complete.
+  private var currentTask: Task<Void, Never>?
+
   init(
     databaseURL: URL = DatabasePath.defaultURL(),
     databaseConfig: DatabaseConfig = WorkspaceReader.defaultConfig(),
@@ -81,51 +88,60 @@ final class WorkspaceReader {
   }
 
   /// Reads workspaces + active members from DB into state. Idempotent.
+  ///
+  /// M-IV: the blocking DB+crypto+disk work runs off the main thread in a
+  /// single cancel-prior detached task; state is mutated only on the
+  /// MainActor. Preserve-stale — never flashes `.loading` on a warm refresh
+  /// (cold start is already `.loading`, so the spinner shows exactly once).
   func refresh() {
-    do {
-      let db = try ensureDatabase()
-      let workspaces = try db.listWorkspaces(includeLeft: false)
-      guard !workspaces.isEmpty else {
-        state = .empty
-        return
+    currentTask?.cancel()
+    let cachedDB = self.database
+    let url = databaseURL
+    let cfg = databaseConfig
+    let enc = databaseEncryption
+    let root = keystoreRoot
+    let knownActiveID = activeStore.activeWorkspaceID
+
+    currentTask = Task.detached(priority: .userInitiated) { [weak self] in
+      do {
+        let snap = try WorkspaceReader.loadSnapshot(
+          cachedDB: cachedDB, url: url, cfg: cfg, enc: enc, root: root,
+          knownActiveID: knownActiveID)
+        try Task.checkCancellation()
+        // Apply on the MainActor via an isolated method (not a captured-self
+        // MainActor.run closure, which Swift 6 flags as a cross-isolation
+        // data race). Only Sendable values cross the boundary.
+        await self?.applyRefreshedSnapshot(snap)
+      } catch is CancellationError {
+        // Superseded by a newer refresh() — drop result, preserve stale state.
+      } catch {
+        // Map the error to a user-facing string OFF main (userFacingMessage is
+        // nonisolated) so only Sendable Strings cross to the MainActor.
+        await self?.applyRefreshFailure(
+          message: WorkspaceReader.userFacingMessage(for: error),
+          debug: String(describing: error))
       }
-
-      // Resolve active workspace (post-M019 first launch fills the UD key
-      // via backfillIfNeeded; subsequent launches read the stored id).
-      try activeStore.backfillIfNeeded(database: db)
-      guard let activeID = activeStore.activeWorkspaceID,
-        let active = workspaces.first(where: { $0.id == activeID })
-      else {
-        state = .error(message: "Couldn’t resolve active workspace.")
-        return
-      }
-
-      // Self-removed detection per active workspace (Phase 5.3.E pattern).
-      let allMembers = try db.readTeamMembers(workspaceID: active.id, includeRemoved: true)
-      let priv = try IdentityService.ensureLocalIdentity(at: keystoreRoot)
-      let myPubHex = priv.publicKey.rawRepresentation
-        .map { String(format: "%02x", $0) }.joined()
-      if let selfMember = allMembers.first(where: { $0.pubkeyHex == myPubHex }),
-        selfMember.removedAt != nil
-      {
-        state = .removedFromActiveWorkspace(workspaceName: active.name)
-        return
-      }
-
-      let activeMembers = allMembers.filter { $0.removedAt == nil }
-      state = .loaded(workspaces: workspaces, active: active, members: activeMembers)
-
-      // Self-heal pre-server-sync legacy rows. One best-effort upsert per
-      // workspace per session — 201 means we filled the gap, 409 means the
-      // server already had it. Any other failure logs and re-tries on the
-      // next session boundary.
-      ensureActiveWorkspaceSyncedToSupabase(
-        workspace: active, createdByPubkey: myPubHex
-      )
-    } catch {
-      logger.error("WorkspaceReader.refresh failed: \(String(describing: error), privacy: .public)")
-      state = .error(message: userFacingMessage(for: error))
     }
+  }
+
+  /// MainActor applier for a successful off-main load (M-IV). Caches the DB
+  /// handle, persists any backfilled active id, swaps state, and fires the
+  /// best-effort Supabase self-heal upsert when loaded.
+  @MainActor
+  private func applyRefreshedSnapshot(_ snap: WorkspaceSnapshot) {
+    self.database = snap.db
+    if let id = snap.backfilledID { activeStore.setActive(id) }
+    state = snap.state
+    if case .loaded(_, let active, _) = snap.state {
+      ensureActiveWorkspaceSyncedToSupabase(workspace: active, createdByPubkey: snap.myPubHex)
+    }
+  }
+
+  /// MainActor applier for an off-main load failure (M-IV).
+  @MainActor
+  private func applyRefreshFailure(message: String, debug: String) {
+    logger.error("WorkspaceReader.refresh failed: \(debug, privacy: .public)")
+    state = .error(message: message)
   }
 
   /// Fire-and-forget upsert of the active workspace to Supabase. Used by
@@ -516,7 +532,23 @@ final class WorkspaceReader {
     return db
   }
 
+  /// Instance forwarder kept so existing MainActor call sites (createWorkspace,
+  /// rename, delete, hardDelete, leaveWorkspace) stay unchanged.
   private func userFacingMessage(for error: Error) -> String {
+    Self.userFacingMessage(for: error)
+  }
+
+  /// M-IV: `nonisolated static` so the off-main `refresh()` detached task can
+  /// map an error to a Sendable String before hopping to the MainActor. Pure —
+  /// switches on error type, no instance state.
+  nonisolated static func userFacingMessage(for error: Error) -> String {
+    if let wErr = error as? WorkspaceReaderError {
+      switch wErr {
+      case .soloAdminCannotLeave:
+        return
+          "You’re the only member of this workspace. Use Delete Permanently instead of leaving."
+      }
+    }
     if let leafErr = error as? LeafError {
       switch leafErr {
       case .invalidPayload:
@@ -566,5 +598,90 @@ final class WorkspaceReader {
     #else
       return nil
     #endif
+  }
+}
+
+// MARK: - M-IV off-main concurrency support
+
+/// Sendable result of the off-main workspace load, crossing the actor boundary
+/// from the detached loader back to the MainActor applier.
+private struct WorkspaceSnapshot: Sendable {
+  let db: LeafCore.Database
+  let state: WorkspaceReader.State
+  let backfilledID: String?
+  /// Populated only for `.loaded`/`.removedFromActiveWorkspace`; `""` otherwise
+  /// (read only inside the `if case .loaded` supabase-sync branch).
+  let myPubHex: String
+}
+
+/// Sendable result of an off-main mutating op (leave/delete/hardDelete):
+/// the (possibly newly-opened) DB handle to re-cache, plus the next active id.
+private struct WorkspaceMutationOutcome: Sendable {
+  let db: LeafCore.Database
+  let remainingFirstID: String?
+}
+
+/// Typed error so the off-main solo-admin guard maps to its existing copy
+/// through `WorkspaceReader.userFacingMessage`.
+private enum WorkspaceReaderError: Error {
+  case soloAdminCannotLeave
+}
+
+extension WorkspaceReader {
+  /// Reuse the cached write pool; only open a new one when none is cached.
+  /// `nonisolated` so it runs inside `Task.detached` (the class is `@MainActor`).
+  nonisolated fileprivate static func openDB(
+    cachedDB: LeafCore.Database?, url: URL, cfg: DatabaseConfig, enc: EncryptionOptions?
+  ) throws -> LeafCore.Database {
+    if let cachedDB { return cachedDB }
+    return try LeafCore.Database.openForWrite(at: url, config: cfg, encryption: enc)
+  }
+
+  /// Next active id after excluding `workspaceID` — alphabetical first of the
+  /// remaining non-left workspaces (mirrors the original inline re-resolve).
+  nonisolated fileprivate static func computeRemainingFirstID(
+    _ db: LeafCore.Database, excluding workspaceID: String
+  ) throws -> String? {
+    try db.listWorkspaces(includeLeft: false)
+      .filter { $0.id != workspaceID }
+      .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+      .first?.id
+  }
+
+  /// The full off-main read: open → list → resolve active → members → identity
+  /// → self-removed check. Returns a Sendable snapshot the MainActor applies.
+  nonisolated fileprivate static func loadSnapshot(
+    cachedDB: LeafCore.Database?, url: URL, cfg: DatabaseConfig, enc: EncryptionOptions?,
+    root: URL, knownActiveID: String?
+  ) throws -> WorkspaceSnapshot {
+    let db = try openDB(cachedDB: cachedDB, url: url, cfg: cfg, enc: enc)
+    let workspaces = try db.listWorkspaces(includeLeft: false)
+    guard !workspaces.isEmpty else {
+      return WorkspaceSnapshot(db: db, state: .empty, backfilledID: nil, myPubHex: "")
+    }
+    try Task.checkCancellation()
+    let resolution = resolveActiveWorkspace(workspaces, knownActiveID: knownActiveID)
+    guard let active = resolution.active else {
+      return WorkspaceSnapshot(
+        db: db, state: .error(message: "Couldn’t resolve active workspace."),
+        backfilledID: nil, myPubHex: "")
+    }
+    let allMembers = try db.readTeamMembers(workspaceID: active.id, includeRemoved: true)
+    try Task.checkCancellation()
+    let priv = try IdentityService.ensureLocalIdentity(at: root)
+    let myPubHex = priv.publicKey.rawRepresentation
+      .map { String(format: "%02x", $0) }.joined()
+    if let selfMember = allMembers.first(where: { $0.pubkeyHex == myPubHex }),
+      selfMember.removedAt != nil
+    {
+      return WorkspaceSnapshot(
+        db: db, state: .removedFromActiveWorkspace(workspaceName: active.name),
+        backfilledID: resolution.backfilledID, myPubHex: myPubHex)
+    }
+    let activeMembers = allMembers.filter { $0.removedAt == nil }
+    return WorkspaceSnapshot(
+      db: db,
+      state: .loaded(workspaces: workspaces, active: active, members: activeMembers),
+      backfilledID: resolution.backfilledID, myPubHex: myPubHex)
   }
 }
