@@ -36,7 +36,7 @@ struct SinceLastActiveBlock: View {
                     LeafDivider()
                     contentBody
                 }
-                .animation(.easeInOut(duration: 0.2), value: filteredItems)
+                .animation(.easeInOut(duration: 0.25), value: filteredItems)
             }
         }
     }
