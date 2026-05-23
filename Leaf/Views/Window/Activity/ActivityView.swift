@@ -66,7 +66,7 @@ struct ActivityView: View {
                 title: "Couldn't load today's events",
                 description: msg,
                 ctaTitle: "Try again",
-                onCTA: { reader.refresh() }
+                onCTA: { reader.refresh(force: true) }
             )
         case .loaded(let snapshot, _):
             loadedContent(for: snapshot)

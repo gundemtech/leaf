@@ -219,7 +219,7 @@ struct HomeView: View {
             title: "Couldn't load Home",
             description: msg,
             ctaTitle: "Try again",
-            onCTA: { reader.refresh() }
+            onCTA: { reader.refresh(force: true) }
         )
     }
 }
