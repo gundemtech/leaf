@@ -330,6 +330,55 @@ final class OrgServiceTests: XCTestCase {
         XCTAssertEqual(onDisk, knownPriv.rawRepresentation)
     }
 
+    // MARK: - 14. activeMemberCount() — Track-10 T6
+
+    /// Brand-new install: no org row → returns 1 (solo personal user).
+    /// Drives Track-10 T6 HomeView Zone 3 solo-vs-team gate
+    /// (`snapshot.memberCount > 1` → ViewThatFits; else NEEDS YOU full-width).
+    func testActiveMemberCount_NoOrg_ReturnsOne() throws {
+        let svc = makeService()
+        XCTAssertEqual(try svc.activeMemberCount(), 1)
+    }
+
+    /// Personal-org with only the self member → still 1 (solo user has a team-of-one).
+    func testActiveMemberCount_SingleSelf() throws {
+        let svc = makeService()
+        _ = try svc.createPersonalOrg(displayName: "Personal")
+        XCTAssertEqual(try svc.activeMemberCount(), 1)
+    }
+
+    /// Two active + one removed member → returns 2 (removed excluded via
+    /// `includeRemoved: false` default). Track-10 T6 gate fires.
+    func testActiveMemberCount_MultiMember_ExcludesRemoved() throws {
+        let svc = makeService()
+        _ = try svc.createPersonalOrg(displayName: "Personal")
+        let org = try db.readOrg()!
+
+        // Insert a second active member + a tombstoned third.
+        let active = TeamMember(
+            id: "test-active-2",
+            orgID: org.id,
+            role: .member,
+            pubkeyHex: String(repeating: "00", count: 32),
+            displayName: "Active Two",
+            addedAt: Date(timeIntervalSince1970: 1_700_000_100),
+            removedAt: nil
+        )
+        let removed = TeamMember(
+            id: "test-removed-3",
+            orgID: org.id,
+            role: .member,
+            pubkeyHex: String(repeating: "11", count: 32),
+            displayName: "Removed Three",
+            addedAt: Date(timeIntervalSince1970: 1_700_000_200),
+            removedAt: Date(timeIntervalSince1970: 1_700_000_300)
+        )
+        try db.insertTeamMember(active)
+        try db.insertTeamMember(removed)
+
+        XCTAssertEqual(try svc.activeMemberCount(), 2)
+    }
+
     // MARK: - Helpers
 
     private func isOrgAlreadyExists(_ error: Error) -> Bool {

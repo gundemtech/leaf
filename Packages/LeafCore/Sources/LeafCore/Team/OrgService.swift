@@ -124,6 +124,16 @@ public struct OrgService: Sendable {
         try database.readOrg()
     }
 
+    /// Track-10 T6 — active member count for the org. Returns `1` when no
+    /// `org` row exists (brand-new install, solo personal user); otherwise
+    /// counts `team_members.removed_at_ms IS NULL` via existing
+    /// `Database.readTeamMembers(orgID:, includeRemoved: false)`. Drives the
+    /// Home Zone-3 solo-vs-team gate in `InsightsReader.refresh()`.
+    public func activeMemberCount() throws -> Int {
+        guard let org = try database.readOrg() else { return 1 }
+        return try database.readTeamMembers(orgID: org.id, includeRemoved: false).count
+    }
+
     /// Default `randomBytes` factory: `SecRandomCopyBytes` под the hood
     /// (mirrors `FileKeyStore.generateRandomKey()` discipline). Public потому
     /// что используется в default arg `init`'а; внешние callers не должны

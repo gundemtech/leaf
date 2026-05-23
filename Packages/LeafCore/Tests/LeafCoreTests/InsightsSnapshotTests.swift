@@ -689,6 +689,53 @@ final class InsightsSnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.sameTaskTeammates, [match])
     }
 
+    // MARK: - Track-10 T6 — activeTeammates + memberCount defaulted inits
+
+    /// Defaulted `activeTeammates: [TeammateSnapshot] = []` matches the
+    /// `sameTaskTeammates` / `sinceLastActiveItems` pattern — existing test
+    /// fixtures keep compiling without an explicit override.
+    func testSnapshotDefaultsActiveTeammatesEmpty() {
+        XCTAssertEqual(emptySnapshot().activeTeammates, [])
+    }
+
+    func testSnapshotCarriesActiveTeammates() {
+        let snap = TeammateSnapshot(
+            memberID: "m-1",
+            displayName: "Anton",
+            linearID: "LEAF-204",
+            branch: "feature/foo",
+            repo: "leaf",
+            currentApp: "Xcode",
+            lastActivityAtMs: 1_700_000_000_000
+        )
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500,
+            activeTeammates: [snap]
+        )
+        XCTAssertEqual(snapshot.activeTeammates, [snap])
+    }
+
+    /// Defaulted `memberCount: Int = 1` matches `OrgService.activeMemberCount()`
+    /// fallback when no org exists — solo Mac default state. Track-10 T6
+    /// HomeView Zone 3 reads this for the solo-vs-team gate.
+    func testSnapshotDefaultsMemberCountToOne() {
+        XCTAssertEqual(emptySnapshot().memberCount, 1)
+    }
+
+    func testSnapshotCarriesMemberCount() {
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500,
+            memberCount: 3
+        )
+        XCTAssertEqual(snapshot.memberCount, 3)
+    }
+
     // MARK: - Phase Track-8 P6 — INBOX
 
     func testSnapshotDefaultsInboxItemsEmpty() {

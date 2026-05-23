@@ -184,6 +184,20 @@ public struct InsightsSnapshot: Sendable, Hashable {
     /// from `DerivedInsights.recentActivityFeed(since:limit:)`. Empty default keeps
     /// fixture / test callsites passing without override.
     public let sinceLastActiveItems: [SinceLastActiveItem]
+    /// Track-10 T6 — teammates last-seen within the freshness window (15 min default),
+    /// populated by `TeammatePresenceReader.recentTeammateSnapshots(maxAge:now:)`. Empty
+    /// default keeps existing fixture/test callsites compiling without override.
+    /// Production `InsightsReader.refresh()` writes the real value once Phase 5.4 wires
+    /// `DBTeammatePresenceReader` against `presence_history`; before then the stub
+    /// returns `[]` and the TEAM·N block renders its "Team presence sync coming
+    /// soon." empty CTA.
+    public let activeTeammates: [TeammateSnapshot]
+    /// Track-10 T6 — `OrgService.activeMemberCount()` (= 1 when no org row, otherwise
+    /// `team_members.removed_at_ms IS NULL` count). Drives the Home Zone-3 solo-vs-team
+    /// gate (`memberCount > 1` → 2-col ViewThatFits with NEEDS YOU + TEAM·N; else
+    /// NEEDS YOU full-width). Defaults to `1` so existing callsites keep solo-user
+    /// behavior without populating.
+    public let memberCount: Int
 
     public init(
         topApps: [AppTimeEntry],
@@ -233,7 +247,9 @@ public struct InsightsSnapshot: Sendable, Hashable {
         weeklyMetrics: WeeklyMetrics = .empty,
         gitDelta: GitDeltaSnapshot? = nil,
         currentTaskIdentity: TaskIdentity? = nil,
-        sinceLastActiveItems: [SinceLastActiveItem] = []
+        sinceLastActiveItems: [SinceLastActiveItem] = [],
+        activeTeammates: [TeammateSnapshot] = [],
+        memberCount: Int = 1
     ) {
         self.topApps = topApps
         self.sessions = sessions
@@ -283,6 +299,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.gitDelta = gitDelta
         self.currentTaskIdentity = currentTaskIdentity
         self.sinceLastActiveItems = sinceLastActiveItems
+        self.activeTeammates = activeTeammates
+        self.memberCount = memberCount
     }
 
     /// Convenience init — рассчитывает `deepSessionsCount` по threshold'у.
@@ -338,7 +356,9 @@ public struct InsightsSnapshot: Sendable, Hashable {
         weeklyMetrics: WeeklyMetrics = .empty,
         gitDelta: GitDeltaSnapshot? = nil,
         currentTaskIdentity: TaskIdentity? = nil,
-        sinceLastActiveItems: [SinceLastActiveItem] = []
+        sinceLastActiveItems: [SinceLastActiveItem] = [],
+        activeTeammates: [TeammateSnapshot] = [],
+        memberCount: Int = 1
     ) {
         self.init(
             topApps: topApps,
@@ -388,7 +408,9 @@ public struct InsightsSnapshot: Sendable, Hashable {
             weeklyMetrics: weeklyMetrics,
             gitDelta: gitDelta,
             currentTaskIdentity: currentTaskIdentity,
-            sinceLastActiveItems: sinceLastActiveItems
+            sinceLastActiveItems: sinceLastActiveItems,
+            activeTeammates: activeTeammates,
+            memberCount: memberCount
         )
     }
 
