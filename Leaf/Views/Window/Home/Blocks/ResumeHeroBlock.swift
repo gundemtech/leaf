@@ -227,10 +227,14 @@ struct ResumeHeroBlock: View {
         return snap.excerpt
     }
 
+    /// Display line for the last commit subject. SwiftUI's `.lineLimit(1)`
+    /// + `.truncationMode(.tail)` handles overflow natively at render time,
+    /// so we no longer hand-truncate. Quote-marks dropped — they survived
+    /// into VoiceOver as audible "quote ... unquote" punctuation per
+    /// Phase A a11y sweep.
     private func commitSubjectLine(_ commit: RecentCommitSnapshot) -> String {
         let trimmed = commit.subject.trimmingCharacters(in: .whitespaces)
-        let capped = trimmed.count > 60 ? String(trimmed.prefix(60)) + "…" : trimmed
-        return "Last commit: \"\(capped)\""
+        return "Last commit: \(trimmed)"
     }
 
     private var headerText: String {

@@ -41,7 +41,7 @@ struct TeamNBlock: View {
             Text("TEAM · \(teammates.count) · active")
                 .leafSectionLabel()
                 .foregroundStyle(LeafColor.text.tertiary)
-                .accessibilityLabel("Team, \(teammates.count) active")
+                .accessibilityLabel(Self.headerA11yLabel(count: teammates.count))
                 .accessibilityAddTraits(.isHeader)
 
             LeafCard(padding: .regular) {
@@ -117,7 +117,8 @@ struct TeamNBlock: View {
     private func avatarCircle(for snapshot: TeammateSnapshot) -> some View {
         Circle()
             .fill(avatarTint(forMemberID: snapshot.memberID))
-            .frame(width: 32, height: 32)
+            // LeafSpace.xxl = 32pt avatar (semantic spacing-scale mapping).
+            .frame(width: LeafSpace.xxl, height: LeafSpace.xxl)
             .overlay(
                 Text(TeamNRowComposer.initials(snapshot.displayName))
                     .font(LeafType.body.small)
@@ -165,5 +166,15 @@ struct TeamNBlock: View {
     private func formatRelative(msAgo ms: Int64) -> String {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         return HomeRelativeTimeFormatter.format(deltaMs: max(0, nowMs - ms), nowMs: nowMs)
+    }
+
+    /// VoiceOver header label with 0/1/N pluralization.
+    /// Visual chip uses compact "TEAM · N · active"; VO reads natural English.
+    static func headerA11yLabel(count: Int) -> String {
+        switch count {
+        case 0: return "Team, no members active"
+        case 1: return "Team, 1 member active"
+        default: return "Team, \(count) members active"
+        }
     }
 }

@@ -44,14 +44,16 @@ struct EodBlock: View {
                 }
             }
         }
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
     private var emptyState: some View {
-        Text("Nothing captured today yet.")
-            .font(LeafType.body.small)
-            .foregroundStyle(LeafColor.text.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        LeafEmptyState(
+            icon: LeafIcons.brand.leaf,
+            title: "Nothing captured today yet.",
+            style: .compact
+        )
     }
 }
 

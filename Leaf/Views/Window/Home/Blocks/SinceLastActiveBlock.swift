@@ -116,6 +116,7 @@ struct SinceLastActiveBlock: View {
             }
             .buttonStyle(.borderless)
             .font(LeafType.body.small)
+            .accessibilityHint("Advances the last-seen cursor so the SINCE block resets next refresh.")
         }
         .padding(.top, LeafSpace.xs)
     }

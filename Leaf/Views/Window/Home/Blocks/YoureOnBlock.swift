@@ -75,10 +75,9 @@ struct YoureOnBlock: View {
     private var emptyState: some View {
         LeafEmptyState(
             icon: LeafIcons.brand.leaf,
-            title: "No active task identified — Leaf reads `LEAF-XXX` from branch names of foreground IDE workspaces.",
-            description: nil,
-            ctaTitle: nil,
-            onCTA: nil
+            title: "No active task identified.",
+            description: "Leaf reads LEAF-XXX from your IDE branch names.",
+            style: .compact
         )
     }
 

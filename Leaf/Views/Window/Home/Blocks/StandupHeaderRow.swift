@@ -28,7 +28,8 @@ struct StandupHeaderRow: View {
                     .foregroundStyle(LeafColor.text.tertiary)
                     .rotationEffect(.degrees(expanded ? 0 : -90))
                     .animation(.easeOut(duration: 0.15), value: expanded)
-                    .frame(width: 12)
+                    // LeafSpace.md = 12pt chevron container (semantic mapping).
+                    .frame(width: LeafSpace.md)
                     .accessibilityHidden(true)
                 Text(label)
                     .leafSectionLabel()
