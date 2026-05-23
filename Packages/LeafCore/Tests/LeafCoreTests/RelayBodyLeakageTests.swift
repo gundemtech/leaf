@@ -4047,5 +4047,59 @@ final class RelayBodyLeakageTests: XCTestCase {
             "raw events.payload_json intentionally preserves substrate — walkback semantics deliberate, not accidental")
     }
 
-    #endif // false — Phase III.B: T7/T8 walkback tests pending Phase IV.A Prod arrival
+    // MARK: - Track-10 T5 — recentActivityFeed body walkback
+
+    /// T5 sentinel-injection regression: `recentActivityFeed` reads `events`
+    /// payload via `json_extract` on allow-listed keys only. Forbidden body
+    /// fields (body / comment_body / note_body / email_subject / file_contents /
+    /// raw_prompt / tool_input / tool_response / prompt / diff) MUST NOT appear
+    /// in any rendered `ActivityFeedItem` field. T5 stops being §6 EXEMPT.
+    func test_recentActivityFeed_DoesNotLeakBodyFields_TrackTen_T5() throws {
+        let db = try Database.openForWrite(
+            at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let sentinel = "LEAKED_SENTINEL_T5_RECENT_FEED"
+        let cursorMs = Int64(Date().timeIntervalSince1970 * 1000) - 60_000
+        let event = RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(cursorMs + 30_000) / 1000),
+            signalType: .action,
+            bundleID: nil,
+            payload: [
+                "source": "github",
+                "event_kind": "gh_pr_merged",
+                "repo": "gundemtech/leaf",
+                "title": "Add feature X",
+                "number": "142",
+                "sha": "",
+                "branch": "",
+                // FORBIDDEN bodies — substrate preserves them at write boundary
+                // (walkback semantic at read boundary); MUST NOT escape into feed.
+                "body": sentinel + " body",
+                "comment_body": sentinel + " comment",
+                "note_body": sentinel + " note",
+                "email_subject": sentinel + " email",
+                "file_contents": sentinel + " file",
+                "raw_prompt": sentinel + " prompt",
+                "tool_input": sentinel + " input",
+                "tool_response": sentinel + " response",
+                "prompt": sentinel + " bare",
+                "diff": sentinel + " diff",
+            ]
+        )
+        try db.write(event)
+
+        let insights = ProdInsights(database: db)
+        let result = try insights.recentActivityFeed(since: cursorMs, limit: 20)
+        XCTAssertEqual(result.count, 1)
+        let item = result[0]
+        let rendered: [String?] = [
+            item.targetTitle, item.targetRef, item.actorDisplay,
+            item.repoHint, item.sourceURL?.absoluteString, item.eventKind,
+        ]
+        for field in rendered.compactMap({ $0 }) {
+            XCTAssertFalse(
+                field.contains(sentinel),
+                "ActivityFeedItem field leaked T5 sentinel: '\(field)'")
+        }
+    }
+    #endif // false — Phase III.B: T7/T8/T5 walkback tests pending Phase IV.A Prod arrival
 }

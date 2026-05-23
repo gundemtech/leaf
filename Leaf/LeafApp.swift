@@ -46,6 +46,7 @@ struct LeafApp: App {
   )
   @State private var permissions = PermissionsService()
   @State private var updater: UpdaterController
+  @State private var lastSeenCursor = LastSeenCursor()
   @State private var reader = InsightsReader()
   // Track 5 S2 Task 12 — `OrgReader` deleted. `WorkspaceReader` +
   // `ActiveWorkspaceStore` — sole substrate for workspace surface.
@@ -559,6 +560,7 @@ struct LeafApp: App {
         .environment(permissions)
         .environment(updater)
         .environment(reader)
+        .environment(lastSeenCursor)  // Track-10 T5
         .environment(workspaceReader)  // Track 5 S2 Task 10
         .environment(activeWorkspaceStore)  // Track 5 S2 Task 10
         // Track 5 / S3 — SupabaseClient is an actor (not @Observable), injected directly
@@ -662,6 +664,7 @@ struct LeafApp: App {
         .environment(permissions)
         .environment(updater)
         .environment(reader)
+        .environment(lastSeenCursor)  // Track-10 T5
         .environment(workspaceReader)  // Track 5 S2 Task 10
         .environment(activeWorkspaceStore)  // Track 5 S2 Task 10
         .environment(inviteAcceptReader)
