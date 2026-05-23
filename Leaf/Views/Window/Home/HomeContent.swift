@@ -4,11 +4,12 @@
 //  budget (master spec §7.2 gate 6 ≤ 310) before the Zone-4 ViewThatFits
 //  2-col rewire lands in C5. Zero behavior change in this commit.
 //
-//  Track-8 5-block composition (post Track-10 T2/T3/T4/T5/T6/T7):
+//  Track-8 5-block composition (post Track-10 T2/T3/T4/T5/T6/T7/T8):
 //    1. RESUME HERO                              (T2)
 //    2. TODAY (with inline YOU·NOW state badge)  (T3)
 //    3. NEEDS YOU ‖ TEAM·N  (ViewThatFits 2-col) (T4, T6)
 //    4. SINCE ‖ YOU'RE ON   (ViewThatFits 2-col) (T5, T7)
+//    5. RECAP + EOD standup helpers              (T8)
 //
 
 import LeafCore
@@ -97,6 +98,14 @@ struct HomeContent: View {
                         )
                     }
                 }
+
+                // Track-10 T8 — Zone-5 standup helper. Always-visible chevron
+                // headers; body auto-reveals by hour bucket (RECAP 06–11,
+                // EOD 17–23). Manual tap toggles regardless of hour; @State
+                // only, resets on view rebuild (no UserDefaults — Brainstorm
+                // Q3 rejected).
+                RecapBlock(snapshot: snapshot.standupRecap?.recap)
+                EodBlock(snapshot: snapshot.standupRecap?.eod)
             }
             .navigationDestination(for: HomeSurface.self) { surface in
                 detail(for: surface)
