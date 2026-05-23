@@ -50,6 +50,13 @@ struct SinceLastActiveRow: View {
                 .font(LeafType.title.small)
                 .foregroundStyle(LeafColor.text.primary)
                 .lineLimit(1)
+            if item.aggregatedCount > 1 {
+                // Carry C-T5-10 — coalesced substrate emissions suffix,
+                // mirrors NeedsYouRow `(N)` aggregation pattern.
+                Text("(×\(item.aggregatedCount))")
+                    .font(LeafType.body.small)
+                    .foregroundStyle(LeafColor.text.tertiary)
+            }
         }
     }
 

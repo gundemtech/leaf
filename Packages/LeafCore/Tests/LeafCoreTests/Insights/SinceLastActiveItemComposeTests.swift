@@ -154,4 +154,78 @@ final class SinceLastActiveItemComposeTests: XCTestCase {
             repoHint: nil, sourceURL: nil
         )
     }
+
+    // MARK: - Coalesce (carry C-T5-10 fix-bundle)
+
+    func test_coalesce_collapsesDuplicateLinearCommentToMeRows() {
+        let feed = (1...5).map { i in
+            ActivityFeedItem(
+                ts: Int64(1_700_000_000_000 + i * 1000),
+                source: .linear, eventKind: "linear_comment_authored_to_me",
+                actorDisplay: nil, actorIsMe: false,
+                targetTitle: "GUN-46", targetRef: "GUN-46",
+                repoHint: nil,
+                sourceURL: URL(string: "https://linear.app/leaf/issue/GUN-46")
+            )
+        }
+        let composed = feed.compactMap(SinceLastActiveItem.compose(from:))
+        XCTAssertEqual(composed.count, 5)
+        let coalesced = SinceLastActiveItem.coalesce(composed)
+        XCTAssertEqual(coalesced.count, 1)
+        XCTAssertEqual(coalesced[0].aggregatedCount, 5)
+        XCTAssertEqual(coalesced[0].tsMs, 1_700_000_000_000 + 5 * 1000)  // max ts wins
+    }
+
+    func test_coalesce_distinctTargetsStaySeparate() {
+        let gun46 = ActivityFeedItem(
+            ts: 1, source: .linear, eventKind: "linear_comment_authored_to_me",
+            actorDisplay: nil, actorIsMe: false,
+            targetTitle: "GUN-46", targetRef: "GUN-46",
+            repoHint: nil, sourceURL: nil)
+        let gun45 = ActivityFeedItem(
+            ts: 2, source: .linear, eventKind: "linear_comment_authored_to_me",
+            actorDisplay: nil, actorIsMe: false,
+            targetTitle: "GUN-45", targetRef: "GUN-45",
+            repoHint: nil, sourceURL: nil)
+        let composed = [gun46, gun46, gun45, gun45, gun45].compactMap(SinceLastActiveItem.compose(from:))
+        let coalesced = SinceLastActiveItem.coalesce(composed)
+        XCTAssertEqual(coalesced.count, 2)
+        let bySource = Dictionary(grouping: coalesced) { $0.sourceMeta }
+        XCTAssertEqual(bySource["GUN-46"]?.first?.aggregatedCount, 2)
+        XCTAssertEqual(bySource["GUN-45"]?.first?.aggregatedCount, 3)
+    }
+
+    func test_coalesce_distinctEventKindsStaySeparate() {
+        let merged = ActivityFeedItem(
+            ts: 1, source: .github, eventKind: "gh_pr_merged",
+            actorDisplay: nil, actorIsMe: true,
+            targetTitle: "Add foo", targetRef: "PR#142", repoHint: "leaf",
+            sourceURL: nil)
+        let opened = ActivityFeedItem(
+            ts: 2, source: .github, eventKind: "gh_pr_opened",
+            actorDisplay: nil, actorIsMe: true,
+            targetTitle: "Add foo", targetRef: "PR#142", repoHint: "leaf",
+            sourceURL: nil)
+        let composed = [merged, opened].compactMap(SinceLastActiveItem.compose(from:))
+        let coalesced = SinceLastActiveItem.coalesce(composed)
+        XCTAssertEqual(coalesced.count, 2)  // distinct verbs "merged" / "opened"
+    }
+
+    func test_coalesce_d3DetectionsWithDistinctExcerpts_stayUnique() {
+        let q1 = ActivityFeedItem(
+            ts: 1, source: .detection, eventKind: "open_question",
+            actorDisplay: nil, actorIsMe: false,
+            targetTitle: "Should we ship 5.4?", targetRef: nil, sourceURL: nil)
+        let q2 = ActivityFeedItem(
+            ts: 2, source: .detection, eventKind: "open_question",
+            actorDisplay: nil, actorIsMe: false,
+            targetTitle: "Bump Sparkle to 2.7?", targetRef: nil, sourceURL: nil)
+        let composed = [q1, q2, q1].compactMap(SinceLastActiveItem.compose(from:))
+        let coalesced = SinceLastActiveItem.coalesce(composed)
+        XCTAssertEqual(coalesced.count, 2)
+    }
+
+    func test_coalesce_emptyInput_returnsEmpty() {
+        XCTAssertEqual(SinceLastActiveItem.coalesce([]), [])
+    }
 }

@@ -241,7 +241,12 @@ final class InsightsReader {
                         if let cursorMs {
                             let feed = (try? insights.recentActivityFeed(
                                 since: cursorMs, limit: 100)) ?? []
-                            sinceLastActiveItems = feed.compactMap(SinceLastActiveItem.compose(from:))
+                            let composed = feed.compactMap(SinceLastActiveItem.compose(from:))
+                            // Carry C-T5-10 fix-bundle: collapse duplicate
+                            // substrate emissions (LinearCollector re-emits
+                            // same comment across ticks when cursor advancement
+                            // lags) into single rows with `(×N)` aggregation.
+                            sinceLastActiveItems = SinceLastActiveItem.coalesce(composed)
                         } else {
                             sinceLastActiveItems = []
                         }
