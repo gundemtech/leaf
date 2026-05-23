@@ -168,6 +168,12 @@ public protocol DerivedInsights: Sendable {
     /// snapshot. Default `nil` for stubs / iOS-future.
     func currentWorkspacePath() throws -> String?
 
+    /// Track-10 T7 — bundled task-session lens consumed by the Home YOU'RE ON
+    /// block. Returns nil when no current task can be identified (e.g.,
+    /// Terminal-only work, no IDE foreground in attention history). See
+    /// `CurrentTaskSession` for field semantics.
+    func currentTaskSession() throws -> CurrentTaskSession?
+
     /// Track-8 P1 — teammates currently working on the same task as caller. Matching
     /// rule is hierarchical (same Linear issue → same branch → adjacent branch).
     /// Returns `[]` when no `presence_history` substrate (pre-Phase 5.4) or no match.
@@ -262,6 +268,10 @@ extension DerivedInsights {
     /// Track-10 T2 — default `nil` for stubs / iOS-future. Prod impl reuses
     /// `WorkspacePathResolver.resolve(bundleID:db:)` ephemeral lookup.
     public func currentWorkspacePath() throws -> String? { nil }
+
+    /// Track-10 T7 — default `nil` for stubs / iOS-future. Prod impl in
+    /// `LeafCorePrivate` composes per-IDE dispatch + dwell walk + basenames.
+    public func currentTaskSession() throws -> CurrentTaskSession? { nil }
 
     public func sameTaskTeammates(rule: MatchRule) throws -> [TeammateMatch] { [] }
 
