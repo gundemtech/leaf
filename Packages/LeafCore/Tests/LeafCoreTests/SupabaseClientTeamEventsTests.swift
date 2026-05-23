@@ -87,7 +87,13 @@ final class SupabaseClientTeamEventsTests: XCTestCase {
         MockURLProtocol.handler = wrapWithBootstrap { request, _ in
             XCTAssertEqual(request.url?.path, "/rest/v1/team_events")
             XCTAssertEqual(request.httpMethod, "POST")
-            XCTAssertEqual(request.value(forHTTPHeaderField: "Prefer"), "return=representation")
+            // Track 5 / S5 — team_events POSTs ship resolution=merge-duplicates so
+            // retry after transient network failure doesn't double-insert under the
+            // deterministic (workspace_id, event_id) tuple.
+            XCTAssertEqual(
+                request.value(forHTTPHeaderField: "Prefer"),
+                "return=representation,resolution=merge-duplicates"
+            )
             return (HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!,
                     Data("""
                     [{ "event_id": "evt-1", "created_at": "2026-05-15T10:00:00Z" }]
