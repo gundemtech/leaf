@@ -354,6 +354,31 @@ final class StandupComposerTests: XCTestCase {
         XCTAssertEqual(snapshot.eod?.carryWaitingItems.map(\.id), ["w1"])
     }
 
+    // MARK: - Hour-bucket auto-reveal
+
+    /// Plan §3.7 lock — RECAP expanded inclusive of 06:00, exclusive of 11:00.
+    func testIsRecapExpanded_boundaryMatrix() {
+        XCTAssertFalse(StandupComposer.isRecapExpanded(atHour: 0))
+        XCTAssertFalse(StandupComposer.isRecapExpanded(atHour: 5))
+        XCTAssertTrue(StandupComposer.isRecapExpanded(atHour: 6))
+        XCTAssertTrue(StandupComposer.isRecapExpanded(atHour: 10))
+        XCTAssertFalse(StandupComposer.isRecapExpanded(atHour: 11))
+        XCTAssertFalse(StandupComposer.isRecapExpanded(atHour: 16))
+        XCTAssertFalse(StandupComposer.isRecapExpanded(atHour: 17))
+        XCTAssertFalse(StandupComposer.isRecapExpanded(atHour: 22))
+        XCTAssertFalse(StandupComposer.isRecapExpanded(atHour: 23))
+    }
+
+    /// Plan §3.7 lock — EOD expanded inclusive of 17:00, exclusive of 23:00.
+    func testIsEodExpanded_boundaryMatrix() {
+        XCTAssertFalse(StandupComposer.isEodExpanded(atHour: 0))
+        XCTAssertFalse(StandupComposer.isEodExpanded(atHour: 6))
+        XCTAssertFalse(StandupComposer.isEodExpanded(atHour: 16))
+        XCTAssertTrue(StandupComposer.isEodExpanded(atHour: 17))
+        XCTAssertTrue(StandupComposer.isEodExpanded(atHour: 22))
+        XCTAssertFalse(StandupComposer.isEodExpanded(atHour: 23))
+    }
+
     func testCompose_allZeroInputs_returnsNilChildren() {
         let snapshot = StandupComposer.compose(
             yesterdayActivity: [],

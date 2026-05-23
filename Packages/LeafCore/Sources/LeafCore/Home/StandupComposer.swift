@@ -199,4 +199,18 @@ public enum StandupComposer {
     public static func renderBlockerBullet(_ blocker: Blocker) -> String {
         blocker.excerpt
     }
+
+    // MARK: - Hour-bucket auto-reveal
+
+    /// RECAP morning brief: expanded by default during `[06:00, 11:00)`.
+    /// Used by `RecapBlock.init` to seed `@State expanded`. Master spec §3.7.
+    public static func isRecapExpanded(atHour hour: Int) -> Bool {
+        (6..<11).contains(hour)
+    }
+
+    /// EOD end-of-day: expanded by default during `[17:00, 23:00)`.
+    /// Used by `EodBlock.init` to seed `@State expanded`. Master spec §3.7.
+    public static func isEodExpanded(atHour hour: Int) -> Bool {
+        (17..<23).contains(hour)
+    }
 }
