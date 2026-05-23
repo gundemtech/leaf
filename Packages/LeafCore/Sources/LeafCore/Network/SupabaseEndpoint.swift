@@ -35,54 +35,14 @@ public enum SupabaseEndpoint {
     baseURL.appendingPathComponent("functions/v1/invite_resolve")
   }
 
-  // MARK: - Edge Functions — M-II idempotent INSERT endpoints (B2-B8)
-
-  /// POST /functions/v1/insert_workspace — idempotent workspace creation.
-  /// Body: { workspace_id, name, created_at_ms }
-  /// Returns 201 { workspace_id, name, created_at (ISO 8601) } / 409 workspace_exists.
-  public static func insertWorkspaceEdge(baseURL: URL) -> URL {
-    baseURL.appendingPathComponent("functions/v1/insert_workspace")
-  }
-
-  /// POST /functions/v1/insert_invite_token — idempotent invite-token creation.
-  /// Body: { workspace_id, code, ttl_seconds, label?, expires_at?, max_uses?, created_at_ms }
-  /// Returns 201 { code, workspace_id, created_at (ISO 8601) } / 409 invite_token_exists.
-  public static func insertInviteTokenEdge(baseURL: URL) -> URL {
-    baseURL.appendingPathComponent("functions/v1/insert_invite_token")
-  }
-
-  /// POST /functions/v1/insert_workspace_member — idempotent member-join INSERT.
-  /// Body: { workspace_id, member_pubkey, display_name, joined_at_ms }
-  /// Returns 201 { workspace_id, member_pubkey, joined_at (ISO 8601) } / 409 workspace_member_exists.
-  public static func insertWorkspaceMemberEdge(baseURL: URL) -> URL {
-    baseURL.appendingPathComponent("functions/v1/insert_workspace_member")
-  }
-
-  /// POST /functions/v1/send_team_event — idempotent team-event INSERT.
-  /// Body: { workspace_id, kind, source_kind, encrypted_payload (\x<hex>), expires_at?, created_at_ms }
-  /// Returns 201 { event_id, workspace_id, created_at (ISO 8601) }.
-  public static func sendTeamEventEdge(baseURL: URL) -> URL {
-    baseURL.appendingPathComponent("functions/v1/send_team_event")
-  }
-
-  /// POST /functions/v1/send_direct_message — idempotent DM INSERT.
-  /// Body: { workspace_id, recipient_pubkey, kind, encrypted_payload (\x<hex>), reply_to?, created_at_ms }
-  /// Returns 201 { message_id, workspace_id, created_at (ISO 8601) }.
-  public static func sendDirectMessageEdge(baseURL: URL) -> URL {
-    baseURL.appendingPathComponent("functions/v1/send_direct_message")
-  }
-
-  /// POST /functions/v1/submit_waitlist — ANON, idempotent waitlist INSERT.
-  /// Body: { email, source?, created_at_ms }
-  /// Returns 201 { email, source, created_at (ISO 8601) } / 409 waitlist_exists.
-  public static func submitWaitlistEdge(baseURL: URL) -> URL {
-    baseURL.appendingPathComponent("functions/v1/submit_waitlist")
-  }
-
   // MARK: - PostgREST tables
 
   public static func postInvite(baseURL: URL) -> URL {
     baseURL.appendingPathComponent("rest/v1/invites")
+  }
+
+  public static func insertWorkspaceMember(baseURL: URL) -> URL {
+    baseURL.appendingPathComponent("rest/v1/workspace_members")
   }
 
   // MARK: - PostgREST tables — Track 5 / S4 (direct_messages + apns_tokens)
@@ -182,6 +142,10 @@ public enum SupabaseEndpoint {
 
   // MARK: - PostgREST tables — Track 5 / S5 (team_events)
 
+  public static func teamEventsInsert(baseURL: URL) -> URL {
+    baseURL.appendingPathComponent("rest/v1/team_events")
+  }
+
   /// Fetch inbound team events — workspace-scoped, since-watermark filter
   /// (ms epoch encoded as ISO8601 for PostgREST `gt.<iso>` operator).
   public static func teamEventsFetchInbound(
@@ -229,6 +193,13 @@ public enum SupabaseEndpoint {
 
   // MARK: - PostgREST tables — Track 5 / S7 (workspace mutations)
 
+  /// POST /rest/v1/workspaces — admin self-insert on workspace creation.
+  /// Used by `SupabaseClient.insertWorkspace` (M027 follow-up — server row
+  /// is required for `is_workspace_admin` RLS helper to return true).
+  public static func workspacesInsert(baseURL: URL) -> URL {
+    baseURL.appendingPathComponent("rest/v1/workspaces")
+  }
+
   /// PATCH /rest/v1/workspaces?id=eq.<id>
   /// Used by `SupabaseClient.patchWorkspaceName` and `SupabaseClient.softDeleteWorkspace`.
   /// RLS-gated: only the workspace creator can UPDATE (M025 server policy).
@@ -242,6 +213,10 @@ public enum SupabaseEndpoint {
   }
 
   // MARK: - PostgREST tables — M027 invite-redesign (invite_tokens + join_requests)
+
+  public static func inviteTokensInsert(baseURL: URL) -> URL {
+    baseURL.appendingPathComponent("rest/v1/invite_tokens")
+  }
 
   /// GET /rest/v1/invite_tokens?workspace_id=eq.<id>&order=created_at.desc&select=*
   /// RLS-gated by `invite_tokens_admin_write` — only workspace admin sees own rows.

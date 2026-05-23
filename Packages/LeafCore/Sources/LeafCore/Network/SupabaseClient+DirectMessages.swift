@@ -103,18 +103,9 @@ public struct SupabaseAPNsPushResult: Sendable, Equatable {
 
 extension SupabaseClient {
 
-  /// Send direct message via `send_direct_message` Edge Function (M-II).
-  /// Idempotent — Idempotency-Key dedup on server makes retries safe.
-  ///
-  /// `encrypted_payload` MUST be PostgreSQL bytea hex `\x<hex>` format — the
-  /// Edge Function rejects base64. The existing `\x` encoding is preserved.
-  ///
-  /// `sender_pubkey` is no longer sent in the body — the Edge Function extracts
-  /// the pubkey from the JWT claim (same pattern as send_team_event). The local
-  /// pubkeyClaim check is retained as a fail-fast guard.
-  ///
-  /// Returns `SupabaseSentMessageRow(messageID:createdAtISO:)` from the
-  /// Edge response { message_id, workspace_id, created_at }.
+  /// Send direct message — JWT-bearing INSERT via PostgREST.
+  /// Encrypts `encryptedPayload` to PostgreSQL bytea hex (`\\x<hex>`) on the wire.
+  /// Returns `(messageID, createdAt)` from PostgREST's `return=representation`.
   public func sendDirectMessage(
     workspaceID: String,
     recipientPubkeyHex: String,
@@ -123,29 +114,30 @@ extension SupabaseClient {
     replyTo: String?
   ) async throws -> SupabaseSentMessageRow {
     let session = try await ensureAuthenticated()
-    // Fail fast if JWT lacks pubkey claim — same guard as before (I1+I2 fix).
-    guard let pubkeyClaim = session.pubkeyClaim, !pubkeyClaim.isEmpty else {
-      throw SupabaseError.identityClaimMissing
-    }
-    _ = pubkeyClaim  // Edge Fn extracts pubkey from JWT; no need to send in body
-    let url = SupabaseEndpoint.sendDirectMessageEdge(baseURL: baseURL)
+    let url = SupabaseEndpoint.directMessagesInsert(baseURL: baseURL)
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
-    for (k, v) in SupabaseEndpoint.authenticatedHeaders(
+    for (k, v) in SupabaseEndpoint.postgrestInsertHeaders(
       anonKey: anonKey, accessToken: session.accessToken
     ) {
       request.setValue(v, forHTTPHeaderField: k)
     }
-    // Preserve the existing PostgreSQL bytea hex wire format (\x<hex>).
-    // The Edge Function validates this exact format and rejects base64.
     let payloadHex = "\\x" + encryptedPayload.map { String(format: "%02x", $0) }.joined()
-    let createdAtMs = Int64(Date().timeIntervalSince1970 * 1000)
+    // I1+I2 — Track 5 / S4 Stage 6 review fix:
+    // We send sender_pubkey explicitly to satisfy the NOT NULL column.
+    // Server-side RLS WITH CHECK verifies the body's sender_pubkey matches
+    // the JWT pubkey claim (auth.jwt() ->> 'pubkey'). If pubkeyClaim is nil
+    // — Auth Hook race, JWT decode glitch — fail fast with a clear error
+    // rather than POST an empty string (which would surface as opaque 403).
+    guard let senderPubkeyHex = session.pubkeyClaim, !senderPubkeyHex.isEmpty else {
+      throw SupabaseError.identityClaimMissing
+    }
     var body: [String: Any] = [
       "workspace_id": workspaceID,
+      "sender_pubkey": senderPubkeyHex,
       "recipient_pubkey": recipientPubkeyHex,
       "kind": kind.rawValue,
       "encrypted_payload": payloadHex,
-      "created_at_ms": createdAtMs,
     ]
     if let replyTo {
       body["reply_to"] = replyTo
@@ -153,24 +145,25 @@ extension SupabaseClient {
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
     let (data, response) = try await transport(
-      request, label: "sendDirectMessage", retryable: true, refreshable: true,
-      idempotent: true)
+      request, label: "sendDirectMessage", retryable: false, refreshable: true)
     guard response.statusCode == 201 else {
       throw SupabaseError.fromStatus(response.statusCode, body: data)
     }
-    // Edge response: { message_id, workspace_id, created_at (ISO 8601) }.
-    struct EdgeRow: Decodable {
+    struct Row: Decodable {
       let message_id: String
       let created_at: String
     }
-    let row: EdgeRow
+    let rows: [Row]
     do {
-      row = try JSONDecoder().decode(EdgeRow.self, from: data)
+      rows = try JSONDecoder().decode([Row].self, from: data)
     } catch {
       throw SupabaseError.decoding(reason: "sendDirectMessage: \(error)")
     }
+    guard let first = rows.first else {
+      throw SupabaseError.decoding(reason: "sendDirectMessage: empty rows")
+    }
     return SupabaseSentMessageRow(
-      messageID: row.message_id, createdAtISO: row.created_at
+      messageID: first.message_id, createdAtISO: first.created_at
     )
   }
 
@@ -440,16 +433,14 @@ extension SupabaseClient {
   /// Shared transport — delegates to performHTTP (M-I task 5). retryable=true
   /// is allowed only for GET / idempotent PATCH callers (markRead/markDone
   /// SET <col>=<isoTimestamp> WHERE message_id=eq.X are safe to retry).
-  /// idempotent=true injects an Idempotency-Key header (M-II Edge Function calls).
   private func transport(
     _ request: URLRequest,
     label: String,
     retryable: Bool = false,
-    refreshable: Bool = false,
-    idempotent: Bool = false
+    refreshable: Bool = false
   ) async throws -> (Data, HTTPURLResponse) {
     try await performHTTP(
-      request, retryable: retryable, refreshable: refreshable, idempotent: idempotent, label: label)
+      request, retryable: retryable, refreshable: refreshable, label: label)
   }
 
   private func decodePostgresByteaHex(_ s: String) -> Data {

@@ -325,24 +325,29 @@ final class SupabaseClientWorkspaceMutationsTests: XCTestCase {
     try await client.patchWorkspaceName(id: "ws-id", name: "Valid")
   }
 
-  // MARK: - M027 / M-II insertWorkspace — URL + method (now Edge Function)
+  // MARK: - M027 insertWorkspace — URL + method
 
-  /// M-II: insertWorkspace now POSTs to /functions/v1/insert_workspace (Edge Fn)
-  /// instead of /rest/v1/workspaces. Body: { workspace_id, name, created_at_ms }.
-  /// Edge response: { workspace_id, name, created_at (ISO 8601) }.
+  /// Round-7 dogfooding fix (commit 9b2a744) — `WorkspaceReader.createWorkspace`
+  /// becomes async and calls `SupabaseClient.insertWorkspace` after the local
+  /// commit so the server-side `is_workspace_admin` RLS helper can find a
+  /// row keyed by `created_by_pubkey` on subsequent admin operations (invite
+  /// token writes, etc.). Pre-fix the workspaces table was server-side empty
+  /// for any admin-created workspace, so every invite generation 403'd.
 
-  func testInsertWorkspace_SendsPOSTToEdgeEndpoint() async throws {
+  func testInsertWorkspace_SendsPOSTToWorkspacesEndpoint() async throws {
     let wsID = "00000000-0000-0000-0000-000000000bbb"
+    let adminPubkey = pubkey
     nonisolated(unsafe) var capturedURL: URL?
     nonisolated(unsafe) var capturedMethod: String?
     MockURLProtocol.handler = wrapWithBootstrap { request, _ in
-      if request.url?.path == "/functions/v1/insert_workspace" {
+      if request.url?.path == "/rest/v1/workspaces" {
         capturedURL = request.url
         capturedMethod = request.httpMethod
       }
       let echo = """
-        { "workspace_id": "\(wsID)", "name": "TestRoom",
-          "created_at": "2026-05-22T12:00:00Z" }
+        [{ "id": "\(wsID)", "name": "TestRoom",
+           "created_by_pubkey": "\(adminPubkey)",
+           "created_at": "2026-05-22T12:00:00Z" }]
         """.data(using: .utf8)!
       return (
         HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!,
@@ -354,31 +359,31 @@ final class SupabaseClientWorkspaceMutationsTests: XCTestCase {
 
     let url: URL = try XCTUnwrap(capturedURL)
     XCTAssertEqual(capturedMethod, "POST")
-    XCTAssertEqual(url.path, "/functions/v1/insert_workspace")
+    XCTAssertEqual(url.path, "/rest/v1/workspaces")
+    // INSERT goes to bare /rest/v1/workspaces with no ?id=eq.<id> filter
+    // (unlike PATCH variants in this file) — server generates / accepts
+    // the row id from the body.
     XCTAssertTrue(
       url.query == nil || url.query?.isEmpty == true,
       "insertWorkspace URL should have no query string, got: \(url.query ?? "nil")")
   }
 
-  // MARK: - M027 / M-II insertWorkspace — Body (Edge shape)
+  // MARK: - M027 insertWorkspace — Body
 
-  func testInsertWorkspace_SendsCorrectEdgeBodyAndAuthHeader() async throws {
+  func testInsertWorkspace_SendsCorrectBodyAndPostgrestHeaders() async throws {
     let wsID = "00000000-0000-0000-0000-000000000bbb"
     nonisolated(unsafe) var capturedBody: Data?
     nonisolated(unsafe) var capturedPrefer: String?
     nonisolated(unsafe) var capturedAuth: String?
     MockURLProtocol.handler = wrapWithBootstrap { request, body in
-      if request.url?.path == "/functions/v1/insert_workspace" {
+      if request.url?.path == "/rest/v1/workspaces" {
         capturedBody = body
         capturedPrefer = request.value(forHTTPHeaderField: "Prefer")
         capturedAuth = request.value(forHTTPHeaderField: "Authorization")
       }
       return (
         HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!,
-        // Edge response: { workspace_id, name, created_at }
-        Data(
-          #"{"workspace_id":"\#(wsID)","name":"TestRoom","created_at":"2026-05-22T12:00:00Z"}"#.utf8
-        )
+        Data()
       )
     }
     let client = makeClient()
@@ -386,22 +391,16 @@ final class SupabaseClientWorkspaceMutationsTests: XCTestCase {
 
     let body: Data = try XCTUnwrap(capturedBody)
     let json = try JSONSerialization.jsonObject(with: body) as? [String: Any]
-    // Edge body: workspace_id (not "id"), name, created_at_ms (not created_by_pubkey)
-    XCTAssertEqual(
-      json?["workspace_id"] as? String, wsID,
-      "Edge body uses workspace_id (not 'id')")
+    XCTAssertEqual(json?["id"] as? String, wsID)
     XCTAssertEqual(json?["name"] as? String, "TestRoom")
-    XCTAssertNotNil(
-      json?["created_at_ms"] as? Int,
-      "created_at_ms must be present for idempotency hash")
-    // Old PostgREST fields must NOT appear.
-    XCTAssertNil(json?["id"], "Edge body must not contain 'id' (old PostgREST field)")
-    XCTAssertNil(
-      json?["created_by_pubkey"],
-      "Edge body must not contain created_by_pubkey (JWT claim used server-side)")
-    // Edge Function uses authenticated headers (Bearer), not PostgREST Prefer.
+    XCTAssertEqual(
+      json?["created_by_pubkey"] as? String, pubkey,
+      "body must carry the admin pubkey for RLS WITH CHECK comparison")
+
+    // PostgREST INSERT requires Prefer: return=representation so the server
+    // echoes the row back (matches postgrestInsertHeaders helper).
+    XCTAssertEqual(capturedPrefer, "return=representation")
     XCTAssertTrue((capturedAuth ?? "").hasPrefix("Bearer "))
-    XCTAssertNil(capturedPrefer, "Edge Function call must not send Prefer header")
   }
 
   // MARK: - M027 insertWorkspace — Name trim + validation
@@ -409,14 +408,12 @@ final class SupabaseClientWorkspaceMutationsTests: XCTestCase {
   func testInsertWorkspace_TrimsWhitespaceFromName() async throws {
     nonisolated(unsafe) var capturedBody: Data?
     MockURLProtocol.handler = wrapWithBootstrap { request, body in
-      if request.url?.path == "/functions/v1/insert_workspace" {
+      if request.url?.path == "/rest/v1/workspaces" {
         capturedBody = body
       }
       return (
         HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!,
-        Data(
-          #"{"workspace_id":"ws-id","name":"Padded Room","created_at":"2026-05-22T12:00:00Z"}"#.utf8
-        )
+        Data()
       )
     }
     let client = makeClient()

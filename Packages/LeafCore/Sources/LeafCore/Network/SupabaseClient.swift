@@ -617,8 +617,37 @@ extension SupabaseClient {
   }
 }
 
-// MARK: - insertWorkspaceMember
-// Relocated to SupabaseClient+Workspaces.swift (B5 / M-II consolidation).
+// MARK: - insertWorkspaceMember (PostgREST INSERT via JWT)
+
+extension SupabaseClient {
+  public func insertWorkspaceMember(
+    workspaceID: String,
+    pubkeyHex: String,
+    displayName: String
+  ) async throws {
+    let session = try await ensureAuthenticated()
+    let url = SupabaseEndpoint.insertWorkspaceMember(baseURL: baseURL)
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    for (k, v) in SupabaseEndpoint.postgrestInsertHeaders(
+      anonKey: anonKey, accessToken: session.accessToken
+    ) {
+      request.setValue(v, forHTTPHeaderField: k)
+    }
+    let body: [String: Any] = [
+      "workspace_id": workspaceID,
+      "pubkey": pubkeyHex,
+      "display_name": displayName,
+    ]
+    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+    let (data, http) = try await performHTTP(
+      request, retryable: false, refreshable: true, label: "insertWorkspaceMember")
+    guard http.statusCode == 201 else {
+      throw SupabaseError.fromStatus(http.statusCode, body: data)
+    }
+  }
+}
 
 // MARK: - SupabaseAuthSession JWT claim extraction
 

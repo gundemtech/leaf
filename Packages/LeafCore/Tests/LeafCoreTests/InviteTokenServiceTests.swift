@@ -95,11 +95,10 @@ final class InviteTokenServiceTests: XCTestCase {
             "expires_at": 9999999999 }
           """.data(using: .utf8)!
         return (resp, data)
-      case "/functions/v1/insert_invite_token":
-        // M-II: insertInviteToken now POSTs to Edge Function.
-        return invitePostHandler(request, body)
       case "/rest/v1/invite_tokens":
         switch request.httpMethod {
+        case "POST":
+          return invitePostHandler(request, body)
         case "GET":
           return inviteGetHandler?(request) ?? (
             HTTPURLResponse(
@@ -149,19 +148,37 @@ final class InviteTokenServiceTests: XCTestCase {
     )
   }
 
-  /// Edge Function response for insert_invite_token: { code, workspace_id, created_at }.
-  /// insertInviteToken decodes only these three fields; all other token fields
-  /// (expiresAt / maxUses / label / ...) are carried forward from the INPUT token by
-  /// the client — the server does not echo them (M-II shape). The legacy descriptive
-  /// params below are accepted for call-site readability but intentionally ignored:
-  /// the response body never carried them, and the service derives them from input.
-  private func echoRow(
-    _ code: String, expiresAt: Date? = nil, maxUses: Int? = nil, label: String? = nil
-  ) -> String {
+  /// Server response: echo back input as JSON row (best-effort — accepts any
+  /// fields, picks reasonable defaults). Sufficient for service-level coverage.
+  private func echoRow(_ code: String, expiresAt: Date?, maxUses: Int?, label: String?) -> String {
+    var fields: [String] = []
+    fields.append(#""code": "\#(code)""#)
+    fields.append(#""workspace_id": "\#(workspaceID)""#)
+    fields.append(#""created_by_pubkey": "\#(adminPubkey)""#)
+    if let label = label {
+      fields.append(#""label": "\#(label)""#)
+    } else {
+      fields.append(#""label": null"#)
+    }
+    fields.append(#""ttl_seconds": 86400"#)
+    if let expiresAt = expiresAt {
+      let iso = ISO8601DateFormatter()
+      iso.formatOptions = [.withInternetDateTime]
+      fields.append(#""expires_at": "\#(iso.string(from: expiresAt))""#)
+    } else {
+      fields.append(#""expires_at": null"#)
+    }
+    if let maxUses = maxUses {
+      fields.append(#""max_uses": \#(maxUses)"#)
+    } else {
+      fields.append(#""max_uses": null"#)
+    }
+    fields.append(#""used_count": 0"#)
+    fields.append(#""deleted_at": null"#)
     let iso = ISO8601DateFormatter()
     iso.formatOptions = [.withInternetDateTime]
-    return
-      #"{"code":"\#(code)","workspace_id":"\#(workspaceID)","created_at":"\#(iso.string(from: fixedNow))"}"#
+    fields.append(#""created_at": "\#(iso.string(from: fixedNow))""#)
+    return "[{ \(fields.joined(separator: ", ")) }]"
   }
 
   // MARK: - generate
@@ -175,7 +192,9 @@ final class InviteTokenServiceTests: XCTestCase {
       let code = (parsed?["code"] as? String) ?? "LEAF-AAAA-BBBB-CCCC"
       let resp = HTTPURLResponse(
         url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!
-      let respBody = self.echoRow(code)
+      let respBody = self.echoRow(
+        code, expiresAt: self.fixedNow.addingTimeInterval(86400),
+        maxUses: nil, label: "Team kickoff")
       return (resp, respBody.data(using: .utf8)!)
     })
 
@@ -193,11 +212,10 @@ final class InviteTokenServiceTests: XCTestCase {
     XCTAssertNotNil(local)
     XCTAssertEqual(local?.label, "Team kickoff")
 
-    // Posted body (Edge shape) includes generated code + ttl_seconds.
-    // Note: Edge body omits created_by_pubkey — the Edge Function derives
-    // it from the JWT claim instead.
+    // Posted body includes generated code + correct admin pubkey.
     let body = try XCTUnwrap(capturedBody)
     let parsed = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    XCTAssertEqual(parsed["created_by_pubkey"] as? String, adminPubkey)
     let postedCode = (parsed["code"] as? String) ?? ""
     XCTAssertEqual(postedCode.count, 19)
     XCTAssertEqual(parsed["ttl_seconds"] as? Int, 86400)

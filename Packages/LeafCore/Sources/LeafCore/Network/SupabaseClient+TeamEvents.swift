@@ -61,21 +61,9 @@ public struct SupabaseTeamEventRow: Sendable, Equatable {
 
 extension SupabaseClient {
 
-  /// Send auto-shared team event via `send_team_event` Edge Function (M-II).
-  /// Idempotent — Idempotency-Key dedup on server makes retries safe.
-  ///
-  /// `eventID` is accepted for API compatibility with existing callers
-  /// (TeamEventBroadcastService passes a deterministic UUID); it is included
-  /// in the idempotency body hash via `created_at_ms` but NOT sent as a body
-  /// field — the Edge Function generates its own server-side event_id UUID.
-  /// The returned `SupabaseSentTeamEventRow.eventID` carries the server-generated
-  /// value.
-  ///
-  /// `encrypted_payload` MUST be PostgreSQL bytea hex `\x<hex>` format — the
-  /// Edge Function rejects base64. The existing `\x` encoding produced by the
-  /// caller is preserved unchanged.
-  ///
-  /// `source_kind` is required (no DB DEFAULT after S5 migration).
+  /// Send auto-shared team event — JWT-bearing INSERT via PostgREST.
+  /// Sender pubkey is taken from JWT claim; RLS WITH CHECK enforces match.
+  /// `expiresAt` populated by caller (broadcast service: now + 30 days).
   public func sendTeamEvent(
     workspaceID: String,
     eventID: String,
@@ -85,51 +73,56 @@ extension SupabaseClient {
     expiresAt: Date
   ) async throws -> SupabaseSentTeamEventRow {
     let session = try await ensureAuthenticated()
-    let url = SupabaseEndpoint.sendTeamEventEdge(baseURL: baseURL)
+    let url = SupabaseEndpoint.teamEventsInsert(baseURL: baseURL)
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
-    for (k, v) in SupabaseEndpoint.authenticatedHeaders(
+    // C4 Stage 6 review fix — merge-duplicates header so transient
+    // network failures that cause client retry with the same
+    // deterministic event_id don't double-insert (PostgREST returns
+    // 200/201 echoing the existing row instead of 409).
+    for (k, v) in SupabaseEndpoint.postgrestInsertHeadersIgnoreDuplicates(
       anonKey: anonKey, accessToken: session.accessToken
     ) {
       request.setValue(v, forHTTPHeaderField: k)
     }
-    // Preserve the existing PostgreSQL bytea hex wire format (\x<hex>).
-    // The Edge Function validates this exact format and rejects base64.
+    guard let senderPubkeyHex = session.pubkeyClaim, !senderPubkeyHex.isEmpty else {
+      throw SupabaseError.identityClaimMissing
+    }
     let payloadHex = "\\x" + encryptedPayload.map { String(format: "%02x", $0) }.joined()
-    let expiresAtISO = Self.iso8601Formatter().string(from: expiresAt)
-    let createdAtMs = Int64(Date().timeIntervalSince1970 * 1000)
-    // Note: `event_id` (caller's deterministic UUID) is intentionally excluded
-    // from the Edge body — server generates its own PK. `created_at_ms` anchors
-    // the idempotency key hash so same-tick retries deduplicate correctly.
-    _ = eventID  // kept in signature for API compatibility; not sent to Edge
+    let iso = Self.iso8601Formatter().string(from: expiresAt)
     let body: [String: Any] = [
+      "event_id": eventID,
       "workspace_id": workspaceID,
-      "kind": kind,
+      "sender_pubkey": senderPubkeyHex,
       "source_kind": sourceKind,
+      "kind": kind,
       "encrypted_payload": payloadHex,
-      "expires_at": expiresAtISO,
-      "created_at_ms": createdAtMs,
+      "expires_at": iso,
     ]
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
     let (data, response) = try await teamEventsTransport(
-      request, label: "sendTeamEvent", retryable: true, refreshable: true,
-      idempotent: true)
-    guard response.statusCode == 201 else {
+      request, label: "sendTeamEvent", retryable: false, refreshable: true)
+    // C4: with resolution=merge-duplicates, PostgREST returns 200 (not
+    // 201) when the row already exists. Both are success in our retry
+    // path — server has the row, client moves on.
+    guard response.statusCode == 200 || response.statusCode == 201 else {
       throw SupabaseError.fromStatus(response.statusCode, body: data)
     }
-    // Edge response: { event_id, workspace_id, created_at (ISO 8601) }.
-    struct EdgeRow: Decodable {
+    struct Row: Decodable {
       let event_id: String
       let created_at: String
     }
-    let row: EdgeRow
+    let rows: [Row]
     do {
-      row = try JSONDecoder().decode(EdgeRow.self, from: data)
+      rows = try JSONDecoder().decode([Row].self, from: data)
     } catch {
       throw SupabaseError.decoding(reason: "sendTeamEvent: \(error)")
     }
-    return SupabaseSentTeamEventRow(eventID: row.event_id, createdAtISO: row.created_at)
+    guard let first = rows.first else {
+      throw SupabaseError.decoding(reason: "sendTeamEvent: empty rows")
+    }
+    return SupabaseSentTeamEventRow(eventID: first.event_id, createdAtISO: first.created_at)
   }
 
   /// Fetch inbound team events — workspace-scoped GET via PostgREST.
@@ -200,11 +193,10 @@ extension SupabaseClient {
     _ request: URLRequest,
     label: String,
     retryable: Bool = false,
-    refreshable: Bool = false,
-    idempotent: Bool = false
+    refreshable: Bool = false
   ) async throws -> (Data, HTTPURLResponse) {
     try await performHTTP(
-      request, retryable: retryable, refreshable: refreshable, idempotent: idempotent, label: label)
+      request, retryable: retryable, refreshable: refreshable, label: label)
   }
 
   /// Build a fresh ISO8601 formatter per call — ISO8601DateFormatter is
