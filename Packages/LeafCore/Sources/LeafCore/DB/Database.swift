@@ -63,6 +63,9 @@ public final class Database: @unchecked Sendable {
         migrator.registerMigration025WorkspaceSoftDelete()
         migrator.registerMigration026S8Substrate()
         migrator.registerMigration027InviteSystemRedesign()
+        // M028 — Track-6 P1 (renamed from M024; slot M024 occupied by Track-5/S5/S7
+        // broadcast offsets on integration-T10 branch).
+        migrator.registerMigration028ClaudeCodeAISubagentIndex()
         try migrator.migrate(pool)
 
         return Database(pool: pool, config: config, mode: .writer)

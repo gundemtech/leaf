@@ -541,4 +541,28 @@ final class MigrationTests: XCTestCase {
         let range = DateInterval(start: .distantPast, duration: 86_400_000)
         XCTAssertEqual(try encrypted.eventCount(in: range), 0)
     }
+
+    // Track-6 P1 partial expression index (renamed M024 → M028 за счёт того что
+    // Track-5/S5/S7 broadcast offsets уже занимают slot M024 на integration-T10).
+    func testMigration028CreatesClaudeCodeAISubagentIndex() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        let db = try Database.openForWrite(
+            at: dbURL,
+            config: .weakDefaults,
+            encryption: .deterministicTest
+        )
+
+        try db.readSQL { rawDB in
+            let indexes = try String.fetchAll(
+                rawDB,
+                sql: "SELECT name FROM sqlite_master WHERE type='index' AND name=?",
+                arguments: ["idx_events_ai_subagent"]
+            )
+            XCTAssertEqual(
+                indexes,
+                ["idx_events_ai_subagent"],
+                "M028 partial expression index должен существовать после миграций"
+            )
+        }
+    }
 }
