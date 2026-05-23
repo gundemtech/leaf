@@ -31,4 +31,10 @@ enum LeafEmptyStateTokens {
     /// Keeps the empty surface from collapsing into a tight band when the
     /// scroll view's intrinsic height is small.
     static let centeredMinHeight: CGFloat = 480
+
+    /// Track-10 Phase A — chip size for `.compact` empty-state style.
+    /// 24pt outer chip pairs naturally with body.regular text inline;
+    /// keeps Recap/Eod/YoureOn collapsibles from inheriting the 64pt
+    /// hero-scale chip from `.large`.
+    static let compactChipSize: LeafIconChipTokens.Size = .sm
 }
