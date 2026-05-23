@@ -358,3 +358,72 @@ final class DeleteOrchestrationTests: XCTestCase {
         XCTAssertTrue(active.contains { $0.id == ws.id })
     }
 }
+
+// MARK: - M-IV: backfillIfNeeded characterization (behavior must not change)
+
+final class BackfillIfNeededCharacterizationTests: XCTestCase {
+    private var tempDir: URL!
+    private var db: LeafCore.Database!
+
+    /// Reference-typed monotonic clock so createWorkspace gets DISTINCT createdAt
+    /// (the injected `now` closure is `@Sendable`; a class lets us mutate safely).
+    private final class Clock: @unchecked Sendable {
+        private var t: TimeInterval = 1_700_000_000
+        func next() -> Date { defer { t += 100 }; return Date(timeIntervalSince1970: t) }
+    }
+
+    override func setUp() {
+        super.setUp()
+        tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ws-backfill-\(UUID().uuidString)")
+        db = try! Database.openForWrite(
+            at: tempDir.appendingPathComponent("events.sqlite"),
+            config: .weakDefaults, encryption: nil)
+    }
+
+    override func tearDown() {
+        db = nil
+        try? FileManager.default.removeItem(at: tempDir)
+        super.tearDown()
+    }
+
+    private func makeService(clock: Clock) -> WorkspaceService {
+        WorkspaceService(
+            database: db,
+            keystoreRoot: tempDir.appendingPathComponent("keystore"),
+            now: { clock.next() },
+            randomBytes: { count in Data(repeating: 0x42, count: count) },
+            randomUUID: { UUID().uuidString.lowercased() }
+        )
+    }
+
+    private func makeStore() -> ActiveWorkspaceStore {
+        let ud = UserDefaults(suiteName: "test-backfill-\(UUID().uuidString)")!
+        return MainActor.assumeIsolated { ActiveWorkspaceStore(userDefaults: ud) }
+    }
+
+    @MainActor
+    func testBackfill_NilActive_PicksOldestByCreatedAt() throws {
+        let clock = Clock()
+        let svc = makeService(clock: clock)
+        let first = try svc.createWorkspace(displayName: "Zebra")  // oldest createdAt
+        _ = try svc.createWorkspace(displayName: "Alpha")
+        _ = try svc.createWorkspace(displayName: "Beta")
+
+        let store = makeStore()
+        XCTAssertNil(store.activeWorkspaceID)
+        try store.backfillIfNeeded(database: db)
+        XCTAssertEqual(store.activeWorkspaceID, first.id, "backfill picks oldest by createdAt, not name")
+    }
+
+    @MainActor
+    func testBackfill_AlreadySet_IsNoOp() throws {
+        let clock = Clock()
+        let svc = makeService(clock: clock)
+        _ = try svc.createWorkspace(displayName: "One")
+        let store = makeStore()
+        store.setActive("preset-id")
+        try store.backfillIfNeeded(database: db)
+        XCTAssertEqual(store.activeWorkspaceID, "preset-id", "backfill must not overwrite an already-set active id")
+    }
+}
