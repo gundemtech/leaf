@@ -18,6 +18,11 @@ public enum RefreshFreshness {
   /// is never fresh, so the first refresh always proceeds. The boundary
   /// (`now - lastRefreshedAt == window`) is not fresh (strict `<`); a
   /// `window` of 0 is therefore never fresh.
+  ///
+  /// A negative delta (a `lastRefreshedAt` in the future of `now`, e.g. the
+  /// wall clock jumped backwards) is treated as fresh — the result is, by the
+  /// `< window` test, "recent". This is intentional and harmless for the 5s
+  /// UI debounce: at worst it throttles one extra ambient refresh.
   public static func isFresh(lastRefreshedAt: Date?, now: Date, window: TimeInterval) -> Bool {
     guard let lastRefreshedAt else { return false }
     return now.timeIntervalSince(lastRefreshedAt) < window

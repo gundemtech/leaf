@@ -39,6 +39,11 @@ final class RefreshFreshnessTests: XCTestCase {
     XCTAssertFalse(RefreshFreshness.isFresh(lastRefreshedAt: base, now: base, window: 0))
   }
 
+  func testZeroDeltaWithNonzeroWindowIsFresh() {
+    // now == last, window > 0 → delta 0 < window → fresh.
+    XCTAssertTrue(RefreshFreshness.isFresh(lastRefreshedAt: base, now: base, window: 5))
+  }
+
   func testNegativeDeltaIsFresh() {
     // Clock moved backwards / last is in the future relative to now → delta < window.
     let last = base.addingTimeInterval(3)
