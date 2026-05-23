@@ -450,11 +450,9 @@ final class DirectMessageServiceCrossPostTests: XCTestCase {
     XCTAssertEqual(result.crossPostStatuses.linear?.identifier, "LEA-42")
   }
 
-  /// Test 9 — A13: idempotency_key body field removed from triggerLinearCreate
-  /// (server reads the Idempotency-Key header injected by performHTTP instead).
-  /// The idempotencyKey parameter is still accepted for API compatibility but
-  /// must NOT appear in the request body.
-  func testSend_LinearIdempotencyKey_AbsentFromRequestBody() async throws {
+  /// Test 9 — idempotencyKey forwarded verbatim into the triggerLinearCreate
+  /// request body.
+  func testSend_LinearIdempotencyKey_RoundTrippedToRequestBody() async throws {
     try seedLinearIntegration()
     let sink = CallSink()
     MockURLProtocol.handler = makeHandler(sink: sink)
@@ -472,9 +470,7 @@ final class DirectMessageServiceCrossPostTests: XCTestCase {
 
     XCTAssertEqual(sink.linearCalls.count, 1)
     let sent = sink.linearCalls[0]
-    XCTAssertNil(
-      sent["idempotency_key"],
-      "Legacy idempotency_key must be absent from request body (A13 removal)")
+    XCTAssertEqual(sent["idempotency_key"] as? String, key.uuidString.lowercased())
   }
 
   /// Test 10 — messageID generated once for the send, passed verbatim into

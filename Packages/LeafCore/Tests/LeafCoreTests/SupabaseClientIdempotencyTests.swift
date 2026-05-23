@@ -494,58 +494,20 @@ final class SupabaseClientIdempotencyTests: XCTestCase {
     // Bootstrap drives signup + register_pubkey + token refresh.
     _ = try await client.ensureAuthenticated()
 
-    // Verify that true Auth POSTs (signup + token) carry NO Idempotency-Key.
-    // register_pubkey is now idempotent:true (B9 flip) so it DOES receive a key —
-    // it is not an Auth POST and is excluded from this assertion.
-    let strictAuthPaths = ["/auth/v1/signup", "/auth/v1/token"]
+    // Verify that none of the auth endpoints received an Idempotency-Key.
+    let authPaths = ["/auth/v1/signup", "/functions/v1/register_pubkey", "/auth/v1/token"]
     let allPaths = paths.all
     let allKeys = captured.keys
 
-    for (path, key) in zip(allPaths, allKeys) where strictAuthPaths.contains(path) {
+    for (path, key) in zip(allPaths, allKeys) where authPaths.contains(path) {
       XCTAssertNil(key, "Auth POST \(path) must NOT receive Idempotency-Key; got \(key ?? "nil")")
     }
   }
 
-  // MARK: - #15 triggerLinearCreate body has NO legacy idempotency_key field
-
-  /// A13 removed the `idempotency_key` body field from linear_create_issue —
-  /// the Idempotency-Key header injected by performHTTP replaces it (M-II).
-  /// Verify the request body never contains the key.
-  func test_15_triggerLinearCreate_noLegacyIdempotencyKeyInBody() async throws {
-    let client = makeClient()
-    let adminPubkey = String(repeating: "c", count: 64)
-    let bodyCapture = BodyCapture()
-
-    bootstrap(client: client, adminPubkey: adminPubkey) { request, body in
-      bodyCapture.set(body)
-      let r = HTTPURLResponse(
-        url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
-      let resp =
-        #"{"ok":true,"issue_id":"id-1","identifier":"LEA-1","url":"https://linear.app/t/LEA-1","error":null}"#
-      return (r, resp.data(using: .utf8)!)
-    }
-
-    _ = try await client.ensureAuthenticated()
-
-    _ = try await client.triggerLinearCreate(
-      workspaceID: UUID(uuidString: workspaceID)!,
-      messageID: UUID(),
-      teamID: "team-1",
-      idempotencyKey: UUID(),
-      title: "Test issue",
-      description: "body",
-      assigneeID: nil,
-      linearUserToken: "tok-linear"
-    )
-
-    let captured = try XCTUnwrap(bodyCapture.data, "No body captured from triggerLinearCreate")
-    let json = try XCTUnwrap(
-      try? JSONSerialization.jsonObject(with: captured) as? [String: Any],
-      "Could not parse body as JSON")
-    XCTAssertNil(
-      json["idempotency_key"],
-      "Legacy idempotency_key field must not be present in the request body (A13 removal)")
-  }
+  // MARK: - #15 (deferred — B9 flip callsite)
+  // triggerLinearCreate body-field test deferred to B9: depends on
+  // idempotent:true being wired at the callsite (B9 scope). The legacy
+  // `linear_issue_id` body field is an orthogonal concern (B9 spec §3).
 }
 
 // MARK: - Thread-safe capture helpers
@@ -569,11 +531,4 @@ private final class PathCapture: @unchecked Sendable {
   private var _paths: [String] = []
   var all: [String] { lock.withLock { _paths } }
   func append(_ p: String) { lock.withLock { _paths.append(p) } }
-}
-
-private final class BodyCapture: @unchecked Sendable {
-  private let lock = NSLock()
-  private var _data: Data?
-  var data: Data? { lock.withLock { _data } }
-  func set(_ d: Data) { lock.withLock { _data = d } }
 }

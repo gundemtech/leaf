@@ -366,8 +366,7 @@ public actor SupabaseClient {
     let body: [String: String] = ["pubkey": pubkeyHex]
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-    let (data, http) = try await performHTTP(
-      request, retryable: true, idempotent: true, label: "registerPubkey")
+    let (data, http) = try await performHTTP(request, retryable: false, label: "registerPubkey")
     if http.statusCode == 200 { return }
     throw SupabaseError.fromRegisterPubkey(status: http.statusCode, body: data)
   }
@@ -546,8 +545,7 @@ extension SupabaseClient {
     ]
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-    let (data, http) = try await performHTTP(
-      request, retryable: true, idempotent: true, label: "resolveInvite")
+    let (data, http) = try await performHTTP(request, retryable: false, label: "resolveInvite")
     guard http.statusCode == 200 else {
       throw SupabaseError.fromInviteResolve(status: http.statusCode, body: data)
     }
@@ -586,8 +584,7 @@ extension SupabaseClient {
     }
     request.httpBody = try JSONSerialization.data(withJSONObject: ["token": token, "probe": true])
 
-    let (data, http) = try await performHTTP(
-      request, retryable: true, idempotent: true, label: "probeInvite")
+    let (data, http) = try await performHTTP(request, retryable: false, label: "probeInvite")
     guard http.statusCode == 200 else {
       throw SupabaseError.fromStatus(http.statusCode, body: data)
     }

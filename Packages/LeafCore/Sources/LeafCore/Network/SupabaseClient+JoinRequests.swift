@@ -51,8 +51,7 @@ extension SupabaseClient {
     }
     request.httpBody = try JSONSerialization.data(withJSONObject: bodyDict)
     let (data, http) = try await joinRequestsTransport(
-      request, label: "invokeCreateJoinRequest", retryable: true, refreshable: true,
-      idempotent: true)
+      request, label: "invokeCreateJoinRequest", retryable: false, refreshable: true)
     guard http.statusCode == 201 else {
       throw SupabaseError.fromStatus(http.statusCode, body: data)
     }
@@ -63,8 +62,7 @@ extension SupabaseClient {
     try await postEdgeFunction(
       url: SupabaseEndpoint.cancelJoinRequest(baseURL: baseURL),
       body: ["request_id": requestID],
-      label: "invokeCancelJoinRequest",
-      idempotent: true
+      label: "invokeCancelJoinRequest"
     )
   }
 
@@ -78,8 +76,7 @@ extension SupabaseClient {
         "request_id": requestID,
         "encrypted_team_key": encryptedTeamKey.base64EncodedString(),
       ],
-      label: "invokeApproveJoinRequest",
-      idempotent: true
+      label: "invokeApproveJoinRequest"
     )
   }
 
@@ -87,8 +84,7 @@ extension SupabaseClient {
     try await postEdgeFunction(
       url: SupabaseEndpoint.declineJoinRequest(baseURL: baseURL),
       body: ["request_id": requestID],
-      label: "invokeDeclineJoinRequest",
-      idempotent: true
+      label: "invokeDeclineJoinRequest"
     )
   }
 
@@ -96,8 +92,7 @@ extension SupabaseClient {
     try await postEdgeFunction(
       url: SupabaseEndpoint.deleteInviteToken(baseURL: baseURL),
       body: ["code": code],
-      label: "invokeDeleteInviteToken",
-      idempotent: true
+      label: "invokeDeleteInviteToken"
     )
   }
 
@@ -148,8 +143,7 @@ extension SupabaseClient {
   private func postEdgeFunction(
     url: URL,
     body: [String: String],
-    label: String,
-    idempotent: Bool = false
+    label: String
   ) async throws {
     let session = try await ensureAuthenticated()
     var request = URLRequest(url: url)
@@ -161,7 +155,7 @@ extension SupabaseClient {
     }
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
     let (data, http) = try await joinRequestsTransport(
-      request, label: label, retryable: true, refreshable: true, idempotent: idempotent)
+      request, label: label, retryable: false, refreshable: true)
     guard http.statusCode == 200 else {
       throw SupabaseError.fromStatus(http.statusCode, body: data)
     }
@@ -171,11 +165,10 @@ extension SupabaseClient {
     _ request: URLRequest,
     label: String,
     retryable: Bool = false,
-    refreshable: Bool = false,
-    idempotent: Bool = false
+    refreshable: Bool = false
   ) async throws -> (Data, HTTPURLResponse) {
     try await performHTTP(
-      request, retryable: retryable, refreshable: refreshable, idempotent: idempotent, label: label)
+      request, retryable: retryable, refreshable: refreshable, label: label)
   }
 
   /// Wire JSON shape from PostgREST `join_requests` table OR Edge Function

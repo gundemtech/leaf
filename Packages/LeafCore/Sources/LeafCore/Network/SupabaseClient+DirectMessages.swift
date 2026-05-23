@@ -353,7 +353,7 @@ extension SupabaseClient {
     _ = environment
 
     let (data, response) = try await transport(
-      request, label: "registerAPNsToken", retryable: true, refreshable: true)
+      request, label: "registerAPNsToken", retryable: false, refreshable: true)
     guard response.statusCode == 201 || response.statusCode == 200 || response.statusCode == 204
     else {
       throw SupabaseError.fromStatus(response.statusCode, body: data)
@@ -401,7 +401,7 @@ extension SupabaseClient {
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
     let (data, response) = try await transport(
-      request, label: "triggerAPNsPush", retryable: true, refreshable: true, idempotent: true)
+      request, label: "triggerAPNsPush", retryable: false, refreshable: true)
     guard response.statusCode == 200 else {
       throw SupabaseError.fromStatus(response.statusCode, body: data)
     }
