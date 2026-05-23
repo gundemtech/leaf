@@ -133,6 +133,11 @@ struct LeafFeedRowPreview: View {
         ]
     }
 
+    // M-IX: precompute once for both grouped previews (DRY).
+    private var renderedGroupedChildren: [RenderedTeamEvent] {
+        groupedChildren.map(RenderedTeamEvent.init(row:))
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -168,7 +173,7 @@ struct LeafFeedRowPreview: View {
                     count: 3,
                     spanStartMs: msAgo(minutes: 10),
                     spanEndMs: msAgo(minutes: 4),
-                    expandedItems: groupedChildren.map(RenderedTeamEvent.init(row:)),
+                    expandedItems: renderedGroupedChildren,
                     isExpanded: $group1Expanded
                 )
 
@@ -180,7 +185,7 @@ struct LeafFeedRowPreview: View {
                     count: 3,
                     spanStartMs: msAgo(minutes: 10),
                     spanEndMs: msAgo(minutes: 4),
-                    expandedItems: groupedChildren.map(RenderedTeamEvent.init(row:)),
+                    expandedItems: renderedGroupedChildren,
                     isExpanded: $group2Expanded
                 )
 
