@@ -84,7 +84,7 @@ struct ProfileView: View {
         title: "Couldn't load stats",
         description: message,
         ctaTitle: "Try again",
-        onCTA: { reader.refresh() }
+        onCTA: { reader.refresh(force: true) }
       )
     }
   }
