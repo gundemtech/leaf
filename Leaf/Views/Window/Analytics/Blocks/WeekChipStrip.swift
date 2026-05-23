@@ -54,6 +54,7 @@ struct WeekChipStrip: View {
         .accessibilityLabel(
             "\(fullWeekdayLabel(day.dayStartMs)) \(focusedLabel(day.focusedMin))\(isToday ? ", today" : "")"
         )
+        .accessibilityAddTraits(isToday ? .isSelected : [])
     }
 
     private func weekdayLabel(_ dayStartMs: Int64) -> String {

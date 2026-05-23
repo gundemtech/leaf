@@ -39,8 +39,10 @@ struct NeedsYouFilterRow: View {
                     )
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("\(chip.label) filter, \(count) \(count == 1 ? "item" : "items")")
-                .accessibilityAddTraits(selected == chip.filter ? [.isButton, .isSelected] : .isButton)
+                .leafChipAccessibility(
+                    label: "\(chip.label) filter, \(count) \(count == 1 ? "item" : "items")",
+                    isSelected: selected == chip.filter
+                )
             }
         }
     }
