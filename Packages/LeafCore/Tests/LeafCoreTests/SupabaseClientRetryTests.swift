@@ -675,9 +675,10 @@ final class SupabaseClientRetryTests: XCTestCase {
     XCTAssertEqual(tokenCalls.value, 2, "expected 1 bootstrap + 1 coalesced refresh")
   }
 
-  /// Task 2 — proves POST scope: 502 on create_join_request triggers a single
-  /// attempt, NOT 4 retries. Confirms `retryable: false` pass-through path.
-  func test_postNotRetriedOn502_throwsServerError_singleCall() async throws {
+  /// Task 2 (updated B9) — create_join_request is now retryable:true (M-II flip).
+  /// 502 triggers the full retry loop (4 attempts = maxAttempts default) before
+  /// surfacing as serverError. Confirms `retryable: true, idempotent: true` path.
+  func test_postRetriedOn502_throwsServerError_fourCalls() async throws {
     let client = makeClient()
     let callBox = RetryCallCounter()
     bootstrap(adminPubkey: String(repeating: "a", count: 64)) { request, _ in
@@ -703,9 +704,11 @@ final class SupabaseClientRetryTests: XCTestCase {
       )
       XCTFail("expected throw")
     } catch SupabaseError.serverError {
-      // expected
+      // expected — all 4 attempts exhausted
     }
-    XCTAssertEqual(callBox.value, 1, "POST must not retry — got \(callBox.value) attempts")
+    XCTAssertEqual(
+      callBox.value, 4,
+      "retryable POST must attempt maxAttempts(4) times — got \(callBox.value)")
   }
 }
 

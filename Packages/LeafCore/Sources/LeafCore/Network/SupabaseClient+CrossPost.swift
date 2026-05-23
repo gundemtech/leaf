@@ -114,7 +114,7 @@ extension SupabaseClient {
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
     let (data, http) = try await crossPostTransport(
-      request, label: "triggerSlackPost", retryable: false, refreshable: true)
+      request, label: "triggerSlackPost", retryable: true, refreshable: true, idempotent: true)
     guard http.statusCode == 200 else {
       throw SupabaseError.fromStatus(http.statusCode, body: data)
     }
@@ -182,11 +182,14 @@ extension SupabaseClient {
       request.setValue(v, forHTTPHeaderField: k)
     }
 
+    // A13: idempotency_key body field removed — server reads the
+    // Idempotency-Key header injected by performHTTP instead (M-II).
+    // Parameter retained in signature for API compatibility.
+    _ = idempotencyKey
     var body: [String: Any] = [
       "workspace_id": workspaceID.uuidString.lowercased(),
       "message_id": messageID.uuidString.lowercased(),
       "team_id": teamID,
-      "idempotency_key": idempotencyKey.uuidString.lowercased(),
       "title": title,
       "description": description,
       "linear_user_token": linearUserToken,
@@ -201,7 +204,7 @@ extension SupabaseClient {
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
     let (data, http) = try await crossPostTransport(
-      request, label: "triggerLinearCreate", retryable: false, refreshable: true)
+      request, label: "triggerLinearCreate", retryable: true, refreshable: true, idempotent: true)
     guard http.statusCode == 200 else {
       throw SupabaseError.fromStatus(http.statusCode, body: data)
     }
@@ -236,9 +239,10 @@ extension SupabaseClient {
     _ request: URLRequest,
     label: String,
     retryable: Bool = false,
-    refreshable: Bool = false
+    refreshable: Bool = false,
+    idempotent: Bool = false
   ) async throws -> (Data, HTTPURLResponse) {
     try await performHTTP(
-      request, retryable: retryable, refreshable: refreshable, label: label)
+      request, retryable: retryable, refreshable: refreshable, idempotent: idempotent, label: label)
   }
 }
