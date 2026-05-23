@@ -16,7 +16,9 @@ import SwiftUI
 struct RecapBlock: View {
     let snapshot: StandupRecap?
     @State private var expanded: Bool
-    @Environment(\.calendar) private var calendar
+
+    // Stage 6 fix-bundle — removed dead `@Environment(\.calendar)`; init
+    // resolves hour via `Calendar.current` (env not accessible in init).
 
     init(snapshot: StandupRecap?, now: Date = Date()) {
         self.snapshot = snapshot

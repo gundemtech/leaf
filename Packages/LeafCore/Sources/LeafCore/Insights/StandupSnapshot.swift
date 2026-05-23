@@ -87,9 +87,10 @@ public struct StandupEod: Equatable, Hashable, Sendable {
     public let todayClosedLinearKeys: [String]
     public let todayReviewedPRsCount: Int
     /// "Tomorrow: resume <anchor>" — reuses `WhereStoppedSnapshot` from
-    /// Zone-1 RESUME hero (intentional reuse; see F-CTO-T8-E rationale —
-    /// narrow surface read of anchorBundleID / anchorFilePath /
-    /// recentLastCommit?.message).
+    /// Zone-1 RESUME hero (F-CTO-T8-E rationale: narrow surface). T8 ships
+    /// reads `excerpt` only; richer reads (`anchorBundleID` /
+    /// `anchorFilePath` / `recentLastCommit?.message`) are deferred to
+    /// post-T8 polish — see Track-10 T9 carry C-T8-7.
     public let tomorrowResume: WhereStoppedSnapshot?
     public let carryWaitingItems: [InboxItem]
     public let carryOpenBlockers: [Blocker]
