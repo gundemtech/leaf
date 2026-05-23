@@ -1,26 +1,24 @@
 //
 //  HomeView.swift
-//  Track 8 / Phase 8.2 — Operational console. Post-Track-10 composition
-//  (T2 hero promote + T3 YOU·NOW badge inline + T4 NEEDS YOU rename):
+//  Track 8 / Phase 8.2 — Operational console shell. Composition + Zone
+//  layout was extracted to `HomeContent.swift` in Track-10 T7 C4 for LOC
+//  budget defense (master spec §7.2 gate 6 ≤ 310). Post-Track-10 composition
+//  (T2 hero promote + T3 YOU·NOW badge inline + T4 NEEDS YOU rename + T6
+//  TEAM·N Zone-3 + T7 YOU'RE ON Zone-4):
 //
-//    1. RESUME HERO                        (full width)
-//    2. TODAY (with inline state badge)    (full width)
-//    3. WITH YOU ON THIS                   (full width — T6 → TeamN)
-//    4. NEEDS YOU                          (full width — T4 from INBOX)
-//
-//  Block bodies were placeholders in P2; P3-P7 wired Phase 8.1 substrate.
+//    1. RESUME HERO                              (T2, full width)
+//    2. TODAY (with inline YOU·NOW state badge)  (T3, full width)
+//    3. NEEDS YOU ‖ TEAM·N  (ViewThatFits 2-col) (T4, T6)
+//    4. SINCE ‖ YOU'RE ON   (ViewThatFits 2-col) (T5, T7)
 //
 //  State-machine UX (InsightsReader.State):
 //    .loading        → LoadingScaffold with muted shape placeholders.
 //    .notConfigured  → Full-page LeafEmptyState + 'Open Connections' CTA.
 //    .empty          → Full-page LeafEmptyState (no CTA).
-//    .error          → LeafBanner.danger at top + 'Try again' CTA.
-//    .loaded         → HomeContent — 5-block render below.
+//    .error          → LeafBanner.danger at top + 'Try again' CTA + last-known content.
+//    .loaded         → HomeContent (extracted) — 4-zone render.
 //
-//  NavigationStack destinations retained for downstream phases:
-//    - HomeSurface       → consumed by TODAY pills in P3
-//    - WorkStateRoute    → consumed by WHERE YOU STOPPED in P7
-//    - LayerBProvider    → consumed by INBOX click-through in P6
+//  NavigationStack destinations live on HomeContent.
 //
 
 import LeafCore
