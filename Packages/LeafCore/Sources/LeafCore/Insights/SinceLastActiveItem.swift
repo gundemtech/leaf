@@ -96,7 +96,10 @@ extension SinceLastActiveItem {
         case .slack:
             return feed.targetRef ?? ""
         case .detection:
-            return feed.eventKind == "blocker" ? "Track-3 D3" : "Track-1 D3"
+            // Both `blocker` (`blockers` table M014) and `open_question`
+            // (`open_questions` table M014) live in the Track-1 D3 detection
+            // substrate. Single shared label.
+            return "Track-1 D3"
         }
     }
 }

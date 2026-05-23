@@ -37,12 +37,12 @@ final class SinceLastActiveItemTests: XCTestCase {
         let a = SinceLastActiveItem(
             severity: .danger, verb: "blocker:", actorPrefix: "",
             targetTitle: "Sasha needs Linear OAuth scope",
-            sourceMeta: "Track-3 D1", tsMs: 1, source: .detection, sourceURL: nil
+            sourceMeta: "Track-1 D3", tsMs: 1, source: .detection, sourceURL: nil
         )
         let b = SinceLastActiveItem(
             severity: .danger, verb: "blocker:", actorPrefix: "",
             targetTitle: "Sasha needs Linear OAuth scope",
-            sourceMeta: "Track-3 D1", tsMs: 1, source: .detection, sourceURL: nil
+            sourceMeta: "Track-1 D3", tsMs: 1, source: .detection, sourceURL: nil
         )
         XCTAssertEqual(Set([a, b]).count, 1)
     }
