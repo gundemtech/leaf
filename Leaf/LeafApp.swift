@@ -624,6 +624,11 @@ struct LeafApp: App {
             windowState: windowState
           )
         }
+                .task {
+                    // Track-10 T5 — two-phase init for LastSeenCursor injection
+                    // (refresh()-triggers first SINCE feed population).
+                    reader.configure(lastSeenCursor: lastSeenCursor)
+                }
         .onOpenURL { url in
           inviteURLHandler.handle(url)
         }

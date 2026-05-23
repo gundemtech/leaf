@@ -173,6 +173,10 @@ public struct InsightsSnapshot: Sendable, Hashable {
     /// `nil` ↔ no attention event in the freshness window. Powers the RESUME hero
     /// task line + Resume/Linear CTAs.
     public let currentTaskIdentity: TaskIdentity?
+    /// Track-10 T5 — per-event SINCE YOU WERE LAST ACTIVE timeline rows composed
+    /// from `DerivedInsights.recentActivityFeed(since:limit:)`. Empty default keeps
+    /// fixture / test callsites passing without override.
+    public let sinceLastActiveItems: [SinceLastActiveItem]
 
     public init(
         topApps: [AppTimeEntry],
@@ -215,7 +219,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         whereStopped: WhereStoppedSnapshot? = nil,
         weeklyMetrics: WeeklyMetrics = .empty,
         gitDelta: GitDeltaSnapshot? = nil,
-        currentTaskIdentity: TaskIdentity? = nil
+        currentTaskIdentity: TaskIdentity? = nil,
+        sinceLastActiveItems: [SinceLastActiveItem] = []
     ) {
         self.topApps = topApps
         self.sessions = sessions
@@ -258,6 +263,7 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.weeklyMetrics = weeklyMetrics
         self.gitDelta = gitDelta
         self.currentTaskIdentity = currentTaskIdentity
+        self.sinceLastActiveItems = sinceLastActiveItems
     }
 
     /// Convenience init — рассчитывает `deepSessionsCount` по threshold'у.
@@ -306,7 +312,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         whereStopped: WhereStoppedSnapshot? = nil,
         weeklyMetrics: WeeklyMetrics = .empty,
         gitDelta: GitDeltaSnapshot? = nil,
-        currentTaskIdentity: TaskIdentity? = nil
+        currentTaskIdentity: TaskIdentity? = nil,
+        sinceLastActiveItems: [SinceLastActiveItem] = []
     ) {
         self.init(
             topApps: topApps,
@@ -349,7 +356,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
             whereStopped: whereStopped,
             weeklyMetrics: weeklyMetrics,
             gitDelta: gitDelta,
-            currentTaskIdentity: currentTaskIdentity
+            currentTaskIdentity: currentTaskIdentity,
+            sinceLastActiveItems: sinceLastActiveItems
         )
     }
 

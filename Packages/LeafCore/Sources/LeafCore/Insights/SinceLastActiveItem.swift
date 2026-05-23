@@ -43,3 +43,61 @@ public struct SinceLastActiveItem: Sendable, Hashable {
         self.sourceURL = sourceURL
     }
 }
+
+extension SinceLastActiveItem {
+    /// Track-10 T5 — compose UI-tier row from substrate `ActivityFeedItem`.
+    /// Returns `nil` for event_kinds outside the allow-listed verb map.
+    public static func compose(from feed: ActivityFeedItem) -> SinceLastActiveItem? {
+        guard let mapping = verbMap[feed.eventKind] else { return nil }
+        let actorPrefix: String = {
+            if feed.source == .detection { return "" }
+            if feed.actorIsMe { return "you" }
+            return feed.actorDisplay ?? "@teammate"
+        }()
+        let targetTitle = feed.targetTitle ?? feed.targetRef ?? "—"
+        let sourceMeta = makeSourceMeta(feed: feed)
+        return SinceLastActiveItem(
+            severity: mapping.severity,
+            verb: mapping.verb,
+            actorPrefix: actorPrefix,
+            targetTitle: targetTitle,
+            sourceMeta: sourceMeta,
+            tsMs: feed.ts,
+            source: feed.source,
+            sourceURL: feed.sourceURL
+        )
+    }
+
+    private static let verbMap: [String: (verb: String, severity: InboxSeverity)] = [
+        "linear_status_transition.started": ("started", .muted),
+        "linear_status_transition.completed": ("completed", .muted),
+        "linear_status_transition.canceled": ("canceled", .muted),
+        "linear_status_transition.reopened": ("reopened", .warn),
+        "linear_comment_authored_to_me": ("commented on", .warn),
+        "gh_commit_pushed": ("pushed", .muted),
+        "gh_pr_opened": ("opened", .muted),
+        "gh_pr_merged": ("merged", .muted),
+        "gh_pr_review_authored": ("reviewed", .muted),
+        "gh_pr_review_requested": ("requested your review on", .warn),
+        "slack_huddle_state_change": ("joined a huddle", .muted),
+        "slack_mention_received_aggregate": ("mentioned you in", .warn),
+        "open_question": ("open question:", .warn),
+        "blocker": ("blocker:", .danger),
+    ]
+
+    private static func makeSourceMeta(feed: ActivityFeedItem) -> String {
+        switch feed.source {
+        case .github:
+            let parts = [feed.targetRef, feed.repoHint]
+                .compactMap { ($0?.isEmpty == false) ? $0 : nil }
+            return parts.joined(separator: " · ")
+        case .linear:
+            return feed.targetRef ?? ""
+        case .slack:
+            return feed.targetRef ?? ""
+        case .detection:
+            return feed.eventKind == "blocker" ? "Track-3 D3" : "Track-1 D3"
+        }
+    }
+}
+
