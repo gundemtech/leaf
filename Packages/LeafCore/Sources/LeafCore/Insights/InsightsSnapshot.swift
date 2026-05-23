@@ -188,6 +188,13 @@ public struct InsightsSnapshot: Sendable, Hashable {
     /// NEEDS YOU full-width). Defaults to `1` so existing callsites keep solo-user
     /// behavior without populating.
     public let memberCount: Int
+    /// Track-10 T7 — bundled task-session lens consumed by the Home YOU'RE ON
+    /// block (LEAF-ID + branch + commits ahead + session start clock + per-task
+    /// focused minutes + recent open files). Composed once per
+    /// `InsightsReader.refresh()` via `DerivedInsights.currentTaskSession()`.
+    /// `nil` ↔ no current task identifiable (Terminal-only work, no IDE foreground
+    /// in attention history) → YOU'RE ON block renders empty state.
+    public let currentSession: CurrentTaskSession?
 
     public init(
         topApps: [AppTimeEntry],
@@ -238,7 +245,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         currentTaskIdentity: TaskIdentity? = nil,
         sinceLastActiveItems: [SinceLastActiveItem] = [],
         activeTeammates: [TeammateSnapshot] = [],
-        memberCount: Int = 1
+        memberCount: Int = 1,
+        currentSession: CurrentTaskSession? = nil
     ) {
         self.topApps = topApps
         self.sessions = sessions
@@ -289,6 +297,7 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.sinceLastActiveItems = sinceLastActiveItems
         self.activeTeammates = activeTeammates
         self.memberCount = memberCount
+        self.currentSession = currentSession
     }
 
     /// Convenience init — рассчитывает `deepSessionsCount` по threshold'у.
@@ -345,7 +354,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         currentTaskIdentity: TaskIdentity? = nil,
         sinceLastActiveItems: [SinceLastActiveItem] = [],
         activeTeammates: [TeammateSnapshot] = [],
-        memberCount: Int = 1
+        memberCount: Int = 1,
+        currentSession: CurrentTaskSession? = nil
     ) {
         self.init(
             topApps: topApps,
@@ -396,7 +406,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
             currentTaskIdentity: currentTaskIdentity,
             sinceLastActiveItems: sinceLastActiveItems,
             activeTeammates: activeTeammates,
-            memberCount: memberCount
+            memberCount: memberCount,
+            currentSession: currentSession
         )
     }
 

@@ -710,6 +710,30 @@ final class InsightsSnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.memberCount, 3)
     }
 
+    // MARK: - Track-10 T7 — currentSession defaulted init
+
+    /// Defaulted `currentSession: CurrentTaskSession? = nil` matches the T2
+    /// gitDelta / currentTaskIdentity pattern — existing fixture / test
+    /// callsites stay unmodified. 13th iteration of defaulted-init blast-radius.
+    func testSnapshotDefaultsCurrentSessionToNil() {
+        XCTAssertNil(emptySnapshot().currentSession)
+    }
+
+    func testSnapshotCarriesCurrentSession() {
+        let task = TaskIdentity(linearID: "GUN-50", branch: "feature/x")
+        let session = CurrentTaskSession(
+            taskIdentity: task, sessionStartMs: 100,
+            focusedMinSoFar: 5, openFiles: ["A.swift"])
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500,
+            currentSession: session
+        )
+        XCTAssertEqual(snapshot.currentSession, session)
+    }
+
     // MARK: - Phase Track-8 P6 — INBOX
 
     func testSnapshotDefaultsInboxItemsEmpty() {

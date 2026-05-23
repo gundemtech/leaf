@@ -241,6 +241,16 @@ final class InsightsReader {
                         let gitDelta = await GitDeltaReaderFactory.make()
                             .read(forWorkspacePath: workspacePath)
                         try Task.checkCancellation()
+                        // Track-10 T7 — bundled task-session lens (LEAF-ID +
+                        // branch + commits ahead + session start + per-task
+                        // focused-min + recent open files) for the Home YOU'RE ON
+                        // block. Composed via per-IDE dispatch (Xcode doc_path
+                        // walk + VSCode/JetBrains workspace_root match) +
+                        // attention dwell SUM + basename-only openFiles cap 3.
+                        // Stays nil for empty fixtures and Terminal-only work
+                        // where currentTaskIdentity() can't resolve.
+                        let currentSession = try insights.currentTaskSession()
+                        try Task.checkCancellation()
                         // Track-10 T5 — per-event SINCE timeline. `cursorMs == nil`
                         // before LeafApp's `configure(lastSeenCursor:)` lands;
                         // emit `[]` so the snapshot composition stays stable
@@ -322,7 +332,8 @@ final class InsightsReader {
                             currentTaskIdentity: taskIdentity,
                             sinceLastActiveItems: sinceLastActiveItems,
                             activeTeammates: activeTeammates,
-                            memberCount: memberCount
+                            memberCount: memberCount,
+                            currentSession: currentSession
                         )
                         return .success((db, snapshot))
                     } catch {
