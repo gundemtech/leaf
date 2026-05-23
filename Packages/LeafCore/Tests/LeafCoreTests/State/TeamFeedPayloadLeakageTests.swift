@@ -84,7 +84,7 @@ final class TeamFeedPayloadLeakageTests: XCTestCase {
 
         // Cross-check via FeedItem: each case carries only its own data.
         let feedDM = FeedItem.directMessage(dm)
-        let feedEvt = FeedItem.teamEvent(evt)
+        let feedEvt = FeedItem.teamEvent(RenderedTeamEvent(row: evt))
 
         // IDs are separate namespaces (message UUID vs event UUID).
         XCTAssertNotEqual(feedDM.id, feedEvt.id)
@@ -146,14 +146,14 @@ final class TeamFeedPayloadLeakageTests: XCTestCase {
         )
 
         // The FeedItem wraps the row unchanged — kind is preserved for audit.
-        let item = FeedItem.teamEvent(aiRow)
-        if case .teamEvent(let row) = item {
-            XCTAssertEqual(row.kind, "ai_prompt_submitted",
+        let item = FeedItem.teamEvent(RenderedTeamEvent(row: aiRow))
+        if case .teamEvent(let rendered) = item {
+            XCTAssertEqual(rendered.row.kind, "ai_prompt_submitted",
                 "FeedItem.teamEvent must preserve kind verbatim (no silent masking)")
             // The sentinel payload is present at the value level — confirms
             // the read path does not fabricate sanitised content.
             XCTAssertTrue(
-                row.plaintextPayloadJSON.contains("SECRET-AI-PROMPT"),
+                rendered.row.plaintextPayloadJSON.contains("SECRET-AI-PROMPT"),
                 "Value type preserves payload — production protection is at the WRITE path (denylist)"
             )
         } else {
@@ -163,7 +163,7 @@ final class TeamFeedPayloadLeakageTests: XCTestCase {
         // Confirm: if an ai_* row somehow reaches fetch output, its kind
         // starts with "ai_" — easy to audit in a unit test.
         if case .teamEvent(let r) = item {
-            let isAIKind = r.kind.hasPrefix("ai_")
+            let isAIKind = r.row.kind.hasPrefix("ai_")
             // This is an assertion documenting the invariant — real protection
             // is in DefaultDenyList.matches() at write time.
             XCTAssertTrue(isAIKind, "ai_* kind must be identifiable at read layer for audit")
@@ -422,11 +422,45 @@ final class TeamFeedPayloadLeakageTests: XCTestCase {
             eventTsMs: 200,
             receivedAtMs: 200
         )
-        let feedEvt = FeedItem.teamEvent(evt)
+        let feedEvt = FeedItem.teamEvent(RenderedTeamEvent(row: evt))
         XCTAssertEqual(feedEvt.id, "00000000-0000-0000-0000-000000000002",
             "Event FeedItem.id must be the event_id UUID, not payload-derived")
         XCTAssertFalse(feedEvt.id.contains("SECRET-EVT-PAYLOAD"),
             "Event FeedItem.id must not contain payload content")
+    }
+
+    // MARK: - (12) M-IX precomputed actionText carries no forbidden payload content
+
+    /// M-IX precomputes RenderedTeamEvent.actionText from the row payload in the
+    /// mapping layer. ADR-010 walkback: the derived display string must read only
+    /// allow-listed keys (title / *_excerpt) — forbidden payload fields (body,
+    /// ai prompt, file_size, raw email/slack content) must never surface in it.
+    func testRenderedTeamEventActionText_NoForbiddenContent() {
+        let payload = #"""
+        {"title":"feat: ship M-IX","body":"SECRET-DM-BODY","ai_prompt":"SECRET-AI-PROMPT","file_size":987654321,"email_subject":"SECRET-SUBJECT"}
+        """#
+        let row = TeamEventMirrorRow(
+            eventID: "evt-mix-1",
+            workspaceID: "ws-1",
+            senderPubkeyHex: String(repeating: "ab", count: 32),
+            source: .gitCommits,
+            kind: "gh_commit_pushed",
+            plaintextPayloadJSON: payload,
+            serverCreatedAtMs: 1000,
+            eventTsMs: 1000,
+            receivedAtMs: 1000
+        )
+        let rendered = RenderedTeamEvent(row: row)
+
+        // Only the allow-listed title is surfaced.
+        XCTAssertEqual(rendered.actionText, #"pushed "feat: ship M-IX""#)
+
+        for sentinel in ["SECRET-DM-BODY", "SECRET-AI-PROMPT", "987654321", "SECRET-SUBJECT"] {
+            XCTAssertFalse(
+                rendered.actionText.contains(sentinel),
+                "actionText must not surface forbidden payload value: '\(sentinel)'"
+            )
+        }
     }
 
     // MARK: - (11) TeamFeedQueryService.swift uses parameterised SQL

@@ -23,41 +23,43 @@ import LeafCore
 
 struct LeafFeedRow: View {
 
-    let row: TeamEventMirrorRow
+    let event: RenderedTeamEvent
     let attachmentMetadata: AttachmentMetadata?
     let onTap: () -> Void
 
     init(
-        row: TeamEventMirrorRow,
+        event: RenderedTeamEvent,
         attachmentMetadata: AttachmentMetadata?,
         onTap: @escaping () -> Void
     ) {
-        self.row = row
+        self.event = event
         self.attachmentMetadata = attachmentMetadata
         self.onTap = onTap
     }
 
     var body: some View {
         HStack(spacing: LeafSpace.sm) {
-            Image(systemName: sourceKindSymbol(row.source))
+            Image(systemName: sourceKindSymbol(event.row.source))
                 .font(.system(size: LeafFeedRowTokens.iconSize, weight: .regular))
                 .foregroundStyle(LeafColor.text.tertiary)
                 .frame(width: LeafFeedRowTokens.iconSize, height: LeafFeedRowTokens.iconSize)
 
             // TODO: Replace truncated pubkey with real display name once Phase G
             // member-lookup (WorkspaceMembersReader) is wired into the feed.
-            Text(senderDisplayName(row.senderPubkeyHex))
+            Text(senderDisplayName(event.row.senderPubkeyHex))
                 .font(LeafType.body.regular)
                 .foregroundStyle(LeafColor.text.primary)
 
-            Text(actionText(for: row))
+            // M-IX — precomputed in the feed mapping layer (RenderedTeamEvent);
+            // no JSON parse during render.
+            Text(event.actionText)
                 .font(LeafType.body.regular)
                 .foregroundStyle(LeafColor.text.secondary)
                 .lineLimit(1)
 
             Spacer()
 
-            Text(relativeTimestamp(row.eventTsMs))
+            Text(relativeTimestamp(event.row.eventTsMs))
                 .font(LeafType.caption)
                 .foregroundStyle(LeafColor.text.tertiary)
         }
@@ -76,7 +78,7 @@ struct LeafFeedRow: View {
         count: Int,
         spanStartMs: Int64,
         spanEndMs: Int64,
-        expandedItems: [TeamEventMirrorRow],
+        expandedItems: [RenderedTeamEvent],
         isExpanded: Binding<Bool>
     ) -> some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -116,8 +118,8 @@ struct LeafFeedRow: View {
 
             if isExpanded.wrappedValue {
                 VStack(alignment: .leading, spacing: LeafFeedRowTokens.groupedExpandedSpacing) {
-                    ForEach(expandedItems, id: \.eventID) { item in
-                        LeafFeedRow(row: item, attachmentMetadata: nil, onTap: {})
+                    ForEach(expandedItems) { item in
+                        LeafFeedRow(event: item, attachmentMetadata: nil, onTap: {})
                             .padding(.leading, LeafSpace.lg)
                     }
                 }
@@ -150,67 +152,6 @@ private func sourceKindSymbol(_ source: ShareSource) -> String {
 /// TODO: Phase G — resolve real display name from WorkspaceMembersReader.
 private func senderDisplayName(_ pubkeyHex: String) -> String {
     String(pubkeyHex.prefix(8))
-}
-
-/// Best-effort action text for individual rows.
-/// ADR-010 discipline: only reads allow-listed payload keys (title, repo,
-/// body excerpt). Never reads AI-related fields or PII.
-private func actionText(for row: TeamEventMirrorRow) -> String {
-    let payload = parsePayload(row.plaintextPayloadJSON)
-
-    switch row.source {
-    case .gitCommits:
-        if let title = payload["title"] as? String, !title.isEmpty {
-            return "pushed \"\(title)\""
-        }
-        return "pushed a commit"
-
-    case .linearIssues:
-        if let title = payload["title"] as? String, !title.isEmpty {
-            return "updated \"\(title)\""
-        }
-        return "updated an issue"
-
-    case .slackMentions:
-        return "mentioned you"
-
-    case .githubPRs:
-        if let title = payload["title"] as? String, !title.isEmpty {
-            return "opened PR \"\(title)\""
-        }
-        return "opened a pull request"
-
-    case .detectedDecisions:
-        if let excerpt = payload["reasoning_excerpt"] as? String, !excerpt.isEmpty {
-            let trimmed = String(excerpt.prefix(50))
-            return "decision: \(trimmed)…"
-        }
-        return "made a decision"
-
-    case .detectedBlockers:
-        if let excerpt = payload["blocker_excerpt"] as? String, !excerpt.isEmpty {
-            let trimmed = String(excerpt.prefix(50))
-            return "blocker: \(trimmed)…"
-        }
-        return "hit a blocker"
-
-    case .detectedOpenQuestions:
-        if let excerpt = payload["question_excerpt"] as? String, !excerpt.isEmpty {
-            let trimmed = String(excerpt.prefix(50))
-            return "question: \(trimmed)…"
-        }
-        return "raised a question"
-
-    case .detectedWhereStopped:
-        if let excerpt = payload["excerpt"] as? String, !excerpt.isEmpty {
-            let trimmed = String(excerpt.prefix(50))
-            return "stopped at: \(trimmed)…"
-        }
-        return "stopped work"
-
-    case .rawGitHubActivity:
-        return "GitHub activity"
-    }
 }
 
 /// Grouped aggregate action text with count.
@@ -261,15 +202,4 @@ private func timelineSpan(startMs: Int64, endMs: Int64) -> String {
 private func relativeTimestamp(_ ms: Int64) -> String {
     let date = Date(timeIntervalSince1970: TimeInterval(ms) / 1000)
     return abbreviatedRelativeFormatter.localizedString(for: date, relativeTo: Date())
-}
-
-/// Best-effort JSON payload parse. Returns empty dict on failure.
-/// Only call with allow-listed keys; never log or surface raw values.
-private func parsePayload(_ json: String) -> [String: Any] {
-    guard
-        let data = json.data(using: .utf8),
-        let obj  = try? JSONSerialization.jsonObject(with: data),
-        let dict = obj as? [String: Any]
-    else { return [:] }
-    return dict
 }

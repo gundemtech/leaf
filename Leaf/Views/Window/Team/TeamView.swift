@@ -484,8 +484,8 @@ struct TeamView: View {
     switch item {
     case .directMessage(let row):
       directMessageCard(row: row)
-    case .teamEvent(let row):
-      teamEventRow(row: row)
+    case .teamEvent(let event):
+      teamEventRow(event: event)
     case .grouped(let kind, let sender, let count, let spanStart, let spanEnd, let expandedItems):
       groupedRow(
         kind: kind,
@@ -626,9 +626,9 @@ struct TeamView: View {
   // MARK: - G.8 teamEventRow + groupedRow
 
   @ViewBuilder
-  private func teamEventRow(row: TeamEventMirrorRow) -> some View {
+  private func teamEventRow(event: RenderedTeamEvent) -> some View {
     LeafFeedRow(
-      row: row, attachmentMetadata: nil,
+      event: event, attachmentMetadata: nil,
       onTap: {
         // Phase v1.1 — tap → open detail view or external URL.
       })
@@ -641,7 +641,7 @@ struct TeamView: View {
     count: Int,
     spanStart: Int64,
     spanEnd: Int64,
-    items: [TeamEventMirrorRow]
+    items: [RenderedTeamEvent]
   ) -> some View {
     // S8 T11: FeedItem.grouped.kind is now the raw event_kind String per
     // S7 spec §11.0:575. Group ID must mirror FeedItem.id format exactly

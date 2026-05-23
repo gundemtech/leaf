@@ -214,7 +214,9 @@ public final class TeamFeedReader {
     public func applyGrouping(_ items: [FeedItem]) -> [FeedItem] {
         var result: [FeedItem] = []
         // Accumulated same-sender/kind burst in DESC order (head = newest).
-        var burst: [TeamEventMirrorRow] = []
+        // M-IX: holds RenderedTeamEvent — grouping only reorganizes already-
+        // rendered values, it never re-derives action text.
+        var burst: [RenderedTeamEvent] = []
 
         func flush() {
             guard !burst.isEmpty else { return }
@@ -230,33 +232,33 @@ public final class TeamFeedReader {
             let newest = burst.first!
             let oldest = burst.last!
 
-            guard let sender = memberResolver(oldest.senderPubkeyHex) else {
+            guard let sender = memberResolver(oldest.row.senderPubkeyHex) else {
                 // Cannot resolve member → fall back to individual rows.
                 result.append(contentsOf: burst.map { .teamEvent($0) })
                 return
             }
 
             result.append(.grouped(
-                kind: oldest.kind,
+                kind: oldest.row.kind,
                 sender: sender,
                 count: burst.count,
-                spanStartMs: oldest.eventTsMs,
-                spanEndMs: newest.eventTsMs,
+                spanStartMs: oldest.row.eventTsMs,
+                spanEndMs: newest.row.eventTsMs,
                 items: burst
             ))
         }
 
         for item in items {
             switch item {
-            case .teamEvent(let row):
+            case .teamEvent(let rendered):
                 if let head = burst.first,
-                   head.kind == row.kind,
-                   head.senderPubkeyHex == row.senderPubkeyHex,
-                   abs(head.eventTsMs - row.eventTsMs) <= Self.groupingWindowMs {
-                    burst.append(row)
+                   head.row.kind == rendered.row.kind,
+                   head.row.senderPubkeyHex == rendered.row.senderPubkeyHex,
+                   abs(head.row.eventTsMs - rendered.row.eventTsMs) <= Self.groupingWindowMs {
+                    burst.append(rendered)
                 } else {
                     flush()
-                    burst = [row]
+                    burst = [rendered]
                 }
             case .directMessage:
                 // DMs break any open burst.

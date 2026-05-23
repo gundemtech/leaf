@@ -194,9 +194,9 @@ final class TeamFeedQueryServiceTests: XCTestCase {
         )
 
         XCTAssertEqual(items.count, 1)
-        if case .teamEvent(let row) = items[0] {
-            XCTAssertEqual(row.eventID, "dec1")
-            XCTAssertEqual(row.source, .detectedDecisions)
+        if case .teamEvent(let rendered) = items[0] {
+            XCTAssertEqual(rendered.row.eventID, "dec1")
+            XCTAssertEqual(rendered.row.source, .detectedDecisions)
         } else {
             XCTFail("Expected teamEvent dec1")
         }
@@ -217,8 +217,8 @@ final class TeamFeedQueryServiceTests: XCTestCase {
         )
 
         XCTAssertEqual(items.count, 1)
-        if case .teamEvent(let row) = items[0] {
-            XCTAssertEqual(row.source, .detectedBlockers)
+        if case .teamEvent(let rendered) = items[0] {
+            XCTAssertEqual(rendered.row.source, .detectedBlockers)
         } else {
             XCTFail("Expected teamEvent blocker")
         }
@@ -241,8 +241,8 @@ final class TeamFeedQueryServiceTests: XCTestCase {
         )
 
         XCTAssertEqual(items.count, 1)
-        if case .teamEvent(let row) = items[0] {
-            XCTAssertEqual(row.eventID, "lin1")
+        if case .teamEvent(let rendered) = items[0] {
+            XCTAssertEqual(rendered.row.eventID, "lin1")
         } else {
             XCTFail("Expected linearIssues event")
         }
@@ -268,7 +268,7 @@ final class TeamFeedQueryServiceTests: XCTestCase {
         let ids = items.flatMap { item -> [String] in
             switch item {
             case .directMessage(let r): return [r.messageID]
-            case .teamEvent(let r): return [r.eventID]
+            case .teamEvent(let r): return [r.row.eventID]
             case .grouped: return []
             }
         }
@@ -292,7 +292,7 @@ final class TeamFeedQueryServiceTests: XCTestCase {
 
         XCTAssertEqual(items.count, 2)
         let ids = items.map { item -> String in
-            if case .teamEvent(let r) = item { return r.eventID }
+            if case .teamEvent(let r) = item { return r.row.eventID }
             return ""
         }
         XCTAssertTrue(ids.contains("git1"))
@@ -417,7 +417,7 @@ final class TeamFeedQueryServiceTests: XCTestCase {
 
         XCTAssertEqual(items.count, 1)
         if case .teamEvent(let r) = items[0] {
-            XCTAssertEqual(r.eventID, "git1")
+            XCTAssertEqual(r.row.eventID, "git1")
         } else {
             XCTFail("Expected teamEvent only")
         }

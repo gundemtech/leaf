@@ -91,7 +91,7 @@ final class TeamFeedItemTests: XCTestCase {
 
     func testFeedItemTeamEventID_UsesEventID() {
         let row = makeEventRow(eventID: "evt-xyz")
-        let item = FeedItem.teamEvent(row)
+        let item = FeedItem.teamEvent(RenderedTeamEvent(row: row))
         XCTAssertEqual(item.id, "evt-xyz")
     }
 
@@ -127,7 +127,7 @@ final class TeamFeedItemTests: XCTestCase {
         let row1 = makeDMRow(messageID: "some-id")
         let row2 = makeEventRow(eventID: "other-id")
         let dm = FeedItem.directMessage(row1)
-        let evt = FeedItem.teamEvent(row2)
+        let evt = FeedItem.teamEvent(RenderedTeamEvent(row: row2))
         XCTAssertEqual(dm.id, "some-id")
         XCTAssertEqual(evt.id, "other-id")
         XCTAssertNotEqual(dm.id, evt.id)
@@ -143,7 +143,7 @@ final class TeamFeedItemTests: XCTestCase {
 
     func testFeedItemTeamEventTimestamp_UsesServerCreatedAtMs() {
         let row = makeEventRow(serverCreatedAtMs: 99_000)
-        let item = FeedItem.teamEvent(row)
+        let item = FeedItem.teamEvent(RenderedTeamEvent(row: row))
         XCTAssertEqual(item.timestamp, 99_000)
     }
 
@@ -162,13 +162,13 @@ final class TeamFeedItemTests: XCTestCase {
 
     func testFeedItemTeamEvent_EqualToSelf() {
         let row = makeEventRow()
-        let item = FeedItem.teamEvent(row)
+        let item = FeedItem.teamEvent(RenderedTeamEvent(row: row))
         XCTAssertEqual(item, item)
     }
 
     func testFeedItemDifferentCases_AreNotEqual() {
         let dm = FeedItem.directMessage(makeDMRow())
-        let evt = FeedItem.teamEvent(makeEventRow())
+        let evt = FeedItem.teamEvent(RenderedTeamEvent(row: makeEventRow()))
         XCTAssertNotEqual(dm, evt)
     }
 }

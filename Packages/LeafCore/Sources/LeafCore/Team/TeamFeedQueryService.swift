@@ -204,7 +204,10 @@ public actor TeamFeedQueryService {
         case "dm":
             return mapDMRow(row).map { .directMessage($0) }
         case "evt":
-            return mapEventRow(row).map { .teamEvent($0) }
+            // M-IX — precompute the row's action text once here (the single
+            // DB→FeedItem mapping site) so the view never parses payload JSON
+            // during render.
+            return mapEventRow(row).map { .teamEvent(RenderedTeamEvent(row: $0)) }
         default:
             return nil
         }

@@ -290,7 +290,7 @@ final class TeamFeedReaderBusinessTests: XCTestCase {
                 senderPubkeyHex: senderPubkeyHex,
                 eventTsMs: ts
             )
-            return .teamEvent(row)
+            return .teamEvent(RenderedTeamEvent(row: row))
         }
     }
 

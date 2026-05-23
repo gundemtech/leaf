@@ -143,22 +143,22 @@ struct LeafFeedRowPreview: View {
                     .foregroundStyle(LeafColor.text.primary)
 
                 sectionLabel("1 · Git commit (gitCommits source)")
-                LeafFeedRow(row: gitCommitRow, attachmentMetadata: nil, onTap: {})
+                LeafFeedRow(event: RenderedTeamEvent(row: gitCommitRow), attachmentMetadata: nil, onTap: {})
 
                 sectionLabel("2 · Linear issue (linearIssues source)")
-                LeafFeedRow(row: linearIssueRow, attachmentMetadata: nil, onTap: {})
+                LeafFeedRow(event: RenderedTeamEvent(row: linearIssueRow), attachmentMetadata: nil, onTap: {})
 
                 sectionLabel("3 · Slack mention (slackMentions source)")
-                LeafFeedRow(row: slackMentionRow, attachmentMetadata: nil, onTap: {})
+                LeafFeedRow(event: RenderedTeamEvent(row: slackMentionRow), attachmentMetadata: nil, onTap: {})
 
                 sectionLabel("4 · GitHub PR (githubPRs source)")
-                LeafFeedRow(row: githubPRRow, attachmentMetadata: nil, onTap: {})
+                LeafFeedRow(event: RenderedTeamEvent(row: githubPRRow), attachmentMetadata: nil, onTap: {})
 
                 sectionLabel("5 · Detected decision (detectedDecisions source)")
-                LeafFeedRow(row: decisionRow, attachmentMetadata: nil, onTap: {})
+                LeafFeedRow(event: RenderedTeamEvent(row: decisionRow), attachmentMetadata: nil, onTap: {})
 
                 sectionLabel("6 · Detected blocker (detectedBlockers source)")
-                LeafFeedRow(row: blockerRow, attachmentMetadata: nil, onTap: {})
+                LeafFeedRow(event: RenderedTeamEvent(row: blockerRow), attachmentMetadata: nil, onTap: {})
 
                 sectionLabel("7 · Grouped — collapsed (tap to expand)")
                 LeafFeedRow.grouped(
@@ -168,7 +168,7 @@ struct LeafFeedRowPreview: View {
                     count: 3,
                     spanStartMs: msAgo(minutes: 10),
                     spanEndMs: msAgo(minutes: 4),
-                    expandedItems: groupedChildren,
+                    expandedItems: groupedChildren.map(RenderedTeamEvent.init(row:)),
                     isExpanded: $group1Expanded
                 )
 
@@ -180,13 +180,13 @@ struct LeafFeedRowPreview: View {
                     count: 3,
                     spanStartMs: msAgo(minutes: 10),
                     spanEndMs: msAgo(minutes: 4),
-                    expandedItems: groupedChildren,
+                    expandedItems: groupedChildren.map(RenderedTeamEvent.init(row:)),
                     isExpanded: $group2Expanded
                 )
 
                 TokensInlineSpec(
                     spec: "LeafFeedRow · single + grouped · 8 variants",
-                    codeSnippet: "LeafFeedRow(row:attachmentMetadata:onTap:) / LeafFeedRow.grouped(source:senderDisplayName:senderPubkeyHex:count:spanStartMs:spanEndMs:expandedItems:isExpanded:)"
+                    codeSnippet: "LeafFeedRow(event:attachmentMetadata:onTap:) / LeafFeedRow.grouped(source:senderDisplayName:senderPubkeyHex:count:spanStartMs:spanEndMs:expandedItems:isExpanded:)"
                 )
             }
             .padding(LeafSpace.lg)

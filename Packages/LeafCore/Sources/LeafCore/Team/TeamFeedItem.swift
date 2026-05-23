@@ -21,14 +21,14 @@ import Foundation
 public enum FeedItem: Identifiable, Equatable, Sendable {
 
     case directMessage(DirectMessageMirrorRow)
-    case teamEvent(TeamEventMirrorRow)
+    case teamEvent(RenderedTeamEvent)
     case grouped(
         kind: String,
         sender: TeamMember,
         count: Int,
         spanStartMs: Int64,
         spanEndMs: Int64,
-        items: [TeamEventMirrorRow]
+        items: [RenderedTeamEvent]
     )
 
     // MARK: - Identifiable
@@ -51,8 +51,8 @@ public enum FeedItem: Identifiable, Equatable, Sendable {
         switch self {
         case .directMessage(let row):
             return row.messageID
-        case .teamEvent(let row):
-            return row.eventID
+        case .teamEvent(let rendered):
+            return rendered.row.eventID
         case .grouped(let kind, let sender, _, let spanStartMs, _, _):
             return "grouped-\(kind)-\(sender.pubkeyHex)-\(spanStartMs)"
         }
@@ -69,8 +69,8 @@ public enum FeedItem: Identifiable, Equatable, Sendable {
         switch self {
         case .directMessage(let row):
             return row.serverCreatedAtMs
-        case .teamEvent(let row):
-            return row.serverCreatedAtMs
+        case .teamEvent(let rendered):
+            return rendered.row.serverCreatedAtMs
         case .grouped(_, _, _, _, let spanEndMs, _):
             return spanEndMs
         }
