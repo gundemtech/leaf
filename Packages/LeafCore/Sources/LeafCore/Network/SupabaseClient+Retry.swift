@@ -28,14 +28,27 @@ extension SupabaseClient {
     _ request: URLRequest,
     retryable: Bool,
     refreshable: Bool = false,
+    idempotent: Bool = false,
     label: String
   ) async throws -> (Data, HTTPURLResponse) {
     if !retryable && !refreshable {
+      // One-shot path: still needs idempotency-key injection if requested.
+      if idempotent {
+        var req = request
+        req.setValue(
+          UUID().uuidString.lowercased(), forHTTPHeaderField: "Idempotency-Key")
+        return try await performOneShot(req, label: label)
+      }
       return try await performOneShot(request, label: label)
     }
     // Retry loop. Calls urlSession.data(for:) directly (bypassing
     // performOneShot's .transport wrapping) so the URLError catch branch
     // sees the raw URLError for classifier dispatch.
+    //
+    // M-II state: when `idempotent=true`, generate ONE UUID before the loop
+    // and set it as Idempotency-Key. The key survives every M-I retry
+    // attempt AND the M-III Authorization swap (which only touches the
+    // Authorization header, never Idempotency-Key).
     //
     // M-III state: `refreshAttempted` flag bounds 401-refresh to at most one
     // per outer call. `currentRequest` is a mutable copy whose Authorization
@@ -44,6 +57,10 @@ extension SupabaseClient {
     var attempt = 0
     var refreshAttempted = false
     var currentRequest = request
+    if idempotent {
+      currentRequest.setValue(
+        UUID().uuidString.lowercased(), forHTTPHeaderField: "Idempotency-Key")
+    }
     while attempt < retryPolicy.maxAttempts {
       do {
         let (data, response) = try await urlSession.data(for: currentRequest)
@@ -167,3 +184,28 @@ extension SupabaseClient {
     return nil
   }
 }
+
+// MARK: - DEBUG test-only passthroughs (M-II idempotency tests)
+
+#if DEBUG
+  extension SupabaseClient {
+    /// Exposes `performHTTP` to idempotency tests (actor-internal method).
+    internal func _performHTTPForTesting(
+      _ request: URLRequest,
+      retryable: Bool,
+      refreshable: Bool = false,
+      idempotent: Bool = false,
+      label: String
+    ) async throws -> (Data, HTTPURLResponse) {
+      try await performHTTP(
+        request, retryable: retryable, refreshable: refreshable,
+        idempotent: idempotent, label: label)
+    }
+
+    /// Exposes `ensureFreshSession(force:)` for the refresh+key-preservation
+    /// test (#10) — lets tests force a token refresh from the outside.
+    internal func _forceRefreshForTesting() async throws -> SupabaseAuthSession {
+      try await ensureFreshSession(force: true)
+    }
+  }
+#endif
