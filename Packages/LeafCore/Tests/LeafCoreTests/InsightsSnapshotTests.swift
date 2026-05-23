@@ -663,32 +663,6 @@ final class InsightsSnapshotTests: XCTestCase {
         XCTAssertEqual(emptySnapshot().youNowState, .empty)
     }
 
-    // MARK: - Phase 8.5 — sameTaskTeammates defaulted init
-
-    func testSnapshotDefaultsSameTaskTeammatesEmpty() {
-        XCTAssertEqual(emptySnapshot().sameTaskTeammates, [])
-    }
-
-    func testSnapshotCarriesSameTaskTeammates() {
-        let match = TeammateMatch(
-            memberID: "m-1",
-            displayName: "Anton",
-            currentApp: "Xcode",
-            durationSec: 0,
-            confidence: .onSameLinearIssue,
-            contextLabel: "on LEAF-204",
-            lastActivityAtMs: 1_700_000_000_000
-        )
-        let snapshot = InsightsSnapshot(
-            topApps: [],
-            sessions: [],
-            switchRate: 0,
-            deepSessionMinSec: 1500,
-            sameTaskTeammates: [match]
-        )
-        XCTAssertEqual(snapshot.sameTaskTeammates, [match])
-    }
-
     // MARK: - Track-10 T6 — activeTeammates + memberCount defaulted inits
 
     /// Defaulted `activeTeammates: [TeammateSnapshot] = []` matches the

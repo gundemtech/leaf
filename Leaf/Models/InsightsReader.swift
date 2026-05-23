@@ -183,13 +183,22 @@ final class InsightsReader {
                         // screen-lock transitions). Stub returns .empty.
                         let youNowState = try insights.youNowState(now: Date())
                         try Task.checkCancellation()
-                        // Track-8 Phase 8.5 — same-task teammates list.
-                        // Hierarchical rule (same Linear → same branch →
-                        // adjacent branch). Stub reader returns [] until
-                        // Phase 5.4 wires DBTeammatePresenceReader against
-                        // presence_history; block renders empty state
-                        // until then.
-                        let sameTaskTeammates = try insights.sameTaskTeammates(rule: .hierarchical)
+                        // Track-10 T6 — broader presence pulse. Reader returns []
+                        // today; Phase 5.4 wires DBTeammatePresenceReader against
+                        // presence_history. 15-min maxAge matches master spec §3.4.
+                        let teammateReader = TeammatePresenceReaderFactory.make(database: db)
+                        let activeTeammates = try teammateReader
+                            .recentTeammateSnapshots(maxAge: 15 * 60, now: Date())
+                        try Task.checkCancellation()
+                        // Track-10 T6 — solo-vs-team gate for HomeView Zone-3.
+                        // `OrgService.activeMemberCount()` is a pure DB read
+                        // (readOrg + readTeamMembers) — no keystore / identity
+                        // dependencies — so we inline-construct here rather than
+                        // thread a new DI param through LeafApp (plan §3.1 API
+                        // surface contract preserved; OrgService stays the
+                        // canonical accessor for org-shape questions).
+                        let orgService = OrgService(database: db)
+                        let memberCount = try orgService.activeMemberCount()
                         try Task.checkCancellation()
                         // Track-8 Phase 8.6 — INBOX dashboard items list.
                         // Fetched with .all/"" defaults; filter + search
@@ -306,13 +315,14 @@ final class InsightsReader {
                             recentSessions: recentSessions,
                             todayMetrics: todayMetrics,
                             youNowState: youNowState,
-                            sameTaskTeammates: sameTaskTeammates,
                             inboxItems: inboxItems,
                             whereStopped: whereStopped,
                             weeklyMetrics: weeklyMetrics,
                             gitDelta: gitDelta,
                             currentTaskIdentity: taskIdentity,
-                            sinceLastActiveItems: sinceLastActiveItems
+                            sinceLastActiveItems: sinceLastActiveItems,
+                            activeTeammates: activeTeammates,
+                            memberCount: memberCount
                         )
                         return .success((db, snapshot))
                     } catch {

@@ -132,16 +132,6 @@ public struct InsightsSnapshot: Sendable, Hashable {
     /// `InsightsReader.refresh()` writes the real value via
     /// `DerivedInsights.youNowState(now:)`.
     public let youNowState: YouNowState
-    /// Phase Track-8 P5 — teammates currently working on the same task
-    /// as the caller (same Linear issue / same branch / adjacent branch).
-    /// Sorted by `SameTaskMatcher` (confidence asc → lastActivityAtMs
-    /// desc → displayName asc). Default `[]` so existing call-sites keep
-    /// compiling without modification. Production `InsightsReader.refresh()`
-    /// writes the real value via
-    /// `DerivedInsights.sameTaskTeammates(rule: .hierarchical)` — returns
-    /// `[]` until Phase 5.4 wires a DB-backed `TeammatePresenceReader`
-    /// against `presence_history`.
-    public let sameTaskTeammates: [TeammateMatch]
     /// Phase Track-8 P6 — INBOX dashboard items list (review requests,
     /// comments on my work, mentions, open questions, blockers). Substrate
     /// already sorts by `InboxSeverity.sortRank` asc → `createdAtMs` desc.
@@ -241,7 +231,6 @@ public struct InsightsSnapshot: Sendable, Hashable {
         workState: WorkStateSummary? = nil,
         todayMetrics: TodayMetrics = .empty,
         youNowState: YouNowState = .empty,
-        sameTaskTeammates: [TeammateMatch] = [],
         inboxItems: [InboxItem] = [],
         whereStopped: WhereStoppedSnapshot? = nil,
         weeklyMetrics: WeeklyMetrics = .empty,
@@ -292,7 +281,6 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.workState = workState
         self.todayMetrics = todayMetrics
         self.youNowState = youNowState
-        self.sameTaskTeammates = sameTaskTeammates
         self.inboxItems = inboxItems
         self.whereStopped = whereStopped
         self.weeklyMetrics = weeklyMetrics
@@ -350,7 +338,6 @@ public struct InsightsSnapshot: Sendable, Hashable {
         workState: WorkStateSummary? = nil,
         todayMetrics: TodayMetrics = .empty,
         youNowState: YouNowState = .empty,
-        sameTaskTeammates: [TeammateMatch] = [],
         inboxItems: [InboxItem] = [],
         whereStopped: WhereStoppedSnapshot? = nil,
         weeklyMetrics: WeeklyMetrics = .empty,
@@ -402,7 +389,6 @@ public struct InsightsSnapshot: Sendable, Hashable {
             workState: workState,
             todayMetrics: todayMetrics,
             youNowState: youNowState,
-            sameTaskTeammates: sameTaskTeammates,
             inboxItems: inboxItems,
             whereStopped: whereStopped,
             weeklyMetrics: weeklyMetrics,
