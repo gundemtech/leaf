@@ -209,6 +209,8 @@ private struct LoadingScaffold: View {
 private struct HomeContent: View {
     let snapshot: InsightsSnapshot
     @Environment(RouteCoordinator.self) private var coordinator
+    @Environment(InsightsReader.self) private var reader
+    @Environment(LastSeenCursor.self) private var lastSeenCursor
 
     var body: some View {
         @Bindable var coord = coordinator
@@ -233,6 +235,18 @@ private struct HomeContent: View {
                 WithYouOnThisBlock(matches: snapshot.sameTaskTeammates)
 
                 NeedsYouBlock(items: snapshot.inboxItems)
+
+                // Track-10 T5 — Zone-5 full-width SINCE YOU WERE LAST ACTIVE.
+                // [Mark all as seen] advances the global cursor + triggers an
+                // explicit refresh() so the snapshot composes empty on next
+                // tick (Q5 single-cursor decision).
+                SinceLastActiveBlock(
+                    items: snapshot.sinceLastActiveItems,
+                    onMarkAllAsSeen: {
+                        lastSeenCursor.markAllAsSeen(now: Date())
+                        reader.refresh()
+                    }
+                )
             }
             .navigationDestination(for: HomeSurface.self) { surface in
                 detail(for: surface)
