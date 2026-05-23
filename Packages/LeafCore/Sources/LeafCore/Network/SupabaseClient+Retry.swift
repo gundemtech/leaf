@@ -58,13 +58,6 @@ extension SupabaseClient {
     var refreshAttempted = false
     var currentRequest = request
     if idempotent {
-      // Spec §2.4: one UUID v4 per logical call, injected before the loop so the
-      // SAME key rides every M-I retry attempt and the M-III refresh swap below
-      // (refresh mutates only Authorization). Spec §2.6 hash-stability is met by
-      // serialize-once, not Codable key-ordering: the body bytes are frozen in
-      // `request.httpBody` by the caller before this method, and every attempt
-      // re-sends those exact bytes — so the server's SHA-256 body-hash is
-      // byte-identical across retries and cannot produce a false 422 mismatch.
       currentRequest.setValue(
         UUID().uuidString.lowercased(), forHTTPHeaderField: "Idempotency-Key")
     }
