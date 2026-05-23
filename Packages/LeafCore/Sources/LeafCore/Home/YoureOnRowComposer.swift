@@ -33,12 +33,19 @@ public enum YoureOnRowComposer {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    /// Composes "Started 09:18 · 1h 32m focused so far". Returns `nil` when
-    /// `sessionStartMs == 0` (no IDE attention today). Drops "focused so far"
-    /// suffix when `focusedMin == 0`.
+    /// Composes "Started 09:18 · 1h 32m focused so far" with optional
+    /// " via Claude Code" suffix when `sessionSource == .aiCollaboration`.
+    /// Returns `nil` when `sessionStartMs == 0` (no IDE attention today).
+    /// Drops "focused so far" suffix when `focusedMin == 0`.
+    ///
+    /// Track-10 Phase B (GUN-B 2026-05-23) added `sessionSource` param
+    /// with `.fallback` default for backward-compat. Suffix surfaces the
+    /// brainstorm-gate "AI wins if more recent" decision honestly in UI
+    /// when the AI candidate beat IDE candidates by latestTs today.
     public static func composeSessionLine(
         sessionStartMs: Int64,
         focusedMin: Int,
+        sessionSource: SessionSource = .fallback,
         now: Date,
         calendar: Calendar
     ) -> String? {
@@ -48,7 +55,11 @@ public enum YoureOnRowComposer {
         if focusedMin > 0 {
             parts.append("\(formatFocusedMin(focusedMin)) focused so far")
         }
-        return parts.joined(separator: " · ")
+        var line = parts.joined(separator: " · ")
+        if sessionSource == .aiCollaboration {
+            line += " via Claude Code"
+        }
+        return line
     }
 
     /// Composes "Open files: A.swift · B.swift · C.swift". Returns `nil` when
@@ -106,6 +117,7 @@ public enum YoureOnRowComposer {
         sessionStartMs: Int64,
         focusedMin: Int,
         openFiles: [String],
+        sessionSource: SessionSource = .fallback,
         now: Date,
         calendar: Calendar
     ) -> String {
@@ -116,6 +128,7 @@ public enum YoureOnRowComposer {
         }
         if let session = composeSessionLine(
             sessionStartMs: sessionStartMs, focusedMin: focusedMin,
+            sessionSource: sessionSource,
             now: now, calendar: calendar)
         {
             parts.append(session.replacingOccurrences(of: " · ", with: ", "))

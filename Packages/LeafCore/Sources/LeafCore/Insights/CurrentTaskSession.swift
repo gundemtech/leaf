@@ -1,5 +1,32 @@
 import Foundation
 
+/// Discriminator for the substrate path that resolved the current task
+/// session. Track-10 Phase B (GUN-B 2026-05-23) — added as the 15th
+/// defaulted-init iteration on `CurrentTaskSession` to carry the
+/// brainstorm gate decision (AI wins if more recent — symmetric
+/// compare-by-latestTs between IDE attention events and aiCollaboration
+/// cwd-match events within today).
+///
+/// Composer reads this to append " via Claude Code" suffix in the
+/// YOU'RE ON session line when the AI candidate's latest activity in
+/// the workspace beat the IDE candidate's. Honest provenance — UI no
+/// longer silently lies that the user "started in Xcode" when they
+/// actually live in a Claude Code terminal.
+public enum SessionSource: String, Sendable, Equatable, Hashable, Codable {
+    /// Per-IDE dispatch matched (Xcode doc_path / VSCode-family
+    /// `workspace_root` / JetBrains `workspace_root`). sessionStartMs =
+    /// earliest IDE attention event today matching the workspace.
+    case ide
+    /// aiCollaboration cwd-match won the latestTs compare. sessionStartMs
+    /// = earliest aiCollaboration event today whose `cwd` matches the
+    /// current workspace (terminal-family bundle dwell).
+    case aiCollaboration
+    /// Neither IDE nor aiCollaboration produced a match today.
+    /// sessionStartMs falls back to today 00:00 local TZ; composer
+    /// suppresses the focus-min line.
+    case fallback
+}
+
 /// Bundled view of the user's current task session — composed once per
 /// `InsightsReader.refresh()` tick and threaded through `InsightsSnapshot`
 /// to the YOU'RE ON Home block (Track-10 T7).
@@ -47,15 +74,24 @@ public struct CurrentTaskSession: Equatable, Hashable, Sendable {
     /// (`test_currentTaskSession_OpenFilesAreBasenamesOnly_NoSentinelLeak`).
     public let openFiles: [String]
 
+    /// Substrate path that resolved the session. Track-10 Phase B
+    /// (15th defaulted-init iteration) — default `.fallback` keeps
+    /// existing constructors backward-compatible while the moat starts
+    /// populating `.ide` / `.aiCollaboration` per the brainstorm-gate
+    /// "AI wins if more recent" decision.
+    public let sessionSource: SessionSource
+
     public init(
         taskIdentity: TaskIdentity,
         sessionStartMs: Int64,
         focusedMinSoFar: Int,
-        openFiles: [String]
+        openFiles: [String],
+        sessionSource: SessionSource = .fallback
     ) {
         self.taskIdentity = taskIdentity
         self.sessionStartMs = sessionStartMs
         self.focusedMinSoFar = focusedMinSoFar
         self.openFiles = openFiles
+        self.sessionSource = sessionSource
     }
 }

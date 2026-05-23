@@ -27,6 +27,23 @@ public enum IDEFamilyClassifier {
         "com.jetbrains.dataspell",
     ]
 
+    /// Terminal-family macOS bundle IDs. Used as the focused-min dwell
+    /// attribution source when the user's primary task workspace is
+    /// resolved via Claude Code Terminal-only workflow (aiCollaboration
+    /// cwd match) rather than IDE foreground attention. Hoisted from
+    /// moat-private constant per Track-10 Phase B (GUN-B 2026-05-23 —
+    /// C-T10-EMIT-T7H3 carry close-out) for cross-extension reuse.
+    public static let terminalFamilyBundleIDs: Set<String> = [
+        "com.apple.Terminal",
+        "com.googlecode.iterm2",
+        "com.mitchellh.ghostty",
+        "com.warp.Warp",
+        "io.alacritty",
+        "net.kovidgoyal.kitty",
+        "com.github.wez.wezterm",
+        "co.zeit.hyperterm",
+    ]
+
     public static func family(forBundleID id: String) -> IDEFamily {
         if VSCodeFamilyDispatcher.isVSCodeFamily(bundleID: id) {
             return .vscodeFamily

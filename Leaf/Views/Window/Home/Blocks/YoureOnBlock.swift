@@ -46,6 +46,7 @@ struct YoureOnBlock: View {
         let sessionLine = YoureOnRowComposer.composeSessionLine(
             sessionStartMs: session.sessionStartMs,
             focusedMin: session.focusedMinSoFar,
+            sessionSource: session.sessionSource,
             now: now, calendar: calendar)
         let filesLine = YoureOnRowComposer.composeFilesLine(session.openFiles)
 
@@ -67,6 +68,7 @@ struct YoureOnBlock: View {
                     sessionStartMs: session.sessionStartMs,
                     focusedMin: session.focusedMinSoFar,
                     openFiles: session.openFiles,
+                    sessionSource: session.sessionSource,
                     now: now, calendar: calendar))
         }
     }
