@@ -41,7 +41,7 @@ NOT excluded:
 
 ### 1.3 In-scope
 
-1. Moat `ProdWhereStoppedDeriver.derive()` — augment `SELECT MAX(ts)` SQL with `WHERE` clause excluding 4 system-edge `event_kind` values via `NOT (signal_type = 'context' AND event_kind IN (...))`.
+1. Moat `ProdWhereStoppedDeriver.derive()` — refine the latest-event-timestamp predicate so it excludes the small set of system-edge context events (sleep/wake/lock/unlock). Pattern + exact query body live in the moat.
 2. Sentinel-injection regression test (moat-side, gitignored) — verify deriver emits a snapshot in the closed-laptop scenario (sleep → wake gap > idle threshold → snapshot fires using pre-sleep activity as anchor).
 3. Master spec §9.2 + Track-9 master spec §9.1.C-25 — mark RESOLVED Phase C.
 4. `current-state.md` — Phase C SHIPPED.
@@ -60,7 +60,7 @@ NOT excluded:
 
 **D-C1.** **Direction 1 selected** (filter system-edge events from `MAX(ts)`). Simplest surgical change; minimal new code paths; preserves existing emit semantics. Direction 2 (emit-on-wake) adds a synthesis detector — unnecessary given Direction 1 suffices.
 
-**D-C2.** **Excluded event_kind set**: `system_slept`, `system_woke`, `system_locked`, `system_unlocked`. Other context events (`meeting_state_*`, `focus_mode_*`) NOT excluded — they represent user activity transitions, not idle markers.
+**D-C2.** **Excluded event_kind set**: a small set of system-edge context events (sleep/wake/lock/unlock transitions). Real list lives in the moat. Other context events (meeting / focus-mode transitions) NOT excluded — they represent user activity transitions, not idle markers.
 
 **D-C3.** **Sentinel-injection regression test (moat)** — seed events simulating closed-laptop scenario (real activity, then `system_slept`, then `system_woke` 30+ min later, then now), assert deriver emits a snapshot with the pre-sleep activity as anchor. Test sits in `Packages/LeafCore/Tests/LeafCorePrivateTests/Prod/Detection/ProdWhereStoppedDeriverTests.swift` (existing file).
 
@@ -78,24 +78,7 @@ NOT excluded:
 
 `Packages/LeafCore/Sources/LeafCorePrivate/Prod/Detection/ProdWhereStoppedDeriver.swift`:
 
-```swift
-// Latest meaningful activity timestamp — excludes system-edge context
-// events (sleep/wake/lock/unlock) so the idle gate reflects actual user
-// activity elapsed-time, not the wake-event noise (C-25 Phase C, GUN-C
-// 2026-05-23).
-let latestEventTs: Int64? = try Int64.fetchOne(
-    db,
-    sql: """
-            SELECT MAX(ts) FROM events
-             WHERE NOT (
-                signal_type = 'context'
-                AND json_extract(payload_json, '$.event_kind') IN (
-                    'system_slept', 'system_woke',
-                    'system_locked', 'system_unlocked'
-                )
-             )
-        """)
-```
+**Approach:** the existing latest-event-timestamp read picks up `MAX(ts)` from the events table. C-25 augments the predicate to exclude **system-edge context events** — the small set of sleep/wake/lock/unlock transitions — so the idle gate reflects actual user activity elapsed-time, not the wake-event noise. Real query body lives in the moat (`ProdWhereStoppedDeriver.derive()`).
 
 ### 3.2 Sentinel-injection regression test (moat)
 
