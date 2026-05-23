@@ -251,6 +251,54 @@ final class InsightsReader {
                         // where currentTaskIdentity() can't resolve.
                         let currentSession = try insights.currentTaskSession()
                         try Task.checkCancellation()
+                        // Track-10 T8 — RECAP + EOD standup composition. Zero
+                        // new substrate: reuses recentActivityFeed (T5) twice
+                        // (yesterday + today windows) plus todayMetrics
+                        // (Phase 8.3) once more for yesterday's commits-per-day.
+                        //
+                        // DST behavior: dateInterval(of: .day, for:) returns a
+                        // 23h interval on spring-forward days and 25h on
+                        // fall-back days; since recentActivityFeed works on
+                        // epoch ms the only effect is a slightly trimmed/
+                        // extended window — not a defect.
+                        //
+                        // F-CTO-T8-L — Calendar.date(byAdding:to:) returns
+                        // Optional; fallback to addingTimeInterval(-86_400) so
+                        // yesterdayStart is never == now (which would silently
+                        // collapse RECAP into a duplicate of today).
+                        let now = Date()
+                        let cal = Calendar.current
+                        let yesterdayStart = cal.date(byAdding: .day, value: -1, to: now)
+                            ?? now.addingTimeInterval(-86_400)
+                        let yesterdayInterval = cal.dateInterval(of: .day, for: yesterdayStart)
+                            ?? DateInterval(start: yesterdayStart, duration: 86_400)
+                        let todayInterval = cal.dateInterval(of: .day, for: now)
+                            ?? DateInterval(start: cal.startOfDay(for: now), duration: 86_400)
+                        let yesterdayMs = Int64(yesterdayInterval.start.timeIntervalSince1970 * 1000)
+                        let todayMs = Int64(todayInterval.start.timeIntervalSince1970 * 1000)
+                        let standupYesterdayFeed =
+                            (try? insights.recentActivityFeed(since: yesterdayMs, limit: 100)) ?? []
+                        try Task.checkCancellation()
+                        let standupTodayFeed =
+                            (try? insights.recentActivityFeed(since: todayMs, limit: 100)) ?? []
+                        try Task.checkCancellation()
+                        let yesterdayMetrics =
+                            (try? insights.todayMetrics(now: yesterdayStart)) ?? .empty
+                        try Task.checkCancellation()
+                        let standupBlockers = (try? insights.openBlockers()) ?? []
+                        try Task.checkCancellation()
+                        let standupSnapshot = StandupComposer.compose(
+                            yesterdayActivity: standupYesterdayFeed,
+                            todayActivity: standupTodayFeed,
+                            yesterdayMetrics: yesterdayMetrics,
+                            todayMetrics: todayMetrics,
+                            actionableItems: inboxItems,
+                            openBlockers: standupBlockers,
+                            currentTask: taskIdentity,
+                            latestStop: whereStoppedBase,
+                            now: now
+                        )
+                        try Task.checkCancellation()
                         // Track-10 T5 — per-event SINCE timeline. `cursorMs == nil`
                         // before LeafApp's `configure(lastSeenCursor:)` lands;
                         // emit `[]` so the snapshot composition stays stable
@@ -333,7 +381,8 @@ final class InsightsReader {
                             sinceLastActiveItems: sinceLastActiveItems,
                             activeTeammates: activeTeammates,
                             memberCount: memberCount,
-                            currentSession: currentSession
+                            currentSession: currentSession,
+                            standupRecap: standupSnapshot
                         )
                         return .success((db, snapshot))
                     } catch {
