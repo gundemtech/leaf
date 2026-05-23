@@ -305,41 +305,43 @@ final class WorkspaceReader {
   /// all synchronous). The earlier `async` was a leftover from when the
   /// flow round-tripped a Supabase PATCH; now there is no awaitable work.
   func leaveWorkspace(workspaceID: String) {
-    do {
-      let db = try ensureDatabase()
-      // Solo-admin guard: «leaving» a workspace you created when nobody else
-      // ever joined would orphan the row with no possibility of rejoin (no
-      // one left to re-invite you). Force the user through Delete Permanently
-      // instead. UI already hides the Leave button for this case, but the
-      // guard here defends sidebar-context-menu / future programmatic paths.
-      let members = try db.readTeamMembers(workspaceID: workspaceID, includeRemoved: false)
-      let priv = try IdentityService.ensureLocalIdentity(at: keystoreRoot)
-      let myPubHex = priv.publicKey.rawRepresentation
-        .map { String(format: "%02x", $0) }.joined()
-      if members.count == 1, let me = members.first,
-        me.pubkeyHex == myPubHex, me.role == .admin
-      {
-        state = .error(
-          message:
-            "You’re the only member of this workspace. Use Delete Permanently instead of leaving."
-        )
-        return
+    let cachedDB = self.database
+    let url = databaseURL
+    let cfg = databaseConfig
+    let enc = databaseEncryption
+    let root = keystoreRoot
+    let wasActive = (activeStore.activeWorkspaceID == workspaceID)
+    // Standalone detached task (NOT currentTask, never cancelled): the
+    // destructive markLeft write must always run to completion. The blocking
+    // guard-read + write + re-resolve happen off main; state lands on MainActor.
+    Task.detached(priority: .userInitiated) { [weak self] in
+      do {
+        let outcome = try WorkspaceReader.performLeave(
+          cachedDB: cachedDB, url: url, cfg: cfg, enc: enc, root: root,
+          workspaceID: workspaceID, wasActive: wasActive)
+        await self?.applyLeaveOutcome(outcome, wasActive: wasActive)
+      } catch {
+        await self?.applyLeaveFailure(
+          message: WorkspaceReader.userFacingMessage(for: error),
+          debug: String(describing: error))
       }
-      let svc = WorkspaceService(database: db, keystoreRoot: keystoreRoot)
-      try svc.markLeft(workspaceID: workspaceID, at: Date())
-      // Only re-resolve active when the workspace we left was the active one.
-      if activeStore.activeWorkspaceID == workspaceID {
-        let remaining = try svc.listWorkspaces(includeLeft: false)
-          .filter { $0.id != workspaceID }
-          .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        activeStore.setActive(remaining.first?.id)
-      }
-      refresh()
-    } catch {
-      logger.error(
-        "WorkspaceReader.leaveWorkspace failed: \(String(describing: error), privacy: .public)")
-      state = .error(message: userFacingMessage(for: error))
     }
+  }
+
+  /// MainActor applier for a successful off-main leave (M-IV): re-cache DB,
+  /// re-resolve active when we left the active workspace, repopulate state.
+  @MainActor
+  private func applyLeaveOutcome(_ outcome: WorkspaceMutationOutcome, wasActive: Bool) {
+    self.database = outcome.db
+    if wasActive { activeStore.setActive(outcome.remainingFirstID) }
+    refresh()
+  }
+
+  /// MainActor applier for an off-main leave failure (M-IV).
+  @MainActor
+  private func applyLeaveFailure(message: String, debug: String) {
+    logger.error("WorkspaceReader.leaveWorkspace failed: \(debug, privacy: .public)")
+    state = .error(message: message)
   }
 
   /// Convenience wrapper: leave the workspace that is currently active.
@@ -683,5 +685,31 @@ extension WorkspaceReader {
       db: db,
       state: .loaded(workspaces: workspaces, active: active, members: activeMembers),
       backfilledID: resolution.backfilledID, myPubHex: myPubHex)
+  }
+
+  /// Off-main leave (M-IV): solo-admin guard → markLeft → re-resolve. Runs to
+  /// completion (no `checkCancellation`) — a destructive write must not be
+  /// cancelled by a racing refresh.
+  nonisolated fileprivate static func performLeave(
+    cachedDB: LeafCore.Database?, url: URL, cfg: DatabaseConfig, enc: EncryptionOptions?,
+    root: URL, workspaceID: String, wasActive: Bool
+  ) throws -> WorkspaceMutationOutcome {
+    let db = try openDB(cachedDB: cachedDB, url: url, cfg: cfg, enc: enc)
+    // Solo-admin guard: leaving a workspace you created when nobody else ever
+    // joined would orphan the row with no possibility of rejoin. Force the user
+    // through Delete Permanently instead.
+    let members = try db.readTeamMembers(workspaceID: workspaceID, includeRemoved: false)
+    let priv = try IdentityService.ensureLocalIdentity(at: root)
+    let myPubHex = priv.publicKey.rawRepresentation
+      .map { String(format: "%02x", $0) }.joined()
+    if members.count == 1, let me = members.first,
+      me.pubkeyHex == myPubHex, me.role == .admin
+    {
+      throw WorkspaceReaderError.soloAdminCannotLeave
+    }
+    let svc = WorkspaceService(database: db, keystoreRoot: root)
+    try svc.markLeft(workspaceID: workspaceID, at: Date())
+    let remaining = wasActive ? try computeRemainingFirstID(db, excluding: workspaceID) : nil
+    return WorkspaceMutationOutcome(db: db, remainingFirstID: remaining)
   }
 }
