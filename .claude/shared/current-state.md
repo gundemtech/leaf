@@ -4,7 +4,7 @@ _Срез "где мы сейчас" за 30 секунд. Детали кажд
 
 ## Последнее обновление
 
-**2026-05-23 — Track-10 wrapped (T1..T9 complete) + Phase A close-out SHIPPED.** Ветка `feature/track-10-operational-home` ahead of `origin/dev` ~62 commits (T9 +56 + Phase A +6), **ready for collective merge** (Дима sanity check + push сам). Master smoke per master spec §7.3 — async gate (Дима выполнит когда удобно); BLOCKER findings → follow-up fix-bundle до collective merge. Phase A (GUN-A · design-system polish + a11y close-out) закрыл 4 carries (T9-A11Y / T9-HIG / T9-A11Y-PRIMITIVES / T7-A11Y) — `LeafEmptyState.compact` variant + `leafChipAccessibility(label:isSelected:)` modifier + 11 NITs landed, zero substrate touch.
+**2026-05-23 — Track-10 wrapped (T1..T9 complete) + Phase A + Phase B SHIPPED.** Ветка `feature/track-10-operational-home` ahead of `origin/dev` ~65 commits, **ready for collective merge** (Дима sanity check + push сам). Master smoke per master spec §7.3 — async gate. Phase A (GUN-A) закрыл 4 carries (T9-A11Y / T9-HIG / T9-A11Y-PRIMITIVES / T7-A11Y) через `LeafEmptyState.compact` + `leafChipAccessibility` modifier + 11 NITs. **Phase B (GUN-B · Claude Code workflow first-class в YOU'RE ON) закрыл 3 carries** (T7H1 / T7H2 / T7H3) — `SessionSource` enum + `CurrentTaskSession.sessionSource` 15th defaulted-init iteration + symmetric `ideCandidateToday`/`aiCandidateToday` dispatcher with brainstorm-gate "AI wins if more recent" + `IDEFamilyClassifier.terminalFamilyBundleIDs` public hoist + 2 sentinel-injection tests. Zero substrate touch (registry 198 / 30 tables / 15 MCP tools frozen).
 
 **Cumulative net T1..T9:**
 - 0 net event_kinds. Registry frozen **198** (Track-9 baseline preserved).
@@ -19,10 +19,11 @@ _Срез "где мы сейчас" за 30 секунд. Детали кажд
 - ADR-010 sentinel-injection discipline preserved (T2/T5/T7 lineage; T1/T3/T4/T6/T8/T9 §6 EXEMPT per aggregate-only / polish-only reads).
 
 **Deferred post-Track-10** (carries в master spec §9.2):
-- C-T10-EMIT-T7H1/H2/H3 → "Claude Code workflow first-class в YOU'RE ON" — **Phase B in flight (this session)**
+- ~~C-T10-EMIT-T7H1/H2/H3~~ → **RESOLVED Phase B** (this session, 3 carries closed)
 - ~~C-T10-EMIT-T9-A11Y/HIG/A11Y-PRIMITIVES + C-T10-EMIT-T7-A11Y~~ → **RESOLVED Phase A** (this session, 4 carries closed)
 - **C-25 sleep/wake substrate idle gap** → **Phase C planned (this session)**
 - Phase 5.4 DB-backed TeammatePresenceReader (lights up TEAM·N automatically)
+- LinearIDPrefixCache v1.1 — deferred to multi-workspace onboarding trigger
 - C-T10-EMIT-STANDUP-HOURS (v1.1 Settings) · C-T10-EMIT-MCP-STANDUP (future) · C-T10-EMIT-FLAKE (test-infra triage) · C-T10-EMIT-LOC-RESUMEHERO (informational tracker)
 
 **Track-10 merge prep (Дима driver, NOT push automatic):**
