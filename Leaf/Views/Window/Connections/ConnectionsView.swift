@@ -47,9 +47,6 @@ struct ConnectionsView: View {
     // MARK: requires SlackScopesReader env injection (Phase Track-3 D3 / Task 18)
     @Environment(SlackScopesReader.self) private var slackScopes
 
-    @State private var nowTick: Date = Date()
-    private let countdownTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-
     /// Cached parse of `integrations.scope` for `provider = github`. Used by
     /// the GitHub Scopes section to compute granted vs missing optional —
     /// `GitHubScopesReader` only exposes `missing` for required-core (per its
@@ -105,9 +102,6 @@ struct ConnectionsView: View {
             slackOAuth.reload()
             refreshGrantedGitHubScopes()
             refreshGrantedSlackScopes()
-        }
-        .onReceive(countdownTimer) { now in
-            nowTick = now
         }
         .onReceive(DistributedNotificationCenter.default().publisher(
             for: NSNotification.Name(GitHubOAuthEndpoints.integrationChangedNotificationName))
@@ -383,9 +377,11 @@ struct ConnectionsView: View {
                     action: { githubOAuth.cancel() }
                 )
             }
-            Text(countdownLabel(expiresAt: expiresAt))
-                .font(LeafType.body.small)
-                .foregroundStyle(LeafColor.text.tertiary)
+            TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                Text(countdownLabel(expiresAt: expiresAt, now: ctx.date))
+                    .font(LeafType.body.small)
+                    .foregroundStyle(LeafColor.text.tertiary)
+            }
         }
     }
 
@@ -537,8 +533,10 @@ struct ConnectionsView: View {
     }
 
     /// MM:SS countdown до истечения device_code (RFC 8628 §3.2 expiresIn).
-    private func countdownLabel(expiresAt: Date) -> String {
-        let remaining = max(0, Int(expiresAt.timeIntervalSince(nowTick)))
+    /// Pure — caller supplies the reference `now` (the driving `TimelineView`
+    /// context date), so no parent-level @State tick is needed.
+    private func countdownLabel(expiresAt: Date, now: Date) -> String {
+        let remaining = max(0, Int(expiresAt.timeIntervalSince(now)))
         let minutes = remaining / 60
         let seconds = remaining % 60
         if remaining <= 0 {
