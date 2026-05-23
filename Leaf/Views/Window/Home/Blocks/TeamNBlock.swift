@@ -41,6 +41,7 @@ struct TeamNBlock: View {
             Text("TEAM · \(teammates.count) · active")
                 .leafSectionLabel()
                 .foregroundStyle(LeafColor.text.tertiary)
+                .accessibilityLabel("Team, \(teammates.count) active")
                 .accessibilityAddTraits(.isHeader)
 
             LeafCard(padding: .regular) {
@@ -83,6 +84,11 @@ struct TeamNBlock: View {
 
     @ViewBuilder
     private func row(_ snapshot: TeammateSnapshot) -> some View {
+        // Compute the relative-time string ONCE per render pass and reuse for
+        // both the visible Text and the a11y label. Two independent Date()
+        // reads can drift across the 60s bucket boundary under a slow render,
+        // producing "now" for VO while the visible Text reads "1m ago".
+        let relative = formatRelative(msAgo: snapshot.lastActivityAtMs)
         HStack(alignment: .center, spacing: LeafSpace.md) {
             avatarCircle(for: snapshot)
             VStack(alignment: .leading, spacing: LeafSpace.xxs) {
@@ -99,17 +105,12 @@ struct TeamNBlock: View {
                 }
             }
             Spacer(minLength: 0)
-            Text(formatRelative(msAgo: snapshot.lastActivityAtMs))
+            Text(relative)
                 .font(LeafType.body.small)
                 .foregroundStyle(LeafColor.text.tertiary)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(
-            TeamNRowComposer.a11yLabel(
-                snapshot,
-                relativeTime: formatRelative(msAgo: snapshot.lastActivityAtMs)
-            )
-        )
+        .accessibilityLabel(TeamNRowComposer.a11yLabel(snapshot, relativeTime: relative))
     }
 
     @ViewBuilder
