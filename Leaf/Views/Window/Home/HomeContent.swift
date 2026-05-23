@@ -4,13 +4,11 @@
 //  budget (master spec §7.2 gate 6 ≤ 310) before the Zone-4 ViewThatFits
 //  2-col rewire lands in C5. Zero behavior change in this commit.
 //
-//  Track-8 5-block composition (post Track-10 T2/T3/T4/T5/T6):
+//  Track-8 5-block composition (post Track-10 T2/T3/T4/T5/T6/T7):
 //    1. RESUME HERO                              (T2)
 //    2. TODAY (with inline YOU·NOW state badge)  (T3)
 //    3. NEEDS YOU ‖ TEAM·N  (ViewThatFits 2-col) (T4, T6)
-//    4. SINCE YOU WERE LAST ACTIVE               (T5, full-width — T7 C5
-//                                                 rewires to ViewThatFits
-//                                                 2-col SINCE ‖ YOU'RE ON)
+//    4. SINCE ‖ YOU'RE ON   (ViewThatFits 2-col) (T5, T7)
 //
 
 import LeafCore
@@ -63,19 +61,42 @@ struct HomeContent: View {
                     NeedsYouBlock(items: snapshot.inboxItems)
                 }
 
-                // Track-10 T5 — Zone-5 full-width SINCE YOU WERE LAST ACTIVE.
-                // [Mark all as seen] advances the global cursor + triggers an
-                // explicit refresh() so the snapshot composes empty on next
-                // tick (Q5 single-cursor decision). T7 C5 rewires this Zone
-                // to a ViewThatFits 2-col `SINCE ‖ YOU'RE ON` layout per
-                // master spec §2 scope lock #5.
-                SinceLastActiveBlock(
-                    items: snapshot.sinceLastActiveItems,
-                    onMarkAllAsSeen: {
-                        lastSeenCursor.markAllAsSeen(now: Date())
-                        reader.refresh()
+                // Track-10 T7 — Zone-4 ViewThatFits 2-col `SINCE ‖ YOU'RE ON`
+                // per master spec §2 scope lock #5. T6 ViewThatFits Zone-3
+                // precedent reuse: wide window → HStack 2-col; narrow →
+                // VStack stacked, SINCE above YOU'RE ON (priority order
+                // baked into the VStack child sequence).
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: LeafSpace.md) {
+                        SinceLastActiveBlock(
+                            items: snapshot.sinceLastActiveItems,
+                            onMarkAllAsSeen: {
+                                lastSeenCursor.markAllAsSeen(now: Date())
+                                reader.refresh()
+                            }
+                        )
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+
+                        YoureOnBlock(
+                            session: snapshot.currentSession,
+                            gitDelta: snapshot.gitDelta
+                        )
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
                     }
-                )
+                    VStack(alignment: .leading, spacing: LeafSpace.xl) {
+                        SinceLastActiveBlock(
+                            items: snapshot.sinceLastActiveItems,
+                            onMarkAllAsSeen: {
+                                lastSeenCursor.markAllAsSeen(now: Date())
+                                reader.refresh()
+                            }
+                        )
+                        YoureOnBlock(
+                            session: snapshot.currentSession,
+                            gitDelta: snapshot.gitDelta
+                        )
+                    }
+                }
             }
             .navigationDestination(for: HomeSurface.self) { surface in
                 detail(for: surface)
