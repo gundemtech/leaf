@@ -637,6 +637,67 @@ master spec §7.3 Zone 4:
 - **C-T7-7** — Settings → branch parsing sub-section (out-of-scope CTA target referenced in master spec §3.6 / §8 "Out of scope"). If user demand emerges for branch-parsing customization (e.g., custom LEAF-ID regex), spawn own substrate phase.
 - **C-T7-8** — `vscode_active_doc_changed` `file_basename` payload presence — verified via parser comment in Discovery; if Track-9 T1 emission contract evolves, openFiles fallback to `doc_path` basename triggers. Monitor.
 
+### 6.1 Post-ship local moat hot-fixes (2026-05-23 — landed local-only, NOT in git)
+
+After SHIPPED, manual smoke on author's Mac surfaced three UX gaps for the
+**Claude Code Terminal-only workflow** (user lives in `claude` CLI inside
+Terminal/iTerm/Ghostty, no Xcode/VSCode/JetBrains foreground today). All
+three patches landed in **gitignored** `LeafCorePrivate` moat files; they
+work locally but do NOT propagate to other team members until promoted to
+a proper substrate phase. **Master spec §9.2 mirrors these as
+C-T10-EMIT-T7H1..H3 for Track-9 wrap visibility.**
+
+- **C-T7-H1 (GUN prefix LinearID resolution)** — `ProdInsights+CurrentTaskIdentity.swift:39`
+  `knownPrefixes` hardcoded to `Set<String>(["LEAF"])`. Branches like
+  `feature/GUN-50-...` resolved with `linearID = nil`, so RESUME hero and
+  YOU'RE ON task line dropped the leading ID. Hot-fix: extended to
+  `["LEAF", "GUN"]`. **Proper resolution** — Phase 4.7.A's
+  `LinearIDPrefixCache` v1.1 (live workspace prefix sync from Linear API)
+  per existing comment. Affects all surfaces consuming `TaskIdentity` (RESUME,
+  YOU'RE ON, YOU·NOW substrate, RouteCoordinator Linear CTA).
+
+- **C-T7-H2 (aiCollaboration fallback for sessionStart)** —
+  `perIDEEarliestEventTodayMatchingWorkspace` returned nil when no
+  Xcode/VSCode/JetBrains attention event matched workspace today. Composer
+  fell back to today midnight (`Started 00:00`) and `focusedMinSoFar = 0`,
+  collapsing the session line to "Started 00:00" with no suffix —
+  semantically vacuous for Terminal-only users. Hot-fix: extended dispatch
+  with a second SQL pass over `signal_type='aiCollaboration'` events today
+  where `payload_json.cwd` matches workspace (new `cwdWorkspaceMatches`
+  helper accepts canonical / parent / tilde / ancestor shapes). Earliest
+  matching aiCollaboration event becomes `sessionStartMs`. **Proper
+  resolution** — first-class "Claude Code workflow" tier in master spec §3.6
+  contract (currently silent about non-IDE sources). Future phase: extend
+  `CurrentTaskSession` with a `sessionSource: enum {ide, aiCollaboration,
+  fallback}` field so composer can render "Started 09:18 via Claude Code"
+  for transparency.
+
+- **C-T7-H3 (terminal-family dwell for focused-min)** —
+  `focusedMinDwellSince(bundleID:)` signature took a single bundle ID. The
+  aiCollaboration-fallback path (C-T7-H2) yields a bundleID that may be the
+  agent itself (`tech.gundem.leaf.agent`) — wrong substrate for dwell sum.
+  Hot-fix: signature changed to `focusedMinDwellSince(bundleIDs: [String])`,
+  SQL `WHERE bundle_id IN (?, ?, ...)`, and aiCollaboration fallback returns
+  `terminalFamilyBundleIDs UNION {loggedBundleID}` covering Terminal,
+  iTerm2, Ghostty, Warp, Alacritty, Kitty, WezTerm, Hyper. Single-IDE path
+  unchanged (returns `[bundleID]` wrapped). **Proper resolution** — same as
+  C-T7-H2 (first-class Claude Code workflow tier). `terminalFamilyBundleIDs`
+  Set could live in shared `IDEFamilyClassifier` registry next to
+  `vscodeFamilyBundleIDs` / `jetbrainsBundleIDs` for consistency.
+
+**Common follow-up phase** (proposal — not yet specced): **"Claude Code
+workflow first-class in YOU'RE ON"** — own brainstorm + spec session
+elevating all three hot-fixes to canonical substrate. Carries:
+- Promote `knownPrefixes` to live `LinearIDPrefixCache` (v1.1 trigger).
+- Add `sessionSource` enum to `CurrentTaskSession` value type.
+- Hoist `terminalFamilyBundleIDs` to `IDEFamilyClassifier.terminalFamilyBundleIDs`.
+- Add `sentinel-injection` regression coverage for aiCollaboration `cwd`
+  → workspace match (currently moat-tested only via happy path).
+- Spec-level decision: should aiCollaboration fallback win OVER IDE match
+  in any scenario (e.g. user opens Xcode briefly to grep something but is
+  actually working in Claude Code)? Current dispatch IDE-first is correct
+  default but worth questioning.
+
 ---
 
 ## 7. ADR-010 / sentinel-injection — T7 EXEMPT

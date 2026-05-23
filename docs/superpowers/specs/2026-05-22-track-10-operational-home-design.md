@@ -563,7 +563,20 @@ Per scope locks + brainstorm:
 
 ### 9.2 Track-10 emits new carries
 
-(To be populated as per-phase sessions surface issues. Format: ID · description · phase discovered · disposition.)
+| Carry | Description | Phase discovered | Disposition |
+|---|---|---|---|
+| C-T10-EMIT-T7H1 | `knownPrefixes` hardcoded `["LEAF"]` in `ProdInsights+CurrentTaskIdentity.swift:39`; GUN-NN branches resolve with `linearID = nil` → RESUME hero + YOU'RE ON task line drop leading ID. Local hot-fix `["LEAF", "GUN"]` landed in moat (not committed — gitignored). | T7 post-ship smoke 2026-05-23 | OUT — proper resolution via Phase 4.7.A's `LinearIDPrefixCache` v1.1 (live Linear workspace prefix sync). Affects ALL `TaskIdentity` consumers — RESUME, YOU'RE ON, YOU·NOW substrate, RouteCoordinator Linear CTA. |
+| C-T10-EMIT-T7H2 | `perIDEEarliestEventTodayMatchingWorkspace` returned nil for Terminal-only Claude Code workflow (no Xcode/VSCode/JetBrains attention event today matching workspace) → `Started 00:00` fallback. Local hot-fix added aiCollaboration `cwd` second-pass dispatch + `cwdWorkspaceMatches` helper (accepts canonical / parent / tilde / ancestor shapes); landed in moat. | T7 post-ship smoke 2026-05-23 | OUT — proper resolution as own phase "Claude Code workflow first-class in YOU'RE ON". Substrate-level: extend `CurrentTaskSession` with `sessionSource: enum {ide, aiCollaboration, fallback}` so composer can render "Started 09:18 via Claude Code" transparently. |
+| C-T10-EMIT-T7H3 | `focusedMinDwellSince(bundleID:)` single-bundle signature mis-attributed dwell when aiCollaboration fallback (C-T10-EMIT-T7H2) yielded the agent's own bundleID instead of foreground terminal. Local hot-fix changed signature to `(bundleIDs: [String])` + SQL `WHERE bundle_id IN (?, ?, ...)`; fallback returns `terminalFamilyBundleIDs UNION {loggedBundleID}` (Terminal/iTerm2/Ghostty/Warp/Alacritty/Kitty/WezTerm/Hyper). Landed in moat. | T7 post-ship smoke 2026-05-23 | OUT — paired with H2 in "Claude Code workflow first-class" phase. Hoist `terminalFamilyBundleIDs` to shared `IDEFamilyClassifier.terminalFamilyBundleIDs` for cross-extension reuse. Add sentinel-injection regression for aiCollaboration `cwd` → workspace match (currently moat-tested via happy path only). |
+
+**Common follow-up proposal** — single new phase "Claude Code workflow
+first-class in YOU'RE ON" subsumes all three. Brainstorm gate: should
+aiCollaboration fallback ever WIN over IDE match (e.g. user briefly opens
+Xcode to grep but actually works in Claude Code)? Current default is
+IDE-first, but worth questioning during spec phase.
+
+T7 spec §6.1 contains identical entries with deeper context — this section
+is the **Track-10 wrap visibility** mirror for T9 / collective merge prep.
 
 ---
 
