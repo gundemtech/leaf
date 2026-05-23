@@ -490,7 +490,10 @@ final class MigrationTests: XCTestCase {
                 Schema.NotificationPrefs.tableName,
                 // M027 invite-redesign: invite_tokens (admin's local mirror) +
                 // workspaces ADD COLUMN defaults (no new table for that ALTER).
-                Schema.InviteTokens.tableName
+                Schema.InviteTokens.tableName,
+                // M029 Track-6 P3 browser per-domain allow-list (renamed from M026;
+                // integration-T10). M028 — index only, no new table.
+                Schema.BrowserDomainAllow.tableName
             ]
             XCTAssertEqual(tables, expected)
         }
@@ -562,6 +565,30 @@ final class MigrationTests: XCTestCase {
                 indexes,
                 ["idx_events_ai_subagent"],
                 "M028 partial expression index должен существовать после миграций"
+            )
+        }
+    }
+
+    // Track-6 P3 browser per-domain allow-list table (renamed M026 → M029 за счёт
+    // того что Track-5/S8 substrate уже занимает slot M026 на integration-T10).
+    func testMigration029CreatesBrowserDomainAllowTable() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        let db = try Database.openForWrite(
+            at: dbURL,
+            config: .weakDefaults,
+            encryption: .deterministicTest
+        )
+
+        try db.readSQL { rawDB in
+            let tables = try String.fetchAll(
+                rawDB,
+                sql: "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                arguments: [Schema.BrowserDomainAllow.tableName]
+            )
+            XCTAssertEqual(
+                tables,
+                [Schema.BrowserDomainAllow.tableName],
+                "M029 browser_domain_allow table должен существовать после миграций"
             )
         }
     }

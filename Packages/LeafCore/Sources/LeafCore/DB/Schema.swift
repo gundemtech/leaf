@@ -736,6 +736,18 @@ public enum Schema {
         public static let slackUsergroups = "slack_usergroups"
         public static let slackChannelsInfo = "slack_channels_info"
     }
+
+    /// Track-6 P3 — per-domain allow-list для browser URL granularity control.
+    /// Default empty; non-matching domains resolve to `domainOnly` at filter time.
+    /// Migration M029 (renamed from M026 — slot M026 occupied by Track-5/S8
+    /// substrate on integration-T10).
+    public enum BrowserDomainAllow {
+        public static let tableName = "browser_domain_allow"
+        public static let domain = "domain"
+        public static let granularity = "granularity"
+        public static let addedAtMs = "added_at_ms"
+        public static let notes = "notes"
+    }
 }
 
 /// Канонические `collector_id` значения. Литералы — public, чтобы тесты

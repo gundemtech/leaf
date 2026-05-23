@@ -72,7 +72,8 @@ final class M013EventLinksTests: XCTestCase {
             // Track-5 S8 T1: M026 (notification_prefs + ALTER messages_mirror.pending_mark_done).
             // M027 invite-redesign: invite_tokens + workspaces ADD COLUMN defaults.
             // M028 Track-6 P1 partial expression index (integration-T10).
-            XCTAssertEqual(applied.count, 28)
+            // M029 Track-6 P3 browser domain allow-list (integration-T10).
+            XCTAssertEqual(applied.count, 29)
         }
     }
 }

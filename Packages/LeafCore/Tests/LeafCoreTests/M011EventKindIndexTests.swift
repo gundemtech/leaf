@@ -60,7 +60,9 @@ final class M011EventKindIndexTests: XCTestCase {
             // M027 invite-redesign: invite_tokens + workspaces ADD COLUMN defaults.
             // M028 Track-6 P1 partial expression index (renamed from M024;
             // integration-T10 branch).
-            XCTAssertEqual(applied.count, 28)
+            // M029 Track-6 P3 browser domain allow-list (renamed from M026;
+            // integration-T10 branch).
+            XCTAssertEqual(applied.count, 29)
         }
     }
 }
