@@ -35,6 +35,11 @@ final class InsightsReader {
 
     private var database: LeafCore.Database?
     private var currentTask: Task<Void, Never>?
+    /// Wall-clock time of the last *successful* refresh completion (`.loaded`
+    /// or `.empty`). Drives the staleness window — see `refresh(force:)`.
+    /// nil until the first successful load; never set on `.error` /
+    /// `.notConfigured` so those stay retryable on the next ambient hop (M-XI).
+    private var lastRefreshedAt: Date?
 
     private let databaseURL: URL
     private let databaseConfig: DatabaseConfig
@@ -42,21 +47,38 @@ final class InsightsReader {
     /// Threshold "deep" — берётся из ProdConfigs (LEAF_PROD) или weakDefaults.
     /// Применяется на producer-side при сборке snapshot, UI не пересчитывает.
     private let deepSessionMinSec: TimeInterval
+    /// Ambient refreshes within this window of the last successful load are
+    /// skipped (tab-switch storm guard, M-XI). Injectable for tests/tuning.
+    private let freshnessWindow: TimeInterval
+    /// Injectable now() — tests drive it deterministically; prod uses Date().
+    private let clock: @Sendable () -> Date
     private let logger = Logger(subsystem: "tech.gundem.leaf.app", category: "insights")
 
     init(
         databaseURL: URL = DatabasePath.defaultURL(),
         databaseConfig: DatabaseConfig = InsightsReader.defaultConfig(),
         databaseEncryption: EncryptionOptions? = InsightsReader.defaultEncryption(),
-        deepSessionMinSec: TimeInterval = InsightsReader.defaultDeepSessionMinSec()
+        deepSessionMinSec: TimeInterval = InsightsReader.defaultDeepSessionMinSec(),
+        freshnessWindow: TimeInterval = 5,
+        clock: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.databaseURL = databaseURL
         self.databaseConfig = databaseConfig
         self.databaseEncryption = databaseEncryption
         self.deepSessionMinSec = deepSessionMinSec
+        self.freshnessWindow = freshnessWindow
+        self.clock = clock
     }
 
-    func refresh() {
+    func refresh(force: Bool = false) {
+        // Staleness window — skip redundant SQL when a successful load landed
+        // less than `freshnessWindow` ago (rapid ambient tab-switch storm,
+        // M-XI). Explicit user-initiated refreshes pass force:true and always
+        // proceed. Gated before cancel/file-check so a fresh state is a pure
+        // no-op; errors are never stamped, so they stay retryable here.
+        if !force, RefreshFreshness.isFresh(lastRefreshedAt: lastRefreshedAt, now: clock(), window: freshnessWindow) {
+            return
+        }
         // Cancel previous refresh'ы — защита от race при быстрых повторных
         // открытиях popover'а (P6 в плане).
         currentTask?.cancel()
@@ -197,6 +219,10 @@ final class InsightsReader {
             switch result {
             case .success(let (db, snapshot)):
                 self.database = db
+                // Stamp on any successful query completion (data or not) so the
+                // staleness window throttles subsequent ambient refreshes. Set
+                // before mutating state; both .empty and .loaded count as fresh.
+                self.lastRefreshedAt = self.clock()
                 if snapshot.isEmpty {
                     self.state = .empty(
                         message: "Collecting… activity will appear after a few app switches."
