@@ -229,12 +229,29 @@ private struct HomeContent: View {
                     youNowState: snapshot.youNowState
                 )
 
-                // Track-10 T3 — YouNowBlock retired; state surfaces as an
-                // inline badge inside TodayBlock. WithYouOnThisBlock
-                // promotes to full-width interim; T6 will replace it.
-                WithYouOnThisBlock(matches: snapshot.sameTaskTeammates)
-
-                NeedsYouBlock(items: snapshot.inboxItems)
+                // Track-10 T6 — Zone-3 solo-vs-team gate. Solo Mac (no org or
+                // 1-member personal org) → NEEDS YOU stays full-width and the
+                // narrow Phase 8.5 WithYouOnThisBlock disappears. Team install
+                // (memberCount > 1) → 2-col ViewThatFits side-by-side; narrow
+                // window collapses to stacked NEEDS YOU above TEAM·N. Reader
+                // stub returns []; TeamNBlock renders empty CTA until
+                // Phase 5.4 lights up DBTeammatePresenceReader.
+                if snapshot.memberCount > 1 {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .top, spacing: LeafSpace.md) {
+                            NeedsYouBlock(items: snapshot.inboxItems)
+                                .frame(maxWidth: .infinity, alignment: .topLeading)
+                            TeamNBlock(teammates: snapshot.activeTeammates)
+                                .frame(maxWidth: .infinity, alignment: .topLeading)
+                        }
+                        VStack(alignment: .leading, spacing: LeafSpace.xl) {
+                            NeedsYouBlock(items: snapshot.inboxItems)
+                            TeamNBlock(teammates: snapshot.activeTeammates)
+                        }
+                    }
+                } else {
+                    NeedsYouBlock(items: snapshot.inboxItems)
+                }
 
                 // Track-10 T5 — Zone-5 full-width SINCE YOU WERE LAST ACTIVE.
                 // [Mark all as seen] advances the global cursor + triggers an
