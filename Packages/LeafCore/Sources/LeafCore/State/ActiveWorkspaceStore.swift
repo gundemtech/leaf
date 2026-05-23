@@ -46,11 +46,10 @@ public final class ActiveWorkspaceStore {
     /// no-op if `activeWorkspaceID` is already set. Throws `Database` errors.
     public func backfillIfNeeded(database: Database) throws {
         guard activeWorkspaceID == nil else { return }
-        let oldest = try database.listWorkspaces(includeLeft: false)
-            .sorted { $0.createdAt < $1.createdAt }
-            .first
-        if let oldest {
-            setActive(oldest.id)
+        let workspaces = try database.listWorkspaces(includeLeft: false)
+        let resolution = resolveActiveWorkspace(workspaces, knownActiveID: nil)
+        if let id = resolution.backfilledID {
+            setActive(id)
         }
     }
 }
