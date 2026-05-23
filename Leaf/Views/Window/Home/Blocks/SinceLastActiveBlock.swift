@@ -28,6 +28,7 @@ struct SinceLastActiveBlock: View {
             Text("SINCE YOU WERE LAST ACTIVE")
                 .leafSectionLabel()
                 .foregroundStyle(LeafColor.text.tertiary)
+                .accessibilityAddTraits(.isHeader)
 
             LeafCard(padding: .regular) {
                 VStack(alignment: .leading, spacing: LeafSpace.sm) {

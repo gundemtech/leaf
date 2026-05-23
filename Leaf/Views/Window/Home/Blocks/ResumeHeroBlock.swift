@@ -33,11 +33,11 @@ struct ResumeHeroBlock: View {
             Text(headerText)
                 .leafSectionLabel()
                 .foregroundStyle(LeafColor.text.tertiary)
+                .accessibilityAddTraits(.isHeader)
 
             LeafCard(padding: .regular) {
                 cardContent
             }
-            .accessibilityElement(children: .combine)
             .animation(.easeInOut(duration: 0.25), value: snapshot)
             .animation(.easeInOut(duration: 0.25), value: gitDelta)
         }
