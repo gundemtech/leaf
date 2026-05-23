@@ -181,7 +181,7 @@ Off-main helpers are `nonisolated private static` functions on `WorkspaceReader`
 
 ## 7. Testing
 
-**Unit (LeafCore, XCTest — matches `WorkspaceReaderOrchestrationTests`):** `resolveActiveWorkspace` — known-id-found / known-id-nil-picks-oldest-by-createdAt / known-id-absent→nil / empty-list / single-workspace / left-rows-excluded ordering. Plus a regression test that `backfillIfNeeded` (now delegating) behaves identically to its prior inline form.
+**Unit (LeafCore, XCTest — matches `WorkspaceReaderOrchestrationTests`):** `resolveActiveWorkspace` — known-id-found / known-id-nil-picks-oldest-by-createdAt / known-id-absent→nil / empty-list / single-workspace. (The resolver receives an already-filtered list — `listWorkspaces(includeLeft: false)` — so left/deleted-row exclusion is the DB query's responsibility, exercised by the backfill characterization test, not the resolver tests.) Plus a characterization test that `backfillIfNeeded` (now delegating) behaves identically to its prior inline form.
 
 **Async glue** (Task.detached hop, cancel-prior, MainActor mutation) lives in the app target with no test bundle — same constraint all existing `WorkspaceReader` glue lives under. Covered by **manual smoke**:
 - Rapid sidebar A→B→C switch → no beachball, no spinner flash, lands on C's content.
