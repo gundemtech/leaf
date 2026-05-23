@@ -205,6 +205,16 @@ public protocol DerivedInsights: Sendable {
     /// `now: Date` for testability (window derives [today − 6d .. today]).
     /// Default `.empty` for stubs / iOS-future.
     func weeklyMetrics(now: Date) throws -> WeeklyMetrics
+
+    // MARK: - Track-10 T5 — per-event activity feed
+
+    /// Track-10 T5 — per-event activity feed since cursor for SINCE YOU WERE LAST
+    /// ACTIVE timeline. Returns most-recent-first rows (`ts DESC`) of allow-listed
+    /// Linear/GitHub/Slack event_kinds with `ts > since`, joined with D3
+    /// `open_questions` / `blockers` opened/started since the cursor. Impl caps
+    /// `limit` at 200 to prevent unbounded memory under stale cursors.
+    /// Default `[]` for stubs / iOS-future.
+    func recentActivityFeed(since: Int64, limit: Int) throws -> [ActivityFeedItem]
 }
 
 /// Default implementations — конформер'ы могут override'ить, но без явного
@@ -270,6 +280,11 @@ extension DerivedInsights {
 
     /// Track-9 T4 stub default — returns `.empty`; ProdInsights SQL impl in LeafCorePrivate moat.
     public func weeklyMetrics(now: Date) throws -> WeeklyMetrics { .empty }
+
+    // MARK: - Track-10 T5 default
+
+    /// Track-10 T5 stub default — returns `[]`; ProdInsights SQL impl in LeafCorePrivate moat.
+    public func recentActivityFeed(since: Int64, limit: Int) throws -> [ActivityFeedItem] { [] }
 }
 
 /// Phase 1.1 / CI fallback. Все методы бросают .notImplemented.
