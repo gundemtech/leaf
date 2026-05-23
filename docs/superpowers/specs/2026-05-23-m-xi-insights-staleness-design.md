@@ -14,19 +14,26 @@ presence) on every call. It has a `currentTask?.cancel()` race guard but **no st
 window**: every consumer's `.onAppear` / `.task` re-runs the full query set unconditionally.
 
 The Native UI shell switches the same `InsightsReader` between tabs. Each tab change fires a
-fresh ambient refresh:
+fresh ambient refresh. The complete set of `InsightsReader.refresh()` call sites (verified by
+resolving the `@Environment(InsightsReader.self)` binding behind each `reader`):
 
-- `RootView.swift:64` — `.onAppear { reader.refresh() }` (window/shell appear)
-- `HomeView.swift:130` — `.onAppear`
-- `ActivityView.swift:27` — `.onAppear`
-- `MenuBarContent.swift:51` — `.onAppear` (popover open)
-- `NotificationsSettingsSection.swift:68` — `.onAppear`
-- `ShareControlsSettingsSection.swift:35` — `.task(id: activeWorkspaceID)`
-- `ActiveTokensSection.swift:41` — `.task(id: activeWorkspaceID)`
+- `RootView.swift:64` — `.onAppear { reader.refresh() }` (window/shell appear) — ambient
+- `HomeView.swift:130` — `.onAppear` — ambient
+- `ActivityView.swift:27` — `.onAppear` — ambient
+- `MenuBarContent.swift:51` — `.onAppear` (popover open) — ambient
+- `HomeView.swift:222` — "Try again" banner CTA — explicit
+- `ActivityView.swift:69` — "Try again" banner CTA — explicit
+- `ProfileView.swift:87` — "Try again" banner CTA — explicit
 
-Navigating Home → Activity → Profile → Settings re-runs ~100ms of SQL each hop even when the
-previous successful load was seconds ago — a redundant refresh storm and a UI hitch under
-@Observable invalidation churn.
+Navigating Home → Activity → Profile re-runs ~100ms of SQL each hop even when the previous
+successful load was seconds ago — a redundant refresh storm and a UI hitch under @Observable
+invalidation churn.
+
+> Note: `NotificationsSettingsSection.swift:68`, `ShareControlsSettingsSection.swift:35`,
+> `ActiveTokensSection.swift:41`, and `GenerateInviteSheet.swift:226` also call
+> `reader.refresh()`, but their `reader` is a *different* type (`NotificationPrefsReader` /
+> `ShareRulesReader` / `InviteTokensReader`), not `InsightsReader`. They are out of scope for
+> M-XI and untouched.
 
 ## Fix
 
@@ -94,17 +101,13 @@ refresh exactly at the window edge proceeds. `window == 0` ⇒ never fresh ⇒ n
 | `MenuBarContent.swift:51` | `.onAppear` | ambient — `refresh()` (unchanged) |
 | `HomeView.swift:130` | `.onAppear` | ambient — `refresh()` (unchanged) |
 | `ActivityView.swift:27` | `.onAppear` | ambient — `refresh()` (unchanged) |
-| `NotificationsSettingsSection.swift:68` | `.onAppear` | ambient — `refresh()` (unchanged) |
-| `ShareControlsSettingsSection.swift:35` | `.task(id:)` | ambient — `refresh()` (unchanged) |
-| `ActiveTokensSection.swift:41` | `.task(id:)` | ambient — `refresh()` (unchanged) |
 | `HomeView.swift:222` | "Try again" CTA | explicit — `refresh(force: true)` |
 | `ActivityView.swift:69` | "Try again" CTA | explicit — `refresh(force: true)` |
 | `ProfileView.swift:87` | "Try again" CTA | explicit — `refresh(force: true)` |
-| `GenerateInviteSheet.swift:226` | "Done" button | explicit — `refresh(force: true)` |
 
-The "Try again" banners render only from `.error` / `.empty` states; routing them through
-`force:true` guarantees an explicit retry is never silently throttled even when a prior
-success was within the window.
+The "Try again" banners render only from `.error` states (`HomeView:216-224`,
+`ActivityView:63-70`, `ProfileView:81-88`); routing them through `force:true` guarantees an
+explicit retry is never silently throttled even when a prior success was within the window.
 
 ## Behavior after the change
 
@@ -119,8 +122,8 @@ success was within the window.
 - The other 11 Tier-M rows (own sessions).
 - Reusing `RefreshFreshness` inside `LinearTeamsReader` (its inline `< ttl` already works) —
   noted as a future consolidation, not done here.
-- Removing the vestigial `GenerateInviteSheet` "Done" → insights refresh (invite generation
-  doesn't change today's activity); left as-is, now `force:true`.
+- `NotificationPrefsReader` / `ShareRulesReader` / `InviteTokensReader` `refresh()` call sites
+  (Settings sections, `GenerateInviteSheet`) — different reader types, not `InsightsReader`.
 
 ## Testing
 
