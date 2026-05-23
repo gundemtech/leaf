@@ -423,6 +423,12 @@ final class WorkspaceReader {
   ///
   /// S7 Stage 6 fix C-I5 + C-I8 — explicit return value (mirrors rename).
   func delete(workspaceID: String) async -> String? {
+    let cachedDB = self.database
+    let url = databaseURL
+    let cfg = databaseConfig
+    let enc = databaseEncryption
+    let root = keystoreRoot
+    let wasActive = (activeStore.activeWorkspaceID == workspaceID)
     do {
       // Local-first delete (mirrors `leaveWorkspace` discipline). The local
       // SQLCipher DB is the source of truth; the server-side
@@ -438,15 +444,17 @@ final class WorkspaceReader {
       // SQLCipher, so the next `refresh()` resurrected the entire workspace
       // list — exactly the «Try again brought them back» symptom from
       // dogfooding round 5.
-      let db = try ensureDatabase()
-      let svc = WorkspaceService(database: db, keystoreRoot: keystoreRoot)
-      try svc.softDelete(workspaceID: workspaceID, at: Date())
-      if activeStore.activeWorkspaceID == workspaceID {
-        let remaining = try svc.listWorkspaces(includeLeft: false)
-          .filter { $0.id != workspaceID }
-          .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        activeStore.setActive(remaining.first?.id)
-      }
+      //
+      // M-IV: the local softDelete + active re-resolve run off main in an
+      // awaited detached hop (uncancellable destructive write). We're back on
+      // the MainActor after `await`, so state/store mutations apply directly.
+      let outcome = try await Task.detached(priority: .userInitiated) {
+        try WorkspaceReader.performDelete(
+          cachedDB: cachedDB, url: url, cfg: cfg, enc: enc, root: root,
+          workspaceID: workspaceID, wasActive: wasActive)
+      }.value
+      self.database = outcome.db
+      if wasActive { activeStore.setActive(outcome.remainingFirstID) }
       refresh()
       // Best-effort server convergence. Failure here does NOT roll back the
       // local delete — divergence is logged but the user's perceived state
@@ -500,16 +508,26 @@ final class WorkspaceReader {
       state = .error(message: msg)
       return msg
     }
+    let cachedDB = self.database
+    let url = databaseURL
+    let cfg = databaseConfig
+    let enc = databaseEncryption
+    let wasActive = (activeStore.activeWorkspaceID == workspaceID)
     do {
+      // cascadeDeleter.execute is already an awaited actor hop (off main). The
+      // only remaining main-blocking work — the post-cascade active re-resolve
+      // — moves into a small awaited detached hop. Back on MainActor after the
+      // awaits, so state/store mutations apply directly.
       try await cascadeDeleter.execute(workspaceID: workspaceID)
-      if activeStore.activeWorkspaceID == workspaceID {
-        let db = try ensureDatabase()
-        let svc = WorkspaceService(database: db, keystoreRoot: keystoreRoot)
-        let remaining = try svc.listWorkspaces(includeLeft: false)
-          .filter { $0.id != workspaceID }
-          .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        activeStore.setActive(remaining.first?.id)
-      }
+      let outcome = try await Task.detached(priority: .userInitiated) {
+        () -> WorkspaceMutationOutcome in
+        let db = try WorkspaceReader.openDB(cachedDB: cachedDB, url: url, cfg: cfg, enc: enc)
+        let remaining =
+          wasActive ? try WorkspaceReader.computeRemainingFirstID(db, excluding: workspaceID) : nil
+        return WorkspaceMutationOutcome(db: db, remainingFirstID: remaining)
+      }.value
+      self.database = outcome.db
+      if wasActive { activeStore.setActive(outcome.remainingFirstID) }
       refresh()
       return nil
     } catch {
@@ -709,6 +727,19 @@ extension WorkspaceReader {
     }
     let svc = WorkspaceService(database: db, keystoreRoot: root)
     try svc.markLeft(workspaceID: workspaceID, at: Date())
+    let remaining = wasActive ? try computeRemainingFirstID(db, excluding: workspaceID) : nil
+    return WorkspaceMutationOutcome(db: db, remainingFirstID: remaining)
+  }
+
+  /// Off-main soft-delete (M-IV): local-first softDelete + active re-resolve.
+  /// Uncancellable destructive write (mirrors `performLeave`).
+  nonisolated fileprivate static func performDelete(
+    cachedDB: LeafCore.Database?, url: URL, cfg: DatabaseConfig, enc: EncryptionOptions?,
+    root: URL, workspaceID: String, wasActive: Bool
+  ) throws -> WorkspaceMutationOutcome {
+    let db = try openDB(cachedDB: cachedDB, url: url, cfg: cfg, enc: enc)
+    let svc = WorkspaceService(database: db, keystoreRoot: root)
+    try svc.softDelete(workspaceID: workspaceID, at: Date())
     let remaining = wasActive ? try computeRemainingFirstID(db, excluding: workspaceID) : nil
     return WorkspaceMutationOutcome(db: db, remainingFirstID: remaining)
   }
