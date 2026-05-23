@@ -40,6 +40,10 @@ final class InsightsReader {
 
     private var database: LeafCore.Database?
     private var currentTask: Task<Void, Never>?
+    /// Track-10 T5 — UserDefaults-backed cursor for SINCE YOU WERE LAST ACTIVE.
+    /// Set via `configure(lastSeenCursor:)` from `LeafApp` at app launch;
+    /// `nil` before configure → `sinceLastActiveItems` returns `[]` from refresh().
+    private var lastSeenCursor: LastSeenCursor?
     /// Track-9 T6 (C-2) — last successful snapshot, updated on every `.loaded`
     /// transition. Read by error path to populate `State.error.lastKnown`.
     /// Instance field (not local) so overlapping refreshes (rapid double-tap on
@@ -67,6 +71,15 @@ final class InsightsReader {
         self.deepSessionMinSec = deepSessionMinSec
     }
 
+    /// Track-10 T5 — two-phase configure pattern. `LeafApp` calls this once at
+    /// app launch (`.task` modifier on root view) to wire the @Observable
+    /// cursor into the reader. Triggers an explicit refresh so the snapshot
+    /// populates `sinceLastActiveItems` on the first appearance.
+    func configure(lastSeenCursor: LastSeenCursor) {
+        self.lastSeenCursor = lastSeenCursor
+        refresh()
+    }
+
     func refresh() {
         // Cancel previous refresh'ы — защита от race при быстрых повторных
         // открытиях popover'а (P6 в плане).
@@ -87,6 +100,10 @@ final class InsightsReader {
         let enc = databaseEncryption
         let cachedDB = database
         let deepMin = deepSessionMinSec
+        // Track-10 T5 — snapshot cursor on MainActor BEFORE the detached task so
+        // the SQL call has a plain Int64 to work with (LastSeenCursor is
+        // @MainActor-isolated). `nil` cursor → skip the feed call entirely.
+        let cursorMs: Int64? = lastSeenCursor?.lastSeenAtMs
 
         currentTask = Task { [self] in
             // Database (@unchecked Sendable) и InsightsSnapshot (Sendable) —
@@ -215,6 +232,20 @@ final class InsightsReader {
                         let gitDelta = await GitDeltaReaderFactory.make()
                             .read(forWorkspacePath: workspacePath)
                         try Task.checkCancellation()
+                        // Track-10 T5 — per-event SINCE timeline. `cursorMs == nil`
+                        // before LeafApp's `configure(lastSeenCursor:)` lands;
+                        // emit `[]` so the snapshot composition stays stable
+                        // (snapshot eq-Hash invariant preserved — same input
+                        // produces same output across refresh ticks).
+                        let sinceLastActiveItems: [SinceLastActiveItem]
+                        if let cursorMs {
+                            let feed = (try? insights.recentActivityFeed(
+                                since: cursorMs, limit: 100)) ?? []
+                            sinceLastActiveItems = feed.compactMap(SinceLastActiveItem.compose(from:))
+                        } else {
+                            sinceLastActiveItems = []
+                        }
+                        try Task.checkCancellation()
                         // Path B — splice commit into deriver's snapshot via
                         // defaulted-init. Preserves anchorFilePath / anchorLine
                         // populated by ProdInsights+RecentWhereStopped LEFT JOIN.
@@ -275,7 +306,8 @@ final class InsightsReader {
                             whereStopped: whereStopped,
                             weeklyMetrics: weeklyMetrics,
                             gitDelta: gitDelta,
-                            currentTaskIdentity: taskIdentity
+                            currentTaskIdentity: taskIdentity,
+                            sinceLastActiveItems: sinceLastActiveItems
                         )
                         return .success((db, snapshot))
                     } catch {
