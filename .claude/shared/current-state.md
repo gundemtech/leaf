@@ -4,7 +4,7 @@ _Срез "где мы сейчас" за 30 секунд. Детали кажд
 
 ## Последнее обновление
 
-**2026-05-23 — Track-10 wrapped (T1..T9 complete).** Ветка `feature/track-10-operational-home` ahead of `origin/dev` ~56 commits, **ready for collective merge** (Дима sanity check + push сам). Master smoke per master spec §7.3 — async gate (Дима выполнит когда удобно); BLOCKER findings → follow-up fix-bundle на T9 branch до collective merge.
+**2026-05-23 — Track-10 wrapped (T1..T9 complete) + Phase A close-out SHIPPED.** Ветка `feature/track-10-operational-home` ahead of `origin/dev` ~62 commits (T9 +56 + Phase A +6), **ready for collective merge** (Дима sanity check + push сам). Master smoke per master spec §7.3 — async gate (Дима выполнит когда удобно); BLOCKER findings → follow-up fix-bundle до collective merge. Phase A (GUN-A · design-system polish + a11y close-out) закрыл 4 carries (T9-A11Y / T9-HIG / T9-A11Y-PRIMITIVES / T7-A11Y) — `LeafEmptyState.compact` variant + `leafChipAccessibility(label:isSelected:)` modifier + 11 NITs landed, zero substrate touch.
 
 **Cumulative net T1..T9:**
 - 0 net event_kinds. Registry frozen **198** (Track-9 baseline preserved).
@@ -19,11 +19,11 @@ _Срез "где мы сейчас" за 30 секунд. Детали кажд
 - ADR-010 sentinel-injection discipline preserved (T2/T5/T7 lineage; T1/T3/T4/T6/T8/T9 §6 EXEMPT per aggregate-only / polish-only reads).
 
 **Deferred post-Track-10** (carries в master spec §9.2):
-- C-T10-EMIT-T7H1/H2/H3 → "Claude Code workflow first-class в YOU'RE ON" own phase (subsumes 3 T7 post-ship hot-fixes — LinearIDPrefixCache · aiCollaboration cwd fallback · terminalFamily dwell)
-- C-T10-EMIT-T9-A11Y/HIG/A11Y-PRIMITIVES + C-T10-EMIT-T7-A11Y → "Track-10 design-system polish + a11y close-out" own phase
-- **C-25 sleep/wake substrate idle gap** (post-Track-9 own phase — blocks "WHERE STOPPED feels useful day-to-day")
+- C-T10-EMIT-T7H1/H2/H3 → "Claude Code workflow first-class в YOU'RE ON" — **Phase B in flight (this session)**
+- ~~C-T10-EMIT-T9-A11Y/HIG/A11Y-PRIMITIVES + C-T10-EMIT-T7-A11Y~~ → **RESOLVED Phase A** (this session, 4 carries closed)
+- **C-25 sleep/wake substrate idle gap** → **Phase C planned (this session)**
 - Phase 5.4 DB-backed TeammatePresenceReader (lights up TEAM·N automatically)
-- C-T10-EMIT-STANDUP-HOURS (v1.1 Settings personalization) · C-T10-EMIT-MCP-STANDUP (future) · C-T10-EMIT-FLAKE (test-infra triage) · C-T10-EMIT-LOC-RESUMEHERO (informational +20 LOC drift)
+- C-T10-EMIT-STANDUP-HOURS (v1.1 Settings) · C-T10-EMIT-MCP-STANDUP (future) · C-T10-EMIT-FLAKE (test-infra triage) · C-T10-EMIT-LOC-RESUMEHERO (informational tracker)
 
 **Track-10 merge prep (Дима driver, NOT push automatic):**
 ```bash
@@ -101,7 +101,7 @@ _Один bullet на phase. Детали — git log + спек по дате/�
 - **Track-10 collective merge to `main`** — `feature/track-10-operational-home` ready, ~56 commits ahead of `origin/dev`. Master smoke per master spec §7.3 mockup parity per zone — async gate (Дима clicks; deviations honest: WHERE STOPPED → RESUME state per C-25 / TEAM·N empty per Phase 5.4 dep). Push to `origin/dev` first (Дима); then separate-session `--no-ff` merge to `main` + `/sync-docs track-10-wrap` whitepaper sync.
 - **Track-9 collective merge to `main`** — `feature/track-9-substrate` ready, ~170 commits ahead. Same flow (manual smoke + no-ff merge + push + `/sync-docs track-9-wrap`). Two independent collective merges queued.
 - **"Claude Code workflow first-class в YOU'RE ON" own phase** (subsumes C-T10-EMIT-T7H1/H2/H3) — substrate brainstorm gate: should aiCollaboration fallback ever WIN over IDE match? Local moat hot-fixes landed during T7 post-ship smoke (LinearIDPrefixCache · cwd fallback · terminalFamily dwell) but NOT committed; need own spec + sentinel-injection regression for aiCollaboration `cwd` → workspace match.
-- **"Track-10 design-system polish + a11y close-out" own phase** (subsumes C-T10-EMIT-T9-A11Y/HIG/A11Y-PRIMITIVES + C-T10-EMIT-T7-A11Y) — tight scope no substrate touch: `LeafEmptyState` adoption sweep (RecapBlock/EodBlock) · `LeafSize.avatarMd` / `chevronWidth` tokens · LeafPill/LeafInput/LeafIconChip primitive Button-trait hoist · pluralization helpers · empty-state VO `.combine` · WeekChipStrip today `.isSelected`.
+- ~~"Track-10 design-system polish + a11y close-out" own phase~~ — **DONE Phase A (this session)** — `LeafEmptyState.compact` variant + `leafChipAccessibility(label:isSelected:)` modifier + 11 NITs landed (4 carries C-T10-EMIT-T9-A11Y/HIG/A11Y-PRIMITIVES + T7-A11Y RESOLVED). Zero substrate touch.
 - **C-25 sleep/wake gap (post-Track-9 own phase)** — `ProdWhereStoppedDeriver.derive()` idle gate fails on closed-laptop scenario (master spec §9.1.C-25 — 3 fix directions). Blocks "WHERE STOPPED feels useful day-to-day" UX promise — most users see empty most days. Own phase brainstorm + sentinel test (touches Track-1 D3 substrate without walkback coverage before T7).
 - **Post-Track-9 substrate backlog**: C-26 (moat 795 LOC reorg), C-29 (`queryCommentsOnMyWork` viewer_login enrichment), C-32 UUID-based `meeting_id`, C-38 (TopToolsCard real substrate), C-39 (per-hour heatmap), C-44 (dual-axis Chart macOS 15+).
 - **Post-Track-9 UI backlog**: C-40 (per-day chart drill-down), C-41 (multi-week 30d/90d Analytics), C-5 (LocalAppsStore reactivity), C-8 (Resume CTA branch staleness v1.1).
