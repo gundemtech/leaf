@@ -67,42 +67,48 @@ Semantics **identical to today's inline logic** (84-101):
 
 ### 5.2 `refresh()` — sync, cancel-prior, single detached hop, preserve-stale
 
+**`currentTask` is itself the detached task** (not an outer `@MainActor` task wrapping an inner detached one). This matters: `Task.detached` does NOT inherit cancellation, so the only way `Task.checkCancellation()` inside `loadSnapshot` does anything is if the task we cancel IS the detached one. So `refresh()` reads its MainActor inputs synchronously (it runs on main), then spawns a single detached task that does the off-main work and hops back via `MainActor.run` to apply state. Captures `[weak self]` (detached tasks shouldn't strongly retain the reader).
+
 ```swift
 private var currentTask: Task<Void, Never>?
 
 func refresh() {
   currentTask?.cancel()
-  let cachedDB = self.database
+  let cachedDB = self.database                        // read MainActor inputs synchronously
   let url = databaseURL, cfg = databaseConfig, enc = databaseEncryption
   let root = keystoreRoot
-  let knownActiveID = activeStore.activeWorkspaceID   // ON MAIN, before hop
+  let knownActiveID = activeStore.activeWorkspaceID
 
-  currentTask = Task { [self] in                      // outer task = @MainActor
-    let result: Result<Snapshot, Error> =
-      await Task.detached(priority: .userInitiated) {
-        try Self.loadSnapshot(cachedDB: cachedDB, url: url, cfg: cfg, enc: enc,
-                              root: root, knownActiveID: knownActiveID)
-      }.result
-    guard !Task.isCancelled else { return }           // superseded → preserve stale state
-    switch result {
-    case .success(let snap):
-      self.database = snap.db                          // cache opened handle (MAIN)
-      if let id = snap.backfilledID { activeStore.setActive(id) }   // store write (MAIN)
-      state = snap.state                               // .empty / .loaded / .removedFromActiveWorkspace
-      if case .loaded(_, let active, _) = snap.state {
-        ensureActiveWorkspaceSyncedToSupabase(workspace: active, createdByPubkey: snap.myPubHex)
+  currentTask = Task.detached(priority: .userInitiated) { [weak self] in
+    do {
+      let snap = try WorkspaceReader.loadSnapshot(            // off main; checkCancellation inside
+        cachedDB: cachedDB, url: url, cfg: cfg, enc: enc, root: root, knownActiveID: knownActiveID)
+      try Task.checkCancellation()                           // superseded → bail before applying
+      await MainActor.run {
+        guard let self else { return }
+        self.database = snap.db                              // cache opened handle (MAIN)
+        if let id = snap.backfilledID { self.activeStore.setActive(id) }   // store write (MAIN)
+        self.state = snap.state                             // .empty / .loaded / .removedFromActiveWorkspace / .error
+        if case .loaded(_, let active, _) = snap.state {
+          self.ensureActiveWorkspaceSyncedToSupabase(workspace: active, createdByPubkey: snap.myPubHex)
+        }
       }
-    case .failure(let err):
-      logger.error("WorkspaceReader.refresh failed: \(String(describing: err), privacy: .public)")
-      state = .error(message: userFacingMessage(for: err))
+    } catch is CancellationError {
+      // superseded by a newer refresh() — drop result, preserve stale state
+    } catch {
+      await MainActor.run {
+        guard let self else { return }
+        self.logger.error("WorkspaceReader.refresh failed: \(String(describing: error), privacy: .public)")
+        self.state = .error(message: self.userFacingMessage(for: error))
+      }
     }
   }
 }
 ```
 
-`Snapshot` is a file-local `Sendable` struct: `(db: Database, state: State, backfilledID: String?, myPubHex: String)`. `Database` is `@unchecked Sendable`; `Workspace`/`TeamMember` (held inside `State`) are `Sendable`; `State` is therefore Sendable. `myPubHex` is populated only for `.loaded`/`.removedFromActiveWorkspace` (identity is loaded at step 7, after a resolve success); for the `.empty`/`.error` early returns it is `""` and never read (the supabase-sync call is gated on `if case .loaded`).
+`Snapshot` is a file-scope `Sendable` struct: `(db: Database, state: State, backfilledID: String?, myPubHex: String)`. `Database` is `@unchecked Sendable`; `Workspace`/`TeamMember` (held inside `State`) are `Sendable`; **`State` gets a `Sendable` conformance added** (`enum State: Equatable, Sendable`). `myPubHex` is populated only for `.loaded`/`.removedFromActiveWorkspace` (identity is loaded after a resolve success); for the `.empty`/`.error` early returns it is `""` and never read (supabase-sync is gated on `if case .loaded`).
 
-`loadSnapshot` (`private static`, runs off-main):
+`loadSnapshot` (`nonisolated private static` — the class is `@MainActor`, so the helper must be `nonisolated` to run off the main actor; runs off-main):
 1. `let db = try cachedDB ?? Database.openForWrite(at: url, config: cfg, encryption: enc)` — **reuse cached write pool; never open a second connection.**
 2. `let workspaces = try db.listWorkspaces(includeLeft: false)`; if empty → return `Snapshot(state: .empty, …)`.
 3. `try Task.checkCancellation()`
@@ -113,36 +119,40 @@ func refresh() {
 8. self-removed check (lines 108-113) → either `.removedFromActiveWorkspace` or `.loaded(workspaces, active, activeMembers)`.
 9. return `Snapshot(db, state, resolution.backfilledID, myPubHex)`.
 
-**No `state = .loading` anywhere** (preserve-stale). **No `self` captured into `.detached`** — only into the outer `@MainActor` `Task`.
+**No `state = .loading` anywhere** (preserve-stale). The detached task captures `[weak self]` and only Sendable locals; all `self` access (state, activeStore, logger) happens inside `MainActor.run`.
 
 ### 5.3 Mutating methods — own run-to-completion hops
 
-`leaveWorkspace(workspaceID:)` (signature stays sync-void):
+`leaveWorkspace(workspaceID:)` (signature stays sync-void). A standalone detached task — **NOT** `currentTask`, and **not cancellable** (the destructive write must complete):
 
 ```swift
 func leaveWorkspace(workspaceID: String) {
   let cachedDB = self.database, root = keystoreRoot
+  let url = databaseURL, cfg = databaseConfig, enc = databaseEncryption
   let wasActive = (activeStore.activeWorkspaceID == workspaceID)   // ON MAIN
-  Task { [self] in                                                 // own task (NOT currentTask)
-    let outcome: Result<LeaveOutcome, Error> =
-      await Task.detached(priority: .userInitiated) {
-        try Self.performLeave(cachedDB: cachedDB, root: root,
-                              workspaceID: workspaceID, wasActive: wasActive)
-      }.result
-    switch outcome {
-    case .success(let r):
-      self.database = r.db
-      if wasActive { activeStore.setActive(r.remainingFirstID) }   // ON MAIN
-      refresh()                                                    // coalesced read path
-    case .failure(let err):
-      logger.error("WorkspaceReader.leaveWorkspace failed: \(String(describing: err), privacy: .public)")
-      state = .error(message: userFacingMessage(for: err))
+  Task.detached(priority: .userInitiated) { [weak self] in        // own task, never cancelled
+    do {
+      let outcome = try WorkspaceReader.performLeave(             // guard + markLeft + re-resolve OFF main
+        cachedDB: cachedDB, url: url, cfg: cfg, enc: enc, root: root,
+        workspaceID: workspaceID, wasActive: wasActive)
+      await MainActor.run {
+        guard let self else { return }
+        self.database = outcome.db
+        if wasActive { self.activeStore.setActive(outcome.remainingFirstID) }   // ON MAIN
+        self.refresh()                                            // coalesced read path repopulates state
+      }
+    } catch {
+      await MainActor.run {
+        guard let self else { return }
+        self.logger.error("WorkspaceReader.leaveWorkspace failed: \(String(describing: error), privacy: .public)")
+        self.state = .error(message: self.userFacingMessage(for: error))
+      }
     }
   }
 }
 ```
 
-`performLeave` (off-main, **no cancellation in the write path**): solo-admin guard (`readTeamMembers(includeRemoved:false)` + identity + `count == 1 && me.role == .admin`) → throws a typed `WorkspaceReaderError.soloAdminCannotLeave` whose `userFacingMessage` is the existing string (308-309); else `WorkspaceService(database:keystoreRoot:).markLeft(workspaceID:at:)`; if `wasActive`, compute `remainingFirstID` from `listWorkspaces(includeLeft:false)` filtered/sorted (315-319). Returns `LeaveOutcome(db, remainingFirstID)`.
+`performLeave` (`nonisolated private static`, **no `checkCancellation` in the write path**): open db; solo-admin guard (`readTeamMembers(includeRemoved:false)` + identity + `count == 1 && me.role == .admin`) → throws `WorkspaceReaderError.soloAdminCannotLeave` (mapped in `userFacingMessage` to the existing string 307-309); else `WorkspaceService(database:keystoreRoot:).markLeft(workspaceID:at: Date())`; if `wasActive`, compute `remainingFirstID` via the shared `computeRemainingFirstID(db, excluding:)` helper (filter/sort/first, 315-319). Returns `MutationOutcome(db, remainingFirstID)`.
 
 `delete(workspaceID:) async -> String?` — preserve **local-first ordering** (425-453): the local `softDelete` + conditional `remaining` re-resolve move into one awaited detached hop; on success cache db + `setActive` (if was active) on main + `refresh()`; then the existing best-effort `supabase.softDeleteWorkspace` PATCH (already off-main, unchanged, including the `.noRowsAffected` info-log branch). Error path returns `userFacingMessage` `String?` exactly as today.
 
@@ -152,16 +162,22 @@ func leaveWorkspace(workspaceID: String) {
 
 ### 5.4 Helper placement
 
-`loadSnapshot` / `performLeave` / `performDelete` are `private static` functions on `WorkspaceReader` (file-local, capture nothing from `self`, take explicit Sendable params). `Snapshot` / `LeaveOutcome` / `DeleteOutcome` are file-local `Sendable` structs. The resolver + `ActiveResolution` are the only additions to `LeafCore`'s public surface.
+Off-main helpers are `nonisolated private static` functions on `WorkspaceReader` (capture nothing from `self`, take explicit Sendable params; `nonisolated` is required because the class is `@MainActor`):
+- `openDB(cachedDB:url:cfg:enc:) throws -> Database` — DRY the `cachedDB ?? Database.openForWrite(...)` open.
+- `computeRemainingFirstID(_ db:excluding:) throws -> String?` — DRY the `listWorkspaces(includeLeft:false).filter { $0.id != excluding }.sorted { … localizedCaseInsensitiveCompare … }.first?.id` re-resolve shared by leave/delete/hardDelete.
+- `loadSnapshot(...) throws -> Snapshot` (refresh).
+- `performLeave(...) throws -> MutationOutcome`, `performDelete(...) throws -> MutationOutcome` (leave/delete writes). `hardDelete`'s post-cascade re-resolve calls `openDB` + `computeRemainingFirstID` inline in its detached block (no dedicated helper).
+
+`Snapshot` and `MutationOutcome { db: Database; remainingFirstID: String? }` are **file-scope** `Sendable` structs (declared outside the class to avoid any `@MainActor` isolation inference). `WorkspaceReaderError: Error { case soloAdminCannotLeave }` is also file-scope. The resolver + `ActiveResolution` are the only additions to `LeafCore`'s public surface.
 
 ## 6. Concurrency invariants (safety contract)
 
-1. `activeStore` touched **only on MainActor** — one read before each hop, one conditional `setActive` after.
-2. Detached blocks capture **only Sendable values** (`Database` `@unchecked Sendable`; `WorkspaceService` `Sendable`; `IdentityService` stateless enum; resolver pure; `Workspace`/`TeamMember`/`State` `Sendable`). `self` never enters a `.detached` closure.
-3. **Cancellation** only ever skips a state write (`guard !Task.isCancelled` before mutation; `Task.checkCancellation()` between the two reads in `loadSnapshot`). It never rolls back a side effect — `refresh` performs no DB write; `setActive` fires only on the winning task, on main.
-4. **Destructive writes are uncancellable** — `performLeave` / `performDelete` run on their own tasks with no `checkCancellation` in the write path.
-5. **One DB connection** — cached write pool reused (`cachedDB ?? openForWrite`); no parallel read pool.
-6. **Error semantics unchanged** — `Result` returned from hops; `userFacingMessage(for:)` mapping + all `state` transitions happen on MainActor; same strings, same branches.
+1. `activeStore` touched **only on MainActor** — read synchronously before each detached hop (in the `@MainActor` method body), conditional `setActive` inside `MainActor.run` after.
+2. Detached closures capture `[weak self]` + **only Sendable values** (`Database` `@unchecked Sendable`; `WorkspaceService` `Sendable`; `IdentityService` stateless enum; resolver pure; `Workspace`/`TeamMember`/`State` `Sendable`). All `self` access (state/activeStore/logger/ensureSync) happens inside `MainActor.run`.
+3. **Cancellation is real for `refresh()`** — `currentTask` IS the detached task, so `currentTask?.cancel()` propagates to `Task.checkCancellation()` (after `loadSnapshot`) → `CancellationError` → caught and dropped, never reaching `MainActor.run`. Stale state preserved. Cancellation only skips a state write; it never rolls back a side effect (`refresh` does no DB write; `setActive` fires only on the winning task, on main).
+4. **Destructive writes are uncancellable** — `leaveWorkspace`/`delete`/`hardDelete` spawn standalone detached tasks (never stored in `currentTask`, never cancelled) with no `checkCancellation` in the write path. `markLeft`/`softDelete`/`cascadeDeleter.execute` always run to completion.
+5. **One DB connection** — `openDB` reuses the cached write pool (`cachedDB ?? openForWrite`); no parallel read pool.
+6. **Error semantics unchanged** — each detached task `do/catch`es; `userFacingMessage(for:)` mapping + all `state`/`String?`-return transitions happen on MainActor; same strings, same branches. `WorkspaceReaderError.soloAdminCannotLeave` is added to `userFacingMessage`'s first branch.
 
 ## 7. Testing
 
