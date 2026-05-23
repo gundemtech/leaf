@@ -4,9 +4,11 @@
 //
 //  M027 invite-redesign — REST wrappers over `invite_tokens` table on Supabase.
 //
-//  insertInviteToken — POST → 201 with row echoed (return=representation).
-//                      RLS `invite_tokens_admin_write` gates by workspace admin
-//                      + WITH CHECK enforces created_by_pubkey == JWT pubkey claim.
+//  insertInviteToken — M-II: POST → /functions/v1/insert_invite_token (Edge Fn).
+//                      Edge Fn adds Idempotency-Key dedup. Returns 201
+//                      { code, workspace_id, created_at }; we map into InviteToken
+//                      (preserving caller-supplied fields; server's created_at
+//                      replaces the local-clock value).
 //
 //  listInviteTokens  — GET → 200 [Row...]. RLS allows admin to list own workspace
 //                      tokens (incl. expired/deleted for audit). Tightly-scoped to
@@ -23,34 +25,70 @@ import Foundation
 
 extension SupabaseClient {
 
-  /// POST a fresh invite token to Supabase. Returns the inserted row echoed
-  /// by PostgREST `Prefer: return=representation` (T2 InviteToken passed in
-  /// is local-shape; server adds `created_at` timestamp authoritatively).
+  /// POST a fresh invite token via `insert_invite_token` Edge Function (M-II).
+  /// Idempotent — Idempotency-Key dedup on server makes retries safe.
   ///
-  /// Throws `SupabaseError.fromStatus(409, ...)` on PK conflict (≈ never —
-  /// 30^11 random space + checksum), `SupabaseError.forbidden` on RLS denial.
+  /// The Edge Function returns 201 { code, workspace_id, created_at }. We map
+  /// this into an InviteToken by carrying forward all caller-supplied fields
+  /// from the input token and replacing `createdAt` with the server's ISO
+  /// authoritative timestamp. All other fields (label, ttlSeconds, expiresAt,
+  /// maxUses, usedCount, deletedAt) are preserved from the input unchanged.
+  ///
+  /// - Throws: `SupabaseError.conflict` on 409 invite_token_exists (PK clash
+  ///   — ≈ never given 30^11 random code space + checksum),
+  ///   `SupabaseError.forbidden` on auth denial, transport errors otherwise.
   public func insertInviteToken(_ token: InviteToken) async throws -> InviteToken {
     let session = try await ensureAuthenticated()
-    let url = SupabaseEndpoint.inviteTokensInsert(baseURL: baseURL)
+    let url = SupabaseEndpoint.insertInviteTokenEdge(baseURL: baseURL)
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
-    for (k, v) in SupabaseEndpoint.postgrestInsertHeaders(
+    for (k, v) in SupabaseEndpoint.authenticatedHeaders(
       anonKey: anonKey, accessToken: session.accessToken
     ) {
       request.setValue(v, forHTTPHeaderField: k)
     }
-    request.httpBody = try Self.encodeInviteTokenBody(token)
+    request.httpBody = try Self.encodeInviteTokenEdgeBody(token)
 
     let (data, response) = try await inviteTokensTransport(
-      request, label: "insertInviteToken", retryable: false, refreshable: true)
+      request, label: "insertInviteToken", retryable: true, refreshable: true,
+      idempotent: true)
     guard response.statusCode == 201 else {
       throw SupabaseError.fromStatus(response.statusCode, body: data)
     }
-    let rows = try Self.decodeInviteTokenRows(data)
-    guard let first = rows.first else {
-      throw SupabaseError.decoding(reason: "insertInviteToken: empty rows")
+    // Edge response: { code, workspace_id, created_at (ISO 8601) }.
+    // Map into InviteToken: carry forward all input fields, replace createdAt
+    // with the server's authoritative timestamp.
+    struct EdgeRow: Decodable {
+      let code: String
+      let workspace_id: String
+      let created_at: String
     }
-    return first
+    let row: EdgeRow
+    do {
+      row = try JSONDecoder().decode(EdgeRow.self, from: data)
+    } catch {
+      throw SupabaseError.decoding(reason: "insertInviteToken: \(error)")
+    }
+    let iso = ISO8601DateFormatter()
+    iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let isoNoFrac = ISO8601DateFormatter()
+    isoNoFrac.formatOptions = [.withInternetDateTime]
+    let serverCreatedAt =
+      iso.date(from: row.created_at)
+      ?? isoNoFrac.date(from: row.created_at)
+      ?? Date()
+    return InviteToken(
+      code: row.code,
+      workspaceID: row.workspace_id,
+      createdByPubkeyHex: token.createdByPubkeyHex,
+      label: token.label,
+      ttlSeconds: token.ttlSeconds,
+      expiresAt: token.expiresAt,
+      maxUses: token.maxUses,
+      usedCount: token.usedCount,
+      deletedAt: token.deletedAt,
+      createdAt: serverCreatedAt
+    )
   }
 
   /// GET all invite_tokens for the workspace (admin-only via RLS). Includes
@@ -100,7 +138,30 @@ extension SupabaseClient {
 
   // MARK: - Wire encoding / decoding
 
-  /// JSON body for POST. Sets all admin-controllable columns; server applies
+  /// JSON body for `insert_invite_token` Edge Function (M-II).
+  /// Body: { workspace_id, code, ttl_seconds, label?, expires_at?, max_uses?, created_at_ms }
+  /// `created_at_ms` is included in the idempotency body hash but NOT stored by the server.
+  private static func encodeInviteTokenEdgeBody(_ token: InviteToken) throws -> Data {
+    var dict: [String: Any] = [
+      "workspace_id": token.workspaceID,
+      "code": token.code,
+      "ttl_seconds": token.ttlSeconds,
+      "created_at_ms": Int64(Date().timeIntervalSince1970 * 1000),
+    ]
+    if let label = token.label, !label.isEmpty {
+      dict["label"] = label
+    }
+    if let expiresAt = token.expiresAt {
+      dict["expires_at"] = iso8601(from: expiresAt)
+    }
+    if let maxUses = token.maxUses {
+      dict["max_uses"] = maxUses
+    }
+    return try JSONSerialization.data(withJSONObject: dict)
+  }
+
+  /// JSON body for legacy PostgREST POST (kept for reference; no longer called).
+  /// Sets all admin-controllable columns; server applies
   /// defaults for `created_at` (now()) and `used_count` (0).
   private static func encodeInviteTokenBody(_ token: InviteToken) throws -> Data {
     var dict: [String: Any] = [
@@ -190,9 +251,10 @@ extension SupabaseClient {
     _ request: URLRequest,
     label: String,
     retryable: Bool = false,
-    refreshable: Bool = false
+    refreshable: Bool = false,
+    idempotent: Bool = false
   ) async throws -> (Data, HTTPURLResponse) {
     try await performHTTP(
-      request, retryable: retryable, refreshable: refreshable, label: label)
+      request, retryable: retryable, refreshable: refreshable, idempotent: idempotent, label: label)
   }
 }

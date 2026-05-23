@@ -54,7 +54,7 @@ final class JoinRequestServiceAcceptApprovedTests: XCTestCase {
 
   // MARK: - Test infrastructure
 
-  /// Network stub — accept bootstrap + 201 the workspace_members INSERT.
+  /// Network stub — accept bootstrap + 201 the insert_workspace_member Edge INSERT.
   /// All other endpoints XCTFail so a stray request from `acceptApproved`
   /// surfaces in the test report instead of silently passing.
   private func bootstrap(
@@ -85,7 +85,10 @@ final class JoinRequestServiceAcceptApprovedTests: XCTestCase {
             "expires_at": 9999999999 }
           """.data(using: .utf8)!
         return (resp, data)
-      case "/rest/v1/workspace_members":
+      case "/functions/v1/insert_workspace_member":
+        // B5 / M-II: member sync moved from PostgREST /rest/v1/workspace_members
+        // to the insert_workspace_member Edge Function. The client discards the
+        // response body (Void return), so an empty 201 satisfies acceptApproved.
         return memberInsertHandler?(request, body)
           ?? (
             HTTPURLResponse(

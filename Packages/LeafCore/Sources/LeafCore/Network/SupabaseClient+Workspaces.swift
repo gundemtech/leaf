@@ -12,9 +12,15 @@
 //  on local-creation time so the server-side `is_workspace_admin` RLS helper
 //  (which queries `workspaces.created_by_pubkey`) returns true for every
 //  subsequent admin operation (`invite_tokens` write, `invites` write, etc.).
-//  Pre-M027 the workspaces table was server-side empty for any admin-created
-//  workspace; S3 magic-link smoke gates G15/G16 were deferred to two-Mac
-//  signed-build session, so this integration gap was not caught earlier.
+//
+//  M-II — `insertWorkspace` now calls the `insert_workspace` Edge Function
+//  (functions/v1/insert_workspace) instead of the PostgREST /rest/v1/workspaces
+//  endpoint. The Edge Function adds server-side idempotency via Idempotency-Key
+//  dedup so retries after transient failures are safe.
+//
+//  `insertWorkspaceMember` is co-located here (moved from SupabaseClient.swift
+//  B5) since it mirrors the workspace-scope INSERT pattern and callers are the
+//  same service layer (InviteAcceptService).
 //
 //  Validation duplicates `WorkspaceService.updateName` for defence-in-depth
 //  so that the network call is never fired with an invalid payload even if the
@@ -25,23 +31,22 @@ import Foundation
 
 extension SupabaseClient {
 
-  // MARK: - M027 — insertWorkspace (admin self-insert)
+  // MARK: - M027 / M-II — insertWorkspace (admin self-insert via Edge Function)
 
-  /// POST a freshly-created workspace row to Supabase. RLS allows the
-  /// caller iff the JWT `pubkey` claim matches `created_by_pubkey` in the
-  /// body — defence-in-depth against impersonation. Server-side
-  /// `workspaces_name_per_admin_unique` constraint maps a duplicate name
-  /// (same admin pubkey, same name) to a 409 → `SupabaseError.conflict`.
+  /// POST a freshly-created workspace row via the `insert_workspace` Edge
+  /// Function. The Edge Function handles idempotency (Idempotency-Key dedup)
+  /// and auth (JWT pubkey claim → created_by_pubkey). Returns Void; server
+  /// authoritative `created_at` is not needed by the caller.
   ///
   /// - Parameters:
-  ///   - id: UUID of the workspace row (same value used in local
-  ///     `workspaces.id`; UUID string in canonical lowercase form).
-  ///   - name: display name. Trimmed before sending; ≤80 chars after trim
-  ///     (mirrors `WorkspaceService` validation).
+  ///   - id: UUID of the workspace row (canonical lowercase form).
+  ///   - name: display name. Trimmed before sending; ≤80 chars after trim.
   ///   - createdByPubkey: admin's X25519 pubkey hex (64 lowercase hex chars).
+  ///     Passed for body-hash inclusion in idempotency key; the Edge Function
+  ///     also extracts the pubkey from the JWT claim for the DB INSERT.
   /// - Throws: `LeafError.invalidPayload` on empty/too-long name,
-  ///   `SupabaseError.conflict` on UNIQUE(created_by_pubkey, name) violation,
-  ///   `SupabaseError.forbidden` on RLS denial, transport errors otherwise.
+  ///   `SupabaseError.conflict` on 409 workspace_exists,
+  ///   `SupabaseError.forbidden` on auth denial, transport errors otherwise.
   public func insertWorkspace(
     id: String,
     name: String,
@@ -52,26 +57,75 @@ extension SupabaseClient {
       throw LeafError.invalidPayload
     }
     let session = try await ensureAuthenticated()
-    let url = SupabaseEndpoint.workspacesInsert(baseURL: baseURL)
+    let url = SupabaseEndpoint.insertWorkspaceEdge(baseURL: baseURL)
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
-    for (k, v) in SupabaseEndpoint.postgrestInsertHeaders(
+    for (k, v) in SupabaseEndpoint.authenticatedHeaders(
       anonKey: anonKey, accessToken: session.accessToken
     ) {
       request.setValue(v, forHTTPHeaderField: k)
     }
+    let createdAtMs = Int64(Date().timeIntervalSince1970 * 1000)
     let body: [String: Any] = [
-      "id": id,
+      "workspace_id": id,
       "name": trimmed,
-      "created_by_pubkey": createdByPubkey,
+      "created_at_ms": createdAtMs,
     ]
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
     let (data, response) = try await workspacesTransport(
-      request, label: "insertWorkspace", retryable: false, refreshable: true)
+      request, label: "insertWorkspace", retryable: true, refreshable: true,
+      idempotent: true)
     guard response.statusCode == 201 else {
       throw SupabaseError.fromStatus(response.statusCode, body: data)
     }
+    // Edge response: { workspace_id, name, created_at } — Void return; discard.
+    _ = data
+  }
+
+  // MARK: - B5 / M-II — insertWorkspaceMember (relocated from SupabaseClient.swift)
+
+  /// POST a new workspace-member row via the `insert_workspace_member` Edge
+  /// Function. Idempotent — safe to retry on transient failure (Idempotency-Key
+  /// dedup on server). 409 workspace_member_exists maps to `SupabaseError.conflict`.
+  ///
+  /// - Parameters:
+  ///   - workspaceID: UUID of the workspace.
+  ///   - pubkeyHex: 64-hex X25519 pubkey of the joining member.
+  ///   - displayName: member's display name (non-empty, ≤100 chars).
+  /// - Throws: `SupabaseError.conflict` on duplicate (workspace_id, pubkey),
+  ///   `SupabaseError.forbidden` on auth denial, transport errors otherwise.
+  public func insertWorkspaceMember(
+    workspaceID: String,
+    pubkeyHex: String,
+    displayName: String
+  ) async throws {
+    let session = try await ensureAuthenticated()
+    let url = SupabaseEndpoint.insertWorkspaceMemberEdge(baseURL: baseURL)
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    for (k, v) in SupabaseEndpoint.authenticatedHeaders(
+      anonKey: anonKey, accessToken: session.accessToken
+    ) {
+      request.setValue(v, forHTTPHeaderField: k)
+    }
+    let joinedAtMs = Int64(Date().timeIntervalSince1970 * 1000)
+    let body: [String: Any] = [
+      "workspace_id": workspaceID,
+      "member_pubkey": pubkeyHex,
+      "display_name": displayName,
+      "joined_at_ms": joinedAtMs,
+    ]
+    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+    let (data, response) = try await workspacesTransport(
+      request, label: "insertWorkspaceMember", retryable: true, refreshable: true,
+      idempotent: true)
+    guard response.statusCode == 201 else {
+      throw SupabaseError.fromStatus(response.statusCode, body: data)
+    }
+    // Edge response: { workspace_id, member_pubkey, joined_at } — Void return; discard.
+    _ = data
   }
 
   // MARK: - E.3: patchWorkspaceName
@@ -180,9 +234,10 @@ extension SupabaseClient {
     _ request: URLRequest,
     label: String,
     retryable: Bool = false,
-    refreshable: Bool = false
+    refreshable: Bool = false,
+    idempotent: Bool = false
   ) async throws -> (Data, HTTPURLResponse) {
     try await performHTTP(
-      request, retryable: retryable, refreshable: refreshable, label: label)
+      request, retryable: retryable, refreshable: refreshable, idempotent: idempotent, label: label)
   }
 }

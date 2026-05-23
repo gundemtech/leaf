@@ -4,6 +4,12 @@
 //
 //  Track 5 / S8 / T4 — anonymous waitlist email capture from UpgradeModal.
 //
+//  M-II — rewritten to call `submit_waitlist` Edge Function
+//  (functions/v1/submit_waitlist). The Edge Function is ANON — no JWT required
+//  (ownerPubkey=null in checkIdempotency, same pattern as invite_resolve).
+//  Idempotency-Key is still injected (idempotent:true) because the anon
+//  endpoint honors the header for deterministic dedup of retry storms.
+//
 //  Per T2 migration `20260519120000_s8_substrate.sql`:
 //      CREATE POLICY waitlist_anon_insert ON waitlist
 //          FOR INSERT WITH CHECK (true);
@@ -18,20 +24,21 @@
 //       (spec §10.3 + §15).
 //
 //  409 idempotency: the `email` PK CHECK regex enforces basic shape; duplicate
-//  email INSERT returns 409 (PostgreSQL unique_violation). Client treats 409
-//  as success (`.success(())`) so the UpgradeModal flow surfaces "Thanks —
-//  we'll be in touch!" on both first-time AND retry submits.
+//  email INSERT returns 409 `waitlist_exists`. Client treats 409 as success
+//  so the UpgradeModal flow surfaces "Thanks — we'll be in touch!" on both
+//  first-time AND retry submits.
 //
 
 import Foundation
 
 extension SupabaseClient {
 
-  /// T4 — anonymous waitlist email capture. RLS `WITH CHECK true` on
-  /// `waitlist` accepts the insert with anon `apikey`-only auth.
+  /// T4 / M-II — anonymous waitlist email capture via `submit_waitlist` Edge Fn.
+  /// ANON flow: no Authorization header, no `ensureAuthenticated()`.
+  /// Idempotency-Key is injected (idempotent:true) for deterministic dedup.
   ///
   /// Returns:
-  /// - `.success(())` on HTTP 201 (new row) OR 409 (duplicate email = idempotent).
+  /// - `.success(())` on HTTP 201 (new row) OR 409 waitlist_exists (idempotent).
   /// - `.failure(SupabaseError)` on other 4xx/5xx OR transport error.
   ///
   /// Result-typed instead of throws because the call site is a closure
@@ -51,23 +58,21 @@ extension SupabaseClient {
       return .failure(SupabaseError.badRequest)
     }
 
-    let url = SupabaseEndpoint.waitlistInsert(baseURL: baseURL)
+    let url = SupabaseEndpoint.submitWaitlistEdge(baseURL: baseURL)
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
-    // Anon flow: apikey-only, no Authorization header. The waitlist RLS
-    // policy is `WITH CHECK (true)`; PostgREST still requires the apikey
-    // gateway header on every request (Supabase Kong layer).
-    // `Prefer: return=minimal` avoids the round-tripped row body (we don't
-    // need it — the modal only branches on success/failure of the insert).
-    var headers = SupabaseEndpoint.anonHeaders(anonKey: anonKey)
-    headers["Prefer"] = "return=minimal"
-    for (k, v) in headers {
+    // ANON flow: apikey-only, no Authorization header. The Edge Function is
+    // ownerPubkey=null (same as invite_resolve). Supabase Kong layer still
+    // requires the `apikey` header on every request.
+    for (k, v) in SupabaseEndpoint.anonHeaders(anonKey: anonKey) {
       request.setValue(v, forHTTPHeaderField: k)
     }
 
+    let createdAtMs = Int64(Date().timeIntervalSince1970 * 1000)
     let body: [String: Any] = [
       "email": normalizedEmail,
       "source": source,
+      "created_at_ms": createdAtMs,
     ]
     do {
       request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -78,8 +83,12 @@ extension SupabaseClient {
     let data: Data
     let http: HTTPURLResponse
     do {
+      // idempotent:true injects Idempotency-Key; retryable:true is safe here
+      // because the Edge Function's server-side dedup makes every retry
+      // idempotent. refreshable:false — anon path has no JWT to refresh.
       (data, http) = try await performHTTP(
-        request, retryable: false, label: "submitToWaitlist")
+        request, retryable: true, refreshable: false, idempotent: true,
+        label: "submitToWaitlist")
     } catch let e as SupabaseError {
       return .failure(e)
     } catch {
@@ -87,25 +96,14 @@ extension SupabaseClient {
     }
 
     // 201 Created — fresh INSERT.
-    // 204 No Content — also success when `Prefer: return=minimal` is set and
-    //                  the server collapses the response body.
-    // 409 Conflict   — duplicate email; idempotent success per spec §10.3.
+    // 409 waitlist_exists — duplicate email; idempotent success per spec §10.3.
     switch http.statusCode {
-    case 200, 201, 204:
+    case 200, 201:
       return .success(())
     case 409:
       return .success(())
     default:
       return .failure(SupabaseError.fromStatus(http.statusCode, body: data))
     }
-  }
-}
-
-// MARK: - SupabaseEndpoint extension (waitlist path)
-
-extension SupabaseEndpoint {
-  /// POST /rest/v1/waitlist — anon-INSERT-only (RLS WITH CHECK true).
-  public static func waitlistInsert(baseURL: URL) -> URL {
-    baseURL.appendingPathComponent("rest/v1/waitlist")
   }
 }
