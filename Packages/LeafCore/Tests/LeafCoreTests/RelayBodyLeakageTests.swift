@@ -3674,12 +3674,27 @@ final class RelayBodyLeakageTests: XCTestCase {
             "No event written after seed timestamp should contain the T5 doc_path sentinel")
     }
 
-    // MARK: - Track-9 T7 walkback
+    // MARK: - Track-9 T7 / T8 / T5 walkback (parked — see note)
     //
-    // Phase III.B integration: T7 substrate (WhereStoppedSnapshot anchor fields +
-    // ProdInsights recentWhereStopped) was deferred to Phase IV.A — the integration
-    // baseline lacks the anchorFilePath field and the ProdInsights moat. Wrapped
-    // in `#if false` so they re-enable cleanly when Phase IV.A lands T7.
+    // T7 substrate landed in Phase IV.A: WhereStoppedSnapshot.anchorFilePath /
+    // anchorLine / anchorBundleID are present on the public type. What these
+    // sentinel-injection tests still need is `ProdInsights` — the gitignored
+    // LeafCorePrivate moat — which cannot compile in this TRACKED LeafCoreTests
+    // file on a moat-less public clone / CI. (`ProdInsights` is referenced only
+    // inside this block; the rest of the file compiles moat-free precisely
+    // because `#if false` excludes it.)
+    //
+    // The same basename-only / no-absolute-path-leak invariant is ALREADY
+    // covered locally by the moat test target — `ProdInsightsRecentWhereStopped
+    // Tests` MT1–MT6 (gitignored, runs under `swift test` when the moat is
+    // present). So the privacy guarantee is NOT unverified; this tracked block
+    // is a redundant sentinel-injection variant.
+    //
+    // Full runtime re-enable of this block is bundled into the deferred
+    // LEAF_FLAGS=LEAF_PROD production session (Phase IV.B carry-over), where
+    // partner's current moat is transferred and the flag is flipped — that is
+    // the only context where a tracked ProdInsights reference compiles + runs.
+    // Until then it stays `#if false` to keep public CI green.
     #if false
 
     /// Track-9 T7 — `ProdInsights.recentWhereStopped` LEFT JOINs the anchor
@@ -4101,5 +4116,5 @@ final class RelayBodyLeakageTests: XCTestCase {
                 "ActivityFeedItem field leaked T5 sentinel: '\(field)'")
         }
     }
-    #endif // false — Phase III.B: T7/T8/T5 walkback tests pending Phase IV.A Prod arrival
+    #endif // false — parked; runtime re-enable bundled into LEAF_FLAGS=LEAF_PROD flip session (moat-dependent). Primary coverage: ProdInsightsRecentWhereStoppedTests MT1–MT6.
 }
