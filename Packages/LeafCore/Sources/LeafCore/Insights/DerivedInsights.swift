@@ -132,6 +132,21 @@ public protocol DerivedInsights: Sendable {
     /// inMeeting > deepWorkFocus > away(screenLocked) > away(idle) > active.
     /// `now: Date` for testability. Default `.away(.idle, idleSec: 0)` for stubs.
     func youNowState(now: Date) throws -> YouNowState
+
+    // MARK: - Track-9 T1 — recent commit deriver
+
+    /// Track-9 T1 — most-recent observed gh_commit_pushed event within maxAgeMs.
+    /// Returns nil if no commit in window or DB read fails gracefully.
+    func recentLastCommit(maxAgeMs: Int64) throws -> RecentCommitSnapshot?
+
+    // MARK: - Track-9 T4 — weekly metrics deriver
+
+    /// Track-9 T4 — 7-day analytics aggregation anchored at local-TZ midnight.
+    /// Returns `dailySeries` (7 entries, oldest → newest), peakHour, single-metric
+    /// WoW delta (focused-min based), 5 streak counters.
+    /// `now: Date` for testability (window derives [today − 6d .. today]).
+    /// Default `.empty` for stubs / iOS-future.
+    func weeklyMetrics(now: Date) throws -> WeeklyMetrics
 }
 
 /// Default implementations — конформер'ы могут override'ить, но без явного
@@ -169,6 +184,16 @@ public extension DerivedInsights {
         .away(YouNowAway(reason: .idle, lastApp: nil, lastContextLabel: nil,
                          lastLinearID: nil, idleSec: 0))
     }
+
+    // MARK: - Track-9 T1 defaults
+
+    /// Track-9 T1 stub default — returns nil; ProdInsights SQL impl lives in moat.
+    func recentLastCommit(maxAgeMs: Int64) throws -> RecentCommitSnapshot? { nil }
+
+    // MARK: - Track-9 T4 defaults
+
+    /// Track-9 T4 stub default — returns `.empty`; ProdInsights SQL impl in LeafCorePrivate moat.
+    func weeklyMetrics(now: Date) throws -> WeeklyMetrics { .empty }
 }
 
 /// Phase 1.1 / CI fallback. Все методы бросают .notImplemented.
@@ -193,4 +218,10 @@ public struct StubInsights: DerivedInsights {
     public func weekOverWeekDelta() throws -> Double? { nil }
     public func activeDaysInRow() throws -> Int { 0 }
     public func lastActivity(bundleID: String?) throws -> ActivitySnapshot? { nil }
+
+    // Track-9 T1 stub default — ProdInsights SQL impl lives in moat.
+    public func recentLastCommit(maxAgeMs: Int64) throws -> RecentCommitSnapshot? { nil }
+
+    // Track-9 T4 stub default — ProdInsights SQL impl in LeafCorePrivate moat.
+    public func weeklyMetrics(now: Date) throws -> WeeklyMetrics { .empty }
 }

@@ -46,4 +46,50 @@ final class LinearGraphQLProviderTests: XCTestCase {
         XCTAssertEqual(b.triagePickedUp.count, 0)
         XCTAssertEqual(b.triageResolved.count, 0)
     }
+
+    // Track-9 T2 — incomingCommentCount field round-trip.
+    // Discriminator counterpart to commentCountInWindow (outbound, viewer's own
+    // comments). incomingCommentCount tallies comments authored BY OTHERS on
+    // viewer-touched issues — the substrate seed for linear_comment_authored_to_me.
+    func test_linearIssueSnapshot_incomingCommentCount_defaultsToZero() {
+        let snap = LinearIssueSnapshot(
+            issueKey: "LEA-200",
+            title: "X",
+            status: "In Progress",
+            project: "",
+            teamKey: "LEA",
+            updatedAtMs: 1_715_900_000_000
+        )
+        XCTAssertEqual(snap.incomingCommentCount, 0)
+    }
+
+    func test_linearIssueSnapshot_incomingCommentCount_roundTripsExplicit() {
+        let snap = LinearIssueSnapshot(
+            issueKey: "LEA-200",
+            title: "X",
+            status: "In Progress",
+            project: "",
+            teamKey: "LEA",
+            updatedAtMs: 1_715_900_000_000,
+            incomingCommentCount: 3
+        )
+        XCTAssertEqual(snap.incomingCommentCount, 3)
+    }
+
+    // Track-9 T2 — workspaceSlug round-trip. urlKey piggybacks `organization { urlKey }`
+    // GraphQL fragment in LeafPoll viewer block (zero new HTTP). Parser-side cached in
+    // LinearCollector actor state; payload `linear_issue_url` composition consumes.
+    func test_linearIssueBatch_workspaceSlug_defaultsNil() {
+        let b = LinearIssueBatch(issues: [], cursorMs: nil)
+        XCTAssertNil(b.workspaceSlug)
+    }
+
+    func test_linearIssueBatch_workspaceSlug_roundTripsExplicit() {
+        let b = LinearIssueBatch(
+            issues: [],
+            cursorMs: nil,
+            workspaceSlug: "my-team"
+        )
+        XCTAssertEqual(b.workspaceSlug, "my-team")
+    }
 }

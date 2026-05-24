@@ -94,6 +94,13 @@ public enum EventKindIcon {
         // ide_window_title_observed intentionally absent — debug-only signal,
         // skipped by ActivityFeedMapper.mapLocalOS, no icon rendered.
 
+        // Track-9 T2 — linear_comment_authored_to_me INBOX feeder.
+        case "linear_comment_authored_to_me": return "bubble.left.fill"
+
+        // Track-9 T3 — PR review request lifecycle.
+        case "gh_pr_review_requested": return "person.crop.circle.badge.plus"
+        case "gh_pr_review_request_removed": return "person.crop.circle.badge.minus"
+
         default: return nil
         }
     }

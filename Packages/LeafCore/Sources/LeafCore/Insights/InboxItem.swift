@@ -10,8 +10,10 @@ public struct InboxItem: Equatable, Hashable, Sendable, Identifiable {
     public let aggregatedCount: Int
     public let createdAtMs: Int64
 
-    public init(id: String, kind: InboxKind, severity: InboxSeverity, title: String,
-                sourceMeta: String, sourceURL: URL?, aggregatedCount: Int, createdAtMs: Int64) {
+    public init(
+        id: String, kind: InboxKind, severity: InboxSeverity, title: String,
+        sourceMeta: String, sourceURL: URL?, aggregatedCount: Int, createdAtMs: Int64
+    ) {
         self.id = id
         self.kind = kind
         self.severity = severity
@@ -24,11 +26,26 @@ public struct InboxItem: Equatable, Hashable, Sendable, Identifiable {
 }
 
 public enum InboxKind: String, Equatable, Hashable, Sendable, CaseIterable {
+    // Existing 5 (preserved order)
     case reviewRequest
     case commentOnMyWork
     case mention
     case openQuestion
     case blocker
+
+    // T8 viable new (3)
+    case buildFailed
+    case ciFailed
+    case liveMeeting
+
+    // T8 placeholder — feeders return [] until substrate phases land
+    // See docs/superpowers/specs/2026-05-19-track-9-substrate-enrichment-design.md §3.4 lines 100-108
+    case calInviteDeclined
+    case calUpcoming15min
+    case calConflict
+    case mailUnreadBucket
+    case reminderDueToday
+    case slackDM
 }
 
 public enum InboxSeverity: String, Equatable, Hashable, Sendable {
@@ -39,8 +56,8 @@ public enum InboxSeverity: String, Equatable, Hashable, Sendable {
     public var sortRank: Int {
         switch self {
         case .danger: return 0
-        case .warn:   return 1
-        case .muted:  return 2
+        case .warn: return 1
+        case .muted: return 2
         }
     }
 }
@@ -50,14 +67,17 @@ public enum InboxFilter: String, Equatable, Hashable, Sendable, CaseIterable {
     case reviews
     case questions
     case mentions
+    case alerts     // T8 — umbrella for buildFailed + ciFailed + liveMeeting
 
     /// Returns true if the filter admits this kind.
     public func admits(_ kind: InboxKind) -> Bool {
         switch self {
-        case .all:       return true
-        case .reviews:   return kind == .reviewRequest
+        case .all: return true
+        case .reviews: return kind == .reviewRequest
         case .questions: return kind == .openQuestion
-        case .mentions:  return kind == .mention
+        case .mentions: return kind == .mention
+        case .alerts:
+            return kind == .buildFailed || kind == .ciFailed || kind == .liveMeeting
         }
     }
 }

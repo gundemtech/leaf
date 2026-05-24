@@ -197,8 +197,10 @@ private struct BrowserBookmarkRow: View {
 
 // MARK: - Track-6 P6 IDEs sub-section
 
-/// Two-row sub-section for VSCode-family + JetBrains IDE storage watchers.
-/// Reads/writes `LocalAppsStore` UserDefaults keys; both default OFF (ADR-020).
+/// Four-row sub-section for VSCode-family + JetBrains IDE storage watchers
+/// and Track-9 T1 depth toggles (AX line capture + workspace path tracking).
+/// Reads/writes `LocalAppsStore` UserDefaults keys; storage rows default OFF
+/// (ADR-020), Track-9 rows default ON (opt-out posture per spec §3.6).
 private struct IDEStorageSettingsSection: View {
     @ObservedObject var store: LocalAppsStore
 
@@ -226,6 +228,29 @@ private struct IDEStorageSettingsSection: View {
                 isOn: Binding(
                     get: { store.jetbrainsStorageEnabled },
                     set: { store.jetbrainsStorageEnabled = $0 }
+                )
+            )
+
+            // Track-9 T1 — depth toggles for YOU·NOW enrichment
+            IDEStorageToggleRow(
+                sfSymbol: "text.cursor",
+                displayName: "Xcode line capture",
+                explainer:
+                    "Capture cursor line in active document via Accessibility. Used by Home YOU·NOW to show cursor position.",
+                isOn: Binding(
+                    get: { store.axLineCaptureEnabled },
+                    set: { store.axLineCaptureEnabled = $0 }
+                )
+            )
+
+            IDEStorageToggleRow(
+                sfSymbol: "folder.badge.gearshape",
+                displayName: "IDE workspace path tracking",
+                explainer:
+                    "Record workspace path (~/path/to/project) for VSCode-family and JetBrains. Used by Home YOU·NOW to derive branch and Linear ID.",
+                isOn: Binding(
+                    get: { store.ideWorkspacePathTrackingEnabled },
+                    set: { store.ideWorkspacePathTrackingEnabled = $0 }
                 )
             )
         }

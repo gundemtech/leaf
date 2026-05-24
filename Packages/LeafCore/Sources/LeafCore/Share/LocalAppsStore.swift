@@ -158,6 +158,32 @@ public final class LocalAppsStore: ObservableObject, @unchecked Sendable {
             DispatchQueue.main.async { [self] in self.objectWillChange.send() }
         }
     }
+
+    // MARK: - Track-9 T1 toggles
+
+    public static let axLineCaptureEnabledKey = "systemObservers.axLineCaptureEnabled"
+    public static let ideWorkspacePathTrackingEnabledKey = "systemObservers.ideWorkspacePathTrackingEnabled"
+
+    /// Track-9 T1 — gates AX line capture in Xcode active doc events.
+    /// Default true (AX trust already granted; no new TCC scope).
+    public var axLineCaptureEnabled: Bool {
+        get { defaults.object(forKey: Self.axLineCaptureEnabledKey) as? Bool ?? true }
+        set {
+            defaults.set(newValue, forKey: Self.axLineCaptureEnabledKey)
+            DispatchQueue.main.async { [self] in self.objectWillChange.send() }
+        }
+    }
+
+    /// Track-9 T1 — gates `workspace_root` payload field on
+    /// `vscode_workspace_opened` + `jetbrains_recent_project_observed`.
+    /// Default true (TCC-free metadata extraction).
+    public var ideWorkspacePathTrackingEnabled: Bool {
+        get { defaults.object(forKey: Self.ideWorkspacePathTrackingEnabledKey) as? Bool ?? true }
+        set {
+            defaults.set(newValue, forKey: Self.ideWorkspacePathTrackingEnabledKey)
+            DispatchQueue.main.async { [self] in self.objectWillChange.send() }
+        }
+    }
 }
 
 // MARK: - Phase Track-6 P3 — BrowserBookmarksFeatureGate conformance

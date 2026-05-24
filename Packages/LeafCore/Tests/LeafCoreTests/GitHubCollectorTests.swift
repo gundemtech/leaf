@@ -944,6 +944,81 @@ final class GitHubCollectorTests: XCTestCase {
         XCTAssertNotNil(state["active_repos_count"] as? Int)
     }
 
+    /// Track-9 T3 — `viewer_login` finalizes Phase 4.7.B partial. `login` comes
+    /// from integration row → propagated through fetch* methods → presence dict.
+    func test_viewerLogin_writtenIntoPresenceState_whenLoginNonEmpty() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db, login: "octocat")
+
+        let provider = MockGitHubAPIProvider()
+        let baseMs: Int64 = 1_700_000_000_000
+        await provider.setBatch(GitHubEventBatch(events: [], cursorMs: baseMs))
+        await provider.setNotificationsSummary(
+            GitHubNotificationsSummary(totalUnread: 0, byReason: [:], observedAtMs: baseMs))
+        await provider.setReviewQueueSummary(
+            GitHubReviewQueueSummary(count: 0, topRepo: nil, observedAtMs: baseMs))
+        await provider.setMyOpenPRsSummary(
+            GitHubMyOpenPRsSummary(count: 0, observedAtMs: baseMs))
+        await provider.setContributionsCalendar(
+            GitHubContributionsCalendar(totalContributions: 0, todayCount: 0, weeks: []))
+
+        let refresher = GitHubTokenRefresher(database: db, clientID: "test-client")
+        let collector = GitHubCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7, logger: logger
+        )
+        _ = await collector.performTick()
+
+        let presence = try db.readSQL { rawDB in
+            try PresenceStateWriter.read(provider: .github, in: rawDB)
+        }
+        let row = try XCTUnwrap(presence)
+        XCTAssertEqual(
+            row.state["viewer_login"] as? String,
+            "octocat",
+            "viewer_login slot должен carry плейн-логин из integrations row"
+        )
+    }
+
+    /// Empty login → NSNull (key present with null value, distinguishable
+    /// from "key absent, field not tracked").
+    func test_viewerLogin_writtenAsNSNull_whenLoginEmpty() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db, login: "")
+
+        let provider = MockGitHubAPIProvider()
+        let baseMs: Int64 = 1_700_000_000_000
+        await provider.setBatch(GitHubEventBatch(events: [], cursorMs: baseMs))
+        await provider.setNotificationsSummary(
+            GitHubNotificationsSummary(totalUnread: 0, byReason: [:], observedAtMs: baseMs))
+        await provider.setReviewQueueSummary(
+            GitHubReviewQueueSummary(count: 0, topRepo: nil, observedAtMs: baseMs))
+        await provider.setMyOpenPRsSummary(
+            GitHubMyOpenPRsSummary(count: 0, observedAtMs: baseMs))
+        await provider.setContributionsCalendar(
+            GitHubContributionsCalendar(totalContributions: 0, todayCount: 0, weeks: []))
+
+        let refresher = GitHubTokenRefresher(database: db, clientID: "test-client")
+        let collector = GitHubCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7, logger: logger
+        )
+        _ = await collector.performTick()
+
+        let presence = try db.readSQL { rawDB in
+            try PresenceStateWriter.read(provider: .github, in: rawDB)
+        }
+        let row = try XCTUnwrap(presence)
+        XCTAssertTrue(
+            row.state["viewer_login"] is NSNull,
+            "viewer_login должен быть NSNull при empty login (key present, value null)"
+        )
+        XCTAssertNotNil(
+            row.state.index(forKey: "viewer_login"),
+            "viewer_login key должен присутствовать в state JSON"
+        )
+    }
+
     /// ADR-010 regression: presence_state JSON не должен содержать reserved
     /// content keys ("title" / "body" / "message") — defensive shape check.
     /// Caller responsibility — этот тест guards boundary.

@@ -19,6 +19,9 @@ public actor JetBrainsRecentProjectsWatcher {
     public struct ParsedEntry: Equatable, Sendable {
         public let displayName: String
         public let activationTimestampMs: Int64
+        /// Tilde-prefixed workspace root extracted from the XML `<entry key="...">` attribute.
+        /// Non-nil only when key starts with `$USER_HOME$`; other key prefixes yield nil.
+        public let workspaceRoot: String?
     }
 
     public struct InferredIDE: Equatable {
@@ -32,14 +35,14 @@ public actor JetBrainsRecentProjectsWatcher {
         // Public wrapper expects LeafCorePrivate-imported ProdJetBrainsProductMap.
         // For unit-testability, this method consults a static closure that
         // production sets at Agent boot to call into Prod map.
-        return _versionDirResolver?(versionDir)
+        _versionDirResolver?(versionDir)
     }
 
     /// Injection point for the prod-side product map. LeafAgent sets this
     /// at boot with `ProdJetBrainsProductMap.split` + `productToBundleID`.
     /// `nonisolated(unsafe)` — write-once at Agent boot before any concurrent
     /// access; tests reset in tearDown under serial XCTest execution.
-    public nonisolated(unsafe) static var _versionDirResolver: ((String) -> InferredIDE?)?
+    nonisolated(unsafe) public static var _versionDirResolver: ((String) -> InferredIDE?)?
 
     /// Parse recentProjects.xml or recentProjectDirectories.xml body.
     /// Returns entries with (displayName, activationTimestampMs). Malformed
@@ -53,22 +56,39 @@ public actor JetBrainsRecentProjectsWatcher {
         return delegate.entries
     }
 
+    /// Convert a recentProjects.xml `<entry key="...">` value to a tilde-prefixed workspace root.
+    /// Only `$USER_HOME$`-anchored keys produce a non-nil result; `$PROJECT_DIR$/...` and other
+    /// prefixes return nil (not home-anchored, privacy-safe to omit).
+    public static func extractWorkspaceRoot(fromKey key: String) -> String? {
+        let prefix = "$USER_HOME$"
+        guard key.hasPrefix(prefix) else { return nil }
+        let suffix = String(key.dropFirst(prefix.count))
+        return suffix.isEmpty ? "~" : "~" + suffix
+    }
+
     /// Build the RawEvent.
     public static func buildEvent(
         bundleID: String,
         versionDir: String,
         displayName: String,
         activationTimestampMs: Int64,
-        outsideWatchedFolder: Bool
+        outsideWatchedFolder: Bool,
+        workspaceRoot: String? = nil,
+        workspaceRootEnabled: Bool = true
     ) -> RawEvent {
-        let payload: [String: String] = [
+        var payload: [String: String] = [
             "event_kind": "jetbrains_recent_project_observed",
             "ide_bundle_id": bundleID,
             "ide_version_dir": versionDir,
             "project_name": displayName,
             "activation_timestamp_ms": String(activationTimestampMs),
-            "outside_watched_folder": outsideWatchedFolder ? "true" : "false"
+            "outside_watched_folder": outsideWatchedFolder ? "true" : "false",
         ]
+        // Include workspace_root only when tracking is enabled, root is present,
+        // and it is tilde-prefixed (defense-in-depth: bare absolute paths are dropped).
+        if workspaceRootEnabled, let root = workspaceRoot, root.hasPrefix("~") {
+            payload["workspace_root"] = root
+        }
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: Double(activationTimestampMs) / 1000.0),
             signalType: .attention,
@@ -83,6 +103,7 @@ public actor JetBrainsRecentProjectsWatcher {
         var entries: [ParsedEntry] = []
         private var currentDisplayName: String?
         private var currentActivationTs: Int64?
+        private var currentWorkspaceRoot: String?
         private var inMetaInfo = false
         // Track nesting depth so we ignore children of <runManager>, <frame>,
         // etc — only top-level <option name="displayName" value="..."/> +
@@ -90,11 +111,17 @@ public actor JetBrainsRecentProjectsWatcher {
         private var depth = 0
         private var metaInfoDepth = 0
 
-        func parser(_ parser: XMLParser, didStartElement elementName: String,
-                    namespaceURI: String?, qualifiedName qName: String?,
-                    attributes attributeDict: [String: String]) {
+        func parser(
+            _ parser: XMLParser, didStartElement elementName: String,
+            namespaceURI: String?, qualifiedName qName: String?,
+            attributes attributeDict: [String: String]
+        ) {
             depth += 1
-            if elementName == "RecentProjectMetaInfo" {
+            if elementName == "entry", let key = attributeDict["key"] {
+                // Capture tilde-prefix workspace root from the <entry key="..."> attribute.
+                // Only $USER_HOME$-anchored keys are promoted; others yield nil.
+                currentWorkspaceRoot = extractWorkspaceRoot(fromKey: key)
+            } else if elementName == "RecentProjectMetaInfo" {
                 inMetaInfo = true
                 metaInfoDepth = depth
                 currentDisplayName = nil
@@ -106,27 +133,46 @@ public actor JetBrainsRecentProjectsWatcher {
                 // Only direct <option> children of RecentProjectMetaInfo —
                 // ignores nested option inside runManager / frame / etc.
                 if attributeDict["name"] == "displayName",
-                   let v = attributeDict["value"] {
+                    let v = attributeDict["value"]
+                {
                     currentDisplayName = v
+                } else if attributeDict["name"] == "activationTimestamp",
+                    let v = attributeDict["value"], let n = Int64(v)
+                {
+                    // Some JetBrains XML variants put activationTimestamp as a
+                    // child <option> rather than an attribute on RecentProjectMetaInfo.
+                    currentActivationTs = n
                 }
             }
             // Other children (runManager, frame, etc.) deliberately ignored.
         }
 
-        func parser(_ parser: XMLParser, didEndElement elementName: String,
-                    namespaceURI: String?, qualifiedName qName: String?) {
+        func parser(
+            _ parser: XMLParser, didEndElement elementName: String,
+            namespaceURI: String?, qualifiedName qName: String?
+        ) {
             if elementName == "RecentProjectMetaInfo", inMetaInfo {
                 if let name = currentDisplayName, let ts = currentActivationTs {
-                    entries.append(ParsedEntry(
-                        displayName: name,
-                        activationTimestampMs: ts
-                    ))
+                    entries.append(
+                        ParsedEntry(
+                            displayName: name,
+                            activationTimestampMs: ts,
+                            workspaceRoot: currentWorkspaceRoot
+                        ))
                 }
                 inMetaInfo = false
                 currentDisplayName = nil
                 currentActivationTs = nil
+                // currentWorkspaceRoot is cleared when the next <entry> is encountered.
+            }
+            if elementName == "entry" {
+                currentWorkspaceRoot = nil
             }
             depth -= 1
+        }
+
+        private func extractWorkspaceRoot(fromKey key: String) -> String? {
+            JetBrainsRecentProjectsWatcher.extractWorkspaceRoot(fromKey: key)
         }
     }
 
@@ -136,17 +182,20 @@ public actor JetBrainsRecentProjectsWatcher {
     private let watchedFolderResolver: (_ path: String) -> String?
     private let eventSink: (RawEvent) -> Void
     private let clock: () -> Int64
+    private let localAppsStore: LocalAppsStore
 
     public init(
         homeDir: String = NSHomeDirectory(),
         watchedFolderResolver: @escaping (_ path: String) -> String?,
         eventSink: @escaping (RawEvent) -> Void,
-        clock: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
+        clock: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
+        localAppsStore: LocalAppsStore = LocalAppsStore()
     ) {
         self.homeDir = homeDir
         self.watchedFolderResolver = watchedFolderResolver
         self.eventSink = eventSink
         self.clock = clock
+        self.localAppsStore = localAppsStore
     }
 
     public func start() async {
@@ -174,13 +223,17 @@ public actor JetBrainsRecentProjectsWatcher {
         // (= new opens / activations since last tick).
         let priorMaxTs = priorSnapshot.map(\.activationTimestampMs).max() ?? 0
         let fresh = parsed.filter { $0.activationTimestampMs > priorMaxTs }
+        // Gate workspace_root on the same flag used by VSCodeWorkspaceWatcher (Track-9 T1).
+        let workspaceRootEnabled = localAppsStore.ideWorkspacePathTrackingEnabled
         for entry in fresh {
             let event = Self.buildEvent(
                 bundleID: ide.bundleID,
                 versionDir: ide.versionDir,
                 displayName: entry.displayName,
                 activationTimestampMs: entry.activationTimestampMs,
-                outsideWatchedFolder: true  // best-effort; watched-folder resolve in production wiring
+                outsideWatchedFolder: true,  // best-effort; watched-folder resolve in production wiring
+                workspaceRoot: entry.workspaceRoot,
+                workspaceRootEnabled: workspaceRootEnabled
             )
             eventSink(event)
         }

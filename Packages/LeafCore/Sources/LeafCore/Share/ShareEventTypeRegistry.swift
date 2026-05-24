@@ -36,6 +36,12 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     // MARK: - Phase 4.7.A — wide cheap (this commit)
     case githubPRReviewCommentAuthored = "gh_pr_review_comment_authored"
     case githubIssueCommentAuthored = "gh_issue_comment_authored"
+    // Track-9 T3 — PR review request lifecycle (outbound: viewer requested review
+    // from others). Both default OFF per ADR-020 — INBOX feeder substrate; user
+    // opts in via Privacy → Share Controls. Departs from existing Phase 4.7.A
+    // GitHub default-true precedent to match Track-9 convention.
+    case githubPRReviewRequested = "gh_pr_review_requested"
+    case githubPRReviewRequestRemoved = "gh_pr_review_request_removed"
     case githubReleasePublished = "gh_release_published"
     case githubBranchCreated = "gh_branch_created"
     case githubBranchDeleted = "gh_branch_deleted"
@@ -45,6 +51,11 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     case slackThreadReplyAggregate = "slack_thread_reply_aggregate"
     case slackStatusChange = "slack_status_change"
     case linearCommentAuthored = "linear_comment_authored"
+    // Track-9 T2 — discriminator sibling: comments authored BY OTHERS on
+    // viewer-touched issues (assigned/created/touched). Default OFF
+    // (ADR-020) — substrate ships silent until user opts in via Privacy →
+    // Share Controls.
+    case linearCommentAuthoredToMe = "linear_comment_authored_to_me"
 
     // MARK: - Phase 4.7.B — presence-first first-class APIs (this commit)
     case githubNotificationsPulse = "gh_notifications_pulse"
@@ -311,6 +322,9 @@ public enum ShareEventTypeDefaults {
         // Phase 4.7.A — additions
         .init(key: .githubPRReviewCommentAuthored, defaultEnabled: true),
         .init(key: .githubIssueCommentAuthored, defaultEnabled: true),
+        // Track-9 T3 — discriminator additions default OFF per ADR-020.
+        .init(key: .githubPRReviewRequested, defaultEnabled: false),
+        .init(key: .githubPRReviewRequestRemoved, defaultEnabled: false),
         .init(key: .githubReleasePublished, defaultEnabled: true),
         .init(key: .githubBranchCreated, defaultEnabled: true),
         .init(key: .githubBranchDeleted, defaultEnabled: true),
@@ -321,6 +335,9 @@ public enum ShareEventTypeDefaults {
         .init(key: .slackThreadReplyAggregate, defaultEnabled: true),
         .init(key: .slackStatusChange, defaultEnabled: true),
         .init(key: .linearCommentAuthored, defaultEnabled: true),
+        // Track-9 T2 — discriminator sibling default OFF per ADR-020. INBOX
+        // feeder substrate; user opts in via Privacy → Share Controls.
+        .init(key: .linearCommentAuthoredToMe, defaultEnabled: false),
 
         // Phase 4.7.B — presence-first first-class APIs
         .init(key: .githubNotificationsPulse, defaultEnabled: true),

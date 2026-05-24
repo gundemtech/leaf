@@ -15,6 +15,10 @@ public enum XcodeBuildState: String, Sendable, Codable, Hashable {
 /// `runDestinationBucket`. The raw name is the AppleScript output (e.g.
 /// "Dmitrii's iPhone"); it must NEVER reach `RawEvent.payload`. The bucket is
 /// the parser-derived enum value, suitable for export. See spec §4.6.
+///
+/// Phase Track-9 T1 (2026-05-19) — extended with `line` (current editor line
+/// number). Descriptive metadata only; line change alone does NOT trigger a
+/// doc_changed event. See spec §T1.
 public struct XcodeObservation: AdapterObservation, Hashable {
     public let activeDocPath: String?
     public let projectName: String?
@@ -25,6 +29,9 @@ public struct XcodeObservation: AdapterObservation, Hashable {
     /// + sink) MUST NOT copy this value into events.
     public let runDestinationName: String?
     public let runDestinationBucket: RunDestinationBucket
+    /// Current editor line number. Emitted as payload["line"] = String(Int)
+    /// when non-nil. Does NOT trigger doc_changed transitions on its own.
+    public let line: Int?
 
     public init(
         activeDocPath: String?,
@@ -32,7 +39,8 @@ public struct XcodeObservation: AdapterObservation, Hashable {
         schemeName: String?,
         buildState: XcodeBuildState,
         runDestinationName: String? = nil,
-        runDestinationBucket: RunDestinationBucket = .unknown
+        runDestinationBucket: RunDestinationBucket = .unknown,
+        line: Int? = nil
     ) {
         self.activeDocPath = activeDocPath
         self.projectName = projectName
@@ -40,5 +48,6 @@ public struct XcodeObservation: AdapterObservation, Hashable {
         self.buildState = buildState
         self.runDestinationName = runDestinationName
         self.runDestinationBucket = runDestinationBucket
+        self.line = line
     }
 }

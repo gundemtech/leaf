@@ -166,6 +166,8 @@ public struct GitHubEventSnapshot: Sendable, Hashable {
     /// Phase 4.7.A additions: "gh_pr_review_comment_authored" | "gh_issue_comment_authored"
     /// | "gh_release_published" | "gh_branch_created" | "gh_branch_deleted" | "gh_tag_created"
     /// | "gh_discussion_authored" | "gh_discussion_comment_authored".
+    /// Track-9 T3 additions: "gh_pr_review_requested" | "gh_pr_review_request_removed"
+    /// (PR review request lifecycle, outbound only — viewer asked others to review).
     public let eventKind: String
     /// "owner/name" — self-authored repo identifier, public-safe.
     public let repoFullName: String

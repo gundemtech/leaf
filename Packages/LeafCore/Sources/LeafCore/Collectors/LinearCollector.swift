@@ -41,6 +41,15 @@ public actor LinearCollector {
     private var loopTask: Task<Void, Never>?
     private var notifyToken: NSObjectProtocol?
 
+    /// Track-9 T2 — Linear organization urlKey cache. Populated from
+    /// `LinearIssueBatch.workspaceSlug` (extracted by provider parser from the
+    /// `viewer.organization { urlKey }` LeafPoll fragment). First non-nil seen
+    /// wins; persists across ticks until process restart. Consumed by
+    /// `makeCommentToMeEvent` to compose `linear_issue_url` payload field, and
+    /// written into `presence_state.linear.workspace_slug` JSON dict key for
+    /// cross-process readers.
+    private var workspaceSlug: String?
+
     public init(
         database: Database,
         provider: any LinearGraphQLProvider,
@@ -78,7 +87,9 @@ public actor LinearCollector {
             Task { await self?.kickTick() }
         }
         loopTask = Task { [weak self] in await self?.runLoop() }
-        logger.info("LinearCollector started (interval=\(self.intervalSec, privacy: .public)s, backfill=\(self.backfillWindowDays, privacy: .public)d)")
+        logger.info(
+            "LinearCollector started (interval=\(self.intervalSec, privacy: .public)s, backfill=\(self.backfillWindowDays, privacy: .public)d)"
+        )
     }
 
     /// Phase 4.5 — одноразовый wipe Linear events + cursor для перехода на
@@ -91,9 +102,13 @@ public actor LinearCollector {
         do {
             let result = try database.purgeLinearAttributionV2()
             userDefaults.set(true, forKey: Self.attributionV2MigrationFlagKey)
-            logger.info("Linear attribution_v2 migration: events=\(result.eventsDeleted, privacy: .public) wiped, offsets=\(result.offsetsDeleted, privacy: .public) reset")
+            logger.info(
+                "Linear attribution_v2 migration: events=\(result.eventsDeleted, privacy: .public) wiped, offsets=\(result.offsetsDeleted, privacy: .public) reset"
+            )
         } catch {
-            logger.error("Linear attribution_v2 migration failed: \(String(describing: error), privacy: .public) — will retry next start")
+            logger.error(
+                "Linear attribution_v2 migration failed: \(String(describing: error), privacy: .public) — will retry next start"
+            )
         }
     }
 
@@ -249,6 +264,21 @@ public actor LinearCollector {
             .filter { $0.commentCountInWindow > 0 }
             .map { Self.makeCommentEvent(issue: $0, periodEndMs: nowMs) }
         events.append(contentsOf: commentEvents)
+        // Track-9 T2 — capture workspaceSlug into actor state BEFORE downstream
+        // emission so tick-1 commentToMeEvents include linear_issue_url whenever
+        // the batch already carries a valid slug (avoids one-tick degrade gap).
+        if let slug = batch.workspaceSlug, !slug.isEmpty {
+            self.workspaceSlug = slug
+        }
+        // Track-9 T2 — discriminator sibling emission. Filter complementary to
+        // commentEvents (incoming vs outgoing comments). Same nowMs windowing.
+        let commentToMeEvents = batch.issues
+            .filter { $0.incomingCommentCount > 0 }
+            .map {
+                Self.makeCommentToMeEvent(
+                    issue: $0, periodEndMs: nowMs, workspaceSlug: self.workspaceSlug)
+            }
+        events.append(contentsOf: commentToMeEvents)
         let workloadEvent = Self.makeAssignedWorkloadPulseEvent(
             snapshot: batch.workload, nowMs: nowMs
         )
@@ -277,9 +307,13 @@ public actor LinearCollector {
         // / [[String: Any]]. Optional scalars defaulted к "" / 0 per plan literal
         // (downstream parser проверяет startedCount > 0 чтобы отличить empty от
         // populated, current_cycle dict пустой если no in-cycle teams).
+        // Track-9 T2 — workspaceSlug already captured into actor state above
+        // (before commentToMeEvents emission). Pass cached value to presence
+        // dict writer for cross-process readers.
         let linearPresence: [String: Any] = Self.buildLinearPresenceState(
             workload: batch.workload,
-            cycles: batch.cycles
+            cycles: batch.cycles,
+            workspaceSlug: self.workspaceSlug
         )
         do {
             try database.writeEventsOffsetAndPresence(
@@ -293,7 +327,9 @@ public actor LinearCollector {
             return TickResult(skipped: false, issuesProcessed: 0, cursorAdvancedMs: nil)
         }
         if !events.isEmpty {
-            logger.info("tick wrote \(events.count, privacy: .public) events (\(batch.issues.count, privacy: .public) issues + \(batch.transitions.count, privacy: .public) transitions + \(commentEvents.count, privacy: .public) comments + 1 workload pulse + \(cycleEvents.count, privacy: .public) cycle progress), cursor=\(offset.lastModifiedMs, privacy: .public)")
+            logger.info(
+                "tick wrote \(events.count, privacy: .public) events (\(batch.issues.count, privacy: .public) issues + \(batch.transitions.count, privacy: .public) transitions + \(commentEvents.count, privacy: .public) comments + 1 workload pulse + \(cycleEvents.count, privacy: .public) cycle progress), cursor=\(offset.lastModifiedMs, privacy: .public)"
+            )
         }
         return TickResult(
             skipped: false,
@@ -312,7 +348,7 @@ public actor LinearCollector {
             "title": issue.title,
             "status": issue.status,
             "project": issue.project,
-            "team_key": issue.teamKey
+            "team_key": issue.teamKey,
         ]
         // Phase 4.6.A.2 — completion duration. Только non-nil → ключ присутствует;
         // отсутствие ключа в payload отличает "не знаем" от "0 секунд" (instant
@@ -352,7 +388,8 @@ public actor LinearCollector {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
             if let data = try? encoder.encode(issue.comments),
-               let str = String(data: data, encoding: .utf8) {
+                let str = String(data: data, encoding: .utf8)
+            {
                 payload[Schema.EventPayloadKeys.commentBodiesJson] = str
             }
         }
@@ -360,7 +397,8 @@ public actor LinearCollector {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
             if let data = try? encoder.encode(issue.attachments),
-               let str = String(data: data, encoding: .utf8) {
+                let str = String(data: data, encoding: .utf8)
+            {
                 payload[Schema.EventPayloadKeys.attachmentsJson] = str
             }
         }
@@ -386,8 +424,47 @@ public actor LinearCollector {
                 "issue_key": issue.issueKey,
                 "team_key": issue.teamKey,
                 "count_in_window": String(issue.commentCountInWindow),
-                "period_end_ms": String(periodEndMs)
+                "period_end_ms": String(periodEndMs),
             ]
+        )
+    }
+
+    /// Track-9 T2 — RawEvent для linear_comment_authored_to_me aggregate.
+    /// Discriminator sibling to linear_comment_authored: per-issue count of
+    /// comments authored BY OTHERS on this viewer-touched issue during the
+    /// polling window (substrate seed для INBOX `commentOnMyWork` Linear branch).
+    ///
+    /// `linear_issue_url` field composed from cached `workspaceSlug` +
+    /// `issue.issueKey` (public-safe identifiers only). Omitted on cold-tick
+    /// before slug cache populates, on Linear free-tier accounts returning null
+    /// org, or on defensive empty-string slug. InboxItems deriver sourceURL
+    /// gracefully nils out when field missing.
+    ///
+    /// ADR-010: payload composed exclusively from `workspace_slug` (org
+    /// metadata) + `issue_key` (self-authored label) + structured counts /
+    /// timestamps. NEVER reads comments[].body / title / description / mention
+    /// text. Sentinel-injection test guards the invariant.
+    static func makeCommentToMeEvent(
+        issue: LinearIssueSnapshot,
+        periodEndMs: Int64,
+        workspaceSlug: String?
+    ) -> RawEvent {
+        var payload: [String: String] = [
+            "source": "linear",
+            "event_kind": "linear_comment_authored_to_me",
+            "issue_key": issue.issueKey,
+            "team_key": issue.teamKey,
+            "to_me_count_in_window": String(issue.incomingCommentCount),
+            "period_end_ms": String(periodEndMs),
+        ]
+        if let slug = workspaceSlug, !slug.isEmpty {
+            payload["linear_issue_url"] = "https://linear.app/\(slug)/issue/\(issue.issueKey)"
+        }
+        return RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(periodEndMs) / 1000.0),
+            signalType: .action,
+            bundleID: nil,
+            payload: payload
         )
     }
 
@@ -415,7 +492,7 @@ public actor LinearCollector {
             "source": "linear",
             "event_kind": "linear_assigned_workload_pulse",
             "started_count": String(snapshot.startedCount),
-            "top_priority": Self.priorityString(snapshot.topPriority)
+            "top_priority": Self.priorityString(snapshot.topPriority),
         ]
         if let id = snapshot.lastTouchedIdentifier {
             payload["last_touched_identifier"] = id
@@ -447,7 +524,7 @@ public actor LinearCollector {
                 Schema.EventPayloadKeys.issueId: r.issueId,
                 Schema.EventPayloadKeys.issueIdentifier: r.issueIdentifier,
                 Schema.EventPayloadKeys.emoji: r.emoji,
-                Schema.EventPayloadKeys.reactedAtMs: String(r.createdAtMs)
+                Schema.EventPayloadKeys.reactedAtMs: String(r.createdAtMs),
             ]
         )
     }
@@ -467,7 +544,7 @@ public actor LinearCollector {
                 Schema.EventPayloadKeys.toIssueId: r.toIssueId,
                 Schema.EventPayloadKeys.toIssueIdentifier: r.toIssueIdentifier,
                 Schema.EventPayloadKeys.relationKind: r.relationKind,
-                Schema.EventPayloadKeys.startedAtMs: String(r.transitionedAtMs)
+                Schema.EventPayloadKeys.startedAtMs: String(r.transitionedAtMs),
             ]
         )
     }
@@ -487,7 +564,7 @@ public actor LinearCollector {
                 Schema.EventPayloadKeys.toIssueId: r.toIssueId,
                 Schema.EventPayloadKeys.toIssueIdentifier: r.toIssueIdentifier,
                 Schema.EventPayloadKeys.relationKind: r.relationKind,
-                Schema.EventPayloadKeys.removedAtMs: String(r.transitionedAtMs)
+                Schema.EventPayloadKeys.removedAtMs: String(r.transitionedAtMs),
             ]
         )
     }
@@ -506,7 +583,7 @@ public actor LinearCollector {
                 Schema.EventPayloadKeys.teamId: t.teamId,
                 Schema.EventPayloadKeys.toStateName: t.toStateName,
                 Schema.EventPayloadKeys.toStateType: t.toStateType,
-                Schema.EventPayloadKeys.startedAtMs: String(t.transitionedAtMs)
+                Schema.EventPayloadKeys.startedAtMs: String(t.transitionedAtMs),
             ]
         )
     }
@@ -522,7 +599,7 @@ public actor LinearCollector {
             Schema.EventPayloadKeys.teamId: t.teamId,
             Schema.EventPayloadKeys.toStateName: t.toStateName,
             Schema.EventPayloadKeys.toStateType: t.toStateType,
-            Schema.EventPayloadKeys.completedAtMs: String(t.transitionedAtMs)
+            Schema.EventPayloadKeys.completedAtMs: String(t.transitionedAtMs),
         ]
         if let rk = t.resolutionKind {
             payload[Schema.EventPayloadKeys.resolutionKind] = rk
@@ -567,7 +644,7 @@ public actor LinearCollector {
                 "days_remaining": String(team.daysRemaining),
                 "scope_count": String(team.scopeCount),
                 "starts_at_ms": String(team.startsAtMs),
-                "ends_at_ms": String(team.endsAtMs)
+                "ends_at_ms": String(team.endsAtMs),
             ]
         )
     }
@@ -594,7 +671,8 @@ public actor LinearCollector {
     /// НЕ хранится: cycle.description, issue.title, comment bodies, attachment titles.
     static func buildLinearPresenceState(
         workload: LinearAssignedWorkloadSnapshot,
-        cycles: LinearCycleSnapshot
+        cycles: LinearCycleSnapshot,
+        workspaceSlug: String? = nil
     ) -> [String: Any] {
         let cyclesArray: [[String: Any]] = cycles.teams.map { team in
             [
@@ -606,7 +684,7 @@ public actor LinearCollector {
                 "days_remaining": team.daysRemaining,
                 "scope_count": team.scopeCount,
                 "starts_at_ms": team.startsAtMs,
-                "ends_at_ms": team.endsAtMs
+                "ends_at_ms": team.endsAtMs,
             ]
         }
         let firstCycle: [String: Any] = cyclesArray.first ?? [:]
@@ -617,7 +695,12 @@ public actor LinearCollector {
             "current_cycle": firstCycle,
             "all_team_cycles": cyclesArray,
             "last_touched_issue_id": workload.lastTouchedIdentifier ?? "",
-            "last_touched_ts": workload.lastTouchedTs ?? 0
+            "last_touched_ts": workload.lastTouchedTs ?? 0,
+            // Track-9 T2 — Linear organization urlKey for cross-process readers
+            // (UI, future MCP tool) that compose linear_issue_url. Empty string
+            // on cold-first-tick / free-tier / schema drift — readers gate on
+            // non-empty before URL composition.
+            "workspace_slug": workspaceSlug ?? "",
         ]
     }
 
@@ -642,7 +725,7 @@ public actor LinearCollector {
             "event_kind": "linear_initiative_observed",
             "initiative_id": i.initiativeId,
             "name": i.name,
-            "observed_at": String(i.observedAtMs)
+            "observed_at": String(i.observedAtMs),
         ]
         if let s = i.status { payload["status"] = s }
         return RawEvent(
@@ -662,7 +745,7 @@ public actor LinearCollector {
             "event_kind": "linear_document_edited",
             "document_id": d.documentId,
             "updated_at": String(d.updatedAtMs),
-            "title": d.title
+            "title": d.title,
         ]
         if let pid = d.projectId { payload["project_id"] = pid }
         if let pname = d.projectName { payload["project_name"] = pname }
@@ -685,7 +768,7 @@ public actor LinearCollector {
             "update_id": pu.updateId,
             "project_id": pu.projectId,
             "project_name": pu.projectName,
-            "created_at": String(pu.createdAtMs)
+            "created_at": String(pu.createdAtMs),
         ]
         if let h = pu.health { payload["health"] = h }
         return RawEvent(
@@ -705,7 +788,7 @@ public actor LinearCollector {
             "event_kind": "linear_estimate_changed",
             "issue_key": t.issueKey,
             "history_id": t.historyId,
-            "transition_at": String(t.transitionAtMs)
+            "transition_at": String(t.transitionAtMs),
         ]
         if let f = t.fromEstimate { payload["from_estimate"] = String(f) }
         if let to = t.toEstimate { payload["to_estimate"] = String(to) }
@@ -727,7 +810,7 @@ public actor LinearCollector {
             "event_kind": "linear_cycle_changed",
             "issue_key": t.issueKey,
             "history_id": t.historyId,
-            "transition_at": String(t.transitionAtMs)
+            "transition_at": String(t.transitionAtMs),
         ]
         if let id = t.fromCycleId { payload["from_cycle_id"] = id }
         if let name = t.fromCycleName { payload["from_cycle_name"] = name }
@@ -755,7 +838,7 @@ public actor LinearCollector {
                 "issue_key": t.issueKey,
                 "history_id": t.historyId,
                 "bucket": t.bucket.rawValue,
-                "transition_at": String(t.transitionAtMs)
+                "transition_at": String(t.transitionAtMs),
             ]
         )
     }
@@ -779,7 +862,7 @@ public actor LinearCollector {
                 "history_id": t.historyId,
                 "label_id": t.labelId,
                 "label_name": t.labelName,
-                "transition_at": String(t.transitionAtMs)
+                "transition_at": String(t.transitionAtMs),
             ]
         )
     }
@@ -801,7 +884,7 @@ public actor LinearCollector {
                 "history_id": t.historyId,
                 "from_priority": String(t.fromPriority),
                 "to_priority": String(t.toPriority),
-                "transition_at": String(t.transitionAtMs)
+                "transition_at": String(t.transitionAtMs),
             ]
         )
     }
@@ -818,7 +901,7 @@ public actor LinearCollector {
             "history_id": t.historyId,
             "to_state_name": t.toStateName,
             "to_state_type": t.toStateType,
-            "transition_at": String(t.transitionAtMs)
+            "transition_at": String(t.transitionAtMs),
         ]
         if let n = t.fromStateName { payload["from_state_name"] = n }
         if let ty = t.fromStateType { payload["from_state_type"] = ty }

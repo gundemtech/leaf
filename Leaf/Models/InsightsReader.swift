@@ -154,11 +154,6 @@ final class InsightsReader {
                         // поэтому popover просто не рендерит row.
                         let uninterruptedWindow = try insights.longestUninterruptedWindow(period: today)
                         try Task.checkCancellation()
-                        // Phase 4.10.A — chronological per-event feed для Activity tab.
-                        // 14-я sequential query; default impl = [] (StubInsights),
-                        // поэтому Activity tab рендерит empty state на CI / no-prod.
-                        let recentActivity = try insights.recentActivity(period: today, limit: 200)
-                        try Task.checkCancellation()
                         // Phase 4.10.B — aggregated sessions для Activity tab
                         // ("Sessions" mode) и Home Recent Sessions block. Default
                         // impl = [] (StubInsights / pre-prod), поэтому UI просто
@@ -204,7 +199,6 @@ final class InsightsReader {
                             // read внутри). Snapshot mirror'ит для UI/MCP consumers.
                             linearTransitions: linear.transitions,
                             linearCompletionRate: linear.completionRate,
-                            recentActivity: recentActivity,
                             presenceState: presenceState,
                             recentSessions: recentSessions
                         )

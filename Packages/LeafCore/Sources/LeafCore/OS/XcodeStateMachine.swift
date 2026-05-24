@@ -16,6 +16,8 @@ public struct XcodeStateMachine: Sendable, Hashable {
         var events: [RawEvent] = []
         let docChanged: Bool = {
             guard let p = prev else { return true }
+            // NOTE: line intentionally excluded from doc_changed trigger predicate
+            // (descriptive metadata, not a transition). Track-9 T1.
             return p.activeDocPath != obs.activeDocPath
                 || p.projectName != obs.projectName
                 || p.schemeName != obs.schemeName
@@ -38,6 +40,7 @@ public struct XcodeStateMachine: Sendable, Hashable {
         if let p = obs.activeDocPath { payload["doc_path"] = p }
         if let pj = obs.projectName { payload["project"] = pj }
         if let s = obs.schemeName { payload["scheme"] = s }
+        if let line = obs.line { payload["line"] = String(line) }  // Track-9 T1
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: Double(nowMs) / 1000.0),
             signalType: .attention,

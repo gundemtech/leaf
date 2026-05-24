@@ -279,6 +279,15 @@ public enum ActivityFeedMapper {
             let count = sanitize(payload["count_in_window"]) ?? "1"
             primary = "\(issueKey): \(count) comment\(count == "1" ? "" : "s")"
             secondary = team
+        // Track-9 T2 — incoming counterpart to linear_comment_authored. Reads only
+        // structured payload counters; never reads body / title / mention text /
+        // linear_issue_url contents (URL field stays in DB row, not surfaced here).
+        case "linear_comment_authored_to_me":
+            guard let issueKey else { return nil }
+            let count = sanitize(payload["to_me_count_in_window"]) ?? "1"
+            primary =
+                "\(issueKey): \(count) comment\(count == "1" ? "" : "s") to you"
+            secondary = team
         case "linear_document_edited":
             // ADR-010: document title is self-authored — surfacing allowed,
             // matches "issue title" allowance.
@@ -345,6 +354,17 @@ public enum ActivityFeedMapper {
             primary = formatPR(repo: repo, number: number, suffix: "thread resolved")
         case GitHubEventKindKey.prReviewSubmitted.rawValue:
             primary = formatPR(repo: repo, number: number, suffix: "review submitted")
+        // Track-9 T3 — PR review request lifecycle. Allowlist-only payload reads:
+        // repo / number (already extracted) + requested_reviewer_login (opaque plaintext
+        // login per Track-3 D2 PRMetadata.requestedReviewers precedent; NOT title or body).
+        case GitHubEventKindKey.prReviewRequested.rawValue:
+            let reviewer = sanitize(payload["requested_reviewer_login"])
+            let suffix = reviewer.map { "requested review (\($0))" } ?? "requested review"
+            primary = formatPR(repo: repo, number: number, suffix: suffix)
+        case GitHubEventKindKey.prReviewRequestRemoved.rawValue:
+            let reviewer = sanitize(payload["requested_reviewer_login"])
+            let suffix = reviewer.map { "dropped review request (\($0))" } ?? "dropped review request"
+            primary = formatPR(repo: repo, number: number, suffix: suffix)
         case GitHubEventKindKey.issueOpened.rawValue:
             primary = formatIssue(repo: repo, number: number, suffix: "issue opened")
         case GitHubEventKindKey.issueClosed.rawValue:

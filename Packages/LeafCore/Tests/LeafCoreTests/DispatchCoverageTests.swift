@@ -14,6 +14,7 @@
 // `GitHubEventKindKey.bodyBearing`.
 
 import XCTest
+
 @testable import LeafCore
 
 final class DispatchCoverageTests: XCTestCase {
@@ -162,7 +163,11 @@ final class DispatchCoverageTests: XCTestCase {
     func testNonBodyBearingGitHubPRKindsReturnNilFromEventLinks() {
         let nonBodyBearing = [
             GitHubEventKindKey.prReviewThreadResolved.rawValue,
-            GitHubEventKindKey.prAwaitingReviewCount.rawValue
+            GitHubEventKindKey.prAwaitingReviewCount.rawValue,
+            // Track-9 T3 — PR review request lifecycle. NOT body-bearing —
+            // payload carries `requested_reviewer_login` + URL only, no body field.
+            GitHubEventKindKey.prReviewRequested.rawValue,
+            GitHubEventKindKey.prReviewRequestRemoved.rawValue,
         ]
         for raw in nonBodyBearing {
             XCTAssertNil(
@@ -207,7 +212,11 @@ final class DispatchCoverageTests: XCTestCase {
     func testNonBodyBearingGitHubPRKindsReturnNilFromDetectorPipeline() {
         let nonBodyBearing = [
             GitHubEventKindKey.prReviewThreadResolved.rawValue,
-            GitHubEventKindKey.prAwaitingReviewCount.rawValue
+            GitHubEventKindKey.prAwaitingReviewCount.rawValue,
+            // Track-9 T3 — PR review request lifecycle. NOT body-bearing —
+            // payload carries `requested_reviewer_login` + URL only, no body field.
+            GitHubEventKindKey.prReviewRequested.rawValue,
+            GitHubEventKindKey.prReviewRequestRemoved.rawValue,
         ]
         for raw in nonBodyBearing {
             XCTAssertNil(
@@ -223,12 +232,12 @@ final class DispatchCoverageTests: XCTestCase {
     /// accidentally dropping a kind from the whitelist set or the switch arms.
     func testTrackSixP3BrowserKindsHandledByActivityFeedMapper() {
         let p3EventKinds: [(kind: String, payload: [String: String])] = [
-            ("safari_tab_navigated",  ["event_kind": "safari_tab_navigated",  "current_url": "https://example.com"]),
-            ("chrome_tab_navigated",  ["event_kind": "chrome_tab_navigated",  "current_url": "https://example.com"]),
-            ("arc_tab_navigated",     ["event_kind": "arc_tab_navigated",     "current_url": "https://example.com"]),
-            ("safari_tab_activated",  ["event_kind": "safari_tab_activated",  "current_url": "https://example.com"]),
-            ("chrome_tab_activated",  ["event_kind": "chrome_tab_activated",  "current_url": "https://example.com"]),
-            ("arc_tab_activated",     ["event_kind": "arc_tab_activated",     "current_url": "https://example.com"]),
+            ("safari_tab_navigated", ["event_kind": "safari_tab_navigated", "current_url": "https://example.com"]),
+            ("chrome_tab_navigated", ["event_kind": "chrome_tab_navigated", "current_url": "https://example.com"]),
+            ("arc_tab_navigated", ["event_kind": "arc_tab_navigated", "current_url": "https://example.com"]),
+            ("safari_tab_activated", ["event_kind": "safari_tab_activated", "current_url": "https://example.com"]),
+            ("chrome_tab_activated", ["event_kind": "chrome_tab_activated", "current_url": "https://example.com"]),
+            ("arc_tab_activated", ["event_kind": "arc_tab_activated", "current_url": "https://example.com"]),
             ("chrome_bookmark_changed", ["event_kind": "chrome_bookmark_changed", "delta": "1", "total_count": "42"]),
             ("safari_bookmark_changed", ["event_kind": "safari_bookmark_changed", "delta": "-1", "total_count": "10"]),
         ]
@@ -255,7 +264,8 @@ final class DispatchCoverageTests: XCTestCase {
     /// suitable for `ActivityFeedMapper.map(payloadJSON:)`.
     private func encodePayload(_ dict: [String: String]) -> String {
         guard let data = try? JSONSerialization.data(withJSONObject: dict),
-              let s = String(data: data, encoding: .utf8) else { return "{}" }
+            let s = String(data: data, encoding: .utf8)
+        else { return "{}" }
         return s
     }
 
@@ -282,9 +292,7 @@ final class DispatchCoverageTests: XCTestCase {
 
     // MARK: - Track-6 P1 — Claude Code coverage
 
-    /// #16 — every `ClaudeCodeEventKindKey` case has a `ShareEventTypeKey` entry
-    /// by rawValue. Track-6 P1 contract §2.5 fence: single-string identity
-    /// across registry, runtime emission, downstream SQL.
+    /// #16 — every `ClaudeCodeEventKindKey` case has a `ShareEventTypeKey` entry.
     func testEveryClaudeCodeEventKindKeyAppearsInShareEventTypeRegistry() {
         let registry = Set(ShareEventTypeKey.allCases.map { $0.rawValue })
         for kind in ClaudeCodeEventKindKey.allCases {
@@ -295,10 +303,7 @@ final class DispatchCoverageTests: XCTestCase {
         }
     }
 
-    /// #17 — every `ClaudeCodeEventKindKey` case is either in
-    /// `ActivityFeedMapper.claudeCodeAIKinds` (visible) or `.skippedKinds`
-    /// (explicitly hidden). No silent default fallback — every new kind
-    /// requires explicit routing decision. Track-6 P1 §3.5 fence.
+    /// #17 — every `ClaudeCodeEventKindKey` case is either visible or skipped.
     func testEveryClaudeCodeEventKindKeyMappedOrSkipped() {
         let visible = ActivityFeedMapper.claudeCodeAIKinds
         let skipped = ActivityFeedMapper.skippedKinds
@@ -311,9 +316,7 @@ final class DispatchCoverageTests: XCTestCase {
         }
     }
 
-    /// #18 — every `ClaudeCodeEventKindKey` case has a `ShareEventTypeDefaults.all`
-    /// entry, and that entry's `defaultEnabled == false`. Track-6 P1 contract
-    /// §2.5 fitness gate — AI tools are sensitive surface, default OFF.
+    /// #18 — every `ClaudeCodeEventKindKey` has a default-OFF entry.
     func testEveryClaudeCodeEventKindKeyHasDefaultEntryOff() {
         let defaults = Dictionary(
             uniqueKeysWithValues: ShareEventTypeDefaults.all.map { ($0.key.rawValue, $0.defaultEnabled) }
@@ -330,23 +333,60 @@ final class DispatchCoverageTests: XCTestCase {
         }
     }
 
+    // MARK: - Track-6 P4 — Google Calendar coverage
+    //
+    // Phase III.B integration: P4 deferred (GCP gate). Re-enables when P4 lands.
+    #if false
+
+    /// #19 — Track-6 P4 Google Calendar parity fence. Every
+    /// `GoogleCalendarEventKind.allCases.rawValue` is either handled by
+    /// `ActivityFeedMapper.mapGoogleCalendar` or explicitly skipped.
+    func testEveryGoogleCalendarEventKindKeyMappedOrSkipped() {
+        for kind in GoogleCalendarEventKind.allCases {
+            if ActivityFeedMapper.skippedKinds.contains(kind.rawValue) {
+                continue
+            }
+            let payload = #"{"source":"google_calendar","event_kind":"\#(kind.rawValue)"}"#
+            let entry = ActivityFeedMapper.map(
+                id: 1,
+                timestampMs: 1_700_000_000_000,
+                signalType: "context",
+                bundleID: nil,
+                payloadJSON: payload
+            )
+            XCTAssertNotNil(
+                entry,
+                "ActivityFeedMapper.mapGoogleCalendar must handle \(kind.rawValue) or skippedKinds must include it"
+            )
+            XCTAssertEqual(
+                entry?.provider,
+                .googleCalendar,
+                "ActivityFeedMapper.mapGoogleCalendar must return provider=.googleCalendar for \(kind.rawValue)"
+            )
+            XCTAssertEqual(
+                entry?.eventKind,
+                kind.rawValue,
+                "ActivityFeedEntry.eventKind must round-trip for \(kind.rawValue)"
+            )
+        }
+    }
+
+    #endif // false — Phase III.B P4 GCal deferred
+
     // MARK: - Track-6 P2 — Xcode Deep coverage
 
-    /// #19 — Track-6 P2 dispatch parity. All 8 `xcode_*` event_kinds (2
+    /// #20 — Track-6 P2 dispatch parity. All 8 `xcode_*` event_kinds (2
     /// Track-4 S2 baseline + 6 P2 lifecycle) must appear in:
     ///   (a) ShareEventTypeKey enum + raw value matches expected
     ///   (b) ShareEventTypeDefaults.all with `defaultEnabled = false`
     ///   (c) EventKindIcon.symbol(for:) resolves to non-nil
     ///   (d) ActivityFeedMapper.trackFourLocalOSKinds whitelist
-    ///
-    /// Catches forgotten registry / mapper / icon updates when adding new
-    /// xcode_* event_kinds in future phases.
     func testDispatchParity_XcodeP2_AllKinds() {
         let allXcodeKinds: [String] = [
             "xcode_active_doc_changed", "xcode_build_state_changed",
             "xcode_build_started", "xcode_build_finished",
             "xcode_test_run_started", "xcode_test_run_finished",
-            "xcode_scheme_changed", "xcode_run_destination_changed"
+            "xcode_scheme_changed", "xcode_run_destination_changed",
         ]
         let registry = Set(ShareEventTypeKey.allCases.map { $0.rawValue })
         let whitelist = ActivityFeedMapper.trackFourLocalOSKinds
@@ -356,47 +396,44 @@ final class DispatchCoverageTests: XCTestCase {
             }
         )
         for kind in allXcodeKinds {
-            XCTAssertTrue(registry.contains(kind),
-                          "ShareEventTypeKey missing entry for \(kind)")
-            XCTAssertTrue(whitelist.contains(kind),
-                          "trackFourLocalOSKinds whitelist missing \(kind)")
-            XCTAssertNotNil(EventKindIcon.symbol(for: kind),
-                            "EventKindIcon missing SF Symbol for \(kind)")
-            XCTAssertEqual(defaultsByKey[kind], false,
-                           "\(kind) must default OFF per ADR-020")
+            XCTAssertTrue(
+                registry.contains(kind),
+                "ShareEventTypeKey missing entry for \(kind)")
+            XCTAssertTrue(
+                whitelist.contains(kind),
+                "trackFourLocalOSKinds whitelist missing \(kind)")
+            XCTAssertNotNil(
+                EventKindIcon.symbol(for: kind),
+                "EventKindIcon missing SF Symbol for \(kind)")
+            XCTAssertEqual(
+                defaultsByKey[kind], false,
+                "\(kind) must default OFF per ADR-020")
         }
     }
 
-    // MARK: - Track-6 P5 — Zoom Deep coverage (integration-T10 cherry-pick)
+    // MARK: - Track-6 P5 — Zoom Deep coverage
 
-    /// #22 — Track-6 P5 parity: every new Zoom-deep kind must be covered by
-    /// (a) `trackFourLocalOSKinds` whitelist, (b) EventKindIcon with a non-default
-    /// SF Symbol, and (c) mapLocalOS rendering a non-empty primaryText.
-    /// The 3 new kinds carry NO user-authored text, so they MUST NOT route
-    /// through `EventsFullTextStore.bodyKindForTesting` (would imply searchable
-    /// content — ADR-010 walkback).
-    /// Renumbered from track-10 source's #16 to #22 to avoid collision with
-    /// integration P1+P2+P3 tests already occupying #16-#21.
+    /// #21 — Track-6 P5 parity: every new Zoom-deep kind must be covered by
+    /// (a) `trackFourLocalOSKinds` whitelist, (b) EventKindIcon with non-generic
+    /// SF Symbol, and (c) NOT route through FTS (no searchable body — ADR-010).
     func testTrack6P5ZoomKindsCoverageParity() {
         let p5Kinds = [
             "zoom_meeting_started",
             "zoom_meeting_ended",
-            "zoom_meeting_calendar_linked"
+            "zoom_meeting_calendar_linked",
         ]
         for kind in p5Kinds {
-            // (a) whitelist
             XCTAssertTrue(
                 ActivityFeedMapper.trackFourLocalOSKinds.contains(kind),
                 "Track-6 P5 kind '\(kind)' missing from trackFourLocalOSKinds whitelist"
             )
-            // (b) icon — must not fall back to the "video.circle" baseline
-            //      (those are for S2 transition events) or `app.dashed` generic.
             let icon = EventKindIcon.symbol(for: kind)
-            XCTAssertNotEqual(icon, "app.dashed",
-                              "Track-6 P5 kind '\(kind)' falls back to generic icon")
-            XCTAssertNotEqual(icon, "questionmark.circle",
-                              "Track-6 P5 kind '\(kind)' has no icon mapping")
-            // (c) FTS dispatcher MUST return nil — P5 payloads have no searchable body.
+            XCTAssertNotEqual(
+                icon, "app.dashed",
+                "Track-6 P5 kind '\(kind)' falls back to generic icon")
+            XCTAssertNotEqual(
+                icon, "questionmark.circle",
+                "Track-6 P5 kind '\(kind)' has no icon mapping")
             XCTAssertNil(
                 EventsFullTextStore.bodyKindForTesting(eventKind: kind),
                 "Track-6 P5 kind '\(kind)' must NOT route to FTS — carries no body text"
@@ -404,23 +441,21 @@ final class DispatchCoverageTests: XCTestCase {
         }
     }
 
-    // MARK: - Track-6 P6 — IDEs Surface Cap coverage (integration-T10 cherry-pick)
-
+    // MARK: - Track-6 P6 Activity-tab visibility fence
+    //
     // `ActivityFeedMapper.trackFourLocalOSKinds` is the canonical whitelist of
     // local-OS event_kinds that render rows in the Activity tab. Every kind in
     // that set must have a matching `ShareEventTypeKey` entry so Share Controls
     // can gate its emission.
     //
-    // `ide_window_title_observed` is registered in ShareEventTypeKey but is
-    // intentionally excluded from `trackFourLocalOSKinds` — it is a debug-only
-    // signal that never renders in the Activity tab.
+    // `ide_window_title_observed` is registered in ShareEventTypeKey (Task 8)
+    // but is intentionally excluded from `trackFourLocalOSKinds` — it is a
+    // debug-only signal that never renders in the Activity tab.
 
-    /// #23 — every kind in `ActivityFeedMapper.trackFourLocalOSKinds` must have
+    /// #16 — every kind in `ActivityFeedMapper.trackFourLocalOSKinds` must have
     /// a matching `ShareEventTypeKey` entry. Auto-derived from the whitelist, so
     /// additions to `trackFourLocalOSKinds` (e.g. Track-6 P6 vscode/jetbrains
     /// kinds) are automatically covered without updating this test.
-    /// Renumbered from track-10 source's #16 to #23 — integration sequential
-    /// numbering after P1/P2/P3 #16-#21 and P5 #22.
     func testTrackFourLocalOSKindsAllRegisteredInShareEventTypeKey() {
         let registry = Set(ShareEventTypeKey.allCases.map { $0.rawValue })
         for kind in ActivityFeedMapper.trackFourLocalOSKinds {

@@ -69,6 +69,12 @@ public struct LinearIssueBatch: Sendable, Hashable {
     public let relationRemovals: [LinearRelationSnapshot]
     public let triagePickedUp: [LinearTriageTransitionSnapshot]
     public let triageResolved: [LinearTriageTransitionSnapshot]
+    /// Track-9 T2 — Linear organization `urlKey` from `viewer.organization { urlKey }`
+    /// fragment in LeafPoll. Cached in `LinearCollector` actor state; used by
+    /// `makeCommentToMeEvent` parser to compose `linear_issue_url` payload field
+    /// (`https://linear.app/{slug}/issue/{key}`). `nil` on cold-first-tick before
+    /// the viewer fetch lands or on Linear free-tier accounts that return null org.
+    public let workspaceSlug: String?
 
     public init(
         issues: [LinearIssueSnapshot],
@@ -88,7 +94,8 @@ public struct LinearIssueBatch: Sendable, Hashable {
         relationAdditions: [LinearRelationSnapshot] = [],
         relationRemovals: [LinearRelationSnapshot] = [],
         triagePickedUp: [LinearTriageTransitionSnapshot] = [],
-        triageResolved: [LinearTriageTransitionSnapshot] = []
+        triageResolved: [LinearTriageTransitionSnapshot] = [],
+        workspaceSlug: String? = nil
     ) {
         self.issues = issues
         self.cursorMs = cursorMs
@@ -108,6 +115,7 @@ public struct LinearIssueBatch: Sendable, Hashable {
         self.relationRemovals = relationRemovals
         self.triagePickedUp = triagePickedUp
         self.triageResolved = triageResolved
+        self.workspaceSlug = workspaceSlug
     }
 
     public static let empty = LinearIssueBatch(
@@ -266,6 +274,12 @@ public struct LinearIssueSnapshot: Sendable, Hashable {
     /// applied client-side в parser'е). 0 если не было моих comments.
     /// ADR-010: bodies НЕ запрашиваются — только id + createdAt + user.id для filter.
     public let commentCountInWindow: Int
+    /// Track-9 T2 — discriminator counterpart to `commentCountInWindow`: count comments
+    /// authored BY OTHERS (`comment.user.id != viewer.id`) on this viewer-touched issue
+    /// within the polling window. Substrate seed для `linear_comment_authored_to_me`
+    /// sibling event_kind. 0 если не было comments-to-me. ADR-010: same allowlist —
+    /// только id + createdAt + user.id для filter, bodies не trip'нут provider.
+    public let incomingCommentCount: Int
     /// Phase 4.7.B (B-8) — counts of GitHub PR attachments на этом issue, derived
     /// из `Issue.attachments(first: 10)` block'а парсером URL'ов. 0 если ни один
     /// attachment не matched GitHub PR pattern (или вообще не attached).
@@ -307,6 +321,7 @@ public struct LinearIssueSnapshot: Sendable, Hashable {
         updatedAtMs: Int64,
         completionSeconds: Int? = nil,
         commentCountInWindow: Int = 0,
+        incomingCommentCount: Int = 0,
         linkedGitHubPRCount: Int = 0,
         linkedGitHubTopRepo: String? = nil,
         linkedSlackMessageCount: Int = 0,
@@ -324,6 +339,7 @@ public struct LinearIssueSnapshot: Sendable, Hashable {
         self.updatedAtMs = updatedAtMs
         self.completionSeconds = completionSeconds
         self.commentCountInWindow = commentCountInWindow
+        self.incomingCommentCount = incomingCommentCount
         self.linkedGitHubPRCount = linkedGitHubPRCount
         self.linkedGitHubTopRepo = linkedGitHubTopRepo
         self.linkedSlackMessageCount = linkedSlackMessageCount
