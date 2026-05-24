@@ -140,6 +140,11 @@ struct LeafApp: App {
       // Track-10 T2 — subprocess-backed git delta reader for RESUME hero card.
       // Non-LEAF_PROD builds fall through to StubGitDeltaReader (returns nil).
       GitDeltaReaderFactory.register { LeafCorePrivate.ProdGitDeltaReader() }
+      // Track-10 T1 C5 — moat-resident preset list ("common dev team
+      // defaults") used by the onboarding `.shareControls` step. Public
+      // builds fall through to `EmptyOnboardingShareTemplateProvider`,
+      // which renders a "configure later in Settings" fallback panel.
+      OnboardingShareTemplateFactory.register(LeafCorePrivate.ProdOnboardingShareTemplate())
     #endif
 
     // D13 (Phase 3.1) — explicit _state = State(initialValue:) pattern для

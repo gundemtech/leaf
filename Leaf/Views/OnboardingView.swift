@@ -18,7 +18,7 @@ import SwiftUI
 import LeafCore
 
 enum OnboardingStep: String, CaseIterable {
-    case welcome, ax, fda, observers, aiTools, team, done
+    case welcome, ax, fda, observers, aiTools, shareControls, team, done
 
     var index: Int { Self.allCases.firstIndex(of: self) ?? 0 }
 }
@@ -112,6 +112,7 @@ struct OnboardingView: View {
         case .fda:       fdaStep
         case .observers: observersStep
         case .aiTools:   aiToolsStep
+        case .shareControls: ShareControlsStepView(onAdvance: { step = .team })
         case .team:      teamStep
         case .done:      doneStep
         }
@@ -256,7 +257,9 @@ struct OnboardingView: View {
             }
             HStack {
                 Spacer()
-                LeafButton("Skip — use jsonl fallback", variant: .ghost, size: .sm, action: { step = .team })
+                LeafButton(
+                    "Skip — use jsonl fallback", variant: .ghost, size: .sm,
+                    action: { step = .shareControls })
             }
         }
     }
@@ -288,7 +291,7 @@ struct OnboardingView: View {
                 case .ok:
                     permissions.aiToolsStore.lastInstallResult = .ok
                     permissions.aiToolsStore.setEnabled("claude_code", true)
-                    step = .team
+                    step = .shareControls
                 case .partial(let msg), .failed(let msg):
                     permissions.aiToolsStore.lastInstallResult = .failed(msg)
                     // Don't advance — let user see error and retry or skip.

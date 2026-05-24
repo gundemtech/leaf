@@ -87,13 +87,6 @@ public protocol DerivedInsights: Sendable {
     func lastActivity(bundleID: String?) throws -> ActivitySnapshot?
 
     /// Phase 4.10.A — chronological per-event feed for the Activity tab.
-    /// Returns up to `limit` most-recent events from `period`, mapped to
-    /// `ActivityFeedEntry` via `ActivityFeedMapper`. State-pulse event_kinds
-    /// (presence / workload / queue counters) are skipped — they belong on
-    /// the Live Presence widget. Default extension returns `[]` so StubInsights
-    /// stays no-op without override.
-    func recentActivity(period: DateInterval, limit: Int) throws -> [ActivityFeedEntry]
-
     /// Phase 4.10.B — aggregated work sessions for the Activity tab "Sessions"
     /// mode and the Home "Recent sessions" block. Reads `attention` events
     /// (+ `context` boundary markers) within `period`, aggregates via
@@ -171,6 +164,14 @@ public protocol DerivedInsights: Sendable {
     /// `limit` at 200 to prevent unbounded memory under stale cursors.
     /// Default `[]` for stubs / iOS-future.
     func recentActivityFeed(since: Int64, limit: Int) throws -> [ActivityFeedItem]
+
+    /// Track-7 P3 substrate — open Blocker rows from M014 `blockers` table.
+    /// IV.A.2 partial substrate: integration consumes only the value type
+    /// (StandupComposer feeds blockers into RecapBlock/EodBlock UI); full
+    /// reader-side implementation lands when Track-7 P3 lands or post-
+    /// integration cleanup wires D3 `BlockerPatternHit` as the canonical
+    /// source. Default returns `[]` so StubInsights stays no-op.
+    func openBlockers() throws -> [Blocker]
 }
 
 /// Default implementations — конформер'ы могут override'ить, но без явного
@@ -187,12 +188,13 @@ public extension DerivedInsights {
     /// Phase 4.6.B — default `nil` для StubInsights / iOS-future.
     func linearCompletionRate(period: DateInterval) throws -> Double? { nil }
 
-    /// Phase 4.10.A — default empty feed для StubInsights / iOS-future / любого
-    /// конформера, который ещё не имплементил raw-events SELECT.
-    func recentActivity(period: DateInterval, limit: Int) throws -> [ActivityFeedEntry] { [] }
-
     /// Phase 4.10.B — default empty list для StubInsights / iOS-future.
     func recentSessions(period: DateInterval, limit: Int) throws -> [ActivitySession] { [] }
+
+    /// IV.A.2 partial substrate — Track-7 P3 `openBlockers` default empty
+    /// for stubs / iOS-future / integration. Real reader-side impl lands
+    /// when Track-7 P3 is fully wired.
+    func openBlockers() throws -> [Blocker] { [] }
 
     // MARK: - Track 8 P1 defaults
 

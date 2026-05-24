@@ -292,7 +292,7 @@ final class DispatchCoverageTests: XCTestCase {
 
     // MARK: - Track-6 P1 — Claude Code coverage
 
-    /// #16 — every `ClaudeCodeEventKindKey` case has a `ShareEventTypeKey` entry.
+    /// #22 — every `ClaudeCodeEventKindKey` case has a `ShareEventTypeKey` entry.
     func testEveryClaudeCodeEventKindKeyAppearsInShareEventTypeRegistry() {
         let registry = Set(ShareEventTypeKey.allCases.map { $0.rawValue })
         for kind in ClaudeCodeEventKindKey.allCases {
@@ -452,7 +452,7 @@ final class DispatchCoverageTests: XCTestCase {
     // but is intentionally excluded from `trackFourLocalOSKinds` — it is a
     // debug-only signal that never renders in the Activity tab.
 
-    /// #16 — every kind in `ActivityFeedMapper.trackFourLocalOSKinds` must have
+    /// #23 — every kind in `ActivityFeedMapper.trackFourLocalOSKinds` must have
     /// a matching `ShareEventTypeKey` entry. Auto-derived from the whitelist, so
     /// additions to `trackFourLocalOSKinds` (e.g. Track-6 P6 vscode/jetbrains
     /// kinds) are automatically covered without updating this test.

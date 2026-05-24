@@ -34,6 +34,7 @@ struct TodayBlock: View {
             Text(sectionLabel)
                 .leafSectionLabel()
                 .foregroundStyle(LeafColor.text.tertiary)
+                .accessibilityAddTraits(.isHeader)
 
             LeafCard(padding: .regular) {
                 if metrics == .empty {

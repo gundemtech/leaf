@@ -125,16 +125,6 @@ public struct InsightsSnapshot: Sendable, Hashable {
     /// `InsightsReader.refresh()` writes the real value via
     /// `DerivedInsights.youNowState(now:)`.
     public let youNowState: YouNowState
-    /// Phase Track-8 P5 — teammates currently working on the same task
-    /// as the caller (same Linear issue / same branch / adjacent branch).
-    /// Sorted by `SameTaskMatcher` (confidence asc → lastActivityAtMs
-    /// desc → displayName asc). Default `[]` so existing call-sites keep
-    /// compiling without modification. Production `InsightsReader.refresh()`
-    /// writes the real value via
-    /// `DerivedInsights.sameTaskTeammates(rule: .hierarchical)` — returns
-    /// `[]` until Phase 5.4 wires a DB-backed `TeammatePresenceReader`
-    /// against `presence_history`.
-    public let sameTaskTeammates: [TeammateMatch]
     /// Phase Track-8 P6 — INBOX dashboard items list (review requests,
     /// comments on my work, mentions, open questions, blockers). Substrate
     /// already sorts by `InboxSeverity.sortRank` asc → `createdAtMs` desc.
@@ -177,6 +167,34 @@ public struct InsightsSnapshot: Sendable, Hashable {
     /// from `DerivedInsights.recentActivityFeed(since:limit:)`. Empty default keeps
     /// fixture / test callsites passing without override.
     public let sinceLastActiveItems: [SinceLastActiveItem]
+    /// Track-10 T6 — teammates last-seen within the freshness window (15 min default),
+    /// populated by `TeammatePresenceReader.recentTeammateSnapshots(maxAge:now:)`. Empty
+    /// default keeps existing fixture/test callsites compiling without override.
+    /// Production `InsightsReader.refresh()` writes the real value once Phase 5.4 wires
+    /// `DBTeammatePresenceReader` against `presence_history`; before then the stub
+    /// returns `[]` and the TEAM·N block renders its "Team presence sync coming
+    /// soon." empty CTA.
+    public let activeTeammates: [TeammateSnapshot]
+    /// Track-10 T6 — `OrgService.activeMemberCount()` (= 1 when no org row, otherwise
+    /// `team_members.removed_at_ms IS NULL` count). Drives the Home Zone-3 solo-vs-team
+    /// gate (`memberCount > 1` → 2-col ViewThatFits with NEEDS YOU + TEAM·N; else
+    /// NEEDS YOU full-width). Defaults to `1` so existing callsites keep solo-user
+    /// behavior without populating.
+    public let memberCount: Int
+    /// Track-10 T7 — bundled task-session lens consumed by the Home YOU'RE ON
+    /// block (LEAF-ID + branch + commits ahead + session start clock + per-task
+    /// focused minutes + recent open files). Composed once per
+    /// `InsightsReader.refresh()` via `DerivedInsights.currentTaskSession()`.
+    /// `nil` ↔ no current task identifiable (Terminal-only work, no IDE foreground
+    /// in attention history) → YOU'RE ON block renders empty state.
+    public let currentSession: CurrentTaskSession?
+    /// Track-10 T8 — bundled value type powering the Home Zone-5 RECAP + EOD
+    /// standup helper. Composed once per `InsightsReader.refresh()` via
+    /// `StandupComposer.compose(...)`. `nil` ↔ composer received all-zero
+    /// inputs (cold DB / non-prod stub) → both blocks render empty-state
+    /// path. 14th iteration of defaulted-init blast-radius; tail position
+    /// preserves T2..T7 callsite back-compat.
+    public let standupRecap: StandupSnapshot?
 
     public init(
         topApps: [AppTimeEntry],
@@ -214,13 +232,16 @@ public struct InsightsSnapshot: Sendable, Hashable {
         recentSessions: [ActivitySession] = [],
         todayMetrics: TodayMetrics = .empty,
         youNowState: YouNowState = .empty,
-        sameTaskTeammates: [TeammateMatch] = [],
         inboxItems: [InboxItem] = [],
         whereStopped: WhereStoppedSnapshot? = nil,
         weeklyMetrics: WeeklyMetrics = .empty,
         gitDelta: GitDeltaSnapshot? = nil,
         currentTaskIdentity: TaskIdentity? = nil,
-        sinceLastActiveItems: [SinceLastActiveItem] = []
+        sinceLastActiveItems: [SinceLastActiveItem] = [],
+        activeTeammates: [TeammateSnapshot] = [],
+        memberCount: Int = 1,
+        currentSession: CurrentTaskSession? = nil,
+        standupRecap: StandupSnapshot? = nil
     ) {
         self.topApps = topApps
         self.sessions = sessions
@@ -257,13 +278,16 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.recentSessions = recentSessions
         self.todayMetrics = todayMetrics
         self.youNowState = youNowState
-        self.sameTaskTeammates = sameTaskTeammates
         self.inboxItems = inboxItems
         self.whereStopped = whereStopped
         self.weeklyMetrics = weeklyMetrics
         self.gitDelta = gitDelta
         self.currentTaskIdentity = currentTaskIdentity
         self.sinceLastActiveItems = sinceLastActiveItems
+        self.activeTeammates = activeTeammates
+        self.memberCount = memberCount
+        self.currentSession = currentSession
+        self.standupRecap = standupRecap
     }
 
     /// Convenience init — рассчитывает `deepSessionsCount` по threshold'у.
@@ -307,13 +331,16 @@ public struct InsightsSnapshot: Sendable, Hashable {
         recentSessions: [ActivitySession] = [],
         todayMetrics: TodayMetrics = .empty,
         youNowState: YouNowState = .empty,
-        sameTaskTeammates: [TeammateMatch] = [],
         inboxItems: [InboxItem] = [],
         whereStopped: WhereStoppedSnapshot? = nil,
         weeklyMetrics: WeeklyMetrics = .empty,
         gitDelta: GitDeltaSnapshot? = nil,
         currentTaskIdentity: TaskIdentity? = nil,
-        sinceLastActiveItems: [SinceLastActiveItem] = []
+        sinceLastActiveItems: [SinceLastActiveItem] = [],
+        activeTeammates: [TeammateSnapshot] = [],
+        memberCount: Int = 1,
+        currentSession: CurrentTaskSession? = nil,
+        standupRecap: StandupSnapshot? = nil
     ) {
         self.init(
             topApps: topApps,
@@ -351,13 +378,16 @@ public struct InsightsSnapshot: Sendable, Hashable {
             recentSessions: recentSessions,
             todayMetrics: todayMetrics,
             youNowState: youNowState,
-            sameTaskTeammates: sameTaskTeammates,
             inboxItems: inboxItems,
             whereStopped: whereStopped,
             weeklyMetrics: weeklyMetrics,
             gitDelta: gitDelta,
             currentTaskIdentity: currentTaskIdentity,
-            sinceLastActiveItems: sinceLastActiveItems
+            sinceLastActiveItems: sinceLastActiveItems,
+            activeTeammates: activeTeammates,
+            memberCount: memberCount,
+            currentSession: currentSession,
+            standupRecap: standupRecap
         )
     }
 

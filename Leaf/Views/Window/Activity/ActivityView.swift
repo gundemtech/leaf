@@ -130,9 +130,8 @@ struct ActivityView: View {
 
     @ViewBuilder
     private func rawEventsContent(for snapshot: InsightsSnapshot) -> some View {
-        // IV.A.1 — recentActivity field removed by Phase III.B C-24 cleanup;
-        // ActivityView raw-events mode stubbed empty until IV.A.2 refactor wires
-        // the replacement source (sessions table direct read).
+        // IV.A.2 — recentActivity protocol method dropped. Raw-events mode
+        // stays empty until a future cleanup wires the replacement source.
         let entries: [ActivityFeedEntry] = []
         VStack(alignment: .leading, spacing: LeafSpace.md) {
             filterPicker(counts: providerCounts(in: entries))

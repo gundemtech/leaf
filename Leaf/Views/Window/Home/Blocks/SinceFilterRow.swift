@@ -57,7 +57,7 @@ struct SinceFilterRow: View {
                     )
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("\(filter.label) filter, \(count) items")
+                .accessibilityLabel("\(filter.label) filter, \(count) \(count == 1 ? "item" : "items")")
                 .accessibilityAddTraits(
                     selected == filter ? [.isButton, .isSelected] : .isButton
                 )

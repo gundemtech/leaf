@@ -68,16 +68,19 @@ extension SinceLastActiveItem {
         )
     }
 
+    // Track-10 T8 — Linear keys hoisted into `LinearActivityKinds` namespace;
+    // SinceLastActiveItem reads from constants (single source of truth) so
+    // downstream callers (StandupComposer) cannot drift apart.
     private static let verbMap: [String: (verb: String, severity: InboxSeverity)] = [
-        "linear_status_transition.started": ("started", .muted),
-        "linear_status_transition.completed": ("completed", .muted),
-        "linear_status_transition.canceled": ("canceled", .muted),
-        "linear_status_transition.reopened": ("reopened", .warn),
+        LinearActivityKinds.statusTransitionStartedKind: ("started", .muted),
+        LinearActivityKinds.statusTransitionCompletedKind: ("completed", .muted),
+        LinearActivityKinds.statusTransitionCanceledKind: ("canceled", .muted),
+        LinearActivityKinds.statusTransitionReopenedKind: ("reopened", .warn),
         "linear_comment_authored_to_me": ("commented on", .warn),
         "gh_commit_pushed": ("pushed", .muted),
         "gh_pr_opened": ("opened", .muted),
         "gh_pr_merged": ("merged", .muted),
-        "gh_pr_review_authored": ("reviewed", .muted),
+        GitHubActivityKinds.prReviewAuthoredKind: ("reviewed", .muted),
         "gh_pr_review_requested": ("requested your review on", .warn),
         "slack_huddle_state_change": ("joined a huddle", .muted),
         "slack_mention_received_aggregate": ("mentioned you in", .warn),

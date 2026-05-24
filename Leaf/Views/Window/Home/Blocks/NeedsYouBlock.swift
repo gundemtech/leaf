@@ -23,6 +23,7 @@ struct NeedsYouBlock: View {
             Text("NEEDS YOU")
                 .leafSectionLabel()
                 .foregroundStyle(LeafColor.text.tertiary)
+                .accessibilityAddTraits(.isHeader)
 
             LeafCard(padding: .regular) {
                 VStack(alignment: .leading, spacing: LeafSpace.sm) {

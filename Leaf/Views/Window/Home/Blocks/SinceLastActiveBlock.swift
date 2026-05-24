@@ -28,6 +28,7 @@ struct SinceLastActiveBlock: View {
             Text("SINCE YOU WERE LAST ACTIVE")
                 .leafSectionLabel()
                 .foregroundStyle(LeafColor.text.tertiary)
+                .accessibilityAddTraits(.isHeader)
 
             LeafCard(padding: .regular) {
                 VStack(alignment: .leading, spacing: LeafSpace.sm) {
@@ -35,7 +36,7 @@ struct SinceLastActiveBlock: View {
                     LeafDivider()
                     contentBody
                 }
-                .animation(.easeInOut(duration: 0.2), value: filteredItems)
+                .animation(.easeInOut(duration: 0.25), value: filteredItems)
             }
         }
     }

@@ -4,8 +4,7 @@
 //  scope lock #6). 13 cases: 10 capture-time families (Claude / Xcode / IDEs /
 //  Browsers / Zoom / Calendar / Mail / Notes / Music / Reminders) + 3 Layer B
 //  providers (Linear / GitHub / Slack). `rawValue` aligns with `HomeSurface`
-//  for capture surfaces and `LayerBProvider` for Layer B — `SurfacePillRouter`
-//  routes through both lookups, so no router signature change needed.
+//  for capture surfaces and `LayerBProvider` for Layer B.
 //
 //  `kind` discriminator drives `TodayBlock` pillStrip label format: capture
 //  families render "X 1h 23m" (count = seconds), action-noun render "X 3"

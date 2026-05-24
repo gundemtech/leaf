@@ -566,4 +566,195 @@ final class InsightsSnapshotTests: XCTestCase {
         let rate = try stub.linearCompletionRate(period: period)
         XCTAssertNil(rate, "default extension → nil")
     }
+    // MARK: - Phase 8.4 — youNowState defaulted init
+
+    func test_init_defaultsYouNowStateToEmpty() {
+        XCTAssertEqual(emptySnapshot().youNowState, .empty)
+    }
+
+    // MARK: - Track-10 T6 — activeTeammates + memberCount defaulted inits
+
+    /// Defaulted `activeTeammates: [TeammateSnapshot] = []` matches the
+    /// `sameTaskTeammates` / `sinceLastActiveItems` pattern — existing test
+    /// fixtures keep compiling without an explicit override.
+    func testSnapshotDefaultsActiveTeammatesEmpty() {
+        XCTAssertEqual(emptySnapshot().activeTeammates, [])
+    }
+
+    func testSnapshotCarriesActiveTeammates() {
+        let snap = TeammateSnapshot(
+            memberID: "m-1",
+            displayName: "Anton",
+            linearID: "LEAF-204",
+            branch: "feature/foo",
+            repo: "leaf",
+            currentApp: "Xcode",
+            lastActivityAtMs: 1_700_000_000_000
+        )
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500,
+            activeTeammates: [snap]
+        )
+        XCTAssertEqual(snapshot.activeTeammates, [snap])
+    }
+
+    /// Defaulted `memberCount: Int = 1` matches `OrgService.activeMemberCount()`
+    /// fallback when no org exists — solo Mac default state. Track-10 T6
+    /// HomeView Zone 3 reads this for the solo-vs-team gate.
+    func testSnapshotDefaultsMemberCountToOne() {
+        XCTAssertEqual(emptySnapshot().memberCount, 1)
+    }
+
+    func testSnapshotCarriesMemberCount() {
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500,
+            memberCount: 3
+        )
+        XCTAssertEqual(snapshot.memberCount, 3)
+    }
+
+    // MARK: - Track-10 T7 — currentSession defaulted init
+
+    /// Defaulted `currentSession: CurrentTaskSession? = nil` matches the T2
+    /// gitDelta / currentTaskIdentity pattern — existing fixture / test
+    /// callsites stay unmodified. 13th iteration of defaulted-init blast-radius.
+    func testSnapshotDefaultsCurrentSessionToNil() {
+        XCTAssertNil(emptySnapshot().currentSession)
+    }
+
+    func testSnapshotCarriesCurrentSession() {
+        let task = TaskIdentity(linearID: "GUN-50", branch: "feature/x")
+        let session = CurrentTaskSession(
+            taskIdentity: task, sessionStartMs: 100,
+            focusedMinSoFar: 5, openFiles: ["A.swift"])
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500,
+            currentSession: session
+        )
+        XCTAssertEqual(snapshot.currentSession, session)
+    }
+    // MARK: - Phase Track-8 P6 — INBOX
+
+    func testSnapshotDefaultsInboxItemsEmpty() {
+        XCTAssertEqual(emptySnapshot().inboxItems, [])
+    }
+
+    func testSnapshotRoundTripsInboxItems() {
+        let item = InboxItem(
+            id: "x",
+            kind: .reviewRequest,
+            severity: .warn,
+            title: "PR review",
+            sourceMeta: "GitHub · 1h ago",
+            sourceURL: URL(string: "https://github.com/x/y/pull/1"),
+            aggregatedCount: 1,
+            createdAtMs: 0
+        )
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500,
+            inboxItems: [item]
+        )
+        XCTAssertEqual(snapshot.inboxItems, [item])
+    }
+
+    // MARK: - Phase Track-8 P7 — WHERE STOPPED
+
+    func testSnapshotDefaultsWhereStoppedToNil() {
+        XCTAssertNil(emptySnapshot().whereStopped)
+    }
+
+    func testSnapshotRoundTripsWhereStopped() {
+        let row = WhereStoppedSnapshot(
+            id: 1,
+            generatedAtMs: 1_700_000_000_000,
+            anchorEventId: 42,
+            excerpt: "Track-7 P5 polish · WorkStateCard.swift",
+            wipSignals: ["commitWip", "midEdit"]
+        )
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500,
+            whereStopped: row
+        )
+        XCTAssertEqual(snapshot.whereStopped, row)
+    }
+
+    // MARK: - Phase Track-9 T9 — WEEKLY METRICS (Analytics surface)
+
+    func testSnapshotDefaultsWeeklyMetricsToEmpty() {
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500
+        )
+        XCTAssertEqual(snapshot.weeklyMetrics, .empty)
+    }
+
+    // MARK: - Track-10 T8 — standupRecap defaulted init (14th iteration)
+
+    /// Defaulted `standupRecap: StandupSnapshot? = nil` matches the T7
+    /// `currentSession` precedent. Existing fixture/test callsites stay
+    /// unmodified — `emptySnapshot()` returns nil for the new field without
+    /// any signature change.
+    func testSnapshotDefaultsStandupRecapToNil() {
+        XCTAssertNil(emptySnapshot().standupRecap)
+    }
+
+    func testSnapshotCarriesStandupRecap() {
+        let recap = StandupRecap(
+            yesterdayCommitsCount: 3,
+            yesterdayClosedLinearKeys: ["GUN-204"],
+            yesterdayReviewedPRsCount: 2,
+            todayContinuing: nil,
+            waitingItems: [],
+            openBlockers: []
+        )
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500,
+            standupRecap: StandupSnapshot(recap: recap, eod: nil)
+        )
+        XCTAssertEqual(snapshot.standupRecap?.recap, recap)
+        XCTAssertNil(snapshot.standupRecap?.eod)
+    }
+
+    func testSnapshotRoundTripsWeeklyMetrics() {
+        let custom = WeeklyMetrics(
+            dailySeries: Array(repeating: DailyMetric.empty, count: 7),
+            peakHour: 14,
+            wowDelta: 0.12,
+            commitStreak: 3,
+            issueCloseStreak: 2,
+            huddleStreak: 1,
+            focusSessionStreak: 4,
+            heavyPulseStreak: 0
+        )
+        let snapshot = InsightsSnapshot(
+            topApps: [],
+            sessions: [],
+            switchRate: 0,
+            deepSessionMinSec: 1500,
+            weeklyMetrics: custom
+        )
+        XCTAssertEqual(snapshot.weeklyMetrics, custom)
+        XCTAssertEqual(snapshot.weeklyMetrics.peakHour, 14)
+        XCTAssertEqual(snapshot.weeklyMetrics.commitStreak, 3)
+    }
 }

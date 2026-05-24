@@ -200,13 +200,20 @@ final class InsightsReader {
                         // screen-lock transitions). Stub returns .empty.
                         let youNowState = try insights.youNowState(now: Date())
                         try Task.checkCancellation()
-                        // Track-8 Phase 8.5 — same-task teammates list.
-                        // Hierarchical rule (same Linear → same branch →
-                        // adjacent branch). Stub reader returns [] until
-                        // Phase 5.4 wires DBTeammatePresenceReader against
-                        // presence_history; block renders empty state
-                        // until then.
-                        let sameTaskTeammates = try insights.sameTaskTeammates(rule: .hierarchical)
+                        // Track-10 T6 — broader presence pulse. Reader returns []
+                        // today; Phase 5.4 wires DBTeammatePresenceReader against
+                        // presence_history. 15-min maxAge matches master spec §3.4.
+                        let teammateReader = TeammatePresenceReaderFactory.make(database: db)
+                        let activeTeammates = try teammateReader
+                            .recentTeammateSnapshots(maxAge: 15 * 60, now: Date())
+                        try Task.checkCancellation()
+                        // Track-10 T6 — solo-vs-team gate for HomeView Zone-3.
+                        // IV.B-REWIRE: OrgService.activeMemberCount() stubbed to 1
+                        // (solo-mode). Real count via ActiveWorkspaceStore +
+                        // WorkspaceMembersReader lands in Phase IV.B alongside
+                        // workspace switcher UI. Inert until then — TEAM·N gate
+                        // never fires; NEEDS YOU stays full-width.
+                        let memberCount: Int = 1
                         try Task.checkCancellation()
                         // Track-8 Phase 8.6 — INBOX dashboard items list.
                         // Fetched with .all/"" defaults; filter + search
@@ -252,6 +259,64 @@ final class InsightsReader {
                         try Task.checkCancellation()
                         let gitDelta = await GitDeltaReaderFactory.make()
                             .read(forWorkspacePath: workspacePath)
+                        try Task.checkCancellation()
+                        // Track-10 T7 — bundled task-session lens (LEAF-ID +
+                        // branch + commits ahead + session start + per-task
+                        // focused-min + recent open files) for the Home YOU'RE ON
+                        // block. Composed via per-IDE dispatch (Xcode doc_path
+                        // walk + VSCode/JetBrains workspace_root match) +
+                        // attention dwell SUM + basename-only openFiles cap 3.
+                        // Stays nil for empty fixtures and Terminal-only work
+                        // where currentTaskIdentity() can't resolve.
+                        let currentSession = try insights.currentTaskSession()
+                        try Task.checkCancellation()
+                        // Track-10 T8 — RECAP + EOD standup composition. Zero
+                        // new substrate: reuses recentActivityFeed (T5) twice
+                        // (yesterday + today windows) plus todayMetrics
+                        // (Phase 8.3) once more for yesterday's commits-per-day.
+                        //
+                        // DST behavior: dateInterval(of: .day, for:) returns a
+                        // 23h interval on spring-forward days and 25h on
+                        // fall-back days; since recentActivityFeed works on
+                        // epoch ms the only effect is a slightly trimmed/
+                        // extended window — not a defect.
+                        //
+                        // F-CTO-T8-L — Calendar.date(byAdding:to:) returns
+                        // Optional; fallback to addingTimeInterval(-86_400) so
+                        // yesterdayStart is never == now (which would silently
+                        // collapse RECAP into a duplicate of today).
+                        let now = Date()
+                        let cal = Calendar.current
+                        let yesterdayStart = cal.date(byAdding: .day, value: -1, to: now)
+                            ?? now.addingTimeInterval(-86_400)
+                        let yesterdayInterval = cal.dateInterval(of: .day, for: yesterdayStart)
+                            ?? DateInterval(start: yesterdayStart, duration: 86_400)
+                        let todayInterval = cal.dateInterval(of: .day, for: now)
+                            ?? DateInterval(start: cal.startOfDay(for: now), duration: 86_400)
+                        let yesterdayMs = Int64(yesterdayInterval.start.timeIntervalSince1970 * 1000)
+                        let todayMs = Int64(todayInterval.start.timeIntervalSince1970 * 1000)
+                        let standupYesterdayFeed =
+                            (try? insights.recentActivityFeed(since: yesterdayMs, limit: 100)) ?? []
+                        try Task.checkCancellation()
+                        let standupTodayFeed =
+                            (try? insights.recentActivityFeed(since: todayMs, limit: 100)) ?? []
+                        try Task.checkCancellation()
+                        let yesterdayMetrics =
+                            (try? insights.todayMetrics(now: yesterdayStart)) ?? .empty
+                        try Task.checkCancellation()
+                        let standupBlockers = (try? insights.openBlockers()) ?? []
+                        try Task.checkCancellation()
+                        let standupSnapshot = StandupComposer.compose(
+                            yesterdayActivity: standupYesterdayFeed,
+                            todayActivity: standupTodayFeed,
+                            yesterdayMetrics: yesterdayMetrics,
+                            todayMetrics: todayMetrics,
+                            actionableItems: inboxItems,
+                            openBlockers: standupBlockers,
+                            currentTask: taskIdentity,
+                            latestStop: whereStoppedBase,
+                            now: now
+                        )
                         try Task.checkCancellation()
                         // Track-10 T5 — per-event SINCE timeline. `cursorMs == nil`
                         // before LeafApp's `configure(lastSeenCursor:)` lands;
@@ -322,13 +387,16 @@ final class InsightsReader {
                             recentSessions: recentSessions,
                             todayMetrics: todayMetrics,
                             youNowState: youNowState,
-                            sameTaskTeammates: sameTaskTeammates,
                             inboxItems: inboxItems,
                             whereStopped: whereStopped,
                             weeklyMetrics: weeklyMetrics,
                             gitDelta: gitDelta,
                             currentTaskIdentity: taskIdentity,
-                            sinceLastActiveItems: sinceLastActiveItems
+                            sinceLastActiveItems: sinceLastActiveItems,
+                            activeTeammates: activeTeammates,
+                            memberCount: memberCount,
+                            currentSession: currentSession,
+                            standupRecap: standupSnapshot
                         )
                         return .success((db, snapshot))
                     } catch {
