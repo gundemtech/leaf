@@ -1,9 +1,10 @@
 import Foundation
 
 /// Phase Track-4 S2 — JetBrains family (IntelliJ / PyCharm / WebStorm / GoLand
-/// / AppCode / CLion / Rider / RubyMine / PhpStorm / Android Studio / DataGrip)
-/// boundary value type. Carries IDE bundle ID + project name + active doc path
-/// only. Never `text of document` or `content`.
+/// / CLion / Rider / RubyMine / PhpStorm / Android Studio / DataGrip / RustRover
+/// / DataSpell) boundary value type. Carries IDE bundle ID + project name +
+/// active doc path only. Never `text of document` or `content`.
+/// AppCode dropped Track-6 P6 (EOL Dec 2023).
 public struct JetBrainsObservation: AdapterObservation, Hashable {
     public let ideBundleID: String
     public let projectName: String?

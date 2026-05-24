@@ -403,4 +403,31 @@ final class DispatchCoverageTests: XCTestCase {
             )
         }
     }
+
+    // MARK: - Track-6 P6 — IDEs Surface Cap coverage (integration-T10 cherry-pick)
+
+    // `ActivityFeedMapper.trackFourLocalOSKinds` is the canonical whitelist of
+    // local-OS event_kinds that render rows in the Activity tab. Every kind in
+    // that set must have a matching `ShareEventTypeKey` entry so Share Controls
+    // can gate its emission.
+    //
+    // `ide_window_title_observed` is registered in ShareEventTypeKey but is
+    // intentionally excluded from `trackFourLocalOSKinds` — it is a debug-only
+    // signal that never renders in the Activity tab.
+
+    /// #23 — every kind in `ActivityFeedMapper.trackFourLocalOSKinds` must have
+    /// a matching `ShareEventTypeKey` entry. Auto-derived from the whitelist, so
+    /// additions to `trackFourLocalOSKinds` (e.g. Track-6 P6 vscode/jetbrains
+    /// kinds) are automatically covered without updating this test.
+    /// Renumbered from track-10 source's #16 to #23 — integration sequential
+    /// numbering after P1/P2/P3 #16-#21 and P5 #22.
+    func testTrackFourLocalOSKindsAllRegisteredInShareEventTypeKey() {
+        let registry = Set(ShareEventTypeKey.allCases.map { $0.rawValue })
+        for kind in ActivityFeedMapper.trackFourLocalOSKinds {
+            XCTAssertTrue(
+                registry.contains(kind),
+                "ShareEventTypeKey missing entry for Activity-tab-visible kind \(kind)"
+            )
+        }
+    }
 }

@@ -54,7 +54,8 @@ final class EventKindIconTests: XCTestCase {
         // Track-6 P2 added 6 xcode_* lifecycle kinds → 39.
         // Track-6 P3 added 8 browser kinds (Safari/Chrome/Arc tab nav + active + bookmark) → 47.
         // Track-6 P5 added 3 zoom_meeting_* kinds → 50.
-        XCTAssertEqual(ActivityFeedMapper.trackFourLocalOSKinds.count, 50)
+        // Track-6 P6 added 3 visible IDE kinds (vscode_active_doc_changed, vscode_workspace_opened, jetbrains_recent_project_observed) → 53.
+        XCTAssertEqual(ActivityFeedMapper.trackFourLocalOSKinds.count, 53)
     }
 
     // MARK: - Phase Track-6 P2 (Xcode Deep — 6 new icon mappings)
@@ -104,5 +105,20 @@ final class EventKindIconTests: XCTestCase {
     /// 2 retroactive + 4 session lifecycle (visible) + 8 per-tool = 14.
     func testClaudeCodeAIKindsSetSizeUnchanged() {
         XCTAssertEqual(ActivityFeedMapper.claudeCodeAIKinds.count, 14)
+    }
+
+    // Track-6 P6 — IDE surface cap
+    func test_p6_vscodeKindsHaveIcons() {
+        XCTAssertEqual(EventKindIcon.symbol(for: "vscode_active_doc_changed"),
+                       "chevron.left.forwardslash.chevron.right")
+        XCTAssertEqual(EventKindIcon.symbol(for: "vscode_workspace_opened"),
+                       "folder.fill.badge.plus")
+        XCTAssertEqual(EventKindIcon.symbol(for: "jetbrains_recent_project_observed"),
+                       "chevron.left.forwardslash.chevron.right")
+    }
+
+    func test_p6_ideWindowTitleObservedHasNoIcon() {
+        // Debug-only signal, skipped by ActivityFeedMapper — no icon.
+        XCTAssertNil(EventKindIcon.symbol(for: "ide_window_title_observed"))
     }
 }

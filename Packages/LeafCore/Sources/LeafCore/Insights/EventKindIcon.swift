@@ -87,6 +87,13 @@ public enum EventKindIcon {
         case "claude_mcp_tool_invoked":       return "plug.circle"
         case "claude_slash_command_invoked":  return "slash.circle"
 
+        // Track-6 P6 — IDEs Surface Cap
+        case "vscode_active_doc_changed":          return "chevron.left.forwardslash.chevron.right"
+        case "vscode_workspace_opened":            return "folder.fill.badge.plus"
+        case "jetbrains_recent_project_observed":  return "chevron.left.forwardslash.chevron.right"
+        // ide_window_title_observed intentionally absent — debug-only signal,
+        // skipped by ActivityFeedMapper.mapLocalOS, no icon rendered.
+
         default: return nil
         }
     }

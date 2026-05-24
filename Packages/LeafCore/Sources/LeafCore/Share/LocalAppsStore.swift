@@ -135,6 +135,29 @@ public final class LocalAppsStore: ObservableObject, @unchecked Sendable {
             self.objectWillChange.send()
         }
     }
+
+    // MARK: - Track-6 P6 IDE-storage feature gate
+
+    /// UserDefaults keys for IDE-storage FSEvents watcher toggles. Both default
+    /// `false` per ADR-020 / Track-4 S3 opt-in posture.
+    static let vscodeStorageEnabledKey    = "ide-storage.vscode.enabled"
+    static let jetbrainsStorageEnabledKey = "ide-storage.jetbrains.enabled"
+
+    public var vscodeStorageEnabled: Bool {
+        get { defaults.bool(forKey: Self.vscodeStorageEnabledKey) }
+        set {
+            defaults.set(newValue, forKey: Self.vscodeStorageEnabledKey)
+            DispatchQueue.main.async { [self] in self.objectWillChange.send() }
+        }
+    }
+
+    public var jetbrainsStorageEnabled: Bool {
+        get { defaults.bool(forKey: Self.jetbrainsStorageEnabledKey) }
+        set {
+            defaults.set(newValue, forKey: Self.jetbrainsStorageEnabledKey)
+            DispatchQueue.main.async { [self] in self.objectWillChange.send() }
+        }
+    }
 }
 
 // MARK: - Phase Track-6 P3 — BrowserBookmarksFeatureGate conformance
@@ -145,4 +168,12 @@ public final class LocalAppsStore: ObservableObject, @unchecked Sendable {
 extension LocalAppsStore: BrowserBookmarksFeatureGate {
     public var chromeEnabled: Bool { browserBookmarksChromeEnabled }
     public var safariEnabled: Bool { browserBookmarksSafariEnabled }
+}
+
+// MARK: - Track-6 P6 IDEStorageFeatureGate conformance
+
+extension LocalAppsStore: IDEStorageFeatureGate {
+    // `LocalAppsStore` is `@unchecked Sendable` and not actor-isolated,
+    // so the protocol's `get async` is satisfied by plain synchronous computed
+    // properties — the compiler synthesises the async wrapper.
 }

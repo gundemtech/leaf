@@ -93,17 +93,44 @@ public final class AttentionEmissionPlanner {
             }
         }
 
-        let title = payload["window_title"]
+        // Capture original window_title BEFORE vscode-family hook for
+        // diff-suppression key (hook below removes window_title and replaces
+        // with parsed fields, but suppression must compare apples to apples
+        // across ticks).
+        let diffKey = payload["window_title"]
+
+        // Track-6 P6 — vscode-family parser hook.
+        // If we have a title AND bundle is vscode-family, attempt parsing.
+        // On parse success: replace generic attention with vscode_active_doc_changed
+        // event_kind (state-machine-diffed downstream by collector).
+        // On parse failure: emit ide_window_title_observed fallback with
+        // path-sanitized raw_title (default OFF in registry — diagnostic signal).
+        if canReadContext,
+           let title = payload["window_title"],
+           VSCodeFamilyDispatcher.isVSCodeFamily(bundleID: bundleID) {
+            if let obs = VSCodeFamilyDispatcher.parse(bundleID: bundleID, title: title) {
+                payload.removeValue(forKey: "window_title")
+                payload["event_kind"] = "vscode_active_doc_changed"
+                payload["ide_bundle_id"] = obs.ideBundleID
+                if let w = obs.workspaceName { payload["workspace_name"] = w }
+                if let f = obs.fileBasename  { payload["file_basename"] = f }
+            } else {
+                payload.removeValue(forKey: "window_title")
+                payload["event_kind"] = "ide_window_title_observed"
+                payload["ide_bundle_id"] = bundleID
+                payload["raw_title"] = IDETitlePathSanitizer.sanitize(title)
+            }
+        }
 
         // Diff suppression — только для polling tick'ов. App switch всегда emit.
         if reason == .windowPoll,
            bundleID == lastBundleID,
-           title == lastWindowTitle {
+           diffKey == lastWindowTitle {
             return nil
         }
 
         lastBundleID = bundleID
-        lastWindowTitle = title
+        lastWindowTitle = diffKey
 
         return RawEvent(
             timestamp: now,

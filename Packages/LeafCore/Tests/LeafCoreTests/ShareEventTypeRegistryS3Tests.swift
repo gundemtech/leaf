@@ -32,8 +32,8 @@ final class ShareEventTypeRegistryS3Tests: XCTestCase {
     // Track-6 P2 grew it 168 → 174 (+6 Xcode Deep). Track-6 P3 grew it 174 → 182 (+8 Browsers).
     // Track-6 P5 grew it 182 → 185 (+3 Zoom Deep).
     func testRegistrySizeIs152() {
-        XCTAssertEqual(ShareEventTypeKey.allCases.count, 185)
-        XCTAssertEqual(ShareEventTypeDefaults.all.count, 185)
+        XCTAssertEqual(ShareEventTypeKey.allCases.count, 189)
+        XCTAssertEqual(ShareEventTypeDefaults.all.count, 189)
     }
 
     func testAllS3KeysDefaultOff() {

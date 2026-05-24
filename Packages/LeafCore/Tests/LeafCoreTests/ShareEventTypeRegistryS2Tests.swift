@@ -6,11 +6,11 @@ final class ShareEventTypeRegistryS2Tests: XCTestCase {
     // Track-6 P1 grew it 152 → 168. Track-6 P2 grew it 168 → 174. Track-6 P3 grew it 174 → 182 (+8 Browsers Deep).
     // Track-6 P5 grew it 182 → 185 (+3 Zoom Deep).
     func testRegistrySizeIs139() {
-        XCTAssertEqual(ShareEventTypeKey.allCases.count, 185)
+        XCTAssertEqual(ShareEventTypeKey.allCases.count, 189)
     }
 
     func testDefaultsCountMatches() {
-        XCTAssertEqual(ShareEventTypeDefaults.all.count, 185)
+        XCTAssertEqual(ShareEventTypeDefaults.all.count, 189)
     }
 
     func testAllNewS2KeysDefaultOff() {

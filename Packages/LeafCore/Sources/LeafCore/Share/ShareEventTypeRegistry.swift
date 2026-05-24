@@ -261,6 +261,15 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     case zoomMeetingStarted               = "zoom_meeting_started"
     case zoomMeetingEnded                 = "zoom_meeting_ended"
     case zoomMeetingCalendarLinked        = "zoom_meeting_calendar_linked"
+
+    // MARK: - Phase Track-6 P6 — IDEs Surface Cap (integration-T10 cherry-pick from track-10-operational-home)
+    // 3 visible (default OFF per ADR-020) + 1 debug-only (`ide_window_title_observed`).
+    // VSCode-family per-fork title parser + JetBrains recentProjects.xml FSEvents watcher.
+    // IDETitlePathSanitizer strips absolute paths before emit (moat-critical).
+    case vscodeActiveDocChanged           = "vscode_active_doc_changed"
+    case vscodeWorkspaceOpened            = "vscode_workspace_opened"
+    case jetbrainsRecentProjectObserved   = "jetbrains_recent_project_observed"
+    case ideWindowTitleObserved           = "ide_window_title_observed"
 }
 
 /// Phase 4.7.A — onboarding default enabled-state per event_kind.
@@ -519,6 +528,14 @@ public enum ShareEventTypeDefaults {
         // disturbing it; new kinds add session timestamps + calendar cross-link.
         .init(key: .zoomMeetingStarted, defaultEnabled: false),
         .init(key: .zoomMeetingEnded, defaultEnabled: false),
-        .init(key: .zoomMeetingCalendarLinked, defaultEnabled: false)
+        .init(key: .zoomMeetingCalendarLinked, defaultEnabled: false),
+
+        // Phase Track-6 P6 — IDEs Surface Cap. All default OFF per ADR-020
+        // (capture-everything locally, share-selectively).
+        // `ideWindowTitleObserved` is debug-only — registered but never rendered.
+        .init(key: .vscodeActiveDocChanged, defaultEnabled: false),
+        .init(key: .vscodeWorkspaceOpened, defaultEnabled: false),
+        .init(key: .jetbrainsRecentProjectObserved, defaultEnabled: false),
+        .init(key: .ideWindowTitleObserved, defaultEnabled: false)
     ]
 }
