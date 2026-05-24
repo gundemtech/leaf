@@ -101,6 +101,37 @@ public protocol DerivedInsights: Sendable {
     /// (start desc). Default extension returns `[]` so StubInsights / iOS-future
     /// stay no-op without override.
     func recentSessions(period: DateInterval, limit: Int) throws -> [ActivitySession]
+
+    // MARK: - Track 8 P1 — Home operational console substrate
+
+    /// Track-8 P1 — caller's current work context (Linear issue, branch, repo, workspace).
+    /// Returns `nil` when underlying presence row is missing entirely; returns a
+    /// `TaskIdentity` with `isEmpty == true` when presence exists but no task is pinned.
+    /// Default `nil` for stubs / iOS-future.
+    func currentTaskIdentity() throws -> TaskIdentity?
+
+    /// Track-8 P1 — teammates currently working on the same task as caller. Matching
+    /// rule is hierarchical (same Linear issue → same branch → adjacent branch).
+    /// Returns `[]` when no `presence_history` substrate (pre-Phase 5.4) or no match.
+    /// Default `[]` for stubs / iOS-future.
+    func sameTaskTeammates(rule: MatchRule) throws -> [TeammateMatch]
+
+    /// Track-8 P1 — items requiring caller's attention: review requests, comments on
+    /// my work, @-mentions, open questions, blockers. Filtered + searched per
+    /// arguments. Aggregation collapses multiple events on same target into one row.
+    /// Default `[]` for stubs / iOS-future.
+    func inboxItems(filter: InboxFilter, query: String?) throws -> [InboxItem]
+
+    /// Track-8 P1 — anchor metrics for Home TODAY block: focused-minutes, AI ratio,
+    /// sessions count, context switches, commits, plus per-surface event-count pills.
+    /// `now: Date` is passed for testability (period derives `today` from local TZ).
+    /// Default `.empty` for stubs / iOS-future.
+    func todayMetrics(now: Date) throws -> TodayMetrics
+
+    /// Track-8 P1 — current activity state with priority resolution:
+    /// inMeeting > deepWorkFocus > away(screenLocked) > away(idle) > active.
+    /// `now: Date` for testability. Default `.away(.idle, idleSec: 0)` for stubs.
+    func youNowState(now: Date) throws -> YouNowState
 }
 
 /// Default implementations — конформер'ы могут override'ить, но без явного
@@ -123,6 +154,21 @@ public extension DerivedInsights {
 
     /// Phase 4.10.B — default empty list для StubInsights / iOS-future.
     func recentSessions(period: DateInterval, limit: Int) throws -> [ActivitySession] { [] }
+
+    // MARK: - Track 8 P1 defaults
+
+    func currentTaskIdentity() throws -> TaskIdentity? { nil }
+
+    func sameTaskTeammates(rule: MatchRule) throws -> [TeammateMatch] { [] }
+
+    func inboxItems(filter: InboxFilter, query: String?) throws -> [InboxItem] { [] }
+
+    func todayMetrics(now: Date) throws -> TodayMetrics { .empty }
+
+    func youNowState(now: Date) throws -> YouNowState {
+        .away(YouNowAway(reason: .idle, lastApp: nil, lastContextLabel: nil,
+                         lastLinearID: nil, idleSec: 0))
+    }
 }
 
 /// Phase 1.1 / CI fallback. Все методы бросают .notImplemented.
