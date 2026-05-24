@@ -236,10 +236,23 @@ final class InsightsReader {
                         // itself stays stub-empty until Phase 5.4 wires presence.
                         let memberCount: Int
                         if let activeWorkspaceID {
-                            memberCount = (try? db.readTeamMembers(
-                                workspaceID: activeWorkspaceID,
-                                includeRemoved: false
-                            ).count) ?? 1
+                            do {
+                                memberCount = try db.readTeamMembers(
+                                    workspaceID: activeWorkspaceID,
+                                    includeRemoved: false
+                                ).count
+                            } catch {
+                                // Solo-safe fallback — never block Home on a
+                                // membership read. Logged (not swallowed) so a
+                                // real schema/decrypt fault is diagnosable rather
+                                // than silently degrading a team install to solo
+                                // UI. Logger created inline: the instance `logger`
+                                // is @MainActor-isolated, unreachable from this
+                                // detached task (os.Logger is Sendable + cheap).
+                                Logger(subsystem: "tech.gundem.leaf.app", category: "insights")
+                                    .error("memberCount readTeamMembers failed: \(String(describing: error), privacy: .public)")
+                                memberCount = 1
+                            }
                         } else {
                             memberCount = 1
                         }

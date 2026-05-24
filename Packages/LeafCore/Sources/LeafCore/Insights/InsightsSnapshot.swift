@@ -175,11 +175,14 @@ public struct InsightsSnapshot: Sendable, Hashable {
     /// returns `[]` and the TEAM·N block renders its "Team presence sync coming
     /// soon." empty CTA.
     public let activeTeammates: [TeammateSnapshot]
-    /// Track-10 T6 — `OrgService.activeMemberCount()` (= 1 when no org row, otherwise
-    /// `team_members.removed_at_ms IS NULL` count). Drives the Home Zone-3 solo-vs-team
-    /// gate (`memberCount > 1` → 2-col ViewThatFits with NEEDS YOU + TEAM·N; else
-    /// NEEDS YOU full-width). Defaults to `1` so existing callsites keep solo-user
-    /// behavior without populating.
+    /// Track-10 T6 — active-workspace member count: `team_members.removed_at_ms
+    /// IS NULL` count for the active workspace, via `Database.readTeamMembers(
+    /// workspaceID:includeRemoved:).count` (Phase IV.B rewire; was the deleted
+    /// `OrgService.activeMemberCount()`). Falls back to `1` on a nil active
+    /// workspace id or a membership read failure. Drives the Home Zone-3
+    /// solo-vs-team gate (`memberCount > 1` → 2-col ViewThatFits with NEEDS YOU +
+    /// TEAM·N; else NEEDS YOU full-width). Defaults to `1` so existing callsites
+    /// keep solo-user behavior without populating.
     public let memberCount: Int
     /// Track-10 T7 — bundled task-session lens consumed by the Home YOU'RE ON
     /// block (LEAF-ID + branch + commits ahead + session start clock + per-task

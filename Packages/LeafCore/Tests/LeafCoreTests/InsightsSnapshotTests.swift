@@ -601,9 +601,10 @@ final class InsightsSnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.activeTeammates, [snap])
     }
 
-    /// Defaulted `memberCount: Int = 1` matches `OrgService.activeMemberCount()`
-    /// fallback when no org exists — solo Mac default state. Track-10 T6
-    /// HomeView Zone 3 reads this for the solo-vs-team gate.
+    /// Defaulted `memberCount: Int = 1` is the solo Mac default — matches the
+    /// Phase IV.B `readTeamMembers` rewire's fallback (nil active workspace or
+    /// membership read failure → 1). Track-10 T6 HomeView Zone 3 reads this for
+    /// the solo-vs-team gate.
     func testSnapshotDefaultsMemberCountToOne() {
         XCTAssertEqual(emptySnapshot().memberCount, 1)
     }
