@@ -2,12 +2,14 @@ import XCTest
 @testable import LeafCore
 
 final class ShareEventTypeRegistryS2Tests: XCTestCase {
+    // Track 4 S2 grew it 125 → 139. Track 4 S3 grew it 139 → 152.
+    // Track-6 P1 grew it 152 → 168.
     func testRegistrySizeIs139() {
-        XCTAssertEqual(ShareEventTypeKey.allCases.count, 152)
+        XCTAssertEqual(ShareEventTypeKey.allCases.count, 168)
     }
 
     func testDefaultsCountMatches() {
-        XCTAssertEqual(ShareEventTypeDefaults.all.count, 152)
+        XCTAssertEqual(ShareEventTypeDefaults.all.count, 168)
     }
 
     func testAllNewS2KeysDefaultOff() {

@@ -15,9 +15,10 @@
 //
 
 import SwiftUI
+import LeafCore
 
 enum OnboardingStep: String, CaseIterable {
-    case welcome, ax, fda, observers, team, done
+    case welcome, ax, fda, observers, aiTools, team, done
 
     var index: Int { Self.allCases.firstIndex(of: self) ?? 0 }
 }
@@ -110,6 +111,7 @@ struct OnboardingView: View {
         case .ax:        axStep
         case .fda:       fdaStep
         case .observers: observersStep
+        case .aiTools:   aiToolsStep
         case .team:      teamStep
         case .done:      doneStep
         }
@@ -222,7 +224,77 @@ struct OnboardingView: View {
             }
             HStack {
                 Spacer()
-                LeafButton("Skip for now", variant: .ghost, size: .sm, action: { step = .team })
+                LeafButton("Skip for now", variant: .ghost, size: .sm, action: { step = .aiTools })
+            }
+        }
+    }
+
+    // Track-6 P1 Phase F — opt-in Claude Code hook bridge install during
+    // onboarding. Skip path is safe: jsonl floor (always-on, no TCC)
+    // continues to capture metadata; the bridge install only adds <50ms
+    // emit latency + duration_ms / permission_mode coverage.
+    private var aiToolsStep: some View {
+        VStack(alignment: .leading, spacing: LeafSpace.md) {
+            Text("AI tool capture")
+                .font(LeafType.title.small)
+                .foregroundStyle(LeafColor.text.primary)
+            Text("Leaf can detect when you work with Claude Code. Metadata only — file paths, durations, token counts. Prompts, tool inputs, AI responses — never captured.")
+                .font(LeafType.body.small)
+                .foregroundStyle(LeafColor.text.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                LeafButton(
+                    "Install Claude Code hooks",
+                    variant: .primary,
+                    size: .sm,
+                    action: {
+                        installHooks()
+                    }
+                )
+                Spacer()
+                installedBadge
+            }
+            HStack {
+                Spacer()
+                LeafButton("Skip — use jsonl fallback", variant: .ghost, size: .sm, action: { step = .team })
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var installedBadge: some View {
+        switch permissions.aiToolsStore.lastInstallResult {
+        case .ok:
+            HStack(spacing: 4) {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(LeafColor.status.success)
+                Text("Installed").font(LeafType.body.small).foregroundStyle(LeafColor.text.secondary)
+            }
+        case .failed(let msg):
+            HStack(spacing: 4) {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(LeafColor.status.danger)
+                Text(msg).font(LeafType.body.small).foregroundStyle(LeafColor.text.secondary)
+            }
+        case .notAttempted:
+            EmptyView()
+        }
+    }
+
+    private func installHooks() {
+        let installer = AIToolsHookInstaller()
+        Task { @MainActor in
+            do {
+                let result = try installer.install()
+                switch result {
+                case .ok:
+                    permissions.aiToolsStore.lastInstallResult = .ok
+                    permissions.aiToolsStore.setEnabled("claude_code", true)
+                    step = .team
+                case .partial(let msg), .failed(let msg):
+                    permissions.aiToolsStore.lastInstallResult = .failed(msg)
+                    // Don't advance — let user see error and retry or skip.
+                }
+            } catch {
+                permissions.aiToolsStore.lastInstallResult = .failed("\(error.localizedDescription)")
             }
         }
     }

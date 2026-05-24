@@ -141,6 +141,126 @@ final class ClaudeCodeCollectorTests: XCTestCase {
         let fileSize = (attrs[.size] as? NSNumber)?.int64Value ?? 0
         XCTAssertEqual(stored?.byteOffset, fileSize)
     }
+
+    /// Track-6 P1 — subagent transcripts live in `<projectSlug>/<sessionId>/subagents/agent-*.jsonl`
+    /// (sibling subdir to the parent's `<sessionId>.jsonl`). Today's 1-level glob silently skipped
+    /// those — subagent activity dropped pre-P1.
+    func testDiscoversSubagentTranscripts() async throws {
+        // Arrange: parent jsonl + subagent jsonl in known subdir shape.
+        let projectDir = projectsRoot.appendingPathComponent("-Users-x-proj", isDirectory: true)
+        try FileManager.default.createDirectory(at: projectDir, withIntermediateDirectories: true)
+
+        let parentUUID = "parent-abc"
+        let agentID = "agent-xyz"
+
+        // Parent jsonl
+        let parentFile = projectDir.appendingPathComponent("\(parentUUID).jsonl")
+        let parentLine = #"{"type":"user","sessionId":"\#(parentUUID)","content":"parent"}"#
+        try (parentLine + "\n").write(to: parentFile, atomically: true, encoding: .utf8)
+
+        // Subagent transcript (sibling subdir)
+        let subagentDir = projectDir.appendingPathComponent("\(parentUUID)/subagents", isDirectory: true)
+        try FileManager.default.createDirectory(at: subagentDir, withIntermediateDirectories: true)
+        let subagentFile = subagentDir.appendingPathComponent("agent-\(agentID).jsonl")
+        let subagentLine = #"{"type":"user","sessionId":"\#(parentUUID)","content":"subagent"}"#
+        try (subagentLine + "\n").write(to: subagentFile, atomically: true, encoding: .utf8)
+
+        // Meta sidecar (not strictly required for this discovery test — discovery should
+        // find the jsonl whether or not meta.json exists yet; Task 7 + Task 10 handle meta).
+        let metaFile = subagentDir.appendingPathComponent("agent-\(agentID).meta.json")
+        try Data(#"{"agentType":"Explore","description":"audit"}"#.utf8).write(to: metaFile)
+
+        // Act: full tick. MockOneEventParser emits 1 RawEvent per line → 2 events total.
+        let writer = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let collector = ClaudeCodeCollector(
+            database: writer,
+            parser: MockOneEventParser(),
+            projectsRoot: projectsRoot,
+            intervalSec: 999,
+            backfillWindowDays: 7,
+            logger: logger
+        )
+        let result = await collector.performTick(now: Date())
+
+        // Assert: both files discovered + tail-read → 2 events.
+        XCTAssertEqual(result.filesScanned, 2, "discovery must include both parent and subagent jsonl")
+        XCTAssertEqual(result.eventsWritten, 2, "1 line per file → 2 events total")
+
+        let allRange = DateInterval(start: .distantPast, end: .distantFuture)
+        let events = try writer.events(in: allRange)
+        XCTAssertEqual(events.count, 2)
+    }
+
+    /// Track-6 P1 — multiple concurrent subagents under one parent: each gets its own offset.
+    func testDiscoversMultipleSubagentsUnderOneParent() async throws {
+        let projectDir = projectsRoot.appendingPathComponent("-Users-x-multi", isDirectory: true)
+        try FileManager.default.createDirectory(at: projectDir, withIntermediateDirectories: true)
+
+        let parentUUID = "parent-multi"
+        try Data(#"{"type":"user","sessionId":"\#(parentUUID)"}"#.utf8 + Data("\n".utf8))
+            .write(to: projectDir.appendingPathComponent("\(parentUUID).jsonl"))
+
+        let subagentDir = projectDir.appendingPathComponent("\(parentUUID)/subagents", isDirectory: true)
+        try FileManager.default.createDirectory(at: subagentDir, withIntermediateDirectories: true)
+        for agentID in ["a1", "a2", "a3"] {
+            let url = subagentDir.appendingPathComponent("agent-\(agentID).jsonl")
+            try Data(#"{"type":"user","sessionId":"\#(parentUUID)","agent":"\#(agentID)"}"#.utf8 + Data("\n".utf8))
+                .write(to: url)
+        }
+
+        let writer = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let collector = ClaudeCodeCollector(
+            database: writer,
+            parser: MockOneEventParser(),
+            projectsRoot: projectsRoot,
+            intervalSec: 999,
+            backfillWindowDays: 7,
+            logger: logger
+        )
+        let result = await collector.performTick(now: Date())
+        XCTAssertEqual(result.filesScanned, 4, "1 parent + 3 subagents")
+        XCTAssertEqual(result.eventsWritten, 4)
+    }
+
+    /// Track-6 P1 — discovery must NOT recurse beyond `<projectSlug>/<sessionId>/subagents/`.
+    /// Random subdir at the project-slug level (e.g. `cache-random/`) must be ignored.
+    func testDoesNotRecurseIntoArbitrarySubdirs() async throws {
+        let projectDir = projectsRoot.appendingPathComponent("-Users-x-strict", isDirectory: true)
+        try FileManager.default.createDirectory(at: projectDir, withIntermediateDirectories: true)
+
+        // Top-level jsonl — should be discovered
+        try Data(#"{"type":"user","sessionId":"X"}"#.utf8 + Data("\n".utf8))
+            .write(to: projectDir.appendingPathComponent("topX.jsonl"))
+
+        // Random subdir with .jsonl — must NOT be discovered.
+        // Use `cache-random` (no leading dot) so `.skipsHiddenFiles` doesn't make
+        // the test pass for the wrong reason.
+        let randomSubdir = projectDir.appendingPathComponent("cache-random", isDirectory: true)
+        try FileManager.default.createDirectory(at: randomSubdir, withIntermediateDirectories: true)
+        try Data(#"{"type":"user","sessionId":"Y"}"#.utf8 + Data("\n".utf8))
+            .write(to: randomSubdir.appendingPathComponent("cached.jsonl"))
+
+        // A nested random subdir (not `subagents/`) under a uuid-like dir — must NOT be discovered.
+        let uuidDir = projectDir.appendingPathComponent("uuid-thing", isDirectory: true)
+        try FileManager.default.createDirectory(at: uuidDir, withIntermediateDirectories: true)
+        let nestedRandom = uuidDir.appendingPathComponent("nested-not-subagents", isDirectory: true)
+        try FileManager.default.createDirectory(at: nestedRandom, withIntermediateDirectories: true)
+        try Data(#"{"type":"user","sessionId":"Z"}"#.utf8 + Data("\n".utf8))
+            .write(to: nestedRandom.appendingPathComponent("deep.jsonl"))
+
+        let writer = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let collector = ClaudeCodeCollector(
+            database: writer,
+            parser: MockOneEventParser(),
+            projectsRoot: projectsRoot,
+            intervalSec: 999,
+            backfillWindowDays: 7,
+            logger: logger
+        )
+        let result = await collector.performTick(now: Date())
+        XCTAssertEqual(result.filesScanned, 1, "only top-level jsonl, not random subdirs")
+        XCTAssertEqual(result.eventsWritten, 1)
+    }
 }
 
 // MARK: - Mock parser
@@ -163,5 +283,104 @@ private struct MockOneEventParser: ClaudeCodeJSONLParsing {
             ]
         )
         return .events([event])
+    }
+}
+
+// MARK: - Track-6 P1 (Task 17) — hook + jsonl dedup
+
+/// Mock parser that extracts `tool_use_id` from each jsonl line and emits one
+/// RawEvent carrying it under the `source = "jsonl"` tag. Used by
+/// `testIngestHookEventsAndJSONLDedup` — jsonl line whose tool_use_id already
+/// sits in the collector's hook LRU must be filtered out before write.
+private struct ToolUseIDInjectingParser: ClaudeCodeJSONLParsing {
+    func parse(line: String, source: String, now: Date) -> ClaudeCodeParseResult {
+        guard let data = line.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let toolUseID = json["tool_use_id"] as? String else {
+            return .irrelevant
+        }
+        let event = RawEvent(
+            timestamp: now,
+            signalType: .aiCollaboration,
+            bundleID: "com.anthropic.claude-code",
+            payload: [
+                "event_kind": "claude_bash_executed",
+                "tool_use_id": toolUseID,
+                "source": "jsonl"
+            ]
+        )
+        return .events([event])
+    }
+}
+
+extension ClaudeCodeCollectorTests {
+    /// Track-6 P1 (Task 17) — hook event ingested via `ingestHookEvents`
+    /// populates LRU; the subsequent jsonl tick parses an event with the
+    /// SAME tool_use_id but it's filtered out before write. Final state:
+    /// exactly ONE event persisted (the hook one with `source = "hook"`).
+    func testIngestHookEventsAndJSONLDedup() async throws {
+        let projectDir = projectsRoot.appendingPathComponent("-Users-x-task17", isDirectory: true)
+        try FileManager.default.createDirectory(at: projectDir, withIntermediateDirectories: true)
+        let sessionFile = projectDir.appendingPathComponent("session.jsonl")
+        let jsonlLine = #"{"type":"tool_use","tool_use_id":"DUP_TOOL_ID"}"#
+        try Data("\(jsonlLine)\n".utf8).write(to: sessionFile)
+
+        let writer = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        let collector = ClaudeCodeCollector(
+            database: writer,
+            parser: ToolUseIDInjectingParser(),
+            projectsRoot: projectsRoot,
+            intervalSec: 999,
+            backfillWindowDays: 7,
+            logger: logger
+        )
+
+        // 1. Hook arrives FIRST with tool_use_id = DUP_TOOL_ID, source = "hook",
+        //    carrying richer fields (duration_ms + permission_mode).
+        let hookEvent = RawEvent(
+            timestamp: Date(),
+            signalType: .aiCollaboration,
+            bundleID: "com.anthropic.claude-code",
+            payload: [
+                "event_kind": "claude_bash_executed",
+                "tool_use_id": "DUP_TOOL_ID",
+                "source": "hook",
+                "duration_ms": "50",
+                "permission_mode": "default"
+            ]
+        )
+        await collector.ingestHookEvents([hookEvent])
+
+        // LRU should now contain the seen tool_use_id.
+        let lruCount = await collector.hookSeenToolUseIDsCount_forTesting()
+        XCTAssertEqual(lruCount, 1, "LRU populated by ingestHookEvents")
+
+        // 2. JSONL tick runs — parser emits one event for the line, but the
+        //    tool_use_id matches the LRU so the collector drops it before
+        //    `writeEventsAndOffset`.
+        let result = await collector.performTick(now: Date())
+        XCTAssertEqual(result.filesScanned, 1)
+        XCTAssertEqual(
+            result.eventsWritten, 0,
+            "jsonl event with hook-seen tool_use_id deduped to zero"
+        )
+
+        // 3. Final DB state — exactly one event (the hook one) persisted.
+        let allRange = DateInterval(start: .distantPast, end: .distantFuture)
+        let events = try writer.events(in: allRange)
+        XCTAssertEqual(events.count, 1, "only hook event persists; jsonl twin dropped")
+        XCTAssertEqual(events.first?.payload["source"], "hook")
+        XCTAssertEqual(events.first?.payload["duration_ms"], "50")
+        XCTAssertEqual(events.first?.payload["permission_mode"], "default")
+
+        // 4. Offset should still advance — jsonl tail-read consumed the line.
+        let offset = try writer.readOffset(
+            collectorID: CollectorID.claudeCodeJSONL,
+            sourceID: sessionFile.resolvingSymlinksInPath().path
+        )
+        XCTAssertNotNil(offset, "offset row written even when all events deduped")
+        let fileSize = (try FileManager.default
+            .attributesOfItem(atPath: sessionFile.path)[.size] as? NSNumber)?.int64Value ?? 0
+        XCTAssertEqual(offset?.byteOffset, fileSize, "tail-read consumed full line despite filter")
     }
 }

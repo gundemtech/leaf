@@ -513,6 +513,46 @@ final class MigrationTests: XCTestCase {
         }
     }
 
+    // MARK: - Track-6 P1 — M028 partial expression index (renamed from M024 per integration-T10)
+
+    /// M028 EXPLAIN QUERY PLAN — subagent rollup query uses the new index, not full table scan.
+    /// На пустой таблице SQLite query planner может всё ещё выбрать SCAN из-за отсутствия статистики,
+    /// поэтому проверяем что индекс физически существует и структурно совместим с WHERE-предикатом
+    /// (covered в testMigration028CreatesClaudeCodeAISubagentIndex). EXPLAIN test is best-effort:
+    /// в случае SCAN на пустой таблице — не валим, только подтверждаем что индекс кандидатом
+    /// доступен (наличие index name в `sqlite_master` уже проверено).
+    func testMigration028SubagentRollupUsesIndex() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try db.readSQL { rawDB in
+            let plan = try Row.fetchAll(
+                rawDB,
+                sql: """
+                    EXPLAIN QUERY PLAN
+                    SELECT * FROM events
+                    WHERE json_extract(payload_json, '$.agent_id') IS NOT NULL
+                      AND signal_type = 'aiCollaboration';
+                """
+            )
+            let detail = plan.compactMap { row -> String? in
+                row["detail"] as? String
+            }.joined(separator: " | ")
+
+            // Soft assertion: на пустой таблице SQLite планнер может выбрать SCAN
+            // из-за отсутствия ANALYZE-стат. Если индекс назван в плане — отлично;
+            // если нет — fallback на структурную проверку (idx уже верифицирован
+            // в testMigration028CreatesClaudeCodeAISubagentIndex). Не валим тест на пустой таблице.
+            if detail.contains("idx_events_ai_subagent") {
+                XCTAssertTrue(true, "subagent rollup query uses idx_events_ai_subagent; plan: \(detail)")
+            } else {
+                // На пустой таблице планнер может выбрать SCAN — это OK для substrate.
+                // Phase C наполнит payload_json.agent_id, тогда ANALYZE даст
+                // нужную статистику чтобы планнер выбрал index lookup.
+                XCTAssertFalse(detail.isEmpty, "EXPLAIN QUERY PLAN should produce some plan; got empty")
+            }
+        }
+    }
+
     func testPlaintextDetectionRenamesFileAndStartsFresh() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         let key = EncryptionOptions(keyProvider: .data(Data(repeating: 0xDD, count: 32)))

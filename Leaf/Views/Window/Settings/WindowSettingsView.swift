@@ -38,6 +38,7 @@ struct WindowSettingsView: View {
                 FoldersSettings(service: watchedFolders)
                 LocalAppsSettingsSection()
                 SystemObserversSettingsSection()
+                AIToolsSettingsSection()
                 UpdatesSection(updater: updater)
             }
             .padding(LeafSpace.xxl)

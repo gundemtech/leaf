@@ -14,7 +14,11 @@ let package = Package(
         .library(name: "LeafCorePrivate", targets: ["LeafCorePrivate"]),
         // Pure MCP protocol layer (JSON-RPC envelope + MCP types + handlers
         // без side effects). Линкуется в LeafMCP binary target.
-        .library(name: "LeafMCPProtocol", targets: ["LeafMCPProtocol"])
+        .library(name: "LeafMCPProtocol", targets: ["LeafMCPProtocol"]),
+        // Track-6 P1 Phase E — thin native binary invoked by Claude Code hooks.
+        // Reads JSON payload from stdin, forwards envelope to Unix domain socket
+        // where Agent listens. See Sources/LeafHookBridge/main.swift.
+        .executable(name: "leaf-hook-bridge", targets: ["LeafHookBridge"])
     ],
     dependencies: [
         // GRDB fork with SQLCipher enabled. Tracks groue/GRDB.swift v7.10.0
@@ -55,6 +59,16 @@ let package = Package(
             name: "LeafMCPProtocolTests",
             dependencies: ["LeafMCPProtocol"],
             path: "Tests/LeafMCPProtocolTests"
+        ),
+        .executableTarget(
+            name: "LeafHookBridge",
+            dependencies: [],  // intentionally zero deps — keeps binary tiny + fast cold start
+            path: "Sources/LeafHookBridge"
+        ),
+        .testTarget(
+            name: "LeafHookBridgeTests",
+            dependencies: ["LeafHookBridge"],
+            path: "Tests/LeafHookBridgeTests"
         )
     ]
 )

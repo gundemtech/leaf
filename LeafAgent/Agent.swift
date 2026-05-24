@@ -96,6 +96,33 @@ enum AgentMain {
             logger: claudeCodeLogger
         )
 
+        // Track-6 P1 (Task 17) — hook bridge listener wiring. The bridge
+        // (`leaf-hook-bridge`) writes line-delimited envelopes to a
+        // unix-domain socket; we accept, parse, and forward to the collector
+        // which (a) writes RawEvents and (b) records each tool_use_id so the
+        // subsequent jsonl tick can dedup. LEAF_PROD gate: the parser +
+        // listener live in LeafCorePrivate (moat); public stub builds skip
+        // the wiring entirely.
+        #if LEAF_PROD
+        let hookParser = ClaudeCodeHookParser()
+        let hookSocketPath = ("~/Library/Application Support/Leaf/hooks.sock" as NSString)
+            .expandingTildeInPath
+        let hookListener = ClaudeCodeHookSocketListener(socketPath: hookSocketPath) { envelope in
+            let events = hookParser.parse(envelope: envelope)
+            if !events.isEmpty {
+                Task { await claudeCodeCollector.ingestHookEvents(events) }
+            }
+        }
+        do {
+            try hookListener.start()
+            claudeCodeLogger.info("hook listener started on \(hookSocketPath, privacy: .public)")
+        } catch {
+            claudeCodeLogger.error(
+                "hook listener start failed: \(error.localizedDescription, privacy: .public)"
+            )
+        }
+        #endif
+
         // Phase 2.4 — FSEvents content collector для watched folders.
         // Router injection: prod (ignore-list + L4/L5 + coalesce) в moat,
         // public Stub возвращает .filtered always → CI builds работают.
@@ -450,6 +477,9 @@ enum AgentMain {
         AgentLifetime.idleCollector = idleCollector
         AgentLifetime.maintenance = maintenance
         AgentLifetime.claudeCodeCollector = claudeCodeCollector
+        #if LEAF_PROD
+        AgentLifetime.claudeCodeHookListener = hookListener
+        #endif
         AgentLifetime.fsEventsCollector = fsEventsCollector
         AgentLifetime.linearCollector = linearCollector
         AgentLifetime.githubCollector = githubCollector
@@ -686,6 +716,10 @@ enum AgentMain {
             if let m = AgentLifetime.maintenance { await m.stop() }
             if let f = AgentLifetime.fsEventsCollector { await f.stop() }
             if let c = AgentLifetime.claudeCodeCollector { await c.stop() }
+            // Track-6 P1 (Task 17) — close hook listener (socket FD + sources).
+            #if LEAF_PROD
+            AgentLifetime.claudeCodeHookListener?.stop()
+            #endif
             if let l = AgentLifetime.linearCollector { await l.stop() }
             if let g = AgentLifetime.githubCollector { await g.stop() }
             if let s = AgentLifetime.slackCollector { await s.stop() }
@@ -712,6 +746,12 @@ enum AgentLifetime {
     nonisolated(unsafe) static var idleCollector: IdleCollector?
     nonisolated(unsafe) static var maintenance: MaintenanceScheduler?
     nonisolated(unsafe) static var claudeCodeCollector: ClaudeCodeCollector?
+    // Track-6 P1 (Task 17) — hook bridge listener retains the unix-domain
+    // socket FD + DispatchSources for the lifetime of the agent. LEAF_PROD
+    // gate matches the wiring site (listener lives in LeafCorePrivate).
+    #if LEAF_PROD
+    nonisolated(unsafe) static var claudeCodeHookListener: ClaudeCodeHookSocketListener?
+    #endif
     nonisolated(unsafe) static var fsEventsCollector: FSEventsCollector?
     nonisolated(unsafe) static var linearCollector: LinearCollector?
     nonisolated(unsafe) static var githubCollector: GitHubCollector?

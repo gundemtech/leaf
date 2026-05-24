@@ -28,9 +28,10 @@ final class ShareEventTypeRegistryS3Tests: XCTestCase {
         XCTAssertEqual(s3RawValues.count, 13, "S3 contract: 13 new keys")
     }
 
+    // Track-6 P1 grew it 152 → 168 (+16 Claude Code deep).
     func testRegistrySizeIs152() {
-        XCTAssertEqual(ShareEventTypeKey.allCases.count, 152)
-        XCTAssertEqual(ShareEventTypeDefaults.all.count, 152)
+        XCTAssertEqual(ShareEventTypeKey.allCases.count, 168)
+        XCTAssertEqual(ShareEventTypeDefaults.all.count, 168)
     }
 
     func testAllS3KeysDefaultOff() {

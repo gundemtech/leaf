@@ -221,7 +221,9 @@ final class ActivityFeedMapperTests: XCTestCase {
         )
         XCTAssertEqual(entry?.provider, .ai)
         XCTAssertEqual(entry?.eventKind, "tool_use")
-        XCTAssertEqual(entry?.primaryText, "Edit")
+        // Track-6 P1 — retroactive copy wraps with "Claude: " prefix to match
+        // claude_* cases (mapAI explicit-switch parity).
+        XCTAssertEqual(entry?.primaryText, "Claude: Edit")
         XCTAssertEqual(entry?.secondaryText, "Foo.swift")
     }
 
@@ -230,7 +232,7 @@ final class ActivityFeedMapperTests: XCTestCase {
         let entry = ActivityFeedMapper.map(
             id: 71, timestampMs: ts, signalType: "aiCollaboration", bundleID: nil, payloadJSON: payload
         )
-        XCTAssertEqual(entry?.primaryText, "Bash")
+        XCTAssertEqual(entry?.primaryText, "Claude: Bash")
         XCTAssertEqual(entry?.secondaryText, "some-repo")
     }
 
@@ -239,7 +241,7 @@ final class ActivityFeedMapperTests: XCTestCase {
         let entry = ActivityFeedMapper.map(
             id: 72, timestampMs: ts, signalType: "aiCollaboration", bundleID: nil, payloadJSON: payload
         )
-        XCTAssertEqual(entry?.primaryText, "Prompt")
+        XCTAssertEqual(entry?.primaryText, "Claude: prompt")
         XCTAssertEqual(entry?.secondaryText, "leaf")
     }
 }

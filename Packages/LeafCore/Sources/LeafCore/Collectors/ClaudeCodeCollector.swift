@@ -28,6 +28,21 @@ public actor ClaudeCodeCollector {
 
     private var loopTask: Task<Void, Never>?
 
+    /// Track-6 P1 (Task 17) — LRU set of `tool_use_id` values observed via the
+    /// hook path. Hook arrives faster than jsonl tail-read; we record each
+    /// tool_use_id from `ingestHookEvents`, then drop matching events when
+    /// jsonl ticks parse them later. Hook wins per spec §2.3 (strictly richer
+    /// payload — has `duration_ms` + `permission_mode`).
+    ///
+    /// Capacity 2048 — generous over typical per-session tool counts (10-200).
+    /// On overflow we drop random half (`shuffled().prefix(N/2)`) — simple,
+    /// stateless, no true LRU bookkeeping. Phase 4.9 may upgrade if metric
+    /// shows churn (e.g. ordered-set with timestamp eviction).
+    ///
+    /// Access is serial via actor isolation — no extra lock needed.
+    private var hookSeenToolUseIDs: Set<String> = []
+    private static let hookSeenLRUCapacity = 2048
+
     public init(
         database: Database,
         parser: any ClaudeCodeJSONLParsing,
@@ -127,8 +142,13 @@ public actor ClaudeCodeCollector {
 
     // MARK: - File discovery
 
-    /// 1-level recursive: `<projectsRoot>/<projectSlug>/<sessionId>.jsonl`.
-    /// Не используем deep `enumerator` чтобы не глядеть в случайные subdirs.
+    /// Track-6 P1 — 2-level discovery:
+    ///   `<projectsRoot>/<projectSlug>/<sessionId>.jsonl`                          ← top-level (existing)
+    ///   `<projectsRoot>/<projectSlug>/<parentSessionId>/subagents/agent-*.jsonl`  ← NEW (subagents)
+    /// Pre-P1 the collector skipped the subagent subdir entirely ("Не используем deep enumerator
+    /// чтобы не глядеть в случайные subdirs"). P1 enables it via narrow walk — exact known shape,
+    /// no wildcard recursion. Random subdirs at the project level / nested under sessionId still
+    /// ignored — see `testDoesNotRecurseIntoArbitrarySubdirs`.
     private func listJSONLFiles() -> [URL] {
         let fm = FileManager.default
         guard let projectDirs = try? fm.contentsOfDirectory(
@@ -142,13 +162,33 @@ public actor ClaudeCodeCollector {
         for projectDir in projectDirs {
             let isDir = (try? projectDir.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
             guard isDir else { continue }
-            guard let files = try? fm.contentsOfDirectory(
+            guard let entries = try? fm.contentsOfDirectory(
                 at: projectDir,
-                includingPropertiesForKeys: nil,
+                includingPropertiesForKeys: [.isDirectoryKey],
                 options: [.skipsHiddenFiles]
             ) else { continue }
-            for f in files where f.pathExtension == "jsonl" {
-                results.append(f)
+            for entry in entries {
+                let entryIsDir = (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+                if !entryIsDir, entry.pathExtension == "jsonl" {
+                    results.append(entry)
+                    continue
+                }
+                // Possible session-uuid dir — look for sibling `subagents/agent-*.jsonl`.
+                if entryIsDir {
+                    let subagentsDir = entry.appendingPathComponent("subagents")
+                    guard let agentFiles = try? fm.contentsOfDirectory(
+                        at: subagentsDir,
+                        includingPropertiesForKeys: nil,
+                        options: [.skipsHiddenFiles]
+                    ) else { continue }
+                    // `.jsonl` extension alone excludes the sibling `.meta.json` files;
+                    // `agent-` prefix is defense-in-depth against future filenames Claude
+                    // might add to the subagents dir (e.g. `summary.jsonl`, `index.jsonl`).
+                    for file in agentFiles where file.pathExtension == "jsonl"
+                        && file.lastPathComponent.hasPrefix("agent-") {
+                        results.append(file)
+                    }
+                }
             }
         }
         return results
@@ -282,6 +322,24 @@ public actor ClaudeCodeCollector {
             }
         }
 
+        // Track-6 P1 (Task 17) — dedup against hook-seen tool_use_ids. Hook
+        // fires faster than the tail-read tick; for any tool_use_id already
+        // observed via `ingestHookEvents` we drop the jsonl twin so exactly
+        // one event (the hook one, richer payload) is persisted.
+        let filteredEvents: [RawEvent]
+        if hookSeenToolUseIDs.isEmpty {
+            filteredEvents = allEvents
+        } else {
+            filteredEvents = allEvents.filter { event in
+                guard let id = event.payload["tool_use_id"] else { return true }
+                return !hookSeenToolUseIDs.contains(id)
+            }
+            let dropped = allEvents.count - filteredEvents.count
+            if dropped > 0 {
+                logger.info("dedup: dropped \(dropped, privacy: .public) jsonl events matching hook tool_use_id")
+            }
+        }
+
         let newOffset = CollectorOffset(
             collectorID: CollectorID.claudeCodeJSONL,
             sourceID: canonicalPath,
@@ -293,7 +351,7 @@ public actor ClaudeCodeCollector {
         )
 
         do {
-            try database.writeEventsAndOffset(allEvents, offset: newOffset)
+            try database.writeEventsAndOffset(filteredEvents, offset: newOffset)
         } catch {
             logger.error("persist failed for \(url.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
             return FileResult(didProcess: false, didBootstrap: false, eventsWritten: 0, malformedLines: malformedCount)
@@ -302,7 +360,7 @@ public actor ClaudeCodeCollector {
         return FileResult(
             didProcess: true,
             didBootstrap: false,
-            eventsWritten: allEvents.count,
+            eventsWritten: filteredEvents.count,
             malformedLines: malformedCount
         )
     }
@@ -370,5 +428,47 @@ public actor ClaudeCodeCollector {
         // Incomplete trailing fragment (без \n) игнорируется — next tick
         // прочитает его с byteOffset == startOffset + lastNewlineEnd.
         return (lines, lastNewlineEnd)
+    }
+
+    // MARK: - Track-6 P1 — Hook bridge ingestion (Task 17)
+
+    /// Hook path entry point. Called by `ClaudeCodeHookSocketListener`'s
+    /// per-envelope callback (wired in `LeafAgent/Agent.swift` under
+    /// `#if LEAF_PROD`). Records each event's `tool_use_id` in the LRU set so
+    /// the subsequent jsonl tick deduplicates, then persists.
+    ///
+    /// No offset tracking: hook path is socket-based (not file-based), so
+    /// `collector_offsets` is meaningless here. We still call
+    /// `writeEventsAndOffset` for transactional atomicity, passing `offset: nil`.
+    public func ingestHookEvents(_ events: [RawEvent]) async {
+        guard !events.isEmpty else { return }
+
+        for event in events {
+            if let id = event.payload["tool_use_id"] {
+                hookSeenToolUseIDs.insert(id)
+            }
+        }
+        // Trim-by-half overflow: simple, deterministic-enough until Phase 4.9
+        // ships a true LRU. Worst case we re-emit a few duplicates after a
+        // mass trim — substrate detector dedup already swallows that.
+        if hookSeenToolUseIDs.count > Self.hookSeenLRUCapacity {
+            hookSeenToolUseIDs = Set(
+                hookSeenToolUseIDs.shuffled().prefix(Self.hookSeenLRUCapacity / 2)
+            )
+        }
+
+        do {
+            try database.writeEventsAndOffset(events, offset: nil)
+        } catch {
+            logger.error(
+                "ingestHookEvents persist failed: \(error.localizedDescription, privacy: .public)"
+            )
+        }
+    }
+
+    /// Test-only accessor — lets ClaudeCodeCollectorTests assert LRU population
+    /// without exposing the underlying Set publicly.
+    internal func hookSeenToolUseIDsCount_forTesting() -> Int {
+        hookSeenToolUseIDs.count
     }
 }
