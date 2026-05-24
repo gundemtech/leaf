@@ -630,6 +630,11 @@ struct LeafApp: App {
           )
         }
                 .task {
+                    // Track-10 T6 (Phase IV.B) — inject ActiveWorkspaceStore
+                    // FIRST (field-only, no refresh) so the cursor configure's
+                    // launch refresh already sees it for the solo-vs-team
+                    // memberCount gate.
+                    reader.configure(activeWorkspaceStore: activeWorkspaceStore)
                     // Track-10 T5 — two-phase init for LastSeenCursor injection
                     // (refresh()-triggers first SINCE feed population).
                     reader.configure(lastSeenCursor: lastSeenCursor)

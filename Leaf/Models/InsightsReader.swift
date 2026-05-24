@@ -44,6 +44,12 @@ final class InsightsReader {
     /// Set via `configure(lastSeenCursor:)` from `LeafApp` at app launch;
     /// `nil` before configure → `sinceLastActiveItems` returns `[]` from refresh().
     private var lastSeenCursor: LastSeenCursor?
+    /// Track-10 T6 (Phase IV.B) — active-workspace store for the Zone-3
+    /// solo-vs-team gate. Set via `configure(activeWorkspaceStore:)` from
+    /// `LeafApp` at launch; `nil` before configure → `memberCount` falls back
+    /// to 1 (solo-safe). @MainActor-isolated, so its id is snapshotted on the
+    /// MainActor before the detached read (mirrors the `lastSeenCursor` hop).
+    private var activeWorkspaceStore: ActiveWorkspaceStore?
     /// Track-9 T6 (C-2) — last successful snapshot, updated on every `.loaded`
     /// transition. Read by error path to populate `State.error.lastKnown`.
     /// Instance field (not local) so overlapping refreshes (rapid double-tap on
@@ -89,6 +95,14 @@ final class InsightsReader {
         refresh(force: true)
     }
 
+    /// Track-10 T6 (Phase IV.B) — inject the active-workspace store for the
+    /// solo-vs-team gate. Field-only set (no refresh) — call this BEFORE
+    /// `configure(lastSeenCursor:)` so the single launch refresh that the
+    /// cursor configure triggers already sees the store. Idempotent.
+    func configure(activeWorkspaceStore: ActiveWorkspaceStore) {
+        self.activeWorkspaceStore = activeWorkspaceStore
+    }
+
     func refresh(force: Bool = false) {
         // Staleness window — skip redundant SQL when a successful load landed
         // less than `freshnessWindow` ago (rapid ambient tab-switch storm,
@@ -121,6 +135,11 @@ final class InsightsReader {
         // the SQL call has a plain Int64 to work with (LastSeenCursor is
         // @MainActor-isolated). `nil` cursor → skip the feed call entirely.
         let cursorMs: Int64? = lastSeenCursor?.lastSeenAtMs
+        // Track-10 T6 (Phase IV.B) — snapshot the active workspace id on the
+        // MainActor before the detached task (ActiveWorkspaceStore is
+        // @MainActor-isolated). `nil` → memberCount falls back to 1 (solo-safe)
+        // in the detached read below.
+        let activeWorkspaceID: String? = activeWorkspaceStore?.activeWorkspaceID
 
         currentTask = Task { [self] in
             // Database (@unchecked Sendable) и InsightsSnapshot (Sendable) —
@@ -208,12 +227,22 @@ final class InsightsReader {
                             .recentTeammateSnapshots(maxAge: 15 * 60, now: Date())
                         try Task.checkCancellation()
                         // Track-10 T6 — solo-vs-team gate for HomeView Zone-3.
-                        // IV.B-REWIRE: OrgService.activeMemberCount() stubbed to 1
-                        // (solo-mode). Real count via ActiveWorkspaceStore +
-                        // WorkspaceMembersReader lands in Phase IV.B alongside
-                        // workspace switcher UI. Inert until then — TEAM·N gate
-                        // never fires; NEEDS YOU stays full-width.
-                        let memberCount: Int = 1
+                        // Active-workspace member count from the `team_members`
+                        // table (the same `readTeamMembers` call WorkspaceReader's
+                        // loader uses). Fallback to 1 (solo-safe) on a nil active
+                        // workspace id or any DB read failure — Home rendering must
+                        // never block on a workspace-membership query. The TEAM·N
+                        // gate fires only at ≥2 active members; the teammates list
+                        // itself stays stub-empty until Phase 5.4 wires presence.
+                        let memberCount: Int
+                        if let activeWorkspaceID {
+                            memberCount = (try? db.readTeamMembers(
+                                workspaceID: activeWorkspaceID,
+                                includeRemoved: false
+                            ).count) ?? 1
+                        } else {
+                            memberCount = 1
+                        }
                         try Task.checkCancellation()
                         // Track-8 Phase 8.6 — INBOX dashboard items list.
                         // Fetched with .all/"" defaults; filter + search
