@@ -3,7 +3,7 @@ import Observation
 import SwiftUI
 
 enum WindowSection: String, CaseIterable, Hashable, Codable, Identifiable {
-    case home, activity, team, connections, settings, profile
+    case home, activity, analytics, team, connections, settings, profile
 
     var id: String { rawValue }
 
@@ -11,6 +11,7 @@ enum WindowSection: String, CaseIterable, Hashable, Codable, Identifiable {
         switch self {
         case .home:         "Home"
         case .activity:     "Activity"
+        case .analytics:    "Analytics"
         case .team:         "Team"
         case .connections:  "Connections"
         case .settings:     "Settings"
@@ -24,6 +25,7 @@ enum WindowSection: String, CaseIterable, Hashable, Codable, Identifiable {
         switch self {
         case .home:         LeafIcons.nav.home
         case .activity:     LeafIcons.nav.activity
+        case .analytics:    LeafIcons.nav.activity
         case .team:         LeafIcons.nav.team
         case .connections:  LeafIcons.nav.connections
         case .settings:     LeafIcons.nav.settings

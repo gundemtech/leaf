@@ -83,3 +83,14 @@ public enum AwayReason: String, Equatable, Hashable, Sendable {
     case idle
     case sleep
 }
+
+extension YouNowState {
+    /// Convenience default for stubs / no-state init paths — semantically
+    /// equivalent to "away (idle, no context)". Used by InsightsSnapshot
+    /// defaulted-init fields where T8/T10 substrate landed before T8 .empty
+    /// helpers had a canonical home.
+    public static var empty: YouNowState {
+        .away(YouNowAway(reason: .idle, lastApp: nil, lastContextLabel: nil,
+                         lastLinearID: nil, idleSec: 0))
+    }
+}

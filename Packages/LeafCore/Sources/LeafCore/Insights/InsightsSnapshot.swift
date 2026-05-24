@@ -104,10 +104,75 @@ public struct InsightsSnapshot: Sendable, Hashable {
     /// producer side. Empty ↔ no attention events in `period` or producer not
     /// wired (StubInsights / non-prod build / B-7 not landed yet).
     public let recentSessions: [ActivitySession]
-    /// Phase 4.10.A — chronological per-event feed for the Activity tab.
-    /// Sorted by ts desc on the producer side. Empty ↔ no events in `period`
-    /// or producer not wired (StubInsights / non-prod build).
-    public let recentActivity: [ActivityFeedEntry]
+    /// Track 7 P2-collapsed — Xcode build/test breakdown for the snapshot's
+    /// reference period. `nil` ↔ snapshot builder did not compute (P2-collapsed
+    /// defers builder extension; cards fall back to "Open for details" headline).
+    /// Phase Track-7 P3 — D3 work state summary (decisions / open questions /
+    /// open blockers). `nil` ↔ no Work State data assembled (e.g. snapshot
+    /// builder is in private moat and not yet wired, fresh DB with no D3 rows,
+    /// or non-prod StubInsights conformer). `WorkStateCardViewModel` collapses
+    /// "All clear" rather than disappearing.
+    /// Phase Track-8 P3 — TODAY block metrics (focused minutes / AI ratio /
+    /// sessions / context switches / commits + surface pills). Default
+    /// `.empty` so existing callsites (tests, previews) keep compiling
+    /// without modification; production `InsightsReader.refresh()` writes
+    /// the real value via `DerivedInsights.todayMetrics(now:)`.
+    public let todayMetrics: TodayMetrics
+    /// Phase Track-8 P4 — YOU·NOW dashboard cell state (active /
+    /// inMeeting / deepWorkFocus / away). Default `.empty` matches the
+    /// `todayMetrics` pattern — no fixture sweep needed across existing
+    /// snapshot construction sites. Production
+    /// `InsightsReader.refresh()` writes the real value via
+    /// `DerivedInsights.youNowState(now:)`.
+    public let youNowState: YouNowState
+    /// Phase Track-8 P5 — teammates currently working on the same task
+    /// as the caller (same Linear issue / same branch / adjacent branch).
+    /// Sorted by `SameTaskMatcher` (confidence asc → lastActivityAtMs
+    /// desc → displayName asc). Default `[]` so existing call-sites keep
+    /// compiling without modification. Production `InsightsReader.refresh()`
+    /// writes the real value via
+    /// `DerivedInsights.sameTaskTeammates(rule: .hierarchical)` — returns
+    /// `[]` until Phase 5.4 wires a DB-backed `TeammatePresenceReader`
+    /// against `presence_history`.
+    public let sameTaskTeammates: [TeammateMatch]
+    /// Phase Track-8 P6 — INBOX dashboard items list (review requests,
+    /// comments on my work, mentions, open questions, blockers). Substrate
+    /// already sorts by `InboxSeverity.sortRank` asc → `createdAtMs` desc.
+    /// Default `[]` so existing call-sites keep compiling without
+    /// modification. Production `InsightsReader.refresh()` writes the
+    /// real value via `DerivedInsights.inboxItems(filter:query:)`.
+    public let inboxItems: [InboxItem]
+    /// Phase Track-8 P7 — WHERE STOPPED block snapshot (most recent
+    /// stop-point derived from Track-1 D3 `where_stopped_log` plus
+    /// commit / ticket / file basename heuristics in
+    /// `ProdWhereStoppedDeriver`). Default `nil` so existing call-sites
+    /// keep compiling without modification. Production
+    /// `InsightsReader.refresh()` writes the real value via
+    /// `DerivedInsights.recentWhereStopped(limit: 1).first` — `nil` when
+    /// substrate has no row (fresh DB, idle gate not met, or non-prod
+    /// `StubInsights` returning `[]`).
+    public let whereStopped: WhereStoppedSnapshot?
+    /// Phase Track-9 T9 — Analytics surface 7-day weekly metrics
+    /// (focus minutes / AI ratio / sessions / commits per day +
+    /// peak hour + WoW delta + 5 streaks). Default `.empty` mirrors
+    /// P3 todayMetrics / P4 youNowState pattern: substrate ships
+    /// `WeeklyMetrics.empty` first-class, callsites read
+    /// `weeklyMetrics == .empty` Equatable check for AnalyticsContent
+    /// empty-state branching. Production `InsightsReader.refresh()`
+    /// writes the real value via `DerivedInsights.weeklyMetrics(now:)`
+    /// (T4 substrate; `StubInsights` default returns `.empty` for
+    /// non-prod / iOS-future paths).
+    public let weeklyMetrics: WeeklyMetrics
+    /// Track-10 T2 — in-process git delta info for the caller's current workspace
+    /// (commits ahead/behind merge base + uncommitted count + parsed remote ref).
+    /// Default `nil` ↔ workspace path unknown / not a git repo / subprocess failure.
+    /// Powers the RESUME hero block's WIP signal line + "Diff with main" CTA.
+    public let gitDelta: GitDeltaSnapshot?
+    /// Track-10 T2 — current `TaskIdentity` resolved from the most recent attention
+    /// event (linearID + branch + repo + workspacePath + linearWorkspaceSlug). Default
+    /// `nil` ↔ no attention event in the freshness window. Powers the RESUME hero
+    /// task line + Resume/Linear CTAs.
+    public let currentTaskIdentity: TaskIdentity?
 
     public init(
         topApps: [AppTimeEntry],
@@ -143,7 +208,14 @@ public struct InsightsSnapshot: Sendable, Hashable {
         linearCompletionRate: Double? = nil,
         presenceState: PresenceUISnapshot = .empty,
         recentSessions: [ActivitySession] = [],
-        recentActivity: [ActivityFeedEntry] = []
+        todayMetrics: TodayMetrics = .empty,
+        youNowState: YouNowState = .empty,
+        sameTaskTeammates: [TeammateMatch] = [],
+        inboxItems: [InboxItem] = [],
+        whereStopped: WhereStoppedSnapshot? = nil,
+        weeklyMetrics: WeeklyMetrics = .empty,
+        gitDelta: GitDeltaSnapshot? = nil,
+        currentTaskIdentity: TaskIdentity? = nil
     ) {
         self.topApps = topApps
         self.sessions = sessions
@@ -178,7 +250,14 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.linearCompletionRate = linearCompletionRate
         self.presenceState = presenceState
         self.recentSessions = recentSessions
-        self.recentActivity = recentActivity
+        self.todayMetrics = todayMetrics
+        self.youNowState = youNowState
+        self.sameTaskTeammates = sameTaskTeammates
+        self.inboxItems = inboxItems
+        self.whereStopped = whereStopped
+        self.weeklyMetrics = weeklyMetrics
+        self.gitDelta = gitDelta
+        self.currentTaskIdentity = currentTaskIdentity
     }
 
     /// Convenience init — рассчитывает `deepSessionsCount` по threshold'у.
@@ -220,7 +299,14 @@ public struct InsightsSnapshot: Sendable, Hashable {
         linearCompletionRate: Double? = nil,
         presenceState: PresenceUISnapshot = .empty,
         recentSessions: [ActivitySession] = [],
-        recentActivity: [ActivityFeedEntry] = []
+        todayMetrics: TodayMetrics = .empty,
+        youNowState: YouNowState = .empty,
+        sameTaskTeammates: [TeammateMatch] = [],
+        inboxItems: [InboxItem] = [],
+        whereStopped: WhereStoppedSnapshot? = nil,
+        weeklyMetrics: WeeklyMetrics = .empty,
+        gitDelta: GitDeltaSnapshot? = nil,
+        currentTaskIdentity: TaskIdentity? = nil
     ) {
         self.init(
             topApps: topApps,
@@ -256,7 +342,14 @@ public struct InsightsSnapshot: Sendable, Hashable {
             linearCompletionRate: linearCompletionRate,
             presenceState: presenceState,
             recentSessions: recentSessions,
-            recentActivity: recentActivity
+            todayMetrics: todayMetrics,
+            youNowState: youNowState,
+            sameTaskTeammates: sameTaskTeammates,
+            inboxItems: inboxItems,
+            whereStopped: whereStopped,
+            weeklyMetrics: weeklyMetrics,
+            gitDelta: gitDelta,
+            currentTaskIdentity: currentTaskIdentity
         )
     }
 
@@ -277,7 +370,6 @@ public struct InsightsSnapshot: Sendable, Hashable {
             && slackHuddleMinutes == 0
             && presenceState.isEmpty
             && recentSessions.isEmpty
-            && recentActivity.isEmpty
     }
 
     /// Average session duration. `0` если sessions пуст.

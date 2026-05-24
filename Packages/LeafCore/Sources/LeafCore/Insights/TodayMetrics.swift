@@ -22,6 +22,15 @@ public struct TodayMetrics: Equatable, Hashable, Sendable {
     }
 }
 
+/// Track-9 T6 — discriminator. `.captureTime` carries duration in seconds;
+/// `.actionNoun` carries discrete event count. Substrate emission preserved
+/// for future re-use (Track-10 T1 dropped TodayBlock UI rendering; no current
+/// MCP consumer).
+public enum SurfacePillKind: String, Equatable, Hashable, Sendable, Codable {
+    case captureTime
+    case actionNoun
+}
+
 public struct SurfacePill: Equatable, Hashable, Sendable, Identifiable {
     public let id: String
     public let label: String

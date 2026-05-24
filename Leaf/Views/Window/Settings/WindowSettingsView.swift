@@ -42,6 +42,7 @@ struct WindowSettingsView: View {
                 SystemObserversSettingsSection()
                 AIToolsSettingsSection()
                 BrowserAllowListSection(store: browserAllowListStore)
+                AdvancedSettingsSection()
                 UpdatesSection(updater: updater)
             }
             .padding(LeafSpace.xxl)

@@ -136,6 +136,9 @@ struct LeafApp: App {
     // dependencies, куда флаг не пропагируется).
     #if LEAF_PROD
       DerivedInsightsFactory.register { LeafCorePrivate.ProdInsights(database: $0) }
+      // Track-10 T2 — subprocess-backed git delta reader for RESUME hero card.
+      // Non-LEAF_PROD builds fall through to StubGitDeltaReader (returns nil).
+      GitDeltaReaderFactory.register { LeafCorePrivate.ProdGitDeltaReader() }
     #endif
 
     // D13 (Phase 3.1) — explicit _state = State(initialValue:) pattern для

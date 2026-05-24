@@ -1,14 +1,14 @@
 //
 //  HomeView.swift
-//  Track 2 / D2 — Home screen. 4-section compact IA:
+//  Track 8 / Phase 8.2 — Operational console. Post-Track-10 composition
+//  (T2 hero promote + T3 YOU·NOW badge inline + T4 NEEDS YOU rename):
 //
-//    1. Hero (current state) — single LeafType.title.large + caption row
-//       with inline metrics. Three states: active session / idle / no-data.
-//    2. Live Presence — LivePresenceWidget on D1 organisms.
-//    3. Today summary — LeafMetricAmbient (focus today) + middot inline
-//       metrics row + 3 provider rows (Linear / GitHub / Slack) as
-//       LeafListRow.
-//    4. Recent sessions — RecentSessionsBlock on D1 organisms.
+//    1. RESUME HERO                        (full width)
+//    2. TODAY (with inline state badge)    (full width)
+//    3. WITH YOU ON THIS                   (full width — T6 → TeamN)
+//    4. NEEDS YOU                          (full width — T4 from INBOX)
+//
+//  Block bodies were placeholders in P2; P3-P7 wired Phase 8.1 substrate.
 //
 //  State-machine UX (InsightsReader.State):
 //    .loading        → ProgressView centered in hero region (no shimmer).
@@ -259,14 +259,31 @@ private struct HomeContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: LeafSpace.xl) {
-            HeroBlock(snapshot: snapshot)
+            // Track-10 T2 — RESUME hero promoted to top of Home. Replaces
+            // HEAD's HeroBlock (Track-9 T7 WhereStoppedBlock retired by T2).
+            ResumeHeroBlock(
+                snapshot: snapshot.whereStopped,
+                gitDelta: snapshot.gitDelta,
+                taskIdentity: snapshot.currentTaskIdentity
+            )
+
+            // Track-9 T6 + T3 — TodayBlock with embedded YouNowStateBadge (T3).
+            TodayBlock(
+                metrics: snapshot.todayMetrics,
+                youNowState: snapshot.youNowState
+            )
+
+            // Track-10 T3 — YouNowBlock retired; state surfaces as an
+            // inline badge inside TodayBlock. WithYouOnThisBlock
+            // promotes to full-width interim; T6 (IV.A.2) will replace it
+            // with TeamNBlock.
+            WithYouOnThisBlock(matches: snapshot.sameTaskTeammates)
+
+            // Track-10 T4 — NEEDS YOU rename + InboxFilter.actionable default.
+            NeedsYouBlock(items: snapshot.inboxItems)
 
             if !snapshot.presenceState.isEmpty {
                 LivePresenceWidget(snapshot: snapshot.presenceState)
-            }
-
-            if hasTodayContent {
-                TodaySection(snapshot: snapshot)
             }
 
             if !snapshot.recentSessions.isEmpty || hasTodayContent || !snapshot.presenceState.isEmpty {

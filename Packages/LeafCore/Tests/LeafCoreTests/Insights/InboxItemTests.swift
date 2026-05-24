@@ -18,6 +18,8 @@ final class InboxItemTests: XCTestCase {
         // C-33 (T10): parity assertion for .alerts case added in T8 — guards
         // against accidental rename that would silently change persisted state.
         XCTAssertEqual(InboxFilter.alerts.rawValue, "alerts")
+        // Track-10 T4: same parity fence for .actionable.
+        XCTAssertEqual(InboxFilter.actionable.rawValue, "actionable")
     }
 
     func testInboxFilterAdmits() {
@@ -90,14 +92,25 @@ extension InboxItemTests {
         XCTAssertEqual(InboxKind.allCases[13], .slackDM)
     }
 
-    func testInboxFilterAdmits_5FilterMatrix() {
-        // Table-driven: 5 filters × 14 kinds
+    func testInboxFilterAdmits_6FilterMatrix() {
+        // Table-driven: 6 filters × 14 kinds (Track-10 T4 added .actionable).
         let filters = InboxFilter.allCases
-        XCTAssertEqual(filters.count, 5)
+        XCTAssertEqual(filters.count, 6)
 
         // .all admits everything
         for kind in InboxKind.allCases {
             XCTAssertTrue(InboxFilter.all.admits(kind), "\(InboxFilter.all) should admit \(kind)")
+        }
+
+        // .actionable admits 7-kind "needs YOUR response NOW" whitelist
+        let actionableKinds: Set<InboxKind> = [
+            .reviewRequest, .mention, .openQuestion, .blocker,
+            .buildFailed, .ciFailed, .liveMeeting,
+        ]
+        for kind in InboxKind.allCases {
+            XCTAssertEqual(
+                InboxFilter.actionable.admits(kind), actionableKinds.contains(kind),
+                "actionable.admits(\(kind)) mismatch")
         }
 
         // .reviews admits only .reviewRequest
@@ -120,5 +133,25 @@ extension InboxItemTests {
         for kind in InboxKind.allCases {
             XCTAssertEqual(InboxFilter.alerts.admits(kind), alertKinds.contains(kind))
         }
+    }
+}
+
+// MARK: - Track-10 T4: InboxFilter.actionable case + position fence
+// See docs/superpowers/specs/2026-05-22-track-10-T4-needs-you.md §3.1
+extension InboxItemTests {
+
+    func testInboxFilter_actionable_rawValue_roundTrip() {
+        XCTAssertEqual(InboxFilter.actionable.rawValue, "actionable")
+        XCTAssertEqual(InboxFilter(rawValue: "actionable"), .actionable)
+    }
+
+    func testInboxFilter_allCases_orderHasActionableSecond() {
+        // Stable order is part of the persisted UI contract — adding a
+        // new case must land at position #2, not at .alerts-tail, to keep
+        // hand-rolled chip strips in NeedsYouFilterRow aligned with
+        // visible-name order in tests/docs/spec.
+        XCTAssertEqual(
+            InboxFilter.allCases,
+            [.all, .actionable, .reviews, .questions, .mentions, .alerts])
     }
 }

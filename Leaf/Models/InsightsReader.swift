@@ -165,6 +165,88 @@ final class InsightsReader {
                         // view, no period). Empty pre-4.7 install / non-prod CI.
                         let presenceState: PresenceUISnapshot = (try? PresenceUISnapshot.read(database: db)) ?? .empty
                         try Task.checkCancellation()
+                        // Track-8 Phase 8.3 — TODAY block aggregates (focused
+                        // minutes / AI ratio / sessions / switches / commits +
+                        // surface pills). Single SQL call backed by Phase 8.1
+                        // substrate; stub on non-prod returns .empty.
+                        let todayMetrics = try insights.todayMetrics(now: Date())
+                        try Task.checkCancellation()
+                        // Track-8 Phase 8.4 — YOU·NOW dashboard cell state.
+                        // Single deriver call over the same substrate
+                        // (presence_state + attention / meeting / focus /
+                        // screen-lock transitions). Stub returns .empty.
+                        let youNowState = try insights.youNowState(now: Date())
+                        try Task.checkCancellation()
+                        // Track-8 Phase 8.5 — same-task teammates list.
+                        // Hierarchical rule (same Linear → same branch →
+                        // adjacent branch). Stub reader returns [] until
+                        // Phase 5.4 wires DBTeammatePresenceReader against
+                        // presence_history; block renders empty state
+                        // until then.
+                        let sameTaskTeammates = try insights.sameTaskTeammates(rule: .hierarchical)
+                        try Task.checkCancellation()
+                        // Track-8 Phase 8.6 — INBOX dashboard items list.
+                        // Fetched with .all/"" defaults; filter + search
+                        // applied view-side as @State, no re-fetch on
+                        // keystroke. Stub returns [] until Phase 4.8/4.9
+                        // wire Layer B; D3 detection tables already feed
+                        // open questions + blockers via the moat impl.
+                        let inboxItems = try insights.inboxItems(filter: .all, query: "")
+                        try Task.checkCancellation()
+                        // Track-8 Phase 8.7 + Track-9 T7 — WHERE STOPPED snapshot
+                        // with Path B composition. Reader fetches the most
+                        // recent stop-point row (substrate returns most-recent-
+                        // first), then splices `recentLastCommit` from the
+                        // Track-9 T1 deriver. nil base → no commit composition.
+                        // IV.A.1 — recentWhereStopped(limit:) protocol method not on
+                        // integration DerivedInsights yet; stub nil. IV.A.2 will add
+                        // the method (or wire to alternate source). ResumeHeroBlock
+                        // handles nil whereStopped via blank-shell fence (T2.5).
+                        let whereStoppedBase: WhereStoppedSnapshot? = nil
+                        try Task.checkCancellation()
+                        // Track-9 T7 — 4h cutoff per spec §9 call C.
+                        let recentLastCommit = try insights.recentLastCommit(
+                            maxAgeMs: 4 * 60 * 60 * 1000
+                        )
+                        try Task.checkCancellation()
+                        // Track-9 T9 — Analytics weekly metrics (7-day window
+                        // anchored at local-TZ midnight). Pure read; T4 ships
+                        // ProdInsights+WeeklyMetrics with 5 streaks + WoW.
+                        let weeklyMetrics = try insights.weeklyMetrics(now: Date())
+                        try Task.checkCancellation()
+                        // Track-10 T2 — task identity (linearID / branch / repo /
+                        // linearWorkspaceSlug) for RESUME hero CTAs. workspacePath
+                        // intentionally NOT carried on the struct (T5 D-8) — see
+                        // currentWorkspacePath() below for the ephemeral fetch.
+                        let taskIdentity = try insights.currentTaskIdentity()
+                        try Task.checkCancellation()
+                        // Track-10 T2 — ephemeral workspace path → in-process git
+                        // delta read (ahead/behind/uncommitted + parsed remote).
+                        // Path bytes stay scoped to this `await`; only counts +
+                        // structured ref strings + parsed remote propagate into the
+                        // snapshot. Stub fallback (non-LEAF_PROD) returns nil.
+                        let workspacePath = try insights.currentWorkspacePath()
+                        try Task.checkCancellation()
+                        let gitDelta = await GitDeltaReaderFactory.make()
+                            .read(forWorkspacePath: workspacePath)
+                        try Task.checkCancellation()
+                        // Path B — splice commit into deriver's snapshot via
+                        // defaulted-init. Preserves anchorFilePath / anchorLine
+                        // populated by ProdInsights+RecentWhereStopped LEFT JOIN.
+                        // Track-10 T2 — also preserves anchorBundleID from same row.
+                        let whereStopped: WhereStoppedSnapshot? = whereStoppedBase.map { base in
+                            WhereStoppedSnapshot(
+                                id: base.id,
+                                generatedAtMs: base.generatedAtMs,
+                                anchorEventId: base.anchorEventId,
+                                excerpt: base.excerpt,
+                                wipSignals: base.wipSignals,
+                                anchorFilePath: base.anchorFilePath,
+                                anchorLine: base.anchorLine,
+                                recentLastCommit: recentLastCommit,
+                                anchorBundleID: base.anchorBundleID
+                            )
+                        }
                         let snapshot = InsightsSnapshot(
                             topApps: topApps,
                             sessions: sessions,
@@ -200,7 +282,15 @@ final class InsightsReader {
                             linearTransitions: linear.transitions,
                             linearCompletionRate: linear.completionRate,
                             presenceState: presenceState,
-                            recentSessions: recentSessions
+                            recentSessions: recentSessions,
+                            todayMetrics: todayMetrics,
+                            youNowState: youNowState,
+                            sameTaskTeammates: sameTaskTeammates,
+                            inboxItems: inboxItems,
+                            whereStopped: whereStopped,
+                            weeklyMetrics: weeklyMetrics,
+                            gitDelta: gitDelta,
+                            currentTaskIdentity: taskIdentity
                         )
                         return .success((db, snapshot))
                     } catch {
@@ -222,6 +312,7 @@ final class InsightsReader {
                         message: "Collecting… activity will appear after a few app switches."
                     )
                 } else {
+                    // IV.A.1 — lastKnownSnapshot field not added (T6.3 review fix skipped)
                     self.state = .loaded(snapshot: snapshot, updated: Date())
                 }
             case .failure(let error):

@@ -171,6 +171,7 @@ struct RootView: View {
         switch section {
         case .home:         HomeView()
         case .activity:     ActivityView()
+        case .analytics:    AnalyticsView()
         case .team:         TeamView()
         case .connections:  ConnectionsView()
         case .settings:     WindowSettingsView()

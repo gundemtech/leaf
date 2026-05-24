@@ -51,6 +51,12 @@ struct Sidebar: View {
   /// post-Send dispatch (InviteURLHandler.handleCodePaste).
   @Environment(WindowState.self) private var windowState
 
+  // Track-10 T1 — gates Analytics sidebar row. `@AppStorage` must be a View
+  // instance property (NOT inside a computed prop closure) so SwiftUI binds
+  // the property wrapper to the View invalidation graph and reflows the
+  // sidebar when the toggle in Settings → Advanced flips.
+  @AppStorage("leaf.ui.showAnalyticsSection") private var showAnalyticsSection: Bool = false
+
   @State private var leavePresented = false
   @State private var leaveTargetWorkspaceID: String?
   @State private var createWorkspacePresented = false
@@ -70,11 +76,15 @@ struct Sidebar: View {
   /// one sheet modifier via `joinByCodeBinding` below.
   @State private var joinByCodePresented = false
 
+  private var leafGroupItems: [WindowSection] {
+    showAnalyticsSection ? [.home, .activity, .analytics] : [.home, .activity]
+  }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       ScrollView(.vertical, showsIndicators: false) {
         VStack(alignment: .leading, spacing: LeafSpace.lg) {
-          group(title: "LEAF", items: [.home, .activity])
+          group(title: "LEAF", items: leafGroupItems)
           group(title: "COLLABORATION", items: [.team, .connections])
           group(title: "ACCOUNT", items: [.settings, .profile])
         }
