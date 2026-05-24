@@ -514,6 +514,10 @@ public enum ActivityFeedMapper {
         "space_switched",
         // S2 (14)
         "xcode_active_doc_changed", "xcode_build_state_changed",
+        // P2 — Xcode Deep
+        "xcode_build_started", "xcode_build_finished",
+        "xcode_test_run_started", "xcode_test_run_finished",
+        "xcode_scheme_changed", "xcode_run_destination_changed",
         "jetbrains_active_doc_changed",
         "music_track_changed", "spotify_track_changed",
         "notes_active_title_changed", "reminder_completed",
@@ -590,6 +594,41 @@ public enum ActivityFeedMapper {
         case "xcode_build_state_changed":
             let state = sanitize(payload["build_state"]) ?? "?"
             primary = "Xcode: build \(state)"
+
+        // Phase Track-6 P2 — Xcode Deep. ADR-010: ONLY allowlisted payload
+        // fields (scheme / status / counts / bucket) — never raw device name,
+        // error message, test method name, build log content.
+        case "xcode_build_started":
+            primary = "Xcode: build started"
+            let scheme = sanitize(payload["scheme"])
+            let bucket = sanitize(payload["run_destination_bucket"])
+            let parts = [scheme, bucket].compactMap { $0 }.filter { !$0.isEmpty }
+            if !parts.isEmpty { secondary = parts.joined(separator: " · ") }
+        case "xcode_build_finished":
+            let status = sanitize(payload["status"]) ?? "?"
+            primary = "Xcode: build \(status)"
+            let scheme = sanitize(payload["scheme"])
+            let errors = sanitize(payload["error_count"]).flatMap(Int.init)
+            let errStr = (errors ?? 0) > 0 ? "\(errors!) errors" : nil
+            let parts = [scheme, errStr].compactMap { $0 }
+            if !parts.isEmpty { secondary = parts.joined(separator: " · ") }
+        case "xcode_test_run_started":
+            primary = "Xcode: tests started"
+            secondary = sanitize(payload["scheme"])
+        case "xcode_test_run_finished":
+            let status = sanitize(payload["status"]) ?? "?"
+            primary = "Xcode: tests \(status)"
+            let p = sanitize(payload["passed_count"]) ?? "0"
+            let f = sanitize(payload["failed_count"]) ?? "0"
+            secondary = "\(p) passed, \(f) failed"
+        case "xcode_scheme_changed":
+            let sch = sanitize(payload["scheme"]) ?? "?"
+            primary = "Xcode: scheme \(sch)"
+            secondary = sanitize(payload["project"])
+        case "xcode_run_destination_changed":
+            let b = sanitize(payload["run_destination_bucket"]) ?? "?"
+            primary = "Xcode: target \(b)"
+
         case "jetbrains_active_doc_changed":
             let base = sanitize(payload["doc_path"]).map(basename(of:)) ?? "—"
             primary = "JetBrains: \(base)"

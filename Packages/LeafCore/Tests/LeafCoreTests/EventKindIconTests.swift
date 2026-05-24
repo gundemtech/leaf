@@ -50,8 +50,20 @@ final class EventKindIconTests: XCTestCase {
 
     func testTrack4LocalOSKindsSetSizeUnchanged() {
         // Guards against silent additions / removals from the whitelist.
-        // S1 (9) + S2 (14) + S3 (10 visible — 3 in skippedKinds) = 33.
-        XCTAssertEqual(ActivityFeedMapper.trackFourLocalOSKinds.count, 33)
+        // Track-4: S1 (9) + S2 (14) + S3 (10 visible — 3 in skippedKinds) = 33.
+        // Track-6 P2 added 6 xcode_* lifecycle kinds. Total = 39.
+        XCTAssertEqual(ActivityFeedMapper.trackFourLocalOSKinds.count, 39)
+    }
+
+    // MARK: - Phase Track-6 P2 (Xcode Deep — 6 new icon mappings)
+
+    func testXcodeP2_specificSymbols() {
+        XCTAssertEqual(EventKindIcon.symbol(for: "xcode_build_started"), "hammer.circle")
+        XCTAssertEqual(EventKindIcon.symbol(for: "xcode_build_finished"), "hammer.circle.fill")
+        XCTAssertEqual(EventKindIcon.symbol(for: "xcode_test_run_started"), "checkmark.diamond")
+        XCTAssertEqual(EventKindIcon.symbol(for: "xcode_test_run_finished"), "checkmark.diamond.fill")
+        XCTAssertEqual(EventKindIcon.symbol(for: "xcode_scheme_changed"), "square.stack.3d.up")
+        XCTAssertEqual(EventKindIcon.symbol(for: "xcode_run_destination_changed"), "display")
     }
 
     // MARK: - Track-6 P1 — Claude Code

@@ -235,6 +235,14 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     case claudeSubagentDispatched         = "claude_subagent_dispatched"
     case claudeMcpToolInvoked             = "claude_mcp_tool_invoked"
     case claudeSlashCommandInvoked        = "claude_slash_command_invoked"
+
+    // MARK: - Phase Track-6 P2 — Xcode Deep (6 new kinds, all default OFF per ADR-020)
+    case xcodeBuildStarted                = "xcode_build_started"
+    case xcodeBuildFinished               = "xcode_build_finished"
+    case xcodeTestRunStarted              = "xcode_test_run_started"
+    case xcodeTestRunFinished             = "xcode_test_run_finished"
+    case xcodeSchemeChanged               = "xcode_scheme_changed"
+    case xcodeRunDestinationChanged       = "xcode_run_destination_changed"
 }
 
 /// Phase 4.7.A — onboarding default enabled-state per event_kind.
@@ -470,6 +478,14 @@ public enum ShareEventTypeDefaults {
         .init(key: .claudeWebFetched, defaultEnabled: false),
         .init(key: .claudeSubagentDispatched, defaultEnabled: false),
         .init(key: .claudeMcpToolInvoked, defaultEnabled: false),
-        .init(key: .claudeSlashCommandInvoked, defaultEnabled: false)
+        .init(key: .claudeSlashCommandInvoked, defaultEnabled: false),
+
+        // Phase Track-6 P2 — Xcode Deep. All default OFF per ADR-020.
+        .init(key: .xcodeBuildStarted, defaultEnabled: false),
+        .init(key: .xcodeBuildFinished, defaultEnabled: false),
+        .init(key: .xcodeTestRunStarted, defaultEnabled: false),
+        .init(key: .xcodeTestRunFinished, defaultEnabled: false),
+        .init(key: .xcodeSchemeChanged, defaultEnabled: false),
+        .init(key: .xcodeRunDestinationChanged, defaultEnabled: false)
     ]
 }
