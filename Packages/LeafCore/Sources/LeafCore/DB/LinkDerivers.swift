@@ -9,19 +9,25 @@ public struct LinkConfidenceValues: Sendable {
     public let prURLInSlack: Double
     public let prNumberHashRef: Double
     public let reviewerAssigned: Double
+    /// Phase Track-6 P5 — Zoom meeting → calendar event link confidence.
+    /// EventKit URL regex match is high-precision; default 0.95 reflects raw URL
+    /// regex hit. Moat can tune lower for fuzzier match methods (e.g. time-window).
+    public let zoomToCalendarMeeting: Double
 
     public init(
         linearIDInText: Double,
         branchNameLinearRef: Double,
         prURLInSlack: Double,
         prNumberHashRef: Double,
-        reviewerAssigned: Double
+        reviewerAssigned: Double,
+        zoomToCalendarMeeting: Double
     ) {
         self.linearIDInText = linearIDInText
         self.branchNameLinearRef = branchNameLinearRef
         self.prURLInSlack = prURLInSlack
         self.prNumberHashRef = prNumberHashRef
         self.reviewerAssigned = reviewerAssigned
+        self.zoomToCalendarMeeting = zoomToCalendarMeeting
     }
 
     /// Conservative non-zero defaults shipped in the public substrate. Tuned
@@ -31,7 +37,8 @@ public struct LinkConfidenceValues: Sendable {
         branchNameLinearRef: 0.5,
         prURLInSlack: 0.5,
         prNumberHashRef: 0.5,
-        reviewerAssigned: 1.0
+        reviewerAssigned: 1.0,
+        zoomToCalendarMeeting: 0.95
     )
 }
 

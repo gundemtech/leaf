@@ -53,7 +53,8 @@ final class EventKindIconTests: XCTestCase {
         // Track-4: S1 (9) + S2 (14) + S3 (10 visible — 3 in skippedKinds) = 33.
         // Track-6 P2 added 6 xcode_* lifecycle kinds → 39.
         // Track-6 P3 added 8 browser kinds (Safari/Chrome/Arc tab nav + active + bookmark) → 47.
-        XCTAssertEqual(ActivityFeedMapper.trackFourLocalOSKinds.count, 47)
+        // Track-6 P5 added 3 zoom_meeting_* kinds → 50.
+        XCTAssertEqual(ActivityFeedMapper.trackFourLocalOSKinds.count, 50)
     }
 
     // MARK: - Phase Track-6 P2 (Xcode Deep — 6 new icon mappings)

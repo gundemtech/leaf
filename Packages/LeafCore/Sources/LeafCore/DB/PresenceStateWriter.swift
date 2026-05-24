@@ -19,6 +19,14 @@ public struct PresenceStateWriter: Sendable {
         case linear
         case slack
         case derived
+        /// Track-6 P5 — Zoom Deep presence row. State JSON shape:
+        ///   { meeting_active: Bool, last_observed_at_ms: Int64,
+        ///     meeting_started_at_ms?: Int64, cold_start?: Bool,
+        ///     linked_calendar_event_id?: String }
+        /// Transient fields (meeting_started_at_ms, cold_start, linked_calendar_event_id)
+        /// are emitted only while meeting_active=true. ADR-010: no raw URLs, titles,
+        /// participants, recording state.
+        case zoom
     }
 
     /// UPSERT current-state snapshot. `state` сериализуется в JSON через
@@ -130,6 +138,34 @@ public struct PresenceStateWriter: Sendable {
                 """,
             arguments: [provider.rawValue]
         )
+    }
+
+    // MARK: - Zoom (Track-6 P5)
+
+    /// Build the `state` dict for a `.zoom` presence row. Transient fields
+    /// (started_at_ms / cold_start / linked_calendar_event_id) are present only
+    /// when `meetingActive == true`. ADR-010: raw URLs / titles / participants
+    /// / recording state never appear — caller passes only the SHA256 hash of
+    /// the matched calendar event identifier (16-hex-char shape).
+    public static func buildZoomState(
+        meetingActive: Bool,
+        meetingStartedAtMs: Int64?,
+        coldStart: Bool?,
+        linkedCalendarEventID: String?,
+        lastObservedAtMs: Int64
+    ) -> [String: Any] {
+        var dict: [String: Any] = [
+            "meeting_active": meetingActive,
+            "last_observed_at_ms": lastObservedAtMs
+        ]
+        if meetingActive {
+            if let started = meetingStartedAtMs { dict["meeting_started_at_ms"] = started }
+            if let cold = coldStart { dict["cold_start"] = cold }
+            if let id = linkedCalendarEventID, !id.isEmpty {
+                dict["linked_calendar_event_id"] = id
+            }
+        }
+        return dict
     }
 
     // MARK: - Private

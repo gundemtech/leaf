@@ -89,7 +89,7 @@ struct LocalAppsSettingsSection: View {
         .init(
             bundleID: "us.zoom.xos",
             displayName: "Zoom",
-            explainer: "Captures meeting state (in / not in / waiting / sharing) — never attendee list or password.",
+            explainer: "Captures meeting state, session start/end timestamps, duration, and links to your calendar event (anonymized hash). Never attendee list, password, screen-share content, chat messages, or recording state.",
             subFieldLabel: "Also capture meeting topic",
             subFieldKey: "ownMeetingTopic"
         ),

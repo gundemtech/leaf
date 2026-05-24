@@ -471,6 +471,10 @@ public enum Schema {
         public static let appSwitchCount = "app_switch_count"
         public static let foregroundApp = "foreground_app"
         public static let audioRoute = "audio_route"
+
+        // Phase Track-6 P5 — Zoom meeting → calendar event cross-link.
+        // SHA256(EKEvent.eventIdentifier)[:16] hex string; opaque target_ref.
+        public static let linkedCalendarEventID = "linked_calendar_event_id"
     }
 
     /// Phase Track-4 S3 — per-minute intensity aggregates (CGEventTap counter-only).
@@ -563,6 +567,9 @@ public enum Schema {
         public static let prURLInSlack = "pr_url_in_slack"
         public static let prNumberHashRef = "pr_number_hash_ref"
         public static let reviewerAssigned = "reviewer_assigned"
+        /// Track-6 P5 — Zoom meeting matched to a concurrent calendar event via
+        /// EventKit URL regex. Target ref = SHA256(EKEvent.eventIdentifier)[:16].
+        public static let zoomToCalendarMeeting = "zoom_to_calendar_meeting"
     }
 
     /// Phase Track-1 D2 — target_kind discriminators for `event_links.target_kind`.
@@ -570,6 +577,8 @@ public enum Schema {
         public static let linearIssue = "linear_issue"
         public static let githubPR = "github_pr"
         public static let githubUser = "github_user"
+        /// Track-6 P5 — Anonymized calendar event reference (SHA256 hash, source-agnostic).
+        public static let calendarEvent = "calendar_event"
     }
 
     /// Phase Track-1 D3 — decision detector hits (one row per source event).
