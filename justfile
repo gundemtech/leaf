@@ -12,6 +12,25 @@ check-tokens:
 check-tokens-self-test:
     @./scripts/tests/test-check-tokens.sh
 
+# OSS leak guard — scan tracked tree for forbidden patterns (names, tuned
+# pragma numerics, secrets, tracked moat source). Same set CI enforces.
+leak-guard:
+    @./scripts/leak-guard.sh --report
+
+# Run the fixture-based self-test for leak-guard.
+leak-guard-self-test:
+    @./scripts/tests/test-leak-guard.sh
+
+# Install the git pre-push hook (thin wrapper around leak-guard.sh).
+# Run once per clone. Bypass a single push with `git push --no-verify`.
+install-hooks:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    hook=.git/hooks/pre-push
+    printf '#!/usr/bin/env bash\nexec "$(git rev-parse --show-toplevel)/scripts/leak-guard.sh"\n' > "$hook"
+    chmod +x "$hook"
+    echo "Installed $hook → scripts/leak-guard.sh"
+
 # Build all 5 Xcode schemes (Debug).
 build-all:
     #!/usr/bin/env bash
