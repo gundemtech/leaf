@@ -1,0 +1,26 @@
+name: leak-guard
+
+# OSS leak guard — fails any PR or push to main that re-introduces a forbidden
+# pattern (team-member names, tuned moat numerics, secrets, tracked moat source,
+# hardcoded signing identity). Single source of truth: scripts/leak-guard.sh.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  leak-guard:
+    name: OSS leak guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Self-test the guard (detect cases + carve-out controls)
+        run: ./scripts/tests/test-leak-guard.sh
+
+      - name: Scan tracked tree for forbidden patterns
+        run: ./scripts/leak-guard.sh --report
