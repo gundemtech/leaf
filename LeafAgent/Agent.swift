@@ -710,6 +710,13 @@ enum AgentMain {
         Task { await rotationFetchScheduler.start() }
         Task { await detectorScheduler.start() }
 
+        // fix/dev-launch-reliability — heartbeat writer for the cross-process
+        // status pipe. Atomic write every 30s with PID + ax_trusted + CDHash +
+        // bundlePath. Main app reads it in Settings → Diagnostics.
+        let heartbeatWriter = HeartbeatWriter()
+        AgentLifetime.heartbeatWriter = heartbeatWriter
+        Task { await heartbeatWriter.start() }
+
         // Shutdown порядок: maintenance → fsEvents → claudeCode → linear → github → slack → writer.
         // fsEvents первым из collectors — закрываем приём callback'ов до того как
         // остальные collectors flush'ят. claudeCode / linear / github / slack flush'ят свои
@@ -719,6 +726,10 @@ enum AgentMain {
         // chain'а minimizes overall stop latency. writer последним — drain буфера
         // attention/idle в DB перед exit.
         installSignalHandlers {
+            // fix/dev-launch-reliability — stop heartbeat writer first (cooperative
+            // Task cancel) before the writer flush chain; heartbeat is read-only
+            // status, safe to drain immediately.
+            if let h = AgentLifetime.heartbeatWriter { await h.stop() }
             // Phase Track-1 D3 — stop detectorScheduler first (purely read-side from
             // collectors' POV; safe to drain immediately, blocks no further writes).
             if let d = AgentLifetime.detectorScheduler { await d.stop() }
@@ -804,6 +815,7 @@ enum AgentMain {
 /// могут быть ARC'нуты до SIGTERM handler'а.
 enum AgentLifetime {
     nonisolated(unsafe) static var writer: EventWriter?
+    nonisolated(unsafe) static var heartbeatWriter: HeartbeatWriter?
     nonisolated(unsafe) static var activeAppCollector: ActiveAppCollector?
     nonisolated(unsafe) static var idleCollector: IdleCollector?
     nonisolated(unsafe) static var maintenance: MaintenanceScheduler?

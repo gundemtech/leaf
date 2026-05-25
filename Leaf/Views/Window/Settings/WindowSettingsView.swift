@@ -44,6 +44,7 @@ struct WindowSettingsView: View {
                 BrowserAllowListSection(store: browserAllowListStore)
                 AdvancedSettingsSection()
                 UpdatesSection(updater: updater)
+                DebugDiagnosticsSection()
             }
             .padding(LeafSpace.xxl)
         }
