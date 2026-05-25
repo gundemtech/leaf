@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	Release-distribution entitlements for Leaf.app (Developer ID outside the App Store).
+
+	Profile-restricted entitlements (com.apple.application-identifier /
+	com.apple.developer.team-identifier / com.apple.developer.aps-environment /
+	keychain-access-groups) MUST NOT appear here. macOS AMFI gates them at spawn
+	time: when those entitlements are present in the signed binary but no valid
+	provisioning profile authorizes them, AMFI rejects launch with POSIX 163 /
+	"Launchd job spawn failed" on any Mac that is not whitelisted in the dev
+	profile (i.e., the whole user base except the build machine).
+
+	Keep this file minimal — only entitlements that are NOT profile-gated. The
+	source-of-truth dev entitlements (Leaf/Leaf.entitlements) stay full so
+	Xcode Run loops on the build machine keep APNs / keychain sharing for dev
+	smoke. release.sh:step_export re-signs Leaf.app against this stripped file
+	before notarization so the distributed bundle is free of AMFI triggers.
+
+	APNs (com.apple.developer.aps-environment) is intentionally absent — Apple
+	Developer Portal must issue a Developer ID Provisioning Profile with push
+	capability before APNs can ship to end users without this strip. Until then,
+	push registers silently fail-soft at runtime; rest of the app launches.
+	-->
+	<key>com.apple.security.app-sandbox</key>
+	<false/>
+</dict>
+</plist>

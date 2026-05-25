@@ -192,7 +192,24 @@ step_export() {
     "${cs[@]}" "$APP/Contents/Frameworks/SQLCipher.framework" >/dev/null
     "${cs[@]}" --entitlements "$REPO_ROOT/LeafAgent/LeafAgent.entitlements" "$APP/Contents/MacOS/LeafAgent" >/dev/null
     "${cs[@]}" --entitlements "$REPO_ROOT/LeafMCP/LeafMCP.entitlements" "$APP/Contents/MacOS/LeafMCP" >/dev/null
-    "${cs[@]}" --entitlements "$REPO_ROOT/Leaf/Leaf.entitlements" "$APP" >/dev/null
+    # Re-sign Leaf.app с release-distribution entitlements (sandbox=false only).
+    # Leaf/Leaf.entitlements содержит profile-gated keys (application-identifier,
+    # team-identifier, aps-environment, keychain-access-groups) для Xcode Run dev
+    # loop. Distribution bundle MUST strip их — AMFI rejects spawn если они
+    # present без authorizing provisioning profile (POSIX 163 / "Launchd job
+    # spawn failed" на любом Mac кроме build machine). См.
+    # Config/Release/Leaf.release.entitlements header comment.
+    "${cs[@]}" --entitlements "$REPO_ROOT/Config/Release/Leaf.release.entitlements" "$APP" >/dev/null
+
+    # Defensive verify: entitlements blob must NOT contain AMFI triggers.
+    local restricted
+    restricted=$(codesign -d --entitlements - "$APP" 2>&1 | grep -E "application-identifier|developer\.team-identifier|aps-environment|keychain-access-groups" || true)
+    if [[ -n "$restricted" ]]; then
+        err "AMFI-restricted entitlements found in signed Leaf.app — bundle would fail to spawn on non-whitelisted Macs."
+        err "$restricted"
+        exit 1
+    fi
+    ok "entitlements blob clean — no AMFI triggers"
 
     mark_done export
     ok "export + re-sign done"
