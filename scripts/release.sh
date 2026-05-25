@@ -175,6 +175,13 @@ step_export() {
     mkdir -p "$EXPORTED"
     cp -R "$ARCHIVE/Products/Applications/Leaf.app" "$APP"
 
+    # Drop embedded Development provisioning profile (Xcode archive embeds dev-profile
+    # by default; Developer ID distribution does NOT require profile + dev profile
+    # contains ProvisionedDevices whitelist that blocks LaunchServices spawn on any
+    # Mac other than Дима's via POSIX 163 / Launchd job spawn failed). Codesign
+    # re-sign на следующем шаге восстановит integrity без profile reference.
+    rm -f "$APP/Contents/embedded.provisionprofile"
+
     local sp="$APP/Contents/Frameworks/Sparkle.framework/Versions/B"
     local cs=(codesign --force --timestamp --options=runtime --sign "$SIGN_ID")
     "${cs[@]}" "$sp/XPCServices/Downloader.xpc" >/dev/null
