@@ -4,7 +4,7 @@
 **Stage:** 0 — Deep Research (pre-brainstorm) per contract §3.
 **Contract:** `2026-05-15-track-6-existing-surface-depth-contract.md`.
 **Date:** 2026-05-16.
-**Author:** Dmitrii + Claude (research subagents: Explore on substrate; direct web/context7/probes on vendor surfaces).
+**Author:** Alex + Claude (research subagents: Explore on substrate; direct web/context7/probes on vendor surfaces).
 
 This doc is the **input to brainstorm (Stage 2)**, not a plan. It maps the realistic ceiling of vscode + JetBrains capture **without an extension/plugin**, surfaces what Track-4 S2 already shipped (JetBrains baseline), flags an **architecture-doc claim that doesn't match shipped code**, and surfaces three product questions for the user before brainstorm starts.
 
@@ -175,7 +175,7 @@ sqlite3 ... "SELECT key FROM ItemTable WHERE key LIKE '%recent%' OR key LIKE '%w
 → history.recentlyOpenedPathsList
 
 sqlite3 ... "SELECT length(value), substr(value,1,200) FROM ItemTable WHERE key='history.recentlyOpenedPathsList'"
-→ 3355|{"entries":[{"folderUri":"file:///Users/ddemidov/Desktop/PortfolioDemidovDmitrii"},{"folderUri":"file:///Users/ddemidov/Desktop/SmartBulb"},...]}
+→ 3355|{"entries":[{"folderUri":"file:///Users/ddemidov/Desktop/PortfolioRiveraAlex"},{"folderUri":"file:///Users/ddemidov/Desktop/SmartBulb"},...]}
 ```
 
 `history.recentlyOpenedPathsList` is **the** recents list — JSON-encoded `{entries: [{folderUri, workspace, ...}, ...]}`. Mtime advances every workspace open / focus / window close. Reading correctly requires:

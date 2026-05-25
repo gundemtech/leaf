@@ -30,9 +30,9 @@ description: Сгенерировать твит / тред о текущей ф
 
 ## Стиль
 
-База — тот же стандарт, что и в `/linkedin`, образец — пост Димы про Vox. Что обязательно:
+База — тот же стандарт, что и в `/linkedin`, образец — пост Алекса про Vox. Что обязательно:
 
-- **NO DASHES. ВООБЩЕ.** Жёсткое правило, нарушать нельзя. Запрещены: `—` (em-dash), `–` (en-dash), `-` (hyphen-minus) в любых позициях: вставные конструкции, составные слова, диапазоны. Образец Димы про Vox содержит тире — **это образец стиля, а НЕ примера пунктуации**. Замены:
+- **NO DASHES. ВООБЩЕ.** Жёсткое правило, нарушать нельзя. Запрещены: `—` (em-dash), `–` (en-dash), `-` (hyphen-minus) в любых позициях: вставные конструкции, составные слова, диапазоны. Образец Алекса про Vox содержит тире — **это образец стиля, а НЕ примера пунктуации**. Замены:
   - `Leaf — ambient memory layer for Mac` → `Leaf, ambient memory layer for Mac,` или отдельным предложением: `Leaf is the ambient memory layer for Mac.`
   - `Counts hide bugs — latencies expose them` → двоеточие или точка: `Counts hide bugs. Latencies expose them.`
   - `5-min polling` → `5 min polling`. `natural-language queries` → `natural language queries`. `Mac-only` → `Mac only`. `open-source` → `open source`.
@@ -42,7 +42,7 @@ description: Сгенерировать твит / тред о текущей ф
   - **«You», не «developers».** Прямой адрес читателю.
   - **Разговорная плотность:** «just dropped», «here's the move», «spoiler:», «real talk» в меру. На single tweet даже одно такое слово ставит тон.
   - **Меньше «We shipped», больше «Just dropped».**
-  - **ЗАПРЕЩЕНО:** tech-bro speak. «Absolutely insane», «this is huge», «let's go», «stoked», «massive W», «cooked», «based» — это та же корпоративная вода, в маске. Образец Димы про Vox молодой и прямой, но в нём ноль tech-bro-фраз. Целимся туда.
+  - **ЗАПРЕЩЕНО:** tech-bro speak. «Absolutely insane», «this is huge», «let's go», «stoked», «massive W», «cooked», «based» — это та же корпоративная вода, в маске. Образец Алекса про Vox молодой и прямой, но в нём ноль tech-bro-фраз. Целимся туда.
 - **Hook = продающий, через боль или резонанс с читателем.** Первый твит решает, читают ли остальное (в треде) или ставят like (на single). Слабо: «Most dev dashboards count actions» (факт). Сильно:
   - «You shipped four PRs this week. Did it feel like four?» (резонанс с самочувствием)
   - «Stop guessing if Monday was slower than Friday.» (боль)

@@ -3,7 +3,7 @@
 **Stage:** Stage 0 (Deep Research) — companion to upcoming phase spec
 **Contract:** `2026-05-15-track-6-existing-surface-depth-contract.md`
 **Date:** 2026-05-16
-**Author:** Dmitrii + Claude (research subagents: Explore + WebSearch/WebFetch)
+**Author:** Alex + Claude (research subagents: Explore + WebSearch/WebFetch)
 
 This doc is the **input to brainstorm (Stage 2)**, not a plan. It maps the realistic ceiling of Xcode capture on macOS, surfaces the deltas between substrate and ceiling, and ends with 4 product questions for the user to answer before brainstorm starts.
 
@@ -120,7 +120,7 @@ Returns structured JSON:
 }
 ```
 
-**Privacy walkback per ADR-010 / contract §7:** `errorCount`, `warningCount`, `analyzerWarningCount`, `targetName`, `startTime`, `endTime`, `destination.platform` ✅ allowed. `errors[].message` (full compiler error text) + `errors[].sourceURL` ❌ forbidden — parser strips before emit. `destination.deviceName` is the user's machine name (e.g. "My Mac" / "Dmitrii's MacBook Air") — **bucketed** before emit (`macos | ios_simulator | ios_device | tv | watch | vision`), raw `deviceName` never stored.
+**Privacy walkback per ADR-010 / contract §7:** `errorCount`, `warningCount`, `analyzerWarningCount`, `targetName`, `startTime`, `endTime`, `destination.platform` ✅ allowed. `errors[].message` (full compiler error text) + `errors[].sourceURL` ❌ forbidden — parser strips before emit. `destination.deviceName` is the user's machine name (e.g. "My Mac" / "Alex's MacBook Air") — **bucketed** before emit (`macos | ios_simulator | ios_device | tv | watch | vision`), raw `deviceName` never stored.
 
 For tests: `xcresulttool get test-results summary` returns analogous schema (`passedTests`, `failedTests`, `skippedTests`, `expectedFailures`, `totalTestCount`, per-target duration). Same walkback discipline — test names (which are user-authored identifiers, sometimes describing failure cause) are **bucketed counts only**, never the test name string.
 
@@ -248,7 +248,7 @@ Source: `.claude/shared/current-state.md` "Open tensions" + Track-3/4 carry-over
 
 2. **Dispatcher parity drift.** Track-3 D4 hit this — `body_kind` dispatcher missed `gh_pr_*` rename. Mitigation: every new event_kind must be added to `DispatchCoverageTests` parity fence + `ShareEventTypeRegistry.allKeys` + `ShareEventTypeDefaults` + `ActivityFeedMapper` switch. Plan: dedicated test (`#16`) enumerating all 8 `xcode_*` kinds and asserting each appears in registry + defaults + mapper.
 
-3. **Raw third-party IDs in payloads.** Track-3 D3 → assignee anonymization. For P2: `destination.deviceName` (`"Dmitrii's MacBook Air"`) is third-party PII for shared team members on the relay. Bucketing (`macos | ios_simulator | ios_device | tv | watch | vision`) enforces walkback. Add `RelayBodyLeakageTests` sentinel for each of: `errors[].message`, `errors[].sourceURL`, `deviceName`, `modelName`, full file paths in `sourceURL`, individual test names, individual target paths.
+3. **Raw third-party IDs in payloads.** Track-3 D3 → assignee anonymization. For P2: `destination.deviceName` (`"Alex's MacBook Air"`) is third-party PII for shared team members on the relay. Bucketing (`macos | ios_simulator | ios_device | tv | watch | vision`) enforces walkback. Add `RelayBodyLeakageTests` sentinel for each of: `errors[].message`, `errors[].sourceURL`, `deviceName`, `modelName`, full file paths in `sourceURL`, individual test names, individual target paths.
 
 4. **Sentinel leak regressions.** P1 used `LEAKED_SENTINEL_CLAUDE_P1`. P2 should mint `LEAKED_SENTINEL_XCODE_P2` and inject into every forbidden field across every new event_kind in `RelayBodyLeakageTests` + the moat-side cross-kind parity test in `LeafCorePrivateTests`.
 
@@ -281,7 +281,7 @@ Per contract §7 P2 + ADR-010:
 - `errors[].sourceURL` (line numbers + file URLs are L4 but the text URL FORM includes raw paths — bucket to `targetName` only)
 - `destination.deviceName` (raw — bucketed at provider boundary)
 - `destination.modelName`, `destination.osBuildNumber` (avoid fingerprint)
-- Individual test method names (user may name them descriptively → potential PII leak in "DmitriiPaymentFailureTest")
+- Individual test method names (user may name them descriptively → potential PII leak in "AlexPaymentFailureTest")
 - Build log content, scheme action result.build log
 - Debugger state, breakpoint locations
 - Symbolic constant names from indexed sourceKit

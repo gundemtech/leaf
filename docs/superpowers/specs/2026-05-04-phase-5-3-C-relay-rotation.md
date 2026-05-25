@@ -1,7 +1,7 @@
 # Phase 5.3.C — Relay endpoints + `RelayClient` rotation methods (wire)
 
 **Status:** Active (2026-05-06). Third sub-phase of Phase 5.3 ("member removal + team key rotation").
-**Owner:** Dmitrii.
+**Owner:** Alex.
 **Stack base:** `feature/phase-5-3-B` (5.3.B landed @ 852 SPM tests).
 **Branch:** `feature/phase-5-3-C`.
 
@@ -270,7 +270,7 @@ Inserted before the trailing 404 fallback, after invite block.
 ```toml
 [[kv_namespaces]]
 binding = "KEY_ROTATIONS"
-id = "<TBD-on-deploy-by-Dmitrii>"
+id = "<TBD-on-deploy-by-Alex>"
 preview_id = "<TBD>"
 ```
 

@@ -30,7 +30,7 @@ Track 1 is **done** when the following 5 use cases work end-to-end on a solo use
 | **UC5** | "что мне знать до ревью PR #142?" | PR metadata + commits + linked Linear ticket + relevant Slack thread bodies (via `event_links`) + absence flag computed on-the-fly ("design choice X surfaced in thread, no reply from `@reviewer`") |
 | **UC6** | "что мы решили по бэкапам?" | Decision record (same shape as UC4). Slack-bot surface (channel `/leaf` command) is **out of Track 1 scope** — Track 2. |
 
-**UC2** ("что Антон делал сегодня?") and **UC7** ("team weekly summary") remain in Track 2 (team distribution) — they need cross-device sharing, not just detection.
+**UC2** ("что Саша делал сегодня?") and **UC7** ("team weekly summary") remain in Track 2 (team distribution) — they need cross-device sharing, not just detection.
 
 Each sub-phase spec lists which use cases it unblocks and writes integration tests against that mapping.
 
@@ -194,7 +194,7 @@ D1 spec must cover all of these. Anything dropped from D1 is dropped permanently
 
 ### 7.2 Attachment metadata
 
-Linear attachments, Slack file uploads, GitHub PR-attached files: capture `filename`, `mime`, `size_bytes`. **Not** content. Enables UC4-shaped responses ("Антон приложил `design.fig` к thread'у").
+Linear attachments, Slack file uploads, GitHub PR-attached files: capture `filename`, `mime`, `size_bytes`. **Not** content. Enables UC4-shaped responses ("Саша приложил `design.fig` к thread'у").
 
 ### 7.3 GitHub PR metadata expansion (Phase 4.8 carry-over)
 

@@ -4,7 +4,7 @@
 **Stage:** 0 — Deep Research (pre-brainstorm) per contract §3
 **Contract:** `2026-05-15-track-6-existing-surface-depth-contract.md`
 **Date:** 2026-05-16
-**Author:** Dmitrii + Claude (research subagents: Explore for substrate, general-purpose × 2 for vendor docs + EventKit/OSS recon)
+**Author:** Alex + Claude (research subagents: Explore for substrate, general-purpose × 2 for vendor docs + EventKit/OSS recon)
 
 This doc is the **input to brainstorm (Stage 2)**, not a plan. It maps:
 - the existing Leaf substrate P4 builds on (Linear OAuth pattern + Track-4 S1 EventKit Calendar collector),
@@ -1041,7 +1041,7 @@ Per contract §3 step 5. Effort: S (≤ 1 step), M (2-4 steps), L (5+ steps). Va
 
 These must be answered before Stage 2 brainstorm begins. Recommendations stated; user gates the calls.
 
-**Resolved 2026-05-16 (Dmitrii):**
+**Resolved 2026-05-16 (Alex):**
 - **OQ-1** → `calendar.readonly` (single broad scope).
 - **OQ-2** → All subscribed calendars (accessRole ∈ {owner, writer, reader}).
 - **OQ-3** → γ Hybrid (independent collectors, dedupe in Derived Insights via iCalUID join, Phase 4.9).

@@ -1,7 +1,7 @@
 # Track 2 — D4: Final Migration & Cleanup
 
 **Date:** 2026-05-10
-**Author:** Dmitrii (with Claude, autonomous-decision mode)
+**Author:** Alex (with Claude, autonomous-decision mode)
 **Status:** spec for review
 **Track:** 2 (UI/UX redesign of Native Leaf macOS app)
 **Phase:** D4 of 4 (D1 = Foundation [landed], D2 = Navigation Shell + Home [landed], D3 = Data Surfaces [landed], D4 = Final Migration & Cleanup)

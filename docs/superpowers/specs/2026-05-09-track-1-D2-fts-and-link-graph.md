@@ -1,7 +1,7 @@
 # Track 1 / D2 — FTS5 keyword index + cross-source link graph
 
 **Status:** Draft (2026-05-09). Second sub-phase of Track 1 stack.
-**Owner:** Dmitrii.
+**Owner:** Alex.
 **Stack:** branches off `feature/track-1-D1-capture-extension` (off `feature/track-1-detection-substrate` off `main`). **НЕ merged в main** — D1 → D2 → D3 sequential, merge стэка в `main` коллективно после D3 ship + acceptance gate (контракт §13).
 
 ---

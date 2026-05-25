@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-15
 **Status:** Draft → awaiting user review
-**Author:** Dmitrii + Claude (brainstorming session)
+**Author:** Alex + Claude (brainstorming session)
 **Scope:** Marketing site at `leaf.gundem.tech` (full redesign + new pages). Whitepaper (`leaf-docs.gundem.tech`) and internal dashboard (`leaf-internal.gundem.tech`) are **follow-up scope** — they reuse the tokens defined here but live in separate specs.
 
 ---
@@ -178,7 +178,7 @@ Each component is implemented as an Astro `.astro` file under `src/components/`.
 
 **Icon strategy:** SVG sprite generated from `~/Desktop/Leaf/design-elements/icons/` (35+ existing) + SF Symbols ported to SVG for missing ones. All `currentColor`-aware. Loaded once per page via `<symbol>` defs.
 
-**Logo strategy:** PNG only for now. `LeafLogo` component renders `<picture>` with `srcset` at 48px / 96px / 144px. Drop-in SVG replacement when Dmitrii provides one.
+**Logo strategy:** PNG only for now. `LeafLogo` component renders `<picture>` with `srcset` at 48px / 96px / 144px. Drop-in SVG replacement when Alex provides one.
 
 ## 7. Page wireframes
 
@@ -404,7 +404,7 @@ These are wiring details that the redesign must not break. Confirmed against `~/
 
 - **Whitepaper redesign** (`leaf-docs.gundem.tech`) — follow-up spec. Will reuse §5 tokens by porting them into `~/Desktop/Leaf/leaf-docs/docs/assets/extra.css`. Header override in `~/Desktop/Leaf/leaf-docs/overrides/partials/header.html` updated to match new wordmark / nav style.
 - **Internal dashboard redesign** (`leaf-internal.gundem.tech`) — follow-up spec. CSS variable swap in `~/Desktop/Leaf/leaf-internal/docs/assets/extra.css` to point at §5 tokens.
-- **Logo vectorization** — Dmitrii will deliver SVG separately. Until then, PNG `@1x/@2x/@3x` via srcset.
+- **Logo vectorization** — Alex will deliver SVG separately. Until then, PNG `@1x/@2x/@3x` via srcset.
 - **Real pricing wiring** — pricing values on `/pricing` are mock placeholders; actual billing integration is a separate track.
 - **Blog / writing surface** — not in this spec; can be added later as `/blog` via Astro content collections.
 - **Internationalization** — site is English-first; Russian translation deferred.
@@ -418,10 +418,10 @@ These are decisions deferred to the implementation phase or owner approval:
 2. **Hero MCP demo** — typed-text + cascading-result animation (current pattern, polished) **or** real video recording of a Claude Code session **or** static screenshot? Recommend: typed-text animation first (lightweight, works in dark/light, respects reduce-motion); upgrade to video later if it adds story.
 3. **Architecture diagram on `/product` §4** — flat 2D **or** isometric **or** annotated screenshot? Defer; first pass flat 2D for ship velocity, iterate after launch.
 4. **FAQ source** — hand-write 6–8 questions in spec **or** pull from `leaf-docs.gundem.tech/faqs/`? Recommend: hand-write 6–8 punchy ones for landing, link "Full FAQ in docs →" to whitepaper FAQ.
-5. **Use case scenarios** — exact wording for the 4 cards. Spec has draft text; final copy review with Dmitrii in implementation.
-6. **Pricing seat limit** — "Up to 20 seats" for Team plan is taken from current site; confirm with Anton before locking.
+5. **Use case scenarios** — exact wording for the 4 cards. Spec has draft text; final copy review with Alex in implementation.
+6. **Pricing seat limit** — "Up to 20 seats" for Team plan is taken from current site; confirm with Sasha before locking.
 7. **Hero CTA** — `[Install for macOS →]` lands on `/dashboard` (requires auth) **or** opens .dmg directly **or** routes to `/signup`? Confirm intended journey.
-8. **Lighter-weight build alternative** — if Astro setup creates friction for Anton, fall back to vanilla HTML with shared `<header>`/`<footer>` includes via PostHTML or a tiny build script. Decide after first prototype.
+8. **Lighter-weight build alternative** — if Astro setup creates friction for Sasha, fall back to vanilla HTML with shared `<header>`/`<footer>` includes via PostHTML or a tiny build script. Decide after first prototype.
 
 ## 14. Follow-up specs (post this one)
 

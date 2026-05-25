@@ -33,15 +33,15 @@ This is a **living document.** Amendments over Track 5 lifetime are expected.
 
 ## 2. Goal — fitness function
 
-Track 5 is **done** when the following use cases work end-to-end between two macOS devices (Anton's Mac + Dmitrii's Mac), both running production-signed Leaf builds with multi-workspace support and Supabase relay:
+Track 5 is **done** when the following use cases work end-to-end between two macOS devices (Sasha's Mac + Alex's Mac), both running production-signed Leaf builds with multi-workspace support and Supabase relay:
 
 | # | Use case | Acceptance criterion |
 |---|---|---|
 | **UC-T5-1** | **Magic-link invite.** Admin in Mac A clicks `+ Add member`, copies link, sends via any channel; invitee in Mac B clicks link → Leaf activates → modal "Join `<workspace>` team?" → click `Join` → joined. | E2E handshake completes without manual OTP entry. 6-digit OTP exists as **opt-in** for paranoid mode (admin can toggle "Require OTP for this link"). |
-| **UC-T5-2** | **Auto-share + AI query.** Mac A user (Anton) toggles in Settings → Share `Git commits ON`, `Linear issues ON`, `Detected decisions ON`. Mac A user commits / closes Linear issues / Slack-detected decisions arrive. Mac B user (Dmitrii) in Cursor / Claude Code asks `что Антон делал сегодня?` → AI client invokes `leaf_query_team(member="anton")` MCP tool → reads Mac B local mirror → returns structured timeline of Mac A activity (filtered by Mac A's Share rules). | End-to-end latency ≤30s from event capture to mirror appearance. Mac B's local DB stores mirror events with sender attribution. Mirror events retain Track 1 detector output (decisions / blockers / open questions). |
-| **UC-T5-3** | **Direct message — Handoff.** Mac A user opens Team tab → clicks sticky `Send` → modal: To=Dmitrii / Type=Handoff / Message="Закончил OAuth, проверь PR #142" / Attach=PR #142 → Send. Mac B receives APNs push within 5s; click on banner opens Leaf scrolled to handoff card in Team feed; reply inline. | APNs push delivery ≤5s on warm app; ≤30s if app cold. Reply appears in Mac A feed under the parent handoff card (threading). Direct message lifecycle: unread → read (auto on view) → replied (optional). |
-| **UC-T5-4** | **Direct message — Task with Linear cross-post.** Mac A user sends Type=Task / Message="SSH keys в Onboarding" / Channels=☑ Leaf + ☑ Linear (LEAF project). Mac B receives push; clicks `Mark done` after completing work; Linear issue closes. Mac A sees task strikethrough + green border + "Done by Dmitrii · 18:42". | Linear issue created with `assignee=dmitrii`. Task state machine: open → acknowledged (auto on read) → done. Cross-post failure (Linear API 4xx) shows toast in sender's app; Leaf-side message persists regardless. |
-| **UC-T5-5** | **Cross-post — Slack.** Mac A user sends Handoff with Channels=☑ Leaf + ☑ Slack (#leaf-architecture). Mac B sees parallel Slack message from Anton in #leaf-architecture (posted via Anton's OAuth token + `chat:write` scope). Dmitrii replies in Slack with 👍 reaction → Layer B Slack collector on Mac A captures it → appears in Mac A's Team feed as a related event. | Slack message posted via `chat.postMessage` API. UI warning shown in Send sheet: "🔓 Slack will see this message — outside E2E". Inbound reactions captured automatically (no new pipe required). |
+| **UC-T5-2** | **Auto-share + AI query.** Mac A user (Sasha) toggles in Settings → Share `Git commits ON`, `Linear issues ON`, `Detected decisions ON`. Mac A user commits / closes Linear issues / Slack-detected decisions arrive. Mac B user (Alex) in Cursor / Claude Code asks `что Саша делал сегодня?` → AI client invokes `leaf_query_team(member="anton")` MCP tool → reads Mac B local mirror → returns structured timeline of Mac A activity (filtered by Mac A's Share rules). | End-to-end latency ≤30s from event capture to mirror appearance. Mac B's local DB stores mirror events with sender attribution. Mirror events retain Track 1 detector output (decisions / blockers / open questions). |
+| **UC-T5-3** | **Direct message — Handoff.** Mac A user opens Team tab → clicks sticky `Send` → modal: To=Alex / Type=Handoff / Message="Закончил OAuth, проверь PR #142" / Attach=PR #142 → Send. Mac B receives APNs push within 5s; click on banner opens Leaf scrolled to handoff card in Team feed; reply inline. | APNs push delivery ≤5s on warm app; ≤30s if app cold. Reply appears in Mac A feed under the parent handoff card (threading). Direct message lifecycle: unread → read (auto on view) → replied (optional). |
+| **UC-T5-4** | **Direct message — Task with Linear cross-post.** Mac A user sends Type=Task / Message="SSH keys в Onboarding" / Channels=☑ Leaf + ☑ Linear (LEAF project). Mac B receives push; clicks `Mark done` after completing work; Linear issue closes. Mac A sees task strikethrough + green border + "Done by Alex · 18:42". | Linear issue created with `assignee=dmitrii`. Task state machine: open → acknowledged (auto on read) → done. Cross-post failure (Linear API 4xx) shows toast in sender's app; Leaf-side message persists regardless. |
+| **UC-T5-5** | **Cross-post — Slack.** Mac A user sends Handoff with Channels=☑ Leaf + ☑ Slack (#leaf-architecture). Mac B sees parallel Slack message from Sasha in #leaf-architecture (posted via Sasha's OAuth token + `chat:write` scope). Alex replies in Slack with 👍 reaction → Layer B Slack collector on Mac A captures it → appears in Mac A's Team feed as a related event. | Slack message posted via `chat.postMessage` API. UI warning shown in Send sheet: "🔓 Slack will see this message — outside E2E". Inbound reactions captured automatically (no new pipe required). |
 | **UC-T5-6** | **Multi-workspace switcher.** Mac A user is in 2 workspaces (Гундем + ClientCorp). Sidebar bottom shows both with avatar + name + unread badge. Click switches active workspace; Team tab feed updates; notifications labelled `[ClientCorp]`. | Each workspace has independent teamKey + members + feed + Share rules. Switching is local-only (no network round-trip). Notification from inactive workspace appears with workspace label. |
 | **UC-T5-7** | **Tier gate.** Free-tier user (no active Team subscription) opens Team tab → sees `Upgrade to Team — $30/seat (min 2)` CTA + read-only preview of feed mockup. Cannot send messages, create workspaces, or accept invites. Existing solo features (Home / Connections / Settings) remain fully functional. | Free-tier check happens at workspace-creation time and message-send time, not at per-event-capture level. Free-tier user can still receive invite links but acceptance prompts upgrade flow. |
 
@@ -83,7 +83,7 @@ Each sub-phase spec lists which use cases it unblocks and writes integration tes
 │  ┌────────────────┐   ┌─────────────────┐   ┌─────────────────────┐  │
 │  │ Pull loop      │──▶│ Decrypt         │──▶│ Local mirror DB     │  │
 │  │ (WebSocket +   │   │ (teamKey from   │   │ (events from        │  │
-│  │  periodic      │   │  Keychain)      │   │  Anton labelled     │  │
+│  │  periodic      │   │  Keychain)      │   │  Sasha labelled     │  │
 │  │  poll)         │   │                 │   │  sender_pubkey=...) │  │
 │  └────────────────┘   └─────────────────┘   └──────────┬──────────┘  │
 │                                                        ▼              │
@@ -183,7 +183,7 @@ Each sub-phase spec lists which use cases it unblocks and writes integration tes
 
 **Why S6 in parallel-feel position despite sequential dep on S4.** S6 reuses S4's encrypted message envelope as cross-post payload — needs the message-primitive shape. But S6 doesn't block S5 / S7 / S8 in terms of code paths — only data flow. A specific sub-phase spec can argue for parallelism within Track 5 if implementation evidence supports.
 
-**Sub-phase smoke tests.** Each sub-phase ships a manual smoke checklist (per `conventions.md` 8-stage workflow Stage 7) **before** merge. Acceptance gate for Track 5 as a whole = all 7 UCs from §2 passed manually on two real Macs (Anton + Dmitrii).
+**Sub-phase smoke tests.** Each sub-phase ships a manual smoke checklist (per `conventions.md` 8-stage workflow Stage 7) **before** merge. Acceptance gate for Track 5 as a whole = all 7 UCs from §2 passed manually on two real Macs (Sasha + Alex).
 
 ---
 
@@ -257,7 +257,7 @@ Track 5 maintains the **E2E invariant** for Leaf-internal data while introducing
 |---|---|---|
 | Direct messages (within Leaf) | ✅ Yes | Encrypted with workspace teamKey. Supabase sees only ciphertext + recipient_pubkey. |
 | Auto-shared events (within Leaf) | ✅ Yes | Same teamKey. Recipients build local mirror by decrypting. |
-| APNs push notification body | ⚠️ Title only | APNs sees notification title (e.g., "Anton sent a handoff"). Body content NOT included in APNs payload — recipient app fetches encrypted message after wake. |
+| APNs push notification body | ⚠️ Title only | APNs sees notification title (e.g., "Sasha sent a handoff"). Body content NOT included in APNs payload — recipient app fetches encrypted message after wake. |
 | Invite handshake | ✅ Yes | Magic-link contains admin's pubkey + workspace_id; invitee derives ECDH shared secret, decrypts teamKey wrapped under it. Supabase sees ciphertexts. |
 | Cross-post to Slack | ❌ No (explicit opt-in) | Message text sent via `chat.postMessage` API in **plain**. UI shows 🔓 warning in Send sheet next to Slack checkbox. |
 | Cross-post to Linear | ❌ No (explicit opt-in) | Same — Task text sent to Linear issue body. UI shows 🔓 warning. |
@@ -391,7 +391,7 @@ Per privacy invariant (§6), APNs payload contains **title only** (no body excer
 ```json
 {
   "aps": {
-    "alert": { "title": "Anton sent a handoff" },
+    "alert": { "title": "Sasha sent a handoff" },
     "sound": "default",
     "thread-id": "<workspace_id>"
   },

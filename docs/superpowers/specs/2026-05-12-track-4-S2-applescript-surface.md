@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-12
 **Status:** Draft (brainstorm-approved via Track-4 design contract; implementation plan in same session per user direction "иду в зал — спек и план оба сразу")
-**Owner:** Dmitrii
+**Owner:** Alex
 **Branch (off):** `feature/track-4-S1-architecture-catch-up` (tip `d334d38`, Track-4 S1 landed locally — awaiting collective merge after S4 per Track-4 contract §"Phase decomposition order")
 **Branch (new):** `feature/track-4-S2-applescript-surface`
 **Contract:** `docs/superpowers/specs/2026-05-11-track-4-local-os-sweep-design.md` § "S2 — AppleScript surface"

@@ -3,7 +3,7 @@
 **Stage:** Stage 0 (Deep Research) — companion to upcoming phase spec
 **Contract:** `2026-05-15-track-6-existing-surface-depth-contract.md`
 **Date:** 2026-05-15
-**Author:** Dmitrii + Claude (research subagents: Explore / claude-code-guide / general-purpose)
+**Author:** Alex + Claude (research subagents: Explore / claude-code-guide / general-purpose)
 
 This doc is the **input to brainstorm (Stage 2)**, not a plan. It maps the realistic ceiling of Claude Code capture, surfaces the deltas between substrate and ceiling, and surfaces 4 product questions for the user to answer before brainstorm starts.
 

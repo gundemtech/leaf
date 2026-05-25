@@ -28,10 +28,10 @@ description: Синхронизировать изменение из текущ
      ```
    - версию бери из `leaf-docs/CLAUDE.md` (текущая + 1, если ещё не бампали в этой волне правок).
 5. **Допиши `docs/05-reference/changelog.md`** — формат:
-   `- **YYYY-MM-DD HH:MM · Dmitrii** — <тема>: <что поменялось>`.
+   `- **YYYY-MM-DD HH:MM · Alex** — <тема>: <что поменялось>`.
    - HH:MM обязательно (changelog-бот парсит строго `\d{4}-\d{2}-\d{2} \d{2}:\d{2}`).
    - Текущее время: `date +'%Y-%m-%d %H:%M'`.
-   - Автор — `Dmitrii` (твоя Mac-сессия). Полные правила — `leaf-docs/CLAUDE.md`.
+   - Автор — `Alex` (твоя Mac-сессия). Полные правила — `leaf-docs/CLAUDE.md`.
 5.5. **Проверь что запись прошла регэкс** перед коммитом:
    ```bash
    tail -1 docs/05-reference/changelog.md \

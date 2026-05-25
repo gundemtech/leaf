@@ -41,7 +41,7 @@ Verify:
 claude mcp list   # leaf: ... ✓ Connected
 ```
 
-In a new Claude Code session ask natural-language questions — *"что я делал сегодня?"* / *"what did Anton ship this week?"* — and Claude calls Leaf's MCP tools under the hood. The MCP server reads the same local SQLCipher database as the menu-bar app; raw metadata never leaves the device.
+In a new Claude Code session ask natural-language questions — *"что я делал сегодня?"* / *"what did Sasha ship this week?"* — and Claude calls Leaf's MCP tools under the hood. The MCP server reads the same local SQLCipher database as the menu-bar app; raw metadata never leaves the device.
 
 ## Compared to alternatives
 

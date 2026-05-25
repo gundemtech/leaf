@@ -1,7 +1,7 @@
 # Phase 5.2.C — `leaf-oauth-relay` invite endpoints (POST/GET/DELETE `/v1/invite` + KV)
 
 **Status:** Active (2026-05-05). Third sub-phase of Phase 5.2 ("relay invite endpoints + invite UX + ECDH handshake").
-**Owner:** Dmitrii.
+**Owner:** Alex.
 **Stack:** branches off `feature/phase-5-2-B` for spec commit; implementation lives in separate private repo `gundemtech/leaf-relay` on branch `feature/v1-invite` off its own `main`.
 
 ---

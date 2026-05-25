@@ -137,7 +137,7 @@ Track-6 piggybacks on existing substrate; net-new components are rare.
 
 **Ordering.** P1 / P2 / P3 / P4 / P6 / P7 parallel-safe (different files, different surfaces). P5 sequential on P4 because Calendar cross-link is a substrate dependency. Within Track-6 work, the only true dependency is P4 → P5.
 
-**Parallelism with Track 5.** All Track-6 phases are parallel-safe with Track 5 (Anton's collaboration redesign). Collision zones are minor:
+**Parallelism with Track 5.** All Track-6 phases are parallel-safe with Track 5 (Sasha's collaboration redesign). Collision zones are minor:
 - Migration counter: Track-5 books M019–M023; Track-6 takes M024+.
 - ShareEventTypeKey registry: append-only, merges cleanly.
 - `ActivityFeedMapper`: switch-case append, merges cleanly.

@@ -54,6 +54,7 @@ assert_detect "PEM private key block"      "-----BEGIN RSA PRIVATE KEY-----"
 assert_detect "GitHub PAT"                 "token ghp_0123456789abcdefABCDEF0123456789abcd"
 assert_detect "OpenAI-style key"           "sk-0123456789abcdefghijKLMN"
 assert_detect "APNs identifier"            "APNS_TEAM_ID=ABCDE12345"
+assert_detect "hardcoded signing identity" 'SIGN_ID="Developer ID Application: Foo Bar (ABCDE12345)"'
 assert_detect "moat source tracked"        "import Foundation"  "sub/LeafCorePrivate_Secret.swift"
 
 # --- Negative controls: carve-outs and placeholders must pass ---

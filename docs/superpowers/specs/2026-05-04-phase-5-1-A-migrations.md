@@ -1,7 +1,7 @@
 # Phase 5.1.A — Migrations (org / team_members / team_keys)
 
 **Status:** Active (2026-05-04). First sub-project of Phase 5.
-**Owner:** Dmitrii.
+**Owner:** Alex.
 **Promotes:** `docs/superpowers/specs/2026-05-04-phase-5-architecture-contract.md` from Draft → Active (per contract §1).
 
 ---
@@ -227,7 +227,7 @@ Triggered automatically per root `CLAUDE.md` "Whitepaper — source of truth":
 - `leaf-docs/docs/03-architecture/storage.md`:
   - Table count update — было 16 (с `presence_state`), станет 19 (`+ org`, `+ team_members`, `+ team_keys`).
   - Admonition `!!! note "Изменение vX.Y — 2026-05-04 (Phase 5.1.A — team-crypto schema)"` — пометка "**rows нет**, только schema substrate".
-- `leaf-docs/docs/05-reference/changelog.md` — entry `- **2026-05-04 HH:MM · Dmitrii** — Phase 5.1.A landed: M006/M007/M008 schema substrate под team relay (no behavioural change, пустые таблицы).`
+- `leaf-docs/docs/05-reference/changelog.md` — entry `- **2026-05-04 HH:MM · Alex** — Phase 5.1.A landed: M006/M007/M008 schema substrate под team relay (no behavioural change, пустые таблицы).`
 - `presence-relay.md` НЕ трогаем — column-level details не уходят в public.
 
 Implementation moat (FK strategy reasoning, partial-index choices, insertion-order paradox) **не уходит** в whitepaper — остаётся в этом spec'е + phase plan.

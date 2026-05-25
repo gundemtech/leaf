@@ -1,7 +1,7 @@
 # Track 2 — D1: Design Foundation
 
 **Date:** 2026-05-10
-**Author:** Dmitrii (with Claude)
+**Author:** Alex (with Claude)
 **Status:** spec for review
 **Track:** 2 (UI/UX redesign of Native Leaf macOS app)
 **Phase:** D1 of 4 (D1 = Foundation, D2 = Navigation Shell + Home, D3 = Data Surfaces, D4 = Identity & Config)
@@ -439,7 +439,7 @@ reduceMotion → все springs/easings → .linear(duration: 0)
 
 ## Open questions / risks
 
-- **macOS 14 testing matrix.** Нужна VM или старый Mac на 14.x для smoke. У Dmitrii есть macOS 26 dev, у Антона — TBD. Если нет 14.x — Tokens Preview всё равно компилируется, но manual smoke на 14 пропадает. Acceptance criteria #4 требует обе версии — risk если 14 машина недоступна.
+- **macOS 14 testing matrix.** Нужна VM или старый Mac на 14.x для smoke. У Alex есть macOS 26 dev, у Саши — TBD. Если нет 14.x — Tokens Preview всё равно компилируется, но manual smoke на 14 пропадает. Acceptance criteria #4 требует обе версии — risk если 14 машина недоступна.
 - **macOS 26 polish baseline.** Adoption macOS 26 на 2026-05 ~50%. Половина юзеров увидит fallback. Дисциплина "fallback должен выглядеть достойно" критична — нельзя проектировать только под Liquid Glass и забивать на bordered.
 - **"Force fallback preview" реализация.** На macOS 26 force-degradation `if #available` нельзя обмануть прямо. Нужен EnvironmentKey `forceLegacyGlass` который Tokens Preview переключает. Все glass wrappers читают этот key и игнорируют availability check если он `true`. Это complexity, но без него side-by-side сравнение невозможно.
 - **Asset Catalog naming.** Apple's color set naming не любит точки в именах (`leaf.surface.canvas` → реально `leaf-surface-canvas` или `leafSurfaceCanvas` в .xcassets). В Swift wrapper маппим красивое имя на реальное. Не блокер, мелкая инфраструктура.

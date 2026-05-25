@@ -134,6 +134,8 @@ scan "GitHub personal access token"     regex 'gh[ps]_[A-Za-z0-9]{36}'
 scan "OpenAI-style secret key"          regex 'sk-[A-Za-z0-9]{20,}'
 scan "Apple APNs identifier (use <APNS_TEAM_ID> / <APNS_KEY_ID>)" \
     regex 'APNS_(TEAM|KEY)_ID[[:space:]]*=[[:space:]]*[A-Z0-9]{10}'
+scan "Hardcoded code-signing identity with name+team (use \$LEAF_SIGN_ID)" \
+    regex 'Developer ID [A-Za-z]+: [^(<]*\([A-Z0-9]{10}\)'
 
 # ---------------------------------------------------------------------------
 # Category 4 — moat source code accidentally tracked.

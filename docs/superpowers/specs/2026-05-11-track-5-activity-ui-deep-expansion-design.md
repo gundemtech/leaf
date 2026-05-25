@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-11
 **Status:** Draft (brainstorm-approved, awaiting per-sub-phase implementation plan)
-**Owner:** Dmitrii
+**Owner:** Alex
 
 ## Context
 

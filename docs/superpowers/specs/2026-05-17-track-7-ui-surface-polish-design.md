@@ -2,7 +2,7 @@
 
 **Status:** Draft (2026-05-17). Promoted to "Active" after user review gate (Stage 3) closes.
 **Stage 0 discovery:** parallel Explore agents — UI inventory + data substrate snapshot (in-session, 2026-05-17).
-**Authors:** Dmitrii + Claude (brainstorm session 2026-05-17).
+**Authors:** Alex + Claude (brainstorm session 2026-05-17).
 **Stage in 8-stage workflow:** 3 (Spec write) — implementation per-phase sessions follow approval; each phase runs `superpowers:writing-plans` → `test-driven-development` → `code-reviewer` → `verification-before-completion`.
 
 ---

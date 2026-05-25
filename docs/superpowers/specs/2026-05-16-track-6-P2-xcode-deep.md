@@ -4,7 +4,7 @@
 **Contract:** [`2026-05-15-track-6-existing-surface-depth-contract.md`](./2026-05-15-track-6-existing-surface-depth-contract.md)
 **Research:** [`2026-05-16-track-6-P2-xcode-deep-research.md`](./2026-05-16-track-6-P2-xcode-deep-research.md)
 **Date:** 2026-05-16
-**Owner:** Dmitrii (Claude session)
+**Owner:** Alex (Claude session)
 **Branch:** `feature/track-6-P2-xcode-deep` (off `main` @ `9b2a53b`)
 **Approach:** A — FSEvents + state-machine split
 

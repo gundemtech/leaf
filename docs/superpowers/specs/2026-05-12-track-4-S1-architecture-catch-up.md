@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-12
 **Status:** Draft (brainstorm-approved via Track-4 design contract; implementation plan in this same session per user direction "иду в зал — спек и план оба сразу")
-**Owner:** Dmitrii
+**Owner:** Alex
 **Branch (off):** `feature/track-3-D4-cross-cutting` (tip — Track-3 D4 landed, all five Track-3 stack sub-phases committed locally, awaiting collective merge per Track-3 contract §13)
 **Branch (new):** `feature/track-4-S1-architecture-catch-up`
 **Contract:** `docs/superpowers/specs/2026-05-11-track-4-local-os-sweep-design.md` § "S1 — Architecture catch-up"
@@ -265,7 +265,7 @@ After every implementation step:
 - **AC2:** 5/5 xcodebuild schemes green (Leaf / LeafAgent / LeafCore / LeafCorePrivate / LeafMCP).
 - **AC3:** `just check-tokens` PASS + `just check-tokens-self-test` PASS.
 - **AC4:** `ShareEventTypeKey.allCases.count == 125` (116 baseline + 9 new); `ShareEventTypeDefaults.all.count == 125`; every new key has `defaultEnabled == false`.
-- **AC5:** Manual smoke on Author's Mac (Dmitrii's):
+- **AC5:** Manual smoke on Author's Mac (Alex's):
   - Cold install LeafAgent + LeafApp → Onboarding shows new `observersStep`.
   - Grant Calendar in Onboarding → TCC prompt fires under `tech.gundem.leaf`. Click Allow.
   - Next agent boot → TCC prompt fires under `tech.gundem.leaf.agent`. Click Allow.

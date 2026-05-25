@@ -1,14 +1,14 @@
 # Phase 5.5 — Decomposition: onboarding & team UX polish
 
 **Status:** Active (2026-05-06). Phase 5.5 of Phase 5 ("team presence relay"). Decomposes whitepaper roadmap row 5.5 into sub-phases 5.5.A → 5.5.C.
-**Owner:** Dmitrii.
+**Owner:** Alex.
 **Stack:** branches off `main` (Phase 5.3 stack landed alpha.10/alpha.11 — 5.3 NOT pending merge anymore).
 
 ---
 
 ## 1. Context
 
-Phase 5.3 stack (member removal + key rotation, alpha.10) и alpha.11 patch (`fix: replace hardcoded "Dmitrii Demidov" placeholder with NSFullUserName`) shipped. Pre-5.5 ревизия выявила что invite/accept flow — реальный adoption-blocker для real teams.
+Phase 5.3 stack (member removal + key rotation, alpha.10) и alpha.11 patch (`fix: replace hardcoded "Alex Rivera" placeholder with NSFullUserName`) shipped. Pre-5.5 ревизия выявила что invite/accept flow — реальный adoption-blocker для real teams.
 
 **7 UX-провалов** (упорядочены по severity):
 
@@ -32,12 +32,12 @@ Phase 5.3 stack (member removal + key rotation, alpha.10) и alpha.11 patch (`fi
 
 | # | Decision | Rationale |
 |---|---|---|
-| D1 | **Bilateral handshake mental model** | Любая сторона стартует. Admin "Add member" может (a) paste invitee Join code если в clipboard, либо (b) отправить invitee pre-filled "ask to join" template. Invitee из onboarding `.team` → "Join existing team" → шарит свой Join code admin'у. Обе стороны имеют waiting state. Альтернативы: invitee-first only (рестриктивно — admin не может "позвать Антона"); admin-first via relay extension (требует /v1/invite/init-by-slot — out of scope). |
+| D1 | **Bilateral handshake mental model** | Любая сторона стартует. Admin "Add member" может (a) paste invitee Join code если в clipboard, либо (b) отправить invitee pre-filled "ask to join" template. Invitee из onboarding `.team` → "Join existing team" → шарит свой Join code admin'у. Обе стороны имеют waiting state. Альтернативы: invitee-first only (рестриктивно — admin не может "позвать Саши"); admin-first via relay extension (требует /v1/invite/init-by-slot — out of scope). |
 | D2 | **Three-way onboarding `.team` step** | "Create new team" / "Join existing team" / "Skip for now". OrganizationView empty-state остаётся fallback для Skip-пути. Альтернативы отвергнуты: "I have an invite / Skip" (не показывает Create CTA — disorientation для new admin). |
 | D3 | **Standard humanization, no admin-confirm gate** | "Pubkey" → "Join code" (formatted base32-Crockford XXXX-XXXX-... + CRC32 checksum 4B). "OTP" → "Verification code" (формат 6 digits сохраняется). Crypto под капотом не меняется. Bitwarden-style admin-confirm gate с 5-word EFF phrase отложен (security hardening против OOB-MITM) → Phase 5.7 candidate. Альтернативы: keep-as-is (плохой UX); full Bitwarden gate (overkill для 5.5 polish). |
 | D4 | **Single deep-link invite** `leaf://invite/<token>#<otp>` | Admin шлёт ОДНУ ссылку. Invitee клик → app open AcceptInviteSheet с auto-fill. Plus clipboard auto-detect on sheet open / app foreground (НЕ interval polling). OTP в URL fragment — не попадает в server access logs если ссылка попадёт в web. Альтернативы: formatted string `LEAF-<token>.<otp>` (нет magic); split (текущее, плохой UX). |
 | D5 | **Local M010 `pending_invites` table** | SQLCipher table для admin-side pending tracking. {token PK, otp, invitee_pubkey_hex, invitee_display_name_hint, created_at_ms, expires_at_ms, status, last_polled_at_ms}. OTP at rest = OK (рядом с teamKey в same DB, no incremental risk). Альтернативы: relay state only (требует new endpoints); in-memory (теряется на restart); status quo (admin не может re-share после закрытия sheet). |
-| D6 | **Display name на Step 1 + NSFullUserName default** | Invitee вводит/подтверждает display name на Step 1 share-flow alongside Join code. Embedded в pre-filled share-template ("Hi! I'm Anton, here's my Leaf Join code..."). Admin display name задаётся в "Create new team" inline form в onboarding (или OrganizationView empty-state form для Skip-пути). |
+| D6 | **Display name на Step 1 + NSFullUserName default** | Invitee вводит/подтверждает display name на Step 1 share-flow alongside Join code. Embedded в pre-filled share-template ("Hi! I'm Sasha, here's my Leaf Join code..."). Admin display name задаётся в "Create new team" inline form в onboarding (или OrganizationView empty-state form для Skip-пути). |
 | D7 | **Manual [Refresh] для pending status** | Нет auto-poll loop в 5.5. TeamView "Pending invites" имеет [Refresh] button (section + per-row). Per click → batch GET pending tokens → 404 (KV consumed) = mark consumed. **Race**: admin GET съедает one-shot blob. Mitigation — UI copy "Refresh after your colleague tells you they opened the link". Auto-poll candidate Phase 5.6 (требует HEAD `/v1/invite/<token>` endpoint в leaf-relay = cross-repo). Альтернативы: auto-poll + relay extension (cross-repo coord); skip pending entirely (UX gap для admin). |
 | D8 | **Sub-phases 5.5.A→C** mirror 5.1/5.2/5.3 discipline | Single-phase 5.5 too wide (M010 migration + new value types + 4 new view files + 4 view rewrites + URL scheme + clipboard auto-detect + pending list + Refresh logic). 3 sub-phases дают landing checkpoints + sub-rollback granularity. 5.5.A foundation (substrate), 5.5.B flow rewrites (UX surface), 5.5.C pending integration (admin recall). |
 | D9 | **No relay extension в 5.5** | Existing `POST /v1/invite`, `GET /v1/invite/:token`, `DELETE /v1/invite/:token` достаточно (per §8 contract). HEAD endpoint для auto-poll → Phase 5.6 (отдельный PR в `gundemtech/leaf-relay`). Pubkey-mediated exchange endpoints → Phase 5.6+. |

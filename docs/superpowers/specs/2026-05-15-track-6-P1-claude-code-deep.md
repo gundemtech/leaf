@@ -3,7 +3,7 @@
 **Status:** Draft (2026-05-15). Promoted to "Active" after user review gate (Stage 3) closes.
 **Contract:** `2026-05-15-track-6-existing-surface-depth-contract.md`
 **Stage 0 research:** `2026-05-15-track-6-P1-claude-code-research.md` (D1–D5 locked decisions + Q1–Q9 resolved in brainstorm)
-**Authors:** Dmitrii + Claude (brainstorm session 2026-05-15)
+**Authors:** Alex + Claude (brainstorm session 2026-05-15)
 **Stage in 8-stage workflow:** 3 (Spec write) — Stage 4 (`writing-plans`) follows after user approval.
 
 ---

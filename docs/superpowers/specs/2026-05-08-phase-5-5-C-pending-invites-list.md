@@ -1,7 +1,7 @@
 # Phase 5.5.C — Pending invites list (admin recall surface)
 
 **Status:** Active (2026-05-07).
-**Owner:** Dmitrii.
+**Owner:** Alex.
 **Stack:** branches off `feature/phase-5-5-B-flow-rewrites` (off `feature/phase-5-5-A-foundation` off `main`, alpha.11 baseline). Branch name: `feature/phase-5-5-C-pending-invites-list`. NOT merged immediately — стэк 5.5.{A,B,C} мерджим коллективным решением в конце, после two-Mac smoke gate (§4.8 в decomposition).
 **Cumulative tests baseline:** 989 SPM (post-5.5.B). End-of-5.5.C target: ≈1000-1010.
 

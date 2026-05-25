@@ -1,7 +1,7 @@
 # Phase 5.1.C — EnvelopeCodec real impl (AES-GCM-256)
 
 **Status:** Active (2026-05-05). Third sub-project of Phase 5.
-**Owner:** Dmitrii.
+**Owner:** Alex.
 **Stack:** branches off `feature/phase-5-1-B` (which holds 5.1.A + 5.1.B commits).
 
 ---
