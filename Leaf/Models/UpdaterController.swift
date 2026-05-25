@@ -17,7 +17,7 @@
 //    3. Old agent SignalHandlers fire (Agent.swift:131) → maintenance.stop +
 //       fsEvents.stop + claudeCode.stop + writer.flush + writer.stop → exit
 //    4. New agent starts at new binary path → acquires SQLCipher writer lock
-//       после release от old agent (busy_timeout=5000ms из Phase 1.1)
+//       после release от old agent (busy_timeout из moat-config DatabaseConfigProd)
 //
 //  Multi-process SQLCipher + existing SignalHandlers handle WAL gracefully.
 //  Choreography compress только timing step 2-3 (~few seconds), не предотвращает
