@@ -15,15 +15,15 @@ final class ShareTemplateTests: XCTestCase {
     }
 
     func testInviteeShare_BodyContainsDisplayNameAndJoinCode() {
-        let body = ShareTemplate.compose(.inviteeShare(displayName: "Anton", joinCode: "ABCD-EFGH"))
-        XCTAssertTrue(body.contains("Anton"))
+        let body = ShareTemplate.compose(.inviteeShare(displayName: "Sasha", joinCode: "ABCD-EFGH"))
+        XCTAssertTrue(body.contains("Sasha"))
         XCTAssertTrue(body.contains("ABCD-EFGH"))
     }
 
     func testAdminShare_BodyContainsURLAndDisplayName() {
         let url = URL(string: "leaf://invite/ABC#123456")!
-        let body = ShareTemplate.compose(.adminShare(displayName: "Anton", inviteURL: url))
-        XCTAssertTrue(body.contains("Anton"))
+        let body = ShareTemplate.compose(.adminShare(displayName: "Sasha", inviteURL: url))
+        XCTAssertTrue(body.contains("Sasha"))
         XCTAssertTrue(body.contains("leaf://invite/ABC#123456"))
         XCTAssertTrue(body.contains("24"), "must mention 24h expiry")
     }

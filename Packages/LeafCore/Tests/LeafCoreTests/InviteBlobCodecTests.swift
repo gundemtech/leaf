@@ -14,7 +14,7 @@ final class InviteBlobCodecTests: XCTestCase {
             orgID: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
             orgName: "Leaf",
             adminMemberID: "99999999-8888-7777-6666-555555555555",
-            adminDisplayName: "Dmitrii",
+            adminDisplayName: "Alex",
             issuedAtMs: 1_730_000_000_000
         )
     }

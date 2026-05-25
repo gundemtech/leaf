@@ -13,7 +13,7 @@ public enum XcodeBuildState: String, Sendable, Codable, Hashable {
 ///
 /// Phase Track-6 P2 (2026-05-16) — extended with `runDestinationName` +
 /// `runDestinationBucket`. The raw name is the AppleScript output (e.g.
-/// "Dmitrii's iPhone"); it must NEVER reach `RawEvent.payload`. The bucket is
+/// "Alex's iPhone"); it must NEVER reach `RawEvent.payload`. The bucket is
 /// the parser-derived enum value, suitable for export. See spec §4.6.
 public struct XcodeObservation: AdapterObservation, Hashable {
     public let activeDocPath: String?
