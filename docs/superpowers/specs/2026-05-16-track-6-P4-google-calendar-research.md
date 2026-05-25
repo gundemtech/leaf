@@ -279,7 +279,7 @@ For completeness, the watch request response:
   "kind": "api#channel",
   "id": "01234567-89ab-cdef-0123456789ab",
   "resourceId": "o3hgv1538sdjfh",
-  "resourceUri": "https://www.googleapis.com/calendar/v3/calendars/my_calendar@gmail.com/events",
+  "resourceUri": "https://www.googleapis.com/calendar/v3/calendars/my_calendar@example.com/events",
   "token": "target=myApp-myCalendarChannelDest",
   "expiration": 1426325213000  // Unix ms
 }

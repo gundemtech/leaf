@@ -56,6 +56,7 @@ assert_detect "OpenAI-style key"           "sk-0123456789abcdefghijKLMN"
 assert_detect "APNs identifier"            "APNS_TEAM_ID=ABCDE12345"
 assert_detect "hardcoded signing identity" 'SIGN_ID="Developer ID Application: Foo Bar (ABCDE12345)"'
 assert_detect "moat source tracked"        "import Foundation"  "sub/LeafCorePrivate_Secret.swift"
+assert_detect "personal email address"     "let owner = \"someone@gmail.com\""
 
 # --- Negative controls: carve-outs and placeholders must pass ---
 assert_allow  "clean fixture"              "let greeting = \"hello world\""
@@ -63,6 +64,7 @@ assert_allow  "lowercase MCP handles"      'leaf_ask_question(to="dima"/"anton")
 assert_allow  "APNs placeholder"           "APNS_TEAM_ID=<APNS_TEAM_ID>"
 assert_allow  "pragma without a value"     "cipher_plaintext_header_size — см. moat config"
 assert_allow  "neutral placeholder name"   "let sender = \"Sasha\""
+assert_allow  "team / example email"       "contact dev@gundem.tech or owner@example.com"
 assert_allow  "Placeholder moat file ok"   "enum Placeholder {}"  "sub/LeafCorePrivate/Placeholder.swift"
 
 echo "All leak-guard self-test cases passed."

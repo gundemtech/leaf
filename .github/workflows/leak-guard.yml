@@ -23,4 +23,6 @@ jobs:
         run: ./scripts/tests/test-leak-guard.sh
 
       - name: Scan tracked tree for forbidden patterns
+        env:
+          LEAF_LEAK_GUARD_FIXTURES_ONLY: "0"  # never let the scan be narrowed to fixtures
         run: ./scripts/leak-guard.sh --report

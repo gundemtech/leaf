@@ -132,6 +132,8 @@ scan "AWS IAM access key id"            regex '(AKIA|ASIA)[0-9A-Z]{16}'
 scan "PEM private key block"            regex '-----BEGIN [A-Z ]*PRIVATE KEY-----'
 scan "GitHub personal access token"     regex 'gh[ps]_[A-Za-z0-9]{36}'
 scan "OpenAI-style secret key"          regex 'sk-[A-Za-z0-9]{20,}'
+scan "Personal email address (use a synthetic / team address)" \
+    regex '[A-Za-z0-9._%+-]+@(gmail|yandex|outlook|icloud|proton|hotmail|mail)\.(com|ru|me)'
 scan "Apple APNs identifier (use <APNS_TEAM_ID> / <APNS_KEY_ID>)" \
     regex 'APNS_(TEAM|KEY)_ID[[:space:]]*=[[:space:]]*[A-Z0-9]{10}'
 scan "Hardcoded code-signing identity with name+team (use \$LEAF_SIGN_ID)" \

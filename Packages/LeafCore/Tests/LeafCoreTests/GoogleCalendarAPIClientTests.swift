@@ -114,7 +114,7 @@ final class GoogleCalendarAPIClientTests: XCTestCase {
         let canned = #"""
             {
               "kind": "calendar#events",
-              "summary": "demidovdmitry07@gmail.com",
+              "summary": "owner@example.com",
               "timeZone": "Europe/Berlin",
               "accessRole": "owner",
               "items": [
