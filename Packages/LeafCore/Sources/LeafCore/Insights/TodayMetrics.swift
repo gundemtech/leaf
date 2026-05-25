@@ -35,10 +35,15 @@ public struct SurfacePill: Equatable, Hashable, Sendable, Identifiable {
     public let id: String
     public let label: String
     public let count: Int
+    /// Track-10 Phase B — pill family discriminator (capture-time vs
+    /// action-noun). Defaulted `.actionNoun` so pre-Phase-B callers stay
+    /// source-compatible.
+    public let kind: SurfacePillKind
 
-    public init(id: String, label: String, count: Int) {
+    public init(id: String, label: String, count: Int, kind: SurfacePillKind = .actionNoun) {
         self.id = id
         self.label = label
         self.count = count
+        self.kind = kind
     }
 }

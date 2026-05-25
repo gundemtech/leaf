@@ -1,5 +1,21 @@
 import Foundation
 
+/// Discriminator for the substrate path that resolved the current task
+/// session. Track-10 Phase B — carries the brainstorm gate decision (AI
+/// wins if more recent — symmetric compare-by-latestTs between IDE
+/// attention events and aiCollaboration cwd-match events within today).
+/// Composer reads this to append " via Claude Code" suffix in the YOU'RE
+/// ON session line when the AI candidate's latest activity beat the IDE's.
+public enum SessionSource: String, Sendable, Equatable, Hashable, Codable {
+    /// Per-IDE dispatch matched (Xcode doc_path / VSCode-family
+    /// `workspace_root` / JetBrains `workspace_root`).
+    case ide
+    /// aiCollaboration cwd-match won the latestTs compare.
+    case aiCollaboration
+    /// Neither IDE nor aiCollaboration produced a match today.
+    case fallback
+}
+
 /// Bundled view of the user's current task session — composed once per
 /// `InsightsReader.refresh()` tick and threaded through `InsightsSnapshot`
 /// to the YOU'RE ON Home block (Track-10 T7).
@@ -47,15 +63,23 @@ public struct CurrentTaskSession: Equatable, Hashable, Sendable {
     /// (`test_currentTaskSession_OpenFilesAreBasenamesOnly_NoSentinelLeak`).
     public let openFiles: [String]
 
+    /// Track-10 Phase B — substrate path that resolved this session
+    /// (IDE dispatch vs aiCollaboration cwd-match vs fallback). Drives
+    /// the " via Claude Code" provenance suffix in the YOU'RE ON line.
+    /// Defaulted `.fallback` so pre-Phase-B callers stay source-compatible.
+    public let sessionSource: SessionSource
+
     public init(
         taskIdentity: TaskIdentity,
         sessionStartMs: Int64,
         focusedMinSoFar: Int,
-        openFiles: [String]
+        openFiles: [String],
+        sessionSource: SessionSource = .fallback
     ) {
         self.taskIdentity = taskIdentity
         self.sessionStartMs = sessionStartMs
         self.focusedMinSoFar = focusedMinSoFar
         self.openFiles = openFiles
+        self.sessionSource = sessionSource
     }
 }
