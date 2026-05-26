@@ -112,5 +112,6 @@ Track-4 S2 substrate (60s AppleScript poll эмитящий `xcode_active_doc_ch
 Substrate-level (технические, не в whitepaper):
 - **OT-1** distributed deletion локальной forever-history у ex-teammates.
 - **OT-2** storage compression для forever retention.
+- **OT-SEC-2a** (security-hardening Phase 2, deferred) — `uuidStringToRawBytes` silent zero-key fallback (audit HIGH H1) живёт в `DirectMessageService.swift` + `TeamEventBroadcastService.swift` на unmerged Track-5; fix (throw `LeafError.invalidPayload` на битый UUID) откладывается до момента merge Track-5 → `main`, перед тем как код станет «живым». Не remote-triggerable; нет live-exposure пока Track-5 не отгружен. Точный diff — в Phase-2 плане.
 
 Стратегические open questions (whitepaper) — `leaf-docs/docs/reference/open-questions.md`.
