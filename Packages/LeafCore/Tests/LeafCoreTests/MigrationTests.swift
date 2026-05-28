@@ -632,4 +632,54 @@ final class MigrationTests: XCTestCase {
             )
         }
     }
+
+    // MARK: - Phase 5 — stale plaintext-backup auto-purge
+
+    /// Write a dummy plaintext `.bak` next to `dbURL` with a chosen modification date.
+    @discardableResult
+    private func seedBackup(at dbURL: URL, mtime: Date) throws -> URL {
+        let backup = dbURL.appendingPathExtension("pre-sqlcipher.bak")
+        try Data("SQLite format 3\u{0}plaintext".utf8).write(to: backup)
+        try FileManager.default.setAttributes([.modificationDate: mtime], ofItemAtPath: backup.path)
+        return backup
+    }
+
+    func testPurgeStalePlaintextBackup_OlderThanMaxAge_Deletes() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        let created = Date(timeIntervalSince1970: 1_000_000)
+        let backup = try seedBackup(at: dbURL, mtime: created)
+
+        Database.purgeStalePlaintextBackupIfNeeded(
+            at: dbURL, now: created.addingTimeInterval(40 * 24 * 60 * 60), maxAge: 30 * 24 * 60 * 60)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: backup.path))
+    }
+
+    func testPurgeStalePlaintextBackup_WithinMaxAge_Retained() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        let created = Date(timeIntervalSince1970: 1_000_000)
+        let backup = try seedBackup(at: dbURL, mtime: created)
+
+        Database.purgeStalePlaintextBackupIfNeeded(
+            at: dbURL, now: created.addingTimeInterval(10 * 24 * 60 * 60), maxAge: 30 * 24 * 60 * 60)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: backup.path))
+    }
+
+    func testPurgeStalePlaintextBackup_NoBackupFile_NoOp() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        Database.purgeStalePlaintextBackupIfNeeded(at: dbURL)  // no .bak — must not crash
+        XCTAssertFalse(
+            FileManager.default.fileExists(
+                atPath: dbURL.appendingPathExtension("pre-sqlcipher.bak").path))
+    }
+
+    func testOpenForWrite_PurgesStaleBackupAfterMigrate() throws {
+        let dbURL = tempDir.appendingPathComponent("events.sqlite")
+        let backup = try seedBackup(at: dbURL, mtime: Date().addingTimeInterval(-40 * 24 * 60 * 60))
+
+        _ = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: backup.path))
+    }
 }

@@ -30,6 +30,7 @@ public final class Database: @unchecked Sendable {
     ) throws -> Database {
         try ensureDirectory(for: url)
         try migrateFromPlaintextIfNeeded(at: url, encryption: encryption)
+        purgeStalePlaintextBackupIfNeeded(at: url)
 
         var grdbConfig = Configuration()
         grdbConfig.readonly = false
@@ -1775,6 +1776,27 @@ public final class Database: @unchecked Sendable {
         }
         Logger(subsystem: "tech.gundem.leaf.core", category: "db")
             .warning("Plaintext SQLite detected at \(path, privacy: .public), renamed to \(backup.path, privacy: .public). Starting fresh encrypted DB.")
+    }
+
+    /// One-shot purge of a stale plaintext-to-encrypted migration backup
+    /// (`events.sqlite.pre-sqlcipher.bak`). The backup is a recovery net created by
+    /// `migrateFromPlaintextIfNeeded`; once the encrypted DB is healthy it is just
+    /// plaintext user data lingering on disk, so delete it after `maxAge`. Called
+    /// from `openForWrite` (writer process only → no multi-process race). Best-effort,
+    /// logged at info. `now`/`maxAge` injectable for tests.
+    static func purgeStalePlaintextBackupIfNeeded(
+        at dbURL: URL,
+        now: Date = Date(),
+        maxAge: TimeInterval = 30 * 24 * 60 * 60
+    ) {
+        let backup = dbURL.appendingPathExtension("pre-sqlcipher.bak")
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: backup.path),
+            let mtime = attrs[.modificationDate] as? Date,
+            now.timeIntervalSince(mtime) > maxAge
+        else { return }
+        try? FileManager.default.removeItem(at: backup)
+        Logger(subsystem: "tech.gundem.leaf.core", category: "db")
+            .info("Purged stale plaintext backup at \(backup.path, privacy: .public)")
     }
 
     // MARK: - Pending invites (Phase 5.5.B)
