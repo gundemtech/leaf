@@ -84,7 +84,7 @@ public struct ProdGoogleCalendarAPIClient: GoogleCalendarAPIClient {
     private let urlSession: URLSession
     private let decoder: JSONDecoder
 
-    public init(urlSession: URLSession = .shared) {
+    public init(urlSession: URLSession = .leafEphemeral()) {
         self.urlSession = urlSession
         self.decoder = JSONDecoder()
     }
