@@ -25,6 +25,14 @@ public enum LinearOAuthEndpoints {
     /// Loopback redirect URI. Linear требует exact-match (port обязателен,
     /// не variable per RFC 8252 — Linear доки явно показывают port в example).
     /// При изменении порта обнови redirect URI в Linear OAuth app config.
+    ///
+    /// Phase 5 security note — fixed loopback port (residual risk, accepted; see
+    /// current-state OT-SEC-5b). A local attacker pre-binding this port can capture
+    /// the redirect's `?code=&state=`, but cannot complete the token exchange: the
+    /// PKCE `code_verifier` is generated per-flow and lives only in-process
+    /// (`LinearOAuthService`), never on disk or the wire. Ephemeral-port allocation
+    /// (RFC 8252 §7.3) is not available here — Linear matches the registered redirect
+    /// URI exactly.
     public static let redirectHost = "127.0.0.1"
     public static let redirectPort: UInt16 = 47823
     public static let redirectPath = "/callback"

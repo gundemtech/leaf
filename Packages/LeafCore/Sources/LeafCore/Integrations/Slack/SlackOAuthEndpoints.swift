@@ -68,6 +68,14 @@ public enum SlackOAuthEndpoints {
     /// Loopback listener — куда Cloudflare Worker 302-редиректит после Slack
     /// approval. SlackOAuthService биндит NWListener на этот port + ловит auth
     /// code. Port 47824 — на единицу больше Linear'овского 47823, cleaner separation.
+    ///
+    /// Phase 5 security note — fixed loopback port (residual risk, accepted; see
+    /// current-state OT-SEC-5b). A local attacker pre-binding this port can capture
+    /// the relay's 302 `?code=&state=`, but cannot complete the token exchange: the
+    /// PKCE `code_verifier` lives only in-process (`SlackOAuthService`). Ephemeral-port
+    /// allocation is not possible without a leaf-relay protocol change — the relay
+    /// hardcodes this port in its 302 Location and would have to learn the chosen
+    /// port per-flow.
     public static let loopbackHost = "127.0.0.1"
     public static let loopbackPort: UInt16 = 47824
     public static let loopbackPath = "/callback"
