@@ -81,6 +81,41 @@ final class KeyAgreementTests: XCTestCase {
         XCTAssertEqual(lower.rawRepresentation, upper.rawRepresentation)
     }
 
+    // MARK: - 6. Low-order / small-subgroup peer point → throws .lowOrderPoint
+
+    /// RFC 7748 §6.1 contributory-behaviour: an all-zero (u=0) peer point yields a
+    /// degenerate shared secret. CryptoKit on macOS ≥ 26 rejects it at the agreement
+    /// step (corecrypto −7); `sharedSecret` reclassifies that into `.lowOrderPoint`.
+    func testSharedSecret_ZeroPeerPublicKey_ThrowsLowOrderPoint() {
+        let priv = Curve25519.KeyAgreement.PrivateKey()
+        let zeroHex = String(repeating: "00", count: 32)
+        XCTAssertThrowsError(
+            try KeyAgreement.sharedSecret(privateKey: priv, peerPublicKeyHex: zeroHex)
+        ) { error in
+            assertLowOrderPoint(error)
+        }
+    }
+
+    /// A canonical Curve25519 small-order (order-8) point. Must be rejected like u=0.
+    func testSharedSecret_SmallOrderPoint_ThrowsLowOrderPoint() {
+        let priv = Curve25519.KeyAgreement.PrivateKey()
+        let order8Hex = "e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800"
+        XCTAssertThrowsError(
+            try KeyAgreement.sharedSecret(privateKey: priv, peerPublicKeyHex: order8Hex)
+        ) { error in
+            assertLowOrderPoint(error)
+        }
+    }
+
+    /// Regression guard: a valid peer key must still complete ECDH (no false reject).
+    func testSharedSecret_ValidPeer_DoesNotThrow() throws {
+        let priv = Curve25519.KeyAgreement.PrivateKey()
+        let peerHex = Curve25519.KeyAgreement.PrivateKey().publicKey.rawRepresentation
+            .map { String(format: "%02x", $0) }.joined()
+        let secret = try KeyAgreement.sharedSecret(privateKey: priv, peerPublicKeyHex: peerHex)
+        XCTAssertEqual(secret.withUnsafeBytes { Data($0) }.count, 32)
+    }
+
     // MARK: - Helpers
 
     private func assertInvalidPayload(_ error: Error, file: StaticString = #filePath, line: UInt = #line) {
@@ -91,6 +126,17 @@ final class KeyAgreementTests: XCTestCase {
         switch leafError {
         case .invalidPayload: break
         default: XCTFail("Expected .invalidPayload, got \(leafError)", file: file, line: line)
+        }
+    }
+
+    private func assertLowOrderPoint(_ error: Error, file: StaticString = #filePath, line: UInt = #line) {
+        guard let leafError = error as? LeafError else {
+            XCTFail("Expected LeafError, got \(error)", file: file, line: line)
+            return
+        }
+        switch leafError {
+        case .lowOrderPoint: break
+        default: XCTFail("Expected .lowOrderPoint, got \(leafError)", file: file, line: line)
         }
     }
 }

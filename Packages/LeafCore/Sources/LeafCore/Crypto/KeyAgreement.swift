@@ -12,13 +12,33 @@ public enum KeyAgreement {
 
     /// X25519 ECDH. Decodes peer pub from hex, computes shared secret.
     /// 32 bytes (constant-time compare semantic).
-    /// - Throws: `LeafError.invalidPayload` если hex bad / wrong length.
+    /// - Throws: `LeafError.invalidPayload` если hex bad / wrong length;
+    ///   `LeafError.lowOrderPoint` если peer point low-order / small-subgroup
+    ///   (rejected by CryptoKit) либо shared secret all-zero (RFC 7748 §6.1).
     public static func sharedSecret(
         privateKey: Curve25519.KeyAgreement.PrivateKey,
         peerPublicKeyHex: String
     ) throws -> SharedSecret {
         let peerPub = try decodePublicKey(hex: peerPublicKeyHex)
-        return try privateKey.sharedSecretFromKeyAgreement(with: peerPub)
+        let secret: SharedSecret
+        do {
+            secret = try privateKey.sharedSecretFromKeyAgreement(with: peerPub)
+        } catch is CryptoKitError {
+            // macOS ≥ 26 CryptoKit rejects low-order / small-subgroup peer points at
+            // the agreement step (corecrypto −7). Surface as a dedicated domain error
+            // so callers (invite / accept / rotation) treat it as a rejected peer key,
+            // not an opaque crypto failure.
+            throw LeafError.lowOrderPoint
+        }
+        // Defense-in-depth for OS versions whose X25519 returns an all-zero shared
+        // secret instead of throwing (RFC 7748 §6.1 contributory-behaviour check).
+        // Constant-time: OR-accumulate every byte, single branch on the aggregate.
+        var acc: UInt8 = 0
+        secret.withUnsafeBytes { raw in
+            for byte in raw { acc |= byte }
+        }
+        if acc == 0 { throw LeafError.lowOrderPoint }
+        return secret
     }
 
     /// Hex → `Curve25519.KeyAgreement.PublicKey`. Lenient case (accepts

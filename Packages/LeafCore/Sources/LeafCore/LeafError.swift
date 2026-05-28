@@ -73,4 +73,8 @@ public enum LeafError: Error, Sendable {
   // SupabaseError so the UI can distinguish a workspace-sync gate from the
   // real `is_workspace_admin` permission denial.
   case workspaceSyncFailed(reason: String)
+  // Phase 5 defence-in-depth (consumer: KeyAgreement.sharedSecret) — X25519 ECDH
+  // peer point rejected: low-order / small-subgroup (CryptoKit corecrypto −7 on
+  // macOS ≥ 26) or an all-zero shared secret (RFC 7748 §6.1, older OS).
+  case lowOrderPoint
 }
