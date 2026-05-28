@@ -50,7 +50,7 @@ public nonisolated struct SlackTokenRefresher: Sendable {
         database: Database,
         clientID: String,
         earlyRefreshSeconds: TimeInterval = 300,
-        urlSession: URLSession = .shared
+        urlSession: URLSession = .leafEphemeral()
     ) {
         self.database = database
         self.clientID = clientID

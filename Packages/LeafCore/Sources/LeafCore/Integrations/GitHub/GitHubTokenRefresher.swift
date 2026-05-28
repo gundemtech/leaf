@@ -31,15 +31,20 @@ public nonisolated struct GitHubTokenRefresher: Sendable {
     /// Buffer перед `expires_at` в секундах. Срабатывает заранее, чтобы избежать race
     /// с одновременным polling call'ом, ушедшим с просроченным token'ом. 5 min на 8h TTL ≈ 1%.
     public let earlyRefreshSeconds: TimeInterval
+    /// Non-caching ephemeral session (Phase 5) — token/refresh responses never touch
+    /// a disk cache. Injectable for tests (URLProtocol stub).
+    public let urlSession: URLSession
 
     public init(
         database: Database,
         clientID: String,
-        earlyRefreshSeconds: TimeInterval = 300
+        earlyRefreshSeconds: TimeInterval = 300,
+        urlSession: URLSession = .leafEphemeral()
     ) {
         self.database = database
         self.clientID = clientID
         self.earlyRefreshSeconds = earlyRefreshSeconds
+        self.urlSession = urlSession
     }
 
     /// Refresh access_token если оставшаяся жизнь меньше `earlyRefreshSeconds`.
@@ -88,7 +93,7 @@ public nonisolated struct GitHubTokenRefresher: Sendable {
 
         let (data, response): (Data, URLResponse)
         do {
-            (data, response) = try await URLSession.shared.data(for: request)
+            (data, response) = try await urlSession.data(for: request)
         } catch {
             throw GitHubTokenRefresherError.network(String(describing: error))
         }

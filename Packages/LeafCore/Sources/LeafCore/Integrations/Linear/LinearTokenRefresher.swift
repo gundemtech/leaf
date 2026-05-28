@@ -31,15 +31,20 @@ public nonisolated struct LinearTokenRefresher: Sendable {
     /// Buffer перед `expires_at` в секундах. Refresher срабатывает заранее, чтобы
     /// avoid race с одновременным polling call'ом, который может уйти с уже-просроченным token'ом.
     public let earlyRefreshSeconds: TimeInterval
+    /// Non-caching ephemeral session (Phase 5) — token/refresh responses never touch
+    /// a disk cache. Injectable for tests (URLProtocol stub).
+    public let urlSession: URLSession
 
     public init(
         database: Database,
         clientID: String,
-        earlyRefreshSeconds: TimeInterval = 300 // 5 min, ничтожный относительно 24h TTL Linear
+        earlyRefreshSeconds: TimeInterval = 300,  // 5 min, ничтожный относительно 24h TTL Linear
+        urlSession: URLSession = .leafEphemeral()
     ) {
         self.database = database
         self.clientID = clientID
         self.earlyRefreshSeconds = earlyRefreshSeconds
+        self.urlSession = urlSession
     }
 
     /// Refresh access_token если оставшаяся жизнь меньше `earlyRefreshSeconds`.
@@ -91,7 +96,7 @@ public nonisolated struct LinearTokenRefresher: Sendable {
 
         let (data, response): (Data, URLResponse)
         do {
-            (data, response) = try await URLSession.shared.data(for: request)
+            (data, response) = try await urlSession.data(for: request)
         } catch {
             throw LinearTokenRefresherError.network(String(describing: error))
         }

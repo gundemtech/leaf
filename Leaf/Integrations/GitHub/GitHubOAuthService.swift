@@ -79,6 +79,9 @@ final class GitHubOAuthService {
     private let databaseEncryption: EncryptionOptions?
     private let restartTriggerName: String
     private var database: Database?
+    /// Phase 5 — non-caching session for OAuth token exchange (bearer/token
+    /// responses never hit a disk cache). See `URLSession.leafEphemeral()`.
+    private let urlSession: URLSession = .leafEphemeral()
     private var pollingTask: Task<Void, Never>?
     /// Observer token kept around so `deinit` can call `removeObserver`.
     /// Earlier shape discarded the token immediately, leaking the observer
@@ -239,7 +242,7 @@ final class GitHubOAuthService {
             "scope": scopeParameter
         ])
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await urlSession.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw makeError("Device code endpoint returned non-HTTP response.")
         }
@@ -329,7 +332,7 @@ final class GitHubOAuthService {
             "grant_type": "urn:ietf:params:oauth:grant-type:device_code"
         ])
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await urlSession.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             return .otherError("Token endpoint returned non-HTTP response.")
         }
@@ -415,7 +418,7 @@ final class GitHubOAuthService {
         request.setValue("Leaf/1.0", forHTTPHeaderField: "User-Agent")
         request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await urlSession.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw makeError("Viewer endpoint returned non-HTTP response.")
         }

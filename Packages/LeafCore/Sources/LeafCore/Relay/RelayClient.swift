@@ -26,8 +26,12 @@ public actor RelayClient: Sendable {
     public let baseURL: URL
     private let urlSession: URLSession
 
-    public init(baseURL: URL = URL(string: "https://oauth.gundem.tech")!,
-                urlSession: URLSession = .shared) {
+    public init(
+        // Reason: compile-time-constant URL literal — `URL(string:)` of a static well-formed URL never returns nil.
+        // swiftlint:disable:next force_unwrapping
+        baseURL: URL = URL(string: "https://oauth.gundem.tech")!,
+        urlSession: URLSession = .leafEphemeral()
+    ) {
         self.baseURL = baseURL
         self.urlSession = urlSession
     }
