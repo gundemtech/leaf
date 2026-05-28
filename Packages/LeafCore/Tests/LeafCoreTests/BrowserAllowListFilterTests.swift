@@ -47,4 +47,33 @@ final class BrowserAllowListFilterTests: XCTestCase {
             reader.granularity(for: "api.github.com"), .domainOnly,
             "subdomain match is exact-only")
     }
+
+    // MARK: - Phase 5 — fragment stripping (audit HIGH H1)
+
+    func testApplyGranularityFullUrlDropsFragment() {
+        // full_url keeps path + query (user opted the domain into full URL) but must
+        // still drop the fragment — it can carry OAuth implicit-flow tokens / JWTs.
+        XCTAssertEqual(
+            applyGranularity("https://app.example.com/cb?code=abc#access_token=SECRET", .fullUrl),
+            "https://app.example.com/cb?code=abc")
+    }
+
+    func testApplyGranularityFullUrlNoFragmentUnchanged() {
+        XCTAssertEqual(
+            applyGranularity("https://github.com/foo?q=1", .fullUrl),
+            "https://github.com/foo?q=1")
+    }
+
+    func testStripURLFragmentParseable() {
+        XCTAssertEqual(stripURLFragment("https://h.com/p?q=1#frag"), "https://h.com/p?q=1")
+    }
+
+    func testStripURLFragmentNoFragmentUnchanged() {
+        XCTAssertEqual(stripURLFragment("https://h.com/p?q=1"), "https://h.com/p?q=1")
+    }
+
+    func testStripURLFragmentAlwaysRemovesHashTail() {
+        XCTAssertFalse(stripURLFragment("https://h.com/p#a#b").contains("#"))
+        XCTAssertFalse(stripURLFragment("garbage##frag with spaces").contains("#"))
+    }
 }
