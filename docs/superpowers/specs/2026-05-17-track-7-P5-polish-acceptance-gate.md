@@ -3,7 +3,7 @@
 **Status.** Draft — Stage 3 of 8-stage phase workflow.
 **Date.** 2026-05-17.
 **Branch.** `feature/track-7-integration` off `main`.
-**Authors.** Dmitrii + Claude (brainstorm session 2026-05-17).
+**Authors.** Alex + Claude (brainstorm session 2026-05-17).
 **Master design.** [`2026-05-17-track-7-ui-surface-polish-design.md`](2026-05-17-track-7-ui-surface-polish-design.md) §12 "P11 — Polish & acceptance gate" + §13 acceptance smoke + §14.2 whitepaper sync framing.
 
 ---
@@ -373,7 +373,7 @@ git pull --ff-only --quiet
 #       through alpha.16.
 
 # 8. Append changelog entry per CLAUDE.md format
-# Format: - **YYYY-MM-DD HH:MM · Dmitrii** — Track-7 (Home dashboard surface) landed:
+# Format: - **YYYY-MM-DD HH:MM · Alex** — Track-7 (Home dashboard surface) landed:
 #   {one-line summary}. {brief impact}.
 
 # 9. Commit + push leaf-docs

@@ -1,7 +1,7 @@
 # Phase 5.3.B — `RotationBlobCodec` + `RotationKDF` (codec substrate)
 
 **Status:** Active (2026-05-06). Second sub-phase of Phase 5.3 ("member removal + team key rotation").
-**Owner:** Dmitrii.
+**Owner:** Alex.
 **Stack base:** `feature/phase-5-3-A` (5.3.A landed @ 816 SPM tests).
 **Branch:** `feature/phase-5-3-B`.
 

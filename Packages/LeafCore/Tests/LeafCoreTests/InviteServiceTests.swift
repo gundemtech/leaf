@@ -404,6 +404,26 @@ final class InviteServiceTests: XCTestCase {
         XCTAssertEqual(req.httpMethod, "DELETE")
     }
 
+    /// Phase 5 — revoke surfaces relay 5xx as `relayUnreachable` (not a silent
+    /// success), so the admin UI can report that the revoke did not land.
+    func testRevokeInvite_RelayServerError_PropagatesRelayUnreachable() async {
+        InviteServiceMockURLProtocol.handler = { req, _ in
+            let resp = HTTPURLResponse(
+                url: req.url!, statusCode: 500, httpVersion: nil,
+                headerFields: nil)!
+            return (resp, nil)
+        }
+        let svc = makeService()
+        do {
+            try await svc.revokeInvite(token: "tok_to_revoke")
+            XCTFail("expected throw")
+        } catch let LeafError.relayUnreachable(reason) {
+            XCTAssertEqual(reason, "server-error")
+        } catch {
+            XCTFail("wrong error: \(error)")
+        }
+    }
+
     // MARK: - Phase 5.5.B JoinCode overload
 
     func testGenerateInvite_JoinCode_FormattedDelegatesToHex() async throws {

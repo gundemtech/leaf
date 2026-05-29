@@ -1,7 +1,7 @@
 # Phase 5.2.B — `InviteBlob` + `ProdInviteBlobCodec` (AES-GCM-256)
 
 **Status:** Active (2026-05-05). Second sub-phase of Phase 5.2 ("relay invite endpoints + invite UX + ECDH handshake").
-**Owner:** Dmitrii.
+**Owner:** Alex.
 **Stack:** branches off `feature/phase-5-2-A` (which holds 5.2.A commits `2862914..705e3d0`).
 
 ---

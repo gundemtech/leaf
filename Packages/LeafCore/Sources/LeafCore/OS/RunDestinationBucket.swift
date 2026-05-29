@@ -2,7 +2,7 @@ import Foundation
 
 /// Phase Track-6 P2 — bucketed enum for Xcode active run destination.
 ///
-/// Raw device names (e.g. `"Dmitrii's iPhone"`) MUST NOT be stored in events;
+/// Raw device names (e.g. `"Alex's iPhone"`) MUST NOT be stored in events;
 /// the bucketing function reduces them to one of these enum values BEFORE the
 /// value reaches `RawEvent.payload`. See P2 spec §4.6 + §8.
 ///

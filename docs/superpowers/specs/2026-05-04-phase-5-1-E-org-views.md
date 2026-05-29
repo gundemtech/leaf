@@ -1,7 +1,7 @@
 # Phase 5.1.E — `OrganizationView` / `TeamView` + integration test + landing
 
 **Status:** Active (2026-05-05). Fifth and final sub-project of Phase 5.1.x stack.
-**Owner:** Dmitrii.
+**Owner:** Alex.
 **Stack:** branches off `feature/phase-5-1-D` (which holds 5.1.A + 5.1.B + 5.1.C + 5.1.D commits).
 
 ---

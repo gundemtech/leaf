@@ -27,13 +27,13 @@ description: Сгенерировать LinkedIn-пост о текущей фи
 
 **Никогда не выдумывай факты.** Если фича в сессии не упомянута и в `current-state.md` её нет — спроси юзера прежде чем фантазировать.
 
-## Стиль (образец — пост Димы про Vox)
+## Стиль (образец — пост Алекса про Vox)
 
 > One more update to VOX. Typing a message in another language used to mean copy-paste gymnastics, and most translators still make you wait until you're done. Vox doesn't anymore. Google Translate lives in a browser tab you don't have open. ChatGPT waits for your full message, then waits some more. Vox is one keystroke away from whatever you're doing. Added a live translator yesterday. Text and voice, one panel. Type, and the translation streams as you pause. Commit a sentence and it freezes: no more watching the first sentence rewrite itself every time you add a word. Switch to voice mode, speak, and the translation appears as you talk. Swap source and target with one tap. If translation feels like work, the tool is wrong. A good one disappears.
 
 Что важно вытащить из этого образца и **повторить**:
 
-- **NO DASHES. ВООБЩЕ.** Это жёсткое правило, нарушать нельзя. Запрещены: `—` (em-dash), `–` (en-dash), `-` (hyphen-minus) внутри предложений, в составных словах, в датах, везде. Образец Димы про Vox содержит тире — **это образец стиля, а НЕ примера пунктуации**, у нас правило строже. Замены:
+- **NO DASHES. ВООБЩЕ.** Это жёсткое правило, нарушать нельзя. Запрещены: `—` (em-dash), `–` (en-dash), `-` (hyphen-minus) внутри предложений, в составных словах, в датах, везде. Образец Алекса про Vox содержит тире — **это образец стиля, а НЕ примера пунктуации**, у нас правило строже. Замены:
   - Вставная конструкция через тире `Leaf — ambient memory layer for Mac` → `Leaf, ambient memory layer for Mac,` или вынести в отдельное предложение: `Leaf is the ambient memory layer for Mac.`
   - Парантеза через тире `Counts make work look uniform — four PRs is four PRs` → двоеточие или точка: `Counts make work look uniform: four PRs is four PRs.` / `Counts make work look uniform. Four PRs is four PRs.`
   - Составные слова: `natural-language queries` → `natural language queries`, `5-min polling` → `5 min polling`, `open-source` → `open source`, `Mac-only` → `Mac only`. Читается естественно везде, проверено.
@@ -43,10 +43,10 @@ description: Сгенерировать LinkedIn-пост о текущей фи
 - **LA startup vibe, не press release.** Тон не корпоративный и не инженерный мануал, а как пишет фаундер ранней стадии в личном тви/ленте. Что это значит конкретно:
   - **«You», не «developers» / «your team».** Адрес читателю напрямую: «You shipped four PRs this week.» вместо «Developers shipping multiple PRs per week…»
   - **Разговорная плотность.** «Just dropped», «here's the move», «real talk», «spoiler:», «built this last weekend». Не каждое предложение — но 1-2 за пост ставит тон.
-  - **Лёгкая самоирония когда уместно.** Bug story Димы или наша история про squash-merge parser regression — это не «we identified and resolved an issue», а «we almost shipped without noticing» или «turns out we'd been silently dropping half the data».
+  - **Лёгкая самоирония когда уместно.** Bug story Алекса или наша история про squash-merge parser regression — это не «we identified and resolved an issue», а «we almost shipped without noticing» или «turns out we'd been silently dropping half the data».
   - **Меньше «We shipped today», больше «Just dropped».** Глаголы прямого действия, не корпоративные глаголы.
   - **Прямой адрес к чувству читателя, не к функции:** «If your tools make work feel like work, that's the bug» сильнее, чем «Our tool aims to reduce friction».
-  - **ЧТО ЗАПРЕЩЕНО при этом:** tech-bro speak. «Absolutely insane», «this is huge», «let's go», «stoked», «massive W», «cooked», «based» — это та же корпоративная вода в другой маске. Молодёжно ≠ tech-bro. Образец Димы про Vox — он молодой, прямой, разговорный, но в нём ноль tech-bro-фраз. Целимся туда.
+  - **ЧТО ЗАПРЕЩЕНО при этом:** tech-bro speak. «Absolutely insane», «this is huge», «let's go», «stoked», «massive W», «cooked», «based» — это та же корпоративная вода в другой маске. Молодёжно ≠ tech-bro. Образец Алекса про Vox — он молодой, прямой, разговорный, но в нём ноль tech-bro-фраз. Целимся туда.
 - **Hook = продающий, через боль или резонанс с читателем, не констатация.** Первая фраза — это решение читателя продолжать или скроллить. Слабо: «Most dev dashboards count actions» (факт, читателю всё равно). Сильно: «You shipped four PRs this week. Did it feel like four?» — это **попадание в самочувствие читателя**, он не может проскроллить. Другие шаблоны:
   - **Боль:** «Stop guessing if Monday was slower than Friday.»
   - **Парадокс:** «Your dashboard says you're shipping. Your gut says you're tired. Both are right.»
@@ -69,7 +69,7 @@ description: Сгенерировать LinkedIn-пост о текущей фи
   - **Тест:** прочитал бы пост твой друг, который **не разработчик**? Если он на третьем предложении подумает «ладно, не моё», ты потерял 80% LinkedIn-аудитории. Технические детали уважают только узкий круг — пиши сначала для широкого читателя, технические сигналы оставляй между строк (имя MCP tool раз, цифра-якорь, конкретное приложение). Целевая аудитория — фаундеры стартапов и менеджеры команд, не staff engineers.
 
 Что **не повторять**:
-- Дима пишет на английском — у нас тоже английский для LinkedIn.
+- Алекс пишет на английском — у нас тоже английский для LinkedIn.
 
 ## Технические рамки
 

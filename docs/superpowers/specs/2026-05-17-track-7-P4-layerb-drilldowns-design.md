@@ -589,7 +589,7 @@ Per session prompt: Linear → GitHub → Slack (simplest scope-drift к сам�
 | `ReviewActivityResult.decode` падает на изменении `ReviewActivityInsights` dict shape | Возвращает `nil` graceful. UI рендерит "Review activity unavailable" placeholder. |
 | Linear scope drift существует в future версии API | `LinearDetailViewModel.scopeBanner` возвращает nil unconditionally в v1.0; добавим `LinearScopesReader` когда понадобится. |
 | Banner state теряется на app suspend/resume | По дизайну: session-local. Re-suspend → banner возвращается. ОК для warning UX. |
-| Manual smoke на real production accounts требует real Linear/GitHub/Slack workspaces | Smoke выполняется на dev'овском Mac автора, acceptance — Dmitrii + Anton. Same precedent как Track-3 D1-D4. |
+| Manual smoke на real production accounts требует real Linear/GitHub/Slack workspaces | Smoke выполняется на dev'овском Mac автора, acceptance — Alex + Sasha. Same precedent как Track-3 D1-D4. |
 | `SurfaceDetailLayout` API changes между P1 и P4 ship dates | P4 фризим API surface: только public params (title/range/headline/chart/aggregates). Если P11 collective merge показывает conflict — reconcile manually, не реактивно. |
 
 ---

@@ -24,10 +24,10 @@ struct RunDestinationBucketTests {
         #expect(RunDestinationBucket.bucket(rawName: "iPhone 16 Pro (Simulator)") == .iosSimulator)
     }
     @Test func iPhoneDevice_iosDevice() {
-        #expect(RunDestinationBucket.bucket(rawName: "Dmitrii's iPhone") == .iosDevice)
+        #expect(RunDestinationBucket.bucket(rawName: "Alex's iPhone") == .iosDevice)
     }
     @Test func iPad_iosDevice() {
-        #expect(RunDestinationBucket.bucket(rawName: "Dmitrii's iPad") == .iosDevice)
+        #expect(RunDestinationBucket.bucket(rawName: "Alex's iPad") == .iosDevice)
     }
     @Test func iPadSimulator() {
         #expect(RunDestinationBucket.bucket(rawName: "iPad Pro 13-inch (M4) (Simulator)") == .iosSimulator)

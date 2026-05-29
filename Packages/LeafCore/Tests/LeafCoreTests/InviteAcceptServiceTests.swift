@@ -202,6 +202,37 @@ final class InviteAcceptServiceTests: XCTestCase {
         }
     }
 
+    /// Phase 5 — admin revoke deletes the relay mailbox; a subsequent invitee fetch
+    /// of the same token then 404s and maps to `inviteNotFound`. Demonstrates the
+    /// fetchable → revoked → not-found transition. (The relay does not distinguish
+    /// revoked-vs-never-existed; both surface as inviteNotFound.)
+    func testFetchInvite_AfterRevoke_MapsToInviteNotFound() async throws {
+        let blobBytes = Data([0x02] + (0..<140).map { _ in UInt8.random(in: 0...255) })
+        let b64url = blobBytes.base64URLNoPad
+        AcceptServiceMockURLProtocol.handler = { req in
+            let body = "{\"blob\":\"\(b64url)\",\"expires_at_ms\":1700086400000}".data(using: .utf8)!
+            let resp = HTTPURLResponse(
+                url: req.url!, statusCode: 200, httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"])!
+            return (resp, body)
+        }
+        let svc = makeService()
+        _ = try await svc.fetchInvite(token: "tok_revoke_me")  // fetchable before revoke
+
+        // Admin revokes → relay mailbox deleted → relay now 404s for the token.
+        AcceptServiceMockURLProtocol.handler = { req in
+            (HTTPURLResponse(url: req.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!, nil)
+        }
+        do {
+            _ = try await svc.fetchInvite(token: "tok_revoke_me")
+            XCTFail("expected inviteNotFound after revoke")
+        } catch LeafError.inviteNotFound {
+            // ok
+        } catch {
+            XCTFail("wrong error: \(error)")
+        }
+    }
+
     func testFetchInvite_TransportFailure_MapsToRelayUnreachable() async throws {
         AcceptServiceMockURLProtocol.handler = { _ in
             throw URLError(.notConnectedToInternet)

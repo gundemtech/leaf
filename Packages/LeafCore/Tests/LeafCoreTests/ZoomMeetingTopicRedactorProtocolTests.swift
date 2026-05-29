@@ -8,8 +8,8 @@ final class ZoomMeetingTopicRedactorProtocolTests: XCTestCase {
         XCTAssertEqual(r.redact(""), "")
         XCTAssertEqual(r.redact("Q1 Planning"), "Q1 Planning")
         XCTAssertEqual(
-            r.redact("Dmitrii Demidov's Personal Meeting Room"),
-            "Dmitrii Demidov's Personal Meeting Room")
+            r.redact("Alex Rivera's Personal Meeting Room"),
+            "Alex Rivera's Personal Meeting Room")
     }
 
     func testIdentitySatisfiesProtocolAsExistential() {

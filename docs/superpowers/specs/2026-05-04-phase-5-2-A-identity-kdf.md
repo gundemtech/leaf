@@ -1,7 +1,7 @@
 # Phase 5.2.A — `IdentityService` + `KeyAgreement` + `InviteKDF` (HKDF-SHA256)
 
 **Status:** Active (2026-05-05). First sub-phase of Phase 5.2 stack.
-**Owner:** Dmitrii.
+**Owner:** Alex.
 **Stack:** branches off `feature/phase-5-1-E` pending 5.1.A→E unified merge to main.
 
 ---

@@ -49,8 +49,8 @@ public final class AttentionEmissionPlanner {
     /// `SessionFeedMapper`.
     public static let titleMaxLength = 200
 
-    /// Жёсткий cap на длину browser URL. Длинные query-string'и и base64
-    /// fragments обрезаем — moat-сохраняющий tradeoff (точность vs storage).
+    /// Жёсткий cap на длину browser URL после sanitize. `sanitizeURL` always drops
+    /// the fragment + non-allowlisted query, then truncates the result to this length.
     public static let urlMaxLength = 1024
 
     public init(
@@ -90,7 +90,7 @@ public final class AttentionEmissionPlanner {
             // Browser URL — только для browse-категории (Safari / Chrome / Arc / ...).
             if classifier.category(for: bundleID) == .browse,
                 let raw = contextProvider.browserURL(forPid: pid, bundleID: bundleID),
-                let sanitized = sanitizeURL(raw)
+                let sanitized = Self.sanitizeURL(raw)
             {
                 payload["browser_url"] = sanitized
             }
@@ -154,10 +154,69 @@ public final class AttentionEmissionPlanner {
         return String(trimmed.prefix(Self.titleMaxLength))
     }
 
-    private func sanitizeURL(_ raw: String) -> String? {
+    /// Browser URL sanitizer (privacy). Always drops the fragment (it can carry
+    /// OAuth implicit-flow tokens / JWTs / magic-link secrets — audit HIGH H1) and
+    /// any userinfo; drops the entire query for non-allowlisted hosts and keeps only
+    /// a narrow per-host query-key allowlist (search terms) otherwise. Truncates to
+    /// `urlMaxLength`. Falls back to a string-split (drops `#…` then `?…`) when the
+    /// input is not a parseable http/https URL, so fragment/query never leaks even
+    /// from malformed input. Returns nil only when empty after trim.
+    static func sanitizeURL(_ raw: String) -> String? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        if trimmed.count <= Self.urlMaxLength { return trimmed }
-        return String(trimmed.prefix(Self.urlMaxLength))
+
+        guard var comps = URLComponents(string: trimmed),
+            let scheme = comps.scheme?.lowercased(),
+            scheme == "http" || scheme == "https",
+            let host = comps.host?.lowercased()
+        else {
+            return privacySafeFallback(trimmed)
+        }
+
+        comps.fragment = nil
+        comps.user = nil
+        comps.password = nil
+
+        let allowed = allowlistedQueryKeys(forHost: host)
+        if allowed.isEmpty {
+            comps.query = nil
+        } else {
+            let kept = (comps.queryItems ?? []).filter { allowed.contains($0.name) }
+            comps.queryItems = kept.isEmpty ? nil : kept
+        }
+
+        guard let rebuilt = comps.string else { return privacySafeFallback(trimmed) }
+        return truncateURL(rebuilt)
+    }
+
+    /// Per-host query-key allowlist. Default = strip all query. Narrow by design:
+    /// only well-known search-engine query params are retained (a Content signal,
+    /// local-only, behind AX + per-app opt-in). Matched lowercased + suffix so
+    /// `www.google.com` uses the `google.com` entry.
+    static let urlQueryAllowlist: [String: Set<String>] = [
+        "google.com": ["q"]
+    ]
+
+    private static func allowlistedQueryKeys(forHost host: String) -> Set<String> {
+        for (domain, keys) in Self.urlQueryAllowlist
+        where host == domain || host.hasSuffix("." + domain) {
+            return keys
+        }
+        return []
+    }
+
+    /// Fallback for inputs that are not parseable http/https URLs: drop `#…` then
+    /// `?…` via string-split, trim, truncate. Guarantees no fragment/query leaks.
+    private static func privacySafeFallback(_ s: String) -> String? {
+        var value = s
+        if let hashIndex = value.firstIndex(of: "#") { value = String(value[..<hashIndex]) }
+        if let queryIndex = value.firstIndex(of: "?") { value = String(value[..<queryIndex]) }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return truncateURL(trimmed)
+    }
+
+    private static func truncateURL(_ s: String) -> String {
+        s.count <= Self.urlMaxLength ? s : String(s.prefix(Self.urlMaxLength))
     }
 }

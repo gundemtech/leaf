@@ -420,7 +420,7 @@ public struct ProdZoomMeetingTopicRedactor: ZoomMeetingTopicRedactor {
 
     // EN-locale PMI format. Non-EN Zoom accounts may localize — best-effort.
     // Examples matched:
-    //   "Dmitrii Demidov's Personal Meeting Room"
+    //   "Alex Rivera's Personal Meeting Room"
     //   "John Smith's Personal Meeting Room"
     //   "Anne-Marie O'Connor's Personal Meeting Room"
     // Not matched (passes through):
@@ -715,7 +715,7 @@ Per event_kind, inject sentinels at forbidden paths and assert they don't appear
 | `participant_names` | `SECRET-ZOOM-PARTICIPANTS-P5` | (Defense-in-depth alias of attendees.) |
 | `screen_share_content` | `SECRET-ZOOM-SHARE-CONTENT-P5` | Any payload key matching `screen_share_content`, `shared_screen_app`, `shared_screen_window`. |
 | `meeting_join_url` | `SECRET-ZOOM-JOIN-URL-P5` | Any payload key matching `meeting_join_url`, `zoom_url`, `conference_uri`. |
-| `pmi_name` | `Dmitrii Demidov's Personal Meeting Room` (sentinel raw PMI string) | Asserted that bucketed `<pmi_meeting>` appears in event payload instead, raw never appears. |
+| `pmi_name` | `Alex Rivera's Personal Meeting Room` (sentinel raw PMI string) | Asserted that bucketed `<pmi_meeting>` appears in event payload instead, raw never appears. |
 
 ### 12.3 Test method skeleton
 
@@ -741,14 +741,14 @@ Iterate per (family × event_kind) combination. 24 functions total. Naming: `tes
 ```swift
 func testProdZoomMeetingTopicRedactorStripsPMIName_P5() {
     let r = ProdZoomMeetingTopicRedactor()
-    XCTAssertEqual(r.redact("Dmitrii Demidov's Personal Meeting Room"), "<pmi_meeting>")
+    XCTAssertEqual(r.redact("Alex Rivera's Personal Meeting Room"), "<pmi_meeting>")
     XCTAssertEqual(r.redact("Anne-Marie O'Connor's Personal Meeting Room"), "<pmi_meeting>")
     XCTAssertEqual(r.redact("Q1 Planning"), "Q1 Planning")
     XCTAssertEqual(r.redact(""), "")
 }
 
 func testProdZoomAdapterParseRedactsPMIBeforeObservation_P5() {
-    // Inject NSAppleEventDescriptor list ["in_meeting", "Dmitrii's Personal Meeting Room"]
+    // Inject NSAppleEventDescriptor list ["in_meeting", "Alex's Personal Meeting Room"]
     // Assert resulting ZoomObservation.ownMeetingTopic == "<pmi_meeting>"
 }
 ```

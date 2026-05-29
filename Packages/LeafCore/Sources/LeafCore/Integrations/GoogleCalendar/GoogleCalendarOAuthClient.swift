@@ -63,7 +63,7 @@ public enum GoogleCalendarOAuthError: Error, Sendable, Equatable {
 public struct GoogleCalendarOAuthClient: GoogleCalendarOAuthHTTP {
     private let urlSession: URLSession
 
-    public init(urlSession: URLSession = .shared) {
+    public init(urlSession: URLSession = .leafEphemeral()) {
         self.urlSession = urlSession
     }
 

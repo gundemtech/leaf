@@ -23,7 +23,7 @@ description: Проверка diff перед пушем в публичный a
 2. **Пройди diff по чек-листу (см. корневой `CLAUDE.md`, раздел "Pre-push чек-лист").** Конкретно ищи:
 
    ### Критичное (обязательно блокируем push)
-   - **Секреты в коде/configs:** строки формата `sk-...`, `ghp_...`, `cf_...`, `-----BEGIN PRIVATE KEY-----`, base64-encoded длинные строки в commit, .env значения.
+   - **Секреты в коде/configs:** строки формата `sk-...`, `ghp_...`, `cf_...`, `PEM private-key headers`, base64-encoded длинные строки в commit, .env значения.
    - **SQL-запросы Derived Insights Engine** — тела функций `timeInApp`, `focusSessions`, `contextSwitchRate`, `teamPresenceOverlap`, `aiRatio`, `deepWorkStreak`, `peakProductivityHour`, `weekOverWeekDelta`, `filesTouched`, `lastSeenFile`, `currentPresence`, `teamCurrentPresence`. Сигнатуры — ок, тела — нет.
    - **SQLCipher pragma значения** (конкретные числа): `cipher_plaintext_header_size=...`, `busy_timeout=...`, KDF params, salt generation.
    - **Cloudflare Worker код** — не должен быть здесь вообще, он в `gundemtech/leaf-relay`.
@@ -33,7 +33,7 @@ description: Проверка diff перед пушем в публичный a
    ### Высокий риск (показать юзеру, пусть решит)
    - **Точные пороги и числа:** idle threshold seconds, polling intervals (5 мин Linear, git polling), heartbeat (60с), WAL checkpoint (15 мин / 4MB), hardcoded delays.
    - **Share Controls preset bundle IDs** — список "common dev defaults" хардкодом.
-   - **TODO/FIXME с внутренним контекстом** ("hack because Linear quirk", "Anton asked", "for customer X").
+   - **TODO/FIXME с внутренним контекстом** ("hack because Linear quirk", "Sasha asked", "for customer X").
    - **Коммит-сообщения и PR descriptions** с именами сотрудников, ship dates, клиентскими деталями, competitive intel.
 
    ### Низкий риск (ок, но пометь)

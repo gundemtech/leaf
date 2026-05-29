@@ -72,7 +72,7 @@ APP="$EXPORTED/Leaf.app"
 DMG="$RELEASES/Leaf-$VERSION.dmg"
 ZIP="$RELEASES/Leaf-$VERSION.zip"
 
-SIGN_ID="Developer ID Application: Dmitrii Demidov (4LZ84Z78M7)"
+SIGN_ID="${LEAF_SIGN_ID:-Developer ID Application: <YOUR NAME> (<TEAM_ID>)}"  # set LEAF_SIGN_ID in your env/Local config (kept out of the public repo)
 NOTARY_PROFILE="leaf-notary"
 
 STEPS=(archive export verify dmg notary staple zip appcast upload)

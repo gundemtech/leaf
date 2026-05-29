@@ -3,7 +3,7 @@
 **Phase:** Track-6 P4 (Google Calendar Deep) — Leaf's first Layer B Google API provider
 **Stage:** 3 — Spec (this doc); written after Stage 0 Research + Stage 2 Brainstorm
 **Date:** 2026-05-16
-**Author:** Dmitrii + Claude
+**Author:** Alex + Claude
 **Contract:** [`2026-05-15-track-6-existing-surface-depth-contract.md`](2026-05-15-track-6-existing-surface-depth-contract.md)
 **Research companion:** [`2026-05-16-track-6-P4-google-calendar-research.md`](2026-05-16-track-6-P4-google-calendar-research.md) — Stage 0 substrate + vendor API ceiling + EventKit + OSS recon + ceiling-vs-effort table
 

@@ -1,7 +1,7 @@
 # Phase 5.5.A — Foundation: `JoinCode` + `InviteURL` + M010 `pending_invites`
 
 **Status:** Active (2026-05-07). First sub-phase of Phase 5.5 stack.
-**Owner:** Dmitrii.
+**Owner:** Alex.
 **Stack:** branches off `main` (Phase 5.3 stack landed alpha.10 + alpha.11 patch — 5.5 не stack'ится поверх pending PR).
 
 ---

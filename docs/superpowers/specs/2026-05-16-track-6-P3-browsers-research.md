@@ -3,7 +3,7 @@
 **Stage:** Stage 0 (Deep Research) — companion to upcoming phase spec
 **Contract:** `2026-05-15-track-6-existing-surface-depth-contract.md`
 **Date:** 2026-05-16
-**Author:** Dmitrii + Claude (research subagents: Explore on substrate; general-purpose on OSS recon)
+**Author:** Alex + Claude (research subagents: Explore on substrate; general-purpose on OSS recon)
 
 This doc is the **input to brainstorm (Stage 2)**, not a plan. It maps the realistic ceiling of Safari + Chrome capture on macOS 15/16, surfaces the deltas between substrate and ceiling, flags one contract-level **assumption that does not hold against current evidence**, and surfaces 5 product questions for the user before brainstorm starts.
 

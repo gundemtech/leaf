@@ -27,7 +27,7 @@
    - найти нужный раздел в `~/Desktop/Leaf/leaf-docs/docs/` (структура в `leaf-docs/CLAUDE.md`),
    - обновить markdown + admonition `!!! note "Изменение vX.Y — YYYY-MM-DD"` (раньше / теперь / причина),
    - дописать в `docs/05-reference/changelog.md` запись формата
-     `- **YYYY-MM-DD HH:MM · Dmitrii** — описание` (HH:MM обязательно;
+     `- **YYYY-MM-DD HH:MM · Alex** — описание` (HH:MM обязательно;
      детальный спек — `leaf-docs/CLAUDE.md` раздел «Правила работы с контентом»),
    - `git add` + коммит `docs: ...` + `git push origin main`,
    - отчитаться: "Засинкано в leaf-docs: файлы, коммит `<hash>`".
@@ -75,7 +75,7 @@ App-репо **публичный**. Перед каждым `git push` в `gund
 
 ## leaf-internal — internal dashboard
 
-Этот репо подаёт данные на внутренний дашборд `leaf-internal.gundem.tech` (приватный, под basic auth, только Антон + Дима).
+Этот репо подаёт данные на внутренний дашборд `leaf-internal.gundem.tech` (приватный, под basic auth, только Саша + Алекс).
 
 ### Когда обновлять architecture.yaml
 
@@ -116,7 +116,7 @@ App-репо **публичный**. Перед каждым `git push` в `gund
 4. Если что-то ненулевое — суммируй первым сообщением: «У тебя N handoffs, M questions, K drifts. [Список одной строкой]. Что разбираем?»
 5. Если всё пусто — не упоминай team awareness, переходи к запросу пользователя.
 
-**Когда пользователь говорит** «спроси Диму X» / «уточни у Антона Y» — используй `leaf_ask_question(to="dima"/"anton", text=..., plan_ref=current_plan, branch_ref=current_branch)` вместо Telegram. Текст question'а ≤ 140 символов.
+**Когда пользователь говорит** «спроси Алекса X» / «уточни у Саши Y» — используй `leaf_ask_question(to="dima"/"anton", text=..., plan_ref=current_plan, branch_ref=current_branch)` вместо Telegram. Текст question'а ≤ 140 символов.
 
 **Когда видишь open question касающийся текущего плана/ветки** (через `leaf_question_list(scope="me-target")` или `leaf://team/questions/open`) — ответь через `leaf_answer_question(question_id, text)` с текстом ≤ 280 символов, или явно скажи пользователю «не знаю, эскалируй».
 
@@ -126,4 +126,4 @@ App-репо **публичный**. Перед каждым `git push` в `gund
 
 **Когда НЕ использовать** ask_question / handoff_create:
 - Если вопрос/задача — short, in-flight clarification («какой именно параметр функции?») — это inline conversation, не async question.
-- Если пользователь явно сказал «не пиши Диме / не дёргай команду».
+- Если пользователь явно сказал «не пиши Алексу / не дёргай команду».

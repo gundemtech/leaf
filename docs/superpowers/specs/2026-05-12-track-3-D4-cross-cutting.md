@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-12
 **Status:** Draft (brainstorm-approved by user, awaiting implementation plan in separate session)
-**Owner:** Dmitrii
+**Owner:** Alex
 **Branch (off):** `feature/track-3-D3-slack-deep-sweep` (tip `9bbe1cc`)
 **Branch (new):** `feature/track-3-D4-cross-cutting`
 **Contract:** `docs/superpowers/specs/2026-05-11-track-3-providers-deep-sweep-design.md` § "D4 — Cross-cutting" (lines 98-104)

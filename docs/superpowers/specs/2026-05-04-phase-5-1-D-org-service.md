@@ -1,7 +1,7 @@
 # Phase 5.1.D — `OrgService.createPersonalOrg` + keystore writers
 
 **Status:** Active (2026-05-05). Fourth sub-project of Phase 5.
-**Owner:** Dmitrii.
+**Owner:** Alex.
 **Stack:** branches off `feature/phase-5-1-C` (which holds 5.1.A + 5.1.B + 5.1.C commits).
 
 ---

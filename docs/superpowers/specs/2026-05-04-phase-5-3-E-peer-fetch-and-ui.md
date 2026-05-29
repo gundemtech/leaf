@@ -1,7 +1,7 @@
 # Phase 5.3.E — Peer fetch loop + UI Remove menu + RemovedFromTeamBanner
 
 **Status:** Active (2026-05-06). Fifth (final) sub-phase of Phase 5.3 ("member removal + team key rotation"). Closes Phase 5.3 stack end-to-end.
-**Owner:** Dmitrii.
+**Owner:** Alex.
 **Stack base:** `feature/phase-5-3-D` (5.3.D landed @ 835 SPM tests на этой машине / ~870-910 cross-machine canonical).
 **Branch:** `feature/phase-5-3-E`.
 
@@ -909,7 +909,7 @@ Keystore-first ordering (§5.4 step 4c → 4d): if `insertTeamKeyIfAbsent` succe
 - `xcodebuild -scheme Leaf` / `LeafAgent` / `LeafMCP` / `LeafCore` / `LeafCorePrivate` — все BUILD SUCCEEDED.
 - Independent code review (`superpowers:code-reviewer`) — APPROVED (or NEEDS-CHANGES → addressed → APPROVED).
 
-### 14.2 Manual ship-gate (two-Mac smoke — Дима)
+### 14.2 Manual ship-gate (two-Mac smoke — Алекс)
 
 1. Mac A admin creates org `"Smoke A"`. Mac A's TeamView shows 1 member (self admin).
 2. Mac A clicks "Add member" → generates invite → copies token + OTP.

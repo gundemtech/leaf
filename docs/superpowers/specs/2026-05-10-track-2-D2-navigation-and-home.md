@@ -1,7 +1,7 @@
 # Track 2 — D2: Navigation Shell + Home
 
 **Date:** 2026-05-10
-**Author:** Dmitrii (with Claude)
+**Author:** Alex (with Claude)
 **Status:** spec for review
 **Track:** 2 (UI/UX redesign of Native Leaf macOS app)
 **Phase:** D2 of 4 (D1 = Foundation [landed], D2 = Navigation Shell + Home, D3 = Data Surfaces, D4 = Identity & Config)

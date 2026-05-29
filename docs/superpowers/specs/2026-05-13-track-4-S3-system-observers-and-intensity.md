@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-13
 **Status:** Draft (brainstorm-approved via Track-4 design contract; OQ-S3-* closed inline with explicit decisions per user direction "иду в зал — решай сам")
-**Owner:** Dmitrii
+**Owner:** Alex
 **Branch (off):** `feature/track-4-S2-applescript-surface` (tip `8489a6e`, Track-4 S2 landed locally — awaiting collective merge after S4 per Track-4 contract §"Phase decomposition order")
 **Branch (new):** `feature/track-4-S3-system-observers-and-intensity`
 **Contract:** `docs/superpowers/specs/2026-05-11-track-4-local-os-sweep-design.md` § "S3 — System observers + intensity"

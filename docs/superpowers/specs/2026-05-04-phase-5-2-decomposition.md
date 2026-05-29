@@ -1,7 +1,7 @@
 # Phase 5.2 — Decomposition: relay invite endpoints + invite UX + ECDH handshake
 
 **Status:** Active (2026-05-05). Phase 5.2 of Phase 5 ("team presence relay"). Decomposes contract-§9 row 5.2 into sub-phases 5.2.A → 5.2.E.
-**Owner:** Dmitrii.
+**Owner:** Alex.
 **Stack:** branches off `feature/phase-5-1-E` pending 5.1.A→E unified merge to main.
 
 ---
@@ -237,10 +237,10 @@ xcodebuild -scheme LeafCorePrivate -configuration Debug build
 curl -i 'https://oauth.gundem.tech/v1/invite/nonexistent-token' # → 404 with no-store
 
 # Two-Mac E2E (manual; canonical "did 5.2 actually ship" gate)
-# Dmitrii + Anton each run alpha build → admin Dmitrii generates invite UI → copy pubkey hex
-# to Anton via Slack → Anton on his Mac creates fresh-X25519 (открыл Accept-invite UI) → posts
-# pubkey back → Dmitrii completes invite → posts token+OTP via Slack → Anton accepts → assert
-# Anton's Organization tab shows Leaf org с двумя members. SQLCipher REPL cross-check matching
+# Alex + Sasha each run alpha build → admin Alex generates invite UI → copy pubkey hex
+# to Sasha via Slack → Sasha on his Mac creates fresh-X25519 (открыл Accept-invite UI) → posts
+# pubkey back → Alex completes invite → posts token+OTP via Slack → Sasha accepts → assert
+# Sasha's Organization tab shows Leaf org с двумя members. SQLCipher REPL cross-check matching
 # teamKey bytes.
 
 # leaf-docs sync
@@ -271,7 +271,7 @@ git -C ~/Desktop/Leaf/leaf-docs pull --ff-only
 |---|---|
 | OOB transmission UX awkward (paste pubkey to Slack, paste token+OTP back) | Acceptable в MVP per whitepaper; copy-buttons + clear instructions; future flow could use deep links / QR codes (5.6+ trk) |
 | KV propagation latency между PUT и GET (Cloudflare KV eventually consistent globally — typically 60s) | 5.2.C spec mentions; admin UI surfaces "Invite ready in ~30s" + invitee-side retry на initial 404 |
-| Two-Mac dev infra cost | Dmitrii + Anton both have Mac's; manual E2E feasible. Two-Mac CI not in scope. |
+| Two-Mac dev infra cost | Alex + Sasha both have Mac's; manual E2E feasible. Two-Mac CI not in scope. |
 | Worker name `leaf-oauth-relay` becoming misleading | Cosmetic. Defer rename. |
 | Onboarding screen 6 churn между 5.2.E partial и 5.5 final | Partial = minimal viable wiring; 5.5 free to redesign visually без API breakage. State machine в `InviteAcceptReader` — invariant target. |
 | 5.2.B ProdInviteBlobCodec leak via crash log / error message | Spec discipline: error messages generic ("invite blob malformed" не "expected version 2 got 1"). KAT regression test + `/pre-push-leaf` scan catches accidental info-string leak. |

@@ -1,7 +1,7 @@
 # Track 2 — D3: Data Surfaces
 
 **Date:** 2026-05-10
-**Author:** Dmitrii (with Claude)
+**Author:** Alex (with Claude)
 **Status:** spec for review
 **Track:** 2 (UI/UX redesign of Native Leaf macOS app)
 **Phase:** D3 of 4 (D1 = Foundation [landed], D2 = Navigation Shell + Home [landed], D3 = Data Surfaces, D4 = Identity & Config)

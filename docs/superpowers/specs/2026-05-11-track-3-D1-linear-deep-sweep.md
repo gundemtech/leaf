@@ -1,7 +1,7 @@
 # Track 3 / D1 — Linear Deep Sweep
 
 **Status:** Active (2026-05-11). First sub-phase of Track 3 stack.
-**Owner:** Dmitrii.
+**Owner:** Alex.
 **Stack:** branches off `main` (Track-1 D3 + Track-2 D4 stacks ready, awaiting collective merge). **НЕ merged в main** — D1 → D2 → D3 → D4 sequential; collective merge стэка после Track 3 acceptance gate (Track 3 design spec §13).
 
 ---

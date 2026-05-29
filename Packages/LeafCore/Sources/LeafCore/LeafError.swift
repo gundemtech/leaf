@@ -36,4 +36,8 @@ public enum LeafError: Error, Sendable {
     case inviteURLMalformed
     // Phase 5.5.B (consumers: InviteAcceptService remap of inviteNotFound; InviteAcceptReader UX message).
     case inviteAlreadyConsumed
+    // Phase 5 defence-in-depth (consumer: KeyAgreement.sharedSecret) — X25519 ECDH
+    // peer point rejected: low-order / small-subgroup (CryptoKit corecrypto −7 on
+    // macOS ≥ 26) or an all-zero shared secret (RFC 7748 §6.1, older OS).
+    case lowOrderPoint
 }

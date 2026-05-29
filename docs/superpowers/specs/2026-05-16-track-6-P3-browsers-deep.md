@@ -4,7 +4,7 @@
 **Contract:** `2026-05-15-track-6-existing-surface-depth-contract.md`
 **Research companion:** `2026-05-16-track-6-P3-browsers-research.md`
 **Date:** 2026-05-16
-**Author:** Dmitrii + Claude
+**Author:** Alex + Claude
 
 ---
 

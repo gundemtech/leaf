@@ -4,7 +4,7 @@
 **Contract:** `2026-05-15-track-6-existing-surface-depth-contract.md`
 **Research:** `2026-05-16-track-6-P7-gpt-cap-research.md`
 **Date:** 2026-05-16
-**Author:** Dmitrii + Claude
+**Author:** Alex + Claude
 **Branch:** `feature/track-6-P7-gpt-cap` (off `main`)
 **Scope:** **doc-only** — no code, no schema migrations, no ShareEventTypeKey entries, no tests.
 
@@ -117,7 +117,7 @@ When any trigger fires → fresh Stage 0 research pass; new phase spec. The won'
 | `.claude/shared/architecture.md` (lines 62-66, the "Vendor-blocked surfaces (нет per-event API наружу — won't-list, Track-6 P7)" sub-bullet replacing the old "Surface навсегда" one-liner) | Rewrite GPT entry for current truth: ChatGPT capture is L1 attention only today; per-event surface vendor-blocked; trigger list per §5. |
 | `.claude/shared/current-state.md` | Append P7 entry to "Последнее обновление" + "Где мы" sections — Track-6 P7 doc-only phase closed; pointer to whitepaper won't-list entry. |
 | `leaf-docs/docs/privacy-security/what-we-dont-capture.md` | New section "AI co-pilot surfaces without per-event API" with ChatGPT Desktop entry + Copilot entry + Apple Intelligence entry. |
-| `leaf-docs/docs/reference/changelog.md` | New entry `2026-05-16 HH:MM · Dmitrii — Track-6 P7 закрыт: won't-list AI co-pilot surfaces без per-event API`. |
+| `leaf-docs/docs/reference/changelog.md` | New entry `2026-05-16 HH:MM · Alex — Track-6 P7 закрыт: won't-list AI co-pilot surfaces без per-event API`. |
 | `docs/superpowers/specs/2026-05-16-track-6-P7-gpt-cap.md` | This file. |
 | `docs/superpowers/specs/2026-05-16-track-6-P7-gpt-cap-research.md` | Already landed (Stage 0). |
 | `docs/superpowers/plans/2026-05-16-track-6-P7-gpt-cap.md` | Atomic-per-commit plan. |

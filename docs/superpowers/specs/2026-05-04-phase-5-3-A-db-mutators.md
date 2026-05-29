@@ -1,7 +1,7 @@
 # Phase 5.3.A — Team DB lifecycle mutators (markTeamMemberRemoved / deprecateTeamKey / readTeamKey)
 
 **Status:** Active (2026-05-06). First sub-phase of Phase 5.3 ("member removal + team key rotation").
-**Owner:** Dmitrii.
+**Owner:** Alex.
 **Stack base:** `feature/phase-5-2-E` (Phase 5.2 closed end-to-end @ 802 SPM tests).
 **Branch:** `feature/phase-5-3-A`.
 

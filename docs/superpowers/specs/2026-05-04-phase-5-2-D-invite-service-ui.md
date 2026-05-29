@@ -1,7 +1,7 @@
 # Phase 5.2.D — `RelayClient` + `InviteService` + Generate-invite UI
 
 **Status:** Active (2026-05-05). Fourth sub-phase of Phase 5.2 ("relay invite endpoints + invite UX + ECDH handshake").
-**Owner:** Dmitrii.
+**Owner:** Alex.
 **Stack:** branches off `feature/phase-5-2-C` (linear A→B→C→D — 5.2.C docs commits noop для кода). Implementation lives entirely в `gundemtech/leaf` repo; depends on 5.2.C deploy live на `oauth.gundem.tech/v1/invite/*` к моменту E2E gate (manual UI smoke).
 
 ---
@@ -352,7 +352,7 @@ URLProtocol-based stub registers responses per request URL+method.
 3. Click Copy on token → paste в editor → assert match.
 4. Click Revoke + Done → sheet dismisses; (optional) curl `GET https://oauth.gundem.tech/v1/invite/<token>` → expect 404 (consumed by DELETE).
 
-Two-Mac E2E (real Anton acceptance) — 5.2.E gate, не 5.2.D.
+Two-Mac E2E (real Sasha acceptance) — 5.2.E gate, не 5.2.D.
 
 ---
 

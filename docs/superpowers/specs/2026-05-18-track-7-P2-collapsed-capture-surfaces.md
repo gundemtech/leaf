@@ -3,7 +3,7 @@
 **Status:** Draft (2026-05-18). Promoted to "Active" after user review gate (Stage 3) closes.
 **Stage 0 discovery:** parallel Explore agents — events schema + DerivedInsights API + UI inventory (in-session, 2026-05-18).
 **Stage 1 reference:** P1 spec `2026-05-17-track-7-ui-surface-polish-design.md` (§4 SurfaceCard contract, §5 SurfaceDetailLayout contract, §9 DerivedInsights coupling).
-**Authors:** Dmitrii + Claude.
+**Authors:** Alex + Claude.
 
 ---
 

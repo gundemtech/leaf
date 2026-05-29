@@ -30,7 +30,7 @@ public actor RelayClient {
         // Reason: compile-time-constant URL literal — `URL(string:)` of a static well-formed URL never returns nil.
         // swiftlint:disable:next force_unwrapping
         baseURL: URL = URL(string: "https://oauth.gundem.tech")!,
-        urlSession: URLSession = .shared
+        urlSession: URLSession = .leafEphemeral()
     ) {
         self.baseURL = baseURL
         self.urlSession = urlSession

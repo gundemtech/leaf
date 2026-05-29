@@ -33,11 +33,32 @@ public func extractDomain(_ urlString: String) -> String {
     return host
 }
 
+/// Phase 5 defence-in-depth — drop the URL fragment (and only the fragment) from a
+/// URL string. Fragments are client-side anchors that frequently carry OAuth
+/// implicit-flow tokens, JWTs, and magic-link secrets; they are never needed for an
+/// activity signal and must never be stored (audit HIGH H1). URLComponents path when
+/// parseable; string-split fallback (`#…`) so a fragment is stripped even from inputs
+/// URLComponents cannot parse. This is the single source of truth for "never store a
+/// fragment" — `sanitizeURL` mirrors `comps.fragment = nil` on its already-parsed
+/// components.
+func stripURLFragment(_ urlString: String) -> String {
+    if var comps = URLComponents(string: urlString) {
+        comps.fragment = nil
+        if let rebuilt = comps.string { return rebuilt }
+    }
+    if let hashIndex = urlString.firstIndex(of: "#") {
+        return String(urlString[..<hashIndex])
+    }
+    return urlString
+}
+
 /// Apply the granularity rule to a URL string. Spec §9.3.
 public func applyGranularity(_ urlString: String, _ granularity: URLGranularity) -> String {
     switch granularity {
     case .fullUrl:
-        return urlString
+        // Keep path + query (the user opted this domain into full-URL granularity)
+        // but always drop the fragment — see `stripURLFragment`.
+        return stripURLFragment(urlString)
     case .pathStripped:
         guard let comps = URLComponents(string: urlString),
             let host = comps.host?.lowercased()

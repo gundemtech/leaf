@@ -1,7 +1,7 @@
 # Phase 5.3.D — `KeyRotationService` admin orchestrator + `RotationOutbox` journal
 
 **Status:** Active (2026-05-06). Fourth sub-phase of Phase 5.3 ("member removal + team key rotation").
-**Owner:** Dmitrii.
+**Owner:** Alex.
 **Stack base:** `feature/phase-5-3-C` (5.3.C landed @ 880 SPM tests).
 **Branch:** `feature/phase-5-3-D`.
 

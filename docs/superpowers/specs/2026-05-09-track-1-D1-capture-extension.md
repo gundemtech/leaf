@@ -1,7 +1,7 @@
 # Track 1 / D1 — Capture Extension: bodies + attachments + Phase 4.8 PR metadata
 
 **Status:** Active (2026-05-09). First sub-phase of Track 1 stack.
-**Owner:** Dmitrii.
+**Owner:** Alex.
 **Stack:** branches off `feature/track-1-detection-substrate`. **НЕ merged в main** — D1 → D2 → D3 идут sequential, merge стэка в main коллективно после D3 ship + acceptance gate (контракт §13).
 
 ---

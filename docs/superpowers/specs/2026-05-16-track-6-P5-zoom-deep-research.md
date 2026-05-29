@@ -345,7 +345,7 @@ If user wants REST in P5: add as **Phase 4 of the implementation** (after meetin
 Reasoning:
 - Format `<First> <Last>'s Personal Meeting Room` is consistent for Zoom-English-locale defaults.
 - Already would leak today via existing `zoom_meeting_name_observed` whenever user opts into the sub-field.
-- ADR-010 walkback test sentinel: `LEAKED_SENTINEL_ZOOM_PMI_NAME_P5` = `Dmitrii Demidov's Personal Meeting Room` injected at parser; assert not in output payload.
+- ADR-010 walkback test sentinel: `LEAKED_SENTINEL_ZOOM_PMI_NAME_P5` = `Alex Rivera's Personal Meeting Room` injected at parser; assert not in output payload.
 - Implementation: in `LeafCorePrivate/Prod/Collectors/Apple/ProdZoomAdapter.swift` parser, after extracting topic string, run `topic.range(of: #"^(.+?)'s Personal Meeting Room$"#, options: .regularExpression)`. If match → replace with `"<pmi_meeting>"` literal. Pass through otherwise.
 - Non-English Zoom accounts may use localized PMI format; document as best-effort.
 

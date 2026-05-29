@@ -4,7 +4,7 @@
 **Stage 1 discovery:** Explore subagent — D3 detection tables (M014), DetectorPipeline / DetectorScheduler / QueryEngine surfaces, DerivedInsights protocol + InsightsSnapshot, LeafTab + SurfaceCard + SurfaceDetailLayout primitives, HomeView wire-up; main session cross-check verified file paths and signatures (subagent fabricated `TodaySection.swift` as separate file — it is a private struct inside HomeView.swift; subagent referenced `SurfaceCardCompact` — not in P1 baseline, that primitive landed in P2-collapsed).
 **Master spec reference:** `2026-05-17-track-7-ui-surface-polish-design.md` §6 (Work State card + detail), §9.1 (DerivedInsights additions), §12 P7 (phase scope).
 **P1 template reference:** `ClaudeCodeSurfaceCardViewModel` (namespace-enum stateless mapper) + `ClaudeCodeDetailViewModel` (`@MainActor @Observable` class, detached Task SQL pipeline, 4-case State enum). P3 follows this shape for Work State.
-**Authors:** Dmitrii + Claude.
+**Authors:** Alex + Claude.
 
 ---
 

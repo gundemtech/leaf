@@ -90,7 +90,7 @@ final class DatabaseTeamTests: XCTestCase {
             orgID: "org-aaaa",
             role: .admin,
             pubkeyHex: String(repeating: "ab", count: 32),
-            displayName: "Dmitrii",
+            displayName: "Alex",
             addedAt: Date(timeIntervalSince1970: 1_700_000_000),
             removedAt: nil
         )
@@ -99,7 +99,7 @@ final class DatabaseTeamTests: XCTestCase {
             orgID: "org-aaaa",
             role: .member,
             pubkeyHex: String(repeating: "cd", count: 32),
-            displayName: "Anton",
+            displayName: "Sasha",
             addedAt: Date(timeIntervalSince1970: 1_700_001_000),
             removedAt: nil
         )
@@ -111,7 +111,7 @@ final class DatabaseTeamTests: XCTestCase {
         XCTAssertEqual(members[0].id, "member-self", "должен быть ordered by addedAt ASC")
         XCTAssertEqual(members[0].role, .admin)
         XCTAssertEqual(members[0].pubkeyHex, String(repeating: "ab", count: 32))
-        XCTAssertEqual(members[0].displayName, "Dmitrii")
+        XCTAssertEqual(members[0].displayName, "Alex")
         XCTAssertNil(members[0].removedAt)
         XCTAssertEqual(members[1].id, "member-2")
         XCTAssertEqual(members[1].role, .member)
@@ -322,7 +322,7 @@ final class DatabaseTeamTests: XCTestCase {
                 orgID: orgID,
                 role: .admin,
                 pubkeyHex: String(repeating: "ab", count: 32),
-                displayName: "Dmitrii",
+                displayName: "Alex",
                 addedAt: Date(timeIntervalSince1970: 1_700_000_000),
                 removedAt: nil
             ))
@@ -332,7 +332,7 @@ final class DatabaseTeamTests: XCTestCase {
                 orgID: orgID,
                 role: .member,
                 pubkeyHex: String(repeating: "cd", count: 32),
-                displayName: "Anton",
+                displayName: "Sasha",
                 addedAt: Date(timeIntervalSince1970: 1_700_001_000),
                 removedAt: nil
             ))

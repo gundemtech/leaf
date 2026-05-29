@@ -517,7 +517,7 @@ window title (workspace + active file basename) + workspace open event
 **`docs/reference/changelog.md`** — entry:
 
 ```
-- **2026-05-DD HH:MM · Dmitrii** — Track-6 P6 (IDEs Surface Cap) landed: vscode-family
+- **2026-05-DD HH:MM · Alex** — Track-6 P6 (IDEs Surface Cap) landed: vscode-family
   parsed active-doc + workspace-opened FSEvents, JetBrains bundle expansion (+3 IDEs, -AppCode),
   whitepaper IDE-ceiling won't-list entry + re-evaluation triggers.
 ```

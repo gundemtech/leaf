@@ -62,6 +62,9 @@ final class SlackOAuthService {
     private let databaseEncryption: EncryptionOptions?
     private let restartTriggerName: String
     private var database: Database?
+    /// Phase 5 — non-caching session for OAuth token exchange (bearer/token
+    /// responses never hit a disk cache). See `URLSession.leafEphemeral()`.
+    private let urlSession: URLSession = .leafEphemeral()
 
     init(
         databaseURL: URL = DatabasePath.defaultURL(),
@@ -349,7 +352,7 @@ final class SlackOAuthService {
             "code_verifier": verifier,
         ])
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await urlSession.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw makeError("Token endpoint returned non-HTTP response.")
         }
