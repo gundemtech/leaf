@@ -346,6 +346,50 @@ public struct SlackWarmBatch: Sendable, Hashable {
     )
 }
 
+/// Prior-tick persisted warm-state fed back into `fetchWarmState` so day-2+
+/// ticks can rank per-channel fan-out off the stable previous snapshot (rather
+/// than the volatile just-fetched member set) and diff pins/bookmarks/reminders/
+/// scheduled/stars against last tick. Mirrors `SlackWarmBatch` minus `reactions`
+/// (reactions carry no prior state — they are always fetched fresh).
+///
+/// `memberChannels` is `nil` on bootstrap (tick #1): with no prior snapshot the
+/// provider falls back to the just-fetched member set for fan-out targeting.
+public struct SlackWarmStatePriorSnapshots: Sendable, Hashable {
+    public let memberChannels: SlackMemberChannelsTopList?
+    public let pinsPerChannel: [SlackChannelPinsSnapshot]
+    public let bookmarksPerChannel: [SlackChannelBookmarksSnapshot]
+    public let reminders: SlackRemindersSnapshot
+    public let scheduledMessages: SlackScheduledMessagesSnapshot
+    public let stars: SlackStarsSnapshot
+
+    public init(
+        memberChannels: SlackMemberChannelsTopList?,
+        pinsPerChannel: [SlackChannelPinsSnapshot],
+        bookmarksPerChannel: [SlackChannelBookmarksSnapshot],
+        reminders: SlackRemindersSnapshot,
+        scheduledMessages: SlackScheduledMessagesSnapshot,
+        stars: SlackStarsSnapshot
+    ) {
+        self.memberChannels = memberChannels
+        self.pinsPerChannel = pinsPerChannel
+        self.bookmarksPerChannel = bookmarksPerChannel
+        self.reminders = reminders
+        self.scheduledMessages = scheduledMessages
+        self.stars = stars
+    }
+
+    /// Bootstrap prior — `memberChannels == nil` switches fan-out to the
+    /// just-fetched member set; all diff baselines start empty.
+    public static let empty = SlackWarmStatePriorSnapshots(
+        memberChannels: nil,
+        pinsPerChannel: [],
+        bookmarksPerChannel: [],
+        reminders: .empty,
+        scheduledMessages: .empty,
+        stars: .empty
+    )
+}
+
 /// Aggregate result of one cold-tier (4am local daily) tick.
 public struct SlackColdBatch: Sendable, Hashable {
     public let canvases: SlackCanvasesSnapshot

@@ -143,12 +143,7 @@ final class SlackCollectorTests: XCTestCase {
             accessToken: String,
             userID: String,
             scopes: SlackScopesChecking,
-            priorMemberChannels: SlackMemberChannelsTopList?,
-            priorPinsPerChannel: [SlackChannelPinsSnapshot],
-            priorBookmarksPerChannel: [SlackChannelBookmarksSnapshot],
-            priorReminders: SlackRemindersSnapshot,
-            priorScheduledMessages: SlackScheduledMessagesSnapshot,
-            priorStars: SlackStarsSnapshot,
+            priors: SlackWarmStatePriorSnapshots,
             since: Int64?,
             now: Int64
         ) async throws -> SlackWarmBatch {
