@@ -1,20 +1,25 @@
 //
 //  WindowSettingsView.swift
-//  Track 2 / D4 — drop manual top-level header chrome. Pure VStack hosting
-//  sub-section views. Track 5 / S7 F.11 — WorkspaceSettingsSection added.
-//  Track 5 / S8 T9 — full reorder + Account + Notifications sections (spec §9).
+//  Settings redesign — the former single ScrollView of 13 stacked sections is
+//  split into 5 categories switched via a top LeafTab strip (mirrors the
+//  Activity screen's header → LeafTab → content layout). Only the selected
+//  category's sub-sections mount at a time, so each view is a short scroll
+//  instead of one километровый dump.
 //
-//  Order (top→bottom):
-//    1. Account              (T9 — identity + pubkey copy + Tier chip)
-//    2. Workspace            (S7 — team identity + members + invites)
-//    3. Share Controls       (S5 — per-source auto-share toggles)
-//    4. Notifications        (T9 — 4 sub-groups × 11 prefs)
-//    5. Privacy              (T10 expands; T9 preserves the existing stub)
-//    6. Background collection
-//    7. Folders
-//    8. Local apps
-//    9. System observers
-//   10. Updates
+//  Categories (see SettingsCategory):
+//    • Workspace      — WorkspaceSettingsSection
+//    • Sharing        — ShareControls + Privacy
+//    • Notifications  — NotificationsSettingsSection
+//    • Data           — Background / Folders / LocalApps / SystemObservers /
+//                       AITools / BrowserAllowList
+//    • General        — Advanced / Updates / (DebugDiagnostics in DEBUG)
+//
+//  The sub-section views are unchanged — they each wrap themselves in
+//  LeafSection + LeafCard and pull their own @Environment. Gating them behind a
+//  tab is safe: every section's `.onAppear`/`.task` is a display-refresh of its
+//  own data (e.g. ShareControls/ActiveTokens/PendingRequests re-run their
+//  `.task(id: activeWorkspaceID)` on mount), so switching workspace and then
+//  opening a tab still pulls fresh data — no global init is lost.
 //
 
 import SwiftUI
@@ -27,27 +32,82 @@ struct WindowSettingsView: View {
 
     @State private var browserAllowListStore = BrowserAllowListStore()
 
+    /// Persisted selected category. `@AppStorage` binds RawRepresentable<String>
+    /// directly, so the choice survives leaving/returning to Settings and app
+    /// relaunch. Namespace mirrors `leaf.ui.showAnalyticsSection` (Sidebar).
+    @AppStorage("leaf.ui.settingsCategory") private var category: SettingsCategory = .workspace
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: LeafSpace.xxl) {
-                // AccountSettingsSection moved to ProfileView (sidebar Profile tab)
-                // to separate identity / tier from operational settings.
+                header
+                LeafTab(
+                    selection: $category,
+                    tabs: SettingsCategory.allCases,
+                    label: { $0.title }
+                )
+                content(for: category)
+            }
+            .padding(LeafSpace.xxl)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    // MARK: - Header
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: LeafSpace.sm) {
+            Text("SETTINGS · \(category.title.uppercased())")
+                .leafSectionLabel()
+                .foregroundStyle(LeafColor.text.tertiary)
+            Text(description(for: category))
+                .font(LeafType.body.regular)
+                .foregroundStyle(LeafColor.text.secondary)
+        }
+    }
+
+    private func description(for category: SettingsCategory) -> String {
+        switch category {
+        case .workspace:
+            "Your team workspace identity, members, and invites."
+        case .sharing:
+            "What leaves this device for teammates, and how long shared events are kept."
+        case .notifications:
+            "Which teammate pushes reach you, and how they're delivered."
+        case .data:
+            "What Leaf captures on this Mac. Off by default — you choose the sources."
+        case .general:
+            "App behavior and updates."
+        }
+    }
+
+    // MARK: - Category content
+
+    @ViewBuilder
+    private func content(for category: SettingsCategory) -> some View {
+        VStack(alignment: .leading, spacing: LeafSpace.xxl) {
+            switch category {
+            case .workspace:
                 WorkspaceSettingsSection()
+            case .sharing:
                 ShareControlsSettingsSection()
-                NotificationsSettingsSection()
                 PrivacySettingsSection()
+            case .notifications:
+                NotificationsSettingsSection()
+            case .data:
                 BackgroundCollectionSection(launchAgent: launchAgent)
                 FoldersSettings(service: watchedFolders)
                 LocalAppsSettingsSection()
                 SystemObserversSettingsSection()
                 AIToolsSettingsSection()
                 BrowserAllowListSection(store: browserAllowListStore)
+            case .general:
                 AdvancedSettingsSection()
                 UpdatesSection(updater: updater)
-                DebugDiagnosticsSection()
+                #if DEBUG
+                    DebugDiagnosticsSection()
+                #endif
             }
-            .padding(LeafSpace.xxl)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
