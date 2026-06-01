@@ -70,45 +70,45 @@ struct LinearUsersResolverTests {
 
     @Test("exact case-sensitive match → unique id")
     func exactCaseSensitive() async throws {
-        let mock = MockLinearGraphQLProvider(canned: [user("u1", displayName: "Dmitrii")])
+        let mock = MockLinearGraphQLProvider(canned: [user("u1", displayName: "Alexandra")])
         let resolver = LinearUsersResolver(provider: mock)
-        let id = try await resolver.resolve(displayName: "Dmitrii")
+        let id = try await resolver.resolve(displayName: "Alexandra")
         #expect(id == "u1")
     }
 
     @Test("exact case-insensitive match (lowercase needle vs PascalCase haystack)")
     func exactCaseInsensitive() async throws {
-        let mock = MockLinearGraphQLProvider(canned: [user("u1", displayName: "Dmitrii")])
+        let mock = MockLinearGraphQLProvider(canned: [user("u1", displayName: "Alexandra")])
         let resolver = LinearUsersResolver(provider: mock)
-        let id = try await resolver.resolve(displayName: "dmitrii")
+        let id = try await resolver.resolve(displayName: "alexandra")
         #expect(id == "u1")
     }
 
     @Test("contains fallback finds unique substring match")
     func containsFallbackUnique() async throws {
         let mock = MockLinearGraphQLProvider(canned: [
-            user("u1", displayName: "Dmitrii"),
-            user("u2", displayName: "Dima D.")
+            user("u1", displayName: "Alexandra"),
+            user("u2", displayName: "Alex D.")
         ])
         let resolver = LinearUsersResolver(provider: mock)
-        let id = try await resolver.resolve(displayName: "Dima")
+        let id = try await resolver.resolve(displayName: "Alex D")
         #expect(id == "u2")
     }
 
     @Test("contains fallback — multiple matches → nil (ambiguous)")
     func containsFallbackAmbiguous() async throws {
         let mock = MockLinearGraphQLProvider(canned: [
-            user("u1", displayName: "Dima"),
-            user("u2", displayName: "Dmitrii")
+            user("u1", displayName: "Alex"),
+            user("u2", displayName: "Alexandra")
         ])
         let resolver = LinearUsersResolver(provider: mock)
-        let id = try await resolver.resolve(displayName: "D")
+        let id = try await resolver.resolve(displayName: "Al")
         #expect(id == nil)
     }
 
     @Test("no matches → nil")
     func noMatch() async throws {
-        let mock = MockLinearGraphQLProvider(canned: [user("u1", displayName: "Dmitrii")])
+        let mock = MockLinearGraphQLProvider(canned: [user("u1", displayName: "Alexandra")])
         let resolver = LinearUsersResolver(provider: mock)
         let id = try await resolver.resolve(displayName: "Xavier")
         #expect(id == nil)
@@ -128,11 +128,11 @@ struct LinearUsersResolverTests {
         // even though contains-pass would also match. Exact ambiguity is a
         // first-class signal that resolver cannot disambiguate.
         let mock = MockLinearGraphQLProvider(canned: [
-            user("u1", displayName: "Dmitrii"),
-            user("u2", displayName: "Dmitrii")
+            user("u1", displayName: "Alexandra"),
+            user("u2", displayName: "Alexandra")
         ])
         let resolver = LinearUsersResolver(provider: mock)
-        let id = try await resolver.resolve(displayName: "Dmitrii")
+        let id = try await resolver.resolve(displayName: "Alexandra")
         #expect(id == nil)
     }
 

@@ -10,7 +10,7 @@ final class InvitePlaintextTests: XCTestCase {
             orgID: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
             orgName: "Leaf",
             adminMemberID: "99999999-8888-7777-6666-555555555555",
-            adminDisplayName: "Dmitrii",
+            adminDisplayName: "Alex",
             issuedAtMs: 1_730_000_000_000
         )
     }
@@ -46,7 +46,7 @@ final class InvitePlaintextTests: XCTestCase {
           "team_key_id": "11111111-2222-3333-4444-555555555555",
           "org_name": "Leaf",
           "admin_member_id": "99999999-8888-7777-6666-555555555555",
-          "admin_display_name": "Dmitrii",
+          "admin_display_name": "Alex",
           "issued_at_ms": 1730000000000
         }
         """.data(using: .utf8)!

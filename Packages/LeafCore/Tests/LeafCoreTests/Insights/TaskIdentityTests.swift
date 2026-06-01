@@ -33,9 +33,9 @@ final class TaskIdentityTests: XCTestCase {
     }
 
     func testTeammateSnapshotEquatable() {
-        let s1 = TeammateSnapshot(memberID: "m1", displayName: "Anton", linearID: "LEAF-1",
+        let s1 = TeammateSnapshot(memberID: "m1", displayName: "Sasha", linearID: "LEAF-1",
                                   branch: "b", repo: "r", currentApp: "Xcode", lastActivityAtMs: 1000)
-        let s2 = TeammateSnapshot(memberID: "m1", displayName: "Anton", linearID: "LEAF-1",
+        let s2 = TeammateSnapshot(memberID: "m1", displayName: "Sasha", linearID: "LEAF-1",
                                   branch: "b", repo: "r", currentApp: "Xcode", lastActivityAtMs: 1000)
         XCTAssertEqual(s1, s2)
     }

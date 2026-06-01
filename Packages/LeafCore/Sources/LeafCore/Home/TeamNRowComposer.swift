@@ -65,7 +65,7 @@ public enum TeamNRowComposer {
 
     /// VoiceOver label for a teammate row. Composes
     /// `<displayName>, <currentApp?>, <branch?>, <relativeTime>` with
-    /// graceful nil-skip — never emits `"Anton, , , 2m ago"` for snapshots
+    /// graceful nil-skip — never emits `"Sasha, , , 2m ago"` for snapshots
     /// missing currentApp/branch. Caller pre-formats the relative time
     /// via `HomeRelativeTimeFormatter.format(deltaMs:nowMs:)`.
     public static func a11yLabel(

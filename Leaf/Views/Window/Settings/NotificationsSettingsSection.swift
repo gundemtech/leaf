@@ -183,14 +183,14 @@ struct NotificationsSettingsSection: View {
   private func scheduleAllTestBanners() {
     scheduleTestBanner(
       id: "leaf-dev-test-handoff",
-      title: "Test handoff from Anton",
+      title: "Test handoff from Sasha",
       body: "Leaf detected a context handoff",
       categoryID: "leaf.dm.handoff",
       in: 5
     )
     scheduleTestBanner(
       id: "leaf-dev-test-task",
-      title: "Test task from Anton",
+      title: "Test task from Sasha",
       body: "Tap Mark Done to complete it without opening the app.",
       categoryID: "leaf.dm.task",
       in: 6

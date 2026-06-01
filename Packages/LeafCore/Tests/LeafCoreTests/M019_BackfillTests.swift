@@ -66,14 +66,14 @@ final class M019_BackfillTests: XCTestCase {
                 VALUES (?, ?, ?, ?, ?, ?, NULL)
                 """, arguments: [adminID, orgUUID, "admin",
                                  "deadbeef" + String(repeating: "00", count: 28),
-                                 "Anton", nowMs])
+                                 "Sasha", nowMs])
 
             try db.execute(sql: """
                 INSERT INTO team_members (id, org_id, role, pubkey_hex, display_name, added_at_ms, removed_at_ms)
                 VALUES (?, ?, ?, ?, ?, ?, NULL)
                 """, arguments: [memberID, orgUUID, "member",
                                  "cafebabe" + String(repeating: "00", count: 28),
-                                 "Dima", nowMs])
+                                 "Alex", nowMs])
 
             try db.execute(sql: """
                 INSERT INTO team_keys (id, generated_at_ms, deprecated_at_ms, generated_by_member_id)

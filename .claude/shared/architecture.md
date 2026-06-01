@@ -99,7 +99,7 @@ Leaf — ambient memory layer для macOS (далее iOS) + Native UI + MCP-с
 ## Хранение (ADR-017)
 - **GRDB 7.10+ fork** + SQLCipher через SwiftPM (официальной интеграции нет — community fork).
 - SQLite в WAL mode, три процесса (Agent writer + MCPServer reader + MenuBarApp reader) → один файл, cross-process POSIX locks, `DatabasePool` в каждом процессе.
-- Обязательные pragma: `cipher_plaintext_header_size=32` + external salt (iOS-ready), `busy_timeout=5000`, `PRAGMA key = x'HEX'` с raw keyspec (без PBKDF2 на каждом open).
+- Обязательные pragma: `cipher_plaintext_header_size` (tuned value в moat) + external salt (iOS-ready), `busy_timeout` (tuned value в moat), `PRAGMA key = x'HEX'` с raw keyspec (без PBKDF2 на каждом open).
 - Ключ в Keychain: `kSecClassGenericPassword`, `kSecAttrAccessGroup=$(TeamID).tech.gundem.leaf`, `AccessibleAfterFirstUnlockThisDeviceOnly`, `Synchronizable=false`.
 - Writer запускает `PRAGMA wal_checkpoint(TRUNCATE)` раз в 15 мин / 4MB — без этого WAL распухает без границ.
 - Путь: `~/Library/Application Support/Leaf/events.sqlite` (0600).

@@ -72,7 +72,7 @@ APP="$EXPORTED/Leaf.app"
 DMG="$RELEASES/Leaf-$VERSION.dmg"
 ZIP="$RELEASES/Leaf-$VERSION.zip"
 
-SIGN_ID="Developer ID Application: Dmitrii Demidov (4LZ84Z78M7)"
+SIGN_ID="${LEAF_SIGN_ID:-Developer ID Application: <YOUR NAME> (<TEAM_ID>)}"  # set LEAF_SIGN_ID in your env/Local config (kept out of the public repo)
 NOTARY_PROFILE="leaf-notary"
 
 STEPS=(archive export verify dmg notary staple zip appcast upload)
@@ -178,7 +178,7 @@ step_export() {
     # Drop embedded Development provisioning profile (Xcode archive embeds dev-profile
     # by default; Developer ID distribution does NOT require profile + dev profile
     # contains ProvisionedDevices whitelist that blocks LaunchServices spawn on any
-    # Mac other than Дима's via POSIX 163 / Launchd job spawn failed). Codesign
+    # Mac other than the maintainer's via POSIX 163 / Launchd job spawn failed). Codesign
     # re-sign на следующем шаге восстановит integrity без profile reference.
     rm -f "$APP/Contents/embedded.provisionprofile"
 

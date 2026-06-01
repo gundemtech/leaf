@@ -699,8 +699,8 @@ Token-based wins for: ease of rotation (single key in Supabase secrets), HTTPS/2
 ```bash
 supabase secrets set \
   APNS_KEY_P8="$(cat AuthKey_XXXXX.p8)" \
-  APNS_KEY_ID=ABCDEFGHIJ \
-  APNS_TEAM_ID=Y6Z2C9N9N9 \
+  APNS_KEY_ID=<APNS_KEY_ID> \
+  APNS_TEAM_ID=<APNS_TEAM_ID> \
   APNS_BUNDLE_ID=tech.gundem.leaf
 ```
 

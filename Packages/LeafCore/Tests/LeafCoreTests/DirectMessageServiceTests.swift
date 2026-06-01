@@ -30,7 +30,7 @@ final class DirectMessageServiceTests: XCTestCase {
         ))
         try db.insertTeamMember(TeamMember(
             id: selfMemberID, workspaceID: workspaceID, role: .admin,
-            pubkeyHex: selfPubkey, displayName: "Anton",
+            pubkeyHex: selfPubkey, displayName: "Sasha",
             addedAt: Date(timeIntervalSince1970: 1_700_000_000), removedAt: nil
         ))
         try db.insertTeamKey(TeamKey(

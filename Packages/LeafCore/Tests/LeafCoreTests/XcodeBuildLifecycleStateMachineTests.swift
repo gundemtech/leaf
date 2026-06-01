@@ -105,20 +105,20 @@ struct XcodeBuildLifecycleStateMachineTests {
         let a = XcodeObservation(
             activeDocPath: nil, projectName: nil, schemeName: "Leaf",
             buildState: .idle,
-            runDestinationName: "Dmitrii's iPhone",
+            runDestinationName: "Alex's iPhone",
             runDestinationBucket: .iosDevice
         )
         _ = m.observe(a, nowMs: 100)
         let b = XcodeObservation(
             activeDocPath: nil, projectName: nil, schemeName: "Leaf",
             buildState: .running,
-            runDestinationName: "Dmitrii's iPhone",
+            runDestinationName: "Alex's iPhone",
             runDestinationBucket: .iosDevice
         )
         let events = m.observe(b, nowMs: 200)
         for ev in events {
             for v in ev.payload.values {
-                #expect(!v.contains("Dmitrii"))
+                #expect(!v.contains("Alex"))
             }
         }
     }

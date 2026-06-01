@@ -268,7 +268,7 @@ final class SupabaseClientDirectMessagesTests: XCTestCase {
             workspaceID: "ws-1",
             recipientPubkeyHex: String(repeating: "b", count: 64),
             messageID: "msg-1",
-            titleText: "Anton sent a handoff",
+            titleText: "Sasha sent a handoff",
             kind: "handoff"
         )
         XCTAssertEqual(result.devicesPushed, 2)
@@ -294,7 +294,7 @@ final class SupabaseClientDirectMessagesTests: XCTestCase {
             workspaceID: "ws-1",
             recipientPubkeyHex: String(repeating: "b", count: 64),
             messageID: "msg-1",
-            titleText: "Anton sent a handoff",
+            titleText: "Sasha sent a handoff",
             kind: "handoff"
         )
         XCTAssertEqual(result.devicesPushed, 1)
@@ -347,7 +347,7 @@ final class SupabaseClientDirectMessagesTests: XCTestCase {
             workspaceID: "ws-1",
             recipientPubkeyHex: String(repeating: "b", count: 64),
             messageID: "msg-1",
-            titleText: "Anton assigned a task",
+            titleText: "Sasha assigned a task",
             kind: "task"
         )
         // Drain the actor-side Task that captured the body.

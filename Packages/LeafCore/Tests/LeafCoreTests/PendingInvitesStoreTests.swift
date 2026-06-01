@@ -33,7 +33,7 @@ final class PendingInvitesStoreTests: XCTestCase {
             workspaceID: workspaceID,
             otp: otp,
             inviteePubkeyHex: String(repeating: "a", count: 64),
-            inviteeDisplayNameHint: "Anton",
+            inviteeDisplayNameHint: "Sasha",
             createdAtMs: createdAtMs,
             expiresAtMs: createdAtMs + 24 * 60 * 60 * 1000,
             status: status,

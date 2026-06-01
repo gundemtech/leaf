@@ -2800,8 +2800,8 @@ final class RelayBodyLeakageTests: XCTestCase {
     func testRelayDoesNotLeakRawPMIName_P5() throws {
         try assertP5DoesNotLeakIntoZoomPresence(
             eventKind: "zoom_meeting_started",
-            extraPayload: ["meeting_topic": "Dmitrii Demidov's Personal Meeting Room"],
-            markers: ["Dmitrii Demidov's Personal Meeting Room"]
+            extraPayload: ["meeting_topic": "Alex Rivera's Personal Meeting Room"],
+            markers: ["Alex Rivera's Personal Meeting Room"]
         )
     }
     // MARK: - Track-6 P6 — vscode/JetBrains sentinel walkbacks

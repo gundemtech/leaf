@@ -584,7 +584,7 @@ final class InsightsSnapshotTests: XCTestCase {
     func testSnapshotCarriesActiveTeammates() {
         let snap = TeammateSnapshot(
             memberID: "m-1",
-            displayName: "Anton",
+            displayName: "Sasha",
             linearID: "LEAF-204",
             branch: "feature/foo",
             repo: "leaf",

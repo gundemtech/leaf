@@ -33,7 +33,7 @@ final class TeammatePresenceReaderTests: XCTestCase {
     }
 
     func testFactoryReturnsRegisteredProvider() throws {
-        let sentinel = TeammateSnapshot(memberID: "m1", displayName: "Anton",
+        let sentinel = TeammateSnapshot(memberID: "m1", displayName: "Sasha",
                                         linearID: nil, branch: nil, repo: nil,
                                         currentApp: nil, lastActivityAtMs: 0)
         TeammatePresenceReaderFactory.register { _ in

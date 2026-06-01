@@ -16,7 +16,7 @@ final class TeamNRowComposerTests: XCTestCase {
 
     private func make(
         memberID: String = "m-1",
-        displayName: String = "Anton Bochkarev",
+        displayName: String = "Sasha Volkov",
         linearID: String? = nil,
         branch: String? = nil,
         repo: String? = nil,
@@ -65,11 +65,11 @@ final class TeamNRowComposerTests: XCTestCase {
     // MARK: - initials
 
     func testInitials_TwoWord() {
-        XCTAssertEqual(TeamNRowComposer.initials("Dmitrii Demidov"), "DD")
+        XCTAssertEqual(TeamNRowComposer.initials("Alex Rivera"), "AR")
     }
 
     func testInitials_OneWord() {
-        XCTAssertEqual(TeamNRowComposer.initials("Anton"), "A")
+        XCTAssertEqual(TeamNRowComposer.initials("Sasha"), "S")
     }
 
     func testInitials_Empty() {
@@ -129,10 +129,10 @@ final class TeamNRowComposerTests: XCTestCase {
     // MARK: - a11yLabel
 
     func testA11yLabel_AllFields() {
-        let snap = make(displayName: "Anton", branch: "feature/foo", currentApp: "Xcode")
+        let snap = make(displayName: "Sasha", branch: "feature/foo", currentApp: "Xcode")
         XCTAssertEqual(
             TeamNRowComposer.a11yLabel(snap, relativeTime: "2m ago"),
-            "Anton, Xcode, feature/foo, 2m ago"
+            "Sasha, Xcode, feature/foo, 2m ago"
         )
     }
 
@@ -161,10 +161,10 @@ final class TeamNRowComposerTests: XCTestCase {
     }
 
     func testA11yLabel_EmptyStringMetaSkipped() {
-        let snap = make(displayName: "Anton", branch: "", currentApp: "Xcode")
+        let snap = make(displayName: "Sasha", branch: "", currentApp: "Xcode")
         XCTAssertEqual(
             TeamNRowComposer.a11yLabel(snap, relativeTime: "now"),
-            "Anton, Xcode, now"
+            "Sasha, Xcode, now"
         )
     }
 

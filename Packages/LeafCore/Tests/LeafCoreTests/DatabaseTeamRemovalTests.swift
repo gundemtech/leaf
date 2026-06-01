@@ -291,7 +291,7 @@ final class DatabaseTeamRemovalTests: XCTestCase {
             workspaceID: orgID,
             role: .admin,
             pubkeyHex: String(repeating: "ab", count: 32),
-            displayName: "Dmitrii",
+            displayName: "Alex",
             addedAt: Date(timeIntervalSince1970: 1_700_000_000),
             removedAt: nil
         ))
@@ -300,7 +300,7 @@ final class DatabaseTeamRemovalTests: XCTestCase {
             workspaceID: orgID,
             role: .member,
             pubkeyHex: String(repeating: "cd", count: 32),
-            displayName: "Anton",
+            displayName: "Sasha",
             addedAt: Date(timeIntervalSince1970: 1_700_001_000),
             removedAt: nil
         ))
