@@ -73,6 +73,10 @@ public final class Database: @unchecked Sendable {
         // M029 — Track-6 P3 (renamed from M026; slot M026 occupied by Track-5/S8
         // substrate on integration-T10 branch).
         migrator.registerMigration029BrowserDomainAllow()
+        // M030 — Track-6 P4 GoogleCalendar (renamed from dev M027; slot M027
+        // occupied by InviteSystemRedesign on the integration trunk). Clean
+        // append after M029 — Ph B trunk unification.
+        migrator.registerMigration030GoogleCalendarTracker()
         try migrator.migrate(pool)
 
         return Database(pool: pool, config: config, mode: .writer)

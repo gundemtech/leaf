@@ -493,7 +493,10 @@ final class MigrationTests: XCTestCase {
                 Schema.InviteTokens.tableName,
                 // M029 Track-6 P3 browser per-domain allow-list (renamed from M026;
                 // integration-T10). M028 — index only, no new table.
-                Schema.BrowserDomainAllow.tableName
+                Schema.BrowserDomainAllow.tableName,
+                // M030 Track-6 P4 GoogleCalendar typed-event tracker (renamed from
+                // dev M027; Ph B trunk unification — appended after M029).
+                Schema.GoogleCalendarTracker.tableName
             ]
             XCTAssertEqual(tables, expected)
         }
