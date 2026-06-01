@@ -12,7 +12,7 @@
 //    • Notifications  — NotificationsSettingsSection
 //    • Data           — Background / Folders / LocalApps / SystemObservers /
 //                       AITools / BrowserAllowList
-//    • General        — Advanced / Updates / (DebugDiagnostics in DEBUG)
+//    • General        — Advanced / Updates / DebugDiagnostics
 //
 //  The sub-section views are unchanged — they each wrap themselves in
 //  LeafSection + LeafCard and pull their own @Environment. Gating them behind a
@@ -104,9 +104,10 @@ struct WindowSettingsView: View {
             case .general:
                 AdvancedSettingsSection()
                 UpdatesSection(updater: updater)
-                #if DEBUG
-                    DebugDiagnosticsSection()
-                #endif
+                // Always visible (incl. signed release): this is a user-facing
+                // troubleshooting panel ("почему не детектит"), not a dev-only
+                // tool — matches DebugDiagnosticsSection's own design intent.
+                DebugDiagnosticsSection()
             }
         }
     }
