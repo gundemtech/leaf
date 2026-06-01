@@ -281,6 +281,16 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     case vscodeWorkspaceOpened            = "vscode_workspace_opened"
     case jetbrainsRecentProjectObserved   = "jetbrains_recent_project_observed"
     case ideWindowTitleObserved           = "ide_window_title_observed"
+
+    // MARK: - Phase Track-6 P4 — Google Calendar deep (6 kinds, all default OFF per ADR-020)
+    // Clock-driven focus/OOO/working-location transitions. ADR-010: structural
+    // enum buckets + counts only; event summaries L4-gated, no freeform body.
+    case googleCalendarEventObserved          = "google_calendar_event_observed"
+    case googleCalendarFocusBlockStarted      = "google_calendar_focus_block_started"
+    case googleCalendarFocusBlockEnded        = "google_calendar_focus_block_ended"
+    case googleCalendarOOOStarted             = "google_calendar_ooo_started"
+    case googleCalendarOOOEnded               = "google_calendar_ooo_ended"
+    case googleCalendarWorkingLocationChanged = "google_calendar_working_location_changed"
 }
 
 /// Phase 4.7.A — onboarding default enabled-state per event_kind.
@@ -553,6 +563,14 @@ public enum ShareEventTypeDefaults {
         .init(key: .vscodeActiveDocChanged, defaultEnabled: false),
         .init(key: .vscodeWorkspaceOpened, defaultEnabled: false),
         .init(key: .jetbrainsRecentProjectObserved, defaultEnabled: false),
-        .init(key: .ideWindowTitleObserved, defaultEnabled: false)
+        .init(key: .ideWindowTitleObserved, defaultEnabled: false),
+
+        // Track-6 P4 — Google Calendar deep (default OFF per ADR-020).
+        .init(key: .googleCalendarEventObserved, defaultEnabled: false),
+        .init(key: .googleCalendarFocusBlockStarted, defaultEnabled: false),
+        .init(key: .googleCalendarFocusBlockEnded, defaultEnabled: false),
+        .init(key: .googleCalendarOOOStarted, defaultEnabled: false),
+        .init(key: .googleCalendarOOOEnded, defaultEnabled: false),
+        .init(key: .googleCalendarWorkingLocationChanged, defaultEnabled: false)
     ]
 }

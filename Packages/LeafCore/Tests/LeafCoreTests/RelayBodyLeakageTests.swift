@@ -2340,10 +2340,8 @@ final class RelayBodyLeakageTests: XCTestCase {
 
     // MARK: - Phase Track-6 P4 — Google Calendar mapper walkbacks (42 = 7×6)
     //
-    // Phase III.B integration: P4 GCal substrate (GoogleCalendarAPI +
-    // GoogleCalendarEventKind) deferred (GCP gate). Wrapped in `#if false` so
-    // these re-enable cleanly when P4 lands post-integration.
-    #if false
+    // Ph B trunk unification: P4 GCal substrate (GoogleCalendarAPI +
+    // GoogleCalendarEventKind) landed → these walkbacks re-enabled.
     //
     // Mapper-level sweep — for each of 6 google_calendar_* event_kinds and
     // each of 7 forbidden-field families, inject a unique sentinel through
@@ -2544,8 +2542,6 @@ final class RelayBodyLeakageTests: XCTestCase {
             }
         }
     }
-
-    #endif // false — Phase III.B GCal deferred
 
     // MARK: - Phase Track-6 P5 — Zoom Deep walkbacks
 

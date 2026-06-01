@@ -62,7 +62,8 @@ final class M011EventKindIndexTests: XCTestCase {
             // integration-T10 branch).
             // M029 Track-6 P3 browser domain allow-list (renamed from M026;
             // integration-T10 branch).
-            XCTAssertEqual(applied.count, 29)
+            // M030 Track-6 P4 GoogleCalendar tracker (Ph B trunk unification).
+            XCTAssertEqual(applied.count, 30)
         }
     }
 }

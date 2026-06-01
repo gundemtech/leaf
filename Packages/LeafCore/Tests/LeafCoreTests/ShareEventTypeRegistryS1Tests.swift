@@ -28,8 +28,8 @@ final class ShareEventTypeRegistryS1Tests: XCTestCase {
     /// Track-6 P1 grew it 152 → 168. Track-6 P2 grew it 168 → 174. Track-6 P3 grew it 174 → 182 (+8 Browsers Deep).
     /// Track-6 P5 grew it 182 → 185 (+3 Zoom Deep).
     func testRegistrySizeIs125() {
-        XCTAssertEqual(ShareEventTypeKey.allCases.count, 192)
-        XCTAssertEqual(ShareEventTypeDefaults.all.count, 192)
+        XCTAssertEqual(ShareEventTypeKey.allCases.count, 198)
+        XCTAssertEqual(ShareEventTypeDefaults.all.count, 198)
     }
 
     /// #3 — every new S1 key defaults to OFF (ADR-020).

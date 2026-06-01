@@ -73,7 +73,8 @@ final class M013EventLinksTests: XCTestCase {
             // M027 invite-redesign: invite_tokens + workspaces ADD COLUMN defaults.
             // M028 Track-6 P1 partial expression index (integration-T10).
             // M029 Track-6 P3 browser domain allow-list (integration-T10).
-            XCTAssertEqual(applied.count, 29)
+            // M030 Track-6 P4 GoogleCalendar tracker (Ph B trunk unification).
+            XCTAssertEqual(applied.count, 30)
         }
     }
 }

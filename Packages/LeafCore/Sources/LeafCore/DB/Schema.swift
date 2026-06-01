@@ -833,4 +833,5 @@ public enum IntegrationProvider: String, Sendable, Hashable, CaseIterable {
     case linear
     case github
     case slack
+    case googleCalendar = "google_calendar"  // Track-6 P4
 }

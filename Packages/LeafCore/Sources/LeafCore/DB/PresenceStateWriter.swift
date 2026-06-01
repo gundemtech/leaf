@@ -19,6 +19,7 @@ public struct PresenceStateWriter: Sendable {
         case linear
         case slack
         case derived
+        case googleCalendar = "google_calendar"  // Track-6 P4
         /// Track-6 P5 — Zoom Deep presence row. State JSON shape:
         ///   { meeting_active: Bool, last_observed_at_ms: Int64,
         ///     meeting_started_at_ms?: Int64, cold_start?: Bool,

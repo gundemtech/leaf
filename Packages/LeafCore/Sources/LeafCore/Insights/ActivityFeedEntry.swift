@@ -7,6 +7,7 @@ import Foundation
 /// recognized shape — UI can hide them or render generically.
 public enum ActivityProvider: String, Sendable, Hashable, CaseIterable, Codable {
     case local, linear, github, slack, ai, unknown
+    case googleCalendar = "google_calendar"  // Track-6 P4
 }
 
 /// One row in the chronological activity feed surfaced by the Activity tab.

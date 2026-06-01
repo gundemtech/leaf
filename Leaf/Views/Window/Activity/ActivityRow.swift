@@ -55,6 +55,7 @@ struct ActivityRow: View {
         case .github:  return "GITHUB"
         case .slack:   return "SLACK"
         case .ai:      return "AI"
+        case .googleCalendar: return "CALENDAR"  // Track-6 P4
         case .unknown: return "EVENT"
         }
     }
@@ -153,6 +154,7 @@ private struct ProviderIcon: View {
         case .github:  return "chevron.left.forwardslash.chevron.right"
         case .slack:   return "bubble.left.and.bubble.right"
         case .ai:      return "sparkles"
+        case .googleCalendar: return "calendar"  // Track-6 P4
         case .unknown: return "circle"
         }
     }

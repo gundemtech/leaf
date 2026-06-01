@@ -489,6 +489,40 @@ enum AgentMain {
             screenshotDirectoryOverride: agentThresholds.screenshotDirectoryOverridePath
         )
 
+        // Track-6 P4 — Google Calendar collector. Client ID/secret come from
+        // xcconfig → Info.plist interpolation (mirror Linear/Slack precedent;
+        // see Config/Production.xcconfig + Config/Local.xcconfig.example).
+        // Unsubstituted `$(...)` placeholder OR empty string → collector
+        // skips startup gracefully so substrate builds (CI, dev without
+        // GCP project) stay green.
+        let googleCalendarCollector: GoogleCalendarCollector? = {
+            let clientIDKey = GoogleCalendarOAuthEndpoints.infoPlistClientIDKey
+            let clientSecretKey = GoogleCalendarOAuthEndpoints.infoPlistClientSecretKey
+            guard
+                let clientID = Bundle.main.object(forInfoDictionaryKey: clientIDKey) as? String,
+                !clientID.isEmpty,
+                !clientID.hasPrefix("$("),
+                let clientSecret = Bundle.main.object(forInfoDictionaryKey: clientSecretKey) as? String,
+                !clientSecret.isEmpty,
+                !clientSecret.hasPrefix("$(")
+            else {
+                agentLogger.info("Google Calendar OAuth client not configured — collector disabled")
+                return nil
+            }
+            let apiClient = ProdGoogleCalendarAPIClient()
+            let oauthHTTP = GoogleCalendarOAuthClient()
+            let refresher = GoogleCalendarTokenRefresher(
+                http: oauthHTTP,
+                clientID: clientID,
+                clientSecret: clientSecret
+            )
+            return GoogleCalendarCollector(
+                apiClient: apiClient,
+                tokenRefresher: refresher,
+                database: database
+            )
+        }()
+
         AgentLifetime.writer = writer
         AgentLifetime.activeAppCollector = activeAppCollector
         AgentLifetime.idleCollector = idleCollector
@@ -534,6 +568,8 @@ enum AgentMain {
         AgentLifetime.wifiCollector = wifiCollector
         AgentLifetime.clipboardCollector = clipboardCollector
         AgentLifetime.localFilesWatcher = localFilesWatcher
+        // Track-6 P4 — Google Calendar collector lifetime slot.
+        AgentLifetime.googleCalendarCollector = googleCalendarCollector
 
         // Phase Track-6 P3 — BrowserBookmarksWatcher.
         // FSEvents-backed bookmark count watcher for Chrome (multi-profile) and
@@ -704,6 +740,8 @@ enum AgentMain {
         Task { await wifiCollector.start() }
         Task { await clipboardCollector.start() }
         DispatchQueue.main.async { localFilesWatcher.start() }
+        // Track-6 P4 — Google Calendar collector (nil when OAuth client unconfigured).
+        if let gcc = googleCalendarCollector { Task { await gcc.start() } }
         // Phase Track-6 P3 — BrowserBookmarksWatcher. Sets up FSEventStreams for
         // Chrome (multi-profile) and Safari (FDA-gated) bookmark file monitoring.
         Task { await browserBookmarksWatcher.start() }
@@ -796,6 +834,8 @@ enum AgentMain {
             if let l = AgentLifetime.linearCollector { await l.stop() }
             if let g = AgentLifetime.githubCollector { await g.stop() }
             if let s = AgentLifetime.slackCollector { await s.stop() }
+            // Track-6 P4 — Google Calendar collector.
+            if let gcc = AgentLifetime.googleCalendarCollector { await gcc.stop() }
             if let w = AgentLifetime.writer {
                 await w.flush()
                 await w.stop()
@@ -871,6 +911,8 @@ enum AgentLifetime {
     nonisolated(unsafe) static var wifiCollector: WiFiCollector?
     nonisolated(unsafe) static var clipboardCollector: ClipboardCollector?
     nonisolated(unsafe) static var localFilesWatcher: LocalFilesWatcher?
+    // Track-6 P4 — Google Calendar collector.
+    nonisolated(unsafe) static var googleCalendarCollector: GoogleCalendarCollector?
     // Phase Track-6 P3 — browser bookmark FSEvents watcher.
     nonisolated(unsafe) static var browserBookmarksWatcher: BrowserBookmarksWatcher?
     // Phase Track-6 P3 — darwin notification observer token for browser allow-list

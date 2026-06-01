@@ -335,8 +335,7 @@ final class DispatchCoverageTests: XCTestCase {
 
     // MARK: - Track-6 P4 — Google Calendar coverage
     //
-    // Phase III.B integration: P4 deferred (GCP gate). Re-enables when P4 lands.
-    #if false
+    // Ph B trunk unification: P4 GCal data layer landed → fence re-enabled.
 
     /// #19 — Track-6 P4 Google Calendar parity fence. Every
     /// `GoogleCalendarEventKind.allCases.rawValue` is either handled by
@@ -370,8 +369,6 @@ final class DispatchCoverageTests: XCTestCase {
             )
         }
     }
-
-    #endif // false — Phase III.B P4 GCal deferred
 
     // MARK: - Track-6 P2 — Xcode Deep coverage
 
