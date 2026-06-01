@@ -86,6 +86,19 @@ License: **TBD** (Elastic License 2.0 vs. AGPL — see [`docs/OSS_STRATEGY.md`](
 
 ```bash
 xcodebuild -project Leaf.xcodeproj -scheme Leaf -destination 'platform=macOS' build
+# or, all schemes:  just build-all     tests:  just test-core
+```
+
+A clean clone builds and runs against stub implementations (`StubInsights` +
+`DatabaseConfig.weakDefaults`) — enough to develop the UI and public layers. The
+production implementations of `LeafCorePrivate` live in a separate private repo
+(`gundemtech/leaf-private`, maintainer access required) and are gitignored here.
+To build with them:
+
+```bash
+just moat-sync                                 # clone/refresh leaf-private into the gitignored build paths
+cp Config/Local.xcconfig.example Config/Local.xcconfig   # then uncomment: LEAF_FLAGS = LEAF_PROD
+just build-all
 ```
 
 ## Repository structure

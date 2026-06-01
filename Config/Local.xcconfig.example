@@ -4,6 +4,9 @@
 
 // Раскомментируй чтобы собрать с production moat-реализациями (SQL тела,
 // точные пороги). Без этого флага — StubInsights + DatabaseConfig.weakDefaults.
+// Production moat (LeafCorePrivate/Prod) живёт в приватном репо gundemtech/leaf-private
+// и gitignored здесь. Сначала `just moat-sync` (склонирует/обновит его в build-пути),
+// потом раскомментируй строку ниже.
 // LEAF_FLAGS = LEAF_PROD
 
 // Phase 4.1 — Linear OAuth client_id override для dev / staging. Production
@@ -21,3 +24,13 @@
 // раскомментируй:
 //
 // GITHUB_OAUTH_CLIENT_ID = Iv1.xxxxxxxxxxxxxxxx
+
+// Track-6 P4 — Google Calendar OAuth public client (PKCE loopback).
+// Создай OAuth 2.0 Client ID на https://console.cloud.google.com → APIs & Services →
+// Credentials (Application type = Desktop). Redirect URI variable port — Google
+// разрешает any loopback port (RFC 8252-compliant). Empty defaults в Production.xcconfig
+// → GoogleCalendarCollector silently skips startup в Agent process (the connect UI
+// ships with the Track-7 follow-up).
+//
+// GOOGLE_CALENDAR_OAUTH_CLIENT_ID = xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com
+// GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET = GOCSPX-xxxxxxxxxxxxxxxxxxxxxxxx

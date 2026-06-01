@@ -31,6 +31,17 @@ install-hooks:
     chmod +x "$hook"
     echo "Installed $hook → scripts/leak-guard.sh"
 
+# Clone/refresh the private moat (gundemtech/leaf-private) into the gitignored
+# build paths. Run once on a fresh clone; re-run to pull moat updates.
+# `just moat-sync --force` overwrites local build-path edits (backed up first).
+moat-sync *ARGS:
+    @./scripts/moat-sync.sh {{ARGS}}
+
+# Reverse-sync local moat edits from the build paths back into the leaf-private
+# clone, then commit + push there.
+moat-push:
+    @./scripts/moat-push.sh
+
 # Build all 5 Xcode schemes (Debug).
 build-all:
     #!/usr/bin/env bash
