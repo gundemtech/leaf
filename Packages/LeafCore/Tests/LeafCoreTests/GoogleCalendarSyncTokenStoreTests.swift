@@ -145,7 +145,7 @@ final class GoogleCalendarSyncTokenStoreTests: XCTestCase {
         let cals: [GoogleCalendarSyncTokenStore.KnownCalendar] = [
             .init(
                 id: "primary",
-                summary: "demidov@example.com",
+                summary: "user@example.com",
                 summaryOverride: nil,
                 accessRole: "owner",
                 primary: true,

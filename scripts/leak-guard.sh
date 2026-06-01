@@ -84,6 +84,7 @@ scan() {
     case "$mode" in
         word)  gargs=(-nI -w -F);  gflags="-nIwF" ;;   # whole-word, fixed, case-sensitive
         lit)   gargs=(-nI -F);     gflags="-nIF"  ;;   # substring, fixed, case-sensitive
+        ilit)  gargs=(-nI -F -i);  gflags="-nIFi" ;;   # substring, fixed, case-INsensitive (surnames in emails/logins)
         regex) gargs=(-nIE);       gflags="-nIE"  ;;   # extended regex
     esac
     for needle in "$@"; do
@@ -117,8 +118,16 @@ NAME_LIT_B64=(             # Cyrillic incl. declensions: substring, case-sensiti
 )
 NAME_WORD=(); for b in "${NAME_WORD_B64[@]}"; do NAME_WORD+=("$(b64d "$b")"); done
 NAME_LIT=();  for b in "${NAME_LIT_B64[@]}";  do NAME_LIT+=("$(b64d "$b")");  done
+# Surnames / formal first name — case-INsensitive substring: catches a lowercase
+# surname embedded in an email local-part, a login, or a hyphenated handle that
+# the case-sensitive whole-word pass above misses. Safe (these tokens have no
+# legit lowercase use); short first names stay whole-word case-sensitive above
+# to avoid matching them inside common substrings.
+NAME_ILIT_B64=( RG1pdHJpaQ== RGVtaWRvdg== Qm9jaGthcmV2 )
+NAME_ILIT=(); for b in "${NAME_ILIT_B64[@]}"; do NAME_ILIT+=("$(b64d "$b")"); done
 scan "Team-member name (use a neutral placeholder)" word "${NAME_WORD[@]}"
 scan "Team-member name (use a neutral placeholder)" lit  "${NAME_LIT[@]}"
+scan "Team-member name (use a neutral placeholder)" ilit "${NAME_ILIT[@]}"
 
 # ---------------------------------------------------------------------------
 # Category 2 — tuned SQLCipher pragma numerics (structural; value never here).

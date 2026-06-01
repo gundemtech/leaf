@@ -65,6 +65,6 @@ final class DetectorMoatPublicSubstrateTests: XCTestCase {
         ]
         XCTAssertEqual(m.match(githubLogin: "demoffsrmain",
                                slackIdentifiers: ids)?.userID, "demoffsrmain")
-        XCTAssertNil(m.match(githubLogin: "ddemidov", slackIdentifiers: ids))
+        XCTAssertNil(m.match(githubLogin: "octocat", slackIdentifiers: ids))
     }
 }

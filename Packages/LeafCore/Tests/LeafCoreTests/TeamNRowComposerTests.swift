@@ -119,7 +119,7 @@ final class TeamNRowComposerTests: XCTestCase {
 
     func testPaletteIndex_Bounded() {
         // Sweep a few memberIDs and assert each maps within [0, paletteCount).
-        for id in ["m-1", "m-2", "m-3", "anton-bochkarev", "x"] {
+        for id in ["m-1", "m-2", "m-3", "m-4", "x"] {
             let idx = TeamNRowComposer.paletteIndex(memberID: id, paletteCount: 5)
             XCTAssertGreaterThanOrEqual(idx, 0, "id=\(id)")
             XCTAssertLessThan(idx, 5, "id=\(id)")
