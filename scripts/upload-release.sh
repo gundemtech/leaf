@@ -59,6 +59,7 @@ AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" \
 aws s3 cp "$RELEASES_DIR/" "s3://$R2_BUCKET/releases/" \
     --recursive \
     --endpoint-url "$R2_ENDPOINT" \
+    --region auto \
     --exclude "*" \
     --include "*.dmg" \
     --include "*.zip" \
@@ -70,6 +71,7 @@ AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" \
 AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" \
 aws s3 cp "$RELEASES_DIR/appcast.xml" "s3://$R2_BUCKET/appcast.xml" \
     --endpoint-url "$R2_ENDPOINT" \
+    --region auto \
     --content-type "application/xml" \
     --cache-control "max-age=300"
 
