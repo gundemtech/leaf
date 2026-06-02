@@ -151,22 +151,28 @@ scan "Hardcoded code-signing identity with name+team (use \$LEAF_SIGN_ID)" \
 
 # ---------------------------------------------------------------------------
 # Category 4 — moat source code accidentally tracked.
-# Only Placeholder.swift may be tracked under the gitignored moat dirs.
+# Only Placeholder.swift may be tracked under the gitignored moat dirs. Also
+# catches disabled/renamed moat tests (e.g. *.swift.disabled-track5-*) — the
+# `.disabled-` suffix dodges the *.swift glob, which is how one slipped in.
 # ---------------------------------------------------------------------------
 moat_hits=""
 if [[ "$FIXTURES_ONLY" != "1" ]]; then
     moat_hits="$(git ls-files \
             'Packages/LeafCore/Sources/LeafCorePrivate/*.swift' \
             'Packages/LeafCore/Sources/LeafCorePrivate/**/*.swift' \
+            'Packages/LeafCore/Sources/LeafCorePrivate/*.disabled-*' \
+            'Packages/LeafCore/Sources/LeafCorePrivate/**/*.disabled-*' \
             'Packages/LeafCore/Tests/LeafCorePrivateTests/*.swift' \
-            'Packages/LeafCore/Tests/LeafCorePrivateTests/**/*.swift' 2>/dev/null \
+            'Packages/LeafCore/Tests/LeafCorePrivateTests/**/*.swift' \
+            'Packages/LeafCore/Tests/LeafCorePrivateTests/*.disabled-*' \
+            'Packages/LeafCore/Tests/LeafCorePrivateTests/**/*.disabled-*' 2>/dev/null \
         | grep -v '/Placeholder\.swift$' || true)"
 fi
 # Self-test hook: an extra path that looks like tracked moat source.
 if [[ ${#EXTRA_FILES[@]} -gt 0 ]]; then
     for f in "${EXTRA_FILES[@]}"; do
         case "$f" in
-            *LeafCorePrivate*.swift|*LeafCorePrivateTests*.swift)
+            *LeafCorePrivate*.swift|*LeafCorePrivateTests*.swift|*LeafCorePrivate*.disabled-*|*LeafCorePrivateTests*.disabled-*)
                 [[ "$f" == *Placeholder.swift ]] || moat_hits+=$'\n'"$f" ;;
         esac
     done

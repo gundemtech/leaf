@@ -56,6 +56,7 @@ assert_detect "OpenAI-style key"           "sk-0123456789abcdefghijKLMN"
 assert_detect "APNs identifier"            "APNS_TEAM_ID=ABCDE12345"
 assert_detect "hardcoded signing identity" 'SIGN_ID="Developer ID Application: Foo Bar (ABCDE12345)"'
 assert_detect "moat source tracked"        "import Foundation"  "sub/LeafCorePrivate_Secret.swift"
+assert_detect "disabled-suffixed moat test" "import XCTest"      "sub/LeafCorePrivateTests_Foo.disabled-track5-x"
 assert_detect "personal email address"     "let owner = \"someone@gmail.com\""
 
 # --- Negative controls: carve-outs and placeholders must pass ---
