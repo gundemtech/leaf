@@ -12,6 +12,26 @@
 - Коммиты: imperative, коротко, без внутренних имён / ship dates / клиентских деталей
 - **Перед каждым `git push`: `/pre-push-leaf`** (проверка diff на утечки moat-деталей, см. корневой `CLAUDE.md`)
 
+## Правила гигиены (trunk-based-lite)
+
+Восемь правил, чтобы 60-веток-хаос и M024↔M028 / M026↔M029 раскол не вернулись. Часть авто-enforced (`just preflight` / pre-push hook / migration-guard), часть — documented дисциплина. Установить hook один раз на клон: `just install-hooks`.
+
+- **R1** — Phase-done ⟺ `just preflight` green (leak-guard + check-tokens + check-migrations + gitleaks + build-all 5 схем + SPM-тесты). Verified, не «вроде работает». *(auto: preflight)*
+- **R2** — Каждый push в public `leaf` проходит leak-guard (pre-push hook, `core.hooksPath .githooks`). Bypass только осознанный `--no-verify` с причиной. *(auto: hook)*
+- **R3** — Migrations: следующий `Mxxx` по порядку, без дублей, никогда не переиспользовать номер. *(auto: `scripts/check-migrations.sh`)*
+- **R4** — Trunk-based-lite: `dev` = единственный транк; `main` = только release-теги; фича-ветки короткие, удаляются СРАЗУ после merge (+ worktree чистится); direct push в транк только `chore`/`ci`/`docs`/`release`; одна phase = одна сессия.
+- **R5** — Секреты только через `!`-prefix / env-file (umask 077, scrub) / SSM — никогда в чат, трекаемые файлы или tool-args. Moat — только в `leaf-private` (gitignored `LeafCorePrivate/Prod`), никогда в public `leaf`. *(auto-частично: leak-guard/gitleaks)*
+- **R6** — Release: version monotonic bump (pbxproj) + commit ДО `release.sh`; tag `vX` per ship; `--clean` (или `rm .stamps`) между ship-циклами; `LEAF_SIGN_ID` env-override.
+- **R7** — Несовместимая БД ≠ краш. Бинарь старше схемы БД → recovery-Alert (migration-guard, write+read paths), не «Couldn't load Home». *(auto: migration-guard; recovery-path gated MANDATORY manual smoke — sqlite3 future-row инжект, — не preflight)*
+- **R8** — **Phase-close чеклист** (в конце каждой фазы; расширяет Stage 8 «Ship» раздела «Одна phase = одна сессия» — R8 канон):
+  1. `just preflight` green (R1).
+  2. Ветку фазы + worktree удалить (R4).
+  3. План фазы → `.claude/plans/archive/`.
+  4. `current-state.md` обновить (≤50 строк, текущий срез — не история).
+  5. `/audit-brain` (размеры `.claude/shared/*.md` ≤200; current-state ≤50; CLAUDE.md ≤100).
+  6. Whitepaper sync если решение whitepaper-уровня (process/implementation moat — НЕ синкаем).
+  7. Запись «фаза closed» в прогресс-лог трека.
+
 ## Git — whitepaper (`gundemtech/leaf-docs`, ПУБЛИЧНЫЙ)
 - Клон: `~/Desktop/Leaf/leaf-docs` (рядом с `~/Desktop/Leaf/leaf`)
 - Прямой push в `main` (branch protection пока нет)
