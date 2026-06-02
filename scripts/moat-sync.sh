@@ -23,6 +23,11 @@ set -euo pipefail
 FORCE=0
 [[ "${1:-}" == "--force" ]] && FORCE=1
 
+# Shared archive/backup helpers — sourced relative to THIS script (not the repo
+# root), so it resolves even when run against an arbitrary working tree.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$SCRIPT_DIR/lib/moat-archive.sh"
+
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 PRIVATE_DIR="${LEAF_PRIVATE_DIR:-$(dirname "$REPO_ROOT")/leaf-private}"
 PRIVATE_SLUG="gundemtech/leaf-private"
@@ -53,11 +58,13 @@ fi
 
 # --- Step 2: back up existing build-path moat + divergence guard -------------
 if find "$SRC_DST" "$TEST_DST" -name '*.swift' ! -name 'Placeholder.swift' 2>/dev/null | grep -q .; then
-    BACKUP="$HOME/Desktop/Leaf/_moat-archive/autobackup-$(date +%Y%m%d-%H%M%S)"
+    ARCHIVE_DIR="$(leaf_moat_archive_dir)"
+    BACKUP="$ARCHIVE_DIR/autobackup-$(date +%Y%m%d-%H%M%S)"
     cyan "[2/5] Existing build-path moat found → backup to $BACKUP"
     mkdir -p "$BACKUP/Prod" "$BACKUP/Tests"
     rsync -a "$SRC_DST/" "$BACKUP/Prod/" 2>/dev/null || true
     rsync -a -f 'P Placeholder.swift' "$TEST_DST/" "$BACKUP/Tests/" 2>/dev/null || true
+    leaf_moat_gc_autobackups "$ARCHIVE_DIR" "$(leaf_moat_keep)"
     if ! diff -rq "$SRC_SRC" "$SRC_DST" >/dev/null 2>&1 \
        || ! diff -rq -x 'Placeholder.swift' -x '*.disabled-*' "$TEST_SRC" "$TEST_DST" >/dev/null 2>&1; then
         yellow "  build-path moat DIFFERS from leaf-private (backed up to $BACKUP)."

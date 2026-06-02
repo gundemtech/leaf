@@ -65,9 +65,18 @@ moat-sync *ARGS:
     @./scripts/moat-sync.sh {{ARGS}}
 
 # Reverse-sync local moat edits from the build paths back into the leaf-private
-# clone, then commit + push there.
+# clone, then commit + push there. Backs up the clone's moat before the
+# reverse --delete (recoverable in the moat archive).
 moat-push:
     @./scripts/moat-push.sh
+
+# Fixture-based self-tests for the moat tooling: retention GC (mtime-based),
+# moat-push pre-delete clone backup, moat-sync archive override + GC. Fast and
+# hermetic — sandboxed, no network, xcodebuild/swift stubbed.
+moat-self-test:
+    @./scripts/tests/test-moat-archive-retention.sh
+    @./scripts/tests/test-moat-push-backup.sh
+    @./scripts/tests/test-moat-sync-archive.sh
 
 # Build all 5 Xcode schemes (Debug). Exit-honest: a BUILD FAILED in any scheme
 # aborts non-zero (do NOT pipe xcodebuild→tail under set -e — the pipe's exit is
