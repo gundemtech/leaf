@@ -137,7 +137,7 @@ SQLCipher таблицы:
 - `where_stopped_log` — append-only WhereStoppedDeriver snapshots (D3 M014): `(generated_at_ms, anchor_event_id NULLABLE, excerpt, wip_signals_json)`. Заменяет планировавшийся sessions extension (substrate не имеет sessions table).
 - `detector_offsets` — per-detector cursor (D3 M014): `(detector_kind PK, cursor_event_id, last_run_at_ms)` pre-seeded `decision`/`open_question`/`blocker_pattern`. Scheduled detectors (linear_stuck, where_stopped) cursor не используют.
 
-Миграции — через GRDB migrations framework. Текущий счёт: M001..M021 (30 таблиц включая virtual + sidecar; Track-5 S4 adds M020 messages_mirror + M021 apns_token_local).
+Миграции — через GRDB migrations framework. Текущий счёт: M001..M030 (unified trunk; счёт таблиц — см. git). **Migration-guard (Ph C, R7):** на open БД, чьи applied-миграции новее бинаря (`migrator.hasBeenSuperseded`), `Database.openForWrite`/`openForRead` бросают `LeafError.databaseSchemaFromFuture` → MenuBarApp показывает `DatabaseRecoveryView` (Backup&Reset/Reveal/Quit), Agent `exit(0)` (no launchd crash-loop), MCP — clean error; не «Couldn't load Home».
 
 ## Share Controls (ADR-020)
 Юзер контролирует что именно видно команде. Default — пустой whitelist, ничего не шарится.
