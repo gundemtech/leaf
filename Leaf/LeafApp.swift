@@ -113,6 +113,11 @@ struct LeafApp: App {
   /// wipe) and RootView's daily-tick scheduler (auto-prune past 30d).
   @State private var workspaceCascadeDeleter: WorkspaceCascadeDeleter?
   @State private var windowState = WindowState()
+  // Ph C migration-guard (D-C4 / R7) — non-nil when the on-disk DB carries
+  // migrations a newer Leaf build wrote. Set ONCE in init() (single chokepoint,
+  // before the ~25 scattered openForWrite callers); when set, the scene shows
+  // DatabaseRecoveryView instead of the normal UI on every surface.
+  @State private var schemaMismatch: DatabaseRecoveryInfo?
   @Environment(\.scenePhase) private var scenePhase
 
   init() {
@@ -153,6 +158,14 @@ struct LeafApp: App {
     // ordered initialization @State properties (нужен для post-init register
     // call ниже). LaunchAgentService init синхронно reads SMAppService.status
     // → нужна детерминированная сборка inline.
+    // Ph C migration-guard (D-C4 / R7) — single pre-flight BEFORE the ~25
+    // scattered openForWrite callers below. If the DB was written by a newer
+    // Leaf build, every opener would throw/degrade-to-nil (and the TeamFeed
+    // fallback would hit fatalError); instead we detect it once here, drive the
+    // recovery UI from `schemaMismatch`, and keep init() crash-free.
+    let schemaMismatchLocal = LeafApp.detectSchemaMismatch()
+    _schemaMismatch = State(initialValue: schemaMismatchLocal)
+
     let agent = LaunchAgentService()
     _launchAgent = State(initialValue: agent)
     _updater = State(initialValue: UpdaterController())
@@ -416,9 +429,25 @@ struct LeafApp: App {
             queryService: queryService,
             memberResolver: memberResolver
           ))
+      } else if schemaMismatchLocal != nil,
+        let tmp = try? LeafCore.Database.openForWrite(
+          at: FileManager.default.temporaryDirectory
+            .appendingPathComponent("leaf-recovery-\(UUID().uuidString).sqlite"),
+          config: DatabaseConfig.weakDefaults,
+          encryption: nil)
+      {
+        // Future-schema DB: the recovery UI takes over the window, but init must
+        // still finish. Hand TeamFeedReader a throwaway temp DB (migrates fresh,
+        // empty, never shown) rather than crashing on the line below.
+        let queryService = TeamFeedQueryService(database: tmp)
+        _teamFeedReader = State(
+          initialValue: TeamFeedReader(
+            queryService: queryService,
+            memberResolver: memberResolver
+          ))
       } else {
-        // Genuine cold-start broken state — fatalError keeps the crash
-        // localized to init rather than a confusing runtime null deref.
+        // Genuine cold-start broken state (not schema-from-future) — fatalError
+        // keeps the crash localized to init rather than a confusing null deref.
         fatalError("LeafApp init: cannot open SQLCipher database for TeamFeed")
       }
     }
@@ -556,7 +585,10 @@ struct LeafApp: App {
 
   var body: some Scene {
     Window("Leaf", id: "main") {
-      RootView()
+      if let mismatch = schemaMismatch {
+        DatabaseRecoveryView(info: mismatch)
+      } else {
+        RootView()
         .environment(launchAgent)
         .environment(watchedFolders)
         .environment(linearOAuth)
@@ -655,6 +687,7 @@ struct LeafApp: App {
             inviteAcceptReader.fetch(inviteURL: url)
           }
         }
+      }
     }
     .defaultSize(width: 1100, height: 720)
     .windowResizability(.contentMinSize)
@@ -677,7 +710,11 @@ struct LeafApp: App {
     #endif
 
     MenuBarExtra("Leaf", image: LeafIcons.brand.leaf) {
-      MenuBarContent()
+      if let mismatch = schemaMismatch {
+        DatabaseRecoveryView(info: mismatch)
+          .frame(width: 360)
+      } else {
+        MenuBarContent()
         .environment(launchAgent)
         .environment(watchedFolders)
         .environment(permissions)
@@ -691,6 +728,7 @@ struct LeafApp: App {
         .environment(inviteAcceptReader)
         .environment(inviteURLHandler)  // Phase 5.5.B
         .environment(windowState)
+      }
     }
     .menuBarExtraStyle(.window)
   }
@@ -764,6 +802,41 @@ struct LeafApp: App {
   /// `AttachmentMetadataResolver` (reads events table via json_extract) and
   /// `TeamFeedQueryService` (reads messages_mirror + team_events_mirror via
   /// UNION). Returns `nil` on failure so callers can fall back gracefully.
+  /// Ph C migration-guard (D-C4 / R7) — one-shot probe at init: if the on-disk
+  /// DB carries migrations this binary does not know (written by a newer Leaf
+  /// build), return recovery info for the alert. `nil` on a fresh device (no
+  /// file), a current/older schema, or any non-schema open error (those keep
+  /// flowing through the existing InsightsReader error state). Read-only probe,
+  /// closed immediately.
+  private static func detectSchemaMismatch() -> DatabaseRecoveryInfo? {
+    let url = DatabasePath.defaultURL()
+    guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+    #if LEAF_PROD
+      let config = ProdConfigs.database
+      let encryption: EncryptionOptions? = EncryptionOptions(
+        keyProvider: .callback { @Sendable in
+          try FileKeyStore.fetchOrCreate()
+        },
+        preKeyPragmas: ProdConfigs.sqlcipherPragmasPreKey,
+        postKeyPragmas: ProdConfigs.sqlcipherPragmasPostKey
+      )
+    #else
+      let config = DatabaseConfig.weakDefaults
+      let encryption: EncryptionOptions? = nil
+    #endif
+    do {
+      _ = try LeafCore.Database.openForRead(at: url, config: config, encryption: encryption)
+      return nil
+    } catch let LeafError.databaseSchemaFromFuture(unknown) {
+      leafAppLogger.error(
+        "DB schema from future — unknown migrations: \(unknown.joined(separator: ","), privacy: .public)")
+      return DatabaseRecoveryInfo(unknownMigrations: unknown, dbPath: url.path)
+    } catch {
+      // Non-schema open failure (corruption / key) — leave to InsightsReader.
+      return nil
+    }
+  }
+
   private static func makeDatabaseForTeamFeed() -> LeafCore.Database? {
     let url = DatabasePath.defaultURL()
     #if LEAF_PROD

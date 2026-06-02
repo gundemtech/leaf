@@ -40,6 +40,14 @@ enum AgentMain {
         do {
             database = try Database.openForWrite(at: dbURL, config: databaseConfig, encryption: databaseEncryption)
             agentLogger.info("Database opened at \(dbURL.path, privacy: .public)")
+        } catch let LeafError.databaseSchemaFromFuture(unknown) {
+            // Ph C migration-guard (R7): DB written by a newer Leaf build. A restart
+            // can't fix it, so exit(0) — launchd KeepAlive{SuccessfulExit:false} will
+            // NOT relaunch us into a tight crash-loop churning WAL/locks against the
+            // file the user is recovering. The app's recovery alert drives the fix.
+            agentLogger.error(
+                "DB schema from future (unknown: \(unknown.joined(separator: ","), privacy: .public)) — bailing without restart")
+            exit(0)
         } catch {
             agentLogger.critical("Failed to open database: \(error.localizedDescription, privacy: .public)")
             exit(1)
