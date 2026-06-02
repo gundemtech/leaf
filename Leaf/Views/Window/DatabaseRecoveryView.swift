@@ -27,10 +27,10 @@ struct DatabaseRecoveryView: View {
   @State private var resetError: String?
 
   var body: some View {
-    VStack(spacing: 16) {
+    VStack(spacing: LeafSpace.lg) {
       Image(systemName: "exclamationmark.triangle.fill")
         .font(.system(size: 40))
-        .foregroundStyle(.orange)
+        .foregroundStyle(LeafColor.status.warning)
 
       Text("Database needs attention")
         .font(.title2.weight(.semibold))
@@ -45,18 +45,18 @@ struct DatabaseRecoveryView: View {
         """
       )
       .font(.body)
-      .foregroundStyle(.secondary)
+      .foregroundStyle(LeafColor.text.secondary)
       .multilineTextAlignment(.center)
       .fixedSize(horizontal: false, vertical: true)
 
       if let resetError {
         Text(resetError)
           .font(.callout)
-          .foregroundStyle(.red)
+          .foregroundStyle(LeafColor.status.danger)
           .multilineTextAlignment(.center)
       }
 
-      HStack(spacing: 12) {
+      HStack(spacing: LeafSpace.md) {
         LeafButton("Backup & Reset", variant: .destructive, size: .md) { backupAndReset() }
         LeafButton("Reveal in Finder", variant: .secondary, size: .md) { revealInFinder() }
       }
@@ -65,7 +65,7 @@ struct DatabaseRecoveryView: View {
         NSApplication.shared.terminate(nil)
       }
     }
-    .padding(32)
+    .padding(LeafSpace.xxl)
     .frame(maxWidth: 460)
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
