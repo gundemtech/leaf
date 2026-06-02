@@ -17,6 +17,14 @@ check-tokens-self-test:
 leak-guard:
     @./scripts/leak-guard.sh --report
 
+# Migration linearity guard (R3) — fails on duplicate/gap/out-of-order Mnnn.
+check-migrations:
+    @./scripts/check-migrations.sh
+
+# Run the fixture-based self-test for check-migrations.
+check-migrations-self-test:
+    @./scripts/tests/test-check-migrations.sh
+
 # Run the fixture-based self-test for leak-guard.
 leak-guard-self-test:
     @./scripts/tests/test-leak-guard.sh
