@@ -21,6 +21,11 @@ leak-guard:
 check-migrations:
     @./scripts/check-migrations.sh
 
+# gitleaks secret scan of the tracked tree (belt+suspenders over leak-guard).
+# Needs `brew install gitleaks`. Allowlist in .gitleaks.toml.
+gitleaks:
+    @./scripts/gitleaks-scan.sh
+
 # Run the fixture-based self-test for check-migrations.
 check-migrations-self-test:
     @./scripts/tests/test-check-migrations.sh

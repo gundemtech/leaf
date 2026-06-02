@@ -1,0 +1,27 @@
+# Leaf gitleaks config — belt-and-suspenders secret scan, layered over the
+# bespoke scripts/leak-guard.sh (which owns moat/name/pragma patterns). Runs in
+# `just preflight` and CI (.github/workflows/leak-guard.yml), NOT in the pre-push
+# hook (that stays leak-guard-only for speed).
+#
+# Allowlists below are PUBLIC-by-design values and synthetic test fixtures. Real
+# secrets (client_secret, EdDSA private key, R2/CF tokens) never live in the repo.
+# Note: leak-guard.sh still scans these same files for AWS keys / PEM / real
+# tokens, so allowlisting them here does not blind us to an actual leak.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Public OAuth client IDs + Supabase anon key/URL in Production.xcconfig (public by design — secret boundary is client_secret / Postgres RLS, never these)"
+paths = ['''Config/Production\.xcconfig''']
+
+[[allowlists]]
+description = "Sparkle EdDSA PUBLIC signing key (SUPublicEDKey) — ships in every build, public by construction"
+regexes = ['''MzPOBHOfA6rzShhSpfIC\+GpvpeSrv0eQKX8b3B7aN3s=''']
+
+[[allowlists]]
+description = "Synthetic crypto/secret fixtures in the test tree (deterministic test keys, fake JWTs/UUIDs, leak-guard body-leak sentinels) — no real secrets; leak-guard.sh still scans these paths for moat/real-secret patterns"
+paths = [
+  '''Packages/LeafCore/Tests/.*''',
+  '''scripts/tests/.*''',
+]
