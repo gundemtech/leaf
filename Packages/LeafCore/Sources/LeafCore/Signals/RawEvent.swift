@@ -1,8 +1,8 @@
 import Foundation
 
-/// Сырой event после сборки коллектором в Agent, до применения Share Controls filter.
-/// Storage-level identity (rowID) живёт в internal `EventRecord` — в RawEvent не торчит,
-/// т.к. RawEvent это in-flight value, не durable handle.
+/// Raw event after a collector assembles it in the Agent, before the Share Controls filter is applied.
+/// Storage-level identity (rowID) lives in the internal `EventRecord` — it is not exposed on RawEvent,
+/// because RawEvent is an in-flight value, not a durable handle.
 public struct RawEvent: Codable, Sendable, Hashable {
     public let timestamp: Date
     public let signalType: SignalType

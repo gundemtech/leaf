@@ -2,11 +2,11 @@
 //  PermissionsService.swift
 //  Leaf
 //
-//  Phase 3.4 — runtime AX + FDA permission status для onboarding flow и
-//  permissionsBanner в MenuBarContent. Polling-based: TCC не шлёт Darwin
-//  notification на grant/revoke, единственный способ детектировать —
-//  периодический query. Hybrid lifecycle: 1с интервал в onboarding (UX),
-//  4с в normal popover (battery).
+//  Phase 3.4 — runtime AX + FDA permission status for the onboarding flow and
+//  the permissionsBanner in MenuBarContent. Polling-based: TCC doesn't send a Darwin
+//  notification on grant/revoke, so the only way to detect it is a
+//  periodic query. Hybrid lifecycle: 1s interval in onboarding (UX),
+//  4s in the normal popover (battery).
 //
 
 import Foundation
@@ -29,7 +29,7 @@ final class PermissionsService {
     /// Phase Track-4 S1 — Focus status TCC grant state.
     private(set) var focusGranted: Bool = false
     /// Phase Track-4 S3 — Input Monitoring TCC grant state. Drives the
-    /// "Intensity monitoring" row в SystemObserversSettingsSection.
+    /// "Intensity monitoring" row in SystemObserversSettingsSection.
     private(set) var inputMonitoringGranted: Bool = false
 
     /// Phase Track-4 S2 — shared Local Apps preference store (per-app enabled
@@ -41,7 +41,7 @@ final class PermissionsService {
     let localAppsPermissionStore: AppleScriptPermissionStore
 
     /// Phase Track-4 S3 — shared System Observers preference store (master
-    /// toggles для intensity / clipboard / wifi / vpn / audio / mic / display
+    /// toggles for intensity / clipboard / wifi / vpn / audio / mic / display
     /// / screenshot_watcher / downloads_watcher / trash_watcher). Backed
     /// UserDefaults; same suite that LocalAppsStore + OAuth services use.
     let systemObserversStore: SystemObserversStore
@@ -99,9 +99,9 @@ final class PermissionsService {
 
     // MARK: - Polling
 
-    /// Idempotent — повторный вызов перезапускает таймер с новым интервалом.
-    /// Hybrid lifecycle: OnboardingView вызывает с 1.0s (UX responsiveness),
-    /// MenuBarContent с 4.0s (battery, banner reactivity).
+    /// Idempotent — a repeat call restarts the timer with the new interval.
+    /// Hybrid lifecycle: OnboardingView calls with 1.0s (UX responsiveness),
+    /// MenuBarContent with 4.0s (battery, banner reactivity).
     func startPolling(every seconds: TimeInterval = 2.0) {
         stopPolling()
         pollTimer = Timer.scheduledTimer(withTimeInterval: seconds, repeats: true) { [weak self] _ in
@@ -116,11 +116,11 @@ final class PermissionsService {
 
     // MARK: - User-initiated grant flow
 
-    /// Показывает system AX prompt sheet — но только в первый раз для свежей
-    /// TCC entry. После denial Apple silent'но прокатывает prompt → нужен
-    /// `openAXSettings()` deep-link как fallback. Безопасно вызывать оба.
-    /// String literal вместо `kAXTrustedCheckOptionPrompt` — imported C global
-    /// не Sendable в Swift 6 strict; значение константы стабильно.
+    /// Shows the system AX prompt sheet — but only the first time for a fresh
+    /// TCC entry. After a denial Apple silently swallows the prompt → an
+    /// `openAXSettings()` deep-link is needed as a fallback. Safe to call both.
+    /// String literal instead of `kAXTrustedCheckOptionPrompt` — the imported C global
+    /// isn't Sendable under Swift 6 strict; the constant's value is stable.
     func triggerAXPrompt() {
         let opts: NSDictionary = ["AXTrustedCheckOptionPrompt": true]
         _ = AXIsProcessTrustedWithOptions(opts)
@@ -208,7 +208,7 @@ final class PermissionsService {
     }
 
     /// Deep-link to System Settings → Privacy → Input Monitoring. Re-grant
-    /// path после denial (TCC silent'но прокатывает second prompt).
+    /// path after a denial (TCC silently swallows the second prompt).
     func openInputMonitoringSettings() {
         openSystemSettings("Privacy_ListenEvent")
     }
@@ -230,14 +230,14 @@ final class PermissionsService {
 
     // MARK: - Default probes
 
-    /// FDA не имеет programmatic API. Proxy: попытка `contentsOfDirectory`
-    /// над `~/Library/Application Support/com.apple.TCC` — readable только
-    /// при FDA grant. Семантика error codes:
+    /// FDA has no programmatic API. Proxy: attempt `contentsOfDirectory`
+    /// over `~/Library/Application Support/com.apple.TCC` — readable only
+    /// with an FDA grant. Error-code semantics:
     ///   - `NSCocoaErrorDomain` Code=260 (NSFileReadNoSuchFileError) → assume
-    ///     granted (probe сам отсутствует, false positive безвреден; banner
-    ///     просто не покажется, при первом FSEvents-event collector сам поймёт).
+    ///     granted (the probe itself is missing, the false positive is harmless; the banner
+    ///     just won't show, and on the first FSEvents event the collector figures it out itself).
     ///   - `NSPOSIXErrorDomain` Code=1 (EPERM) → denied.
-    ///   - другие → denied (defensive default).
+    ///   - others → denied (defensive default).
     nonisolated static func defaultFDAProbe() -> Bool {
         let probe = NSHomeDirectory() + "/Library/Application Support/com.apple.TCC"
         do {
@@ -275,33 +275,33 @@ final class PermissionsService {
 
 // MARK: - Test plan
 //
-// Real XCTestCase'ы wire'ятся когда LeafTests Xcode target создаётся
-// (Phase 3.5+). XCTest framework не линкуется в app target — `#if DEBUG`
-// compile-only невозможен. Cases ниже — execution-ready spec.
+// Real XCTestCases get wired up once the LeafTests Xcode target is created
+// (Phase 3.5+). The XCTest framework doesn't link into the app target — `#if DEBUG`
+// compile-only isn't possible. The cases below are an execution-ready spec.
 //
 // Helper:
 //   final class MutableBox<T> { var value: T; init(_ v: T) { value = v } }
 //
 // 1. testRefreshReadsInjectedClosures
-//    Init с `axCheck = { true }`, `fdaCheck = { false }`. Assert
-//    `axGranted == true && fdaGranted == false` после init (init вызывает
-//    refresh). Проверяет что closures wire'd корректно.
+//    Init with `axCheck = { true }`, `fdaCheck = { false }`. Assert
+//    `axGranted == true && fdaGranted == false` after init (init calls
+//    refresh). Verifies that the closures are wired correctly.
 //
 // 2. testRefreshPicksUpStateChange
-//    Использует MutableBox<Bool>. Closures читают `box.value`. Init с box=true,
+//    Uses MutableBox<Bool>. Closures read `box.value`. Init with box=true,
 //    assert axGranted==true. Set box.value = false. Call svc.refresh(). Assert
-//    axGranted==false. Доказывает что refresh re-evaluate'т closures, не
-//    кеширует первое значение.
+//    axGranted==false. Proves that refresh re-evaluates the closures rather than
+//    caching the first value.
 //
 // 3. testPollingStartStopIdempotent
-//    Counter MutableBox<Int>, axCheck increment'ит. Snapshot baseline.
+//    Counter MutableBox<Int>, axCheck increments it. Snapshot baseline.
 //    startPolling(every: 0.05). Sleep 200ms. Snapshot mid (assert >2 increments).
 //    stopPolling(). Sleep 200ms. Snapshot after (assert ≤1 increment vs mid —
-//    допускает один in-flight Task который запустился до stopPolling).
-//    Доказывает что таймер запущен, потом остановлен.
+//    allows for one in-flight Task that started before stopPolling).
+//    Proves that the timer is started, then stopped.
 //
 // 4. testFDAProbeMissingDirReturnsTrue
-//    Создаёт PermissionsService с custom fdaCheck, который имитирует ту же
-//    try/catch shape для несуществующего пути (`/tmp/nonexistent-\(UUID())`).
-//    Assert returns true (NoSuchFile branch — NSCocoaError 260). Подтверждает
-//    что D4 graceful fallback работает.
+//    Creates a PermissionsService with a custom fdaCheck that mimics the same
+//    try/catch shape for a non-existent path (`/tmp/nonexistent-\(UUID())`).
+//    Assert returns true (NoSuchFile branch — NSCocoaError 260). Confirms
+//    that the D4 graceful fallback works.

@@ -1,9 +1,9 @@
 import XCTest
 @testable import LeafCore
 
-/// Тесты публичного контракта `AppCategoryClassifier`. Полные preset-bundle
-/// тесты живут в `LeafCorePrivateTests` (gitignored) — здесь только то, что
-/// гарантирует public LeafCore любому консьюмеру: stable enum raw values +
+/// Tests for the public contract of `AppCategoryClassifier`. The full
+/// preset-bundle tests live in `LeafCorePrivateTests` (gitignored) — here only
+/// what public LeafCore guarantees to any consumer: stable enum raw values +
 /// EmptyAppCategoryClassifier safety floor.
 final class AppCategoryClassifierTests: XCTestCase {
     func testEmptyClassifier_anyBundle_returnsOther() {
@@ -15,7 +15,7 @@ final class AppCategoryClassifierTests: XCTestCase {
     }
 
     func testCategoryRawValuesAreStable() {
-        // Category .rawValue может уйти в DB / config — защита от случайного rename.
+        // Category .rawValue may end up in DB / config — guard against accidental rename.
         XCTAssertEqual(AppCategory.dev.rawValue, "dev")
         XCTAssertEqual(AppCategory.browse.rawValue, "browse")
         XCTAssertEqual(AppCategory.communication.rawValue, "communication")
@@ -24,7 +24,7 @@ final class AppCategoryClassifierTests: XCTestCase {
     }
 
     func testCategoryAllCases_remainStable() {
-        // Order changes сломает downstream UI rendering / migrations.
+        // Order changes will break downstream UI rendering / migrations.
         XCTAssertEqual(
             AppCategory.allCases,
             [.dev, .browse, .communication, .design, .other]

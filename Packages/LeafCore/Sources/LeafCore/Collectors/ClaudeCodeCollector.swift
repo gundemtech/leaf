@@ -1,23 +1,23 @@
 import Foundation
 import os
 
-/// Phase 2.3 — tail-read collector для Claude Code session jsonl файлов.
+/// Phase 2.3 — tail-read collector for Claude Code session jsonl files.
 ///
-/// Каждый tick:
+/// Each tick:
 ///   1. Recursive 1-level list `~/.claude/projects/<slug>/*.jsonl`.
-///   2. Для каждого файла — `URLResourceValues` (mtime, size, inode).
+///   2. For each file — `URLResourceValues` (mtime, size, inode).
 ///   3. Lookup `collector_offsets[claude_code_jsonl, abs_path]`.
 ///   4. Bootstrap (no offset record): mtime ≥ now − backfillWindowDays → offset=0
-///      (backfill); иначе offset=fileSize (skip-backward).
+///      (backfill); otherwise offset=fileSize (skip-backward).
 ///   5. Skip if mtime/size unchanged.
-///   6. Inode/truncate guard: reset offset=0 при inode mismatch / size shrink.
-///   7. `FileHandle.seek(toOffset:) → readToEnd()`. Split по \n. Incomplete
-///      trailing fragment без \n — пропускаем (next tick подберёт).
+///   6. Inode/truncate guard: reset offset=0 on inode mismatch / size shrink.
+///   7. `FileHandle.seek(toOffset:) → readToEnd()`. Split on \n. An incomplete
+///      trailing fragment without \n — we skip it (the next tick picks it up).
 ///   8. Parser → `[RawEvent]` per line; `.malformed` log warning + skip line.
-///   9. `Database.writeEventsAndOffset` — events + offset в одной транзакции.
+///   9. `Database.writeEventsAndOffset` — events + offset in a single transaction.
 ///
-/// Pattern идентичен `MaintenanceScheduler`: actor, start/stop с cancel + await,
-/// `performTick` отдельно от loop wrapper для unit-тестируемости.
+/// The pattern is identical to `MaintenanceScheduler`: actor, start/stop with cancel + await,
+/// `performTick` separate from the loop wrapper for unit-testability.
 public actor ClaudeCodeCollector {
     private let database: Database
     private let parser: any ClaudeCodeJSONLParsing
@@ -86,8 +86,8 @@ public actor ClaudeCodeCollector {
         public let bootstrappedFiles: Int
     }
 
-    /// Single tick — testable без timer'а. `now` инжектируется тестами для
-    /// детерминированной bootstrap-проверки (mtime relative к now).
+    /// Single tick — testable without a timer. `now` is injected by tests for
+    /// a deterministic bootstrap check (mtime relative to now).
     @discardableResult
     public func performTick(now: Date = Date()) async -> TickResult {
         guard FileManager.default.fileExists(atPath: projectsRoot.path) else {
@@ -126,8 +126,8 @@ public actor ClaudeCodeCollector {
     // MARK: - Loop
 
     private func runLoop() async {
-        // Short initial settle delay — let Agent остальные подсистемы стартануть
-        // (writer/maintenance), плюс не блокируем main launch с blocking I/O scan.
+        // Short initial settle delay — let the Agent's other subsystems start up
+        // (writer/maintenance), plus we don't block main launch with a blocking I/O scan.
         await sleep(seconds: min(intervalSec, 5))
         while !Task.isCancelled {
             await performTick()
@@ -145,8 +145,8 @@ public actor ClaudeCodeCollector {
     /// Track-6 P1 — 2-level discovery:
     ///   `<projectsRoot>/<projectSlug>/<sessionId>.jsonl`                          ← top-level (existing)
     ///   `<projectsRoot>/<projectSlug>/<parentSessionId>/subagents/agent-*.jsonl`  ← NEW (subagents)
-    /// Pre-P1 the collector skipped the subagent subdir entirely ("Не используем deep enumerator
-    /// чтобы не глядеть в случайные subdirs"). P1 enables it via narrow walk — exact known shape,
+    /// Pre-P1 the collector skipped the subagent subdir entirely ("We don't use a deep enumerator
+    /// so we don't peek into arbitrary subdirs"). P1 enables it via narrow walk — exact known shape,
     /// no wildcard recursion. Random subdirs at the project level / nested under sessionId still
     /// ignored — see `testDoesNotRecurseIntoArbitrarySubdirs`.
     private func listJSONLFiles() -> [URL] {
@@ -206,13 +206,13 @@ public actor ClaudeCodeCollector {
     private func processFile(_ url: URL, now: Date) -> FileResult {
         let stat = fileStat(url)
         guard let stat else {
-            // Файл исчез между listing и stat — skip silent.
+            // File disappeared between listing and stat — skip silently.
             return FileResult(didProcess: false, didBootstrap: false, eventsWritten: 0, malformedLines: 0)
         }
         let nowMs = Int64(now.timeIntervalSince1970 * 1000)
-        // Canonical path (resolves /var → /private/var symlinks etc) — без этого
-        // тот же файл может попасть в `collector_offsets` дважды если listing API
-        // и тест передают разные представления одного pathname.
+        // Canonical path (resolves /var → /private/var symlinks etc) — without this
+        // the same file could land in `collector_offsets` twice if the listing API
+        // and a test pass different representations of the same pathname.
         let canonicalPath = url.resolvingSymlinksInPath().path
 
         let existing = (try? database.readOffset(
@@ -227,12 +227,12 @@ public actor ClaudeCodeCollector {
 
         let stored = existing!
 
-        // Skip-unchanged: mtime AND size совпадают со stored — нет append'а.
+        // Skip-unchanged: mtime AND size match the stored values — no append.
         if stat.mtimeMs <= stored.lastModifiedMs && stat.size == stored.size {
             return FileResult(didProcess: false, didBootstrap: false, eventsWritten: 0, malformedLines: 0)
         }
 
-        // Inode/truncate reset: tail-read на новом файле / replay'нутом → начать сначала.
+        // Inode/truncate reset: tail-read on a new / replayed file → start over.
         var startOffset = stored.byteOffset
         if let storedInode = stored.inode, storedInode != stat.inode {
             startOffset = 0
@@ -246,7 +246,7 @@ public actor ClaudeCodeCollector {
     private func bootstrap(url: URL, canonicalPath: String, stat: FileStat, nowMs: Int64) -> FileResult {
         let cutoffMs = nowMs - Int64(backfillWindowDays) * 86_400_000
         if stat.mtimeMs >= cutoffMs {
-            // В пределах окна — backfill от 0.
+            // Within the window — backfill from 0.
             let result = readAndPersist(url: url, canonicalPath: canonicalPath, stat: stat, startOffset: 0, nowMs: nowMs)
             return FileResult(
                 didProcess: result.didProcess,
@@ -255,7 +255,7 @@ public actor ClaudeCodeCollector {
                 malformedLines: result.malformedLines
             )
         } else {
-            // Slик starobi — skip-backward: запоминаем current EOF, дальше tail-read.
+            // Too old — skip-backward: record the current EOF, then tail-read from there.
             let offset = CollectorOffset(
                 collectorID: CollectorID.claudeCodeJSONL,
                 sourceID: canonicalPath,
@@ -276,9 +276,9 @@ public actor ClaudeCodeCollector {
     }
 
     private func readAndPersist(url: URL, canonicalPath: String, stat: FileStat, startOffset: Int64, nowMs: Int64) -> FileResult {
-        // Защитный кейс: файл не вырос и offset уже в EOF — нет работы.
+        // Defensive case: the file hasn't grown and the offset is already at EOF — nothing to do.
         if startOffset >= stat.size {
-            // Всё-таки UPSERT'нем offset чтобы lastModifiedMs обновился.
+            // Still UPSERT the offset so that lastModifiedMs is updated.
             let offset = CollectorOffset(
                 collectorID: CollectorID.claudeCodeJSONL,
                 sourceID: canonicalPath,
@@ -303,8 +303,8 @@ public actor ClaudeCodeCollector {
             return FileResult(didProcess: false, didBootstrap: false, eventsWritten: 0, malformedLines: 0)
         }
 
-        // Split по \n. Если последний фрагмент НЕ заканчивается \n — он incomplete
-        // (writer ещё дописывает строку), пропускаем его в этом tick'е.
+        // Split on \n. If the last fragment does NOT end with \n it is incomplete
+        // (the writer is still appending the line), so we skip it in this tick.
         let (completeLines, consumedBytes) = splitCompleteLines(payload)
 
         var allEvents: [RawEvent] = []
@@ -373,9 +373,9 @@ public actor ClaudeCodeCollector {
         let inode: Int64?
     }
 
-    /// `URLResourceKey` не имеет inode getter'а на macOS — берём через
+    /// `URLResourceKey` has no inode getter on macOS — we obtain it via
     /// `FileManager.attributesOfItem` (stat syscall, NSFileSystemFileNumber key).
-    /// Size + mtime — через URLResourceValues (cheaper, no separate stat).
+    /// Size + mtime — via URLResourceValues (cheaper, no separate stat).
     private func fileStat(_ url: URL) -> FileStat? {
         guard let values = try? url.resourceValues(forKeys: [
             .fileSizeKey,
@@ -404,9 +404,9 @@ public actor ClaudeCodeCollector {
 
     /// Returns:
     ///   - `lines` — only complete lines (terminated by `\n`)
-    ///   - `consumedBytes` — кол-во bytes полных строк (включая `\n` terminator'ы);
-    ///     incomplete trailing fragment (если есть) не учитывается → next tick
-    ///     прочитает его с byte_offset == startOffset + consumedBytes.
+    ///   - `consumedBytes` — number of bytes of complete lines (including `\n` terminators);
+    ///     the incomplete trailing fragment (if any) is not counted → the next tick
+    ///     reads it from byte_offset == startOffset + consumedBytes.
     private func splitCompleteLines(_ data: Data) -> (lines: [String], consumedBytes: Int) {
         guard !data.isEmpty else { return ([], 0) }
 
@@ -425,8 +425,8 @@ public actor ClaudeCodeCollector {
                 lastNewlineEnd = i + 1
             }
         }
-        // Incomplete trailing fragment (без \n) игнорируется — next tick
-        // прочитает его с byteOffset == startOffset + lastNewlineEnd.
+        // The incomplete trailing fragment (without \n) is ignored — the next tick
+        // reads it from byteOffset == startOffset + lastNewlineEnd.
         return (lines, lastNewlineEnd)
     }
 

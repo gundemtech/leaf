@@ -8,8 +8,8 @@ import LeafCore
 /// from system mic (Zoom / FaceTime / Slack huddle / Voice Memos / etc) —
 /// generic "user in voice call" signal.
 ///
-/// **NSMicrophoneUsageDescription НЕ нужен** — property listener не открывает
-/// recording, не активирует green-dot indicator, не читает audio samples
+/// **NSMicrophoneUsageDescription is NOT needed** — the property listener does not open
+/// recording, does not activate the green-dot indicator, does not read audio samples
 /// (ADR-010 Won't-list — mic_in_use → boolean only).
 @MainActor
 final class MicInUseCollector {
@@ -18,9 +18,9 @@ final class MicInUseCollector {
     private var stateMachine = MicInUseStateMachine()
     private var listenerBlock: AudioObjectPropertyListenerBlock?
     /// Cached default input device at start(). **Known limitation (I2 review):**
-    /// если юзер сменит default input device после start (USB mic plug-in),
-    /// listener останется attached к старому. Mirror VPN limitation pattern
-    /// (NEVPNManager.shared() also pins к first profile). Document'но
+    /// if the user changes the default input device after start (USB mic plug-in),
+    /// the listener stays attached to the old one. Mirror VPN limitation pattern
+    /// (NEVPNManager.shared() also pins to the first profile). Documented as
     /// acceptable best-effort; revisit if real signal demands live re-attach.
     private var inputDeviceID: AudioDeviceID = 0
     private var listenerInstalled = false

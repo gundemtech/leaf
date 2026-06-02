@@ -6,9 +6,9 @@ import LeafCore
 import LeafCorePrivate
 #endif
 
-// Агент — command-line daemon, запускается LaunchAgent'ом через SMAppService.
-// Использует sync @main + внутренние Task'и для async работы, чтобы
-// `RunLoop.main.run()` в конце блокировал на main thread (mandatory для
+// Agent — command-line daemon, launched by a LaunchAgent via SMAppService.
+// Uses a sync @main + internal Tasks for async work, so that the trailing
+// `RunLoop.main.run()` blocks on the main thread (mandatory for
 // NSWorkspace notifications).
 
 @main
@@ -53,13 +53,13 @@ enum AgentMain {
             exit(1)
         }
 
-        // Writer + collectors + maintenance scheduler. Retain'им в статичных globals
-        // чтобы не собралось по ARC до срабатывания SIGTERM handler'а.
+        // Writer + collectors + maintenance scheduler. Retained in static globals
+        // so ARC doesn't collect them before the SIGTERM handler fires.
         let writer = EventWriter(database: database, thresholds: agentThresholds)
 
-        // Phase 4.10.B — classifier injection: prod (moat preset) для signed
-        // build, public empty stub для dev/CI. Empty fallback корректен:
-        // collector просто не enrich'ит payload window_title (всё → L1).
+        // Phase 4.10.B — classifier injection: prod (moat preset) for the signed
+        // build, public empty stub for dev/CI. The empty fallback is correct:
+        // the collector simply won't enrich the window_title payload (everything → L1).
         let classifier: any AppCategoryClassifier = {
             #if LEAF_PROD
             return ProdAppCategoryClassifier()
@@ -84,7 +84,7 @@ enum AgentMain {
         )
 
         // Phase 2.3 — Claude Code AI collaboration collector.
-        // Parser injection: prod schema-mapping в moat, public Stub для dev/CI.
+        // Parser injection: prod schema-mapping in moat, public Stub for dev/CI.
         let claudeCodeParser: any ClaudeCodeJSONLParsing = {
             #if LEAF_PROD
             return ClaudeCodeJSONLParser()
@@ -131,9 +131,9 @@ enum AgentMain {
         }
         #endif
 
-        // Phase 2.4 — FSEvents content collector для watched folders.
-        // Router injection: prod (ignore-list + L4/L5 + coalesce) в moat,
-        // public Stub возвращает .filtered always → CI builds работают.
+        // Phase 2.4 — FSEvents content collector for watched folders.
+        // Router injection: prod (ignore-list + L4/L5 + coalesce) in moat,
+        // public Stub always returns .filtered → CI builds work.
         let fsEventsRouter: any FSEventsRouting = {
             #if LEAF_PROD
             return FSEventsRouterProd(
@@ -155,8 +155,8 @@ enum AgentMain {
 
         // Phase 4.2 — Linear GraphQL polling collector.
         // Provider injection: prod (paginated query + retry + complexity budget)
-        // в moat, public Stub no-op для CI/dev. clientID empty → graceful skip
-        // (collector не стартует). Refresher переехал в LeafCore (Phase 4.2 D1).
+        // in moat, public Stub no-op for CI/dev. clientID empty → graceful skip
+        // (collector doesn't start). Refresher moved into LeafCore (Phase 4.2 D1).
         let linearProvider: any LinearGraphQLProvider = {
             #if LEAF_PROD
             return ProdLinearGraphQLProvider()
@@ -224,9 +224,9 @@ enum AgentMain {
         }()
 
         // Phase 4.3 — GitHub REST events polling collector.
-        // Mirror Linear: prod parser в moat (ProdGitHubAPIProvider — REST event
-        // mapping + ADR-010 enforcement), public Stub no-op для CI/dev. Empty
-        // clientID → graceful skip (collector не стартует — нет OAuth App).
+        // Mirror Linear: prod parser in moat (ProdGitHubAPIProvider — REST event
+        // mapping + ADR-010 enforcement), public Stub no-op for CI/dev. Empty
+        // clientID → graceful skip (collector doesn't start — no OAuth App).
         let githubProvider: any GitHubAPIProvider = {
             #if LEAF_PROD
             return ProdGitHubAPIProvider()
@@ -299,9 +299,9 @@ enum AgentMain {
         }()
 
         // Phase 4.4 — Slack Web API polling collector.
-        // Mirror Linear/GitHub: prod parser в moat (ProdSlackAPIProvider — search.messages
-        // + users.profile.get mapping + ADR-010 enforcement: bodies/permalinks discard'ятся
-        // pre-RawEvent), public Stub no-op для CI/dev. Empty clientID → graceful skip.
+        // Mirror Linear/GitHub: prod parser in moat (ProdSlackAPIProvider — search.messages
+        // + users.profile.get mapping + ADR-010 enforcement: bodies/permalinks are discarded
+        // pre-RawEvent), public Stub no-op for CI/dev. Empty clientID → graceful skip.
         let slackProvider: any SlackAPIProvider = {
             #if LEAF_PROD
             return ProdSlackAPIProvider()
@@ -657,7 +657,7 @@ enum AgentMain {
         // Phase 5.3.E — periodic peer-side rotation fetch + opportunistic outbox resume.
         // Drains relay's /v1/key-rotation/by-peer/* mailbox, peek-discriminates rotation
         // vs tombstone, installs idempotently via insertTeamKeyIfAbsent + deprecateTeamKey
-        // (or markTeamMemberRemoved для self-tombstone). Mirror MaintenanceScheduler
+        // (or markTeamMemberRemoved for self-tombstone). Mirror MaintenanceScheduler
         // actor pattern. Reuses 5.3.D rotationRelayClient/Codec/KDF instances.
         let rotationFetchService = RotationFetchService(
             database: database,
@@ -697,8 +697,8 @@ enum AgentMain {
         AgentLifetime.detectorScheduler = detectorScheduler
 
         // Kick off writer + collectors + scheduler.
-        // `start()` на writer/idle — fire-and-forget Task внутри; на activeApp — запускаем
-        // через DispatchQueue.main.async чтобы NSWorkspace observer'у был доступен main runloop.
+        // `start()` on writer/idle — fire-and-forget Task inside; activeApp — we launch it
+        // via DispatchQueue.main.async so the NSWorkspace observer has access to the main runloop.
         Task { await writer.start() }
         DispatchQueue.main.async { activeAppCollector.start() }
         idleCollector.start()
@@ -738,7 +738,7 @@ enum AgentMain {
         // polling Task per adapter.
         Task { await appleScriptCollector.start() }
         // Phase Track-4 S3 — start system observers + intensity. Each gates
-        // на SystemObserversStore.isEnabled(<key>); intensity additionally
+        // on SystemObserversStore.isEnabled(<key>); intensity additionally
         // probes Input Monitoring TCC and silently no-ops if denied.
         Task { await cgEventTapCollector.start() }
         Task { await audioRouteCollector.start() }
@@ -763,14 +763,14 @@ enum AgentMain {
         AgentLifetime.heartbeatWriter = heartbeatWriter
         Task { await heartbeatWriter.start() }
 
-        // Shutdown порядок: maintenance → fsEvents → claudeCode → linear → github → slack → writer.
-        // fsEvents первым из collectors — закрываем приём callback'ов до того как
-        // остальные collectors flush'ят. claudeCode / linear / github / slack flush'ят свои
-        // текущие tick'и атомарно (events + offset в одной транзакции) — не остаётся
-        // "events без offset" / "offset без events". Linear / github / slack после claudeCode
-        // т.к. имеют network call в tick (медленнее на shutdown); тащить их в конец
-        // chain'а minimizes overall stop latency. writer последним — drain буфера
-        // attention/idle в DB перед exit.
+        // Shutdown order: maintenance → fsEvents → claudeCode → linear → github → slack → writer.
+        // fsEvents first among collectors — we stop accepting callbacks before the
+        // other collectors flush. claudeCode / linear / github / slack flush their
+        // current ticks atomically (events + offset in one transaction) — leaving no
+        // "events without offset" / "offset without events". Linear / github / slack after claudeCode
+        // because they have a network call in the tick (slower on shutdown); pushing them to the end
+        // of the chain minimizes overall stop latency. writer last — drains the
+        // attention/idle buffer into the DB before exit.
         installSignalHandlers {
             // fix/dev-launch-reliability — stop heartbeat writer first (cooperative
             // Task cancel) before the writer flush chain; heartbeat is read-only
@@ -852,15 +852,15 @@ enum AgentMain {
 
         agentLogger.info("Agent ready — entering main run loop")
 
-        // NSWorkspace observers диспатчатся на main queue → нужен активный CFRunLoop.
-        // RunLoop.main.run() блокирует forever. Shutdown через SIGTERM/SIGINT handlers.
+        // NSWorkspace observers are dispatched on the main queue → an active CFRunLoop is required.
+        // RunLoop.main.run() blocks forever. Shutdown via SIGTERM/SIGINT handlers.
         RunLoop.main.run()
     }
 }
 
-/// Глобальный контейнер для retain'а агентских подсистем.
-/// Нужен потому что @main enum не даёт stored properties, а локалы в `main()`
-/// могут быть ARC'нуты до SIGTERM handler'а.
+/// Global container for retaining the agent's subsystems.
+/// Needed because a @main enum can't have stored properties, and locals in `main()`
+/// can be ARC'd away before the SIGTERM handler runs.
 enum AgentLifetime {
     nonisolated(unsafe) static var writer: EventWriter?
     nonisolated(unsafe) static var heartbeatWriter: HeartbeatWriter?

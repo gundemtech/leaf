@@ -2,12 +2,12 @@
 //  InviteURLHandler.swift
 //  Leaf
 //
-//  Phase 5.5.B — central glue для `leaf://invite/...` deep-links И NSPasteboard.general
+//  Phase 5.5.B — central glue for `leaf://invite/...` deep-links AND NSPasteboard.general
 //  auto-detect on app foreground / sheet open. Routes:
 //   - InviteURL.parse success → InviteAcceptReader.fetch(inviteURL:)
-//   - JoinCode на pasteboard (admin-side) → InviteOutboxReader.generate(inviteeJoinCode:)
+//   - JoinCode on the pasteboard (admin-side) → InviteOutboxReader.generate(inviteeJoinCode:)
 //
-//  Не interval-poll'ит pasteboard — только реактивные триггеры (URL open / app foreground / explicit sheet open).
+//  Does not interval-poll the pasteboard — only reactive triggers (URL open / app foreground / explicit sheet open).
 //
 
 import Foundation
@@ -30,8 +30,8 @@ final class InviteURLHandler {
     /// + pre-fill the paste sheet from a clicked link.
     private weak var windowState: WindowState?
 
-    /// Last clipboard match observed (для UI affordances "Detected Join code: ABCD...").
-    /// Не хранит pubkey bytes — только тип события (UI достаёт fresh value через `probeClipboardForJoinCode()`).
+    /// Last clipboard match observed (for UI affordances "Detected Join code: ABCD...").
+    /// Does not store pubkey bytes — only the event kind (UI fetches a fresh value via `probeClipboardForJoinCode()`).
     private(set) var lastDetectedKind: DetectedKind = .none
 
     enum DetectedKind: Equatable {
@@ -98,9 +98,9 @@ final class InviteURLHandler {
         return String(path[codeRange])
     }
 
-    /// Called by AcceptInviteSheet on appear ИЛИ LeafApp on `applicationDidBecomeActive`.
-    /// Returns Match для UI affordance ("Found invite link in clipboard — Use it?"); side-effect:
-    /// updates `lastDetectedKind` для @Observable subscribers.
+    /// Called by AcceptInviteSheet on appear OR LeafApp on `applicationDidBecomeActive`.
+    /// Returns Match for the UI affordance ("Found invite link in clipboard — Use it?"); side-effect:
+    /// updates `lastDetectedKind` for @Observable subscribers.
     @discardableResult
     func probeClipboard() -> ClipboardMatcher.Match {
         guard let raw = NSPasteboard.general.string(forType: .string),

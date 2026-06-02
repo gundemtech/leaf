@@ -2,34 +2,34 @@
 //  GitHubCollector.swift
 //  LeafCore
 //
-//  Phase 4.3 — GitHub REST events polling collector. Раз в `intervalSec`:
-//  1. Читает `integrations` row (provider=.github). Нет → skip.
-//  2. `refresher.refreshIfNeeded(now:)` — refresh access token если истекает.
-//     На `.refreshDenied` (invalid_grant) refresher уже сделал deleteIntegration
-//     + UserDefaults flag + DistributedNotification → UI surface'ит "Reconnect needed".
+//  Phase 4.3 — GitHub REST events polling collector. Once per `intervalSec`:
+//  1. Reads the `integrations` row (provider=.github). None → skip.
+//  2. `refresher.refreshIfNeeded(now:)` — refresh the access token if it is expiring.
+//     On `.refreshDenied` (invalid_grant) the refresher has already done deleteIntegration
+//     + UserDefaults flag + DistributedNotification → UI surfaces "Reconnect needed".
 //  3. `provider.fetchEvents(token, login, since:)` — REST GET /users/<login>/events.
-//     `since` = stored `lastModifiedMs` (max `created_at` от прошлого tick'а);
-//     bootstrap → `nil` → provider использует первую страницу feed'а (~90д max).
-//  4. Map результат в `[RawEvent]` с `signal_type=.action`, `payload.source=github`.
-//  5. Atomic write через `writeEventsAndOffset(events:offset:)` — events + cursor
-//     в одной транзакции. Cursor = `batch.cursorMs` (newest createdAt).
+//     `since` = stored `lastModifiedMs` (max `created_at` from the previous tick);
+//     bootstrap → `nil` → provider uses the first page of the feed (~90d max).
+//  4. Map the result into `[RawEvent]` with `signal_type=.action`, `payload.source=github`.
+//  5. Atomic write via `writeEventsAndOffset(events:offset:)` — events + cursor
+//     in one transaction. Cursor = `batch.cursorMs` (newest createdAt).
 //
 
 import Foundation
 import os
 
 public actor GitHubCollector {
-    /// Phase 4.7.B-3 — top-N most-recently-pushed repos cap для bounded fan-out
-    /// `actions/runs` polling. N=10 → ≤10 HTTP calls per tick поверх baseline events
-    /// fetch; conservative под 5000/hr primary rate-limit (12 ticks/hr × 10 calls = 120/hr).
+    /// Phase 4.7.B-3 — top-N most-recently-pushed repos cap for bounded fan-out
+    /// `actions/runs` polling. N=10 → ≤10 HTTP calls per tick on top of the baseline events
+    /// fetch; conservative under the 5000/hr primary rate-limit (12 ticks/hr × 10 calls = 120/hr).
     /// TODO(B-5+): activeReposCap may need to drop to 5-7 once check_runs and
     /// contributions land — verify GitHub REST budget headroom (B-4 add ≤K
     /// check-runs calls per tick where K = unique pushed shas; B-5 daily
-    /// contributions GraphQL — separate budget, не per-tick).
+    /// contributions GraphQL — separate budget, not per-tick).
     private static let activeReposCap = 10
-    /// Phase 4.7.B-3 — sliding window для derive активных repos из `events` table.
-    /// 7 дней — достаточно чтобы поймать недельный rhythm проекта без false-positive
-    /// от старого ad-hoc activity. Конфигурабельно (constant) если потребуется tuning.
+    /// Phase 4.7.B-3 — sliding window for deriving active repos from the `events` table.
+    /// 7 days — enough to catch a project's weekly rhythm without false-positives
+    /// from stale ad-hoc activity. Configurable (constant) if tuning is needed.
     private static let activeReposLookbackDays = 7
 
     private let database: Database
@@ -43,15 +43,15 @@ public actor GitHubCollector {
     private var loopTask: Task<Void, Never>?
     private var notifyToken: NSObjectProtocol?
 
-    /// Phase 4.7.B-5 — in-memory cooldown gate для daily contributions GraphQL.
-    /// `"yyyy-MM-dd"` UTC; refetch fires только когда day rolls over. Reset на
-    /// app restart — допустимо: at-most one redundant fetch per launch (REST
-    /// `/graphql` cost ≈ negligible под 5000pts/hr secondary limit).
+    /// Phase 4.7.B-5 — in-memory cooldown gate for the daily contributions GraphQL.
+    /// `"yyyy-MM-dd"` UTC; refetch fires only when the day rolls over. Reset on
+    /// app restart — acceptable: at-most one redundant fetch per launch (REST
+    /// `/graphql` cost ≈ negligible under the 5000pts/hr secondary limit).
     private var lastContributionsFetchDay: String?
-    /// Phase 4.7.B-5 — cached value across ticks. Updated только когда fresh
-    /// calendar fetched в этом tick'е (cooldown gate didn't fire). Sticky:
-    /// если today's day rolls over но fetch упал, prev value остаётся в
-    /// `presence_state` — non-zero false-positive менее плох, чем silent drop.
+    /// Phase 4.7.B-5 — cached value across ticks. Updated only when a fresh
+    /// calendar is fetched in this tick (the cooldown gate didn't fire). Sticky:
+    /// if today's day rolls over but the fetch fails, the previous value stays in
+    /// `presence_state` — a non-zero false-positive is less bad than a silent drop.
     private var lastContributionsToday: Int = 0
 
     public init(
@@ -117,7 +117,7 @@ public actor GitHubCollector {
             return TickResult(skipped: true, eventsProcessed: 0, cursorAdvancedMs: nil)
         }
 
-        // 2. Refresh if needed. .refreshDenied → refresher уже сделал
+        // 2. Refresh if needed. .refreshDenied → the refresher has already done
         // deleteIntegration + UserDefaults flag + DistributedNotification.
         let refreshed: IntegrationRecord
         do {
@@ -130,8 +130,8 @@ public actor GitHubCollector {
             return TickResult(skipped: true, eventsProcessed: 0, cursorAdvancedMs: nil)
         }
 
-        // 3. Read cursor. workspaceID per Phase 4.3 = "github:<login>" → используем напрямую.
-        // workspaceName хранит raw login (без префикса) — это путь /users/<login>/events.
+        // 3. Read cursor. workspaceID per Phase 4.3 = "github:<login>" → use it directly.
+        // workspaceName stores the raw login (without prefix) — this is the path /users/<login>/events.
         let sourceID = refreshed.workspaceID
         let login = refreshed.workspaceName
         let stored: CollectorOffset?
@@ -165,8 +165,8 @@ public actor GitHubCollector {
 
         // 5a. Phase 4.7.B-1 — notifications pulse. Failure must NOT block events
         // tick: provider already returns `.empty(nowMs:)` on non-200 / parse failure,
-        // но сетевая ошибка throw'ит — wrap'им в do/catch + emit empty pulse, чтобы
-        // observability не пропадала между tick'ами.
+        // but a network error throws — wrap in do/catch + emit an empty pulse, so
+        // observability is not lost between ticks.
         let notifSummary: GitHubNotificationsSummary
         do {
             notifSummary = try await provider.fetchNotifications(accessToken: refreshed.accessToken)
@@ -176,9 +176,9 @@ public actor GitHubCollector {
         }
         events.append(Self.makeNotificationsPulseEvent(summary: notifSummary, nowMs: nowMs))
 
-        // 5b. Phase 4.7.B-2 — review queue + my open PRs pulse. Each fetch wrapped
-        // в свой do/catch — независимый graceful degrade. Always emit пульсы
-        // даже при failure (counts=0, top_repo omitted) — observability discipline.
+        // 5b. Phase 4.7.B-2 — review queue + my open PRs pulse. Each fetch is wrapped
+        // in its own do/catch — independent graceful degrade. Always emit the pulses
+        // even on failure (counts=0, top_repo omitted) — observability discipline.
         let reviewQueueSummary: GitHubReviewQueueSummary
         do {
             reviewQueueSummary = try await provider.fetchPRsAwaitingReview(
@@ -201,10 +201,10 @@ public actor GitHubCollector {
         }
         events.append(Self.makeMyOpenPRCountEvent(summary: myOpenPRsSummary, nowMs: nowMs))
 
-        // 5c. Phase 4.7.B-3 — actions/runs feed для top-N most-recently-pushed repos.
-        // Derive активные repos из existing `events` table — bounded fan-out N HTTP
+        // 5c. Phase 4.7.B-3 — actions/runs feed for top-N most-recently-pushed repos.
+        // Derive active repos from the existing `events` table — bounded fan-out N HTTP
         // calls per tick (N = `Self.activeReposCap`). DB query failure → empty list,
-        // не блокируем tick. `since` = nowMs - intervalSec*1000 → fetch только runs
+        // does not block the tick. `since` = nowMs - intervalSec*1000 → fetch only runs
         // initiated after last tick window (graceful approximation last-tick boundary).
         let activeReposSinceMs = nowMs - Int64(Self.activeReposLookbackDays) * 24 * 3600 * 1000
         let activeRepos: [String]
@@ -235,14 +235,14 @@ public actor GitHubCollector {
         }
 
         // 5d. Phase 4.7.B-4 — check_runs aggregate per HEAD commit, push-triggered.
-        // Bounded cost: K HTTP calls = K unique (repo, sha) pairs across все
-        // gh_commit_pushed snapshots в этом tick'е. Empty pushes → 0 calls (skipped
+        // Bounded cost: K HTTP calls = K unique (repo, sha) pairs across all
+        // gh_commit_pushed snapshots in this tick. Empty pushes → 0 calls (skipped
         // entirely). Iterate `batch.events` (snapshots) — preserves repo + sha
-        // напрямую, не rely на string lookup в payload. Dedup via Set<String>
+        // directly, does not rely on string lookup in the payload. Dedup via Set<String>
         // (`repo|sha`) — handles dual shape: stripped feed → 1 sha per push,
         // full webhook → N shas per push. Per-(repo,sha) failures (404 / parse)
-        // → provider returns `.empty`, мы всё равно emit pulse (observability:
-        // "у HEAD commit'а check-runs нет/недоступны").
+        // → provider returns `.empty`, we still emit the pulse (observability:
+        // "the HEAD commit has no/unavailable check-runs").
         var seenPairs = Set<String>()
         var pushedPairs: [(repo: String, sha: String)] = []
         for snapshot in batch.events {
@@ -254,10 +254,10 @@ public actor GitHubCollector {
                 pushedPairs.append((repo: repo, sha: sha))
             }
         }
-        // Latest push check-run status — собираем для presence_state.github.
-        // pushedPairs приходит в том порядке, в котором мы итерировали batch.events
+        // Latest push check-run status — collected for presence_state.github.
+        // pushedPairs arrives in the order in which we iterated batch.events
         // (REST events DESC by created_at → first pair = most recent push).
-        // Берём first non-nil bucket reduction; nil если push events не было.
+        // Take the first non-nil bucket reduction; nil if there were no push events.
         var latestPushCheckStatus: String? = nil
 
         for pair in pushedPairs {
@@ -287,14 +287,14 @@ public actor GitHubCollector {
                 } else if summary.success > 0 {
                     latestPushCheckStatus = "success"
                 }
-                // total=0 / только neutral → leave nil (no actionable CI signal).
+                // total=0 / only neutral → leave nil (no actionable CI signal).
             }
         }
 
-        // 5e. Phase 4.7.B-5 — daily contributions calendar. NOT emitted as event;
-        // только cooldown-gated update of `lastContributionsToday` для
+        // 5e. Phase 4.7.B-5 — daily contributions calendar. NOT emitted as an event;
+        // only a cooldown-gated update of `lastContributionsToday` for
         // presence_state.github. Cooldown — in-memory `"yyyy-MM-dd"` UTC,
-        // resets на app restart (acceptable: at-most 1 redundant fetch per launch).
+        // resets on app restart (acceptable: at-most 1 redundant fetch per launch).
         let utcDayFormatter = DateFormatter()
         utcDayFormatter.calendar = Calendar(identifier: .gregorian)
         utcDayFormatter.timeZone = TimeZone(identifier: "UTC")
@@ -310,19 +310,19 @@ public actor GitHubCollector {
                 lastContributionsFetchDay = todayString
             } catch {
                 logger.error("fetchContributionsCalendar failed: \(String(describing: error), privacy: .public)")
-                // Cooldown НЕ advance — retry next tick same day. lastContributionsToday
-                // оставляем previous value (sticky).
+                // Cooldown does NOT advance — retry next tick same day. lastContributionsToday
+                // keeps its previous value (sticky).
             }
         }
 
         // 6. Build presence_state.github composite snapshot.
-        // ADR-010 boundary: только counts / repo identifiers / status enums.
-        // No titles / bodies / message subjects попадают в state JSON.
-        // JSONSerialization не принимает Swift Optional — nil поля сериализуем
-        // как NSNull (поле присутствует с явно null значением), не омитим.
-        // Это позволяет downstream readers различать "ключ отсутствует, поле
-        // не отслеживается" от "поле известно, значение null" — важный сигнал
-        // для presence broadcast / merged snapshot rendering в Phase 5.
+        // ADR-010 boundary: only counts / repo identifiers / status enums.
+        // No titles / bodies / message subjects enter the state JSON.
+        // JSONSerialization does not accept Swift Optional — nil fields are serialized
+        // as NSNull (the field is present with an explicit null value), not omitted.
+        // This lets downstream readers distinguish "key absent, field not
+        // tracked" from "field known, value null" — an important signal
+        // for presence broadcast / merged snapshot rendering in Phase 5.
         // Track-9 T3 — viewer_login finalizes Phase 4.7.B partial. `login` already
         // in scope (passed parameter into provider.fetch* methods since OAuth bootstrap).
         // NSNull-on-empty mirrors prs_awaiting_top_repo / latest_push_check_status above
@@ -339,9 +339,9 @@ public actor GitHubCollector {
             "viewer_login": login.isEmpty ? NSNull() as Any : login,
         ]
 
-        // 7. Atomic write — events + offset + presence_state в одной транзакции.
-        // Если batch пуст — cursor НЕ двигается (retry next tick на том же since).
-        // Если batch не пуст — cursor = batch.cursorMs (max createdAt).
+        // 7. Atomic write — events + offset + presence_state in one transaction.
+        // If the batch is empty — the cursor does NOT move (retry next tick on the same since).
+        // If the batch is non-empty — cursor = batch.cursorMs (max createdAt).
         let advancedCursor = batch.cursorMs ?? since
         let offset = CollectorOffset(
             collectorID: CollectorID.githubPolling,
@@ -375,11 +375,11 @@ public actor GitHubCollector {
         )
     }
 
-    /// Phase 4.7.B-1 — `gh_notifications_pulse` state event. Эмитится КАЖДЫЙ tick
-    /// (даже при empty inbox) — нулевой count всё равно signal: "пользователь дочистил
-    /// inbox". `signal_type=.context` (state pulse, не user action).
-    /// Reasons распакованы в top-level keys (`reason_review_requested_count`) для
-    /// query-friendly доступа без nested JSON parsing на read-side.
+    /// Phase 4.7.B-1 — `gh_notifications_pulse` state event. Emitted on EVERY tick
+    /// (even with an empty inbox) — a zero count is still a signal: "the user cleared
+    /// their inbox". `signal_type=.context` (state pulse, not a user action).
+    /// Reasons are unpacked into top-level keys (`reason_review_requested_count`) for
+    /// query-friendly access without nested JSON parsing on the read-side.
     static func makeNotificationsPulseEvent(
         summary: GitHubNotificationsSummary, nowMs: Int64
     ) -> RawEvent {
@@ -389,7 +389,7 @@ public actor GitHubCollector {
             "total_unread": String(summary.totalUnread),
             "observed_at_ms": String(nowMs),
         ]
-        // Top-level fields для query-friendly access (избегаем nested JSON в payload).
+        // Top-level fields for query-friendly access (avoid nested JSON in the payload).
         for (reason, count) in summary.byReason {
             payload["reason_\(reason)_count"] = String(count)
         }
@@ -401,9 +401,9 @@ public actor GitHubCollector {
         )
     }
 
-    /// Phase 4.7.B-2 — `gh_pr_awaiting_review_count` state event. Эмитится каждый tick.
-    /// `signal_type=.context` (state pulse). `top_repo` поле omitted при `count==0`
-    /// или `topRepo==nil` — отличает "нет данных" от "owner/repo:0".
+    /// Phase 4.7.B-2 — `gh_pr_awaiting_review_count` state event. Emitted on every tick.
+    /// `signal_type=.context` (state pulse). The `top_repo` field is omitted when `count==0`
+    /// or `topRepo==nil` — distinguishes "no data" from "owner/repo:0".
     static func makePRAwaitingReviewCountEvent(
         summary: GitHubReviewQueueSummary, nowMs: Int64
     ) -> RawEvent {
@@ -425,11 +425,11 @@ public actor GitHubCollector {
     }
 
     /// Phase 4.7.B-3 — `gh_actions_run_initiated` action event per snapshot.
-    /// `signal_type=.action` (discrete action — юзер запустил CI run), не `.context`.
-    /// Timestamp = run's `created_at` (когда GitHub registered run start), не nowMs —
-    /// синхронизируется с реальным moment of action для downstream timeline accuracy.
-    /// ADR-010: `head_commit.message` / run `name` (часто equals commit subject) /
-    /// `output.title` — НЕ persisted. Только public-safe metadata: workflow file slug,
+    /// `signal_type=.action` (discrete action — the user started a CI run), not `.context`.
+    /// Timestamp = run's `created_at` (when GitHub registered the run start), not nowMs —
+    /// synchronized with the real moment of action for downstream timeline accuracy.
+    /// ADR-010: `head_commit.message` / run `name` (often equals the commit subject) /
+    /// `output.title` — NOT persisted. Only public-safe metadata: workflow file slug,
     /// trigger event, status/conclusion enum, head branch.
     static func makeActionsRunInitiatedEvent(snapshot: GitHubActionsRunSnapshot) -> RawEvent {
         var payload: [String: String] = [
@@ -442,8 +442,8 @@ public actor GitHubCollector {
             "status": snapshot.status,
             "created_at_ms": String(snapshot.createdAtMs),
         ]
-        // Только non-nil поля — отличает "completed→success" от "in_progress" (no
-        // conclusion yet) на read-side без nullable parsing.
+        // Only non-nil fields — distinguishes "completed→success" from "in_progress" (no
+        // conclusion yet) on the read-side without nullable parsing.
         if let conclusion = snapshot.conclusion {
             payload["conclusion"] = conclusion
         }
@@ -459,11 +459,11 @@ public actor GitHubCollector {
     }
 
     /// Phase 4.7.B-4 — `gh_check_runs_status` state event per (repo, sha) pair.
-    /// `signal_type=.context` (state pulse — current CI status of HEAD commit,
-    /// не discrete user action). Timestamp = `nowMs` (when collector observed),
-    /// не `created_at` of run (this is aggregate snapshot across N runs).
-    /// ADR-010: ни `name` of check-run, ни `output.title`/`output.summary`/
-    /// `output.text` — provider их не parses, collector их не emit'ит. Только
+    /// `signal_type=.context` (state pulse — current CI status of the HEAD commit,
+    /// not a discrete user action). Timestamp = `nowMs` (when the collector observed it),
+    /// not the run's `created_at` (this is an aggregate snapshot across N runs).
+    /// ADR-010: neither the check-run's `name`, nor `output.title`/`output.summary`/
+    /// `output.text` — the provider does not parse them and the collector does not emit them. Only
     /// 5 aggregate counts (total + 4 buckets) + repo + sha identifiers.
     static func makeCheckRunsStatusEvent(
         repo: String, sha: String, summary: GitHubCheckRunsSummary, nowMs: Int64
@@ -488,7 +488,7 @@ public actor GitHubCollector {
         )
     }
 
-    /// Phase 4.7.B-2 — `gh_my_open_pr_count` state event. Эмитится каждый tick.
+    /// Phase 4.7.B-2 — `gh_my_open_pr_count` state event. Emitted on every tick.
     /// `signal_type=.context` (state pulse).
     static func makeMyOpenPRCountEvent(
         summary: GitHubMyOpenPRsSummary, nowMs: Int64
@@ -517,8 +517,8 @@ public actor GitHubCollector {
             "sha": snapshot.sha ?? "",
             "branch": snapshot.branch ?? "",
         ]
-        // Phase 4.6.A.1 — latency fields. Только non-nil → ключ присутствует;
-        // отсутствие ключа в payload отличает "не знаем" от "0 секунд".
+        // Phase 4.6.A.1 — latency fields. Only non-nil → the key is present;
+        // an absent key in the payload distinguishes "we don't know" from "0 seconds".
         if let cycle = snapshot.cycleSeconds {
             payload["cycle_seconds"] = String(cycle)
         }
@@ -528,7 +528,7 @@ public actor GitHubCollector {
         // Phase 4.7.A — per-event-kind extension fields. Reserved baseline keys
         // ("source"/"event_kind"/"repo"/"title"/"number"/"sha"/"branch"/
         // "cycle_seconds"/"review_delay_seconds" + Track-1 D1 body/PR metadata keys)
-        // cannot be overridden via metadata — guards против accidental shadowing.
+        // cannot be overridden via metadata — guards against accidental shadowing.
         // Other keys merge in.
         if let metadata = snapshot.metadata {
             let reserved: Set<String> = [

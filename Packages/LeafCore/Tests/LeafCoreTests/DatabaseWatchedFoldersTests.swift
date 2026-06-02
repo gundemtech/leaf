@@ -1,5 +1,5 @@
-// Phase 2.4 — public-side tests для watched_folders таблицы (M003) +
-// 4 CRUD методов Database. FSEventsCollector + router — отдельные файлы.
+// Phase 2.4 — public-side tests for the watched_folders table (M003) +
+// 4 CRUD methods on Database. FSEventsCollector + router — separate files.
 
 import XCTest
 @testable import LeafCore
@@ -21,8 +21,8 @@ final class DatabaseWatchedFoldersTests: XCTestCase {
 
     // MARK: - Schema (M003)
 
-    /// M003 создаёт таблицу + index + accepts CHECK на granularity.
-    /// Idempotency M001+M002 не ломается (round-trip через два open'а).
+    /// M003 creates the table + index + accepts the CHECK on granularity.
+    /// M001+M002 idempotency does not break (round-trip through two opens).
     func testMigrationCreatesTableAndIndex() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -45,8 +45,8 @@ final class DatabaseWatchedFoldersTests: XCTestCase {
 
     // MARK: - add + list round-trip
 
-    /// Базовый round-trip: add → list возвращает тот же row с правильно
-    /// раскодированными датами + granularity.
+    /// Basic round-trip: add → list returns the same row with correctly
+    /// decoded dates + granularity.
     func testAddAndListRoundTrip() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -67,12 +67,12 @@ final class DatabaseWatchedFoldersTests: XCTestCase {
         XCTAssertEqual(listed[0].path, "/Users/alice/Desktop/proj")
         XCTAssertEqual(listed[0].maxGranularity, .L4)
         XCTAssertTrue(listed[0].enabled)
-        // Допускаем 1ms дрейф из-за Int64(_ * 1000) round-trip.
+        // Allow 1ms drift due to the Int64(_ * 1000) round-trip.
         XCTAssertEqual(listed[0].addedAt.timeIntervalSince1970, 1_700_000_000, accuracy: 0.001)
     }
 
-    /// `path` UNIQUE — попытка add дубликата → throws SQLITE_CONSTRAINT.
-    /// UI ловит и показывает "already watching".
+    /// `path` UNIQUE — attempting to add a duplicate → throws SQLITE_CONSTRAINT.
+    /// The UI catches it and shows "already watching".
     func testAddDuplicatePathThrows() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -93,8 +93,8 @@ final class DatabaseWatchedFoldersTests: XCTestCase {
 
     // MARK: - includingDisabled filter
 
-    /// list(includingDisabled: false) — default — отдаёт только enabled=1.
-    /// FSEventsCollector использует именно этот вариант (не watch'ит disabled).
+    /// list(includingDisabled: false) — default — returns only enabled=1.
+    /// FSEventsCollector uses exactly this variant (does not watch disabled).
     func testListFiltersDisabledByDefault() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -123,8 +123,8 @@ final class DatabaseWatchedFoldersTests: XCTestCase {
 
     // MARK: - remove
 
-    /// remove by id — DELETE single row, остальные не трогает; idempotent
-    /// для отсутствующего id (no-op без exception).
+    /// remove by id — DELETE a single row, leaves the rest untouched; idempotent
+    /// for a missing id (no-op without an exception).
     func testRemoveDeletesRow() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -142,16 +142,16 @@ final class DatabaseWatchedFoldersTests: XCTestCase {
         XCTAssertEqual(listed.count, 1)
         XCTAssertEqual(listed[0].id, "id-2")
 
-        // Idempotent — no row для "nonexistent" → no-op без exception.
+        // Idempotent — no row for "nonexistent" → no-op without an exception.
         XCTAssertNoThrow(try db.removeWatchedFolder(id: "nonexistent"))
         XCTAssertEqual(try db.listWatchedFolders().count, 1)
     }
 
     // MARK: - update
 
-    /// Partial update — только переданные поля меняются. updated_ms bump'ится always.
-    /// Проверяем что enabled toggle + granularity change — независимы и не затирают
-    /// другие колонки (path / id / addedAt invariant).
+    /// Partial update — only the passed fields change. updated_ms always bumps.
+    /// We verify that the enabled toggle + granularity change are independent and do not clobber
+    /// other columns (path / id / addedAt invariant).
     func testUpdatePartialFields() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -161,22 +161,22 @@ final class DatabaseWatchedFoldersTests: XCTestCase {
             enabled: true, addedAt: now, updatedAt: now
         ))
 
-        // Update только granularity → enabled остаётся true.
+        // Update only granularity → enabled stays true.
         try db.updateWatchedFolder(id: "id-1", maxGranularity: .L5)
         var listed = try db.listWatchedFolders(includingDisabled: true)
         XCTAssertEqual(listed[0].maxGranularity, .L5)
         XCTAssertTrue(listed[0].enabled)
         XCTAssertEqual(listed[0].path, "/a")
         XCTAssertGreaterThan(listed[0].updatedAt.timeIntervalSince1970, now.timeIntervalSince1970,
-                             "updated_ms должен подняться")
+                             "updated_ms must increase")
 
-        // Update только enabled → granularity остаётся L5.
+        // Update only enabled → granularity stays L5.
         try db.updateWatchedFolder(id: "id-1", enabled: false)
         listed = try db.listWatchedFolders(includingDisabled: true)
         XCTAssertFalse(listed[0].enabled)
         XCTAssertEqual(listed[0].maxGranularity, .L5)
 
-        // Both nil → no-op (без exception).
+        // Both nil → no-op (without an exception).
         XCTAssertNoThrow(try db.updateWatchedFolder(id: "id-1"))
     }
 }

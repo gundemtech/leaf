@@ -4,7 +4,7 @@ import Foundation
 ///
 /// Bytes layout: `[ ver:1B | admin_pubkey:32B | nonce:12B | ciphertext | tag:16B ]`.
 /// Public envelope shape — whitepaper presence-relay.md §invite handshake.
-/// AAD construction / JSON plaintext shape / nonce gen — moat в
+/// AAD construction / JSON plaintext shape / nonce gen — moat in
 /// `LeafCorePrivate/Prod/Crypto/`.
 public struct InviteBlob: Sendable, Hashable {
     public let bytes: Data
@@ -13,10 +13,10 @@ public struct InviteBlob: Sendable, Hashable {
 
 /// Plaintext header parse result. No crypto.
 ///
-/// Caller использует `adminPubkey` чтобы выполнить
+/// The caller uses `adminPubkey` to perform
 /// `KeyAgreement.sharedSecret(privateKey: invitee_priv, peerPublicKeyHex: pubkey.hex)` →
 /// `InviteKDF.deriveWrapKey(sharedSecret:, otp:)` → `wrapKey`,
-/// затем `InviteBlobCodec.decode(blob, wrapKey:)`.
+/// then `InviteBlobCodec.decode(blob, wrapKey:)`.
 public struct InviteBlobHeader: Sendable, Hashable {
     public let version: UInt8
     public let adminPubkey: Data
@@ -26,7 +26,7 @@ public struct InviteBlobHeader: Sendable, Hashable {
         self.adminPubkey = adminPubkey
     }
 
-    /// `0x02` для invite blob (отличается от envelope `0x01`).
+    /// `0x02` for the invite blob (distinct from envelope `0x01`).
     public static let currentVersion: UInt8 = 2
     /// 1B version + 32B X25519 admin pubkey.
     public static let prefixSize: Int = 33
@@ -39,8 +39,8 @@ public struct InviteBlobHeader: Sendable, Hashable {
     /// 1+32+12+16 — fixed overhead (excludes plaintext bytes).
     public static let fixedOverhead: Int = 61
 
-    /// Read-only parse первых 33 байт. No crypto.
-    /// Throws `LeafError.inviteBlobMalformed` если bytes < 33 / version != currentVersion.
+    /// Read-only parse of the first 33 bytes. No crypto.
+    /// Throws `LeafError.inviteBlobMalformed` if bytes < 33 / version != currentVersion.
     public static func peek(from blob: InviteBlob) throws -> InviteBlobHeader {
         let bytes = blob.bytes
         guard bytes.count >= prefixSize else {

@@ -2,12 +2,12 @@ import Foundation
 
 /// Phase Track-4 S3 — flush-time snapshot emitted by `CGEventTapCollector`
 /// minute-boundary loop. Counter-only — keycode / .characters / .modifierFlags
-/// никогда не материализуются (ADR-010 Won't-list).
+/// never materialize (ADR-010 Won't-list).
 ///
-/// `droppedReason: .locked` или `.sleeping` (mutually exclusive — `.locked`
-/// has priority per spec §1 "intensity_bucket_dropped" semantics) сигналит
-/// что minute попал в AFK window; в этом случае `foregroundApp` обнуляется
-/// (наблюдение app под locked screen — приватный leak risk даже counter-only).
+/// `droppedReason: .locked` or `.sleeping` (mutually exclusive — `.locked`
+/// has priority per spec §1 "intensity_bucket_dropped" semantics) signals
+/// that the minute fell into an AFK window; in that case `foregroundApp` is cleared
+/// (observing the app under a locked screen is a private leak risk even counter-only).
 public struct IntensityBucketSnapshot: Sendable, Equatable {
     public enum DroppedReason: String, Sendable, Hashable {
         case locked
@@ -62,9 +62,9 @@ public struct IntensityBucketSnapshot: Sendable, Equatable {
 
 /// Phase Track-4 S3 — stateless formatter: takes minute-bucket counter values +
 /// system-state flags, produces `IntensityBucketSnapshot`. Counter state lives
-/// внутри `CGEventTapCollector` actor (OSAllocatedUnfairLock-guarded); этот
-/// тип просто оформляет snapshot. Минутно-граничная semantics тестируется
-/// здесь в изоляции, без CGEventTap callback или DB.
+/// inside the `CGEventTapCollector` actor (OSAllocatedUnfairLock-guarded); this
+/// type just shapes the snapshot. The minute-boundary semantics are tested
+/// here in isolation, without a CGEventTap callback or DB.
 public struct IntensityBucketAccumulator: Sendable {
     public init() {}
 

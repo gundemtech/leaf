@@ -2,8 +2,8 @@ import Foundation
 import os
 import LeafCore
 
-/// Actor-батчер: коллектор зовёт `enqueue(_:)` не блокируя, writer раз в N секунд
-/// или при достижении батча кидает всё в DB одним write.
+/// Actor batcher: a collector calls `enqueue(_:)` without blocking; the writer,
+/// every N seconds or once the batch fills up, flushes everything to the DB in a single write.
 actor EventWriter {
     private let database: Database
     private let thresholds: AgentThresholds
@@ -37,7 +37,7 @@ actor EventWriter {
         }
     }
 
-    /// Принудительный flush (для graceful shutdown).
+    /// Forced flush (for graceful shutdown).
     func flush() {
         flushLocked()
     }
@@ -51,7 +51,7 @@ actor EventWriter {
             try database.write(batch)
             writerLogger.debug("Flushed \(batch.count) events")
         } catch {
-            // Для Phase 1 — log and drop. В Phase 2+ можно re-enqueue с лимитом retry.
+            // For Phase 1 — log and drop. In Phase 2+ we can re-enqueue with a retry limit.
             writerLogger.error("Failed to write batch of \(batch.count): \(error.localizedDescription, privacy: .public)")
         }
     }

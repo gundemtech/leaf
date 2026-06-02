@@ -2,22 +2,22 @@ import CryptoKit
 import Foundation
 
 /// Phase 5.2.A — idempotent X25519 long-term identity bootstrap.
-/// Reads `<root>/x25519.priv` if exists (32B), иначе генерирует
+/// Reads `<root>/x25519.priv` if it exists (32B), otherwise generates
 /// `Curve25519.KeyAgreement.PrivateKey()` + atomically writes through
 /// `TeamKeystore.writeX25519Private`. Mirror enum-namespace style of
 /// `TeamKeystore` (5.1.D).
 ///
-/// Single source of truth для long-term identity bootstrap по обе стороны
+/// Single source of truth for long-term identity bootstrap on both sides of the
 /// invite handshake (admin `OrgService.createPersonalOrg` + invitee
-/// accept-invite path в 5.2.E). Replaces 5.1.D inline
-/// `randomX25519PrivateKey` factory в `OrgService` (commit 4 этой phase).
+/// accept-invite path in 5.2.E). Replaces the 5.1.D inline
+/// `randomX25519PrivateKey` factory in `OrgService` (commit 4 of this phase).
 public enum IdentityService {
 
-  /// Read existing 32B X25519 priv из `<root>/x25519.priv` если файл есть;
-  /// иначе генерирует новую keypair и atomically пишет.
+  /// Read the existing 32B X25519 priv from `<root>/x25519.priv` if the file exists;
+  /// otherwise generate a new keypair and atomically write it.
   /// - Throws:
-  ///   - `LeafError.keyFileCorrupted` — файл существует, но размер ≠ 32B
-  ///     (propagates, не silent regenerate — invariant: corrupted state
+  ///   - `LeafError.keyFileCorrupted` — the file exists, but its size ≠ 32B
+  ///     (propagates, not a silent regenerate — invariant: corrupted state
   ///     stays observable).
   ///   - `LeafError.keyFileUnavailable(reason:)` — write failed
   ///     (filesystem / permissions).
@@ -31,9 +31,9 @@ public enum IdentityService {
       })
   }
 
-  /// Test/dev overload — inject deterministic keypair generator. Используется
-  /// только на gen-path (когда файл отсутствует). Если файл уже на диске,
-  /// generator НЕ вызывается (см. `IdentityServiceTests.testInjectedGenerator_…`).
+  /// Test/dev overload — inject a deterministic keypair generator. Used only on
+  /// the gen-path (when the file is absent). If the file is already on disk,
+  /// the generator is NOT called (see `IdentityServiceTests.testInjectedGenerator_…`).
   public static func ensureLocalIdentity(
     at root: URL,
     generate: @Sendable () -> Curve25519.KeyAgreement.PrivateKey

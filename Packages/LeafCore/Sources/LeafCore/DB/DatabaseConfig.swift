@@ -1,7 +1,7 @@
 import Foundation
 
-/// Runtime-injected конфиг для Database. Точные значения — moat (`LeafCorePrivate`).
-/// weakDefaults — слабые значения для CI и тестов (работают, но не production-ready).
+/// Runtime-injected config for Database. Exact values are moat (`LeafCorePrivate`).
+/// weakDefaults are weak values for CI and tests (they work, but are not production-ready).
 public struct DatabaseConfig: Sendable, Hashable {
     public let busyTimeoutMs: Int
     public let walCheckpointIntervalSec: TimeInterval
@@ -20,7 +20,7 @@ public struct DatabaseConfig: Sendable, Hashable {
     )
 }
 
-/// Каноничный путь sqlite-файла.
+/// Canonical path of the sqlite file.
 public enum DatabasePath {
     public static let filename = "events.sqlite"
     public static let applicationSupportSubdir = "Leaf"

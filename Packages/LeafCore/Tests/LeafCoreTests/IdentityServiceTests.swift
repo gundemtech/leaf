@@ -1,7 +1,7 @@
 // Phase 5.2.A — IdentityService tests.
 // Idempotent read-or-generate semantics: first call generates + persists 32B
 // X25519 priv to <root>/x25519.priv (0o600); second call reads existing file
-// и returns same key. Mirror OrgServiceTests tempDir setUp/tearDown discipline.
+// and returns same key. Mirror OrgServiceTests tempDir setUp/tearDown discipline.
 
 import CryptoKit
 import XCTest
@@ -21,7 +21,7 @@ final class IdentityServiceTests: XCTestCase {
     try? FileManager.default.removeItem(at: tempRoot)
   }
 
-  // MARK: - 1. Generate + persist на пустом root
+  // MARK: - 1. Generate + persist on an empty root
 
   func testEnsureLocalIdentity_NoFile_GeneratesAndPersists() throws {
     let priv = try IdentityService.ensureLocalIdentity(at: tempRoot)
@@ -38,7 +38,7 @@ final class IdentityServiceTests: XCTestCase {
     XCTAssertEqual(perms?.int16Value, 0o600)
   }
 
-  // MARK: - 2. Existing file → read, не generate
+  // MARK: - 2. Existing file → read, don't generate
 
   func testEnsureLocalIdentity_FileExists_ReadsExisting() throws {
     let sentinel = Curve25519.KeyAgreement.PrivateKey()
@@ -49,10 +49,10 @@ final class IdentityServiceTests: XCTestCase {
     XCTAssertEqual(read.rawRepresentation, sentinel.rawRepresentation)
   }
 
-  // MARK: - 3. Corrupted file → throws (length mismatch propagates, не silent regenerate)
+  // MARK: - 3. Corrupted file → throws (length mismatch propagates, not silent regenerate)
 
   func testEnsureLocalIdentity_CorruptedFile_Throws() throws {
-    // Bypass TeamKeystore length-validation: write 31B raw напрямую.
+    // Bypass TeamKeystore length-validation: write 31B raw directly.
     try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
     let fileURL = tempRoot.appendingPathComponent(TeamKeystore.x25519PrivateFilename)
     let bad = Data(repeating: 0x00, count: 31)
@@ -85,7 +85,7 @@ final class IdentityServiceTests: XCTestCase {
   func testEnsureLocalIdentity_KeystoreSubdirCreatedIdempotently() throws {
     // tempRoot does not exist yet — TeamKeystore writeAtomic must create parent.
     let first = try IdentityService.ensureLocalIdentity(at: tempRoot)
-    // Second call against same root — должно работать, no error.
+    // Second call against same root — should work, no error.
     let second = try IdentityService.ensureLocalIdentity(at: tempRoot)
 
     XCTAssertEqual(first.rawRepresentation, second.rawRepresentation)
@@ -118,7 +118,7 @@ final class IdentityServiceTests: XCTestCase {
     )
   }
 
-  // MARK: - 6. Injected generator используется только при gen-path (lazy)
+  // MARK: - 6. Injected generator is used only on the gen-path (lazy)
 
   func testEnsureLocalIdentity_InjectedGenerator_UsedOnlyOnFirstCall() throws {
     let injected = Curve25519.KeyAgreement.PrivateKey()
@@ -138,16 +138,16 @@ final class IdentityServiceTests: XCTestCase {
       at: tempRoot,
       generate: {
         counter.increment()
-        return Curve25519.KeyAgreement.PrivateKey()  // different key — would mismatch если invoked
+        return Curve25519.KeyAgreement.PrivateKey()  // different key — would mismatch if invoked
       })
     XCTAssertEqual(second.rawRepresentation, injected.rawRepresentation)
     XCTAssertEqual(counter.value, 1, "generate() must not be called when file exists")
   }
 }
 
-/// Sendable counter для inject'абельного `generate:` closure.
-/// `@Sendable` closure не может mutate'ить captured var, but reference-type
-/// поверх NSLock — Sendable-safe.
+/// Sendable counter for the injectable `generate:` closure.
+/// A `@Sendable` closure cannot mutate a captured var, but a reference-type
+/// over an NSLock is Sendable-safe.
 private final class CallCounter: @unchecked Sendable {
   private let lock = NSLock()
   private var _value = 0

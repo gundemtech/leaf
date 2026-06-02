@@ -1,7 +1,7 @@
-// Phase 4.4 B3 — SlackTokenRefresher тесты.
-// Mock URLSession через URLProtocol + ephemeral session — паттерн из
-// `LeafCorePrivateTests.MockURLProtocol`, но локальная копия (test target
-// `LeafCoreTests` не может линковаться с private test target).
+// Phase 4.4 B3 — SlackTokenRefresher tests.
+// Mock URLSession via URLProtocol + ephemeral session — the pattern from
+// `LeafCorePrivateTests.MockURLProtocol`, but a local copy (the test target
+// `LeafCoreTests` can't link against the private test target).
 
 import XCTest
 import Foundation
@@ -58,7 +58,7 @@ final class SlackTokenRefresherTests: XCTestCase {
             .appendingPathComponent("slack-refresher-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         dbURL = tempDir.appendingPathComponent("events.sqlite")
-        // Чистим cross-test state — flag и handler.
+        // Clean up cross-test state — flag and handler.
         UserDefaults(suiteName: SlackOAuthEndpoints.userDefaultsSuite)?
             .removeObject(forKey: SlackOAuthEndpoints.refreshDeniedFlagKey)
         SlackMockURLProtocol.handler = nil
@@ -120,7 +120,7 @@ final class SlackTokenRefresherTests: XCTestCase {
 
     // MARK: - refreshIfNeeded — short-circuit cases
 
-    /// Token живёт ещё долго (>5 min до expiry) → возврат текущей записи без HTTP.
+    /// Token still has plenty of life (>5 min until expiry) → return the current record without HTTP.
     func testRefreshIfNeededWhenNotExpired_ReturnsExisting() async throws {
         let db = try makeDatabase()
         let now = Date(timeIntervalSince1970: 1_700_000_000)
@@ -137,7 +137,7 @@ final class SlackTokenRefresherTests: XCTestCase {
         XCTAssertEqual(result.refreshToken, "xoxe-1-old")
     }
 
-    /// expiresAt=nil (rotation OFF / long-lived xoxp-) → возврат текущей записи без HTTP.
+    /// expiresAt=nil (rotation OFF / long-lived xoxp-) → return the current record without HTTP.
     func testRefreshIfNeededWhenExpiresAtNil_ReturnsExisting() async throws {
         let db = try makeDatabase()
         let now = Date(timeIntervalSince1970: 1_700_000_000)
@@ -156,8 +156,8 @@ final class SlackTokenRefresherTests: XCTestCase {
 
     // MARK: - forceRefresh — happy path
 
-    /// Slack 200 + ok=true + новые top-level access/refresh/expires_in →
-    /// upsert IntegrationRecord, возврат обновлённого row.
+    /// Slack 200 + ok=true + new top-level access/refresh/expires_in →
+    /// upsert IntegrationRecord, return the updated row.
     func testForceRefreshHappy_StoresNewToken() async throws {
         let db = try makeDatabase()
         let now = Date(timeIntervalSince1970: 1_700_000_000)
@@ -185,14 +185,14 @@ final class SlackTokenRefresherTests: XCTestCase {
 
         let result = try await refresher.refreshIfNeeded(now: now)
 
-        // Endpoint и form-encoded body содержат всё нужное.
+        // Endpoint and form-encoded body contain everything needed.
         XCTAssertEqual(capturedURL, SlackOAuthEndpoints.token)
         let bodyString = String(data: capturedBody ?? Data(), encoding: .utf8) ?? ""
         XCTAssertTrue(bodyString.contains("grant_type=refresh_token"))
         XCTAssertTrue(bodyString.contains("client_id=test-client-id"))
         XCTAssertTrue(bodyString.contains("refresh_token=xoxe-1-old"))
 
-        // Новый record.
+        // New record.
         XCTAssertEqual(result.accessToken, "xoxe.xoxp-NEW")
         XCTAssertEqual(result.refreshToken, "xoxe-1-NEW")
         XCTAssertEqual(
@@ -200,11 +200,11 @@ final class SlackTokenRefresherTests: XCTestCase {
             now.addingTimeInterval(43200).timeIntervalSince1970,
             accuracy: 0.001
         )
-        // workspaceID/connectedAt сохраняются.
+        // workspaceID/connectedAt are preserved.
         XCTAssertEqual(result.workspaceID, "T123:U456")
         XCTAssertEqual(result.connectedAt.timeIntervalSince1970, 1_700_000_000, accuracy: 0.001)
 
-        // DB действительно обновлена.
+        // DB is actually updated.
         let stored = try db.readIntegration(provider: .slack)
         XCTAssertEqual(stored?.accessToken, "xoxe.xoxp-NEW")
         XCTAssertEqual(stored?.refreshToken, "xoxe-1-NEW")
@@ -235,9 +235,9 @@ final class SlackTokenRefresherTests: XCTestCase {
             XCTFail("Unexpected error: \(error)")
         }
 
-        // Row удалён.
+        // Row deleted.
         XCTAssertNil(try db.readIntegration(provider: .slack))
-        // Flag установлен.
+        // Flag set.
         let flag = UserDefaults(suiteName: SlackOAuthEndpoints.userDefaultsSuite)?
             .bool(forKey: SlackOAuthEndpoints.refreshDeniedFlagKey)
         XCTAssertEqual(flag, true)
@@ -246,7 +246,7 @@ final class SlackTokenRefresherTests: XCTestCase {
     // MARK: - forceRefresh — transient error
 
     /// ok=false + non-terminal error (e.g. internal_error) → throws .network,
-    /// row остаётся, flag НЕ ставится (юзер увидит retry на следующем tick'е).
+    /// row stays, flag is NOT set (the user will see a retry on the next tick).
     func testForceRefreshOnTransientError_KeepsIntegration() async throws {
         let db = try makeDatabase()
         let now = Date(timeIntervalSince1970: 1_700_000_000)
@@ -268,7 +268,7 @@ final class SlackTokenRefresherTests: XCTestCase {
             XCTFail("Unexpected error: \(error)")
         }
 
-        // Row жив — не было permanent denial.
+        // Row alive — there was no permanent denial.
         XCTAssertNotNil(try db.readIntegration(provider: .slack))
         let flag = UserDefaults(suiteName: SlackOAuthEndpoints.userDefaultsSuite)?
             .bool(forKey: SlackOAuthEndpoints.refreshDeniedFlagKey) ?? false

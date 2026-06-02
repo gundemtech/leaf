@@ -26,26 +26,26 @@ import LeafCore
 
 private let knownLinearPrefixesForHero: Set<String> = ["LEAF"]
 
-/// Hero app-icon size — 36pt. С `heroIconAnchor` (top = title cap-top) icon
-/// верхней гранью лежит на линии cap-top'а заголовка, нижней — на середине
-/// caption. Не входит в LeafIconSize tokens (.xl = 32pt) — hero единственный
-/// consumer 36pt.
+/// Hero app-icon size — 36pt. With `heroIconAnchor` (top = title cap-top) the
+/// icon's top edge sits on the title's cap-top line, its bottom edge on the
+/// middle of the caption. Not part of LeafIconSize tokens (.xl = 32pt) — hero
+/// is the only 36pt consumer.
 private let heroIconSize: CGFloat = 36
 
 /// Bleached leaf-green for cosmetic accent tints (provider row icons,
-/// RIGHT NOW column headers). `accent.subtle` в dark mode = 35%-alpha
-/// dark-green fill — для foreground tint'а нечитаем. Используем
-/// primary с opacity'ом — тот же hue, мягче читается.
+/// RIGHT NOW column headers). `accent.subtle` in dark mode = 35%-alpha
+/// dark-green fill — unreadable as a foreground tint. We use
+/// primary with opacity — same hue, reads softer.
 extension Color {
     static var leafAccentBleached: Color { LeafColor.accent.primary.opacity(0.6) }
 }
 
-/// Custom alignment guide — пинит icon top к title cap-top, не center-to-center.
-/// Title frame включает leading выше cap-line'а (для 28pt SF Pro Display
-/// semibold ≈ 7pt сверху над «T»), поэтому icon center = title frame center
-/// визуально ставит squircle выше cap-line'а. Cap-top считаем как
-/// `firstTextBaseline - capHeight`; capHeight ≈ 0.71 от font size для SF Pro
-/// Display semibold (Apple metrics; 0.71 — empirical, не доку из Apple).
+/// Custom alignment guide — pins icon top to title cap-top, not center-to-center.
+/// The title frame includes leading above the cap-line (for 28pt SF Pro Display
+/// semibold ≈ 7pt above the «T»), so icon center = title frame center visually
+/// places the squircle above the cap-line. We compute cap-top as
+/// `firstTextBaseline - capHeight`; capHeight ≈ 0.71 of font size for SF Pro
+/// Display semibold (Apple metrics; 0.71 — empirical, not from Apple docs).
 extension VerticalAlignment {
     private struct HeroIconAnchor: AlignmentID {
         static func defaultValue(in context: ViewDimensions) -> CGFloat {
@@ -55,7 +55,7 @@ extension VerticalAlignment {
     static let heroIconAnchor = VerticalAlignment(HeroIconAnchor.self)
 }
 
-/// Cap-height ratio для SF Pro Display semibold — empirical.
+/// Cap-height ratio for SF Pro Display semibold — empirical.
 private let heroTitleCapHeightRatio: CGFloat = 0.71
 
 /// Hero caption fallback truncation when no Linear ID matches the active

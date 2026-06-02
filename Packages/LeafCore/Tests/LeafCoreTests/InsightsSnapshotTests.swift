@@ -1,11 +1,11 @@
 import XCTest
 @testable import LeafCore
 
-/// Phase 2.5 — закрепляем семантику `InsightsSnapshot.isEmpty`. Это
-/// load-bearing property: `InsightsReader` решает по нему `.loaded` vs
-/// `.empty` в UI state machine. Любое новое поле snapshot'а должно быть
-/// учтено в `isEmpty` — иначе ненулевое поле "проглотится" глобальным
-/// "Collecting…" placeholder'ом.
+/// Phase 2.5 — pin down the semantics of `InsightsSnapshot.isEmpty`. This is a
+/// load-bearing property: `InsightsReader` uses it to decide `.loaded` vs
+/// `.empty` in the UI state machine. Any new snapshot field must be
+/// accounted for in `isEmpty` — otherwise a non-empty field gets "swallowed" by the global
+/// "Collecting…" placeholder.
 final class InsightsSnapshotTests: XCTestCase {
 
     private let now = Date(timeIntervalSince1970: 1_700_000_000)
@@ -300,7 +300,7 @@ final class InsightsSnapshotTests: XCTestCase {
     }
 
     func testSlackReactionsAndHuddleSessionStatsDefaultsBackwardCompat() {
-        // Existing test/UI callsites без новых параметров не ломаются.
+        // Existing test/UI callsites without the new parameters don't break.
         let snapshot = InsightsSnapshot(
             topApps: [],
             sessions: [],
@@ -308,12 +308,12 @@ final class InsightsSnapshotTests: XCTestCase {
             deepSessionMinSec: 1500,
             slackMessagesCount: 3
         )
-        XCTAssertEqual(snapshot.slackReactionsReceived, 0, "default 0 для backward compat")
+        XCTAssertEqual(snapshot.slackReactionsReceived, 0, "default 0 for backward compat")
         XCTAssertNil(snapshot.slackHuddleSessionStats, "default nil")
-        XCTAssertFalse(snapshot.isEmpty, "messages > 0 → не empty")
+        XCTAssertFalse(snapshot.isEmpty, "messages > 0 → not empty")
     }
 
-    // MARK: - Phase 4.6.C.1 — wowDeltaPct в breakdown structs
+    // MARK: - Phase 4.6.C.1 — wowDeltaPct in breakdown structs
 
     func testLinearBreakdownWowDeltaPctDefaultNil() {
         let bd = LinearActivityBreakdown(
@@ -350,7 +350,7 @@ final class InsightsSnapshotTests: XCTestCase {
             byEventKind: [],
             wowDeltaPct: -0.05
         )
-        XCTAssertEqual(bd.wowDeltaPct, -0.05, "negative WoW сохраняется")
+        XCTAssertEqual(bd.wowDeltaPct, -0.05, "negative WoW is preserved")
     }
 
     func testSlackBreakdownWowDeltaPctDefaultNil() {
@@ -369,14 +369,14 @@ final class InsightsSnapshotTests: XCTestCase {
             byChannel: [],
             wowDeltaPct: 0.0
         )
-        XCTAssertEqual(bd.wowDeltaPct, 0.0, "zero WoW (без change) — legitimate value, не nil")
+        XCTAssertEqual(bd.wowDeltaPct, 0.0, "zero WoW (no change) — legitimate value, not nil")
     }
 
     // MARK: - Phase 4.6.C.2 — longestUninterruptedWindow
 
     func testSnapshotLongestUninterruptedWindowDefaultNil() {
         XCTAssertNil(emptySnapshot().longestUninterruptedWindow,
-            "convenience init без аргумента → default nil (backwards compat)")
+            "convenience init without the argument → default nil (backwards compat)")
     }
 
     func testSnapshotLongestUninterruptedWindowExplicit() {
@@ -398,8 +398,8 @@ final class InsightsSnapshotTests: XCTestCase {
                        ["github", "slack"])
     }
 
-    /// Default extension impl возвращает nil — StubInsights не override'ит,
-    /// поэтому iOS-future / CI и тесты с stub'ом работают без ошибок.
+    /// Default extension impl returns nil — StubInsights doesn't override it,
+    /// so iOS-future / CI and tests using the stub work without errors.
     func testStubInsightsLongestUninterruptedWindowDefaultsToNil() throws {
         let dbURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("stub-insights-window-\(UUID().uuidString).sqlite")
@@ -412,7 +412,7 @@ final class InsightsSnapshotTests: XCTestCase {
         XCTAssertNil(win, "default extension impl — nil")
     }
 
-    // MARK: - Phase 4.6.C.3 — per-provider streaks в breakdown structs
+    // MARK: - Phase 4.6.C.3 — per-provider streaks in breakdown structs
 
     func testLinearBreakdownIssueCloseStreakDefaultNil() {
         let bd = LinearActivityBreakdown(
@@ -449,7 +449,7 @@ final class InsightsSnapshotTests: XCTestCase {
             byEventKind: [],
             commitStreak: 12
         )
-        XCTAssertEqual(bd.commitStreak, 12, "long streak (12 days) сохраняется")
+        XCTAssertEqual(bd.commitStreak, 12, "long streak (12 days) is preserved")
     }
 
     func testSlackBreakdownHuddleParticipationStreakDefaultNil() {
@@ -469,7 +469,7 @@ final class InsightsSnapshotTests: XCTestCase {
             huddleParticipationStreak: 1
         )
         XCTAssertEqual(bd.huddleParticipationStreak, 1,
-            "single-day streak=1 — legitimate value (не nil), edge между \"never\" и \"started today\"")
+            "single-day streak=1 — legitimate value (not nil), edge between \"never\" and \"started today\"")
     }
 
     // MARK: - Phase 4.6.B — Linear status transitions
@@ -480,7 +480,7 @@ final class InsightsSnapshotTests: XCTestCase {
             byProject: [],
             byStatus: []
         )
-        XCTAssertNil(bd.transitions, "default nil — backwards compat для existing init callsite'ов")
+        XCTAssertNil(bd.transitions, "default nil — backwards compat for existing init callsites")
         XCTAssertNil(bd.completionRate, "default nil — same convention")
     }
 
@@ -497,7 +497,7 @@ final class InsightsSnapshotTests: XCTestCase {
         XCTAssertEqual(bd.transitions?.completed, 3)
         XCTAssertEqual(bd.transitions?.canceled, 1)
         XCTAssertEqual(bd.transitions?.reopened, 1)
-        XCTAssertEqual(bd.transitions?.total, 7, "sum может exceed unique transition count для completed→canceled overlap")
+        XCTAssertEqual(bd.transitions?.total, 7, "sum may exceed unique transition count for completed→canceled overlap")
         XCTAssertEqual(bd.completionRate, 0.5)
     }
 
@@ -538,7 +538,7 @@ final class InsightsSnapshotTests: XCTestCase {
     }
 
     func testSnapshotLinearTransitionsDefaultsBackwardCompat() {
-        // Existing callsite'ы без новых параметров продолжают работать.
+        // Existing callsites without the new parameters keep working.
         let snapshot = InsightsSnapshot(
             topApps: [],
             sessions: [],
@@ -551,8 +551,8 @@ final class InsightsSnapshotTests: XCTestCase {
     }
 
     func testStubInsightsLinearTransitionsAndCompletionRateDefaults() throws {
-        // StubInsights наследует default extension impl → .empty / nil
-        // (для CI / iOS-future / тест-сценариев без LeafCorePrivate).
+        // StubInsights inherits the default extension impl → .empty / nil
+        // (for CI / iOS-future / test scenarios without LeafCorePrivate).
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("snapshot-stub-tx-\(UUID().uuidString).sqlite")
         defer { try? FileManager.default.removeItem(at: tmp) }

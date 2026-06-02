@@ -2,23 +2,23 @@ import Foundation
 import LeafCore
 import LeafMCPProtocol
 
-/// Phase 4.6.C.2 — MCP tool: longest gap (uninterrupted window) между Layer B
-/// integration events (Linear/GitHub/Slack) внутри period'а. Proxy для "deep
-/// async work session" — время непрерывной работы без notification-interruption
-/// из tracked интеграций. Отличается от `get_current_session` (тот про
-/// macOS-level focus session) — здесь только integration silence.
+/// Phase 4.6.C.2 — MCP tool: longest gap (uninterrupted window) between Layer B
+/// integration events (Linear/GitHub/Slack) within a period. Proxy for "deep
+/// async work session" — time of continuous work without notification-interruption
+/// from tracked integrations. Differs from `get_current_session` (that one is about
+/// macOS-level focus session) — here only integration silence.
 ///
-/// Output payload (versioned `version: 1` через `ToolResponseBuilder`):
-///   - `period`, `from`, `to` — окно
-///   - `start`, `end` — ISO timestamps окна (period bounds допустимы как anchors:
-///     start может быть = period.start если первый event сильно позже,
-///     end может быть = period.end если последний event сильно раньше)
-///   - `durationSeconds` — длительность gap'а
-///   - `sourcesActive[]` — sources с ≥1 event в period (honest signal:
-///     ["slack"] значит окно считалось только между Slack events; Linear/
-///     GitHub либо disconnected, либо silent весь период; [] = вообще никого)
+/// Output payload (versioned `version: 1` via `ToolResponseBuilder`):
+///   - `period`, `from`, `to` — window
+///   - `start`, `end` — ISO timestamps of the window (period bounds are allowed as anchors:
+///     start may be = period.start if the first event is much later,
+///     end may be = period.end if the last event is much earlier)
+///   - `durationSeconds` — gap duration
+///   - `sourcesActive[]` — sources with ≥1 event in the period (honest signal:
+///     ["slack"] means the window was computed only between Slack events; Linear/
+///     GitHub either disconnected or silent for the whole period; [] = nobody at all)
 ///
-/// Metadata only — никакого user content (только timestamps + source bucket).
+/// Metadata only — no user content (only timestamps + source bucket).
 struct GetUninterruptedWindowTool: ToolExecutor {
     let dbURL: URL
     let dbConfig: DatabaseConfig

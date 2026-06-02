@@ -1,8 +1,8 @@
 import Foundation
 import GRDB
 
-/// Internal GRDB record для таблицы events. Не протекает в public API —
-/// конверсия в/из `RawEvent` происходит внутри `Database`.
+/// Internal GRDB record for the events table. Doesn't leak into the public API —
+/// conversion to/from `RawEvent` happens inside `Database`.
 internal struct EventRecord: Codable, FetchableRecord, MutablePersistableRecord {
     static let databaseTableName = Schema.Events.tableName
 

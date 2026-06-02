@@ -3,14 +3,14 @@
 //  Leaf
 //
 //  Phase 4.1 — Proof Key for Code Exchange (RFC 7636).
-//  Public — public-safe (RFC, не moat).
+//  Public — public-safe (RFC, not moat).
 //
 
 import Foundation
 import CryptoKit
 
 nonisolated enum PKCE {
-    /// Generates a fresh PKCE pair + state nonce для одного OAuth flow.
+    /// Generates a fresh PKCE pair + state nonce for a single OAuth flow.
     /// `verifier` — 32 random bytes → base64url; `challenge` — SHA-256(verifier) → base64url.
     static func makeChallenge() -> Challenge {
         let verifier = randomBase64URL(byteCount: 32)
@@ -28,9 +28,9 @@ nonisolated enum PKCE {
 
     // MARK: - Helpers
 
-    /// `count` random bytes → base64url-without-padding строка.
-    /// Verifier по RFC 7636 §4.1: 43-128 символов, unreserved alphabet.
-    /// 32 bytes → 43 base64url chars (нижняя граница диапазона).
+    /// `count` random bytes → base64url-without-padding string.
+    /// Verifier per RFC 7636 §4.1: 43-128 characters, unreserved alphabet.
+    /// 32 bytes → 43 base64url chars (lower bound of the range).
     private static func randomBase64URL(byteCount: Int) -> String {
         var bytes = [UInt8](repeating: 0, count: byteCount)
         let status = SecRandomCopyBytes(kSecRandomDefault, byteCount, &bytes)

@@ -1,9 +1,9 @@
 // Phase Track-6 P5 — Parity fence for the 3 new Zoom-deep ShareEventTypeKey
 // entries. Locks down: (a) the enum cases exist with canonical raw values,
 // (b) defaults are OFF per ADR-020, (c) the running registry total
-// (originally 185 post-P5 на integration-T10, now 189 после Track-6 P6 IDEs).
+// (originally 185 post-P5 on integration-T10, now 189 after Track-6 P6 IDEs).
 // Track-10 base time the count was 155 (152+3); integration baseline is 182 because
-// it already carries P1 Claude Code (+16) and P2 Xcode (+6) и P3 Browsers (+8) и P5 Zoom (+3).
+// it already carries P1 Claude Code (+16) and P2 Xcode (+6) and P3 Browsers (+8) and P5 Zoom (+3).
 // Track-6 P6 IDEs added +4 → 189.
 
 import XCTest

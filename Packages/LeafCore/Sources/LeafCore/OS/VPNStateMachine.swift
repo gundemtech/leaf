@@ -1,8 +1,8 @@
 import Foundation
 
-/// Phase Track-4 S3 — raw NEVPNStatus shape mirrored locally чтобы state
-/// machine не зависел от NetworkExtension framework (Linux CI build). 6-way
-/// enum 1:1 с `NEVPNStatus`: invalid/disconnected/connecting/connected/
+/// Phase Track-4 S3 — raw NEVPNStatus shape mirrored locally so the state
+/// machine doesn't depend on the NetworkExtension framework (Linux CI build). 6-way
+/// enum 1:1 with `NEVPNStatus`: invalid/disconnected/connecting/connected/
 /// reasserting/disconnecting.
 public enum VPNRawStatus: Sendable, Hashable, CaseIterable {
     case invalid
@@ -13,11 +13,11 @@ public enum VPNRawStatus: Sendable, Hashable, CaseIterable {
     case disconnecting
 }
 
-/// Phase Track-4 S3 — pure transition detector для VPN. Collapses raw 6-way
-/// status enum в 2-way stable state (connected | disconnected) и emits только
-/// при реальной смене stable state. Intermediate states (.connecting,
-/// .disconnecting, .reasserting) ignored — иначе flap'ило бы на каждом dial.
-/// `.invalid` маппится в `.disconnected`.
+/// Phase Track-4 S3 — pure transition detector for VPN. Collapses the raw 6-way
+/// status enum into a 2-way stable state (connected | disconnected) and emits only
+/// on an actual change of stable state. Intermediate states (.connecting,
+/// .disconnecting, .reasserting) ignored — otherwise it would flap on every dial.
+/// `.invalid` maps to `.disconnected`.
 public struct VPNStateMachine: Sendable, Hashable {
     public enum StableState: Sendable, Hashable { case connected, disconnected }
 
@@ -33,7 +33,7 @@ public struct VPNStateMachine: Sendable, Hashable {
         case .connected: stable = .connected
         case .disconnected, .invalid: stable = .disconnected
         case .connecting, .disconnecting, .reasserting:
-            return nil   // intermediate — никаких state-обновлений
+            return nil   // intermediate — no state updates
         }
         defer { lastStable = stable }
         guard let prior = lastStable else { return nil }

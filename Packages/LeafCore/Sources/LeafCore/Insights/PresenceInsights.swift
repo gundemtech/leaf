@@ -1,38 +1,38 @@
 import Foundation
 import GRDB
 
-/// Phase 4.7.B-15 — read-side helper для merged presence snapshot across
-/// providers. Тонкий wrapper поверх `PresenceStateWriter.readAll`, который
-/// форматирует результат в JSON-friendly `[String: Any]` payload готовый
-/// под `ToolResponseBuilder.versionedJSONResult` в MCP tool'е.
+/// Phase 4.7.B-15 — read-side helper for a merged presence snapshot across
+/// providers. A thin wrapper over `PresenceStateWriter.readAll` that formats
+/// the result into a JSON-friendly `[String: Any]` payload ready for
+/// `ToolResponseBuilder.versionedJSONResult` in the MCP tool.
 ///
-/// Живёт в LeafCore (а не в LeafMCP/Tools/), чтобы быть testable из SPM —
-/// `LeafMCP` это Xcode target и под `swift test` не собирается. Tool struct
-/// в `LeafMCP/Tools/GetCurrentPresenceTool.swift` — пятистрочная обёртка
-/// над этим helper'ом.
+/// Lives in LeafCore (rather than LeafMCP/Tools/) so it is testable from SPM —
+/// `LeafMCP` is an Xcode target and is not built under `swift test`. The tool
+/// struct in `LeafMCP/Tools/GetCurrentPresenceTool.swift` is a five-line wrapper
+/// over this helper.
 ///
-/// Phase 4.7.B-16 расширил helper методом `workloadPulse(database:period:)` —
-/// aggregated cross-provider snapshot ("сколько на тарелке прямо сейчас")
-/// для `get_workload_pulse` MCP tool. Mix `presence_state` (live state) +
-/// `events` (recent activity counts) — period параметр влияет только на
-/// `events`-aggregates, presence_state row-ы всегда live (single-row-per-provider
-/// materialized view, без period concept).
+/// Phase 4.7.B-16 extended the helper with `workloadPulse(database:period:)` —
+/// an aggregated cross-provider snapshot ("what's on your plate right now")
+/// for the `get_workload_pulse` MCP tool. It mixes `presence_state` (live state) +
+/// `events` (recent activity counts) — the period parameter affects only the
+/// `events` aggregates, presence_state rows are always live (single-row-per-provider
+/// materialized view, no period concept).
 ///
-/// ADR-010: helper не делает доп. фильтрации — ответственность по очистке
-/// от bodies/titles/PII лежит на каждом collector'е до записи в
-/// `presence_state` (см. PresenceStateWriter doc-comment).
+/// ADR-010: the helper does no extra filtering — responsibility for stripping
+/// bodies/titles/PII lies with each collector before writing into
+/// `presence_state` (see PresenceStateWriter doc-comment).
 public enum PresenceInsights {
-    /// Period для `workloadPulse(database:period:)`. Plan-required values
-    /// расходятся с `TimelinePeriod` (today/yesterday/last_7_days), поэтому
-    /// отдельный enum: today (calendar day, like TimelinePeriod), this_week
+    /// Period for `workloadPulse(database:period:)`. The plan-required values
+    /// diverge from `TimelinePeriod` (today/yesterday/last_7_days), hence a
+    /// separate enum: today (calendar day, like TimelinePeriod), this_week
     /// (rolling 7 days), last_24h (rolling 24 hours).
     public enum WorkloadPulsePeriod: String, Sendable {
         case today
         case thisWeek = "this_week"
         case last24h = "last_24h"
 
-        /// Returns start timestamp (epoch ms) для events-aggregate `ts >= start`.
-        /// `now` параметр — для testability (calendar boundaries детерминированы).
+        /// Returns the start timestamp (epoch ms) for the events-aggregate `ts >= start`.
+        /// The `now` parameter is for testability (calendar boundaries are deterministic).
         public func startMs(now: Date = Date(), calendar: Calendar = .current) -> Int64 {
             switch self {
             case .today:
@@ -50,7 +50,7 @@ public enum PresenceInsights {
 
     /// Merged snapshot across all `presence_state` rows.
     ///
-    /// Returns payload готовый к сериализации:
+    /// Returns a payload ready for serialization:
     /// ```
     /// {
     ///   "providers": {
@@ -61,9 +61,9 @@ public enum PresenceInsights {
     ///   "observed_at_ms": Int64
     /// }
     /// ```
-    /// Empty DB → `providers == [:]` (пустой словарь — отличается от
-    /// "ключи отсутствуют"; clients типа Claude Code должны это handle'ить).
-    /// `derived_mode` всегда `nil` в Phase 4.7 — populated в Phase 4.9.
+    /// Empty DB → `providers == [:]` (an empty dictionary — distinct from
+    /// "keys absent"; clients like Claude Code must handle this).
+    /// `derived_mode` is always `nil` in Phase 4.7 — populated in Phase 4.9.
     public static func currentSnapshot(database: Database) throws -> [String: Any] {
         var providers: [String: Any] = [:]
         try database.readSQL { rawDB in
@@ -71,10 +71,10 @@ public enum PresenceInsights {
             for (provider, entry) in all {
                 providers[provider.rawValue] = [
                     "state": entry.state,
-                    // Explicit NSNull для `derived_mode == nil` — иначе
-                    // JSONSerialization выбросит ключ из словаря и клиенты
-                    // не увидят shape "derived_mode: null". Phase 4.9 начнёт
-                    // populate'ить string-значениями.
+                    // Explicit NSNull for `derived_mode == nil` — otherwise
+                    // JSONSerialization drops the key from the dictionary and clients
+                    // won't see the shape "derived_mode: null". Phase 4.9 will start
+                    // populating it with string values.
                     "derived_mode": entry.derivedMode as Any? ?? NSNull(),
                     "updated_at_ms": entry.updatedAtMs
                 ]
@@ -87,11 +87,11 @@ public enum PresenceInsights {
     }
 
     /// Phase 4.7.B-16 — aggregated workload pulse across GitHub / Linear / Slack.
-    /// Объединяет live `presence_state` rows (current queue size / cycle progress /
-    /// DND / native presence) с `events` aggregates за выбранный period
+    /// Combines live `presence_state` rows (current queue size / cycle progress /
+    /// DND / native presence) with `events` aggregates over the selected period
     /// (mention counts, file upload counts, in-progress CI runs).
     ///
-    /// Returns payload готовый к сериализации:
+    /// Returns a payload ready for serialization:
     /// ```
     /// {
     ///   "github": {
@@ -103,7 +103,7 @@ public enum PresenceInsights {
     ///   "linear": {
     ///     "started_count": Int,
     ///     "top_priority": String,                // "urgent"/"high"/.../"none"
-    ///     "current_cycle": [String: Any] | {}    // empty dict если no in-cycle teams
+    ///     "current_cycle": [String: Any] | {}    // empty dict if no in-cycle teams
     ///   },
     ///   "slack": {
     ///     "mentions_received_today": Int,        // SUM aggregated counts since period.start
@@ -115,23 +115,23 @@ public enum PresenceInsights {
     ///   "observed_at_ms": Int64
     /// }
     /// ```
-    /// Empty DB → все subkey'и со значениями-по-умолчанию (0 / "none" / false /
-    /// "unknown" / `{}`). Naming "*_today" в slack/output payload оставлен
-    /// per plan literal независимо от выбранного period — semantic intent
-    /// "сколько за окно" одинаков; `period` echo'нут в payload чтобы reader
-    /// не угадывал что окно есть.
+    /// Empty DB → all subkeys with default values (0 / "none" / false /
+    /// "unknown" / `{}`). The "*_today" naming in the slack/output payload is kept
+    /// per plan literal regardless of the selected period — the semantic intent
+    /// "how much over the window" is the same; `period` is echoed in the payload so the
+    /// reader doesn't have to guess what the window is.
     ///
-    /// ADR-010: helper не парсит bodies/titles — все aggregates считаются по
-    /// numeric `count` payload field'ам, redaction уже сделана collector'ами.
+    /// ADR-010: the helper does not parse bodies/titles — all aggregates are computed over
+    /// numeric `count` payload fields, redaction is already done by the collectors.
     public static func workloadPulse(
         database: Database,
         period: WorkloadPulsePeriod = .today,
         now: Date = Date()
     ) throws -> [String: Any] {
         let periodStartMs = period.startMs(now: now)
-        // `actions_runs_in_progress` — отдельный сurrent-state aggregate. Plan
-        // окно "active runs" — последние 24h independent от period (CI runs
-        // обычно завершаются за минуты; older runs почти всегда finished).
+        // `actions_runs_in_progress` — a separate current-state aggregate. The plan
+        // window "active runs" is the last 24h, independent of period (CI runs
+        // usually finish in minutes; older runs are almost always finished).
         let actionsLookbackMs = Int64(now.timeIntervalSince1970 * 1000) - 24 * 60 * 60 * 1000
 
         var github: [String: Any] = [
@@ -191,8 +191,8 @@ public enum PresenceInsights {
             }
 
             // 4. events aggregate — slack mentions received since period.start.
-            // `count` payload field stored as String ("3") поверх RawEvent
-            // [String:String] payload типа → CAST(... AS INTEGER) в SQL.
+            // `count` payload field stored as String ("3") on top of the RawEvent
+            // [String:String] payload type → CAST(... AS INTEGER) in SQL.
             // Plan-required SQL shape (see B-16 spec).
             slack["mentions_received_today"] = try Self.sumIntPayloadField(
                 eventKind: "slack_mention_received_aggregate",
@@ -209,8 +209,8 @@ public enum PresenceInsights {
                 in: rawDB
             )
 
-            // 6. events count — gh_actions_run_initiated с status='in_progress'
-            // за последние 24h (independent от period; CI runs short-lived).
+            // 6. events count — gh_actions_run_initiated with status='in_progress'
+            // over the last 24h (independent of period; CI runs short-lived).
             github["actions_runs_in_progress"] = try Self.countEvents(
                 eventKind: GitHubEventKindKey.actionsRunInitiated.rawValue,
                 statusFilter: "in_progress",
@@ -230,9 +230,9 @@ public enum PresenceInsights {
 
     // MARK: - Private SQL helpers (Phase 4.7.B-16)
 
-    /// SUM(CAST(json_extract(payload_json, fieldPath) AS INTEGER)) для events
-    /// matching `event_kind = ?` AND `ts >= ?`. NULL safety: если ни одного
-    /// event'а — `total` returns NULL → coalesce в 0.
+    /// SUM(CAST(json_extract(payload_json, fieldPath) AS INTEGER)) for events
+    /// matching `event_kind = ?` AND `ts >= ?`. NULL safety: if there are no
+    /// events — `total` returns NULL → coalesce to 0.
     private static func sumIntPayloadField(
         eventKind: String,
         fieldPath: String,
@@ -253,7 +253,7 @@ public enum PresenceInsights {
         return (row?["total"] as Int64?).map { Int($0) } ?? 0
     }
 
-    /// COUNT(*) для events matching `event_kind = ?` AND `status = ?` AND `ts >= ?`.
+    /// COUNT(*) for events matching `event_kind = ?` AND `status = ?` AND `ts >= ?`.
     private static func countEvents(
         eventKind: String,
         statusFilter: String,

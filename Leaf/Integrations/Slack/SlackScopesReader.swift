@@ -45,9 +45,9 @@ final class SlackScopesReader {
     private(set) var crossPostReady: Bool = false
 
     private let service: SlackScopesService?
-    /// `nonisolated(unsafe)` так как `deinit` non-isolated в Swift 6, а
-    /// `DistributedNotificationCenter.removeObserver` thread-safe. Запись
-    /// единожды в `subscribeIntegrationChanged()` (MainActor) при init.
+    /// `nonisolated(unsafe)` because `deinit` is non-isolated in Swift 6, and
+    /// `DistributedNotificationCenter.removeObserver` is thread-safe. Written
+    /// exactly once in `subscribeIntegrationChanged()` (MainActor) at init.
     private nonisolated(unsafe) var observer: NSObjectProtocol?
 
     init(service: SlackScopesService?) {

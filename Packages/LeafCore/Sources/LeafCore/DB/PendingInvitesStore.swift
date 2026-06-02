@@ -107,7 +107,7 @@ public struct PendingInvitesStore: Sendable {
 
     /// Phase 5.5.C — SELECT all rows where `status != 'consumed'`, ordered by
     /// `created_at_ms` DESC. Used by UI list (consumed rows hidden — admin-side
-    /// mental model "row пропал = colleague joined" per spec D1).
+    /// mental model "row gone = colleague joined" per spec D1).
     public static func readAllExcludingConsumed(in db: GRDB.Database) throws -> [PendingInvite] {
         let rows = try Row.fetchAll(
             db,

@@ -1,7 +1,7 @@
 import Foundation
 
-/// JSON-RPC id может быть number или string per spec. Null отдельно не моделируем —
-/// см. known limitations в plan'е (parse-error response с id:null MVP не поддерживает).
+/// A JSON-RPC id may be a number or a string per spec. We don't model Null separately —
+/// see known limitations in the plan (parse-error response with id:null is not supported in MVP).
 public enum JSONRPCID: Codable, Hashable, Sendable {
     case number(Int)
     case string(String)
@@ -25,9 +25,9 @@ public enum JSONRPCID: Codable, Hashable, Sendable {
     }
 }
 
-/// Type-erased JSON value для params / result / error.data.
-/// `@unchecked Sendable` т.к. `value: Any` фактически всегда immutable JSON primitive
-/// (Bool/Int/Double/String/NSNull) или рекурсивная структура того же — см. decode/encode.
+/// Type-erased JSON value for params / result / error.data.
+/// `@unchecked Sendable` because `value: Any` is in practice always an immutable JSON primitive
+/// (Bool/Int/Double/String/NSNull) or a recursive structure of the same — see decode/encode.
 public struct AnyCodable: Codable, @unchecked Sendable {
     public let value: Any
 
@@ -109,8 +109,8 @@ public struct JSONRPCResponse: Codable, Sendable {
     }
 }
 
-/// Standard JSON-RPC 2.0 error codes. MCP spec использует стандартные —
-/// tool-level errors идут в result.isError, не в error.code.
+/// Standard JSON-RPC 2.0 error codes. The MCP spec uses the standard ones —
+/// tool-level errors go into result.isError, not error.code.
 public enum JSONRPCErrorCode {
     public static let parseError      = -32700
     public static let invalidRequest  = -32600

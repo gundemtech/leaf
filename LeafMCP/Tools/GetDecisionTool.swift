@@ -4,9 +4,9 @@ import LeafMCPProtocol
 
 /// Phase Track-1 D3 — `leaf_get_decision` MCP tool.
 ///
-/// Тонкая обёртка над `QueryEngine.getDecision(topic:period:)`. Heavy lifting
+/// A thin wrapper over `QueryEngine.getDecision(topic:period:)`. Heavy lifting
 /// (FTS rank by confidence + recency, originating-event projection, outbound links)
-/// живёт в LeafCore. Schema / param decoders shared via `D3ToolSchemas` / `D3ToolParams`.
+/// lives in LeafCore. Schema / param decoders shared via `D3ToolSchemas` / `D3ToolParams`.
 struct GetDecisionTool: ToolExecutor {
     let dbURL: URL
     let dbConfig: DatabaseConfig

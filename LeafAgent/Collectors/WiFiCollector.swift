@@ -5,10 +5,10 @@ import LeafCore
 
 /// Phase Track-4 S3 — `CWWiFiClient.shared().interface()` polling, state only.
 ///
-/// **NO SSID capture.** Reads только `CWInterface.interfaceMode` (UInt32 —
-/// .none / .station / .ibss / .hostAP) и `CWInterface.powerOn() -> Bool`.
+/// **NO SSID capture.** Reads only `CWInterface.interfaceMode` (UInt32 —
+/// .none / .station / .ibss / .hostAP) and `CWInterface.powerOn() -> Bool`.
 /// SSID PII concern eliminated + Location TCC prompt avoided (CWInterface.ssid()
-/// returns nil без Location TCC; не вызываем) — ADR-010 Won't-list.
+/// returns nil without Location TCC; we never call it) — ADR-010 Won't-list.
 @MainActor
 final class WiFiCollector {
     private let writer: EventWriter
@@ -34,7 +34,7 @@ final class WiFiCollector {
         }
         let intervalNs = UInt64(pollIntervalSec * 1_000_000_000)
         let interval = pollIntervalSec
-        // Seed with current value (no emit на first observation).
+        // Seed with current value (no emit on first observation).
         _ = stateMachine.observe(currentSnapshot())
         pollTask = Task { [weak self] in
             collectorLogger.info("WiFiCollector started (poll=\(interval, privacy: .public)s)")

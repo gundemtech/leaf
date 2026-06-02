@@ -2,7 +2,7 @@
 //  LinearUsersResolverEnvironmentKey.swift
 //  Leaf
 //
-//  Track 5 / S6 T13 — SwiftUI EnvironmentKey для LinearUsersResolver actor.
+//  Track 5 / S6 T13 — SwiftUI EnvironmentKey for the LinearUsersResolver actor.
 //  Actors can't conform to Observable (Observation Tracking), so the
 //  `.environment(value:)` overload for @Observable doesn't apply. This
 //  custom key threads the resolver through the environment as a Sendable

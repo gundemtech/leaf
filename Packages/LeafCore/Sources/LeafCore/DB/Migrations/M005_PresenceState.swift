@@ -2,9 +2,9 @@ import Foundation
 import GRDB
 
 /// Phase 4.7.A — `presence_state` single-row-per-provider materialized view.
-/// Read by MenuBarApp self-UI и Phase 5 broadcaster (encrypted snapshot).
+/// Read by MenuBarApp self-UI and Phase 5 broadcaster (encrypted snapshot).
 /// PK — `provider` ('github' | 'linear' | 'slack' | 'derived').
-/// Writes идут в Track B; в Phase 4.7.A только schema готова.
+/// Writes happen in Track B; in Phase 4.7.A only the schema is ready.
 public extension DatabaseMigrator {
     mutating func registerMigration005PresenceState() {
         registerMigration("005_presence_state") { db in

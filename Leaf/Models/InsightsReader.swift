@@ -2,10 +2,10 @@
 //  InsightsReader.swift
 //  Leaf
 //
-//  @Observable state-machine для MenuBarContent: открывает events.sqlite
-//  в reader-режиме, зовёт Derived Insights (timeInApp за "today") и отдаёт
-//  результат в UI. Управление параллельными refresh'ами, обработка
-//  отсутствующей базы, логирование ошибок через os.Logger.
+//  @Observable state-machine for MenuBarContent: opens events.sqlite
+//  in reader mode, calls Derived Insights (timeInApp for "today") and hands
+//  the result to the UI. Manages concurrent refreshes, handles a missing
+//  database, logs errors via os.Logger.
 //
 
 import Foundation
@@ -16,9 +16,9 @@ import LeafCore
 import LeafCorePrivate
 #endif
 
-// Note: `#if LEAF_PROD import LeafCorePrivate` остаётся здесь
-// чтобы `ProdConfigs.database` резолвился в `defaultConfig()`. Provider
-// для insights регистрируется отдельно, в `LeafApp.init()`.
+// Note: `#if LEAF_PROD import LeafCorePrivate` stays here
+// so that `ProdConfigs.database` resolves in `defaultConfig()`. The provider
+// for insights is registered separately, in `LeafApp.init()`.
 
 @MainActor
 @Observable
@@ -60,8 +60,8 @@ final class InsightsReader {
     private let databaseURL: URL
     private let databaseConfig: DatabaseConfig
     private let databaseEncryption: EncryptionOptions?
-    /// Threshold "deep" — берётся из ProdConfigs (LEAF_PROD) или weakDefaults.
-    /// Применяется на producer-side при сборке snapshot, UI не пересчитывает.
+    /// "deep" threshold — taken from ProdConfigs (LEAF_PROD) or weakDefaults.
+    /// Applied producer-side while building the snapshot; the UI does not recompute.
     private let deepSessionMinSec: TimeInterval
     /// Ambient refreshes within this window of the last successful load are
     /// skipped (tab-switch storm guard, M-XI). Injectable for tests/tuning.
@@ -112,12 +112,12 @@ final class InsightsReader {
         if !force, RefreshFreshness.isFresh(lastRefreshedAt: lastRefreshedAt, now: clock(), window: freshnessWindow) {
             return
         }
-        // Cancel previous refresh'ы — защита от race при быстрых повторных
-        // открытиях popover'а (P6 в плане).
+        // Cancel previous refreshes — guards against a race on rapid repeated
+        // popover openings (P6 in the plan).
         currentTask?.cancel()
 
-        // Pre-check существования файла — избегаем exception overhead и
-        // даём осмысленный .notConfigured state вместо обобщённой ошибки (P9).
+        // Pre-check file existence — avoids exception overhead and
+        // gives a meaningful .notConfigured state instead of a generic error (P9).
         if !FileManager.default.fileExists(atPath: databaseURL.path) {
             state = .notConfigured(
                 message: "Enable background collection in Settings to see today's activity."
@@ -142,24 +142,24 @@ final class InsightsReader {
         let activeWorkspaceID: String? = activeWorkspaceStore?.activeWorkspaceID
 
         currentTask = Task { [self] in
-            // Database (@unchecked Sendable) и InsightsSnapshot (Sendable) —
-            // hopping через MainActor.run после background compute race-safe.
+            // Database (@unchecked Sendable) and InsightsSnapshot (Sendable) —
+            // hopping via MainActor.run after the background compute is race-safe.
             let result: Result<(LeafCore.Database, InsightsSnapshot), Error> =
                 await Task.detached(priority: .userInitiated) {
                     do {
                         let db = try cachedDB ?? LeafCore.Database.openForRead(at: url, config: cfg, encryption: enc)
                         let insights = DerivedInsightsFactory.make(database: db)
                         let today = InsightsReader.todayInterval()
-                        // Sequential calls — async overhead неоправдан, SQL-reads <50ms.
+                        // Sequential calls — async overhead isn't justified, SQL reads <50ms.
                         let topApps = try insights.timeInApp(period: today)
                         try Task.checkCancellation()
                         let sessions = try insights.focusSessions(period: today)
                         try Task.checkCancellation()
                         let switchRate = try insights.contextSwitchRate(period: today)
                         try Task.checkCancellation()
-                        // Phase 2.2 trends — 4 независимых queries, sequential
-                        // (каждый < 50ms на типичном workload'е; если p95 вырастет
-                        // под нагрузкой — оптимизируем в 2.5 wrap через shared CTE).
+                        // Phase 2.2 trends — 4 independent queries, sequential
+                        // (each < 50ms on a typical workload; if p95 grows
+                        // under load — optimize in the 2.5 wrap via a shared CTE).
                         let streak = try insights.deepWorkStreak()
                         try Task.checkCancellation()
                         let peakHour = try insights.peakProductivityHour()
@@ -168,42 +168,42 @@ final class InsightsReader {
                         try Task.checkCancellation()
                         let activeDays = try insights.activeDaysInRow()
                         try Task.checkCancellation()
-                        // Phase 2.3 — AI breakdown за тот же `today` period.
-                        // 8-я sequential query; если совокупный p95 вырастет —
-                        // оптимизация в 2.5 wrap (shared CTE для bucket'ов).
+                        // Phase 2.3 — AI breakdown for the same `today` period.
+                        // 8th sequential query; if the aggregate p95 grows —
+                        // optimize in the 2.5 wrap (shared CTE for the buckets).
                         let aiBreakdown = try insights.aiActivityBreakdown(period: today)
                         try Task.checkCancellation()
-                        // Phase 2.4 — top files touched в watched folders.
-                        // 9-я sequential query; lazy на пустой content events
-                        // (router StubFSEventsRouter в CI всегда .filtered → []).
+                        // Phase 2.4 — top files touched in watched folders.
+                        // 9th sequential query; lazy on empty content events
+                        // (router StubFSEventsRouter in CI is always .filtered → []).
                         let filesTouched = try insights.filesTouched(period: today)
                         try Task.checkCancellation()
                         // Phase 4.2 — Linear issue activity.
-                        // 10-я sequential query; на не-подключённом Linear возвращает
-                        // .empty (Stub) — popover'у решать рендерить или скрыть.
+                        // 10th sequential query; on a non-connected Linear returns
+                        // .empty (Stub) — the popover decides whether to render or hide.
                         let linear = try insights.linearActivity(period: today)
                         try Task.checkCancellation()
-                        // Phase 4.3 — GitHub events activity. 11-я sequential query;
-                        // на не-подключённом GitHub возвращает .empty (Stub).
+                        // Phase 4.3 — GitHub events activity. 11th sequential query;
+                        // on a non-connected GitHub returns .empty (Stub).
                         let github = try insights.githubActivity(period: today)
                         try Task.checkCancellation()
-                        // Phase 4.4 — Slack activity. 12-я sequential query;
-                        // на не-подключённом Slack возвращает .empty (Stub).
+                        // Phase 4.4 — Slack activity. 12th sequential query;
+                        // on a non-connected Slack returns .empty (Stub).
                         let slack = try insights.slackActivity(period: today)
                         try Task.checkCancellation()
-                        // Phase 4.6.C.2 — longest gap без Layer B events.
-                        // 13-я sequential query; default impl = nil (StubInsights),
-                        // поэтому popover просто не рендерит row.
+                        // Phase 4.6.C.2 — longest gap without Layer B events.
+                        // 13th sequential query; default impl = nil (StubInsights),
+                        // so the popover simply doesn't render the row.
                         let uninterruptedWindow = try insights.longestUninterruptedWindow(period: today)
                         try Task.checkCancellation()
-                        // Phase 4.10.B — aggregated sessions для Activity tab
-                        // ("Sessions" mode) и Home Recent Sessions block. Default
-                        // impl = [] (StubInsights / pre-prod), поэтому UI просто
-                        // не рендерит блок если sessions пустые.
+                        // Phase 4.10.B — aggregated sessions for the Activity tab
+                        // ("Sessions" mode) and Home Recent Sessions block. Default
+                        // impl = [] (StubInsights / pre-prod), so the UI simply
+                        // doesn't render the block when sessions are empty.
                         let recentSessions = try insights.recentSessions(period: today, limit: 200)
                         try Task.checkCancellation()
-                        // Phase 4.10.A — Live Presence widget читает merged
-                        // presence_state row-ы (single-row-per-provider materialized
+                        // Phase 4.10.A — Live Presence widget reads merged
+                        // presence_state rows (single-row-per-provider materialized
                         // view, no period). Empty pre-4.7 install / non-prod CI.
                         let presenceState: PresenceUISnapshot = (try? PresenceUISnapshot.read(database: db)) ?? .empty
                         try Task.checkCancellation()
@@ -421,8 +421,8 @@ final class InsightsReader {
                             linearIssueCloseStreak: linear.issueCloseStreak ?? 0,
                             githubCommitStreak: github.commitStreak ?? 0,
                             slackHuddleParticipationStreak: slack.huddleParticipationStreak ?? 0,
-                            // Phase 4.6.B — passthrough из linearActivity (third
-                            // read внутри). Snapshot mirror'ит для UI/MCP consumers.
+                            // Phase 4.6.B — passthrough from linearActivity (third
+                            // read inside). The snapshot mirrors it for UI/MCP consumers.
                             linearTransitions: linear.transitions,
                             linearCompletionRate: linear.completionRate,
                             presenceState: presenceState,
@@ -465,8 +465,8 @@ final class InsightsReader {
                 }
             case .failure(let error):
                 if error is CancellationError { return }
-                // Детально логируем (os.Logger → Console.app), в UI
-                // только generic сообщение (P8 — moat-safe).
+                // Log in detail (os.Logger → Console.app); in the UI
+                // only a generic message (P8 — moat-safe).
                 self.logger.error("insights snapshot failed: \(String(describing: error), privacy: .public)")
                 self.database = nil
                 self.state = .error(

@@ -103,7 +103,7 @@ public enum DetectorPipeline {
     /// resolve timestamp (could happen if events were retention-pruned).
     ///
     /// Linear collector emits `payload.event_kind = "status_transition"` with
-    /// `payload.issue_key = <REF>` (см. LinearCollector.makeTransitionEvent).
+    /// `payload.issue_key = <REF>` (see LinearCollector.makeTransitionEvent).
     private static func autoResolveLinearStuck(currentlyStuck: Set<String>,
                                                nowMs: Int64,
                                                in db: GRDB.Database) throws {

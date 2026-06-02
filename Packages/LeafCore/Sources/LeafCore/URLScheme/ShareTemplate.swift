@@ -1,8 +1,8 @@
 import Foundation
 
-/// Phase 5.5.B — pre-filled message templates для share-flow (RU; EN polish при review).
-/// Pure value-type helper. Каналы (Mail / Messages / Copy) — `mailtoURL` / `smsURL` / NSPasteboard
-/// в Leaf app target; здесь только compose + percent-encoded URL builders.
+/// Phase 5.5.B — pre-filled message templates for the share flow (RU; EN polish at review).
+/// Pure value-type helper. Channels (Mail / Messages / Copy) — `mailtoURL` / `smsURL` / NSPasteboard
+/// in the Leaf app target; here only compose + percent-encoded URL builders.
 public enum ShareTemplate {
 
     /// Discriminator + interpolatable params per template variant (decomposition §4.5).
@@ -38,8 +38,8 @@ public enum ShareTemplate {
             Жду от тебя invite link 🌿
             """
         case .adminShare(let displayName, let inviteURL):
-            // Admin-side не всегда знает invitee display name (paste-Join-code flow без preceding
-            // inviteeShare exchange). Empty/whitespace → neutral greeting; иначе — personalized.
+            // Admin side doesn't always know the invitee display name (paste-Join-code flow without a
+            // preceding inviteeShare exchange). Empty/whitespace → neutral greeting; otherwise personalized.
             let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
             let greeting = trimmed.isEmpty ? "Привет!" : "Привет, \(trimmed)!"
             return """

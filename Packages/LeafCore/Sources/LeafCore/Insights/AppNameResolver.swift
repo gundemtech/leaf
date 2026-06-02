@@ -2,16 +2,16 @@
 import AppKit
 import Foundation
 
-/// Превращает bundle ID (`com.apple.Safari`) в human-readable имя (`Safari`).
-/// Три tier'а с fallback'ами:
+/// Turns a bundle ID (`com.apple.Safari`) into a human-readable name (`Safari`).
+/// Three tiers with fallbacks:
 ///
-/// 1. `NSRunningApplication` — быстро и актуально для запущенных приложений.
+/// 1. `NSRunningApplication` — fast and up to date for running applications.
 /// 2. `NSWorkspace.urlForApplication(withBundleIdentifier:)` + Info.plist —
-///    читает `CFBundleDisplayName` или `CFBundleName` установленного приложения.
-/// 3. Bundle ID как есть — последний резерв.
+///    reads `CFBundleDisplayName` or `CFBundleName` of the installed application.
+/// 3. The bundle ID as-is — last resort.
 ///
-/// In-memory LRU-style cache держит resolved names чтобы не пересчитывать
-/// на каждом popover refresh'е.
+/// An in-memory LRU-style cache holds resolved names so we don't recompute
+/// on every popover refresh.
 public final class AppNameResolver: @unchecked Sendable {
     public static let shared = AppNameResolver()
 
@@ -29,7 +29,7 @@ public final class AppNameResolver: @unchecked Sendable {
         return resolved
     }
 
-    /// Сбросить кэш (для тестов, и на случай когда юзер переименовал app).
+    /// Flush the cache (for tests, and in case the user renamed an app).
     public func flushCache() {
         queue.sync { cache.removeAll() }
     }

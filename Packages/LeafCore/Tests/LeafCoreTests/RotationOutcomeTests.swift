@@ -1,7 +1,7 @@
 import XCTest
 @testable import LeafCore
 
-/// Phase 5.3.D — `RotationOutcome` return type для `removeMember` + `resumePendingPosts`.
+/// Phase 5.3.D — `RotationOutcome` return type for `removeMember` + `resumePendingPosts`.
 final class RotationOutcomeTests: XCTestCase {
 
     func testEquatableHashableRoundTrip() {

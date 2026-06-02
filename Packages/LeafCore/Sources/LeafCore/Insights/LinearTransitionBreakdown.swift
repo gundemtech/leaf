@@ -1,23 +1,23 @@
 import Foundation
 
-/// Phase 4.6.B — counts моих status transitions в Linear за period.
-/// Producer (LinearCollector + ProdLinearGraphQLProvider) эмитит
-/// `event_kind="status_transition"` events после fetch'а history fragment'а
-/// per issue (client-side filter actor.id == viewer.id). Aggregator группирует
-/// по `to_state_type` / `from_state_type` через mutually-exclusive priority.
+/// Phase 4.6.B — counts of my status transitions in Linear over the period.
+/// The producer (LinearCollector + ProdLinearGraphQLProvider) emits
+/// `event_kind="status_transition"` events after fetching the history fragment
+/// per issue (client-side filter actor.id == viewer.id). The aggregator groups
+/// by `to_state_type` / `from_state_type` via mutually-exclusive priority.
 ///
 /// Bucketing semantics:
-/// - `started`   = `to_type=started AND from_type != completed` (новая активация
-///   issue из backlog/unstarted/canceled).
-/// - `completed` = `to_type=completed` (любое попадание в Done state).
-/// - `canceled`  = `to_type=canceled` (любое попадание в Cancelled).
-/// - `reopened`  = `from_type=completed AND to_type != completed` (любое отмена
-///   завершения — reopen в work, перенос в backlog/triage, cancel after Done).
+/// - `started`   = `to_type=started AND from_type != completed` (a fresh activation
+///   of an issue from backlog/unstarted/canceled).
+/// - `completed` = `to_type=completed` (any landing in a Done state).
+/// - `canceled`  = `to_type=canceled` (any landing in Cancelled).
+/// - `reopened`  = `from_type=completed AND to_type != completed` (any undo of
+///   completion — reopen into work, move to backlog/triage, cancel after Done).
 ///
-/// `total = started + completed + canceled + reopened` — sum может exceed unique
-/// transition count для `completed → canceled` (попадает в canceled И reopened
-/// одновременно: orthogonal "terminal cancellation" + "completion was undone"
-/// сигналы).
+/// `total = started + completed + canceled + reopened` — the sum may exceed the unique
+/// transition count for `completed → canceled` (which falls into canceled AND reopened
+/// at once: orthogonal "terminal cancellation" + "completion was undone"
+/// signals).
 public struct LinearTransitionBreakdown: Sendable, Hashable, Codable {
     public let started: Int
     public let completed: Int

@@ -34,7 +34,7 @@ final class ClipboardCollector {
         }
         let intervalNs = UInt64(pollIntervalSec * 1_000_000_000)
         let interval = pollIntervalSec
-        // Seed lastCount with current changeCount (no emit на first observation).
+        // Seed lastCount with current changeCount (no emit on first observation).
         _ = stateMachine.observe(NSPasteboard.general.changeCount)
         pollTask = Task { [weak self] in
             collectorLogger.info("ClipboardCollector started (poll=\(interval, privacy: .public)s)")

@@ -5,7 +5,7 @@ import GRDB
 /// populated by `CGEventTapCollector` minute-boundary flush. PK
 /// `minute_bucket_ms` (minute-truncated epoch ms). UPSERT semantics — re-flush
 /// on restart replaces existing row idempotently. Counter columns counter-only;
-/// keycode/characters/modifierFlags никогда не пишутся (ADR-010 Won't-list).
+/// keycode/characters/modifierFlags are never written (ADR-010 Won't-list).
 public extension DatabaseMigrator {
     mutating func registerMigration018IntensityAggregates() {
         registerMigration("018_intensity_aggregates") { db in

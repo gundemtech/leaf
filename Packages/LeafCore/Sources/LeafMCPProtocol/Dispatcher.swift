@@ -33,9 +33,9 @@ public struct Dispatcher: Sendable {
 
     /// Returns nil for notifications (no `id`) — caller MUST NOT write a response.
     public func dispatch(_ request: JSONRPCRequest) async -> JSONRPCResponse? {
-        // JSON-RPC 2.0: notification = request без id. Sensor short-circuit'ит
-        // раньше чем реально пойти к handler'у — спец-handler для notifications
-        // регистрировать не нужно.
+        // JSON-RPC 2.0: a notification = a request without an id. We short-circuit
+        // before actually dispatching to a handler — no dedicated handler for
+        // notifications needs to be registered.
         guard let id = request.id else { return nil }
 
         guard let handler = handlers[request.method] else {

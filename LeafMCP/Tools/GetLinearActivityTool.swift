@@ -2,31 +2,31 @@ import Foundation
 import LeafCore
 import LeafMCPProtocol
 
-/// Phase 4.2 — MCP-tool: вернуть Linear issue activity за период (today /
-/// yesterday / last_7_days). Reads same encrypted DB что MenuBar app —
-/// single source of truth. 5-й tool из 8 запланированных в whitepaper.
+/// Phase 4.2 — MCP-tool: return Linear issue activity for a period (today /
+/// yesterday / last_7_days). Reads same encrypted DB as MenuBar app —
+/// single source of truth. 5th tool out of 8 planned in the whitepaper.
 ///
-/// Output payload (versioned `version: 1` через `ToolResponseBuilder`):
-///   - `period`, `from`, `to` — окно
+/// Output payload (versioned `version: 1` via `ToolResponseBuilder`):
+///   - `period`, `from`, `to` — window
 ///   - `issuesTouched` — distinct issue_key count
 ///   - `byProject[]` — `{project, count}`, top-5 by distinct issues
 ///   - `byStatus[]` — `{status, count}`, top-5 by distinct issues
 ///   - `completionDurationStats` (Phase 4.6.A.2, additive optional) —
-///     `{medianSeconds, avgSeconds, maxSeconds, sampleCount}` для issues, completed
-///     в окне; отсутствует если sampleCount=0
+///     `{medianSeconds, avgSeconds, maxSeconds, sampleCount}` for issues completed
+///     in the window; absent if sampleCount=0
 ///   - `wowDelta` (Phase 4.6.C.1, additive optional) — global week-over-week
 ///     activity delta scalar
 ///   - `issueCloseStreak` (Phase 4.6.C.3, additive optional) — consecutive days
-///     с ≥1 closed issue (independent of period)
+///     with ≥1 closed issue (independent of period)
 ///   - `transitions` (Phase 4.6.B, additive optional) — `{started, completed,
-///     canceled, reopened, total}` my status transitions counts; отсутствует
-///     если total=0
+///     canceled, reopened, total}` my status transitions counts; absent
+///     if total=0
 ///   - `completionRate` (Phase 4.6.B, additive optional) — soft follow-through
-///     ratio `completed / (completed + started + reopened)`, surface'ится только
-///     при completed > 0
+///     ratio `completed / (completed + started + reopened)`, surfaced only
+///     when completed > 0
 ///
-/// Metadata only — issue bodies / comment text никогда не покидают устройство
-/// (ADR-010 won't-list, enforced на parser-level в LinearGraphQLProvider).
+/// Metadata only — issue bodies / comment text never leave the device
+/// (ADR-010 won't-list, enforced at parser-level in LinearGraphQLProvider).
 struct GetLinearActivityTool: ToolExecutor {
     let dbURL: URL
     let dbConfig: DatabaseConfig
@@ -101,19 +101,19 @@ struct GetLinearActivityTool: ToolExecutor {
             ]
         }
         // Phase 4.6.C.1 — global week-over-week activity delta (additive optional;
-        // absent если baseline < 7 days OR prev week zero). Same scalar across
-        // 3 integration tools — это global attention-time trend.
+        // absent if baseline < 7 days OR prev week zero). Same scalar across
+        // 3 integration tools — it's a global attention-time trend.
         if let wow = try? insights.weekOverWeekDelta() {
             payload["wowDelta"] = wow
         }
-        // Phase 4.6.C.3 — issue close streak (consecutive days с ≥1 closed issue;
+        // Phase 4.6.C.3 — issue close streak (consecutive days with ≥1 closed issue;
         // independent of period — global current streak ending today/yesterday).
         if let streak = breakdown.issueCloseStreak, streak > 0 {
             payload["issueCloseStreak"] = streak
         }
         // Phase 4.6.B — my status transitions (started/completed/canceled/reopened).
-        // Full breakdown shape (включая нули) для machine consumers; UI слой
-        // фильтрует non-zero buckets отдельно. Absent если breakdown.transitions
+        // Full breakdown shape (including zeros) for machine consumers; UI layer
+        // filters non-zero buckets separately. Absent if breakdown.transitions
         // == nil (total=0).
         if let tx = breakdown.transitions {
             payload["transitions"] = [
@@ -124,8 +124,8 @@ struct GetLinearActivityTool: ToolExecutor {
                 "total": tx.total
             ]
         }
-        // Phase 4.6.B — soft follow-through ratio. Absent если completed=0
-        // (avoids misleading "0% follow-through" для типичного in-progress дня).
+        // Phase 4.6.B — soft follow-through ratio. Absent if completed=0
+        // (avoids misleading "0% follow-through" for a typical in-progress day).
         if let rate = breakdown.completionRate {
             payload["completionRate"] = rate
         }

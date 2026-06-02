@@ -1,12 +1,12 @@
 import Foundation
 
 /// Phase 5.5.C — pure orchestrator over `Database` + `RelayClient` + `PendingInvitesStore`.
-/// Used by `PendingInvitesReader` (Leaf target) для UI surface'а pending invites list.
+/// Used by `PendingInvitesReader` (Leaf target) for the UI surface of the pending invites list.
 ///
 /// Service surface mirrors §4.5 spec:
 /// - `loadVisible` → sweep expired + read non-consumed (D8 + D1).
 /// - `pollPending` → batch GET .pending rows; 200 stamp lastPolledAtMs, 404 → .consumed,
-///   transport / 5xx counted в `PollOutcome.networkErrors`.
+///   transport / 5xx counted in `PollOutcome.networkErrors`.
 /// - `revoke` → best-effort relay DELETE + local truth (DB authoritative, mirror
 ///   `InviteOutboxReader.revokeAndDismiss`).
 /// - `dismiss` → hard DELETE row (terminal-state cleanup, D2).
@@ -60,7 +60,7 @@ public struct PendingInvitesService: Sendable {
     }
 
     /// Sync local status flip → `.revoked`. Used by `PendingInvitesReader.revoke`
-    /// для immediate UI feedback (spec D4) — caller dispatches relay DELETE separately
+    /// for immediate UI feedback (spec D4) — caller dispatches relay DELETE separately
     /// via `tryRelayDelete(token:)`.
     public func revokeLocal(token: String) throws {
         try database.updatePendingInviteStatus(token: token, status: .revoked)
@@ -68,7 +68,7 @@ public struct PendingInvitesService: Sendable {
 
     /// Best-effort relay DELETE. Never throws — failure logged by caller, local truth
     /// authoritative. Token one-shot consume is bound to `memberPubkeyHex` crypto;
-    /// operational risk низкий per spec §8.
+    /// operational risk is low per spec §8.
     public func tryRelayDelete(token: String) async {
         do {
             try await relayClient.deleteInvite(token: token)
@@ -79,15 +79,15 @@ public struct PendingInvitesService: Sendable {
 
     /// Combined sync DB flip + async relay DELETE. Mirror `InviteOutboxReader.revokeAndDismiss`
     /// precedent (5.2.D): DB write authoritative even on relay failure. Reader uses split
-    /// `revokeLocal` + `tryRelayDelete` instead для immediate UI feedback (D4); this method
-    /// remains для test harness и any future caller wanting one-shot semantics.
+    /// `revokeLocal` + `tryRelayDelete` instead for immediate UI feedback (D4); this method
+    /// remains for the test harness and any future caller wanting one-shot semantics.
     public func revoke(token: String) async throws {
         try revokeLocal(token: token)
         await tryRelayDelete(token: token)
     }
 
-    /// Hard DELETE row from DB. Used by [Dismiss] action на terminal-state rows.
-    /// Silent no-op if token уже не существует — see `PendingInvitesStore.delete` semantics.
+    /// Hard DELETE row from DB. Used by the [Dismiss] action on terminal-state rows.
+    /// Silent no-op if the token no longer exists — see `PendingInvitesStore.delete` semantics.
     public func dismiss(token: String) throws {
         try database.deletePendingInvite(token: token)
     }

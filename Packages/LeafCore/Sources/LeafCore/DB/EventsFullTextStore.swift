@@ -109,8 +109,8 @@ public enum EventsFullTextStore {
         let canonical = Schema.EventPayloadKeys.body
 
         // Track-1 D2 carry-over fix: LinearCollector emits "issue_updated"
-        // (без "linear_" префикса); старая dispatch строка пропускала Linear
-        // descriptions из FTS. Track-3 D1 фиксит, добавляет notification_title.
+        // (without a "linear_" prefix); the old dispatch line skipped Linear
+        // descriptions from FTS. Track-3 D1 fixes this, adds notification_title.
         if eventKind == "issue_updated" { return (canonical, Schema.BodyKinds.linearDesc) }
         if eventKind == "linear_notification_received" { return (canonical, Schema.BodyKinds.linearNotificationTitle) }
         if eventKind == GitHubEventKindKey.commitPushed.rawValue { return (canonical, Schema.BodyKinds.commitMsg) }
@@ -119,7 +119,7 @@ public enum EventsFullTextStore {
         if eventKind == "slack_thread_reply_aggregate" { return (canonical, Schema.BodyKinds.slackThreadParent) }
         // Track-3 D2: explicit gh_* cases instead of bare hasPrefix("gh_pr_")
         // catch-all (which would spuriously match gh_pr_review_thread_resolved
-        // и gh_pr_awaiting_review_count whose body-bearing is nil).
+        // and gh_pr_awaiting_review_count whose body-bearing is nil).
         if eventKind == GitHubEventKindKey.prOpened.rawValue
             || eventKind == GitHubEventKindKey.prMerged.rawValue
             || eventKind == GitHubEventKindKey.prClosed.rawValue {

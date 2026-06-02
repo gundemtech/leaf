@@ -15,13 +15,13 @@ public struct AppTimeEntry: Codable, Sendable, Hashable {
 }
 
 public struct FocusSession: Codable, Sendable, Hashable {
-    /// Dominant app внутри session (longest cumulative duration).
+    /// Dominant app within the session (longest cumulative duration).
     public let bundleID: String
     public let start: Date
     public let end: Date
-    /// Number of distinct bundle IDs touched внутри session.
+    /// Number of distinct bundle IDs touched within the session.
     /// `appCount == 1` — single-app focus; `> 1` — multi-app session, `bundleID`
-    /// показывает dominant.
+    /// shows the dominant one.
     public let appCount: Int
     public var duration: TimeInterval { end.timeIntervalSince(start) }
 

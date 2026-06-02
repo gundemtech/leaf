@@ -36,9 +36,9 @@ final class GitHubScopesReader {
     private(set) var state: ShipState = .unknown
 
     private let service: GitHubScopesService?
-    /// `nonisolated(unsafe)` так как `deinit` non-isolated в Swift 6, а
-    /// `DistributedNotificationCenter.removeObserver` thread-safe. Запись
-    /// единожды в `subscribeIntegrationChanged()` (MainActor) при init.
+    /// `nonisolated(unsafe)` because `deinit` is non-isolated in Swift 6, and
+    /// `DistributedNotificationCenter.removeObserver` is thread-safe. Written
+    /// once in `subscribeIntegrationChanged()` (MainActor) at init.
     private nonisolated(unsafe) var observer: NSObjectProtocol?
 
     init(service: GitHubScopesService?) {

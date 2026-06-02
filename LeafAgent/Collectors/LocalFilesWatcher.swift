@@ -4,13 +4,13 @@ import AppKit
 import os
 import LeafCore
 
-/// Phase Track-4 S3 — single FSEventStream поверх 3 path watcher'ов
-/// (screenshot dir / ~/Downloads / ~/.Trash). Routes batch events по
-/// path-prefix к ScreenshotMatcher / DownloadsMatcher / TrashMatcher.
+/// Phase Track-4 S3 — single FSEventStream over 3 path watchers
+/// (screenshot dir / ~/Downloads / ~/.Trash). Routes batch events by
+/// path-prefix to ScreenshotMatcher / DownloadsMatcher / TrashMatcher.
 ///
-/// **Filename only** — никогда не читает file contents. `Data(contentsOf:)`,
+/// **Filename only** — never reads file contents. `Data(contentsOf:)`,
 /// `String(contentsOf:)`, `FileHandle(forReadingAt:)`, `FileManager.contents(atPath:)`
-/// — все запрещены (ADR-010 Won't-list, walkback в T12).
+/// — all forbidden (ADR-010 Won't-list, walkback in T12).
 @MainActor
 final class LocalFilesWatcher {
     private let writer: EventWriter
@@ -177,9 +177,9 @@ final class LocalFilesWatcher {
 // MARK: - Private FSEventStream wrapper
 
 /// Phase Track-4 S3 — agent-target-local FSEventStream wrapper. Mirror
-/// shape `LeafCore/Internal/FSEventStream.swift` (которое internal scope).
-/// Не reuse'им через public re-export, потому что LocalFilesWatcher живёт
-/// в LeafAgent target — отдельный wrapper держит OS bridge на target boundary.
+/// shape `LeafCore/Internal/FSEventStream.swift` (which is internal scope).
+/// Not reused via a public re-export, because LocalFilesWatcher lives
+/// in the LeafAgent target — a separate wrapper keeps the OS bridge at the target boundary.
 private final nonisolated class AgentFSEventStream: @unchecked Sendable {
     typealias EventsHandler = @Sendable (_ paths: [String], _ flags: [UInt32]) -> Void
 

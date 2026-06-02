@@ -1,35 +1,35 @@
 import Foundation
 
-/// Phase 2.3 — protocol для парсера одной line из Claude Code session jsonl.
-/// Реальный парсер (schema mapping + tool allowlist + ADR-010 фильтрация
-/// prompt content) живёт в `LeafCorePrivate/Prod/Collectors/ClaudeCodeJSONLParser.swift`
-/// — это moat. Public Core ships только protocol + Stub.
+/// Phase 2.3 — protocol for the parser of a single line from a Claude Code session jsonl.
+/// The real parser (schema mapping + tool allowlist + ADR-010 filtering of
+/// prompt content) lives in `LeafCorePrivate/Prod/Collectors/ClaudeCodeJSONLParser.swift`
+/// — that is moat. Public Core ships only the protocol + Stub.
 ///
-/// Контекст вокруг line (cwd / git_branch / sessionId / source path) обычно
-/// дублируется на верхнем уровне самой jsonl-line, но передаётся явно для двух
-/// причин: (a) парсер не должен обязан заглядывать в top-level filesystem context
-/// при `.malformed` строках, (b) source override полезен для тестов.
+/// The context around a line (cwd / git_branch / sessionId / source path) is usually
+/// duplicated at the top level of the jsonl-line itself, but is passed explicitly for two
+/// reasons: (a) the parser should not be required to look into top-level filesystem context
+/// on `.malformed` lines, (b) a source override is useful for tests.
 public protocol ClaudeCodeJSONLParsing: Sendable {
-    /// Парсит ОДНУ line. Возвращает `[RawEvent]` потому что один `assistant`
-    /// message может содержать несколько `tool_use` элементов в `message.content`.
-    /// `source` — abs path к файлу для логов; `now` — фоллбек timestamp если
-    /// в самой line нет parseable `timestamp`.
+    /// Parses ONE line. Returns `[RawEvent]` because a single `assistant`
+    /// message may contain several `tool_use` elements in `message.content`.
+    /// `source` — abs path to the file for logs; `now` — fallback timestamp if
+    /// the line itself has no parseable `timestamp`.
     func parse(line: String, source: String, now: Date) -> ClaudeCodeParseResult
 }
 
-/// Result для одной line. `.events` — что-то полезное распарсилось (≥0 events;
-/// пустой массив тоже OK — например `assistant` с одним `text` элементом без tool_use).
-/// `.irrelevant` — line известного типа, но мы её не ингестим (system / attachment / ...).
-/// `.malformed` — JSON parse error или нарушение known schema → collector log warning + skip.
+/// Result for a single line. `.events` — something useful was parsed (≥0 events;
+/// an empty array is also OK — e.g. an `assistant` with a single `text` element and no tool_use).
+/// `.irrelevant` — line of a known type that we do not ingest (system / attachment / ...).
+/// `.malformed` — JSON parse error or known-schema violation → collector log warning + skip.
 public enum ClaudeCodeParseResult: Sendable, Equatable {
     case events([RawEvent])
     case irrelevant
     case malformed(reason: String)
 }
 
-/// Public stub — dev/CI builds без moat. Возвращает `.irrelevant` для всего:
-/// невыровненный билд не пишет AI events (у нас нет права угадывать schema
-/// без moat-knowledge). Production использует `ClaudeCodeJSONLParser` из
+/// Public stub — dev/CI builds without moat. Returns `.irrelevant` for everything:
+/// an unaligned build does not write AI events (we have no right to guess the schema
+/// without moat knowledge). Production uses `ClaudeCodeJSONLParser` from
 /// LeafCorePrivate.
 public struct StubClaudeCodeJSONLParser: ClaudeCodeJSONLParsing {
     public init() {}

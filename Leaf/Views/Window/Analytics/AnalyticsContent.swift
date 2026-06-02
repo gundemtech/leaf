@@ -1,7 +1,7 @@
 //
 //  AnalyticsContent.swift
 //  Track-9 T9 — Analytics surface consumer. Receives WeeklyMetrics
-//  (single-purpose, not full InsightsSnapshot) и composes 6 child
+//  (single-purpose, not full InsightsSnapshot) and composes 6 child
 //  blocks per master spec §3.5. Empty-state branch via
 //  `metrics == .empty` Equatable check (auto-synth WeeklyMetrics).
 //

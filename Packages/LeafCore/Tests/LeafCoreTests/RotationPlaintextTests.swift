@@ -49,7 +49,7 @@ final class RotationPlaintextTests: XCTestCase {
         let encoded = try JSONEncoder().encode(plaintext)
         let parsed = try XCTUnwrap(try JSONSerialization.jsonObject(with: encoded) as? [String: Any])
 
-        // JSONEncoder default omits nil optionals; "removed_member_id" only present для tombstone.
+        // JSONEncoder default omits nil optionals; "removed_member_id" only present for tombstone.
         let requiredKeys: Set<String> = [
             "kind", "new_team_key", "new_key_id", "prior_key_id", "generated_at_ms",
         ]

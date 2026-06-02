@@ -4,8 +4,8 @@ import os
 import LeafCore
 
 /// Phase Track-4 S3 — CoreGraphics `CGDisplayRegisterReconfigurationCallback`.
-/// Filters `CGDisplayChangeSummaryFlags` — emits ONLY на `.addFlag`
-/// (→ display_connected) или `.removeFlag` (→ display_disconnected).
+/// Filters `CGDisplayChangeSummaryFlags` — emits ONLY on `.addFlag`
+/// (→ display_connected) or `.removeFlag` (→ display_disconnected).
 /// Ignores `.modeChangedFlag` / `.setMainFlag` / `.rotationFlag` (noise).
 ///
 /// **NEVER** calls CGDisplayCreateImage / CGWindowListCreateImage /
@@ -18,7 +18,7 @@ final class DisplayCollector {
     private var registered = false
 
     // Static singleton — production runtime has exactly one DisplayCollector
-    // (Agent.main constructs once + retains в AgentLifetime). The static
+    // (Agent.main constructs once + retains in AgentLifetime). The static
     // reference is the C-callback fan-out target since
     // `CGDisplayRegisterReconfigurationCallback` takes `userInfo:` arg
     // that maps awkwardly to Swift refcon-pattern. **Test isolation

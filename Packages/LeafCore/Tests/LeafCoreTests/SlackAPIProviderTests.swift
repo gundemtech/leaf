@@ -1,6 +1,6 @@
-// Phase 4.4 — minimal contract test для StubSlackAPIProvider.
+// Phase 4.4 — minimal contract test for StubSlackAPIProvider.
 // Prod parser (users.profile.get + search.messages mapping, DM anonymization,
-// ADR-010 enforcement, ratelimited/401 paths) tested separately в
+// ADR-010 enforcement, ratelimited/401 paths) tested separately in
 // LeafCorePrivateTests/ProdSlackAPIProviderTests.swift (moat, B5).
 
 import XCTest
@@ -36,15 +36,15 @@ final class SlackAPIProviderTests: XCTestCase {
         XCTAssertEqual(SlackHuddleState(slackAPIString: "default_unset"), .defaultUnset)
         XCTAssertEqual(SlackHuddleState(slackAPIString: "in_a_huddle"), .inAHuddle)
         XCTAssertEqual(SlackHuddleState(slackAPIString: "unknown"), .unknown)
-        // Будущий Slack state, которого мы ещё не знаем → fallback .unknown,
-        // collector такие transitions не emit'ит.
+        // A future Slack state we don't yet know about → fallback .unknown,
+        // the collector doesn't emit such transitions.
         XCTAssertEqual(SlackHuddleState(slackAPIString: "in_a_meeting_v2"), .unknown)
         XCTAssertEqual(SlackHuddleState(slackAPIString: ""), .unknown)
     }
 
     func testHuddleStateRawValuesMatchSlackAPI() {
-        // Sanity: rawValue идёт в DB через persistence layer (B6+) и в transition
-        // emission. Любая случайная переименовка ломает forward-compat / DB rows.
+        // Sanity: rawValue goes into the DB via the persistence layer (B6+) and into
+        // transition emission. Any accidental rename breaks forward-compat / DB rows.
         XCTAssertEqual(SlackHuddleState.defaultUnset.rawValue, "default_unset")
         XCTAssertEqual(SlackHuddleState.inAHuddle.rawValue, "in_a_huddle")
         XCTAssertEqual(SlackHuddleState.unknown.rawValue, "unknown")

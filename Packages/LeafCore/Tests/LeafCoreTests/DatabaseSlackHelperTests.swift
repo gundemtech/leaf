@@ -1,6 +1,6 @@
 // Phase 4.4 B6 — Database.readLatestSlackHuddleEvent helper tests.
-// Helper выбирает последний context-event с source=slack + event_kind=huddle_state_change.
-// Filters: action-events, не-slack source, отсутствие huddle event_kind — все skipped.
+// Helper picks the latest context-event with source=slack + event_kind=huddle_state_change.
+// Filters: action-events, non-slack source, missing huddle event_kind — all skipped.
 
 import XCTest
 @testable import LeafCore
@@ -56,12 +56,12 @@ final class DatabaseSlackHelperTests: XCTestCase {
         XCTAssertEqual(summary?.tsMs, newer)
     }
 
-    /// Action-event с source=slack (message aggregate) — пропускается даже если
-    /// он newer, потому что фильтр требует signal_type=context AND event_kind=huddle_state_change.
+    /// Action-event with source=slack (message aggregate) — skipped even if
+    /// it is newer, because the filter requires signal_type=context AND event_kind=huddle_state_change.
     func testReadLatestSlackHuddleEvent_IgnoresNonHuddleEvents() throws {
         let db = try makeDB()
         let huddleMs: Int64 = 1_700_000_000_000
-        let actionMs: Int64 = 1_700_000_500_000  // newer но action — должен skip'ться
+        let actionMs: Int64 = 1_700_000_500_000  // newer but action — should be skipped
         try db.write([
             huddleEvent(state: "default_unset", atMs: huddleMs),
             RawEvent(
@@ -82,8 +82,8 @@ final class DatabaseSlackHelperTests: XCTestCase {
         XCTAssertEqual(summary?.tsMs, huddleMs)
     }
 
-    /// Linear context-event newer того же типа НЕ должен возвращаться —
-    /// payload.source != "slack" фильтруется.
+    /// A newer Linear context-event of the same type must NOT be returned —
+    /// payload.source != "slack" is filtered out.
     func testReadLatestSlackHuddleEvent_IgnoresNonSlackEvents() throws {
         let db = try makeDB()
         let slackMs: Int64 = 1_700_000_000_000
@@ -96,7 +96,7 @@ final class DatabaseSlackHelperTests: XCTestCase {
                 bundleID: nil,
                 payload: [
                     "source": "linear",
-                    "event_kind": "slack_huddle_state_change",  // даже если другой провайдер случайно использует тот же event_kind
+                    "event_kind": "slack_huddle_state_change",  // even if another provider happens to use the same event_kind
                     "state": "default_unset"
                 ]
             )

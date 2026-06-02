@@ -1,11 +1,11 @@
 import Foundation
 
-/// Phase Track-4 S3 — emission gate для Downloads FSEvents. Accepts created
+/// Phase Track-4 S3 — emission gate for Downloads FSEvents. Accepts created
 /// files, rejects directories / hidden files / `.DS_Store`. **Filename only**
-/// (ADR-010 Won't-list — никогда не читает file contents).
+/// (ADR-010 Won't-list — never reads file contents).
 public struct DownloadsMatcher: Sendable {
     /// `kFSEventStreamEventFlagItemCreated` = 0x100. Hardcoded mirror — avoid
-    /// CoreServices import в pure-Swift matcher (testable без framework).
+    /// a CoreServices import in a pure-Swift matcher (testable without the framework).
     public static let createdFlag: UInt32 = 0x100
 
     public init() {}

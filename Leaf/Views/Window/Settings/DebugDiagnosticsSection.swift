@@ -2,8 +2,8 @@
 //  DebugDiagnosticsSection.swift
 //  fix/dev-launch-reliability — Settings → Diagnostics.
 //
-//  Видимая (не #if DEBUG) панель для понимания «почему не детектит» без
-//  копания в логах. Три группы: Main app / Agent / Capture. Refresh — manual.
+//  Visible (not #if DEBUG) panel for figuring out "why isn't it detecting"
+//  without digging through logs. Three groups: Main app / Agent / Capture. Refresh — manual.
 //
 
 import AppKit

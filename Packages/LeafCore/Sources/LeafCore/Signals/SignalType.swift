@@ -1,7 +1,7 @@
 import Foundation
 
-/// Ортогональная классификация событий; см. whitepaper раздел 6.
-/// Content type L6 не существует как case — won't-list на уровне компилятора.
+/// Orthogonal classification of events; see whitepaper section 6.
+/// Content type L6 does not exist as a case — won't-list enforced at the compiler level.
 public enum SignalType: String, Codable, Sendable, CaseIterable {
     case attention
     case content

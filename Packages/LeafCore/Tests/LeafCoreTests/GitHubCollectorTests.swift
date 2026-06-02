@@ -1,6 +1,6 @@
-// Phase 4.3 — integration test для GitHubCollector polling lifecycle.
-// Mock provider в этом файле; production REST events parser tested separately
-// в LeafCorePrivateTests/ProdGitHubAPIProviderTests.swift (moat, B5).
+// Phase 4.3 — integration test for the GitHubCollector polling lifecycle.
+// Mock provider in this file; the production REST events parser is tested separately
+// in LeafCorePrivateTests/ProdGitHubAPIProviderTests.swift (moat, B5).
 
 import XCTest
 import os
@@ -24,8 +24,8 @@ final class GitHubCollectorTests: XCTestCase {
 
     // MARK: - Mock provider
 
-    /// Captures `since` argument для assertion в тестах. Каждый `setBatch(_:)`
-    /// заменяет следующий return value.
+    /// Captures the `since` argument for assertions in tests. Each `setBatch(_:)`
+    /// replaces the next return value.
     private actor MockGitHubAPIProvider: GitHubAPIProvider {
         private(set) var sinceCalls: [Int64?] = []
         private(set) var loginCalls: [String] = []
@@ -53,8 +53,8 @@ final class GitHubCollectorTests: XCTestCase {
             return batchToReturn
         }
 
-        // Phase 4.7.B-1 — default returns empty pulse если test не setNotificationsSummary;
-        // позволяет существующим тестам компилиться без модификации (они проверяют
+        // Phase 4.7.B-1 — defaults to an empty pulse if a test doesn't call setNotificationsSummary;
+        // lets existing tests compile without modification (they verify
         // events from setBatch(_:), pulse — orthogonal channel).
         func fetchNotifications(accessToken: String) async throws -> GitHubNotificationsSummary {
             notificationsCallCount += 1
@@ -63,8 +63,8 @@ final class GitHubCollectorTests: XCTestCase {
             )
         }
 
-        // Phase 4.7.B-2 — defaults к `.empty` для backwards compat с existing тестами,
-        // которые сосредоточены на batch events / cursor flow.
+        // Phase 4.7.B-2 — defaults to `.empty` for backwards compat with existing tests
+        // that focus on batch events / cursor flow.
         func fetchPRsAwaitingReview(accessToken: String, login: String) async throws -> GitHubReviewQueueSummary {
             reviewQueueCallCount += 1
             return reviewQueueSummaryToReturn ?? .empty(
@@ -79,10 +79,10 @@ final class GitHubCollectorTests: XCTestCase {
             )
         }
 
-        // Phase 4.7.B-3 — defaults к `[]` для backwards compat. setActionsRuns(_:)
-        // переопределяет результат для тестов, exercise'ующих action runs explicitly.
-        // Existing тесты используют signalType=.action filter assuming только batch
-        // events; default empty actions runs preserves этот invariant.
+        // Phase 4.7.B-3 — defaults to `[]` for backwards compat. setActionsRuns(_:)
+        // overrides the result for tests that exercise action runs explicitly.
+        // Existing tests use the signalType=.action filter assuming only batch
+        // events; default empty actions runs preserves this invariant.
         func fetchActionsRunsForActor(
             accessToken: String, login: String, repos: [String], since: Int64
         ) async throws -> [GitHubActionsRunSnapshot] {
@@ -92,8 +92,8 @@ final class GitHubCollectorTests: XCTestCase {
             return actionsRunsToReturn
         }
 
-        // Phase 4.7.B-4 — defaults к `.empty` для backwards compat. setCheckRuns(_:_:_:)
-        // переопределяет per-(repo, sha) — другие pairs всё равно return `.empty`.
+        // Phase 4.7.B-4 — defaults to `.empty` for backwards compat. setCheckRuns(_:_:_:)
+        // overrides per-(repo, sha) — other pairs still return `.empty`.
         func fetchCheckRunsForCommit(
             accessToken: String, repo: String, sha: String
         ) async throws -> GitHubCheckRunsSummary {
@@ -102,8 +102,8 @@ final class GitHubCollectorTests: XCTestCase {
             return checkRunsByKey["\(repo)|\(sha)"] ?? .empty
         }
 
-        // Phase 4.7.B-5 — contributions calendar; defaults к `.empty` (todayCount=0).
-        // Используется только когда collector сам решает fetch (cooldown gate).
+        // Phase 4.7.B-5 — contributions calendar; defaults to `.empty` (todayCount=0).
+        // Used only when the collector itself decides to fetch (cooldown gate).
         func fetchContributionsCalendar(accessToken: String) async throws -> GitHubContributionsCalendar {
             contributionsCallCount += 1
             return contributionsCalendarToReturn
@@ -169,7 +169,7 @@ final class GitHubCollectorTests: XCTestCase {
     // MARK: - Helpers
 
     /// `workspaceID = "github:<login>"` per Phase 4.3 OAuth service convention;
-    /// `workspaceName` хранит raw login (без префикса) — используется как path-сегмент
+    /// `workspaceName` stores the raw login (without prefix) — used as the path segment
     /// `/users/<login>/events`.
     private func insertFreshIntegration(
         db: Database,
@@ -192,7 +192,7 @@ final class GitHubCollectorTests: XCTestCase {
 
     // MARK: - Tests
 
-    /// Без integration row tick'и должны быть skipped (юзер не подключал GitHub).
+    /// Without an integration row, ticks must be skipped (the user hasn't connected GitHub).
     func testTickWithoutIntegrationSkips() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         let provider = MockGitHubAPIProvider()
@@ -213,11 +213,11 @@ final class GitHubCollectorTests: XCTestCase {
         XCTAssertNil(result.cursorAdvancedMs)
 
         let calls = await provider.calls()
-        XCTAssertEqual(calls.count, 0, "provider.fetchEvents не должен вызываться без integration row")
+        XCTAssertEqual(calls.count, 0, "provider.fetchEvents must not be called without an integration row")
     }
 
-    /// Со свежим integration row + 3 events от provider'а: events + offset
-    /// должны попасть в БД atomically. Bootstrap path (no stored offset → since=nil).
+    /// With a fresh integration row + 3 events from the provider: events + offset
+    /// must land in the DB atomically. Bootstrap path (no stored offset → since=nil).
     func testTickPersistsEventsAndCursor() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -257,10 +257,10 @@ final class GitHubCollectorTests: XCTestCase {
         XCTAssertFalse(result.skipped)
         XCTAssertEqual(result.cursorAdvancedMs, cursorMs)
 
-        // Structural assertion на batch events: filter by signalType=.action.
-        // Pulses (notifications / pr_awaiting_review_count / my_open_pr_count) идут
-        // как .context — не пересекаются. Forward-compat: следующие B-tasks могут
-        // добавлять new pulse'ы без bumping числовых counts здесь.
+        // Structural assertion on batch events: filter by signalType=.action.
+        // Pulses (notifications / pr_awaiting_review_count / my_open_pr_count) are
+        // emitted as .context — they don't overlap. Forward-compat: later B-tasks may
+        // add new pulses without bumping the numeric counts here.
         let stored = try db.events(in: DateInterval(
             start: Date(timeIntervalSince1970: TimeInterval(cursorMs - 10_000) / 1000),
             end: Date(timeIntervalSince1970: TimeInterval(cursorMs + 10_000) / 1000)
@@ -268,16 +268,16 @@ final class GitHubCollectorTests: XCTestCase {
         let actionEvents = stored.filter { $0.signalType == .action }
         XCTAssertEqual(actionEvents.count, 3, "3 batch events from fetchEvents")
 
-        // Atomic write: события + offset row должны быть в БД.
+        // Atomic write: events + offset row must be in the DB.
         let offset = try db.readOffset(
             collectorID: CollectorID.githubPolling,
             sourceID: "github:octocat"
         )
         XCTAssertEqual(offset?.lastModifiedMs, cursorMs)
-        XCTAssertEqual(offset?.byteOffset, 0, "byte_offset не релевантен для HTTP API")
+        XCTAssertEqual(offset?.byteOffset, 0, "byte_offset is not relevant for the HTTP API")
         XCTAssertNil(offset?.inode)
 
-        // Bootstrap: первый tick → since=nil (no stored offset).
+        // Bootstrap: first tick → since=nil (no stored offset).
         let calls = await provider.calls()
         XCTAssertEqual(calls.count, 1)
         if let firstSince = calls.first {
@@ -286,14 +286,14 @@ final class GitHubCollectorTests: XCTestCase {
             XCTFail("expected one provider call")
         }
 
-        // Login forwarded из workspaceName (не workspaceID — тот префиксирован "github:").
+        // Login forwarded from workspaceName (not workspaceID — that one is prefixed "github:").
         let logins = await provider.logins()
         XCTAssertEqual(logins, ["octocat"])
     }
 
-    /// Phase 4.6.A.1 — latency-fields из snapshot'а должны доезжать до events.payload.
-    /// Snapshot с `cycleSeconds=10800` → payload содержит ключ `cycle_seconds = "10800"`;
-    /// snapshot без latency → ключ отсутствует (не пустая строка).
+    /// Phase 4.6.A.1 — latency fields from the snapshot must make it into events.payload.
+    /// A snapshot with `cycleSeconds=10800` → payload contains the key `cycle_seconds = "10800"`;
+    /// a snapshot without latency → the key is absent (not an empty string).
     func testTickEncodesCycleAndReviewDelayInPayload() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -343,18 +343,18 @@ final class GitHubCollectorTests: XCTestCase {
 
         let merged = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "gh_pr_merged" })
         XCTAssertEqual(merged.payload["cycle_seconds"], "10800")
-        XCTAssertNil(merged.payload["review_delay_seconds"], "non-review event не должен иметь review_delay_seconds key")
+        XCTAssertNil(merged.payload["review_delay_seconds"], "a non-review event must not have a review_delay_seconds key")
 
         let review = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "gh_pr_review_submitted" })
         XCTAssertEqual(review.payload["review_delay_seconds"], "600")
-        XCTAssertNil(review.payload["cycle_seconds"], "review event не несёт cycle key")
+        XCTAssertNil(review.payload["cycle_seconds"], "a review event does not carry a cycle key")
 
         let push = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "gh_commit_pushed" })
-        XCTAssertNil(push.payload["cycle_seconds"], "snapshot.cycleSeconds=nil → key отсутствует, не \"\"")
+        XCTAssertNil(push.payload["cycle_seconds"], "snapshot.cycleSeconds=nil → key absent, not \"\"")
         XCTAssertNil(push.payload["review_delay_seconds"])
     }
 
-    /// Второй tick передаёт сохранённый cursor как `since`.
+    /// The second tick passes the stored cursor as `since`.
     func testSecondTickPassesStoredCursor() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -378,7 +378,7 @@ final class GitHubCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        // Empty batch на втором tick'е (никаких новых events).
+        // Empty batch on the second tick (no new events).
         await provider.setBatch(.empty)
         _ = await collector.performTick()
 
@@ -388,8 +388,8 @@ final class GitHubCollectorTests: XCTestCase {
         XCTAssertEqual(calls[1], cursorMs, "second tick — stored cursor")
     }
 
-    /// Phase 4.7.A — `metadata` dict из snapshot'а прокачивается в payload,
-    /// reserved keys (`source`/`event_kind`/etc) защищены от override.
+    /// Phase 4.7.A — the `metadata` dict from the snapshot is pumped into the payload,
+    /// reserved keys (`source`/`event_kind`/etc) are protected from override.
     func testTickEncodesMetadataFieldsInPayload() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -406,7 +406,7 @@ final class GitHubCollectorTests: XCTestCase {
                     metadata: [
                         "tag_name": "v1.0.0",
                         "action": "published",
-                        // Попытка override reserved key — должна быть проигнорирована.
+                        // Attempt to override a reserved key — must be ignored.
                         "event_kind": "OVERRIDE_ATTEMPT"
                     ]
                 ),
@@ -444,26 +444,26 @@ final class GitHubCollectorTests: XCTestCase {
         XCTAssertEqual(release.payload["tag_name"], "v1.0.0")
         XCTAssertEqual(release.payload["action"], "published")
         XCTAssertEqual(release.payload["event_kind"], "gh_release_published",
-                       "reserved key event_kind не overridable через metadata")
+                       "reserved key event_kind is not overridable via metadata")
 
         let tag = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "gh_tag_created" })
         XCTAssertEqual(tag.payload["tag_name"], "v1.1.0")
 
         let push = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "gh_commit_pushed" })
-        XCTAssertNil(push.payload["tag_name"], "snapshot.metadata=nil → нет лишних ключей в payload")
+        XCTAssertNil(push.payload["tag_name"], "snapshot.metadata=nil → no extra keys in the payload")
     }
 
     // MARK: - Phase 4.7.B-1 — notifications pulse
 
-    /// Provider stub returns a non-empty summary → tick должен emit'ить
-    /// `github_notifications_pulse` event с total_unread + reason_*_count keys.
-    /// Signal type — `.context` (не `.action` — это state pulse, не user action).
+    /// Provider stub returns a non-empty summary → tick must emit a
+    /// `github_notifications_pulse` event with total_unread + reason_*_count keys.
+    /// Signal type — `.context` (not `.action` — this is a state pulse, not a user action).
     func testTick_EmitsNotificationsPulse() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
 
         let provider = MockGitHubAPIProvider()
-        // Empty events batch + non-empty notifications → tick должен emit'ить только pulse.
+        // Empty events batch + non-empty notifications → tick must emit only the pulse.
         await provider.setBatch(.empty)
         let pulseObservedAt: Int64 = 1_700_000_000_000
         await provider.setNotificationsSummary(GitHubNotificationsSummary(
@@ -485,19 +485,19 @@ final class GitHubCollectorTests: XCTestCase {
         let result = await collector.performTick()
         XCTAssertFalse(result.skipped)
         let notifCalls = await provider.notificationsCalls()
-        XCTAssertEqual(notifCalls, 1, "fetchNotifications вызвался ровно раз")
+        XCTAssertEqual(notifCalls, 1, "fetchNotifications was called exactly once")
 
-        // Read all events; ровно один с event_kind=github_notifications_pulse.
+        // Read all events; exactly one with event_kind=github_notifications_pulse.
         let stored = try db.events(in: DateInterval(
             start: Date(timeIntervalSince1970: 0),
             end: Date(timeIntervalSince1970: TimeInterval(Date().timeIntervalSince1970 + 60))
         ))
-        // Empty batch → нет .action events; только .context pulses.
+        // Empty batch → no .action events; only .context pulses.
         XCTAssertEqual(stored.filter { $0.signalType == .action }.count, 0,
-                       "empty batch → нет .action events")
+                       "empty batch → no .action events")
         let pulse = try XCTUnwrap(
             stored.first { $0.payload["event_kind"] == "gh_notifications_pulse" },
-            "ожидался github_notifications_pulse event"
+            "expected a github_notifications_pulse event"
         )
         XCTAssertEqual(pulse.signalType, .context, "pulse — state event, signal_type=.context")
         XCTAssertEqual(pulse.payload["source"], "github")
@@ -505,14 +505,14 @@ final class GitHubCollectorTests: XCTestCase {
         XCTAssertEqual(pulse.payload["reason_review_requested_count"], "2")
         XCTAssertEqual(pulse.payload["reason_mention_count"], "1")
         XCTAssertEqual(pulse.payload["reason_comment_count"], "1")
-        XCTAssertNotNil(pulse.payload["observed_at_ms"], "observed_at_ms всегда populated")
+        XCTAssertNotNil(pulse.payload["observed_at_ms"], "observed_at_ms is always populated")
     }
 
     // MARK: - Phase 4.7.B-2 — review queue + my open PRs pulses
 
-    /// Provider stubs return non-empty summaries → tick должен emit'ить два pulse
-    /// event'а: `pr_awaiting_review_count` (с `top_repo`) и `my_open_pr_count`.
-    /// Both signal_type=.context (state pulses, не user actions).
+    /// Provider stubs return non-empty summaries → tick must emit two pulse
+    /// events: `pr_awaiting_review_count` (with `top_repo`) and `my_open_pr_count`.
+    /// Both signal_type=.context (state pulses, not user actions).
     func testTick_EmitsPRAwaitingReviewAndMyOpenPRs() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -537,8 +537,8 @@ final class GitHubCollectorTests: XCTestCase {
         XCTAssertFalse(result.skipped)
         let reviewCalls = await provider.reviewQueueCalls()
         let myOpenCalls = await provider.myOpenPRsCalls()
-        XCTAssertEqual(reviewCalls, 1, "fetchPRsAwaitingReview вызвался ровно раз")
-        XCTAssertEqual(myOpenCalls, 1, "fetchMyOpenPRs вызвался ровно раз")
+        XCTAssertEqual(reviewCalls, 1, "fetchPRsAwaitingReview was called exactly once")
+        XCTAssertEqual(myOpenCalls, 1, "fetchMyOpenPRs was called exactly once")
 
         let stored = try db.events(in: DateInterval(
             start: Date(timeIntervalSince1970: 0),
@@ -547,7 +547,7 @@ final class GitHubCollectorTests: XCTestCase {
 
         let reviewPulse = try XCTUnwrap(
             stored.first { $0.payload["event_kind"] == "gh_pr_awaiting_review_count" },
-            "ожидался pr_awaiting_review_count event"
+            "expected a pr_awaiting_review_count event"
         )
         XCTAssertEqual(reviewPulse.signalType, .context)
         XCTAssertEqual(reviewPulse.payload["source"], "github")
@@ -557,17 +557,17 @@ final class GitHubCollectorTests: XCTestCase {
 
         let openPulse = try XCTUnwrap(
             stored.first { $0.payload["event_kind"] == "gh_my_open_pr_count" },
-            "ожидался my_open_pr_count event"
+            "expected a my_open_pr_count event"
         )
         XCTAssertEqual(openPulse.signalType, .context)
         XCTAssertEqual(openPulse.payload["source"], "github")
         XCTAssertEqual(openPulse.payload["count"], "7")
-        XCTAssertNil(openPulse.payload["top_repo"], "my_open_pr_count не несёт top_repo")
+        XCTAssertNil(openPulse.payload["top_repo"], "my_open_pr_count does not carry top_repo")
         XCTAssertNotNil(openPulse.payload["observed_at_ms"])
     }
 
-    /// `top_repo` payload key omitted при `count==0` (review queue empty).
-    /// Отличает "ничего не ждёт" от "ничего не fetched" / future error states.
+    /// `top_repo` payload key omitted when `count==0` (review queue empty).
+    /// Distinguishes "nothing is waiting" from "nothing was fetched" / future error states.
     func testTick_EmptyReviewQueueOmitsTopRepoKey() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -595,9 +595,9 @@ final class GitHubCollectorTests: XCTestCase {
     // MARK: - Phase 4.7.B-3 — actions runs
 
     /// Provider stub returns 2 runs → 2 `actions_run_initiated` action events emitted.
-    /// `signal_type=.action` (discrete user action), payload содержит run_id + repo +
+    /// `signal_type=.action` (discrete user action), payload contains run_id + repo +
     /// workflow_name + event + status. ADR-010 fields (head_commit.message / run.name)
-    /// — provider их не set'ит в snapshot, collector их не emit'ит.
+    /// — the provider doesn't set them in the snapshot, and the collector doesn't emit them.
     func testTick_EmitsActionsRunInitiatedEvents() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -629,7 +629,7 @@ final class GitHubCollectorTests: XCTestCase {
         let result = await collector.performTick()
         XCTAssertFalse(result.skipped)
         let runsCalls = await provider.actionsRunsCalls()
-        XCTAssertEqual(runsCalls, 1, "fetchActionsRunsForActor вызвался ровно раз")
+        XCTAssertEqual(runsCalls, 1, "fetchActionsRunsForActor was called exactly once")
 
         let stored = try db.events(in: DateInterval(
             start: Date(timeIntervalSince1970: TimeInterval(baseMs - 10_000) / 1000),
@@ -638,7 +638,7 @@ final class GitHubCollectorTests: XCTestCase {
         let runEvents = stored.filter { $0.payload["event_kind"] == "gh_actions_run_initiated" }
         XCTAssertEqual(runEvents.count, 2, "2 runs → 2 actions_run_initiated events")
 
-        // Все run-events должны иметь signal_type=.action (discrete user action).
+        // All run events must have signal_type=.action (discrete user action).
         for ev in runEvents {
             XCTAssertEqual(ev.signalType, .action, "actions_run_initiated — signal_type=.action")
             XCTAssertEqual(ev.payload["source"], "github")
@@ -647,7 +647,7 @@ final class GitHubCollectorTests: XCTestCase {
             XCTAssertNotNil(ev.payload["workflow_name"])
         }
 
-        // First run — completed/success, со всеми optional fields.
+        // First run — completed/success, with all optional fields.
         let releaseRun = try XCTUnwrap(runEvents.first { $0.payload["run_id"] == "100" })
         XCTAssertEqual(releaseRun.payload["repo"], "octocat/leaf")
         XCTAssertEqual(releaseRun.payload["workflow_name"], "Release")
@@ -656,7 +656,7 @@ final class GitHubCollectorTests: XCTestCase {
         XCTAssertEqual(releaseRun.payload["conclusion"], "success")
         XCTAssertEqual(releaseRun.payload["head_branch"], "main")
 
-        // Second run — in_progress, conclusion=nil → ключ omitted из payload.
+        // Second run — in_progress, conclusion=nil → key omitted from the payload.
         let ciRun = try XCTUnwrap(runEvents.first { $0.payload["run_id"] == "101" })
         XCTAssertEqual(ciRun.payload["status"], "in_progress")
         XCTAssertNil(ciRun.payload["conclusion"], "conclusion=nil → key omitted entirely")
@@ -665,9 +665,9 @@ final class GitHubCollectorTests: XCTestCase {
 
     // MARK: - Phase 4.7.B-4 — check_runs_status per pushed commit
 
-    /// 2 push events с разными shas → 2 fetchCheckRunsForCommit calls, 2
+    /// 2 push events with different shas → 2 fetchCheckRunsForCommit calls, 2
     /// `check_runs_status` events emitted (signal_type=.context). Bucket counts
-    /// from summary прокачиваются в payload as-is.
+    /// from the summary are pumped into the payload as-is.
     func testTick_EmitsCheckRunsStatusForEachPush() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -748,16 +748,16 @@ final class GitHubCollectorTests: XCTestCase {
         XCTAssertEqual(otherEvent.payload["neutral"], "3")
     }
 
-    /// Без commit_pushed events в batch → 0 fetchCheckRunsForCommit calls + 0
-    /// check_runs_status events. Tick остальное (notifications / review queue /
-    /// my open PRs / actions runs pulses) всё равно работает.
+    /// Without commit_pushed events in the batch → 0 fetchCheckRunsForCommit calls + 0
+    /// check_runs_status events. The rest of the tick (notifications / review queue /
+    /// my open PRs / actions runs pulses) still works.
     func testTick_NoPushEvents_NoCheckRunsCalls() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
 
         let provider = MockGitHubAPIProvider()
         let baseMs: Int64 = 1_700_000_000_000
-        // Batch только non-push events.
+        // Batch with only non-push events.
         await provider.setBatch(GitHubEventBatch(
             events: [
                 GitHubEventSnapshot(
@@ -797,8 +797,8 @@ final class GitHubCollectorTests: XCTestCase {
 
     // MARK: - Phase 4.7.B-5 — contributions calendar + presence_state.github
 
-    /// Helper для UTC-aligned `Date` для testов day-boundary cooldown'а.
-    /// Возвращает midnight UTC + offsetSeconds.
+    /// Helper for a UTC-aligned `Date` for day-boundary cooldown tests.
+    /// Returns midnight UTC + offsetSeconds.
     private func utcDate(year: Int, month: Int, day: Int, hour: Int = 12) -> Date {
         var components = DateComponents()
         components.year = year
@@ -812,12 +812,12 @@ final class GitHubCollectorTests: XCTestCase {
         return cal.date(from: components)!
     }
 
-    /// Two ticks одного дня → fetchContributionsCalendar called только один раз.
-    /// Cooldown gate работает.
+    /// Two ticks on the same day → fetchContributionsCalendar called only once.
+    /// Cooldown gate works.
     func testTick_FetchesContributionsOncePerDay() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
-        // expiresAt в далёком будущем — refresher выходит на no-op даже когда мы
-        // подаём `now` в прошлом (utcDate fixture'ы для day-boundary теста).
+        // expiresAt far in the future — the refresher becomes a no-op even when we
+        // feed a `now` in the past (utcDate fixtures for the day-boundary test).
         try insertFreshIntegration(
             db: db,
             expiresAt: utcDate(year: 2030, month: 1, day: 1)
@@ -842,7 +842,7 @@ final class GitHubCollectorTests: XCTestCase {
         XCTAssertEqual(calls, 1, "two ticks same UTC day → 1 fetchContributionsCalendar call")
     }
 
-    /// Tick на day+1 → fetchContributionsCalendar called второй раз.
+    /// Tick on day+1 → fetchContributionsCalendar called a second time.
     /// Day-boundary triggers re-fetch.
     func testTick_FetchesContributionsAcrossDayBoundary() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
@@ -870,8 +870,8 @@ final class GitHubCollectorTests: XCTestCase {
         XCTAssertEqual(calls, 2, "ticks across UTC day boundary → 2 fetchContributionsCalendar calls")
     }
 
-    /// После tick'а presence_state.github row существует с composite state, все
-    /// 8 plan-required keys присутствуют, derivedMode=nil.
+    /// After the tick, the presence_state.github row exists with composite state, all
+    /// 8 plan-required keys are present, derivedMode=nil.
     func testTick_WritesPresenceStateRow() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -921,8 +921,8 @@ final class GitHubCollectorTests: XCTestCase {
         let presence = try db.readSQL { rawDB in
             try PresenceStateWriter.read(provider: .github, in: rawDB)
         }
-        let row = try XCTUnwrap(presence, "presence_state.github row должен существовать после tick'а")
-        XCTAssertNil(row.derivedMode, "derivedMode=nil в Phase 4.7 (Phase 4.9 начнёт populate)")
+        let row = try XCTUnwrap(presence, "presence_state.github row must exist after the tick")
+        XCTAssertNil(row.derivedMode, "derivedMode=nil in Phase 4.7 (Phase 4.9 will start populating it)")
 
         // All 8 plan-required keys present.
         let state = row.state
@@ -937,10 +937,10 @@ final class GitHubCollectorTests: XCTestCase {
         XCTAssertEqual(state["latest_push_check_status"] as? String, "success",
                        "2 success / 0 failure / 0 in_progress → success bucket")
         XCTAssertEqual(state["contributions_today"] as? Int, 7)
-        // active_repos_count = 0 (events table пуста до этого tick'а — derive
-        // query видит just-inserted push, но окно 7 дней назад отработало
-        // на прошлом empty состоянии). Если будет 1 (включая current push),
-        // это тоже acceptable — invariant: ключ присутствует и Int.
+        // active_repos_count = 0 (the events table is empty before this tick — the derive
+        // query sees the just-inserted push, but the 7-days-ago window ran
+        // against the previous empty state). If it ends up 1 (including the current push),
+        // that's also acceptable — invariant: the key is present and an Int.
         XCTAssertNotNil(state["active_repos_count"] as? Int)
     }
 
@@ -976,7 +976,7 @@ final class GitHubCollectorTests: XCTestCase {
         XCTAssertEqual(
             row.state["viewer_login"] as? String,
             "octocat",
-            "viewer_login slot должен carry плейн-логин из integrations row"
+            "viewer_login slot must carry the plain login from the integrations row"
         )
     }
 
@@ -1011,17 +1011,17 @@ final class GitHubCollectorTests: XCTestCase {
         let row = try XCTUnwrap(presence)
         XCTAssertTrue(
             row.state["viewer_login"] is NSNull,
-            "viewer_login должен быть NSNull при empty login (key present, value null)"
+            "viewer_login must be NSNull on empty login (key present, value null)"
         )
         XCTAssertNotNil(
             row.state.index(forKey: "viewer_login"),
-            "viewer_login key должен присутствовать в state JSON"
+            "viewer_login key must be present in the state JSON"
         )
     }
 
-    /// ADR-010 regression: presence_state JSON не должен содержать reserved
+    /// ADR-010 regression: presence_state JSON must not contain reserved
     /// content keys ("title" / "body" / "message") — defensive shape check.
-    /// Caller responsibility — этот тест guards boundary.
+    /// Caller responsibility — this test guards the boundary.
     func testTick_PresenceStateOmitsRedactedFields() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -1052,31 +1052,31 @@ final class GitHubCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        // Read raw JSON и ассерт что reserved content keys не появились.
-        // Используем raw stateJSON column через PresenceStateWriter.read (parsed dict
-        // даёт нам keys()) — boundary check.
+        // Read raw JSON and assert that reserved content keys did not appear.
+        // We use the raw stateJSON column via PresenceStateWriter.read (the parsed dict
+        // gives us keys()) — boundary check.
         let presence = try db.readSQL { rawDB in
             try PresenceStateWriter.read(provider: .github, in: rawDB)
         }
         let row = try XCTUnwrap(presence)
         let topLevelKeys = Set(row.state.keys)
         XCTAssertFalse(topLevelKeys.contains("title"),
-                       "presence_state не должен содержать 'title' top-level key")
+                       "presence_state must not contain a 'title' top-level key")
         XCTAssertFalse(topLevelKeys.contains("body"),
-                       "presence_state не должен содержать 'body' top-level key")
+                       "presence_state must not contain a 'body' top-level key")
         XCTAssertFalse(topLevelKeys.contains("message"),
-                       "presence_state не должен содержать 'message' top-level key")
+                       "presence_state must not contain a 'message' top-level key")
 
-        // Sentinel string из event title не должна leak'ать в стейт через какое-либо
-        // поле (paranoid check — guards против accidental forwarding).
+        // The sentinel string from the event title must not leak into the state through any
+        // field (paranoid check — guards against accidental forwarding).
         let serialized = try JSONSerialization.data(withJSONObject: row.state, options: [])
         let serializedStr = String(data: serialized, encoding: .utf8) ?? ""
         XCTAssertFalse(serializedStr.contains(sentinelTitle),
-                       "title content не должен попасть в presence_state JSON")
+                       "title content must not end up in the presence_state JSON")
     }
 
-    /// Lifecycle smoke: start запускает loopTask, stop его cancels + awaits.
-    /// Без assertion — если actor zombie'ит, тест зависнет (timeout safeguard).
+    /// Lifecycle smoke: start launches loopTask, stop cancels it + awaits.
+    /// No assertion — if the actor zombies, the test hangs (timeout safeguard).
     func testStartStopLifecycle() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         let provider = MockGitHubAPIProvider()
@@ -1133,14 +1133,14 @@ final class GitHubCollectorTests: XCTestCase {
         ))
         let event = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "gh_commit_pushed" })
         XCTAssertEqual(event.payload[Schema.EventPayloadKeys.body], fullBody,
-                       "full commit message должен быть в payload.body")
+                       "the full commit message must be in payload.body")
         XCTAssertTrue(event.payload[Schema.EventPayloadKeys.body]?.contains("Long body paragraph") == true,
-                      "body содержит multi-line content")
+                      "body contains multi-line content")
         XCTAssertNil(event.payload[Schema.EventPayloadKeys.bodyTruncated],
-                     "bodyTruncated absent когда не truncated")
+                     "bodyTruncated absent when not truncated")
     }
 
-    /// PRMetadata fields всех 6 ключей присутствуют в payload.
+    /// PRMetadata fields — all 6 keys are present in the payload.
     func testTick_PRMetadataPayloadKeys_TrackD1() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -1182,10 +1182,10 @@ final class GitHubCollectorTests: XCTestCase {
         XCTAssertEqual(event.payload[Schema.EventPayloadKeys.mentionCount], "1")
         XCTAssertEqual(event.payload[Schema.EventPayloadKeys.linkCount], "0")
         let reviewersJson = try XCTUnwrap(event.payload[Schema.EventPayloadKeys.requestedReviewersJson])
-        XCTAssertTrue(reviewersJson.contains("alice"), "requested_reviewers_json содержит reviewer login")
+        XCTAssertTrue(reviewersJson.contains("alice"), "requested_reviewers_json contains the reviewer login")
     }
 
-    /// Inline images parsed from PR body → attachments_json в payload.
+    /// Inline images parsed from PR body → attachments_json in the payload.
     func testTick_InlineImagesParsedFromBody_TrackD1() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -1218,11 +1218,11 @@ final class GitHubCollectorTests: XCTestCase {
         ))
         let event = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "gh_pr_opened" })
         let attachmentsJson = try XCTUnwrap(event.payload[Schema.EventPayloadKeys.attachmentsJson],
-                                             "attachments_json должен быть в payload")
-        XCTAssertTrue(attachmentsJson.contains("screenshot.png"), "attachments_json содержит filename")
+                                             "attachments_json must be in the payload")
+        XCTAssertTrue(attachmentsJson.contains("screenshot.png"), "attachments_json contains the filename")
         // JSONEncoder escapes "/" → "\/" in JSON; check for "image" + "png" separately.
         XCTAssertTrue(attachmentsJson.contains("image") && attachmentsJson.contains("png"),
-                      "attachments_json содержит mime type (image/png, possibly JSON-escaped)")
+                      "attachments_json contains the mime type (image/png, possibly JSON-escaped)")
     }
 
     // MARK: - Track-3 D2 Task 4 — gh_* rename + 7 new hot-tier event_kinds
@@ -1298,8 +1298,8 @@ final class GitHubCollectorTests: XCTestCase {
         XCTAssertEqual(event.payload[Schema.EventPayloadKeys.prReviewState], "approved")
     }
 
-    /// Reserved-keys guard предотвращает shadowing: snapshot.metadata с "body"/"additions" ключами
-    /// не может перезаписать body/additions из snapshot.body/prMetadata.
+    /// Reserved-keys guard prevents shadowing: snapshot.metadata with "body"/"additions" keys
+    /// cannot overwrite body/additions from snapshot.body/prMetadata.
     func testTick_ReservedKeysGuard_TrackD1() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -1341,13 +1341,13 @@ final class GitHubCollectorTests: XCTestCase {
         let event = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "gh_pr_opened" })
         // Real body wins over metadata shadow.
         XCTAssertEqual(event.payload[Schema.EventPayloadKeys.body], realBody,
-                       "real body из snapshot.body должен присутствовать")
+                       "the real body from snapshot.body must be present")
         XCTAssertFalse(event.payload.values.contains("metadata-shadow"),
-                       "metadata shadow не должен появляться в payload")
+                       "the metadata shadow must not appear in the payload")
         // Real additions from prMetadata wins over metadata shadow.
         XCTAssertEqual(event.payload[Schema.EventPayloadKeys.additions], "42",
-                       "real additions из prMetadata должны быть в payload")
+                       "the real additions from prMetadata must be in the payload")
         XCTAssertFalse(event.payload.values.contains("999"),
-                       "metadata additions shadow не должен перезаписать реальное значение")
+                       "the metadata additions shadow must not overwrite the real value")
     }
 }

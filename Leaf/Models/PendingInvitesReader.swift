@@ -2,7 +2,7 @@
 //  PendingInvitesReader.swift
 //  Leaf
 //
-//  Phase 5.5.C — @Observable wrapper над PendingInvitesService. Lazy-init Database +
+//  Phase 5.5.C — @Observable wrapper over PendingInvitesService. Lazy-init Database +
 //  RelayClient + service. State machine drives PendingInvitesSection.
 //  Mirror InviteOutboxReader (5.2.D) lazy-init pattern + composition root #if LEAF_PROD.
 //
@@ -25,10 +25,10 @@ final class PendingInvitesReader {
     }
 
     private(set) var state: State = .loading
-    /// Section header surface'ит inline ProgressView пока `poll()` в полёте.
+    /// The section header surfaces an inline ProgressView while `poll()` is in flight.
     private(set) var isPolling: Bool = false
-    /// One-shot user-facing message после poll'а ("Checked 3 — 1 consumed").
-    /// Non-blocking — UI читает + clear'ит через .acknowledgePollMessage().
+    /// One-shot user-facing message after a poll ("Checked 3 — 1 consumed").
+    /// Non-blocking — the UI reads it and clears it via .acknowledgePollMessage().
     private(set) var pollMessage: String? = nil
 
     private var service: PendingInvitesService?

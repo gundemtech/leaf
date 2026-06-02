@@ -1,6 +1,6 @@
 // Phase 4.4 B6 — SlackCollector polling lifecycle tests.
-// Mock provider в этом файле; production REST parser tested separately
-// в LeafCorePrivateTests/ProdSlackAPIProviderTests (moat).
+// Mock provider in this file; production REST parser tested separately
+// in LeafCorePrivateTests/ProdSlackAPIProviderTests (moat).
 
 import XCTest
 import os
@@ -28,12 +28,12 @@ final class SlackCollectorTests: XCTestCase {
 
     // MARK: - Mock provider
 
-    /// Captures `since` / `userID` calls для assertion'ов; injectable
+    /// Captures `since` / `userID` calls for assertions; injectable
     /// `nextResult: SlackTickResult` (default — `.empty`).
-    /// Phase 4.7.B-9 — также injectable presence + counter для tick'ов.
-    /// Phase 4.7.B-10 — также injectable DND + counter для tick'ов.
-    /// Phase 4.7.B-11 — также injectable mentions + counter для tick'ов.
-    /// Phase 4.7.B-12 — также injectable file upload summary + counter.
+    /// Phase 4.7.B-9 — also injectable presence + counter for ticks.
+    /// Phase 4.7.B-10 — also injectable DND + counter for ticks.
+    /// Phase 4.7.B-11 — also injectable mentions + counter for ticks.
+    /// Phase 4.7.B-12 — also injectable file upload summary + counter.
     private actor MockSlackAPIProvider: SlackAPIProvider {
         private(set) var sinceCalls: [Int64?] = []
         private(set) var userIDCalls: [String] = []
@@ -241,7 +241,7 @@ final class SlackCollectorTests: XCTestCase {
 
     // MARK: - Tests
 
-    /// Без integration row → tick skipped, provider не вызывается.
+    /// Without an integration row → tick skipped, provider not called.
     func testTickWithoutIntegrationSkips() async throws {
         let db = try makeDB()
         let provider = MockSlackAPIProvider()
@@ -258,8 +258,8 @@ final class SlackCollectorTests: XCTestCase {
         XCTAssertEqual(calls.count, 0)
     }
 
-    /// Со свежим integration + 2 channels × counts → 2 message events
-    /// + offset cursor в одной транзакции. Bootstrap path → since=nil.
+    /// With a fresh integration + 2 channels × counts → 2 message events
+    /// + offset cursor in a single transaction. Bootstrap path → since=nil.
     func testTickPersistsMessageEventsAndCursor() async throws {
         let db = try makeDB()
         try insertFreshIntegration(db: db)
@@ -269,7 +269,7 @@ final class SlackCollectorTests: XCTestCase {
         let periodStart: Int64 = 1_700_000_000_000
         let periodEnd: Int64 = 1_700_000_300_000
         await provider.setResult(SlackTickResult(
-            huddle: .unknown,  // не emit'ит huddle event — очищает изоляцию теста
+            huddle: .unknown,  // does not emit a huddle event — keeps the test isolated
             channelMessageCounts: [
                 SlackChannelMessageCount(channelName: "engineering", count: 3),
                 SlackChannelMessageCount(channelName: "DM", count: 5)
@@ -294,14 +294,14 @@ final class SlackCollectorTests: XCTestCase {
         )
         XCTAssertEqual(offset?.lastModifiedMs, cursorMs)
 
-        // Bootstrap: первый call → since=nil; userID извлечён из workspaceID после ":".
+        // Bootstrap: first call → since=nil; userID extracted from workspaceID after ":".
         let sinceCalls = await provider.sinceHistory()
         XCTAssertEqual(sinceCalls.count, 1)
         XCTAssertNil(sinceCalls[0])
         let userIDCalls = await provider.userIDHistory()
         XCTAssertEqual(userIDCalls, ["U456"])
 
-        // Events действительно записаны в DB как action со source=slack.
+        // Events are actually written to the DB as actions with source=slack.
         let writtenEvents = try db.events(
             in: DateInterval(
                 start: Date(timeIntervalSince1970: TimeInterval(periodEnd) / 1000.0 - 1),
@@ -319,11 +319,11 @@ final class SlackCollectorTests: XCTestCase {
     }
 
     /// Last DB huddle event = default_unset, tick.huddle = inAHuddle →
-    /// emit одно context event с state="in_a_huddle".
+    /// emit a single context event with state="in_a_huddle".
     func testTickEmitsHuddleTransitionOnStateChange() async throws {
         let db = try makeDB()
         try insertFreshIntegration(db: db)
-        // baseline: предыдущее состояние было default_unset.
+        // baseline: the previous state was default_unset.
         try db.write([huddleEventInDB(state: "default_unset", atMs: 1_700_000_000_000)])
 
         let provider = MockSlackAPIProvider()
@@ -349,7 +349,7 @@ final class SlackCollectorTests: XCTestCase {
     }
 
     /// Last DB huddle event = inAHuddle, tick.huddle = inAHuddle →
-    /// transition НЕ emit'ится. Latest huddle event в DB остаётся прежним.
+    /// transition is NOT emitted. The latest huddle event in the DB stays unchanged.
     func testTickSuppressesHuddleEventWhenStateUnchanged() async throws {
         let db = try makeDB()
         try insertFreshIntegration(db: db)
@@ -372,11 +372,11 @@ final class SlackCollectorTests: XCTestCase {
 
         let latest = try db.readLatestSlackHuddleEvent()
         XCTAssertEqual(latest?.state, "in_a_huddle")
-        XCTAssertEqual(latest?.tsMs, baselineMs, "baseline ts должен сохраниться — нового event нет")
+        XCTAssertEqual(latest?.tsMs, baselineMs, "baseline ts should be preserved — no new event")
     }
 
-    /// tick.huddle = .unknown (provider не смог fetch / forward-compat) →
-    /// transition НЕ emit'ится независимо от DB-state.
+    /// tick.huddle = .unknown (provider failed to fetch / forward-compat) →
+    /// transition is NOT emitted regardless of DB state.
     func testTickSuppressesHuddleEventWhenUnknown() async throws {
         let db = try makeDB()
         try insertFreshIntegration(db: db)
@@ -398,14 +398,14 @@ final class SlackCollectorTests: XCTestCase {
         XCTAssertEqual(result.messageEventsEmitted, 0)
     }
 
-    /// Empty batch (no messages, huddle .unknown) → cursor НЕ двигается.
-    /// Второй tick передаёт прежний since.
+    /// Empty batch (no messages, huddle .unknown) → cursor does NOT move.
+    /// The second tick passes the same since.
     func testTickDoesNotAdvanceCursorOnEmptyBatch() async throws {
         let db = try makeDB()
         try insertFreshIntegration(db: db)
 
         let provider = MockSlackAPIProvider()
-        // First tick: даёт cursor=10000.
+        // First tick: yields cursor=10000.
         await provider.setResult(SlackTickResult(
             huddle: .unknown,
             channelMessageCounts: [
@@ -429,25 +429,25 @@ final class SlackCollectorTests: XCTestCase {
         let result = await collector.performTick()
 
         XCTAssertEqual(result.messageEventsEmitted, 0)
-        // Cursor остался 10000 (since из stored offset; provider не дал новый).
+        // Cursor stayed at 10000 (since from stored offset; provider gave no new one).
         XCTAssertEqual(result.cursorAdvancedMs, 10_000)
 
-        // Третий tick передаёт тот же since=10000 (cursor не двинулся).
+        // Third tick passes the same since=10000 (cursor did not move).
         let sinceCalls = await provider.sinceHistory()
         XCTAssertEqual(sinceCalls.count, 2)
-        XCTAssertNil(sinceCalls[0], "первый tick — bootstrap")
-        XCTAssertEqual(sinceCalls[1], 10_000, "второй tick — stored cursor")
+        XCTAssertNil(sinceCalls[0], "first tick — bootstrap")
+        XCTAssertEqual(sinceCalls[1], 10_000, "second tick — stored cursor")
 
         let offset = try db.readOffset(
             collectorID: CollectorID.slackPolling,
             sourceID: "slack:T123:U456"
         )
-        XCTAssertEqual(offset?.lastModifiedMs, 10_000, "cursor не двигается на empty batch")
+        XCTAssertEqual(offset?.lastModifiedMs, 10_000, "cursor does not move on an empty batch")
     }
 
-    /// Phase 4.6.A.3 — reactionsCount > 0 → payload содержит "reactions_count";
-    /// reactionsCount == 0 → ключ ОТСУТСТВУЕТ (не пустая строка). Это позволяет
-    /// SQL aggregator'у различать pre-4.6 events от 0-samples через `IS NOT NULL`.
+    /// Phase 4.6.A.3 — reactionsCount > 0 → payload contains "reactions_count";
+    /// reactionsCount == 0 → the key is ABSENT (not an empty string). This lets
+    /// the SQL aggregator distinguish pre-4.6 events from 0-samples via `IS NOT NULL`.
     func testTickEncodesReactionsCountInPayloadWhenPositive() async throws {
         let db = try makeDB()
         try insertFreshIntegration(db: db)
@@ -481,9 +481,9 @@ final class SlackCollectorTests: XCTestCase {
         let eng = writtenEvents.first(where: { $0.payload["channel_name"] == "engineering" })
         let rand = writtenEvents.first(where: { $0.payload["channel_name"] == "random" })
         XCTAssertEqual(eng?.payload["reactions_count"], "7")
-        XCTAssertNil(rand?.payload["reactions_count"], "ключ должен ОТСУТСТВОВАТЬ при reactionsCount=0, не быть пустой строкой")
+        XCTAssertNil(rand?.payload["reactions_count"], "key should be ABSENT when reactionsCount=0, not an empty string")
 
-        // Sanity: existing fields неизменны.
+        // Sanity: existing fields unchanged.
         XCTAssertEqual(eng?.payload["count"], "3")
         XCTAssertEqual(rand?.payload["count"], "1")
         XCTAssertEqual(eng?.payload["event_kind"], "slack_message_authored_aggregate")
@@ -491,7 +491,7 @@ final class SlackCollectorTests: XCTestCase {
 
     // MARK: - Phase 4.7.A — slack_status_change
 
-    /// First tick observed=":coffee:", lastEmitted=nil → emit. Second tick тот же
+    /// First tick observed=":coffee:", lastEmitted=nil → emit. Second tick same
     /// emoji → no emit. Third tick observed=":pizza:" → emit.
     func testTickStatusEmojiChangeEmitsEvent() async throws {
         let db = try makeDB()
@@ -513,7 +513,7 @@ final class SlackCollectorTests: XCTestCase {
 
         // Tick 2: same emoji → no emit.
         let r2 = await collector.performTick()
-        XCTAssertFalse(r2.statusChangeEmitted, "unchanged emoji не emit")
+        XCTAssertFalse(r2.statusChangeEmitted, "unchanged emoji does not emit")
 
         // Tick 3: different emoji → emit.
         await provider.setResult(SlackTickResult(
@@ -540,7 +540,7 @@ final class SlackCollectorTests: XCTestCase {
         XCTAssertEqual(pizza.payload["status_expiration_ts"], "1730000000000")
     }
 
-    /// emoji "" → "" → "" — no emit ни разу (lastEmittedStatusEmoji=nil
+    /// emoji "" → "" → "" — no emit at all (lastEmittedStatusEmoji=nil
     /// only first tick).
     func testTickStatusEmojiUnsetFirstObservationEmitsBaseline() async throws {
         let db = try makeDB()
@@ -635,10 +635,10 @@ final class SlackCollectorTests: XCTestCase {
 
     // MARK: - Phase 4.7.B-9 — slack_presence_state pulse
 
-    /// Pulse emit'ится КАЖДЫЙ non-skipped tick (active / away / unknown). Mirror
-    /// к github_notifications_pulse: observation continuity > shrunk row count.
-    /// Также проверяем что network throw в provider'е graceful'но degrade'ит в
-    /// state="unknown" event (не блокирует tick).
+    /// Pulse is emitted on EVERY non-skipped tick (active / away / unknown). Mirror
+    /// of github_notifications_pulse: observation continuity > shrunk row count.
+    /// Also verifies that a network throw in the provider gracefully degrades to a
+    /// state="unknown" event (does not block the tick).
     func testTick_EmitsSlackPresenceStateEvent() async throws {
         let db = try makeDB()
         try insertFreshIntegration(db: db)
@@ -672,11 +672,11 @@ final class SlackCollectorTests: XCTestCase {
         await provider.setPresenceShouldThrow(true)
         let now3 = Date(timeIntervalSince1970: 1_700_000_700)
         let r3 = await collector.performTick(now: now3)
-        XCTAssertTrue(r3.presenceStateEmitted, "even на network throw мы emit pulse (unknown)")
+        XCTAssertTrue(r3.presenceStateEmitted, "even on a network throw we emit a pulse (unknown)")
         let calls3 = await provider.presenceCallCount()
         XCTAssertEqual(calls3, 3)
 
-        // Verify DB: 3 slack_presence_state events с правильным state mapping.
+        // Verify DB: 3 slack_presence_state events with correct state mapping.
         let stored = try db.events(in: DateInterval(
             start: Date(timeIntervalSince1970: 1_700_000_000),
             end: Date(timeIntervalSince1970: 1_700_001_000)
@@ -684,7 +684,7 @@ final class SlackCollectorTests: XCTestCase {
         let presenceEvents = stored.filter { $0.payload["event_kind"] == "slack_presence_state" }
         XCTAssertEqual(presenceEvents.count, 3, "3 ticks → 3 pulses")
         for e in presenceEvents {
-            XCTAssertEqual(e.signalType, .context, "pulse — state event, не user action")
+            XCTAssertEqual(e.signalType, .context, "pulse — state event, not a user action")
             XCTAssertEqual(e.payload["source"], "slack")
             XCTAssertNotNil(e.payload["observed_at_ms"])
         }
@@ -700,17 +700,17 @@ final class SlackCollectorTests: XCTestCase {
 
     // MARK: - Phase 4.7.B-10 — slack_dnd_state pulse
 
-    /// Pulse emit'ится КАЖДЫЙ non-skipped tick (active DND / inactive / scheduled-only /
-    /// graceful empty). Mirror к slack_presence_state. Также проверяем что network
-    /// throw в provider'е graceful'но degrade'ит в empty event без блокировки tick'а,
-    /// и что nil ts-поля омитятся из payload (consistent с existing conventions).
+    /// Pulse is emitted on EVERY non-skipped tick (active DND / inactive / scheduled-only /
+    /// graceful empty). Mirror of slack_presence_state. Also verifies that a network
+    /// throw in the provider gracefully degrades to an empty event without blocking the tick,
+    /// and that nil ts fields are omitted from the payload (consistent with existing conventions).
     func testTick_EmitsSlackDNDStateEvent() async throws {
         let db = try makeDB()
         try insertFreshIntegration(db: db)
         let provider = MockSlackAPIProvider()
         let collector = makeCollector(db: db, provider: provider)
 
-        // Tick 1 — DND active с user-set snooze.
+        // Tick 1 — DND active with a user-set snooze.
         await provider.setDND(SlackDNDState(
             dndEnabled: true,
             snoozeUntilMs: 1_700_001_000_000,
@@ -747,11 +747,11 @@ final class SlackCollectorTests: XCTestCase {
         await provider.setDNDShouldThrow(true)
         let now3 = Date(timeIntervalSince1970: 1_700_000_700)
         let r3 = await collector.performTick(now: now3)
-        XCTAssertTrue(r3.dndStateEmitted, "even на network throw мы emit pulse (empty)")
+        XCTAssertTrue(r3.dndStateEmitted, "even on a network throw we emit a pulse (empty)")
         let calls3 = await provider.dndCallCount()
         XCTAssertEqual(calls3, 3)
 
-        // Verify DB: 3 slack_dnd_state events с правильным payload mapping.
+        // Verify DB: 3 slack_dnd_state events with correct payload mapping.
         let stored = try db.events(in: DateInterval(
             start: Date(timeIntervalSince1970: 1_700_000_000),
             end: Date(timeIntervalSince1970: 1_700_001_000)
@@ -759,13 +759,13 @@ final class SlackCollectorTests: XCTestCase {
         let dndEvents = stored.filter { $0.payload["event_kind"] == "slack_dnd_state" }
         XCTAssertEqual(dndEvents.count, 3, "3 ticks → 3 pulses")
         for e in dndEvents {
-            XCTAssertEqual(e.signalType, .context, "pulse — state event, не user action")
+            XCTAssertEqual(e.signalType, .context, "pulse — state event, not a user action")
             XCTAssertEqual(e.payload["source"], "slack")
             XCTAssertNotNil(e.payload["observed_at_ms"])
             XCTAssertNotNil(e.payload["dnd_enabled"])
         }
 
-        // Tick 1 — dnd_enabled=true + snooze_until_ms; next_dnd_* ОМИТЯТСЯ (nil → no key).
+        // Tick 1 — dnd_enabled=true + snooze_until_ms; next_dnd_* OMITTED (nil → no key).
         let activeEv = try XCTUnwrap(dndEvents.first {
             $0.payload["observed_at_ms"] == String(Int64(now1.timeIntervalSince1970 * 1000))
         })
@@ -774,7 +774,7 @@ final class SlackCollectorTests: XCTestCase {
         XCTAssertNil(activeEv.payload["next_dnd_start_ms"], "nil ts → omitted from payload")
         XCTAssertNil(activeEv.payload["next_dnd_end_ms"])
 
-        // Tick 2 — dnd_enabled=false + scheduled window; snooze_until ОМИТНУТ.
+        // Tick 2 — dnd_enabled=false + scheduled window; snooze_until OMITTED.
         let scheduledEv = try XCTUnwrap(dndEvents.first {
             $0.payload["observed_at_ms"] == String(Int64(now2.timeIntervalSince1970 * 1000))
         })
@@ -783,7 +783,7 @@ final class SlackCollectorTests: XCTestCase {
         XCTAssertEqual(scheduledEv.payload["next_dnd_start_ms"], "1700010000000")
         XCTAssertEqual(scheduledEv.payload["next_dnd_end_ms"], "1700020000000")
 
-        // Tick 3 — graceful empty: dnd_enabled=false, все ts nil.
+        // Tick 3 — graceful empty: dnd_enabled=false, all ts nil.
         let emptyEv = try XCTUnwrap(dndEvents.first {
             $0.payload["observed_at_ms"] == String(Int64(now3.timeIntervalSince1970 * 1000))
         })
@@ -797,7 +797,7 @@ final class SlackCollectorTests: XCTestCase {
 
     /// Per-channel mention counts → 1 RawEvent per (channel, count > 0). Verifies
     /// payload shape (event_kind, channel, count, period_*_ms), `signal_type=.action`,
-    /// и что графа provider'а вызывается с корректным `since`.
+    /// and that the provider's call is invoked with the correct `since`.
     func testTick_EmitsMentionReceivedAggregatePerChannel() async throws {
         let db = try makeDB()
         try insertFreshIntegration(db: db)
@@ -834,7 +834,7 @@ final class SlackCollectorTests: XCTestCase {
 
         XCTAssertEqual(result.mentionEventsEmitted, 2, "2 channel buckets → 2 events")
         let mentionCalls = await provider.mentionCallCount()
-        XCTAssertEqual(mentionCalls, 1, "fetchMentionsReceived вызывается ровно раз per tick")
+        XCTAssertEqual(mentionCalls, 1, "fetchMentionsReceived is called exactly once per tick")
         // First tick — bootstrap path (no stored cursor) → since=0.
         let mentionSinceHistory = await provider.mentionSinceHistory()
         XCTAssertEqual(mentionSinceHistory, [0], "bootstrap → since=0 (no stored cursor)")
@@ -846,7 +846,7 @@ final class SlackCollectorTests: XCTestCase {
         let mentions = stored.filter { $0.payload["event_kind"] == "slack_mention_received_aggregate" }
         XCTAssertEqual(mentions.count, 2)
         for e in mentions {
-            XCTAssertEqual(e.signalType, .action, "mention — triggering action, не state")
+            XCTAssertEqual(e.signalType, .action, "mention — triggering action, not state")
             XCTAssertEqual(e.payload["source"], "slack")
             XCTAssertEqual(e.payload["period_start_ms"], String(periodStart))
             XCTAssertEqual(e.payload["period_end_ms"], String(periodEnd))
@@ -861,8 +861,8 @@ final class SlackCollectorTests: XCTestCase {
 
     /// Single aggregate event per tick (NOT per-file). Verifies payload shape
     /// (event_kind, count, image_count, code_count, doc_count, other_count,
-    /// period_*_ms), `signal_type=.action`, always-emit semantics (даже на zero
-    /// count), и что fetchFilesUploaded вызывается ровно раз per tick.
+    /// period_*_ms), `signal_type=.action`, always-emit semantics (even on zero
+    /// count), and that fetchFilesUploaded is called exactly once per tick.
     func testTick_EmitsFileUploadedAggregateEvent() async throws {
         let db = try makeDB()
         try insertFreshIntegration(db: db)
@@ -891,12 +891,12 @@ final class SlackCollectorTests: XCTestCase {
 
         XCTAssertTrue(result.fileUploadEventEmitted, "always-emit semantics: 1 aggregate per tick")
         let filesCalls = await provider.filesCallCount()
-        XCTAssertEqual(filesCalls, 1, "fetchFilesUploaded вызывается ровно раз per tick")
+        XCTAssertEqual(filesCalls, 1, "fetchFilesUploaded is called exactly once per tick")
         // First tick — bootstrap (no stored cursor) → since=0.
         let filesSinceHistory = await provider.filesSinceHistory()
         XCTAssertEqual(filesSinceHistory, [0], "bootstrap → since=0")
 
-        // Найти сам event — timestamp = nowMs (UTC).
+        // Find the event itself — timestamp = nowMs (UTC).
         let nowMs = Int64(now.timeIntervalSince1970 * 1000)
         let stored = try db.events(in: DateInterval(
             start: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0 - 1),
@@ -915,7 +915,7 @@ final class SlackCollectorTests: XCTestCase {
         XCTAssertEqual(ev.payload["period_start_ms"], String(periodStart))
         XCTAssertEqual(ev.payload["period_end_ms"], String(periodEnd))
 
-        // Always-emit: tick 2 с zero count тоже emit'ит.
+        // Always-emit: tick 2 with zero count emits too.
         await provider.setFiles(.empty(periodStartMs: periodEnd, periodEndMs: periodEnd + 1000))
         let now2 = Date(timeIntervalSince1970: 1_700_000_500)
         let result2 = await collector.performTick(now: now2)
@@ -929,7 +929,7 @@ final class SlackCollectorTests: XCTestCase {
         XCTAssertEqual(fileEvents2.count, 1)
         let ev2 = try XCTUnwrap(fileEvents2.first)
         XCTAssertEqual(ev2.payload["count"], "0")
-        XCTAssertEqual(ev2.payload["image_count"], "0", "zero buckets explicit, не omitted")
+        XCTAssertEqual(ev2.payload["image_count"], "0", "zero buckets explicit, not omitted")
         XCTAssertEqual(ev2.payload["code_count"], "0")
         XCTAssertEqual(ev2.payload["doc_count"], "0")
         XCTAssertEqual(ev2.payload["other_count"], "0")
@@ -937,9 +937,9 @@ final class SlackCollectorTests: XCTestCase {
 
     // MARK: - Phase 4.7.B-13 — presence_state.slack writer
 
-    /// Plan-required: после tick'а presence_state.slack row существует с composite
+    /// Plan-required: after a tick the presence_state.slack row exists with composite
     /// state (native presence + dnd + status + huddle + last activity + mention/file
-    /// counts), все expected keys присутствуют, derivedMode=nil.
+    /// counts), all expected keys present, derivedMode=nil.
     func testTick_WritesSlackPresenceState() async throws {
         let db = try makeDB()
         try insertFreshIntegration(db: db)
@@ -993,8 +993,8 @@ final class SlackCollectorTests: XCTestCase {
         let presence = try db.readSQL { rawDB in
             try PresenceStateWriter.read(provider: .slack, in: rawDB)
         }
-        let row = try XCTUnwrap(presence, "presence_state.slack row должен существовать после tick'а")
-        XCTAssertNil(row.derivedMode, "derivedMode=nil в Phase 4.7 (Phase 4.9 начнёт populate)")
+        let row = try XCTUnwrap(presence, "presence_state.slack row should exist after a tick")
+        XCTAssertNil(row.derivedMode, "derivedMode=nil in Phase 4.7 (Phase 4.9 will start populating it)")
 
         let state = row.state
         XCTAssertEqual(state["native_presence"] as? String, "active")
@@ -1015,17 +1015,17 @@ final class SlackCollectorTests: XCTestCase {
         XCTAssertEqual(dnd["next_dnd_end_ms"] as? Int64, 1_700_020_000_000)
     }
 
-    /// ADR-010 regression: presence_state JSON не должен содержать reserved
+    /// ADR-010 regression: presence_state JSON must not contain reserved
     /// content keys ("text" / "preview" / "title" / "body") — defensive shape check.
-    /// Caller responsibility — этот тест guards boundary.
+    /// Caller responsibility — this test guards the boundary.
     func testTick_SlackPresenceStateOmitsBodyFields() async throws {
         let db = try makeDB()
         try insertFreshIntegration(db: db)
         let provider = MockSlackAPIProvider()
         let collector = makeCollector(db: db, provider: provider)
 
-        // Inject sentinel-like channel name (paranoid: это всё равно public-safe
-        // identifier, но сверим что body keys никогда не появляются).
+        // Inject sentinel-like channel name (paranoid: it's still a public-safe
+        // identifier, but we double-check that body keys never appear).
         await provider.setResult(SlackTickResult(
             huddle: .defaultUnset,
             channelMessageCounts: [
@@ -1048,26 +1048,26 @@ final class SlackCollectorTests: XCTestCase {
         let row = try XCTUnwrap(presence)
         let topLevelKeys = Set(row.state.keys)
         XCTAssertFalse(topLevelKeys.contains("text"),
-                       "presence_state.slack не должен содержать 'text' top-level key")
+                       "presence_state.slack must not contain a 'text' top-level key")
         XCTAssertFalse(topLevelKeys.contains("preview"),
-                       "presence_state.slack не должен содержать 'preview' top-level key")
+                       "presence_state.slack must not contain a 'preview' top-level key")
         XCTAssertFalse(topLevelKeys.contains("title"),
-                       "presence_state.slack не должен содержать 'title' top-level key")
+                       "presence_state.slack must not contain a 'title' top-level key")
         XCTAssertFalse(topLevelKeys.contains("body"),
-                       "presence_state.slack не должен содержать 'body' top-level key")
+                       "presence_state.slack must not contain a 'body' top-level key")
 
-        // Paranoid: serialized JSON не должен иметь body markers.
+        // Paranoid: serialized JSON must not have body markers.
         let serialized = try JSONSerialization.data(withJSONObject: row.state, options: [])
         let serializedStr = String(data: serialized, encoding: .utf8) ?? ""
         for forbidden in ["\"text\"", "\"preview\"", "\"title\"", "\"body\""] {
             XCTAssertFalse(serializedStr.contains(forbidden),
-                           "serialized state не должен содержать ключ \(forbidden)")
+                           "serialized state must not contain the key \(forbidden)")
         }
     }
 
-    /// Roundtrip: write → read → assert dict equality для всех expected keys
-    /// (включая nested `dnd`). Verifies, что JSONSerialization сохранение через
-    /// `PresenceStateWriter.upsert` + `read` не теряет nested struct.
+    /// Roundtrip: write → read → assert dict equality for all expected keys
+    /// (including nested `dnd`). Verifies that JSONSerialization persistence through
+    /// `PresenceStateWriter.upsert` + `read` does not lose the nested struct.
     func testTick_SlackPresenceStateRoundtrips() async throws {
         let db = try makeDB()
         try insertFreshIntegration(db: db)
@@ -1133,7 +1133,7 @@ final class SlackCollectorTests: XCTestCase {
         let dnd = try XCTUnwrap(state["dnd"] as? [String: Any])
         XCTAssertEqual(dnd.keys.sorted(),
                        ["is_active", "next_dnd_end_ms", "next_dnd_start_ms", "snooze_until_ms"],
-                       "ровно 4 keys в nested dnd dict")
+                       "exactly 4 keys in the nested dnd dict")
         XCTAssertEqual(dnd["is_active"] as? Bool, false)
         XCTAssertEqual(dnd["snooze_until_ms"] as? Int64, 0, "nil → 0 per plan literal")
         XCTAssertEqual(dnd["next_dnd_start_ms"] as? Int64, 1_700_030_000_000)
@@ -1147,8 +1147,8 @@ final class SlackCollectorTests: XCTestCase {
         ])
     }
 
-    /// Skip path: без integration row → presence_state.slack row НЕ записан
-    /// (early return до writeEventsOffsetAndPresence).
+    /// Skip path: without an integration row → presence_state.slack row is NOT written
+    /// (early return before writeEventsOffsetAndPresence).
     func testTickSkipPathDoesNotWritePresenceRow() async throws {
         let db = try makeDB()
         let provider = MockSlackAPIProvider()
@@ -1160,11 +1160,11 @@ final class SlackCollectorTests: XCTestCase {
         let presence = try db.readSQL { rawDB in
             try PresenceStateWriter.read(provider: .slack, in: rawDB)
         }
-        XCTAssertNil(presence, "skip path не должен создавать presence_state.slack row")
+        XCTAssertNil(presence, "skip path must not create a presence_state.slack row")
     }
 
-    /// start запускает loopTask, stop его cancels + awaits.
-    /// Без integration row provider не должен вызываться (skip path).
+    /// start launches loopTask, stop cancels it + awaits.
+    /// Without an integration row the provider must not be called (skip path).
     func testStartStopLifecycle() async throws {
         let db = try makeDB()
         let provider = MockSlackAPIProvider()
@@ -1175,7 +1175,7 @@ final class SlackCollectorTests: XCTestCase {
         await collector.stop()
 
         let calls = await provider.sinceHistory()
-        XCTAssertEqual(calls.count, 0, "skip path не должен вызывать provider")
+        XCTAssertEqual(calls.count, 0, "skip path must not call the provider")
     }
 
     // MARK: - Track-1 D1 tests
@@ -1222,19 +1222,19 @@ final class SlackCollectorTests: XCTestCase {
             )
         ).filter { $0.payload["event_kind"] == "slack_message_authored_aggregate" }
 
-        XCTAssertEqual(events.count, 1, "должен быть ровно 1 message_authored_aggregate event")
+        XCTAssertEqual(events.count, 1, "there should be exactly 1 message_authored_aggregate event")
         let event = try XCTUnwrap(events.first)
 
         // messages_json must be present and decodable.
         let messagesJsonStr = try XCTUnwrap(event.payload["messages_json"],
-                                            "messages_json payload key должен присутствовать")
+                                            "messages_json payload key should be present")
         let messagesData = try XCTUnwrap(messagesJsonStr.data(using: .utf8))
         let decoded = try JSONDecoder().decode([SlackMessageRecord].self, from: messagesData)
         XCTAssertEqual(decoded.count, 2)
         XCTAssertEqual(Set(decoded.map { $0.ts }), ["1700000001.000001", "1700000002.000001"])
 
         // Top-level `body` key must NOT be present (multiple messages, no single body).
-        XCTAssertNil(event.payload["body"], "message_authored_aggregate не должен иметь top-level body key")
+        XCTAssertNil(event.payload["body"], "message_authored_aggregate must not have a top-level body key")
     }
 
     /// Track-1 D1: N threads in batch > maxThreadsPerTick cap.
@@ -1282,7 +1282,7 @@ final class SlackCollectorTests: XCTestCase {
 
         let calls = await provider.threadReplyCallHistory()
         XCTAssertEqual(calls.count, cap,
-                       "fetchThreadReplies должен вызываться не более maxThreadsPerTick раз (\(cap)), но вызван \(calls.count) раз")
+                       "fetchThreadReplies should be called no more than maxThreadsPerTick times (\(cap)), but was called \(calls.count) times")
     }
 
     /// Track-1 D1: per-thread cursor advances after successful reply fetch.
@@ -1326,11 +1326,11 @@ final class SlackCollectorTests: XCTestCase {
             collectorID: CollectorID.slackPolling,
             sourceID: threadSourceID
         )
-        XCTAssertNotNil(storedOffset, "collector_offsets должен содержать курсор для thread \(threadTs)")
+        XCTAssertNotNil(storedOffset, "collector_offsets should contain a cursor for thread \(threadTs)")
         // The cursor should reflect the latest reply ts.
         let expectedCursorMs = Int64(Double(replyTs)! * 1000)
         XCTAssertEqual(storedOffset?.lastModifiedMs, expectedCursorMs,
-                       "Cursor должен соответствовать ms времени последнего reply")
+                       "Cursor should match the ms time of the last reply")
 
         // Second tick — collector must pass oldest based on stored cursor (ms precision).
         // Slack ts "1700000002.000050" → Int64 ms truncation → "1700000002.000000".
@@ -1338,11 +1338,11 @@ final class SlackCollectorTests: XCTestCase {
         _ = await collector.performTick()
 
         let calls = await provider.threadReplyCallHistory()
-        XCTAssertGreaterThanOrEqual(calls.count, 2, "второй tick должен вызвать fetchThreadReplies снова")
+        XCTAssertGreaterThanOrEqual(calls.count, 2, "the second tick should call fetchThreadReplies again")
         let secondCall = calls[1]
         let expectedOldest = String(format: "%.6f", Double(Int64(Double(replyTs)! * 1000)) / 1000.0)
         XCTAssertEqual(secondCall.oldest, expectedOldest,
-                       "второй tick должен передавать oldest с ms-точностью (Slack ts truncated to ms)")
+                       "the second tick should pass oldest with ms precision (Slack ts truncated to ms)")
     }
 
     /// Track-1 D1: mock throws RateLimitError on N-th thread.
@@ -1393,12 +1393,12 @@ final class SlackCollectorTests: XCTestCase {
         let offset3 = try db.readOffset(collectorID: CollectorID.slackPolling,
                                         sourceID: "slack:thread:\(channelID):\(ts3)")
 
-        XCTAssertNotNil(offset1, "thread 1 должен иметь курсор — успешно обработан")
-        XCTAssertNotNil(offset2, "thread 2 должен иметь курсор — успешно обработан")
-        XCTAssertNil(offset3, "thread 3 не должен иметь курсор — 429 до обработки")
+        XCTAssertNotNil(offset1, "thread 1 should have a cursor — processed successfully")
+        XCTAssertNotNil(offset2, "thread 2 should have a cursor — processed successfully")
+        XCTAssertNil(offset3, "thread 3 should not have a cursor — 429 before processing")
 
         // Calls: ts1, ts2, ts3 (throws) → 3 calls total.
         let calls = await provider.threadReplyCallHistory()
-        XCTAssertEqual(calls.count, 3, "fetchThreadReplies должен вызываться до 429-го thread'а включительно")
+        XCTAssertEqual(calls.count, 3, "fetchThreadReplies should be called up to and including the thread that hits 429")
     }
 }

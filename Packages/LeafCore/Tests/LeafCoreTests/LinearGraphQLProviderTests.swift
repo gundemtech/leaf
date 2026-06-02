@@ -1,4 +1,4 @@
-// Phase 4.2 — minimal contract test для StubLinearGraphQLProvider.
+// Phase 4.2 — minimal contract test for StubLinearGraphQLProvider.
 // Prod parser tested in LeafCorePrivateTests/ProdLinearGraphQLProviderTests.swift (moat).
 
 import XCTest

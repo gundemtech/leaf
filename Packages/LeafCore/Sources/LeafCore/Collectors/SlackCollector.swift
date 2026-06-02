@@ -2,20 +2,20 @@
 //  SlackCollector.swift
 //  LeafCore
 //
-//  Phase 4.4 B6 — Slack REST polling collector. Mirror'ит Linear/GitHub
-//  collector pattern с двумя Slack-специфичными deviations:
-//   1. Per-tick result agreggate'ит messages per channel (1 RawEvent per
-//      (channel, count, tick) — D6) и detect'ит huddle transition сравнением
-//      с last DB event (`Database.readLatestSlackHuddleEvent`).
-//   2. workspaceID хранится в формате "<team_id>:<user_id>" (см. SlackOAuthService
-//      persistence shape, B2). Collector сплитит на user_id для logging /
-//      defensive guard, но `from:me` query alias делает userID не-required
-//      для search query — он сохранён в provider signature на случай
+//  Phase 4.4 B6 — Slack REST polling collector. Mirrors the Linear/GitHub
+//  collector pattern with two Slack-specific deviations:
+//   1. The per-tick result aggregates messages per channel (1 RawEvent per
+//      (channel, count, tick) — D6) and detects huddle transitions by comparing
+//      against the last DB event (`Database.readLatestSlackHuddleEvent`).
+//   2. workspaceID is stored in the format "<team_id>:<user_id>" (see SlackOAuthService
+//      persistence shape, B2). The collector splits out user_id for logging /
+//      defensive guarding, but the `from:me` query alias makes userID non-required
+//      for the search query — it is kept in the provider signature in case of a
 //      fallback path.
 //
-//  Atomic write: events + offset идут одной транзакцией через
-//  `writeEventsAndOffset`. Если batch пустой и no transition — cursor
-//  не двигается (retry next tick на тех же `since`), идентично Linear/GitHub.
+//  Atomic write: events + offset go in a single transaction via
+//  `writeEventsAndOffset`. If the batch is empty and there is no transition, the
+//  cursor does not advance (retry next tick on the same `since`), identically to Linear/GitHub.
 //
 
 import Foundation
@@ -37,10 +37,10 @@ public actor SlackCollector {
     private var loopTask: Task<Void, Never>?
     private var notifyToken: NSObjectProtocol?
 
-    /// Phase 4.7.A — last emitted custom-status emoji. In-memory, reset на restart.
-    /// `nil` = ещё не наблюдали в этом процессе (first-tick всегда emit). Acceptable
-    /// double-emit на crash-restart — emoji rarely changes (юзер выставил намеренно),
-    /// дубликаты dedupable downstream через одинаковый `transition_at`.
+    /// Phase 4.7.A — last emitted custom-status emoji. In-memory, reset on restart.
+    /// `nil` = not yet observed in this process (first tick always emits). Acceptable
+    /// double-emit on crash-restart — emoji rarely changes (user set it deliberately),
+    /// duplicates are dedupable downstream via the same `transition_at`.
     private var lastEmittedStatusEmoji: String?
 
     public init(
@@ -91,23 +91,23 @@ public actor SlackCollector {
         public let messageEventsEmitted: Int
         public let huddleTransitionEmitted: Bool
         public let cursorAdvancedMs: Int64?
-        /// Phase 4.7.A — кол-во slack_thread_reply_aggregate events emitted в этом tick'е.
+        /// Phase 4.7.A — number of slack_thread_reply_aggregate events emitted in this tick.
         public let threadReplyEventsEmitted: Int
-        /// Phase 4.7.A — true если в этом tick'е emit'ился slack_status_change.
+        /// Phase 4.7.A — true if a slack_status_change was emitted in this tick.
         public let statusChangeEmitted: Bool
-        /// Phase 4.7.B-9 — true если в этом tick'е emit'ился slack_presence_state pulse.
-        /// Should be true каждый non-skipped tick (always-emit semantics).
+        /// Phase 4.7.B-9 — true if a slack_presence_state pulse was emitted in this tick.
+        /// Should be true for every non-skipped tick (always-emit semantics).
         public let presenceStateEmitted: Bool
-        /// Phase 4.7.B-10 — true если в этом tick'е emit'ился slack_dnd_state pulse.
-        /// Should be true каждый non-skipped tick (always-emit semantics).
+        /// Phase 4.7.B-10 — true if a slack_dnd_state pulse was emitted in this tick.
+        /// Should be true for every non-skipped tick (always-emit semantics).
         public let dndStateEmitted: Bool
-        /// Phase 4.7.B-11 — кол-во slack_mention_received_aggregate events emitted
-        /// в этом tick'е (один event per channel-bucket, count=mentions per period).
-        /// 0 = no mentions / graceful degrade на provider-throw / ratelimit.
+        /// Phase 4.7.B-11 — number of slack_mention_received_aggregate events emitted
+        /// in this tick (one event per channel-bucket, count=mentions per period).
+        /// 0 = no mentions / graceful degrade on provider-throw / ratelimit.
         public let mentionEventsEmitted: Int
-        /// Phase 4.7.B-12 — true если в этом tick'е emit'ился
-        /// `slack_file_uploaded_aggregate`. Should be true каждый non-skipped tick
-        /// (always-emit semantics — substrate continuity, mirror к presence/dnd).
+        /// Phase 4.7.B-12 — true if a `slack_file_uploaded_aggregate` was emitted
+        /// in this tick. Should be true for every non-skipped tick
+        /// (always-emit semantics — substrate continuity, mirror to presence/dnd).
         public let fileUploadEventEmitted: Bool
 
         public init(
@@ -149,7 +149,7 @@ public actor SlackCollector {
             return TickResult(skipped: true, messageEventsEmitted: 0, huddleTransitionEmitted: false, cursorAdvancedMs: nil)
         }
 
-        // 2. Refresh if needed. .refreshDenied → refresher уже сделал
+        // 2. Refresh if needed. .refreshDenied → refresher has already done
         // deleteIntegration + UserDefaults flag + DistributedNotification.
         let refreshed: IntegrationRecord
         do {
@@ -162,8 +162,8 @@ public actor SlackCollector {
             return TickResult(skipped: true, messageEventsEmitted: 0, huddleTransitionEmitted: false, cursorAdvancedMs: nil)
         }
 
-        // 3. Parse userID из workspaceID "<team>:<user>" — формат гарантирован
-        // SlackOAuthService persistence (B2). Defensive: malformed → skip.
+        // 3. Parse userID from workspaceID "<team>:<user>" — the format is guaranteed
+        // by SlackOAuthService persistence (B2). Defensive: malformed → skip.
         let parts = refreshed.workspaceID.split(separator: ":", omittingEmptySubsequences: false)
         guard parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty else {
             logger.error("malformed workspaceID '\(refreshed.workspaceID, privacy: .public)' — expected '<team>:<user>'")
@@ -200,10 +200,10 @@ public actor SlackCollector {
         }
 
         // 5a. Phase 4.7.B-9 — presence pulse. Independent of fetchTick — observability
-        // continuity discipline: even на network throw мы emit'им pulse с state="unknown"
-        // чтобы downstream видел "observed but undeterminable" без gap'ов между tick'ами.
-        // Provider impl сам делает graceful degrade на 401/429/parse, но network throw
-        // bubble'ит наверх — wrap'им здесь.
+        // continuity discipline: even on a network throw we emit a pulse with state="unknown"
+        // so downstream sees "observed but undeterminable" without gaps between ticks.
+        // The provider impl degrades gracefully on 401/429/parse, but a network throw
+        // bubbles up — we wrap it here.
         let presenceState: SlackPresenceState
         do {
             presenceState = try await provider.fetchPresence(
@@ -215,10 +215,10 @@ public actor SlackCollector {
             presenceState = .unknown
         }
 
-        // 5b. Phase 4.7.B-10 — DND pulse. Same observability discipline что и
-        // fetchPresence: graceful `.empty` на network throw чтобы не блокировать
-        // tick. Provider impl сам degrade'ит на 401/429/parse, но network throw
-        // bubble'ит — wrap'им здесь.
+        // 5b. Phase 4.7.B-10 — DND pulse. Same observability discipline as
+        // fetchPresence: graceful `.empty` on a network throw so the tick is not
+        // blocked. The provider impl degrades gracefully on 401/429/parse, but a
+        // network throw bubbles up — we wrap it here.
         let dndState: SlackDNDState
         do {
             dndState = try await provider.fetchDND(
@@ -230,14 +230,14 @@ public actor SlackCollector {
             dndState = .empty
         }
 
-        // 5c. Phase 4.7.B-11 — mentions received aggregate. Per-channel count'ы
-        // сообщений где меня mention'нули за период `[since, now]` (bootstrap
-        // window — provider-side, по умолчанию 7 дней). Graceful: throw → []
-        // (no events emitted этим mechanism'ом). Period semantics: `since` =
-        // tick cursor (либо 0 на bootstrap path — provider обработает).
-        // Mentions — это NOT message activity (от меня); это received-from-others.
-        // Cursor для mention search не двигаем — окно перекрывается tick-to-tick
-        // и нам важен `периодический snapshot`, а не точный delta dedup.
+        // 5c. Phase 4.7.B-11 — mentions received aggregate. Per-channel counts of
+        // messages that mention me over the period `[since, now]` (bootstrap
+        // window — provider-side, 7 days by default). Graceful: throw → []
+        // (no events emitted by this mechanism). Period semantics: `since` =
+        // tick cursor (or 0 on the bootstrap path — the provider handles it).
+        // Mentions are NOT message activity (from me); they are received-from-others.
+        // We do not advance the cursor for mention search — the window overlaps
+        // tick-to-tick and what matters to us is a `periodic snapshot`, not exact delta dedup.
         let mentionCounts: [SlackMentionChannelCount]
         do {
             mentionCounts = try await provider.fetchMentionsReceived(
@@ -252,10 +252,10 @@ public actor SlackCollector {
 
         // 5d. Phase 4.7.B-12 — files uploaded aggregate. Single aggregate per
         // tick (count + mime-type bucket distribution, NOT per-file timeline).
-        // Always emit (mirror к presence/dnd substrate continuity): graceful
-        // network throw → `.empty(...)` с count=0, типs пустой. Provider-side
-        // 401/429/parse тоже degrade'ят в `.empty(...)`. ADR-010: filenames /
-        // previews / permalinks отбрасываются на provider-side parsing'е.
+        // Always emit (mirror to presence/dnd substrate continuity): a graceful
+        // network throw → `.empty(...)` with count=0, types empty. Provider-side
+        // 401/429/parse also degrade to `.empty(...)`. ADR-010: filenames /
+        // previews / permalinks are dropped during provider-side parsing.
         let nowEpochMsForFiles = Int64(now.timeIntervalSince1970 * 1000)
         let filesSummary: SlackFileUploadSummary
         do {
@@ -270,7 +270,7 @@ public actor SlackCollector {
         }
 
         // 6. Compose events.
-        // 6a. Message events — один Action RawEvent per (channel, count > 0).
+        // 6a. Message events — one Action RawEvent per (channel, count > 0).
         let messageEvents: [RawEvent] = tick.channelMessageCounts
             .filter { $0.count > 0 }
             .map {
@@ -394,9 +394,9 @@ public actor SlackCollector {
                 }
         }
 
-        // 6b. Huddle transition event — emit только если state различается с
-        // последним DB-зафиксированным huddle event'ом. .unknown → skip
-        // (provider не смог fetch). Первый ever event (DB пуст) → emit
+        // 6b. Huddle transition event — emit only if the state differs from the
+        // last DB-recorded huddle event. .unknown → skip
+        // (provider could not fetch). First ever event (DB empty) → emit
         // baseline transition.
         var huddleEvent: RawEvent?
         if tick.huddle != .unknown {
@@ -413,10 +413,10 @@ public actor SlackCollector {
             }
         }
 
-        // 6c. Phase 4.7.A — slack_status_change event. Compare текущий emoji
-        // против last-emitted (in-memory). Different → emit. Idle ticks (тот же
+        // 6c. Phase 4.7.A — slack_status_change event. Compare the current emoji
+        // against the last-emitted one (in-memory). Different → emit. Idle ticks (same
         // emoji) → no emit. First-ever observation per process always emits
-        // (lastEmittedStatusEmoji=nil), это acceptable double-emit на restart.
+        // (lastEmittedStatusEmoji=nil), which is an acceptable double-emit on restart.
         var statusChangeEvent: RawEvent?
         if tick.statusEmoji != lastEmittedStatusEmoji {
             statusChangeEvent = Self.makeStatusChangeEvent(
@@ -427,43 +427,43 @@ public actor SlackCollector {
             lastEmittedStatusEmoji = tick.statusEmoji
         }
 
-        // 6d. Phase 4.7.B-9 — slack_presence_state pulse. ВСЕГДА emit (per-tick
-        // pulse, mirror к gh_notifications_pulse). `nowMs` определяется ниже
-        // в шаге 7 для cursor — компьютим раньше чтобы передать в event.
+        // 6d. Phase 4.7.B-9 — slack_presence_state pulse. ALWAYS emit (per-tick
+        // pulse, mirror to gh_notifications_pulse). `nowMs` is computed below
+        // in step 7 for the cursor — we compute it earlier to pass into the event.
         let nowMsForPresence = Int64(now.timeIntervalSince1970 * 1000)
         let presenceEvent = Self.makePresenceStateEvent(
             state: presenceState,
             nowMs: nowMsForPresence
         )
 
-        // 6e. Phase 4.7.B-10 — slack_dnd_state pulse. ВСЕГДА emit (per-tick),
-        // тот же `nowMs` что и presence (один observation timestamp на tick).
+        // 6e. Phase 4.7.B-10 — slack_dnd_state pulse. ALWAYS emit (per-tick),
+        // the same `nowMs` as presence (one observation timestamp per tick).
         let dndEvent = Self.makeDNDStateEvent(
             state: dndState,
             nowMs: nowMsForPresence
         )
 
-        // 6f. Phase 4.7.B-11 — mention_received_aggregate events. Один event
-        // per channel-bucket с count > 0 (provider гарантирует count > 0 в
-        // groups, но belt-and-suspenders filter здесь). count=0 буффер не
-        // создаём — provider drop'ает channels без matches до return.
+        // 6f. Phase 4.7.B-11 — mention_received_aggregate events. One event
+        // per channel-bucket with count > 0 (the provider guarantees count > 0 in
+        // groups, but a belt-and-suspenders filter here). We do not create a count=0
+        // buffer — the provider drops channels without matches before returning.
         let mentionEvents: [RawEvent] = mentionCounts
             .filter { $0.count > 0 }
             .map { Self.makeMentionReceivedAggregateEvent(channelCount: $0, nowMs: nowMsForPresence) }
 
         // 6g. Phase 4.7.B-12 — slack_file_uploaded_aggregate. Single event per
-        // tick (NOT per-file). Always emit — mirror к presence/dnd: на zero count
-        // тоже emit (substrate continuity, downstream видит "наблюдали, файлов
-        // не было" vs "не наблюдали"). Flatten typesSummary в top-level keys
-        // (image_count / code_count / doc_count / other_count) для query-friendly
+        // tick (NOT per-file). Always emit — mirror to presence/dnd: on a zero count
+        // we also emit (substrate continuity, downstream sees "observed, no files"
+        // vs "not observed"). Flatten typesSummary into top-level keys
+        // (image_count / code_count / doc_count / other_count) for query-friendly
         // SQL access.
         let fileUploadEvent = Self.makeFileUploadedAggregateEvent(
             summary: filesSummary,
             nowMs: nowMsForPresence
         )
 
-        // Compose tick events. Split в локальные slices чтобы Swift type-checker
-        // не задыхался на длинной chained-`+` expression.
+        // Compose tick events. Split into local slices so the Swift type-checker
+        // does not choke on a long chained-`+` expression.
         var allEvents: [RawEvent] = []
         allEvents.append(contentsOf: messageEvents)
         allEvents.append(contentsOf: threadReplyEvents)
@@ -475,13 +475,13 @@ public actor SlackCollector {
         allEvents.append(fileUploadEvent)
 
         // 7. Build presence_state.slack composite snapshot.
-        // ADR-010 boundary: только counts / public-safe identifiers / enums /
-        // emoji literal. Никаких message text / file names / mention bodies
-        // не попадает (provider их не парсит, build dict здесь — defensive,
-        // мы строим его из уже-redacted snapshot'ов).
+        // ADR-010 boundary: only counts / public-safe identifiers / enums /
+        // emoji literal. No message text / file names / mention bodies
+        // get in (the provider does not parse them, building the dict here is
+        // defensive — we build it from already-redacted snapshots).
         // JSONSerialization-friendly: Int / Bool / String / [String: Any].
-        // Optional ts → 0 per plan literal (downstream parser проверяет
-        // наличие через > 0 или строковое сравнение с "" для channel'а).
+        // Optional ts → 0 per plan literal (the downstream parser checks for
+        // presence via > 0 or a string comparison with "" for the channel).
         let slackPresence: [String: Any] = Self.buildSlackPresenceState(
             tick: tick,
             presenceState: presenceState,
@@ -491,9 +491,9 @@ public actor SlackCollector {
         )
 
         // 8. Atomic write events + cursor + presence_state.
-        // Cursor двигается только когда provider дал nonempty cursorMs (т.е.
-        // были messages в batch'е). Empty batch + no transition → cursor
-        // остаётся (retry next tick), как Linear/GitHub.
+        // The cursor advances only when the provider returned a nonempty cursorMs (i.e.
+        // there were messages in the batch). Empty batch + no transition → the cursor
+        // stays (retry next tick), like Linear/GitHub.
         let nowMs = Int64(now.timeIntervalSince1970 * 1000)
         let advancedCursor = tick.cursorMs ?? since
         let offset = CollectorOffset(
@@ -538,40 +538,40 @@ public actor SlackCollector {
         )
     }
 
-    /// Phase 4.7.B-13 — composite `presence_state.slack` snapshot. Single point
-    /// of truth для Slack-side state visible to команде через Phase 5 broadcast.
-    /// Built из tick fetch outputs (already redacted на provider parsing'е).
+    /// Phase 4.7.B-13 — composite `presence_state.slack` snapshot. The single point
+    /// of truth for Slack-side state visible to the team via the Phase 5 broadcast.
+    /// Built from tick fetch outputs (already redacted during provider parsing).
     ///
     /// Plan-required keys (top-level):
     /// - `native_presence: String` — "active" | "away" | "unknown" (raw value
-    ///   `SlackPresenceState`, mirror к API enum).
-    /// - `dnd: [String: Any]` — nested dict с 4 keys:
+    ///   `SlackPresenceState`, mirror of the API enum).
+    /// - `dnd: [String: Any]` — nested dict with 4 keys:
     ///     - `is_active: Bool` — `dnd.dndEnabled`.
-    ///     - `snooze_until_ms: Int64` — user-set snooze, 0 если nil (per plan literal).
-    ///     - `next_dnd_start_ms: Int64` — scheduled DND start, 0 если nil.
-    ///     - `next_dnd_end_ms: Int64` — scheduled DND end, 0 если nil.
-    /// - `status_emoji: String` — Slack custom status emoji (Phase 4.7.A), пустая
-    ///   строка если не выставлен.
-    /// - `status_expiration_ts: Int64` — epoch ms когда status истекает (0 = no expiration).
+    ///     - `snooze_until_ms: Int64` — user-set snooze, 0 if nil (per plan literal).
+    ///     - `next_dnd_start_ms: Int64` — scheduled DND start, 0 if nil.
+    ///     - `next_dnd_end_ms: Int64` — scheduled DND end, 0 if nil.
+    /// - `status_emoji: String` — Slack custom status emoji (Phase 4.7.A), empty
+    ///   string if not set.
+    /// - `status_expiration_ts: Int64` — epoch ms when the status expires (0 = no expiration).
     /// - `in_huddle: Bool` — `tick.huddle == .inAHuddle` (`.unknown` / `.defaultUnset` → false).
     /// - `huddle_channel: String` — channel name where huddle is active. **Currently
-    ///   always `""`** — `SlackHuddleState` enum не несёт channel info на уровне
-    ///   API (`profile.huddle_state` отдаёт только enum). Surface зарезервирован
-    ///   под потенциальное расширение API parsing'а; downstream readers НЕ должны
-    ///   считать "" = "no huddle" — для этого есть `in_huddle`.
-    /// - `last_activity_channel: String` — most-recent-message channel за tick window
-    ///   (max-count entry в `tick.channelMessageCounts`); `""` если no messages
+    ///   always `""`** — the `SlackHuddleState` enum does not carry channel info at the
+    ///   API level (`profile.huddle_state` returns only the enum). The surface is reserved
+    ///   for a potential extension of API parsing; downstream readers must NOT
+    ///   treat "" = "no huddle" — `in_huddle` exists for that.
+    /// - `last_activity_channel: String` — most-recent-message channel over the tick window
+    ///   (max-count entry in `tick.channelMessageCounts`); `""` if no messages
     ///   authored.
-    /// - `mention_count_today: Int` — sum of mention counts по всем channel'ам в
-    ///   tick window. Naming "today" — semantic intent (Slack `after:` имеет
-    ///   day-resolution); фактически intra-tick aggregate (provider возвращает
-    ///   per-channel counts за окно `[since, now]`, мы суммируем). Нulled из DB не
-    ///   читаем — каждый tick свежий snapshot.
-    /// - `file_count_today: Int` — `filesSummary.count`, naming зеркалирует mention.
+    /// - `mention_count_today: Int` — sum of mention counts across all channels in the
+    ///   tick window. The "today" naming is semantic intent (Slack `after:` has
+    ///   day-resolution); in practice it is an intra-tick aggregate (the provider returns
+    ///   per-channel counts over the window `[since, now]`, which we sum). We do not read
+    ///   it from the DB — each tick is a fresh snapshot.
+    /// - `file_count_today: Int` — `filesSummary.count`, naming mirrors mention.
     ///
     /// ADR-010 redaction: caller responsibility. `tick.statusEmoji` — pure literal
-    /// (provider drop'ает `status_text` body). `last_activity_channel` — public
-    /// channel name либо literal "DM" (anonymized в provider'е). Mention/file
+    /// (the provider drops the `status_text` body). `last_activity_channel` — public
+    /// channel name or the literal "DM" (anonymized in the provider). Mention/file
     /// counts — numeric only.
     static func buildSlackPresenceState(
         tick: SlackTickResult,
@@ -596,8 +596,8 @@ public actor SlackCollector {
             "status_emoji": tick.statusEmoji,
             "status_expiration_ts": tick.statusExpirationTs,
             "in_huddle": tick.huddle == .inAHuddle,
-            // huddle_channel: surface зарезервирован, current API parser не
-            // populates — `SlackHuddleState` enum только indicator, без channel.
+            // huddle_channel: the surface is reserved, the current API parser does
+            // not populate it — the `SlackHuddleState` enum is only an indicator, without a channel.
             "huddle_channel": "",
             "last_activity_channel": lastActivityChannel,
             "mention_count_today": mentionTotal,
@@ -610,8 +610,8 @@ public actor SlackCollector {
         periodStartMs: Int64,
         periodEndMs: Int64
     ) -> RawEvent {
-        // Aggregate event — timestamp = period boundary, не индивидуальное
-        // message ts (count > 1 не имеет single moment).
+        // Aggregate event — timestamp = period boundary, not an individual
+        // message ts (count > 1 has no single moment).
         var payload: [String: String] = [
             "source": "slack",
             "event_kind": SlackEventKindKey.slackMessageAuthored.rawValue,
@@ -620,10 +620,10 @@ public actor SlackCollector {
             "period_start_ms": String(periodStartMs),
             "period_end_ms": String(periodEndMs)
         ]
-        // Phase 4.6.A.3 — reactions_count present ↔ "знаем что были реакции".
-        // Отсутствие ключа = "0 реакций или старая alpha.6 без 4.6.A.3"
-        // (consistent с decision не различать 0 от nil на UI; SQL aggregator
-        // фильтрует `IS NOT NULL` чтобы 0-samples не путать с pre-4.6 events).
+        // Phase 4.6.A.3 — reactions_count present ↔ "we know there were reactions".
+        // Absence of the key = "0 reactions or an old alpha.6 without 4.6.A.3"
+        // (consistent with the decision not to distinguish 0 from nil in the UI; the SQL
+        // aggregator filters `IS NOT NULL` so 0-samples are not confused with pre-4.6 events).
         if channel.reactionsCount > 0 {
             payload["reactions_count"] = String(channel.reactionsCount)
         }
@@ -654,7 +654,7 @@ public actor SlackCollector {
 
     /// Phase 4.7.A — thread reply aggregate event (count-only fallback path).
     /// Used when per-message data is not available (stub / pre-D1 path).
-    /// Same shape pattern что `message_authored_aggregate`, distinct event_kind.
+    /// Same shape pattern as `message_authored_aggregate`, distinct event_kind.
     private static func makeThreadReplyEvent(
         channel: SlackChannelMessageCount,
         periodStartMs: Int64,
@@ -720,8 +720,8 @@ public actor SlackCollector {
     }
 
     /// Phase 4.7.A — slack_status_change context event. Emoji = pure literal
-    /// (e.g. ":pizza:") или "" если cleared. ADR-010: status_text НЕ читаем
-    /// на parsing (provider drop'ает field до payload-finalize).
+    /// (e.g. ":pizza:") or "" if cleared. ADR-010: we do NOT read status_text
+    /// during parsing (the provider drops the field before payload-finalize).
     private static func makeStatusChangeEvent(
         emoji: String,
         expirationTs: Int64,
@@ -741,11 +741,11 @@ public actor SlackCollector {
         )
     }
 
-    /// Phase 4.7.B-9 — `slack_presence_state` per-tick pulse event. Mirror'ит
-    /// `gh_notifications_pulse`: эмитится КАЖДЫЙ non-skipped tick (даже на
+    /// Phase 4.7.B-9 — `slack_presence_state` per-tick pulse event. Mirrors
+    /// `gh_notifications_pulse`: emitted on EVERY non-skipped tick (even on
     /// `.unknown` — observation continuity > shrunk row count). `signal_type=.context`
-    /// (state pulse, не user action). Payload — minimal enum + observed ts; ничего
-    /// PII (ADR-010), `users.getPresence` response в принципе не содержит body.
+    /// (state pulse, not a user action). Payload — minimal enum + observed ts; nothing
+    /// PII (ADR-010), the `users.getPresence` response inherently contains no body.
     static func makePresenceStateEvent(
         state: SlackPresenceState,
         nowMs: Int64
@@ -764,11 +764,11 @@ public actor SlackCollector {
     }
 
     /// Phase 4.7.B-10 — `slack_dnd_state` per-tick pulse event. Always-emit
-    /// semantics (mirror к `slack_presence_state`): tick → 1 event regardless
-    /// of state. `signal_type=.context` (DND — состояние, не user action).
-    /// Optional ts payload keys — omit когда nil (consistent с completion_seconds
-    /// и прочими existing-conventions; downstream считает отсутствие = "no scheduled" /
-    /// "no active snooze"). ADR-010: response не содержит body / PII.
+    /// semantics (mirror to `slack_presence_state`): tick → 1 event regardless
+    /// of state. `signal_type=.context` (DND is a state, not a user action).
+    /// Optional ts payload keys — omitted when nil (consistent with completion_seconds
+    /// and other existing conventions; downstream treats absence = "no scheduled" /
+    /// "no active snooze"). ADR-010: the response contains no body / PII.
     static func makeDNDStateEvent(
         state: SlackDNDState,
         nowMs: Int64
@@ -796,14 +796,14 @@ public actor SlackCollector {
         )
     }
 
-    /// Phase 4.7.B-11 — `slack_mention_received_aggregate` action event. Один
-    /// event per channel-bucket (count > 0). Mirror'ит shape `message_authored_aggregate`
-    /// (channel + count + period boundaries), но `event_kind` distinct чтобы
-    /// downstream insights могли distinguish "что написал я" vs "сколько раз
-    /// меня mention'нули". `signal_type=.action` (per plan): mention — это
-    /// triggering event для меня (нужно отреагировать), не пассивный state.
-    /// ADR-010: текст mention'ящего сообщения и автор mention'а — provider
-    /// drop'ает на parsing'е, в payload не попадают.
+    /// Phase 4.7.B-11 — `slack_mention_received_aggregate` action event. One
+    /// event per channel-bucket (count > 0). Mirrors the shape of `message_authored_aggregate`
+    /// (channel + count + period boundaries), but `event_kind` is distinct so
+    /// downstream insights can distinguish "what I wrote" vs "how many times
+    /// I was mentioned". `signal_type=.action` (per plan): a mention is a
+    /// triggering event for me (needs a response), not a passive state.
+    /// ADR-010: the text of the mentioning message and the author of the mention — the provider
+    /// drops them during parsing, they do not end up in the payload.
     static func makeMentionReceivedAggregateEvent(
         channelCount: SlackMentionChannelCount,
         nowMs: Int64
@@ -824,15 +824,15 @@ public actor SlackCollector {
     }
 
     /// Phase 4.7.B-12 — `slack_file_uploaded_aggregate` action event. Single
-    /// event per tick (not per-file). Always-emit: на zero count тоже эмитится
-    /// (substrate continuity). `signal_type=.action` (uploading file —
-    /// triggering action, не state). Payload flatten'ит typesSummary в top-level
-    /// keys (`image_count` / `code_count` / `doc_count` / `other_count`) для
-    /// query-friendly access — SQL может фильтровать по type без JSON-функций.
-    /// Bucket с zero — пишем 0 explicit (consumer не угадывает "ключ
-    /// отсутствует == 0 ИЛИ pre-4.7.B без bucket'а").
-    /// ADR-010: filename / preview / permalink — отбрасываются на provider-side
-    /// parsing'е, в payload не попадают.
+    /// event per tick (not per-file). Always-emit: it is also emitted on a zero count
+    /// (substrate continuity). `signal_type=.action` (uploading a file is a
+    /// triggering action, not a state). The payload flattens typesSummary into top-level
+    /// keys (`image_count` / `code_count` / `doc_count` / `other_count`) for
+    /// query-friendly access — SQL can filter by type without JSON functions.
+    /// A zero bucket — we write 0 explicitly (the consumer does not guess "key
+    /// absent == 0 OR pre-4.7.B without the bucket").
+    /// ADR-010: filename / preview / permalink — dropped during provider-side
+    /// parsing, they do not end up in the payload.
     /// Phase Track-1 D1 — `attachments_json` key added when provider populated
     /// the files field with per-file metadata. Uses shared `AttachmentMeta` shape
     /// for cross-provider uniformity.
@@ -873,8 +873,8 @@ public actor SlackCollector {
     }
 
     private static func makeHuddleEvent(state: SlackHuddleState, now: Date) -> RawEvent {
-        // Transition timestamp = `now` (а не moment самого huddle start) —
-        // мы не знаем точный момент между ticks; ±5min неточность приемлема в MVP.
+        // Transition timestamp = `now` (not the moment of the huddle start itself) —
+        // we do not know the exact moment between ticks; a ±5min inaccuracy is acceptable in the MVP.
         RawEvent(
             timestamp: now,
             signalType: .context,

@@ -1,19 +1,19 @@
 import XCTest
 @testable import LeafCore
 
-/// Phase Track-4 S3 — defence-in-depth privacy walkback против CGEventTap
+/// Phase Track-4 S3 — defence-in-depth privacy walkback against CGEventTap
 /// content reads. Three layers:
-///   1) Source-grep на `CGEventTapCollector.swift` — forbidden API
+///   1) Source-grep on `CGEventTapCollector.swift` — forbidden API
 ///      substring count == 0.
-///   2) Source-grep на `IntensityBucketAccumulator.swift` — same set.
+///   2) Source-grep on `IntensityBucketAccumulator.swift` — same set.
 ///   3) Runtime payload audit — `IntensityBucketSnapshot.toRawEventPayload()`
 ///      keys subset of whitelist `{event_kind, keystroke_count, mouse_move_count,
 ///      app_switch_count, foreground_app, state}`.
 ///
 /// Compile-time guard via IntensityBucketSnapshot fields (counter-only) +
 /// CGEvent callback's mask-based discrimination — primary safety. These
-/// tests catch a future bypass где разработчик добавляет forbidden API call
-/// без disabling tests.
+/// tests catch a future bypass where a developer adds a forbidden API call
+/// without disabling the tests.
 final class CGEventTapNoContentLeakageTests: XCTestCase {
 
     private func repoRoot() -> URL {

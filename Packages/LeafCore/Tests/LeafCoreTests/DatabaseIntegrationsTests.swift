@@ -1,7 +1,7 @@
-// Phase 4.1 — public-side tests для integrations таблицы (M004) +
-// 3 CRUD методов Database. LinearOAuthService unit-тестами не покрыт
+// Phase 4.1 — public-side tests for the integrations table (M004) +
+// 3 CRUD methods of Database. LinearOAuthService is not covered by unit tests
 // (Network.framework + URLSession + NSWorkspace.open — heavy mocking
-// без выгоды; manual smoke в PR description).
+// with no payoff; manual smoke in the PR description).
 
 import XCTest
 import GRDB
@@ -24,7 +24,7 @@ final class DatabaseIntegrationsTests: XCTestCase {
 
     // MARK: - Schema (M004)
 
-    /// M004 создаёт таблицу с правильными колонками. PK на provider.
+    /// M004 creates the table with the correct columns. PK on provider.
     func testMigrationCreatesTable() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -52,8 +52,8 @@ final class DatabaseIntegrationsTests: XCTestCase {
 
     // MARK: - upsert + read
 
-    /// Базовый round-trip: upsert → read возвращает тот же row с правильно
-    /// раскодированными датами + nil-fields.
+    /// Basic round-trip: upsert → read returns the same row with correctly
+    /// decoded dates + nil-fields.
     func testUpsertAndReadRoundTrip() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -80,14 +80,14 @@ final class DatabaseIntegrationsTests: XCTestCase {
         XCTAssertEqual(loaded?.accessToken, "tok-access")
         XCTAssertEqual(loaded?.refreshToken, "tok-refresh")
         XCTAssertEqual(loaded?.scope, "read")
-        // 1ms precision floor от Int64(_ * 1000) round-trip.
+        // 1ms precision floor from the Int64(_ * 1000) round-trip.
         XCTAssertEqual(loaded?.connectedAt.timeIntervalSince1970 ?? 0, 1_700_000_000, accuracy: 0.001)
         XCTAssertEqual(loaded?.expiresAt?.timeIntervalSince1970 ?? 0, 1_700_086_399, accuracy: 0.001)
     }
 
-    /// `refreshToken == nil` и `expiresAt == nil` сохраняются как NULL и
-    /// корректно поднимаются обратно. Linear возвращает refresh_token, но
-    /// для других provider'ов (на v1.1+) поле может быть пустым.
+    /// `refreshToken == nil` and `expiresAt == nil` are stored as NULL and
+    /// correctly loaded back. Linear returns a refresh_token, but
+    /// for other providers (on v1.1+) the field may be empty.
     func testUpsertHandlesNilOptionals() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -110,9 +110,9 @@ final class DatabaseIntegrationsTests: XCTestCase {
         XCTAssertNil(loaded?.expiresAt)
     }
 
-    /// Single-row-per-provider — повторный upsert замещает row in-place.
-    /// Reconnect flow: новый workspace под тем же provider'ом перезаписывает
-    /// предыдущий, не плодит rows.
+    /// Single-row-per-provider — a repeated upsert replaces the row in-place.
+    /// Reconnect flow: a new workspace under the same provider overwrites
+    /// the previous one, without spawning rows.
     func testUpsertReplacesExistingRow() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -135,7 +135,7 @@ final class DatabaseIntegrationsTests: XCTestCase {
         XCTAssertEqual(loaded?.workspaceName, "Second")
         XCTAssertEqual(loaded?.accessToken, "new-tok")
 
-        // Один row total.
+        // One row total.
         try db.readSQL { rawDB in
             let count = try Int.fetchOne(rawDB, sql: "SELECT COUNT(*) FROM \(Schema.Integrations.tableName)") ?? -1
             XCTAssertEqual(count, 1)
@@ -144,7 +144,7 @@ final class DatabaseIntegrationsTests: XCTestCase {
 
     // MARK: - delete
 
-    /// delete by provider — idempotent: отсутствующий row не throw'ит.
+    /// delete by provider — idempotent: a missing row does not throw.
     func testDeleteIsIdempotent() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -161,11 +161,11 @@ final class DatabaseIntegrationsTests: XCTestCase {
         try db.deleteIntegration(provider: .linear)
         XCTAssertNil(try db.readIntegration(provider: .linear))
 
-        // Повторный delete — no-op.
+        // Repeated delete — no-op.
         XCTAssertNoThrow(try db.deleteIntegration(provider: .linear))
     }
 
-    /// readIntegration на пустой таблице → nil (не throw, не error).
+    /// readIntegration on an empty table → nil (no throw, no error).
     func testReadReturnsNilWhenAbsent() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         XCTAssertNil(try db.readIntegration(provider: .linear))
@@ -174,8 +174,8 @@ final class DatabaseIntegrationsTests: XCTestCase {
     // MARK: - Phase 4.4 Slack provider
 
     /// Slack round-trip: composite workspaceID `<team_id>:<user_id>` (no `slack:`
-    /// prefix) + xoxp- user token + xoxe- refresh token + 12h expiry. Подтверждает
-    /// что schema generic для provider'ов и не требует новой миграции (M005).
+    /// prefix) + xoxp- user token + xoxe- refresh token + 12h expiry. Confirms
+    /// that the schema is generic across providers and doesn't require a new migration (M005).
     func testUpsertSlackProviderRoundTrip() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -204,7 +204,7 @@ final class DatabaseIntegrationsTests: XCTestCase {
         XCTAssertEqual(loaded?.scope, "users:read,users.profile:read,search:read")
         XCTAssertEqual(loaded?.expiresAt?.timeIntervalSince1970 ?? 0, expires.timeIntervalSince1970, accuracy: 0.001)
 
-        // Linear row отдельно — slack не пересекается по PK.
+        // Linear row is separate — slack doesn't collide on the PK.
         XCTAssertNil(try db.readIntegration(provider: .linear))
     }
 }

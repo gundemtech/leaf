@@ -6,14 +6,14 @@ let package = Package(
     name: "LeafCore",
     platforms: [.macOS(.v14)],
     products: [
-        // Public API — линкуется всегда всеми таргетами.
+        // Public API — always linked by all targets.
         .library(name: "LeafCore", targets: ["LeafCore"]),
-        // Moat-target — линкуется всегда, но реальные файлы (Prod/**)
-        // живут только на dev-машине (см. .gitignore). На публичном клоне
-        // содержит только Placeholder.swift → собирается без ошибок.
+        // Moat target — always linked, but the real files (Prod/**)
+        // live only on the dev machine (see .gitignore). On a public clone
+        // it contains only Placeholder.swift → builds without errors.
         .library(name: "LeafCorePrivate", targets: ["LeafCorePrivate"]),
         // Pure MCP protocol layer (JSON-RPC envelope + MCP types + handlers
-        // без side effects). Линкуется в LeafMCP binary target.
+        // without side effects). Linked into the LeafMCP binary target.
         .library(name: "LeafMCPProtocol", targets: ["LeafMCPProtocol"]),
         // Track-6 P1 Phase E — thin native binary invoked by Claude Code hooks.
         // Reads JSON payload from stdin, forwards envelope to Unix domain socket

@@ -13,24 +13,24 @@ import GRDB
 /// conflict with per-event timeline shape; mention scanning will require
 /// channel-text scan that ADR-010 forbids without per-event redaction layer).
 ///
-/// Лежит в LeafCore (а не в LeafMCP/Tools/), чтобы быть testable из SPM —
-/// `LeafMCP` это Xcode target и под `swift test` не собирается. Tool struct
-/// `GetCrossProviderThreadTool` в `LeafMCP/Tools/` — тонкая обёртка над этим
-/// helper'ом.
+/// Lives in LeafCore (not in LeafMCP/Tools/) so it's testable from SPM —
+/// `LeafMCP` is an Xcode target and doesn't build under `swift test`. The tool struct
+/// `GetCrossProviderThreadTool` in `LeafMCP/Tools/` is a thin wrapper over this
+/// helper.
 ///
-/// ADR-010: helper не парсит bodies / commit messages / PR titles — поверх
-/// `payload_json` уже sanitized fields'ов. Output projection — только
-/// metadata (event_kind, repo, pr_number, sha, branch, issue_key, status,
-/// linked_linear_id) — никаких title-полей не возвращаем.
+/// ADR-010: the helper doesn't parse bodies / commit messages / PR titles — it sits
+/// on top of already-sanitized `payload_json` fields. The output projection is
+/// metadata-only (event_kind, repo, pr_number, sha, branch, issue_key, status,
+/// linked_linear_id) — no title fields are returned.
 public enum CrossProviderInsights {
-    /// Maximum events возвращаемых одним вызовом. Bounded чтобы AI-клиент
-    /// не получил многомегабайтный ответ для long-running issue.
+    /// Maximum events returned by a single call. Bounded so an AI client
+    /// doesn't get a multi-megabyte response for a long-running issue.
     public static let maxEvents: Int = 200
 
-    /// Cross-provider timeline для конкретного Linear issue ID
-    /// (e.g., "LEAF-456"). Chronologically sorted по `ts ASC`.
+    /// Cross-provider timeline for a specific Linear issue ID
+    /// (e.g., "LEAF-456"). Chronologically sorted by `ts ASC`.
     ///
-    /// Returns payload готовый к сериализации:
+    /// Returns a payload ready for serialization:
     /// ```
     /// {
     ///   "linear_issue_id": String,                // echo of arg
@@ -43,13 +43,13 @@ public enum CrossProviderInsights {
     ///     },
     ///     ...
     ///   ],
-    ///   "first_touch_ms": Int64,                  // 0 если events empty
-    ///   "last_touch_ms": Int64,                   // 0 если events empty
-    ///   "duration_seconds": Int                   // 0 если events empty
+    ///   "first_touch_ms": Int64,                  // 0 if events empty
+    ///   "last_touch_ms": Int64,                   // 0 if events empty
+    ///   "duration_seconds": Int                   // 0 if events empty
     /// }
     /// ```
     /// Empty results → `events: []`, `first_touch_ms: 0`, `last_touch_ms: 0`,
-    /// `duration_seconds: 0`. Top-level shape preserved для consistency.
+    /// `duration_seconds: 0`. Top-level shape preserved for consistency.
     public static func crossProviderThread(
         database: Database,
         linearIssueID: String
@@ -59,9 +59,9 @@ public enum CrossProviderInsights {
         var lastTouchMs: Int64 = 0
 
         try database.readSQL { rawDB in
-            // Plan-required SQL: UNION across sources via OR condition. `?` bind
-            // используется дважды (linear issue_key + github linked_linear_id) —
-            // GRDB.StatementArguments позиционно matched.
+            // Plan-required SQL: UNION across sources via OR condition. The `?` bind
+            // is used twice (linear issue_key + github linked_linear_id) —
+            // GRDB.StatementArguments are matched positionally.
             let sql = """
                 SELECT \(Schema.Events.ts) AS ts, \(Schema.Events.payloadJSON) AS payload_json
                 FROM \(Schema.Events.tableName)
@@ -101,8 +101,8 @@ public enum CrossProviderInsights {
         if events.isEmpty {
             durationSeconds = 0
         } else {
-            // duration = (last - first) / 1000 (ceil не нужен — integer math
-            // достаточно для cross-provider thread, sub-second precision не value-add).
+            // duration = (last - first) / 1000 (no ceil needed — integer math
+            // is enough for a cross-provider thread, sub-second precision isn't value-add).
             durationSeconds = Int((lastTouchMs - firstTouchMs) / 1000)
         }
 
@@ -116,11 +116,11 @@ public enum CrossProviderInsights {
     }
 
     /// ADR-010 metadata-only projection. Whitelist of safe payload keys —
-    /// everything else (title / commit message body / etc) dropped перед
-    /// surfacing на MCP wire.
+    /// everything else (title / commit message body / etc) dropped before
+    /// surfacing on the MCP wire.
     ///
-    /// Whitelist умышленно небольшой и conservative — лучше пропустить
-    /// потенциально полезное поле, чем accidentally shipping body content.
+    /// The whitelist is deliberately small and conservative — better to drop a
+    /// potentially useful field than to accidentally ship body content.
     private static let payloadWhitelist: Set<String> = [
         "source",
         "event_kind",

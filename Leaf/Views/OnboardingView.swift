@@ -2,10 +2,10 @@
 //  OnboardingView.swift
 //  Leaf
 //
-//  Phase 3.4 — first-launch UX. 5-step inline state machine рендерится
-//  в popover вместо normal MenuBarContent когда `!hasCompletedOnboarding`.
-//  Auto-advance через `.onChange(of: permissions.axGranted/fdaGranted)`
-//  + 1s polling в onAppear (UX-priority: instant grant detection).
+//  Phase 3.4 — first-launch UX. A 5-step inline state machine is rendered
+//  in the popover instead of the normal MenuBarContent when `!hasCompletedOnboarding`.
+//  Auto-advance via `.onChange(of: permissions.axGranted/fdaGranted)`
+//  + 1s polling in onAppear (UX-priority: instant grant detection).
 //
 //  Track 2 / D4 — inline migration to D1 atoms (LeafType / LeafButton / LeafColor /
 //  LeafSpace / LeafIcons). NOT LeafOnboardingStepLayout — popover constraint

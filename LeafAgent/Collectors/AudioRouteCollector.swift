@@ -5,13 +5,13 @@ import LeafCore
 
 /// Phase Track-4 S3 — CoreAudio default output device transport-type observer.
 /// Maps `kAudioDevicePropertyTransportType` (UInt32) to narrow
-/// `AudioRouteCategory` enum; device names / manufacturer info никогда не
-/// материализуется (ADR-010 Won't-list — audio_route → transport-type enum
+/// `AudioRouteCategory` enum; device names / manufacturer info are never
+/// materialized (ADR-010 Won't-list — audio_route → transport-type enum
 /// only).
 ///
-/// Listener attaches к default-output-device-changed property; callback
-/// re-fetches current device + transport type. Initial seed observation на
-/// start чтобы first transition после restart был visible.
+/// The listener attaches to the default-output-device-changed property; the callback
+/// re-fetches the current device + transport type. Initial seed observation at
+/// start so the first transition after restart is visible.
 @MainActor
 final class AudioRouteCollector {
     private let writer: EventWriter
@@ -48,7 +48,7 @@ final class AudioRouteCollector {
             mElement: kAudioObjectPropertyElementMain
         )
         let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
-            // Hop to main actor для state-machine mutation.
+            // Hop to main actor for state-machine mutation.
             Task { @MainActor in
                 await self?.tickOnce()
             }

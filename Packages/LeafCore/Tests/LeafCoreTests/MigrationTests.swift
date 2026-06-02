@@ -51,8 +51,8 @@ final class MigrationTests: XCTestCase {
         _ = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
     }
 
-    /// M004 idempotency: повторный open после уже применённой миграции
-    /// не пересоздаёт таблицу integrations и не теряет данные.
+    /// M004 idempotency: reopening after the migration is already applied
+    /// does not recreate the integrations table and does not lose data.
     func testMigration004IsIdempotent() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         let db1 = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
@@ -86,7 +86,7 @@ final class MigrationTests: XCTestCase {
         }
     }
 
-    /// Phase 4.7.A M005 — `presence_state` создана с правильной schema.
+    /// Phase 4.7.A M005 — `presence_state` is created with the correct schema.
     func testMigration005CreatesPresenceStateTable() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
@@ -117,7 +117,7 @@ final class MigrationTests: XCTestCase {
             let stateJSON = try XCTUnwrap(byName[Schema.PresenceState.stateJSON])
             XCTAssertEqual(stateJSON["notnull"] as Int?, 1)
 
-            // derived_mode — nullable (всегда NULL в Phase 4.7).
+            // derived_mode — nullable (always NULL in Phase 4.7).
             let derivedMode = try XCTUnwrap(byName[Schema.PresenceState.derivedMode])
             XCTAssertEqual(derivedMode["notnull"] as Int?, 0)
 
@@ -127,14 +127,14 @@ final class MigrationTests: XCTestCase {
         }
     }
 
-    /// M005 idempotency — повторный open после applied миграции не падает.
+    /// M005 idempotency — reopening after the migration is applied does not crash.
     func testMigration005IsIdempotent() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         _ = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         _ = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
     }
 
-    /// M005 — fresh DB → presence_state пустой (writes идут в Track B).
+    /// M005 — fresh DB → presence_state is empty (writes come from Track B).
     func testPresenceStateEmptyAfterMigration() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
@@ -150,8 +150,8 @@ final class MigrationTests: XCTestCase {
 
     // MARK: - Phase 5.1.A — Step 1 sanity (Schema constants + TeamMemberRole)
 
-    /// Phase 5.1.A — Schema namespaces для team-crypto tables присутствуют
-    /// и держат ожидаемые SQL identifier'ы. Sanity для Step 1 (до миграций).
+    /// Phase 5.1.A — Schema namespaces for team-crypto tables are present
+    /// and hold the expected SQL identifiers. Sanity for Step 1 (before migrations).
     /// Track-5 S2: post-M019 expectations — `org` → `workspaces`,
     /// `team_members_org_active` → `team_members_workspace_active`.
     func testPhase51ASchemaConstantsAreDeclared() throws {
@@ -169,7 +169,7 @@ final class MigrationTests: XCTestCase {
         XCTAssertEqual(Schema.TeamKeys.indexActive, "team_keys_active")
     }
 
-    /// `TeamMemberRole` rawValue — single source of truth для team_members.role.
+    /// `TeamMemberRole` rawValue — single source of truth for team_members.role.
     func testTeamMemberRoleRawValuesAreStable() throws {
         XCTAssertEqual(TeamMemberRole.admin.rawValue, "admin")
         XCTAssertEqual(TeamMemberRole.member.rawValue, "member")
@@ -178,7 +178,7 @@ final class MigrationTests: XCTestCase {
 
     // MARK: - Phase 5.1.A — Step 2 (M006 org)
 
-    /// M006 — `org` table создана с правильными столбцами. Track-5 S2:
+    /// M006 — `org` table is created with the correct columns. Track-5 S2:
     /// after M019 the table is renamed to `workspaces` and gains a
     /// `left_at_ms` column (OQ-T5-2 soft-mark). Asserts post-M019 shape
     /// because `Database.openForWrite` runs the full migrator chain.
@@ -234,19 +234,19 @@ final class MigrationTests: XCTestCase {
             XCTAssertEqual(id["pk"] as Int?, 1)
             XCTAssertEqual(id["notnull"] as Int?, 1)
 
-            // Остальные — NOT NULL без PK.
+            // The rest — NOT NULL without PK.
             for col in [Schema.Workspaces.name, Schema.Workspaces.createdAtMs, Schema.Workspaces.createdByMemberID] {
                 let row = try XCTUnwrap(byName[col])
-                XCTAssertEqual(row["pk"] as Int?, 0, "column \(col) не должен быть PK")
-                XCTAssertEqual(row["notnull"] as Int?, 1, "column \(col) должен быть NOT NULL")
+                XCTAssertEqual(row["pk"] as Int?, 0, "column \(col) must not be PK")
+                XCTAssertEqual(row["notnull"] as Int?, 1, "column \(col) must be NOT NULL")
             }
         }
     }
 
     // MARK: - Phase 5.1.A — Step 3 (M007 team_members)
 
-    /// M007 — `team_members` table создана с правильными столбцами.
-    /// `removed_at_ms` nullable, остальные NOT NULL.
+    /// M007 — `team_members` table is created with the correct columns.
+    /// `removed_at_ms` nullable, the rest NOT NULL.
     func testMigration007CreatesTeamMembersTable() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
@@ -281,12 +281,12 @@ final class MigrationTests: XCTestCase {
                 ])
             )
 
-            // PK на id.
+            // PK on id.
             let id = try XCTUnwrap(byName[Schema.TeamMembers.id])
             XCTAssertEqual(id["pk"] as Int?, 1)
             XCTAssertEqual(id["notnull"] as Int?, 1)
 
-            // Всё кроме removed_at_ms — NOT NULL.
+            // Everything except removed_at_ms — NOT NULL.
             for col in [
                 Schema.TeamMembers.workspaceID,
                 Schema.TeamMembers.role,
@@ -295,7 +295,7 @@ final class MigrationTests: XCTestCase {
                 Schema.TeamMembers.addedAtMs
             ] {
                 let row = try XCTUnwrap(byName[col])
-                XCTAssertEqual(row["notnull"] as Int?, 1, "column \(col) должен быть NOT NULL")
+                XCTAssertEqual(row["notnull"] as Int?, 1, "column \(col) must be NOT NULL")
             }
 
             // removed_at_ms — nullable.
@@ -304,8 +304,8 @@ final class MigrationTests: XCTestCase {
         }
     }
 
-    /// M007 — partial index `team_members_org_active` присутствует и фильтрует
-    /// по `removed_at_ms IS NULL`.
+    /// M007 — partial index `team_members_org_active` is present and filters
+    /// on `removed_at_ms IS NULL`.
     func testMigration007CreatesActiveIndex() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
@@ -321,7 +321,7 @@ final class MigrationTests: XCTestCase {
                 "expected index \(Schema.TeamMembers.indexWorkspaceActive); found \(indexes)"
             )
 
-            // Verify partial — sqlite_master.sql содержит WHERE clause.
+            // Verify partial — sqlite_master.sql contains a WHERE clause.
             let sql = try String.fetchOne(
                 rawDB,
                 sql: "SELECT sql FROM sqlite_master WHERE type='index' AND name=?",
@@ -329,22 +329,22 @@ final class MigrationTests: XCTestCase {
             )
             let unwrapped = try XCTUnwrap(sql)
             let upper = unwrapped.uppercased()
-            XCTAssertTrue(upper.contains("WHERE"), "ожидался partial index; got: \(unwrapped)")
+            XCTAssertTrue(upper.contains("WHERE"), "expected a partial index; got: \(unwrapped)")
             XCTAssertTrue(
                 upper.contains(Schema.TeamMembers.removedAtMs.uppercased()),
-                "WHERE clause должен фильтровать по \(Schema.TeamMembers.removedAtMs); got: \(unwrapped)"
+                "WHERE clause must filter on \(Schema.TeamMembers.removedAtMs); got: \(unwrapped)"
             )
             XCTAssertTrue(
                 upper.contains("IS NULL"),
-                "ожидался WHERE ... IS NULL predicate; got: \(unwrapped)"
+                "expected a WHERE ... IS NULL predicate; got: \(unwrapped)"
             )
         }
     }
 
     // MARK: - Phase 5.1.A — Step 4 (M008 team_keys)
 
-    /// M008 — `team_keys` table создана с правильными столбцами.
-    /// `deprecated_at_ms` nullable, остальные NOT NULL.
+    /// M008 — `team_keys` table is created with the correct columns.
+    /// `deprecated_at_ms` nullable, the rest NOT NULL.
     func testMigration008CreatesTeamKeysTable() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
@@ -383,7 +383,7 @@ final class MigrationTests: XCTestCase {
 
             for col in [Schema.TeamKeys.generatedAtMs, Schema.TeamKeys.generatedByMemberID] {
                 let row = try XCTUnwrap(byName[col])
-                XCTAssertEqual(row["notnull"] as Int?, 1, "column \(col) должен быть NOT NULL")
+                XCTAssertEqual(row["notnull"] as Int?, 1, "column \(col) must be NOT NULL")
             }
 
             let deprecated = try XCTUnwrap(byName[Schema.TeamKeys.deprecatedAtMs])
@@ -391,8 +391,8 @@ final class MigrationTests: XCTestCase {
         }
     }
 
-    /// M008 — partial index `team_keys_active` присутствует и фильтрует
-    /// по `deprecated_at_ms IS NULL`.
+    /// M008 — partial index `team_keys_active` is present and filters
+    /// on `deprecated_at_ms IS NULL`.
     func testMigration008CreatesActiveIndex() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
@@ -415,22 +415,22 @@ final class MigrationTests: XCTestCase {
             )
             let unwrapped = try XCTUnwrap(sql)
             let upper = unwrapped.uppercased()
-            XCTAssertTrue(upper.contains("WHERE"), "ожидался partial index; got: \(unwrapped)")
+            XCTAssertTrue(upper.contains("WHERE"), "expected a partial index; got: \(unwrapped)")
             XCTAssertTrue(
                 upper.contains(Schema.TeamKeys.deprecatedAtMs.uppercased()),
-                "WHERE clause должен фильтровать по \(Schema.TeamKeys.deprecatedAtMs); got: \(unwrapped)"
+                "WHERE clause must filter on \(Schema.TeamKeys.deprecatedAtMs); got: \(unwrapped)"
             )
             XCTAssertTrue(
                 upper.contains("IS NULL"),
-                "ожидался WHERE ... IS NULL predicate; got: \(unwrapped)"
+                "expected a WHERE ... IS NULL predicate; got: \(unwrapped)"
             )
         }
     }
 
     // MARK: - Phase 5.1.A — Step 5 (idempotency + coexistence)
 
-    /// M006/M007/M008 — повторный open после applied миграций не падает
-    /// и не пересоздаёт таблицы. Mirrors testMigration001IsIdempotent.
+    /// M006/M007/M008 — reopening after the migrations are applied does not crash
+    /// and does not recreate the tables. Mirrors testMigration001IsIdempotent.
     func testMigration006To008AreIdempotent() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         _ = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
@@ -438,13 +438,13 @@ final class MigrationTests: XCTestCase {
         _ = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
     }
 
-    /// Sanity — после полного open видим все application tables в `sqlite_master`,
-    /// то есть migration registration order не ломает existing tables.
-    /// Phase 5.5.A добавляет `pending_invites` (M010).
-    /// Phase Track-1 D2 добавляет `events_fts` (M012) — FTS5 internal shadow tables
-    /// (`events_fts_data`/`_idx`/`_docsize`/`_config`) исключаются явно по имени,
-    /// чтобы load-bearing sidecar `events_fts_meta` не прятался под wildcard.
-    /// Phase Track-1 D2 добавляет `event_links` (M013).
+    /// Sanity — after a full open we see all application tables in `sqlite_master`,
+    /// i.e. the migration registration order does not break existing tables.
+    /// Phase 5.5.A adds `pending_invites` (M010).
+    /// Phase Track-1 D2 adds `events_fts` (M012) — the FTS5 internal shadow tables
+    /// (`events_fts_data`/`_idx`/`_docsize`/`_config`) are excluded explicitly by name,
+    /// so the load-bearing sidecar `events_fts_meta` is not hidden under the wildcard.
+    /// Phase Track-1 D2 adds `event_links` (M013).
     func testMigration006To010CoexistWithEarlier() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
@@ -502,8 +502,8 @@ final class MigrationTests: XCTestCase {
         }
     }
 
-    /// Phase 5.1.A — таблицы создаются пустыми; первые rows будут вставлены
-    /// в Phase 5.1.D `OrgService.createPersonalOrg`. Sanity для substrate.
+    /// Phase 5.1.A — the tables are created empty; the first rows will be inserted
+    /// in Phase 5.1.D `OrgService.createPersonalOrg`. Sanity for the substrate.
     func testPhase51ATablesEmptyAfterMigration() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
@@ -511,7 +511,7 @@ final class MigrationTests: XCTestCase {
         try db.readSQL { rawDB in
             for table in [Schema.Workspaces.tableName, Schema.TeamMembers.tableName, Schema.TeamKeys.tableName] {
                 let count = try Int.fetchOne(rawDB, sql: "SELECT count(*) FROM \(table)")
-                XCTAssertEqual(count, 0, "expected \(table) пустой после fresh migration")
+                XCTAssertEqual(count, 0, "expected \(table) to be empty after a fresh migration")
             }
         }
     }
@@ -519,11 +519,11 @@ final class MigrationTests: XCTestCase {
     // MARK: - Track-6 P1 — M028 partial expression index (renamed from M024 per integration-T10)
 
     /// M028 EXPLAIN QUERY PLAN — subagent rollup query uses the new index, not full table scan.
-    /// На пустой таблице SQLite query planner может всё ещё выбрать SCAN из-за отсутствия статистики,
-    /// поэтому проверяем что индекс физически существует и структурно совместим с WHERE-предикатом
-    /// (covered в testMigration028CreatesClaudeCodeAISubagentIndex). EXPLAIN test is best-effort:
-    /// в случае SCAN на пустой таблице — не валим, только подтверждаем что индекс кандидатом
-    /// доступен (наличие index name в `sqlite_master` уже проверено).
+    /// On an empty table SQLite's query planner may still pick a SCAN due to the lack of statistics,
+    /// so we verify that the index physically exists and is structurally compatible with the WHERE predicate
+    /// (covered in testMigration028CreatesClaudeCodeAISubagentIndex). The EXPLAIN test is best-effort:
+    /// on a SCAN over an empty table we don't fail, we only confirm that the index is available
+    /// as a candidate (the presence of the index name in `sqlite_master` is already verified).
     func testMigration028SubagentRollupUsesIndex() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
@@ -541,16 +541,16 @@ final class MigrationTests: XCTestCase {
                 row["detail"] as? String
             }.joined(separator: " | ")
 
-            // Soft assertion: на пустой таблице SQLite планнер может выбрать SCAN
-            // из-за отсутствия ANALYZE-стат. Если индекс назван в плане — отлично;
-            // если нет — fallback на структурную проверку (idx уже верифицирован
-            // в testMigration028CreatesClaudeCodeAISubagentIndex). Не валим тест на пустой таблице.
+            // Soft assertion: on an empty table SQLite's planner may pick a SCAN
+            // due to the lack of ANALYZE stats. If the index is named in the plan — great;
+            // if not — fall back to the structural check (the idx is already verified
+            // in testMigration028CreatesClaudeCodeAISubagentIndex). We don't fail the test on an empty table.
             if detail.contains("idx_events_ai_subagent") {
                 XCTAssertTrue(true, "subagent rollup query uses idx_events_ai_subagent; plan: \(detail)")
             } else {
-                // На пустой таблице планнер может выбрать SCAN — это OK для substrate.
-                // Phase C наполнит payload_json.agent_id, тогда ANALYZE даст
-                // нужную статистику чтобы планнер выбрал index lookup.
+                // On an empty table the planner may pick a SCAN — that's OK for the substrate.
+                // Phase C will populate payload_json.agent_id, then ANALYZE will provide
+                // the statistics the planner needs to pick an index lookup.
                 XCTAssertFalse(detail.isEmpty, "EXPLAIN QUERY PLAN should produce some plan; got empty")
             }
         }
@@ -560,27 +560,27 @@ final class MigrationTests: XCTestCase {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         let key = EncryptionOptions(keyProvider: .data(Data(repeating: 0xDD, count: 32)))
 
-        // Arrange: создаём plaintext DB с одним событием.
+        // Arrange: create a plaintext DB with a single event.
         do {
             let plain = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: nil)
             try plain.write(RawEvent(signalType: .attention, bundleID: "com.legacy"))
             try plain.checkpointWAL()
         }
 
-        // Sanity — файл plaintext.
+        // Sanity — the file is plaintext.
         let headerBefore = try (FileHandle(forReadingFrom: dbURL).read(upToCount: 16)) ?? Data()
         XCTAssertEqual(headerBefore, Data("SQLite format 3\0".utf8))
 
-        // Act: reopen с encryption — должен рядом появиться .bak и свежая encrypted DB.
+        // Act: reopen with encryption — a .bak and a fresh encrypted DB should appear alongside it.
         let encrypted = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: key)
 
-        // Assert: .bak существует и plaintext.
+        // Assert: .bak exists and is plaintext.
         let backup = dbURL.appendingPathExtension("pre-sqlcipher.bak")
         XCTAssertTrue(FileManager.default.fileExists(atPath: backup.path))
         let headerBak = try (FileHandle(forReadingFrom: backup).read(upToCount: 16)) ?? Data()
         XCTAssertEqual(headerBak, Data("SQLite format 3\0".utf8))
 
-        // Новая DB encrypted: header не SQLite и пустая.
+        // The new DB is encrypted: header is not SQLite and it is empty.
         try encrypted.checkpointWAL()
         let headerNew = try (FileHandle(forReadingFrom: dbURL).read(upToCount: 16)) ?? Data()
         XCTAssertNotEqual(headerNew, Data("SQLite format 3\0".utf8))
@@ -588,8 +588,8 @@ final class MigrationTests: XCTestCase {
         XCTAssertEqual(try encrypted.eventCount(in: range), 0)
     }
 
-    // Track-6 P1 partial expression index (renamed M024 → M028 за счёт того что
-    // Track-5/S5/S7 broadcast offsets уже занимают slot M024 на integration-T10).
+    // Track-6 P1 partial expression index (renamed M024 → M028 because
+    // Track-5/S5/S7 broadcast offsets already occupy slot M024 on integration-T10).
     func testMigration028CreatesClaudeCodeAISubagentIndex() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         let db = try Database.openForWrite(
@@ -607,13 +607,13 @@ final class MigrationTests: XCTestCase {
             XCTAssertEqual(
                 indexes,
                 ["idx_events_ai_subagent"],
-                "M028 partial expression index должен существовать после миграций"
+                "M028 partial expression index must exist after the migrations"
             )
         }
     }
 
-    // Track-6 P3 browser per-domain allow-list table (renamed M026 → M029 за счёт
-    // того что Track-5/S8 substrate уже занимает slot M026 на integration-T10).
+    // Track-6 P3 browser per-domain allow-list table (renamed M026 → M029 because
+    // the Track-5/S8 substrate already occupies slot M026 on integration-T10).
     func testMigration029CreatesBrowserDomainAllowTable() throws {
         let dbURL = tempDir.appendingPathComponent("events.sqlite")
         let db = try Database.openForWrite(
@@ -631,7 +631,7 @@ final class MigrationTests: XCTestCase {
             XCTAssertEqual(
                 tables,
                 [Schema.BrowserDomainAllow.tableName],
-                "M029 browser_domain_allow table должен существовать после миграций"
+                "M029 browser_domain_allow table must exist after the migrations"
             )
         }
     }

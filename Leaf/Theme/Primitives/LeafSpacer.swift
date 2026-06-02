@@ -1,6 +1,6 @@
 //
 //  LeafSpacer.swift
-//  Track 2 / D1 — Atom A4. Semantic wrapper над `Spacer`.
+//  Track 2 / D1 — Atom A4. Semantic wrapper around `Spacer`.
 //  Fixed-size: `LeafSpacer(LeafSpace.lg)` renders a `Color.clear` square.
 //  Flexible: `LeafSpacer()` renders `Spacer(minLength: 0)`.
 //

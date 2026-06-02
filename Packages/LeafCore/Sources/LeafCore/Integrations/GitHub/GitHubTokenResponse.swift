@@ -2,19 +2,19 @@
 //  GitHubTokenResponse.swift
 //  LeafCore
 //
-//  Phase 4.3 — Codable DTOs для GitHub Device Flow и refresh responses.
-//  GitHub возвращает либо form-encoded, либо JSON в зависимости от Accept header;
-//  клиент всегда шлёт `Accept: application/json` → JSON shape.
-//  `nonisolated` — DTO декодируются в URLSession callback context.
+//  Phase 4.3 — Codable DTOs for GitHub Device Flow and refresh responses.
+//  GitHub returns either form-encoded or JSON depending on the Accept header;
+//  the client always sends `Accept: application/json` → JSON shape.
+//  `nonisolated` — DTOs are decoded in the URLSession callback context.
 //
 
 import Foundation
 
-/// Success response для `POST /login/oauth/access_token`.
-/// При `grant_type=urn:ietf:params:oauth:grant-type:device_code`:
-///   - long-lived OAuth App (token expiration OFF): `expiresIn`/`refreshToken` отсутствуют.
+/// Success response for `POST /login/oauth/access_token`.
+/// With `grant_type=urn:ietf:params:oauth:grant-type:device_code`:
+///   - long-lived OAuth App (token expiration OFF): `expiresIn`/`refreshToken` are absent.
 ///   - rotating OAuth App (token expiration ON): `expiresIn` ~28800 (8h),
-///     `refreshToken` присутствует, `refreshTokenExpiresIn` ~15724800 (6 месяцев).
+///     `refreshToken` is present, `refreshTokenExpiresIn` ~15724800 (6 months).
 public nonisolated struct GitHubTokenResponse: Decodable, Sendable {
     public let accessToken: String
     public let tokenType: String
@@ -33,15 +33,15 @@ public nonisolated struct GitHubTokenResponse: Decodable, Sendable {
     }
 }
 
-/// Error response для `/login/oauth/access_token` (RFC 6749 §5.2 +
+/// Error response for `/login/oauth/access_token` (RFC 6749 §5.2 +
 /// RFC 8628 §3.5 device-flow specific codes).
-/// Codable с обоими `error` и `error_description`; UI показывает description.
+/// Codable with both `error` and `error_description`; the UI shows the description.
 ///
 /// Device flow codes (RFC 8628):
-///   - `authorization_pending` — юзер ещё не авторизовал, продолжаем polling.
-///   - `slow_down` — увеличить interval на 5s.
-///   - `expired_token` — device_code истёк (>15 min), нужен restart.
-///   - `access_denied` — юзер отклонил.
+///   - `authorization_pending` — the user has not authorized yet, keep polling.
+///   - `slow_down` — increase the interval by 5s.
+///   - `expired_token` — device_code expired (>15 min), restart needed.
+///   - `access_denied` — the user declined.
 public nonisolated struct GitHubTokenError: Decodable, Sendable {
     public let error: String
     public let errorDescription: String?
@@ -54,19 +54,19 @@ public nonisolated struct GitHubTokenError: Decodable, Sendable {
     }
 }
 
-/// Response для `POST /login/device/code` — initial device code request.
+/// Response for `POST /login/device/code` — initial device code request.
 public nonisolated struct GitHubDeviceCodeResponse: Decodable, Sendable {
-    /// Long random string — отправляется на `/login/oauth/access_token` polling'ом.
+    /// Long random string — sent to `/login/oauth/access_token` while polling.
     public let deviceCode: String
-    /// Short human-readable code (e.g. "WDJB-MJHT") — юзер вводит на verification_uri.
+    /// Short human-readable code (e.g. "WDJB-MJHT") — the user enters it on verification_uri.
     public let userCode: String
-    /// URL куда юзер идёт, обычно `https://github.com/login/device`.
+    /// URL the user goes to, usually `https://github.com/login/device`.
     public let verificationURI: String
-    /// Полный URL с pre-filled user_code (если сервер поддерживает).
+    /// Full URL with a pre-filled user_code (if the server supports it).
     public let verificationURIComplete: String?
-    /// Время жизни device_code в секундах (GitHub: 900 = 15 min).
+    /// device_code lifetime in seconds (GitHub: 900 = 15 min).
     public let expiresIn: Int
-    /// Минимальный интервал polling'а в секундах (GitHub: 5).
+    /// Minimum polling interval in seconds (GitHub: 5).
     public let interval: Int
 
     enum CodingKeys: String, CodingKey {
@@ -79,7 +79,7 @@ public nonisolated struct GitHubDeviceCodeResponse: Decodable, Sendable {
     }
 }
 
-/// `GET /user` viewer identity response. Минимальный subset полей.
+/// `GET /user` viewer identity response. Minimal subset of fields.
 public nonisolated struct GitHubViewerResponse: Decodable, Sendable {
     public let id: Int
     public let login: String

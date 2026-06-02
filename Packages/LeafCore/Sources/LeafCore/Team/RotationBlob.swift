@@ -6,12 +6,12 @@ import Foundation
 /// `[ ver:1B | prior_keyID:16B | new_keyID:16B | recipient_pubkey:32B | nonce:12B | ciphertext | tag:16B ]`.
 ///
 /// Public envelope shape — whitepaper presence-relay.md §key rotation flow.
-/// AAD construction / JSON plaintext shape / nonce gen — moat в
+/// AAD construction / JSON plaintext shape / nonce gen — moat in
 /// `LeafCorePrivate/Prod/Crypto/`.
 ///
-/// `ver = 0x03` distinguishes от envelope (0x01) и invite (0x02). Domain
-/// separation enforced на двух independent layers — version byte +
-/// distinct HKDF info string (constant — moat в `LeafCorePrivate`).
+/// `ver = 0x03` distinguishes it from envelope (0x01) and invite (0x02). Domain
+/// separation enforced at two independent layers — version byte +
+/// distinct HKDF info string (constant — moat in `LeafCorePrivate`).
 public struct RotationBlob: Sendable, Hashable {
     public let bytes: Data
     public init(bytes: Data) { self.bytes = bytes }
@@ -19,11 +19,11 @@ public struct RotationBlob: Sendable, Hashable {
 
 /// Plaintext header parse result. No crypto.
 ///
-/// Caller использует `recipientPubkey` + `newKeyID` чтобы derive wrapKey:
+/// Caller uses `recipientPubkey` + `newKeyID` to derive wrapKey:
 ///   - .rotation: `KeyAgreement.sharedSecret(privateKey: peer_priv, peerPublicKeyHex: admin_pub)`
 ///                → `RotationKDF.deriveWrapKey(sharedSecret:, newKeyID:)` → `wrapKey`
 ///   - .tombstone: `wrapKey = SymmetricKey(data: priorTeamKey)` (raw 32B,
-///                 shared между всеми team members до rotation)
+///                 shared among all team members prior to rotation)
 public struct RotationBlobHeader: Sendable, Hashable {
     public let version: UInt8
     public let priorKeyID: Data       // 16B raw UUID bytes
@@ -37,7 +37,7 @@ public struct RotationBlobHeader: Sendable, Hashable {
         self.recipientPubkey = recipientPubkey
     }
 
-    /// `0x03` для rotation blob (envelope = `0x01`, invite = `0x02`).
+    /// `0x03` for rotation blob (envelope = `0x01`, invite = `0x02`).
     public static let currentVersion: UInt8 = 3
     public static let priorKeyIDSize: Int = 16
     public static let newKeyIDSize: Int = 16
@@ -53,8 +53,8 @@ public struct RotationBlobHeader: Sendable, Hashable {
     /// 65 + 12 + 16 — fixed overhead (excludes plaintext bytes).
     public static let fixedOverhead: Int = 93
 
-    /// Read-only parse первых 65 байт. No crypto.
-    /// Throws `LeafError.rotationBlobMalformed` если bytes < 65 / version != currentVersion.
+    /// Read-only parse of the first 65 bytes. No crypto.
+    /// Throws `LeafError.rotationBlobMalformed` if bytes < 65 / version != currentVersion.
     public static func peek(from blob: RotationBlob) throws -> RotationBlobHeader {
         let bytes = blob.bytes
         guard bytes.count >= prefixSize else {

@@ -2,21 +2,21 @@ import Foundation
 import LeafCore
 import LeafMCPProtocol
 
-/// Phase 4.3 — MCP-tool: вернуть GitHub events activity за период (today /
-/// yesterday / last_7_days). Reads same encrypted DB что MenuBar app —
-/// single source of truth. 6-й tool из 8 запланированных в whitepaper.
+/// Phase 4.3 — MCP-tool: return GitHub events activity for a period (today /
+/// yesterday / last_7_days). Reads same encrypted DB as MenuBar app —
+/// single source of truth. 6th tool out of 8 planned in the whitepaper.
 ///
-/// Output payload (versioned `version: 1` через `ToolResponseBuilder`):
-///   - `period`, `from`, `to` — окно
-///   - `eventsCount` — total events с `signal_type='action'` AND `payload.source='github'`
+/// Output payload (versioned `version: 1` via `ToolResponseBuilder`):
+///   - `period`, `from`, `to` — window
+///   - `eventsCount` — total events with `signal_type='action'` AND `payload.source='github'`
 ///   - `byRepo[]` — `{repo, count}`, top-5 by count DESC
 ///   - `byEventKind[]` — `{eventKind, count}`, top-5 by count DESC
 ///   - `prCycleStats` (Phase 4.6.A.1, additive optional) — `{medianSeconds, avgSeconds,
-///     maxSeconds, sampleCount}` для `gh_pr_merged` events; отсутствует если sampleCount=0
-///   - `reviewDelayStats` (Phase 4.6.A.1, additive optional) — то же для `gh_pr_review_submitted`
+///     maxSeconds, sampleCount}` for `gh_pr_merged` events; absent if sampleCount=0
+///   - `reviewDelayStats` (Phase 4.6.A.1, additive optional) — same for `gh_pr_review_submitted`
 ///
-/// Metadata only — PR/issue bodies, comments, file diffs никогда не покидают
-/// устройство (ADR-010 won't-list, enforced на parser-level в ProdGitHubAPIProvider).
+/// Metadata only — PR/issue bodies, comments, file diffs never leave
+/// the device (ADR-010 won't-list, enforced at parser-level in ProdGitHubAPIProvider).
 struct GetGitHubActivityTool: ToolExecutor {
     let dbURL: URL
     let dbConfig: DatabaseConfig
@@ -102,7 +102,7 @@ struct GetGitHubActivityTool: ToolExecutor {
         if let wow = try? insights.weekOverWeekDelta() {
             payload["wowDelta"] = wow
         }
-        // Phase 4.6.C.3 — commit streak (consecutive days с ≥1 commit pushed;
+        // Phase 4.6.C.3 — commit streak (consecutive days with ≥1 commit pushed;
         // independent of period — global current streak ending today/yesterday).
         if let streak = breakdown.commitStreak, streak > 0 {
             payload["commitStreak"] = streak

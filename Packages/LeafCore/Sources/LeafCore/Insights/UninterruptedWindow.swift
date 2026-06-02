@@ -1,20 +1,20 @@
 import Foundation
 
-/// Phase 4.6.C.2 — самое длинное окно внутри `period` без events из Layer B
-/// integrations (Linear/GitHub/Slack). Proxy для "deep async work session" —
-/// время непрерывной работы без notification-interruption из tracked интеграций.
+/// Phase 4.6.C.2 — the longest window inside `period` with no events from Layer B
+/// integrations (Linear/GitHub/Slack). A proxy for a "deep async work session" —
+/// the span of uninterrupted work with no notification-interruption from tracked integrations.
 ///
-/// Отличается от `FocusSession` (тот про app-switches/idle на уровне macOS):
-/// здесь только integration silence. Окно может ограничиваться bounds period'а
-/// (gap от period.start до first event, или от last event до period.end —
-/// edge case "events нет вовсе" → window = весь period).
+/// Differs from `FocusSession` (which is about app-switches/idle at the macOS level):
+/// here it's only integration silence. The window can be bounded by the period bounds
+/// (gap from period.start to the first event, or from the last event to period.end —
+/// edge case "no events at all" → window = the entire period).
 public struct UninterruptedWindow: Sendable, Hashable, Codable {
     public let start: Date
     public let end: Date
     public let durationSeconds: Int
-    /// Источники с ≥1 event в period (не "connected sources"). Honest signal:
-    /// если sourcesActiveInPeriod=["slack"], gap считается только между Slack
-    /// events — Linear/GitHub либо disconnected, либо silent весь период.
+    /// Sources with ≥1 event in the period (not "connected sources"). Honest signal:
+    /// if sourcesActiveInPeriod=["slack"], the gap is computed only between Slack
+    /// events — Linear/GitHub are either disconnected or silent for the entire period.
     public let sourcesActiveInPeriod: [String]
 
     public init(

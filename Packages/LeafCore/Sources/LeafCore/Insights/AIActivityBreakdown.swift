@@ -1,24 +1,24 @@
 import Foundation
 
-/// Phase 2.3 — детальный AI-collaboration срез за период. UI потребляет
-/// `ratio` (через `InsightsSnapshot.aiRatio`); MCP `get_ai_activity` отдаёт
-/// весь breakdown как versioned JSON. `aiRatio()` в `DerivedInsights` —
-/// делегирует в `aiActivityBreakdown(period:).ratio` (single source of truth).
+/// Phase 2.3 — detailed AI-collaboration breakdown for a period. The UI consumes
+/// `ratio` (via `InsightsSnapshot.aiRatio`); MCP `get_ai_activity` returns
+/// the full breakdown as versioned JSON. `aiRatio()` in `DerivedInsights`
+/// delegates to `aiActivityBreakdown(period:).ratio` (single source of truth).
 ///
 /// `ratio` — per-minute bucket union: minutes_with_ai / minutes_with_ai_or_attention.
-/// Всегда `0...1`; `0` означает либо "AI off", либо "никакой активности вообще".
+/// Always `0...1`; `0` means either "AI off" or "no activity at all".
 public struct AIActivityBreakdown: Sendable, Hashable {
-    /// `0..1`. Доля минут с ≥1 aiCollaboration event от union с attention.
+    /// `0..1`. Fraction of minutes with ≥1 aiCollaboration event out of the union with attention.
     public let ratio: Double
-    /// Сумма distinct AI-active minutes × 60.
+    /// Sum of distinct AI-active minutes × 60.
     public let aiActiveSeconds: TimeInterval
-    /// Union AI ∪ attention minutes × 60. `0` если в окне нет ни одной активной минуты.
+    /// Union AI ∪ attention minutes × 60. `0` if the window has no active minute at all.
     public let totalActiveSeconds: TimeInterval
-    /// Distinct `session_id` (Claude Code session UUID) в окне.
+    /// Distinct `session_id` (Claude Code session UUID) in the window.
     public let sessionCount: Int
-    /// Top-N tools по count. Sorted desc; tiebreak — alphabetical.
+    /// Top-N tools by count. Sorted desc; tiebreak — alphabetical.
     public let topTools: [ToolCountEntry]
-    /// Top-N projects по AI-active seconds. Key — `cwd` из payload.
+    /// Top-N projects by AI-active seconds. Key — `cwd` from the payload.
     public let topProjects: [ProjectTimeEntry]
 
     public init(

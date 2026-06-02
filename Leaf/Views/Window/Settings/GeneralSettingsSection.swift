@@ -2,7 +2,7 @@
 //  GeneralSettingsSection.swift
 //  Track 2 / D4 — split into two sibling views so WindowSettingsView can
 //  interleave them with FoldersSettings (Background → Folders → Updates →
-//  Privacy is the order юзер wants for cognitive flow). Both views read
+//  Privacy is the order the user wants for cognitive flow). Both views read
 //  from `LeafCore` services injected by the host.
 //
 //  Background-collection card collapses to a single toggle in the happy

@@ -3,7 +3,7 @@ import XCTest
 
 final class AttentionGranularityPolicyTests: XCTestCase {
     func testEmptyClassifier_anyBundle_isL1() {
-        // Empty classifier → всё .other → L1 (conservative default).
+        // Empty classifier → everything .other → L1 (conservative default).
         let policy = DefaultAttentionGranularityPolicy(classifier: EmptyAppCategoryClassifier())
         XCTAssertEqual(policy.maxGranularity(for: "com.apple.dt.Xcode"), .l1)
         XCTAssertEqual(policy.maxGranularity(for: "com.apple.Safari"), .l1)
@@ -41,8 +41,8 @@ final class AttentionGranularityPolicyTests: XCTestCase {
     }
 
     func testRawValuesAreStable() {
-        // External serialization (DB / config) полагается на raw int. Защита от
-        // случайного reorder enum cases.
+        // External serialization (DB / config) relies on the raw int. Guards against
+        // accidental reordering of enum cases.
         XCTAssertEqual(AttentionGranularityLevel.l1.rawValue, 1)
         XCTAssertEqual(AttentionGranularityLevel.l2.rawValue, 2)
         XCTAssertEqual(AttentionGranularityLevel.l3.rawValue, 3)

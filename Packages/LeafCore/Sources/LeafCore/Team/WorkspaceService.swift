@@ -129,7 +129,7 @@ public struct WorkspaceService: Sendable {
     /// Clears `workspaces.left_at_ms`. Used by `InviteAcceptService`'s
     /// rejoin path (existing left workspace receives a fresh invite —
     /// re-activate instead of creating a duplicate row). No-op if the
-    /// workspace is already active или missing.
+    /// workspace is already active or missing.
     public func rejoin(workspaceID: String) throws {
         try database.clearWorkspaceLeftAt(workspaceID: workspaceID)
     }
@@ -235,7 +235,7 @@ public struct WorkspaceService: Sendable {
         try await deleter.execute(workspaceID: workspaceID)
     }
 
-    /// Default `randomBytes` factory: `SecRandomCopyBytes` под the hood.
+    /// Default `randomBytes` factory: `SecRandomCopyBytes` under the hood.
     /// Mirrors `OrgService.secureRandom`.
     public static func secureRandom(_ count: Int) throws -> Data {
         var bytes = Data(count: count)

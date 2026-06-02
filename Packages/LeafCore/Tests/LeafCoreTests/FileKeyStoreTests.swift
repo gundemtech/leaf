@@ -39,7 +39,7 @@ final class FileKeyStoreTests: XCTestCase {
 
         let attrs = try FileManager.default.attributesOfItem(atPath: keyURL.path)
         let perms = attrs[.posixPermissions] as? NSNumber
-        XCTAssertEqual(perms?.int16Value, Int16(0o600), "db.key должен быть mode 0600")
+        XCTAssertEqual(perms?.int16Value, Int16(0o600), "db.key must be mode 0600")
     }
 
     func testDeleteRemovesFile() throws {
@@ -51,13 +51,13 @@ final class FileKeyStoreTests: XCTestCase {
     }
 
     func testDeleteIsIdempotentWhenFileMissing() throws {
-        // delete() на несуществующем файле не должен бросать (test/dev tearDown convenience).
+        // delete() on a nonexistent file must not throw (test/dev tearDown convenience).
         XCTAssertNoThrow(try FileKeyStore.delete(at: keyURL))
     }
 
     func testCorruptedFileShorterThan32BytesThrows() throws {
-        // Defensive contract: file existed но не 32 bytes → throw, не silently regenerate
-        // (это мог быть partial-write от crashed process; auto-recovery маскирует bigger problem).
+        // Defensive contract: file existed but not 32 bytes → throw, don't silently regenerate
+        // (it could be a partial write from a crashed process; auto-recovery masks a bigger problem).
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         let truncated = Data(repeating: 0xAB, count: 16)
         try truncated.write(to: keyURL)
@@ -71,11 +71,11 @@ final class FileKeyStoreTests: XCTestCase {
     }
 
     func testConcurrentReadersConverge() async throws {
-        // Production model (Phase 3.4.5): main app eager-init'ит файл В `LeafApp.init()`
-        // ДО `agent.register()`. Helpers (LeafAgent/LeafMCP) гарантированно стартуют после
-        // и читают тот же on-disk файл. Concurrent writes на свежий path в prod не бывает.
+        // Production model (Phase 3.4.5): the main app eager-inits the file IN `LeafApp.init()`
+        // BEFORE `agent.register()`. Helpers (LeafAgent/LeafMCP) are guaranteed to start afterwards
+        // and read the same on-disk file. Concurrent writes to a fresh path never happen in prod.
         //
-        // Тест: pre-write файл, потом 2 параллельных fetchOrCreate'а должны прочитать те же bytes.
+        // Test: pre-write the file, then 2 parallel fetchOrCreate calls must read the same bytes.
         for _ in 0..<10 {
             let url = tempDir.appendingPathComponent("read-\(UUID().uuidString).key")
             let seed = try FileKeyStore.fetchOrCreate(at: url)  // eager-init equivalent
@@ -84,13 +84,13 @@ final class FileKeyStoreTests: XCTestCase {
             async let b = Task.detached(priority: .userInitiated) { try FileKeyStore.fetchOrCreate(at: url) }.value
 
             let (keyA, keyB) = try await (a, b)
-            XCTAssertEqual(keyA, seed, "Concurrent reader A должен вернуть seed bytes")
-            XCTAssertEqual(keyB, seed, "Concurrent reader B должен вернуть seed bytes")
+            XCTAssertEqual(keyA, seed, "Concurrent reader A must return the seed bytes")
+            XCTAssertEqual(keyB, seed, "Concurrent reader B must return the seed bytes")
             XCTAssertEqual(keyA.count, 32)
         }
     }
 
-    /// Bridge migration с legacy Keychain item. Skip on CI — требует real Keychain.
+    /// Bridge migration from a legacy Keychain item. Skip on CI — requires a real Keychain.
     func testMigrationFromKeychain() throws {
         try XCTSkipIf(
             ProcessInfo.processInfo.environment["CI"] == "true",
@@ -111,26 +111,26 @@ final class FileKeyStoreTests: XCTestCase {
             try? KeychainKeyStore.delete(accessGroup: testAccessGroup, service: testService, account: testAccount)
         }
 
-        // Migration path требует чтобы FileKeyStore вызвал KeychainKeyStore.fetchOnly
-        // с дефолтными service/account. На реальном launchpath так и есть, но в этом
-        // тесте custom service/account → миграция не triggered. Поэтому вместо проверки
-        // через FileKeyStore.fetchOrCreate API проверяем contracts отдельно:
-        // 1. KeychainKeyStore.fetchOnly возвращает existing key (с тем же service/account).
-        // 2. FileKeyStore сам путь read→write→read консистентен.
+        // The migration path requires FileKeyStore to call KeychainKeyStore.fetchOnly
+        // with the default service/account. On the real launch path that's the case, but in this
+        // test the custom service/account → migration is not triggered. So instead of verifying
+        // through the FileKeyStore.fetchOrCreate API, we check the contracts separately:
+        // 1. KeychainKeyStore.fetchOnly returns the existing key (with the same service/account).
+        // 2. FileKeyStore's own read→write→read path is consistent.
 
         let fetched = try KeychainKeyStore.fetchOnly(
             accessGroup: testAccessGroup,
             service: testService,
             account: testAccount
         )
-        XCTAssertEqual(fetched, legacyKey, "fetchOnly должен возвращать тот же key что fetchOrCreate")
+        XCTAssertEqual(fetched, legacyKey, "fetchOnly must return the same key as fetchOrCreate")
 
-        // Записать legacyKey в file через FileKeyStore approximation (через writeAtomic не публичен —
-        // emulate через прямой Data.write + read через fetchOrCreate с file-exists branch).
+        // Write legacyKey to the file via a FileKeyStore approximation (writeAtomic isn't public —
+        // emulate via a direct Data.write + read via fetchOrCreate's file-exists branch).
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         try legacyKey.write(to: keyURL)
 
         let viaFileStore = try FileKeyStore.fetchOrCreate(at: keyURL)
-        XCTAssertEqual(viaFileStore, legacyKey, "FileKeyStore читает существующий file верно")
+        XCTAssertEqual(viaFileStore, legacyKey, "FileKeyStore reads an existing file correctly")
     }
 }

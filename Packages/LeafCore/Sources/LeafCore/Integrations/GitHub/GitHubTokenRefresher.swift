@@ -2,13 +2,13 @@
 //  GitHubTokenRefresher.swift
 //  LeafCore
 //
-//  Phase 4.3 — refresh helper для GitHub OAuth Apps (Device Flow).
-//  Поддерживает оба режима GitHub OAuth App config:
+//  Phase 4.3 — refresh helper for GitHub OAuth Apps (Device Flow).
+//  Supports both modes of GitHub OAuth App config:
 //  - Long-lived (token expiration OFF): expiresAt=nil, refreshToken=nil → no-op refresh.
 //  - Rotating (token expiration ON): expiresAt~8h, refreshToken~6mo → POST /login/oauth/access_token
-//    с grant_type=refresh_token; на invalid_grant → surface "Reconnect needed" + delete row.
+//    with grant_type=refresh_token; on invalid_grant → surface "Reconnect needed" + delete row.
 //
-//  GitHubCollector в Agent process вызывает `refreshIfNeeded` на каждом polling tick'е.
+//  GitHubCollector in the Agent process calls `refreshIfNeeded` on every polling tick.
 //
 
 import Foundation
@@ -26,10 +26,10 @@ public enum GitHubTokenRefresherError: Error, Equatable, Sendable {
 
 public nonisolated struct GitHubTokenRefresher: Sendable {
     public let database: Database
-    /// Public OAuth client_id из Info.plist (main app) или AgentThresholds (Agent).
+    /// Public OAuth client_id from Info.plist (main app) or AgentThresholds (Agent).
     public let clientID: String
-    /// Buffer перед `expires_at` в секундах. Срабатывает заранее, чтобы избежать race
-    /// с одновременным polling call'ом, ушедшим с просроченным token'ом. 5 min на 8h TTL ≈ 1%.
+    /// Buffer before `expires_at` in seconds. Fires early to avoid a race
+    /// with a concurrent polling call that went out with an expired token. 5 min on an 8h TTL ≈ 1%.
     public let earlyRefreshSeconds: TimeInterval
     /// Non-caching ephemeral session (Phase 5) — token/refresh responses never touch
     /// a disk cache. Injectable for tests (URLProtocol stub).
@@ -47,8 +47,8 @@ public nonisolated struct GitHubTokenRefresher: Sendable {
         self.urlSession = urlSession
     }
 
-    /// Refresh access_token если оставшаяся жизнь меньше `earlyRefreshSeconds`.
-    /// Long-lived (expiresAt=nil) → возврат existing record без HTTP call.
+    /// Refresh access_token if the remaining lifetime is less than `earlyRefreshSeconds`.
+    /// Long-lived (expiresAt=nil) → return the existing record without an HTTP call.
     public func refreshIfNeeded(now: Date = Date()) async throws -> IntegrationRecord {
         guard let current = try database.readIntegration(provider: .github) else {
             throw GitHubTokenRefresherError.notConnected
@@ -59,14 +59,14 @@ public nonisolated struct GitHubTokenRefresher: Sendable {
                 return current
             }
         } else {
-            // Long-lived OAuth App — token expiration OFF, refresh нечего делать.
+            // Long-lived OAuth App — token expiration OFF, nothing to refresh.
             return current
         }
         return try await forceRefresh(current: current, now: now)
     }
 
-    /// Безусловный refresh — вызывается на 401 от API (stale token, может быть
-    /// revoked серверной стороной до natural expiry).
+    /// Unconditional refresh — called on a 401 from the API (stale token, may have been
+    /// revoked server-side before natural expiry).
     public func forceRefresh(now: Date = Date()) async throws -> IntegrationRecord {
         guard let current = try database.readIntegration(provider: .github) else {
             throw GitHubTokenRefresherError.notConnected
@@ -124,10 +124,10 @@ public nonisolated struct GitHubTokenRefresher: Sendable {
             return updated
         }
 
-        // RFC 6749 §5.2 — `invalid_grant` означает refresh_token revoked / expired.
-        // GitHub возвращает 200 с error body для большинства cases; некоторые edge — 401.
+        // RFC 6749 §5.2 — `invalid_grant` means the refresh_token was revoked / expired.
+        // GitHub returns 200 with an error body for most cases; some edge cases — 401.
         // Surface flow: deleteIntegration + UserDefaults flag + DistributedNotification →
-        // ConnectionsSettings рендерит orange "Reconnect needed" warning.
+        // ConnectionsSettings renders the orange "Reconnect needed" warning.
         let message: String
         if let errorPayload = try? JSONDecoder().decode(GitHubTokenError.self, from: data) {
             message = errorPayload.errorDescription ?? errorPayload.error
@@ -144,9 +144,9 @@ public nonisolated struct GitHubTokenRefresher: Sendable {
     }
 
     /// Phase 4.3 — write UserDefaults flag + post DistributedNotification.
-    /// Cross-process: Agent (где crash'нул refresh) и main app (UI) видят один UserDefaults
-    /// suite через kCFPreferencesCurrentApplication. Тот же suite что у Linear,
-    /// distinct ключ `github.refreshDenied`.
+    /// Cross-process: the Agent (where refresh crashed) and the main app (UI) see one UserDefaults
+    /// suite via kCFPreferencesCurrentApplication. The same suite as Linear,
+    /// distinct key `github.refreshDenied`.
     private func surfaceRefreshDenied() {
         UserDefaults(suiteName: GitHubOAuthEndpoints.userDefaultsSuite)?
             .set(true, forKey: GitHubOAuthEndpoints.refreshDeniedFlagKey)

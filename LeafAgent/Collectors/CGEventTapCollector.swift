@@ -9,24 +9,24 @@ import LeafCore
 /// Phase Track-4 S3 — central intensity collector.
 ///
 /// **Counter-only.** Callback NEVER reads `.keycode`, `.characters`,
-/// `.modifierFlags`, `.location`, `.unicodeStringValue` — increments один из
-/// двух bucket counters (`keystrokes` или `mouseMoves`) на основе только
-/// `CGEventType` discriminator (ADR-010 Won't-list; walkback в T12).
+/// `.modifierFlags`, `.location`, `.unicodeStringValue` — increments one of
+/// two bucket counters (`keystrokes` or `mouseMoves`) based solely on the
+/// `CGEventType` discriminator (ADR-010 Won't-list; walkback in T12).
 ///
 /// **System-state gated.** Callback drops events while `SystemStateCollector`
-/// reports `isLocked` или `isSleeping` (S1 dependency). Minute boundary
+/// reports `isLocked` or `isSleeping` (S1 dependency). Minute boundary
 /// flush asks the same flags @MainActor; locked/sleeping buckets emit
-/// `intensity_bucket_dropped` event без `foreground_app`.
+/// an `intensity_bucket_dropped` event without `foreground_app`.
 ///
 /// **Auto-restart.** Tap recovers from `.tapDisabledByTimeout` /
 /// `.tapDisabledByUserInput` via `CGEvent.tapEnable(enable: true)` —
-/// без metrics emit (avoid noise log).
+/// without a metrics emit (avoid noise log).
 ///
-/// Concurrency: `@unchecked Sendable`. Callback runs на CFRunLoop thread
-/// (главный главного thread'а после install). Counter state guarded by
-/// `OSAllocatedUnfairLock` — атомарные increments из C-callback +
-/// атомарный snapshot+reset из minute-boundary flush loop. Flush hops
-/// в MainActor для system-state reads + writer.enqueue.
+/// Concurrency: `@unchecked Sendable`. Callback runs on the CFRunLoop thread
+/// (the main thread after install). Counter state is guarded by
+/// `OSAllocatedUnfairLock` — atomic increments from the C-callback +
+/// atomic snapshot+reset from the minute-boundary flush loop. Flush hops
+/// to MainActor for system-state reads + writer.enqueue.
 final class CGEventTapCollector: @unchecked Sendable {
     private struct CounterState {
         var keystrokes: UInt32 = 0
@@ -273,7 +273,7 @@ final class CGEventTapCollector: @unchecked Sendable {
 
             // UPSERT into intensity_aggregates — idempotent on PK
             // minute_bucket_ms. `try?` — DB unavailable shouldn't block flush
-            // loop; next tick retries on новых counters.
+            // loop; next tick retries on fresh counters.
             try? database.upsertIntensityAggregate(
                 minuteBucketMs: snapshot.minuteBucketMs,
                 keystrokes: Int(snapshot.keystrokes),
@@ -282,7 +282,7 @@ final class CGEventTapCollector: @unchecked Sendable {
                 foregroundApp: snapshot.foregroundApp
             )
 
-            // RawEvent emit — skip пустых active buckets (no signal).
+            // RawEvent emit — skip empty active buckets (no signal).
             if snapshot.droppedReason != nil ||
                snapshot.keystrokes > 0 || snapshot.mouseMoves > 0 || snapshot.appSwitches > 0 {
                 let payload = snapshot.toRawEventPayload()

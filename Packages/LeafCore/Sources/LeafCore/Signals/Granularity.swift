@@ -1,7 +1,7 @@
 import Foundation
 
-/// Уровень детализации того, что команда может увидеть о юзере.
-/// L6 (content) отсутствует намеренно — запрещено навсегда (ADR Won't-list).
+/// Level of detail the team is allowed to see about a user.
+/// L6 (content) is intentionally absent — permanently forbidden (ADR Won't-list).
 public enum Granularity: Int, Codable, Sendable, CaseIterable, Comparable {
     case l1 = 1
     case l2 = 2

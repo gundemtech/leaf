@@ -9,7 +9,7 @@ import GRDB
 ///
 /// `blob` BLOB column stores the full encoded `RotationBlob` bytes — resume is
 /// pure HTTP retry without re-deriving crypto (~270B × N peers ≈ 13 KB per event,
-/// trivial). `kind` constrained to `'rotation'` или `'tombstone'`.
+/// trivial). `kind` constrained to `'rotation'` or `'tombstone'`.
 ///
 /// Partial index `rotation_outbox_unposted` — query "drain unposted" cheap.
 public extension DatabaseMigrator {

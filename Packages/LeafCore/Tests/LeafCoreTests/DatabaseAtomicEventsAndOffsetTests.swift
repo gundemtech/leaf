@@ -1,6 +1,6 @@
-// Phase 2.3 — atomic write API (events insert + offset UPSERT в одной транзакции).
-// Это primary write-path для tail-read collector'ов: либо обе записи commit,
-// либо ни одной (Agent crash посреди flush → no duplicates + no lost-but-marked).
+// Phase 2.3 — atomic write API (events insert + offset UPSERT in a single transaction).
+// This is the primary write-path for tail-read collectors: either both writes commit,
+// or neither (Agent crash mid-flush → no duplicates + no lost-but-marked).
 
 import XCTest
 @testable import LeafCore
@@ -20,7 +20,7 @@ final class DatabaseAtomicEventsAndOffsetTests: XCTestCase {
         try? FileManager.default.removeItem(at: tempDir)
     }
 
-    /// Combined write: 5 aiCollaboration events + offset UPSERT → оба видны после.
+    /// Combined write: 5 aiCollaboration events + offset UPSERT → both visible afterward.
     /// Round-trip: count events == 5, offset == provided.
     func testAtomicWrite() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
@@ -50,7 +50,7 @@ final class DatabaseAtomicEventsAndOffsetTests: XCTestCase {
 
         try db.writeEventsAndOffset(events, offset: offset)
 
-        // Events: ровно 5, все signal_type=aiCollaboration.
+        // Events: exactly 5, all signal_type=aiCollaboration.
         let range = DateInterval(
             start: base.addingTimeInterval(-10),
             end: base.addingTimeInterval(86_400)
@@ -69,9 +69,9 @@ final class DatabaseAtomicEventsAndOffsetTests: XCTestCase {
         XCTAssertEqual(stored?.inode, 555)
     }
 
-    /// Edge case: empty events array + offset → только UPSERT, не throws.
-    /// Используется в bootstrap branch (skip-backward) когда файл существует
-    /// но мы не читаем его исторический контент.
+    /// Edge case: empty events array + offset → UPSERT only, does not throw.
+    /// Used in the bootstrap branch (skip-backward) when the file exists
+    /// but we are not reading its historical content.
     func testEmptyEventsWithOffsetIsAllowed() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -93,7 +93,7 @@ final class DatabaseAtomicEventsAndOffsetTests: XCTestCase {
         )
         XCTAssertEqual(stored?.byteOffset, 50_000)
 
-        // Никаких events не записалось.
+        // No events were written.
         let allEvents = try db.events(in: DateInterval(
             start: .distantPast,
             end: .distantFuture

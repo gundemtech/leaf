@@ -2,22 +2,22 @@
 //  SlackTokenRefresher.swift
 //  LeafCore
 //
-//  Phase 4.4 B3 — refresh helper для Slack OAuth (PKCE / public client).
-//  Mirror'ит Linear/GitHub refresher'ы со Slack-specific deviations:
-//   - `oauth.v2.access` возвращает 200 даже для ошибок; ok=false → читаем
-//     `error` из тела (invalid_grant / token_revoked / etc).
-//   - Public client: refresh-запрос идёт без `client_secret` (RFC 6749 §3.2.1
-//     для public clients secret не требуется; Slack distributed/public app
-//     должен быть зарегистрирован соответственно).
-//   - Refresh-response кладёт новый xoxe.xoxp- user-token на TOP LEVEL
-//     `access_token` + top-level `refresh_token` + `expires_in`. В
-//     отличие от initial code exchange, где user-token в `authed_user`.
-//   - Long-lived case: если token rotation выключен на app side, Slack
-//     возвращает initial xoxp- без `expires_in` → record.expiresAt=nil →
-//     refresher no-op'ит без HTTP-вызова.
+//  Phase 4.4 B3 — refresh helper for Slack OAuth (PKCE / public client).
+//  Mirrors the Linear/GitHub refreshers with Slack-specific deviations:
+//   - `oauth.v2.access` returns 200 even for errors; ok=false → read
+//     `error` from the body (invalid_grant / token_revoked / etc).
+//   - Public client: the refresh request goes without `client_secret` (RFC 6749 §3.2.1
+//     — for public clients no secret is required; a Slack distributed/public app
+//     must be registered accordingly).
+//   - The refresh response puts the new xoxe.xoxp- user-token at the TOP LEVEL
+//     `access_token` + top-level `refresh_token` + `expires_in`. Unlike the
+//     initial code exchange, where the user-token is in `authed_user`.
+//   - Long-lived case: if token rotation is off on the app side, Slack
+//     returns the initial xoxp- without `expires_in` → record.expiresAt=nil →
+//     the refresher is a no-op without an HTTP call.
 //
-//  SlackCollector в Agent process будет вызывать `refreshIfNeeded` на
-//  каждом polling tick'е (Phase 4.4 B6).
+//  SlackCollector in the Agent process will call `refreshIfNeeded` on
+//  every polling tick (Phase 4.4 B6).
 //
 
 import Foundation
@@ -35,15 +35,15 @@ public enum SlackTokenRefresherError: Error, Equatable, Sendable {
 
 public nonisolated struct SlackTokenRefresher: Sendable {
     public let database: Database
-    /// Public OAuth client_id из Info.plist (main app) или AgentThresholds (Agent).
+    /// Public OAuth client_id from Info.plist (main app) or AgentThresholds (Agent).
     public let clientID: String
-    /// Buffer перед `expires_at` в секундах. Срабатывает заранее, чтобы избежать race
-    /// с одновременным polling call'ом, ушедшим с просроченным token'ом. 5 min на
-    /// 12h Slack TTL ≈ 0.7%.
+    /// Buffer before `expires_at` in seconds. Fires early to avoid a race
+    /// with a concurrent polling call that went out with an expired token. 5 min on
+    /// a 12h Slack TTL ≈ 0.7%.
     public let earlyRefreshSeconds: TimeInterval
-    /// URLSession DI — production = `.shared`, тесты подсовывают session с
-    /// custom URLProtocol. Кастомность только в URLSessionConfiguration; DTO/
-    /// и поведение идентичны.
+    /// URLSession DI — production = `.shared`, tests slip in a session with
+    /// a custom URLProtocol. The customization is only in URLSessionConfiguration;
+    /// the DTOs and behavior are identical.
     public let urlSession: URLSession
 
     public init(
@@ -58,9 +58,9 @@ public nonisolated struct SlackTokenRefresher: Sendable {
         self.urlSession = urlSession
     }
 
-    /// Refresh access_token если оставшаяся жизнь меньше `earlyRefreshSeconds`.
-    /// Long-lived (expiresAt=nil) → возврат existing record без HTTP-вызова —
-    /// Slack возвращает `expires_in` только когда token rotation включён на app side.
+    /// Refresh access_token if the remaining lifetime is less than `earlyRefreshSeconds`.
+    /// Long-lived (expiresAt=nil) → return the existing record without an HTTP call —
+    /// Slack returns `expires_in` only when token rotation is enabled on the app side.
     public func refreshIfNeeded(now: Date = Date()) async throws -> IntegrationRecord {
         guard let current = try database.readIntegration(provider: .slack) else {
             throw SlackTokenRefresherError.notConnected
@@ -71,14 +71,14 @@ public nonisolated struct SlackTokenRefresher: Sendable {
                 return current
             }
         } else {
-            // Token rotation OFF на app side → long-lived xoxp-, refresh нечего делать.
+            // Token rotation OFF on the app side → long-lived xoxp-, nothing to refresh.
             return current
         }
         return try await forceRefresh(current: current, now: now)
     }
 
-    /// Безусловный refresh — вызывается на 401-эквивалент (ok=false с invalid_auth)
-    /// от API: серверная сторона могла revok'нуть токен до natural expiry.
+    /// Unconditional refresh — called on a 401-equivalent (ok=false with invalid_auth)
+    /// from the API: the server side may have revoked the token before its natural expiry.
     public func forceRefresh(now: Date = Date()) async throws -> IntegrationRecord {
         guard let current = try database.readIntegration(provider: .slack) else {
             throw SlackTokenRefresherError.notConnected
@@ -114,7 +114,7 @@ public nonisolated struct SlackTokenRefresher: Sendable {
             throw SlackTokenRefresherError.network("non-HTTP response")
         }
         guard http.statusCode == 200 else {
-            // Slack 99% возвращает 200 с ok=false; не-200 = транспорт/инфра.
+            // Slack 99% returns 200 with ok=false; non-200 = transport/infra.
             throw SlackTokenRefresherError.network("HTTP \(http.statusCode)")
         }
 
@@ -126,9 +126,9 @@ public nonisolated struct SlackTokenRefresher: Sendable {
         }
 
         if decoded.ok {
-            // Refresh-flow кладёт новый user-token на TOP LEVEL — в отличие от
-            // initial exchange (там в `authed_user`). Fallback на authedUser —
-            // защита от случая когда Slack однажды поменяет shape (paranoid).
+            // The refresh flow puts the new user-token at the TOP LEVEL — unlike the
+            // initial exchange (where it's in `authed_user`). The fallback to authedUser
+            // guards against the case where Slack someday changes the shape (paranoid).
             let newAccessToken = decoded.accessToken
                 ?? decoded.authedUser?.accessToken
             guard let accessToken = newAccessToken, !accessToken.isEmpty else {
@@ -162,9 +162,9 @@ public nonisolated struct SlackTokenRefresher: Sendable {
             return updated
         }
 
-        // ok=false — провайдерская ошибка. Категоризируем: terminal (refresh-token
-        // мёртв навсегда → Reconnect needed) vs transient (network-ish, retry на
-        // следующем tick'е).
+        // ok=false — a provider error. Categorize: terminal (refresh-token
+        // dead forever → Reconnect needed) vs transient (network-ish, retry on
+        // the next tick).
         let code = decoded.error ?? "unknown_error"
         let terminalErrors: Set<String> = [
             "invalid_grant",
@@ -185,10 +185,10 @@ public nonisolated struct SlackTokenRefresher: Sendable {
     }
 
     /// Phase 4.4 — write UserDefaults flag + post DistributedNotification.
-    /// Cross-process: Agent (где crash'нул refresh) и main app (UI) видят один
-    /// UserDefaults suite через kCFPreferencesCurrentApplication.
-    /// `SlackOAuthService.reload()` читает флаг и переключает state в
-    /// `.reconnectNeeded` (B2 уже встроен этот path).
+    /// Cross-process: the Agent (where the refresh crashed) and the main app (UI) see one
+    /// UserDefaults suite via kCFPreferencesCurrentApplication.
+    /// `SlackOAuthService.reload()` reads the flag and switches state to
+    /// `.reconnectNeeded` (B2 already wired up this path).
     private func surfaceRefreshDenied() {
         UserDefaults(suiteName: SlackOAuthEndpoints.userDefaultsSuite)?
             .set(true, forKey: SlackOAuthEndpoints.refreshDeniedFlagKey)
@@ -206,7 +206,7 @@ public nonisolated struct SlackTokenRefresher: Sendable {
     }
 
     private func percentEncode(_ value: String) -> String {
-        // application/x-www-form-urlencoded: spaces — `+`, остальное — percent-escape unreserved.
+        // application/x-www-form-urlencoded: spaces — `+`, everything else — percent-escape unreserved.
         var allowed = CharacterSet.alphanumerics
         allowed.insert(charactersIn: "-._~")
         return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value

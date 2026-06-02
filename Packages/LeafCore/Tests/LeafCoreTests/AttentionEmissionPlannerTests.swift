@@ -141,7 +141,7 @@ final class AttentionEmissionPlannerTests: XCTestCase {
         XCTAssertNotNil(event)
         XCTAssertNil(event?.payload["window_title"])
         XCTAssertNil(event?.payload["browser_url"])
-        // Provider не должен дёргаться для L1 — экономим AX вызовы
+        // Provider must not be hit for L1 — we save AX calls
         XCTAssertTrue(ctx.titleQueriedFor.isEmpty)
         XCTAssertTrue(ctx.urlQueriedFor.isEmpty)
     }

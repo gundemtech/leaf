@@ -1,8 +1,8 @@
 import Foundation
 
-/// Phase 5.5.B — scan free-form clipboard text для `leaf://invite/...` URL ИЛИ formatted/legacy JoinCode.
-/// Priority: InviteURL (более специфичный signal — token+OTP exchange) попробуется первой; на miss
-/// — JoinCode сканируется как fallback (admin-side хочет invitee pubkey).
+/// Phase 5.5.B — scan free-form clipboard text for a `leaf://invite/...` URL OR a formatted/legacy JoinCode.
+/// Priority: InviteURL (the more specific signal — token+OTP exchange) is tried first; on a miss
+/// the JoinCode is scanned as a fallback (admin-side wants the invitee pubkey).
 public enum ClipboardMatcher {
 
     public enum Match: Sendable, Equatable {
@@ -12,12 +12,12 @@ public enum ClipboardMatcher {
     }
 
     public static func match(_ raw: String) -> Match {
-        // 1. Try InviteURL — найти первое вхождение `leaf://invite/...` substring.
+        // 1. Try InviteURL — find the first occurrence of the `leaf://invite/...` substring.
         if let url = scanInviteURL(in: raw) {
             return .inviteURL(url)
         }
-        // 2. Try JoinCode — формат + lenient hex. Скользящее окно по token candidates
-        //    выбирается так: split по whitespace + хвостовая пунктуация trim'ится.
+        // 2. Try JoinCode — format + lenient hex. The sliding window over token candidates
+        //    is chosen as follows: split on whitespace + trim trailing punctuation.
         if let bytes = scanJoinCode(in: raw) {
             return .joinCode(bytes)
         }
@@ -28,9 +28,9 @@ public enum ClipboardMatcher {
 
     private static func scanInviteURL(in raw: String) -> URL? {
         // Find substring starting "leaf://invite/" — take until first whitespace / punctuation that
-        // isn't valid in URL fragment. Простое сканирование вместо regex для контроля над allowed
-        // alphabet. After extracting candidate substring, attempt InviteURL.parse — strict validator
-        // отфильтрует malformed extras (extra path / query string / wrong OTP shape).
+        // isn't valid in URL fragment. A simple scan instead of regex for control over the allowed
+        // alphabet. After extracting candidate substring, attempt InviteURL.parse — the strict validator
+        // filters out malformed extras (extra path / query string / wrong OTP shape).
         let needle = "leaf://invite/"
         guard let startIdx = raw.range(of: needle)?.lowerBound else { return nil }
         var endIdx = raw.endIndex
@@ -57,10 +57,10 @@ public enum ClipboardMatcher {
     // MARK: - Private — JoinCode scan
 
     private static func scanJoinCode(in raw: String) -> Data? {
-        // Стратегия: split по whitespace, попробовать decode для каждого token-а; ALSO попробовать
-        // склеенные пары соседних токенов на случай если чат обернул JoinCode переводом строки.
-        // JoinCode.decode сам канонизирует whitespace+hyphens, но split нам нужен чтобы не decode'ить
-        // целое сообщение (пройдёт canonicalize и чисто случайно длина совпадёт).
+        // Strategy: split on whitespace, attempt decode for each token; ALSO try
+        // glued pairs of adjacent tokens in case the chat wrapped the JoinCode with a line break.
+        // JoinCode.decode canonicalizes whitespace+hyphens itself, but we need the split so we don't decode
+        // the whole message (it would pass canonicalize and just happen to match the length by chance).
         let tokens = raw.split(whereSeparator: { $0.isWhitespace }).map { String($0) }
         for token in tokens {
             if case .success(let bytes) = JoinCode.decode(token) { return bytes }

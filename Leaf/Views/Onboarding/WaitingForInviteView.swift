@@ -2,8 +2,8 @@
 //  WaitingForInviteView.swift
 //  Leaf
 //
-//  Phase 5.5.B — onboarding Step 1.5 для invitee: после share Join code'а юзер ждёт
-//  invite link. Auto-progress на (a) `.onOpenURL` либо (b) `applicationDidBecomeActive`
+//  Phase 5.5.B — onboarding Step 1.5 for the invitee: after sharing the Join code, the user waits for
+//  the invite link. Auto-progress on (a) `.onOpenURL` or (b) `applicationDidBecomeActive`
 //  clipboard-probe. Manual fallback — "I have the invite link" → opens AcceptInviteSheet.
 //
 //  Track 2 / D4 — migrated to D1 atoms (LeafType / LeafButton / LeafColor / LeafSpace).

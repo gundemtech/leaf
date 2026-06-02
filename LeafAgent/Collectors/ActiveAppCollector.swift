@@ -4,16 +4,16 @@ import ApplicationServices
 import os
 import LeafCore
 
-/// Phase 4.10.B — слушает `NSWorkspace.didActivateApplicationNotification`
-/// (app switch) + polling tick раз в `attentionWindowPollIntervalSec` (in-app
-/// window-change detection). Pure decision logic вынесена в
-/// `AttentionEmissionPlanner` (LeafCore) — collector держит только wiring.
+/// Phase 4.10.B — listens to `NSWorkspace.didActivateApplicationNotification`
+/// (app switch) + a polling tick every `attentionWindowPollIntervalSec` (in-app
+/// window-change detection). Pure decision logic is extracted into
+/// `AttentionEmissionPlanner` (LeafCore) — the collector holds only the wiring.
 ///
-/// Notification callback диспатчится на `.main` queue (mandatory — NSWorkspace не
-/// thread-safe). Polling tick тоже выполняет AX read'ы на main thread (AX API
-/// не thread-safe для одного процесса). `@unchecked Sendable` оправдан тем,
-/// что внутреннее состояние (planner.lastBundleID/Title, observer, pollTask)
-/// читается/пишется только с main.
+/// The notification callback is dispatched on the `.main` queue (mandatory — NSWorkspace is
+/// not thread-safe). The polling tick also performs AX reads on the main thread (the AX API
+/// is not thread-safe within a single process). `@unchecked Sendable` is justified because
+/// the internal state (planner.lastBundleID/Title, observer, pollTask)
+/// is read/written only from main.
 final class ActiveAppCollector: @unchecked Sendable {
     private let writer: EventWriter
     private let blocklist: Set<String>
@@ -73,10 +73,10 @@ final class ActiveAppCollector: @unchecked Sendable {
             }
         }
 
-        // Phase 4.10.B — polling tick для in-app window changes
-        // (Xcode переключение между файлами, Slack между каналами, browser
-        // между табами). NSWorkspace activation observer ловит только
-        // app-switch'и; внутренние title changes доступны только через AX poll.
+        // Phase 4.10.B — polling tick for in-app window changes
+        // (Xcode switching between files, Slack between channels, browser
+        // between tabs). The NSWorkspace activation observer catches only
+        // app switches; internal title changes are available only through AX poll.
         let intervalNs = UInt64(pollIntervalSec * 1_000_000_000)
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -116,18 +116,18 @@ final class ActiveAppCollector: @unchecked Sendable {
 
 // MARK: - Real AX implementations
 
-/// Production `AXTrustChecker` — `AXIsProcessTrusted()`. Cached result был бы
-/// неверным (юзер может toggled permission в System Settings runtime'но),
-/// поэтому делаем fresh call каждый раз.
+/// Production `AXTrustChecker` — `AXIsProcessTrusted()`. A cached result would be
+/// incorrect (the user can toggle the permission in System Settings at runtime),
+/// so we make a fresh call every time.
 struct RealAXTrustChecker: AXTrustChecker {
     func isAXTrusted() -> Bool {
         AXIsProcessTrusted()
     }
 }
 
-/// Production `WindowContextProvider` — читает focused window title и (для
-/// browser-категории) tab URL через AX API. ADR-010: title bar text не есть
-/// content (мы не читаем body документа), URL берётся из AXWebArea.
+/// Production `WindowContextProvider` — reads the focused window title and (for
+/// the browser category) the tab URL via the AX API. ADR-010: title bar text is not
+/// content (we don't read the document body), the URL is taken from AXWebArea.
 struct AXWindowContextProvider: WindowContextProvider {
     func windowTitle(forPid pid: pid_t, bundleID: String) -> String? {
         guard let window = focusedOrFallbackWindow(forPid: pid) else { return nil }
@@ -142,16 +142,16 @@ struct AXWindowContextProvider: WindowContextProvider {
 
     func browserURL(forPid pid: pid_t, bundleID: String) -> String? {
         guard let window = focusedOrFallbackWindow(forPid: pid) else { return nil }
-        // BFS-ish search для AXWebArea с глубиной cap'ом — большинство браузеров
-        // помещают AXWebArea на 2-4 уровне (window → group → tab → web area).
+        // BFS-ish search for AXWebArea with a depth cap — most browsers
+        // place AXWebArea at level 2-4 (window → group → tab → web area).
         return findWebAreaURL(in: window, depthRemaining: 8)
     }
 
-    /// Phase 4.10.B paper-cut: некоторые apps (Xcode подтверждённо) возвращают
-    /// `AXFocusedWindow` только когда frontmost. Между NSWorkspace activation
-    /// notification и нашим AX read юзер уже мог переключиться → focused = nil
-    /// → title не пишется. Fallback chain: focused → main → first из windows
-    /// array — даёт стабильный titlebar text даже для backgrounded apps.
+    /// Phase 4.10.B paper-cut: some apps (Xcode confirmed) return
+    /// `AXFocusedWindow` only while frontmost. Between the NSWorkspace activation
+    /// notification and our AX read the user may already have switched → focused = nil
+    /// → no title is written. Fallback chain: focused → main → first of the windows
+    /// array — yields stable titlebar text even for backgrounded apps.
     private func focusedOrFallbackWindow(forPid pid: pid_t) -> AXUIElement? {
         let appElement = AXUIElementCreateApplication(pid)
 
@@ -180,7 +180,7 @@ struct AXWindowContextProvider: WindowContextProvider {
             &ref
         ) == .success,
               let value = ref else { return nil }
-        // AXUIElementGetTypeID() guard на случай когда attribute exists но не window-shaped.
+        // AXUIElementGetTypeID() guard for the case where the attribute exists but is not window-shaped.
         if CFGetTypeID(value) != AXUIElementGetTypeID() { return nil }
         return (value as! AXUIElement)
     }

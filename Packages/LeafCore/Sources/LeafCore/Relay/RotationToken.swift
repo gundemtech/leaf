@@ -3,8 +3,8 @@
 //  LeafCore
 //
 //  Phase 5.3.C — Public response value type for `RelayClient.postRotationBlob`.
-//  Mirror'ит `InviteToken` shape: server-issued URL-safe 32-char identifier
-//  + server-side expiry (echoed from request, clamped к relay's MAX_FUTURE_MS).
+//  Mirrors the `InviteToken` shape: server-issued URL-safe 32-char identifier
+//  + server-side expiry (echoed from request, clamped to relay's MAX_FUTURE_MS).
 //
 
 import Foundation

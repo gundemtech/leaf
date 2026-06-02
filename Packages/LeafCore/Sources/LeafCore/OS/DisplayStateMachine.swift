@@ -1,7 +1,7 @@
 import Foundation
 
-/// Phase Track-4 S3 — input для DisplayStateMachine. Constructed by
-/// `DisplayCollector` от `CGDisplayChangeSummaryFlags`-фильтра.
+/// Phase Track-4 S3 — input for DisplayStateMachine. Constructed by
+/// `DisplayCollector` from the `CGDisplayChangeSummaryFlags` filter.
 public struct DisplayChange: Sendable, Hashable {
     public enum Kind: Sendable, Hashable { case connected, disconnected }
 
@@ -19,11 +19,11 @@ public enum DisplayTransition: Sendable, Hashable {
     case disconnected(UInt32)
 }
 
-/// Phase Track-4 S3 — tracked-set state machine для display add/remove events.
-/// Suppresses duplicate-add (we already think this display is connected) и
+/// Phase Track-4 S3 — tracked-set state machine for display add/remove events.
+/// Suppresses duplicate-add (we already think this display is connected) and
 /// remove-of-unknown (we never saw this display added — e.g. agent missed
 /// the connection event). CGDisplayRegisterReconfigurationCallback fires only
-/// on CHANGE, not boot state; agent emits только реальные transitions.
+/// on CHANGE, not boot state; agent emits only real transitions.
 public struct DisplayStateMachine: Sendable {
     private var connected: Set<UInt32> = []
 

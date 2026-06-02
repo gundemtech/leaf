@@ -37,7 +37,7 @@ final class InviteTokensReader {
   /// `InviteTokenService` keeps its first-seen `workspaceID` private,
   /// `listActive()` returns rows from the wrong workspace, and active
   /// tokens leak across the sidebar switcher (dogfooding round 6: invite
-  /// «уаыва» generated on workspace «anton» appeared verbatim under «5555»).
+  /// "uyava" generated on workspace "acme" appeared verbatim under "5555").
   private var cachedServiceWorkspaceID: String?
   private var database: LeafCore.Database?
 

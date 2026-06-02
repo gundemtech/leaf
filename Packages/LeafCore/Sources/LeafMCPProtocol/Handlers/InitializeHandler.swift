@@ -7,8 +7,8 @@ public struct InitializeHandler: MethodHandler {
 
     public func handle(params: AnyCodable?) async throws -> AnyCodable {
         // Spec: server SHOULD echo client's protocolVersion if supports, else
-        // respond with latest supported. MVP всегда возвращает latest — см.
-        // plan's "Known limitations" (version negotiation — v1.1 трек).
+        // respond with latest supported. MVP always returns latest — see
+        // plan's "Known limitations" (version negotiation — v1.1 track).
         let result = InitializeResult(
             protocolVersion: MCPConstants.protocolVersion,
             capabilities: ServerCapabilities(tools: ToolsCapability(listChanged: false)),
@@ -18,7 +18,7 @@ public struct InitializeHandler: MethodHandler {
             )
         )
         // Double-hop encode/decode — InitializeResult → JSON → AnyCodable.
-        // Вызывается 1 раз за MCP сессию, overhead незаметен.
+        // Called once per MCP session, overhead is negligible.
         let data = try JSONEncoder().encode(result)
         return try JSONDecoder().decode(AnyCodable.self, from: data)
     }

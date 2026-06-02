@@ -1,26 +1,26 @@
 import Foundation
 
-/// Phase 4.3 — GitHub events activity для DerivedInsights.githubActivity(period:).
-/// Метаданные only (repo, event_kind, title) — bodies/comments/diffs not stored
-/// (ADR-010 won't-list, enforced на уровне ProdGitHubAPIProvider parser'а).
+/// Phase 4.3 — GitHub events activity for DerivedInsights.githubActivity(period:).
+/// Metadata only (repo, event_kind, title) — bodies/comments/diffs not stored
+/// (ADR-010 won't-list, enforced in the ProdGitHubAPIProvider parser).
 public struct GitHubActivityBreakdown: Sendable, Hashable {
-    /// Total events с `signal_type='action'` AND `payload.source='github'` в окне.
+    /// Total events with `signal_type='action'` AND `payload.source='github'` in the window.
     public let eventsCount: Int
-    /// Top-5 repo bucket'ов по count, descending. Пустая проекция → пустой массив.
+    /// Top-5 repo buckets by count, descending. Empty projection → empty array.
     public let byRepo: [RepoCountEntry]
-    /// Top-5 event_kind bucket'ов по count, descending.
+    /// Top-5 event_kind buckets by count, descending.
     public let byEventKind: [EventKindCountEntry]
     /// Phase 4.6.A.1 — distribution of `closed_at - created_at` (seconds) over
-    /// `gh_pr_merged` events в окне. `nil` → нет samples (PRs не закрывали или
-    /// timestamps отсутствовали).
+    /// `gh_pr_merged` events in the window. `nil` → no samples (no PRs closed, or
+    /// timestamps were missing).
     public let prCycleStats: LatencyStats?
     /// Phase 4.6.A.1 — distribution of `review.submitted_at - pull_request.created_at`
-    /// (seconds) over `gh_pr_review_submitted` events. Семантика: "сколько чужой PR
-    /// ждал моего review". `nil` → нет samples.
+    /// (seconds) over `gh_pr_review_submitted` events. Semantics: "how long someone
+    /// else's PR waited for my review". `nil` → no samples.
     public let reviewDelayStats: LatencyStats?
-    /// Phase 4.6.C.1 — reserved под per-provider WoW в 4.7+. Сейчас всегда nil.
+    /// Phase 4.6.C.1 — reserved for per-provider WoW in 4.7+. Always nil for now.
     public let wowDeltaPct: Double?
-    /// Phase 4.6.C.3 — consecutive days с ≥1 GitHub PushEvent
+    /// Phase 4.6.C.3 — consecutive days with ≥1 GitHub PushEvent
     /// (event_kind='gh_commit_pushed'), ending today/yesterday. 60-day lookback,
     /// independent of `period` parameter. `nil` ↔ streak=0.
     public let commitStreak: Int?

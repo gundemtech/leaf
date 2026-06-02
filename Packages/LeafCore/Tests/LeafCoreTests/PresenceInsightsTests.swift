@@ -1,19 +1,19 @@
 // Phase 4.7.B-15 — `PresenceInsights.currentSnapshot` (testable backing
-// для `get_current_presence` MCP tool).
+// for the `get_current_presence` MCP tool).
 //
-// LeafMCP target живёт под Xcode (не под `swift test`), поэтому tool-struct
-// `GetCurrentPresenceTool` в `LeafMCP/Tools/` тестируется через свой
-// LeafCore helper (`PresenceInsights.currentSnapshot`). Здесь — все 4
-// плановых case'а:
+// The LeafMCP target builds under Xcode (not under `swift test`), so the
+// `GetCurrentPresenceTool` tool-struct in `LeafMCP/Tools/` is tested through its
+// LeafCore helper (`PresenceInsights.currentSnapshot`). Here — all 4
+// planned cases:
 //
 //   - testExecute_EmptyDB_ReturnsEmptyProviders
 //   - testExecute_SeededPresenceState_ReturnsAllRows
 //   - testExecute_DerivedModeNullInPhase47
-//   - testExecute_NoArgumentsAccepted (схема tool — `properties:{}`,
-//     `additionalProperties:false`. Helper аргументов вообще не принимает,
-//     поэтому "extra args ignored" для tool-обёртки тривиально верно.
-//     Тест верифицирует, что helper детерминирован и не зависит ни от
-//     каких аргументов, и что schema действительно пустая в definition.)
+//   - testExecute_NoArgumentsAccepted (tool schema — `properties:{}`,
+//     `additionalProperties:false`. The helper accepts no arguments at all,
+//     so "extra args ignored" holds trivially for the tool wrapper.
+//     The test verifies that the helper is deterministic and does not depend on
+//     any arguments, and that the schema is indeed empty in the definition.)
 
 import XCTest
 import GRDB
@@ -36,26 +36,26 @@ final class PresenceInsightsTests: XCTestCase {
 
     // MARK: - Empty DB
 
-    /// Свежая (только что созданная) DB → providers={} (пустой словарь
-    /// — отсутствуют все 4 row'а PresenceStateWriter.Provider). Top-level
-    /// shape сохраняется: ключи `providers` и `observed_at_ms` присутствуют.
+    /// A fresh (just-created) DB → providers={} (empty dictionary
+    /// — all 4 PresenceStateWriter.Provider rows are absent). The top-level
+    /// shape is preserved: the `providers` and `observed_at_ms` keys are present.
     func testExecute_EmptyDB_ReturnsEmptyProviders() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
         let payload = try PresenceInsights.currentSnapshot(database: db)
 
         let providers = try XCTUnwrap(payload["providers"] as? [String: Any])
-        XCTAssertEqual(providers.count, 0, "fresh DB → ни одного presence_state row")
+        XCTAssertEqual(providers.count, 0, "fresh DB → no presence_state rows")
 
         let observedAt = try XCTUnwrap(payload["observed_at_ms"] as? Int64)
-        // Sanity — в пределах разумного (сегодняшний эпох-таймштамп ms).
+        // Sanity — within a reasonable range (today's epoch timestamp in ms).
         XCTAssertGreaterThan(observedAt, 1_700_000_000_000)
     }
 
     // MARK: - Seeded → all rows
 
-    /// Seed 3 row'а (github / linear / slack) → response.providers содержит
-    /// все три ключа с полями state / derived_mode / updated_at_ms.
+    /// Seed 3 rows (github / linear / slack) → response.providers contains
+    /// all three keys with the state / derived_mode / updated_at_ms fields.
     func testExecute_SeededPresenceState_ReturnsAllRows() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -89,7 +89,7 @@ final class PresenceInsightsTests: XCTestCase {
         XCTAssertNotNil(providers["github"])
         XCTAssertNotNil(providers["linear"])
         XCTAssertNotNil(providers["slack"])
-        XCTAssertNil(providers["derived"], "Phase 4.7 не пишет derived row")
+        XCTAssertNil(providers["derived"], "Phase 4.7 does not write a derived row")
 
         // GitHub state roundtrip.
         let github = try XCTUnwrap(providers["github"] as? [String: Any])
@@ -115,9 +115,9 @@ final class PresenceInsightsTests: XCTestCase {
 
     // MARK: - derived_mode invariant
 
-    /// derived_mode не должен populated в Phase 4.7 — все ключи под
-    /// providers содержат `derived_mode: NSNull` (явный null, не отсутствие
-    /// ключа).  Phase 4.9 mode classifier начнёт писать string-значения.
+    /// derived_mode must not be populated in Phase 4.7 — every key under
+    /// providers contains `derived_mode: NSNull` (an explicit null, not a missing
+    /// key).  The Phase 4.9 mode classifier will start writing string values.
     func testExecute_DerivedModeNullInPhase47() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -159,8 +159,8 @@ final class PresenceInsightsTests: XCTestCase {
             )
         }
 
-        // Round-trip через JSONSerialization — убедимся, что NSNull
-        // действительно сериализуется в `null`, а не выпадает.
+        // Round-trip through JSONSerialization — confirm that NSNull
+        // actually serializes to `null` rather than being dropped.
         let json = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
         let jsonString = String(data: json, encoding: .utf8) ?? ""
         XCTAssertTrue(
@@ -171,12 +171,12 @@ final class PresenceInsightsTests: XCTestCase {
 
     // MARK: - schema / args
 
-    /// Tool схема — `properties:{}` + `additionalProperties:false`,
-    /// и helper не принимает аргументов вообще. Проверяем оба инварианта.
-    /// Это проверка контракта: вызов `currentSnapshot(database:)` детерминирован
-    /// относительно DB content; "extra args" в tool-обёртке отбрасываются на
-    /// уровне MCP server schema (additionalProperties=false), но helper
-    /// этого не видит и работает одинаково.
+    /// Tool schema — `properties:{}` + `additionalProperties:false`,
+    /// and the helper accepts no arguments at all. We check both invariants.
+    /// This is a contract check: the `currentSnapshot(database:)` call is deterministic
+    /// with respect to DB content; "extra args" in the tool wrapper are discarded at
+    /// the MCP server schema level (additionalProperties=false), but the helper
+    /// never sees them and behaves identically.
     func testExecute_NoArgumentsAccepted() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try db.writeSQL { rawDB in
@@ -189,16 +189,16 @@ final class PresenceInsightsTests: XCTestCase {
             )
         }
 
-        // Helper детерминирован — два последовательных вызова дают
-        // одинаковый providers payload (observed_at_ms может отличаться).
+        // The helper is deterministic — two successive calls return
+        // an identical providers payload (observed_at_ms may differ).
         let p1 = try PresenceInsights.currentSnapshot(database: db)
         let p2 = try PresenceInsights.currentSnapshot(database: db)
 
         let providers1 = try XCTUnwrap(p1["providers"] as? [String: Any])
         let providers2 = try XCTUnwrap(p2["providers"] as? [String: Any])
 
-        // Сериализуем оба providers-словаря в детерминированный JSON
-        // (sortedKeys) и сравниваем.
+        // Serialize both providers dictionaries to deterministic JSON
+        // (sortedKeys) and compare.
         let j1 = try JSONSerialization.data(withJSONObject: providers1, options: [.sortedKeys])
         let j2 = try JSONSerialization.data(withJSONObject: providers2, options: [.sortedKeys])
         XCTAssertEqual(j1, j2, "providers payload must be deterministic across calls")

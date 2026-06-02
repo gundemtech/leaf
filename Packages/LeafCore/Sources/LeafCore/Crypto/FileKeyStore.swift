@@ -1,28 +1,30 @@
 import Foundation
 import Security
 
-/// Хранит 32-byte SQLCipher key в файле `~/Library/Application Support/Leaf/db.key`
-/// (mode 0600). Phase 3.4.5 заменил `KeychainKeyStore` для основного потока — keychain
-/// access group sharing требует Developer ID Provisioning Profile, которого нет на
-/// distribution. File-based подход даёт нативный sharing между app/agent/mcp без
-/// entitlement-инфраструктуры.
+/// Stores the 32-byte SQLCipher key in `~/Library/Application Support/Leaf/db.key`
+/// (mode 0600). Phase 3.4.5 replaced `KeychainKeyStore` for the main path — keychain
+/// access group sharing requires a Developer ID Provisioning Profile, which is not
+/// available on distribution. The file-based approach gives native sharing between
+/// app/agent/mcp without entitlement infrastructure.
 ///
-/// Защита: file permissions 0600 + FileVault. Sensitivity сравнима с самой DB файлом
-/// (`events.sqlite` рядом).
+/// Protection: file permissions 0600 + FileVault. Sensitivity is comparable to the DB
+/// file itself (`events.sqlite` alongside it).
 ///
-/// Migration: на первом launch если файла нет, но в Keychain есть legacy item от
-/// alpha.2 main app — читаем оттуда и пишем в файл (`fetchOrCreate`). Cleanup legacy
-/// Keychain item — отдельный best-effort вызов из main app eager init.
+/// Migration: on first launch, if the file is absent but the Keychain holds a legacy
+/// item from the alpha.2 main app, read it from there and write it to the file
+/// (`fetchOrCreate`). Cleanup of the legacy Keychain item is a separate best-effort
+/// call from the main app's eager init.
 ///
-/// Concurrency: atomic write (`Data.write` с `.atomic` → POSIX `rename(2)`) + read-back
-/// verification. Полную race-free serialization обеспечивает eager call в `LeafApp.init()`
-/// до `agent.register()` — он материализует файл до того как любой helper стартанёт.
+/// Concurrency: atomic write (`Data.write` with `.atomic` → POSIX `rename(2)`) + read-back
+/// verification. Fully race-free serialization is ensured by the eager call in
+/// `LeafApp.init()` before `agent.register()` — it materializes the file before any
+/// helper starts.
 public enum FileKeyStore {
     public static let keyLengthBytes = 32
     public static let filename = "db.key"
 
-    /// `~/Library/Application Support/Leaf/db.key`. Co-located с `events.sqlite` —
-    /// та же subdir что у `DatabasePath`.
+    /// `~/Library/Application Support/Leaf/db.key`. Co-located with `events.sqlite` —
+    /// the same subdir as `DatabasePath`.
     public static func defaultURL() -> URL {
         let support = FileManager.default.urls(
             for: .applicationSupportDirectory,
@@ -33,7 +35,7 @@ public enum FileKeyStore {
             .appendingPathComponent(filename, isDirectory: false)
     }
 
-    /// Idempotent. Returns existing key или создаёт новый/мигрирует с Keychain.
+    /// Idempotent. Returns the existing key or creates a new one / migrates from Keychain.
     public static func fetchOrCreate(at url: URL = defaultURL()) throws -> Data {
         try ensureParentDirectory(for: url)
 
@@ -41,13 +43,13 @@ public enum FileKeyStore {
             return try readExisting(at: url)
         }
 
-        // Bridge migration: alpha.2 main app мог положить ключ в default Keychain group
-        // ("" → per-bundle group `tech.gundem.leaf`). Helpers свой group — пустой.
+        // Bridge migration: the alpha.2 main app may have placed the key in the default
+        // Keychain group ("" → per-bundle group `tech.gundem.leaf`). Helpers' own group is empty.
         let legacy: Data?
         do {
             legacy = try KeychainKeyStore.fetchOnly()
         } catch {
-            legacy = nil  // Keychain unavailable / locked / denied — fall through к generate.
+            legacy = nil  // Keychain unavailable / locked / denied — fall through to generate.
         }
 
         let candidate: Data
@@ -61,16 +63,16 @@ public enum FileKeyStore {
         return try readBackAndVerify(candidate: candidate, at: url)
     }
 
-    /// Удаляет файл. Test/dev tearDown.
+    /// Deletes the file. Test/dev tearDown.
     public static func delete(at url: URL = defaultURL()) throws {
         if FileManager.default.fileExists(atPath: url.path) {
             try FileManager.default.removeItem(at: url)
         }
     }
 
-    /// Best-effort cleanup legacy Keychain item. Вызывается main app'ом ОДИН РАЗ
-    /// после успешного `fetchOrCreate` — helpers это не делают (их Keychain group
-    /// другая, item там и так нет). Swallow errors: errSecItemNotFound нормально.
+    /// Best-effort cleanup of the legacy Keychain item. Called by the main app ONCE
+    /// after a successful `fetchOrCreate` — helpers do not do this (their Keychain group
+    /// differs, the item isn't there anyway). Swallow errors: errSecItemNotFound is normal.
     public static func cleanupLegacyKeychainBestEffort() {
         try? KeychainKeyStore.delete(accessGroup: "")
     }
@@ -120,8 +122,8 @@ public enum FileKeyStore {
     }
 
     private static func readBackAndVerify(candidate: Data, at url: URL) throws -> Data {
-        // Read-back закрывает race "два процесса оба пишут": last-writer wins,
-        // оба процесса возвращают на самом деле on-disk bytes.
+        // Read-back closes the "two processes both write" race: last-writer wins,
+        // both processes return the actual on-disk bytes.
         let onDisk: Data
         do {
             onDisk = try Data(contentsOf: url)

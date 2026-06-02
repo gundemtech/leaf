@@ -1,19 +1,19 @@
 import Foundation
 
-/// Единый entry point для получения `DerivedInsights` реализации.
-/// Callsite'ы (MenuBarApp, MCPServer) не ссылаются на конкретные типы —
-/// provider регистрируется consumer'ом при старте (dependency injection).
+/// Single entry point for obtaining a `DerivedInsights` implementation.
+/// Callsites (MenuBarApp, MCPServer) don't reference concrete types —
+/// the provider is registered by the consumer at startup (dependency injection).
 ///
-/// Почему не `#if LEAF_PROD` внутри factory: Xcode не прокидывает
-/// `SWIFT_ACTIVE_COMPILATION_CONDITIONS` внутрь SPM dependencies, поэтому
-/// conditional import здесь не сработал бы. Флаг есть только в app/agent
-/// target'ах — там и решается какую реализацию зарегистрировать.
+/// Why not `#if LEAF_PROD` inside the factory: Xcode doesn't propagate
+/// `SWIFT_ACTIVE_COMPILATION_CONDITIONS` into SPM dependencies, so a
+/// conditional import wouldn't work here. The flag exists only in the app/agent
+/// targets — that's where the choice of which implementation to register is made.
 ///
-/// Публичный build / CI без регистрации → `StubInsights` (throws на всех
-/// методах). Dev/prod → app регистрирует `ProdInsights` в `App.init()`.
+/// Public build / CI without registration → `StubInsights` (throws on all
+/// methods). Dev/prod → the app registers `ProdInsights` in `App.init()`.
 public enum DerivedInsightsFactory {
-    // Registration — единожды на старте приложения. Last-writer wins,
-    // концептуально read-many-write-once → `nonisolated(unsafe)` acceptable.
+    // Registration — once at app startup. Last-writer wins,
+    // conceptually read-many-write-once → `nonisolated(unsafe)` acceptable.
     nonisolated(unsafe) private static var provider: (@Sendable (Database) -> any DerivedInsights)?
 
     public static func register(

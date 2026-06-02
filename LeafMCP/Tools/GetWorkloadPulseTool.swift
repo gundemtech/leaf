@@ -4,14 +4,14 @@ import LeafMCPProtocol
 
 /// Phase 4.7.B-16 — `get_workload_pulse` MCP tool.
 ///
-/// Тонкая обёртка над `PresenceInsights.workloadPulse(database:period:)`.
-/// Heavy lifting (DB read, presence_state merge, events aggregates) живёт
-/// в LeafCore чтобы быть testable через SPM (LeafMCP — Xcode target, в
-/// `swift test` не входит).
+/// Thin wrapper over `PresenceInsights.workloadPulse(database:period:)`.
+/// Heavy lifting (DB read, presence_state merge, events aggregates) lives
+/// in LeafCore so it is testable via SPM (LeafMCP — Xcode target, not part
+/// of `swift test`).
 ///
-/// Period — optional argument; невалидный или отсутствующий → defaults to
-/// `today` (mirror к B-15 `get_current_presence` permissive shape — tool
-/// не должен падать, если AI-клиент послал `period:"unknown"`).
+/// Period — optional argument; invalid or missing → defaults to
+/// `today` (mirrors the B-15 `get_current_presence` permissive shape — the tool
+/// must not crash if the AI client sent `period:"unknown"`).
 struct GetWorkloadPulseTool: ToolExecutor {
     let dbURL: URL
     let dbConfig: DatabaseConfig
@@ -44,8 +44,8 @@ struct GetWorkloadPulseTool: ToolExecutor {
     }()
 
     func execute(arguments: AnyCodable?) async throws -> ToolCallResult {
-        // Permissive parse: невалидный/отсутствующий period → today. Не throw'ить
-        // — plan testExecute_InvalidPeriod_DefaultsToToday verifies этот invariant.
+        // Permissive parse: invalid/missing period → today. Do not throw
+        // — plan testExecute_InvalidPeriod_DefaultsToToday verifies this invariant.
         let period: PresenceInsights.WorkloadPulsePeriod
         if let dict = arguments?.value as? [String: Any],
            let raw = dict["period"] as? String,

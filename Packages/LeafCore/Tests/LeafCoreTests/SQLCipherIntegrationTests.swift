@@ -1,8 +1,8 @@
 import XCTest
 @testable import LeafCore
 
-/// End-to-end проверка encrypted path: Database.openForWrite/Read с EncryptionOptions
-/// реально шифрует файл, только правильный ключ его читает.
+/// End-to-end check of the encrypted path: Database.openForWrite/Read with EncryptionOptions
+/// actually encrypts the file, and only the correct key can read it.
 final class SQLCipherIntegrationTests: XCTestCase {
     private var tempDir: URL!
     private var dbURL: URL!
@@ -25,7 +25,7 @@ final class SQLCipherIntegrationTests: XCTestCase {
         do {
             let writer = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: key)
             try writer.write(RawEvent(timestamp: ts, signalType: .attention, bundleID: "com.app"))
-            try writer.checkpointWAL()   // форсируем flush в основной файл, иначе DatabasePool может держать .wal
+            try writer.checkpointWAL()   // force a flush into the main file, otherwise DatabasePool may keep data in .wal
         }
 
         let reader = try Database.openForRead(at: dbURL, config: .weakDefaults, encryption: key)
@@ -45,8 +45,8 @@ final class SQLCipherIntegrationTests: XCTestCase {
             try writer.checkpointWAL()
         }
 
-        // Открытие с wrong key может throw либо на open (prepareDatabase execute PRAGMA key),
-        // либо на первом реальном read (GRDB может отложить init). Пробуем обе точки.
+        // Opening with the wrong key may throw either at open (prepareDatabase executes PRAGMA key),
+        // or on the first actual read (GRDB may defer init). We try both points.
         XCTAssertThrowsError(try {
             let reader = try Database.openForRead(at: dbURL, config: .weakDefaults, encryption: keyB)
             _ = try reader.events(in: DateInterval(start: .distantPast, duration: 86_400_000))

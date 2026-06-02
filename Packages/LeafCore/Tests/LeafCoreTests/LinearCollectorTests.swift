@@ -1,6 +1,6 @@
-// Phase 4.2 — integration test для LinearCollector polling lifecycle.
-// Mock provider в этом файле; production GraphQL parser tested separately
-// в LeafCorePrivateTests/ProdLinearGraphQLProviderTests.swift (moat).
+// Phase 4.2 — integration test for the LinearCollector polling lifecycle.
+// Mock provider lives in this file; the production GraphQL parser is tested separately
+// in LeafCorePrivateTests/ProdLinearGraphQLProviderTests.swift (moat).
 
 import XCTest
 import os
@@ -29,8 +29,8 @@ final class LinearCollectorTests: XCTestCase {
 
     // MARK: - Mock provider
 
-    /// Captures `since` argument для assertion в тестах. Каждый `setBatch(_:)`
-    /// заменяет следующий return value.
+    /// Captures the `since` argument for assertions in tests. Each `setBatch(_:)`
+    /// replaces the next return value.
     private actor MockLinearGraphQLProvider: LinearGraphQLProvider {
         private(set) var sinceCalls: [Int64?] = []
         private var batchToReturn: LinearIssueBatch = .empty
@@ -80,7 +80,7 @@ final class LinearCollectorTests: XCTestCase {
 
     // MARK: - Tests
 
-    /// Без integration row tick'и должны быть skipped (юзер не подключал Linear).
+    /// Without an integration row, ticks should be skipped (user hasn't connected Linear).
     func testTickWithoutIntegrationSkips() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         let provider = MockLinearGraphQLProvider()
@@ -89,7 +89,7 @@ final class LinearCollectorTests: XCTestCase {
             database: db,
             provider: provider,
             refresher: refresher,
-            intervalSec: 999,  // не запускаем loop — только performTick
+            intervalSec: 999,  // don't run the loop — performTick only
             backfillWindowDays: 7,
             logger: logger
         )
@@ -101,11 +101,11 @@ final class LinearCollectorTests: XCTestCase {
         XCTAssertNil(result.cursorAdvancedMs)
 
         let calls = await provider.calls()
-        XCTAssertEqual(calls.count, 0, "provider.fetchIssues не должен вызываться без integration row")
+        XCTAssertEqual(calls.count, 0, "provider.fetchIssues must not be called without an integration row")
     }
 
-    /// Со свежим integration row + 2 issues от provider'а: events + offset
-    /// должны попасть в БД atomically. Bootstrap path (no stored offset → since=nil).
+    /// With a fresh integration row + 2 issues from the provider: events + offset
+    /// must land in the DB atomically. Bootstrap path (no stored offset → since=nil).
     func testTickPersistsEventsAndCursor() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -136,20 +136,20 @@ final class LinearCollectorTests: XCTestCase {
         let result = await collector.performTick()
 
         XCTAssertFalse(result.skipped)
-        // 2 issue_updated + 1 workload pulse (Phase 4.7.B — emit'ится every tick).
+        // 2 issue_updated + 1 workload pulse (Phase 4.7.B — emitted every tick).
         XCTAssertEqual(result.issuesProcessed, 3)
         XCTAssertEqual(result.cursorAdvancedMs, cursorMs)
 
-        // Atomic write: оба events + offset row должны быть в БД.
+        // Atomic write: both events + the offset row must be in the DB.
         let offset = try db.readOffset(
             collectorID: CollectorID.linearPolling,
             sourceID: "linear:ws-1"
         )
         XCTAssertEqual(offset?.lastModifiedMs, cursorMs)
-        XCTAssertEqual(offset?.byteOffset, 0, "byte_offset не релевантен для HTTP API")
+        XCTAssertEqual(offset?.byteOffset, 0, "byte_offset is not relevant for the HTTP API")
         XCTAssertNil(offset?.inode)
 
-        // Bootstrap: первый tick → since=nil (no stored offset).
+        // Bootstrap: first tick → since=nil (no stored offset).
         let calls = await provider.calls()
         XCTAssertEqual(calls.count, 1)
         if let firstSince = calls.first {
@@ -159,10 +159,10 @@ final class LinearCollectorTests: XCTestCase {
         }
     }
 
-    /// Phase 4.6.A.2 — `completionSeconds` из snapshot'а должно доезжать до events.payload.
-    /// Snapshot с positive value → ключ `completion_seconds` присутствует;
-    /// snapshot с nil → ключ ОТСУТСТВУЕТ (не "" — иначе SQL `IS NOT NULL` не отфильтрует);
-    /// snapshot с 0 (instant complete) → ключ `"0"` (legitimate sample, не nil).
+    /// Phase 4.6.A.2 — `completionSeconds` from the snapshot must make it into events.payload.
+    /// Snapshot with a positive value → the `completion_seconds` key is present;
+    /// snapshot with nil → the key is ABSENT (not "" — otherwise SQL `IS NOT NULL` won't filter it out);
+    /// snapshot with 0 (instant complete) → the key is `"0"` (a legitimate sample, not nil).
     func testTickEncodesCompletionSecondsInPayload() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -213,13 +213,13 @@ final class LinearCollectorTests: XCTestCase {
         XCTAssertEqual(completed.payload["completion_seconds"], "7200")
 
         let inFlight = try XCTUnwrap(stored.first { $0.payload["issue_key"] == "LEA-101" })
-        XCTAssertNil(inFlight.payload["completion_seconds"], "snapshot.completionSeconds=nil → key отсутствует, не \"\"")
+        XCTAssertNil(inFlight.payload["completion_seconds"], "snapshot.completionSeconds=nil → key absent, not \"\"")
 
         let instant = try XCTUnwrap(stored.first { $0.payload["issue_key"] == "LEA-102" })
-        XCTAssertEqual(instant.payload["completion_seconds"], "0", "instant completion (0s) — legitimate sample, key present с value \"0\"")
+        XCTAssertEqual(instant.payload["completion_seconds"], "0", "instant completion (0s) — legitimate sample, key present with value \"0\"")
     }
 
-    /// Второй tick передаёт сохранённый cursor как `since`.
+    /// The second tick passes the stored cursor as `since`.
     func testSecondTickPassesStoredCursor() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -242,7 +242,7 @@ final class LinearCollectorTests: XCTestCase {
         )
         _ = await collector.performTick()
 
-        // Empty batch на втором tick'е (никаких новых issues).
+        // Empty batch on the second tick (no new issues).
         await provider.setBatch(.empty)
         _ = await collector.performTick()
 
@@ -329,24 +329,24 @@ final class LinearCollectorTests: XCTestCase {
         let events = try db.events(in: range)
         let linearEvents = events.filter { $0.payload["source"] == "linear" }
         let githubEvents = events.filter { $0.payload["source"] == "github" }
-        XCTAssertEqual(linearEvents.count, 0, "Linear events должны быть wiped")
-        XCTAssertEqual(githubEvents.count, 1, "Other-provider events должны сохраниться")
+        XCTAssertEqual(linearEvents.count, 0, "Linear events must be wiped")
+        XCTAssertEqual(githubEvents.count, 1, "Other-provider events must be preserved")
 
         let offset = try db.readOffset(
             collectorID: CollectorID.linearPolling,
             sourceID: "linear:ws-1"
         )
-        XCTAssertNil(offset, "Linear cursor должен быть reset")
+        XCTAssertNil(offset, "Linear cursor must be reset")
 
         let suite = UserDefaults(suiteName: suiteName)
         XCTAssertTrue(
             suite?.bool(forKey: LinearCollector.attributionV2MigrationFlagKey) ?? false,
-            "Migration flag должен быть set после успешного wipe"
+            "Migration flag must be set after a successful wipe"
         )
     }
 
-    /// Idempotency: при повторном start с уже set flag — миграция skipped,
-    /// события вставленные между start'ами не wipe'ятся.
+    /// Idempotency: on a repeated start with the flag already set, migration is skipped,
+    /// and events inserted between starts are not wiped.
     func testMigrationIsIdempotent() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         let suiteName = makeIsolatedSuiteName()
@@ -367,7 +367,7 @@ final class LinearCollectorTests: XCTestCase {
         await first.stop()
 
         // After migration: insert new linear event, restart collector — flag set,
-        // migration skipped, новый event survive.
+        // migration skipped, the new event survives.
         try db.writeEventsAndOffset(
             [makeLinearActionEvent(issueKey: "LEA-NEW", updatedAtMs: 1_700_000_500_000)],
             offset: nil
@@ -386,21 +386,21 @@ final class LinearCollectorTests: XCTestCase {
         )
         let events = try db.events(in: range)
         let linearEvents = events.filter { $0.payload["source"] == "linear" }
-        XCTAssertEqual(linearEvents.count, 1, "Только LEA-NEW должен остаться (LEA-OLD wiped, second-start no-op)")
+        XCTAssertEqual(linearEvents.count, 1, "Only LEA-NEW should remain (LEA-OLD wiped, second-start no-op)")
         XCTAssertEqual(linearEvents.first?.payload["issue_key"], "LEA-NEW")
     }
 
     // MARK: - Phase 4.7.A — linear_comment_authored
 
-    /// Issue с count > 0 → emit linear_comment_authored event рядом с issue_updated.
+    /// Issue with count > 0 → emit a linear_comment_authored event alongside issue_updated.
     func testTickEmitsCommentEventWhenCountPositive() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
 
         let provider = MockLinearGraphQLProvider()
-        // Использую timestamp близкий к now — comment event пишется
-        // с periodEndMs = now (а не cursorMs), а issue_updated с cursorMs.
-        // Range query должен покрыть оба.
+        // Use a timestamp close to now — the comment event is written
+        // with periodEndMs = now (not cursorMs), while issue_updated uses cursorMs.
+        // The range query must cover both.
         let cursorMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000) - 60_000
         await provider.setBatch(LinearIssueBatch(
             issues: [
@@ -436,7 +436,7 @@ final class LinearCollectorTests: XCTestCase {
         XCTAssertEqual(comment.payload["team_key"], "LEA")
     }
 
-    /// Issue с count=0 → no comment event.
+    /// Issue with count=0 → no comment event.
     func testTickDoesNotEmitCommentEventWhenCountZero() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -473,8 +473,8 @@ final class LinearCollectorTests: XCTestCase {
 
     // MARK: - Phase 4.7.B — linear_assigned_workload_pulse
 
-    /// Batch с populated workload → events array contains pulse event с
-    /// payload, отражающим snapshot (started_count + top_priority + last_touched).
+    /// Batch with populated workload → the events array contains a pulse event with a
+    /// payload reflecting the snapshot (started_count + top_priority + last_touched).
     func testTick_EmitsLinearWorkloadPulseEvent() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -517,20 +517,20 @@ final class LinearCollectorTests: XCTestCase {
         XCTAssertEqual(pulse.payload["last_touched_identifier"], "LEA-201")
         XCTAssertEqual(pulse.payload["last_touched_ts_ms"], String(lastTouchedTs))
         XCTAssertEqual(pulse.signalType, .context, "workload pulse — state pulse, signal_type=.context")
-        // ADR-010 regression: pulse не должен нести title (snapshot его не несёт,
-        // но defensive — payload не должен contain'ить любые non-whitelisted keys).
+        // ADR-010 regression: the pulse must not carry a title (the snapshot doesn't carry one,
+        // but defensively — the payload must not contain any non-whitelisted keys).
         XCTAssertNil(pulse.payload["title"])
     }
 
-    /// Empty workload (startedCount=0) → pulse всё равно emit'ится с
+    /// Empty workload (startedCount=0) → the pulse is still emitted with
     /// started_count="0" + top_priority="none" + omitted last_touched_*.
-    /// Substrate consistency: downstream aggregator опирается на наличие sample.
+    /// Substrate consistency: the downstream aggregator relies on the sample being present.
     func testTick_LinearWorkloadPulseAlwaysEmitted() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
 
         let provider = MockLinearGraphQLProvider()
-        // Empty batch с empty workload — bootstrap path with nothing in flight.
+        // Empty batch with empty workload — bootstrap path with nothing in flight.
         await provider.setBatch(.empty)
 
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
@@ -548,11 +548,11 @@ final class LinearCollectorTests: XCTestCase {
         ))
         let pulse = try XCTUnwrap(
             stored.first { $0.payload["event_kind"] == "linear_assigned_workload_pulse" },
-            "pulse должен emit'иться даже на empty workload"
+            "pulse must be emitted even on an empty workload"
         )
         XCTAssertEqual(pulse.payload["started_count"], "0")
         XCTAssertEqual(pulse.payload["top_priority"], "none",
-                       "empty workload → top_priority=\"none\" (всегда present, не omitted)")
+                       "empty workload → top_priority=\"none\" (always present, not omitted)")
         XCTAssertNil(pulse.payload["last_touched_identifier"],
                      "nil identifier → key omitted")
         XCTAssertNil(pulse.payload["last_touched_ts_ms"],
@@ -561,14 +561,14 @@ final class LinearCollectorTests: XCTestCase {
 
     // MARK: - Phase 4.7.B (B-7) — linear_cycle_progress
 
-    /// Helper: build `LinearTeamCycleSnapshot` с разумными defaults.
+    /// Helper: build a `LinearTeamCycleSnapshot` with sensible defaults.
     private func makeTeamCycle(
         teamID: String = "team-A",
         teamName: String = "Engineering",
         cycleID: String = "cycle-1",
         cycleName: String = "Sprint 42",
-        startsAtMs: Int64 = 1_777_180_800_000,  // 2026-04-26 ~ начало
-        endsAtMs: Int64 = 1_780_000_000_000,    // в будущем
+        startsAtMs: Int64 = 1_777_180_800_000,  // 2026-04-26 ~ start
+        endsAtMs: Int64 = 1_780_000_000_000,    // in the future
         completedPct: Double = 60.0,
         daysRemaining: Int = 5,
         scopeCount: Int = 15
@@ -586,7 +586,7 @@ final class LinearCollectorTests: XCTestCase {
         )
     }
 
-    /// Plan-required: 2 teams с cycles → 2 events emitted (один per team).
+    /// Plan-required: 2 teams with cycles → 2 events emitted (one per team).
     func testTick_EmitsCycleProgressPerTeam() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -619,7 +619,7 @@ final class LinearCollectorTests: XCTestCase {
             userDefaultsSuiteName: makeIsolatedSuiteName()
         )
         let result = await collector.performTick()
-        XCTAssertEqual(result.cycleEventsEmitted, 2, "2 teams с cycles → 2 events")
+        XCTAssertEqual(result.cycleEventsEmitted, 2, "2 teams with cycles → 2 events")
 
         let stored = try db.events(in: DateInterval(
             start: Date(timeIntervalSinceNow: -3600),
@@ -639,7 +639,7 @@ final class LinearCollectorTests: XCTestCase {
         XCTAssertEqual(eventA.payload["days_remaining"], "3")
         XCTAssertEqual(eventA.payload["scope_count"], "15")
         XCTAssertEqual(eventA.signalType, .context, "cycle progress — state pulse, signal_type=.context")
-        // ADR-010 regression — defensive (snapshot не несёт description).
+        // ADR-010 regression — defensive (the snapshot doesn't carry a description).
         XCTAssertNil(eventA.payload["description"])
     }
 
@@ -677,8 +677,8 @@ final class LinearCollectorTests: XCTestCase {
 
     // MARK: - Phase 4.7.B (B-8) — presence_state.linear writer + attachments enrichment
 
-    /// Plan-required: после tick'а presence_state.linear row существует с composite
-    /// state (workload + cycles), все expected keys присутствуют, derivedMode=nil.
+    /// Plan-required: after a tick, the presence_state.linear row exists with composite
+    /// state (workload + cycles), all expected keys are present, derivedMode=nil.
     func testTick_WritesLinearPresenceState() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -720,8 +720,8 @@ final class LinearCollectorTests: XCTestCase {
         let presence = try db.readSQL { rawDB in
             try PresenceStateWriter.read(provider: .linear, in: rawDB)
         }
-        let row = try XCTUnwrap(presence, "presence_state.linear row должен существовать после tick'а")
-        XCTAssertNil(row.derivedMode, "derivedMode=nil в Phase 4.7 (Phase 4.9 начнёт populate)")
+        let row = try XCTUnwrap(presence, "presence_state.linear row must exist after a tick")
+        XCTAssertNil(row.derivedMode, "derivedMode=nil in Phase 4.7 (Phase 4.9 will start populating it)")
 
         let state = row.state
         XCTAssertEqual(state["started_issues_count"] as? Int, 3)
@@ -729,7 +729,7 @@ final class LinearCollectorTests: XCTestCase {
         XCTAssertEqual(state["last_touched_issue_id"] as? String, "LEA-77")
         XCTAssertEqual(state["last_touched_ts"] as? Int64, nowMs - 60_000)
 
-        // current_cycle = первая team (team-A) per plan literal.
+        // current_cycle = the first team (team-A) per plan literal.
         let currentCycle = try XCTUnwrap(state["current_cycle"] as? [String: Any])
         XCTAssertEqual(currentCycle["team_id"] as? String, "team-A")
         XCTAssertEqual(currentCycle["cycle_name"] as? String, "Sprint 42")
@@ -737,22 +737,22 @@ final class LinearCollectorTests: XCTestCase {
         XCTAssertEqual(currentCycle["days_remaining"] as? Int, 3)
         XCTAssertEqual(currentCycle["scope_count"] as? Int, 15)
 
-        // all_team_cycles — array обоих team'ов (multi-team support).
+        // all_team_cycles — array of both teams (multi-team support).
         let allTeams = try XCTUnwrap(state["all_team_cycles"] as? [[String: Any]])
         XCTAssertEqual(allTeams.count, 2)
         XCTAssertEqual(allTeams[0]["team_id"] as? String, "team-A")
         XCTAssertEqual(allTeams[1]["team_id"] as? String, "team-B")
     }
 
-    /// Plan-required: state JSON не должен содержать reserved content keys
+    /// Plan-required: the state JSON must not contain reserved content keys
     /// ("title" / "description" / "body") — defensive shape check.
-    /// Caller responsibility — этот тест guards boundary.
+    /// Caller responsibility — this test guards the boundary.
     func testTick_LinearPresenceStateOmitsBodies() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
 
-        // Inject sentinel в title issue'а — но всё равно presence_state не должен
-        // его содержать (build composite только из workload + cycles snapshots).
+        // Inject a sentinel into the issue's title — but presence_state still must not
+        // contain it (the composite is built only from workload + cycles snapshots).
         let sentinelTitle = "SENSITIVE_LINEAR_TITLE_LEAK_xyz"
         let issue = LinearIssueSnapshot(
             issueKey: "LEA-99",
@@ -786,26 +786,26 @@ final class LinearCollectorTests: XCTestCase {
         let row = try XCTUnwrap(presence)
         let topLevelKeys = Set(row.state.keys)
         XCTAssertFalse(topLevelKeys.contains("title"),
-                       "presence_state.linear не должен содержать 'title' top-level key")
+                       "presence_state.linear must not contain a 'title' top-level key")
         XCTAssertFalse(topLevelKeys.contains("description"),
-                       "presence_state.linear не должен содержать 'description' top-level key")
+                       "presence_state.linear must not contain a 'description' top-level key")
         XCTAssertFalse(topLevelKeys.contains("body"),
-                       "presence_state.linear не должен содержать 'body' top-level key")
+                       "presence_state.linear must not contain a 'body' top-level key")
 
-        // Sentinel title из issue не должна leak'ать в state JSON (paranoid check).
+        // The sentinel title from the issue must not leak into the state JSON (paranoid check).
         let serialized = try JSONSerialization.data(withJSONObject: row.state, options: [])
         let serializedStr = String(data: serialized, encoding: .utf8) ?? ""
         XCTAssertFalse(serializedStr.contains(sentinelTitle),
-                       "title issue не должен попасть в presence_state.linear JSON")
-        // Используется значение nowMs из суток сегодня — не должно совпадать с
-        // sentinel нигде; fallback assertion: snapshot present.
+                       "the issue title must not end up in the presence_state.linear JSON")
+        // Uses the nowMs value from today — it must not match the
+        // sentinel anywhere; fallback assertion: snapshot present.
         _ = nowMs  // sanity hold
     }
 
     /// Pragmatic atomicity smoke: positive-path — events + offset + presence row
-    /// land together после single performTick. См. также
+    /// land together after a single performTick. See also
     /// `DatabaseAtomicEventsAndOffsetTests.testWriteEventsOffsetAndPresenceAtomic`
-    /// (B-0): тот тест locks rollback semantics на infrastructure уровне.
+    /// (B-0): that test locks rollback semantics at the infrastructure level.
     func testTick_LinearPresenceStateUsesAtomicWrite() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -846,26 +846,26 @@ final class LinearCollectorTests: XCTestCase {
             end: Date(timeIntervalSince1970: 1_800_000_000)
         ))
         let issueEvents = stored.filter { $0.payload["issue_key"] == "LEA-200" }
-        XCTAssertGreaterThanOrEqual(issueEvents.count, 1, "issue event должен быть persisted")
+        XCTAssertGreaterThanOrEqual(issueEvents.count, 1, "issue event must be persisted")
 
         // 2) offset advanced.
         let offset = try db.readOffset(
             collectorID: CollectorID.linearPolling,
             sourceID: "linear:ws-1"
         )
-        XCTAssertEqual(offset?.lastModifiedMs, cursorMs, "cursor должен advance к batch.cursorMs")
+        XCTAssertEqual(offset?.lastModifiedMs, cursorMs, "cursor must advance to batch.cursorMs")
 
         // 3) presence row present.
         let presence = try db.readSQL { rawDB in
             try PresenceStateWriter.read(provider: .linear, in: rawDB)
         }
-        let row = try XCTUnwrap(presence, "presence_state.linear должен быть persisted в той же транзакции")
+        let row = try XCTUnwrap(presence, "presence_state.linear must be persisted in the same transaction")
         XCTAssertEqual(row.state["started_issues_count"] as? Int, 1)
         XCTAssertEqual(row.state["last_touched_issue_id"] as? String, "LEA-200")
     }
 
-    /// Plan-required: makeEvent injects linked_* keys только при non-zero counts.
-    /// Validates payload key omission convention для empty case.
+    /// Plan-required: makeEvent injects linked_* keys only for non-zero counts.
+    /// Validates the payload key omission convention for the empty case.
     func testTick_IssueWithoutAttachments_NoLinkedKeysInPayload() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -905,13 +905,13 @@ final class LinearCollectorTests: XCTestCase {
             $0.payload["issue_key"] == "LEA-300" && $0.payload["event_kind"] == "issue_updated"
         })
         XCTAssertNil(issueEvent.payload["linked_github_pr_count"],
-                     "0 PRs → ключ должен отсутствовать")
+                     "0 PRs → key must be absent")
         XCTAssertNil(issueEvent.payload["linked_github_top_repo"],
-                     "nil topRepo → ключ должен отсутствовать")
+                     "nil topRepo → key must be absent")
         XCTAssertNil(issueEvent.payload["linked_slack_message_count"],
-                     "0 Slack → ключ должен отсутствовать")
+                     "0 Slack → key must be absent")
         XCTAssertNil(issueEvent.payload["linked_attachment_count"],
-                     "0 attachments → ключ должен отсутствовать")
+                     "0 attachments → key must be absent")
     }
 
     /// Plan-required: makeEvent injects linked_* keys when issue has populated counts.
@@ -961,33 +961,33 @@ final class LinearCollectorTests: XCTestCase {
         XCTAssertEqual(issueEvent.payload["linked_attachment_count"], "4")
     }
 
-    /// Lifecycle smoke: start запускает loopTask, stop его cancels + awaits.
-    /// Без assertion — если actor zombie'ит, тест зависнет (timeout safeguard).
+    /// Lifecycle smoke: start launches the loopTask, stop cancels + awaits it.
+    /// No assertion — if the actor zombies, the test hangs (timeout safeguard).
     func testStartStopLifecycle() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         let provider = MockLinearGraphQLProvider()
         let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
         let collector = LinearCollector(
             database: db, provider: provider, refresher: refresher,
-            intervalSec: 0.05,  // короткий interval — loop проворачивается раз
+            intervalSec: 0.05,  // short interval — the loop spins at least once
             backfillWindowDays: 7,
             logger: logger,
-            userDefaultsSuiteName: makeIsolatedSuiteName()  // Phase 4.5 — не трогаем shared `tech.gundem.leaf` suite
+            userDefaultsSuiteName: makeIsolatedSuiteName()  // Phase 4.5 — don't touch the shared `tech.gundem.leaf` suite
         )
 
         await collector.start()
-        try await Task.sleep(nanoseconds: 200_000_000)  // 200ms — даём loop'у проснуться 1-2 раза
+        try await Task.sleep(nanoseconds: 200_000_000)  // 200ms — let the loop wake up 1-2 times
         await collector.stop()
 
-        // Provider не должен быть called (нет integration row → skip path).
+        // Provider must not be called (no integration row → skip path).
         let calls = await provider.calls()
         XCTAssertEqual(calls.count, 0)
     }
 
     // MARK: - Phase 4.7.C — priority transitions
 
-    /// Batch с одним priorityTransitions snap → tick emit'ит linear_priority_changed
-    /// event с правильным payload shape (signal=action, raw int values, history_id).
+    /// Batch with one priorityTransitions snap → tick emits a linear_priority_changed
+    /// event with the correct payload shape (signal=action, raw int values, history_id).
     func testTickEmitsPriorityTransitionEvent() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -1036,7 +1036,7 @@ final class LinearCollectorTests: XCTestCase {
         XCTAssertEqual(priorityEvent.signalType, .action)
     }
 
-    /// Mixed batch: 2 added + 1 removed snap'а → 3 events с правильными kind'ами.
+    /// Mixed batch: 2 added + 1 removed snaps → 3 events with the correct kinds.
     func testTickEmitsLabelAddedAndRemovedEvents() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -1093,7 +1093,7 @@ final class LinearCollectorTests: XCTestCase {
         XCTAssertEqual(removed.first?.payload["issue_key"], "LEA-200")
     }
 
-    /// Phase 4.7.C — assignee event с bucket enum + no raw IDs leaked.
+    /// Phase 4.7.C — assignee event with a bucket enum + no raw IDs leaked.
     func testTickEmitsAssigneeTransitionEvent() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -1134,12 +1134,12 @@ final class LinearCollectorTests: XCTestCase {
         XCTAssertEqual(asgn.payload["issue_key"], "LEA-300")
         XCTAssertEqual(asgn.payload["history_id"], "hist-asg-1")
         XCTAssertEqual(asgn.payload["bucket"], "reassigned_self_to_other")
-        // ADR-010 sentinel: payload не должен содержать from/to ID полей вообще.
-        XCTAssertNil(asgn.payload["from_assignee_id"], "raw IDs не покидают provider")
+        // ADR-010 sentinel: the payload must not contain any from/to ID fields at all.
+        XCTAssertNil(asgn.payload["from_assignee_id"], "raw IDs do not leave the provider")
         XCTAssertNil(asgn.payload["to_assignee_id"])
     }
 
-    /// Phase 4.7.C — cycle transition event с правильным payload (move scenario).
+    /// Phase 4.7.C — cycle transition event with the correct payload (move scenario).
     func testTickEmitsCycleTransitionEvent() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -1223,13 +1223,13 @@ final class LinearCollectorTests: XCTestCase {
             end: Date(timeIntervalSinceNow: 3600)
         ))
         let cyc = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "linear_cycle_changed" })
-        XCTAssertNil(cyc.payload["from_cycle_id"], "nil from → ключ omitted")
+        XCTAssertNil(cyc.payload["from_cycle_id"], "nil from → key omitted")
         XCTAssertNil(cyc.payload["from_cycle_name"])
         XCTAssertEqual(cyc.payload["to_cycle_id"], "cyc-X")
         XCTAssertEqual(cyc.payload["to_cycle_name"], "Sprint X")
     }
 
-    /// Phase 4.7.C — estimate transition event с правильным payload.
+    /// Phase 4.7.C — estimate transition event with the correct payload.
     func testTickEmitsEstimateTransitionEvent() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -1309,11 +1309,11 @@ final class LinearCollectorTests: XCTestCase {
             end: Date(timeIntervalSinceNow: 3600)
         ))
         let est = try XCTUnwrap(stored.first { $0.payload["event_kind"] == "linear_estimate_changed" })
-        XCTAssertNil(est.payload["from_estimate"], "nil from → omit ключа")
+        XCTAssertNil(est.payload["from_estimate"], "nil from → omit the key")
         XCTAssertEqual(est.payload["to_estimate"], "8.0")
     }
 
-    /// Phase 4.7.C — ProjectUpdate authored event с правильным payload.
+    /// Phase 4.7.C — ProjectUpdate authored event with the correct payload.
     func testTickEmitsProjectUpdateAuthoredEvent() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -1379,7 +1379,7 @@ final class LinearCollectorTests: XCTestCase {
         )
     }
 
-    /// Phase 4.7.C — Document edited event с правильным payload.
+    /// Phase 4.7.C — Document edited event with the correct payload.
     func testTickEmitsDocumentEditedEvent() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -1417,7 +1417,7 @@ final class LinearCollectorTests: XCTestCase {
         XCTAssertEqual(de.payload["project_name"], "Leaf")
     }
 
-    /// Standalone document — без project info.
+    /// Standalone document — no project info.
     func testTickEmitsDocumentEditedEventStandalone() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -1455,7 +1455,7 @@ final class LinearCollectorTests: XCTestCase {
         XCTAssertNil(de.payload["project_name"])
     }
 
-    /// Phase 4.7.C — Initiative observed event с signal_type=.context.
+    /// Phase 4.7.C — Initiative observed event with signal_type=.context.
     func testTickEmitsInitiativeObservedEvent() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -1493,7 +1493,7 @@ final class LinearCollectorTests: XCTestCase {
         XCTAssertEqual(init2.signalType, .context, "membership snapshot per tick — context signal")
     }
 
-    /// Initiative без status — payload omits status field.
+    /// Initiative with no status — payload omits the status field.
     func testTickEmitsInitiativeObservedEventWithNilStatus() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -1528,9 +1528,9 @@ final class LinearCollectorTests: XCTestCase {
 
     // MARK: - Phase 4.7.C — end-to-end collector emission integration
 
-    /// C-12 integration: batch со всеми Phase 4.7.C snapshot flavors → assert все
-    /// expected event_kinds присутствуют в DB, count'ы матчат, signal types
-    /// корректные, sentinel string не просачивается ни в один payload.
+    /// C-12 integration: batch with all Phase 4.7.C snapshot flavors → assert all
+    /// expected event_kinds are present in the DB, counts match, signal types
+    /// are correct, and the sentinel string doesn't leak into any payload.
     func testTick_FullPhase47CBatch_EmitsAllEventKinds() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try insertFreshIntegration(db: db)
@@ -1667,13 +1667,13 @@ final class LinearCollectorTests: XCTestCase {
             }
         }
 
-        // ADR-010 sentinel walk: ни один payload не содержит sentinel.
-        // (Snapshots не содержат sentinel — это integration test, not response
-        // contamination — но sanity assert для regression catch'ей.)
+        // ADR-010 sentinel walk: no payload contains the sentinel.
+        // (Snapshots don't contain the sentinel — this is an integration test, not response
+        // contamination — but it's a sanity assert to catch regressions.)
         for ev in stored {
             for (k, v) in ev.payload {
                 XCTAssertFalse(v.contains(sentinel),
-                               "ADR-010: payload[\(k)]=\"\(v)\" не должен содержать sentinel")
+                               "ADR-010: payload[\(k)]=\"\(v)\" must not contain the sentinel")
             }
         }
     }

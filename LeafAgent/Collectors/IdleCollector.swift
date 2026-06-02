@@ -3,8 +3,8 @@ import CoreGraphics
 import os
 import LeafCore
 
-/// Polling'ом спрашивает `CGEventSource` когда был последний HID event.
-/// Пишем context events только на транзиции active↔idle — не на каждый tick.
+/// Polls `CGEventSource` for the time of the last HID event.
+/// Writes context events only on active↔idle transitions — not on every tick.
 final class IdleCollector: @unchecked Sendable {
     private let writer: EventWriter
     private let thresholds: AgentThresholds

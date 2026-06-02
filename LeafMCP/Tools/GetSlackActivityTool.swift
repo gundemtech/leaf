@@ -2,20 +2,20 @@ import Foundation
 import LeafCore
 import LeafMCPProtocol
 
-/// Phase 4.4 — MCP-tool: вернуть Slack activity за период (today /
-/// yesterday / last_7_days). Reads same encrypted DB что MenuBar app —
-/// single source of truth. 7-й tool из 8 запланированных в whitepaper.
+/// Phase 4.4 — MCP-tool: return Slack activity for a period (today /
+/// yesterday / last_7_days). Reads same encrypted DB as MenuBar app —
+/// single source of truth. 7th tool out of 8 planned in the whitepaper.
 ///
-/// Output payload (versioned `version: 1` через `ToolResponseBuilder`):
-///   - `period`, `from`, `to` — окно
-///   - `messagesCount` — сумма count'ов action events
+/// Output payload (versioned `version: 1` via `ToolResponseBuilder`):
+///   - `period`, `from`, `to` — window
+///   - `messagesCount` — sum of action event counts
 ///     `payload.source='slack' AND event_kind='slack_message_authored_aggregate'`
-///   - `huddleMinutes` — derived из context events `slack_huddle_state_change`
+///   - `huddleMinutes` — derived from context events `slack_huddle_state_change`
 ///   - `byChannel[]` — `{channel, count}`, top-5 by count DESC.
-///     DM channels уже слиты в "DM" bucket на parser-level (ADR-010).
+///     DM channels are already collapsed into the "DM" bucket at parser-level (ADR-010).
 ///
-/// Metadata only — message bodies / permalinks / status text никогда не
-/// покидают устройство (ADR-010 won't-list, enforced на parser-level в
+/// Metadata only — message bodies / permalinks / status text never
+/// leave the device (ADR-010 won't-list, enforced at parser-level in
 /// ProdSlackAPIProvider).
 struct GetSlackActivityTool: ToolExecutor {
     let dbURL: URL
@@ -97,7 +97,7 @@ struct GetSlackActivityTool: ToolExecutor {
         if let wow = try? insights.weekOverWeekDelta() {
             payload["wowDelta"] = wow
         }
-        // Phase 4.6.C.3 — huddle participation streak (consecutive days с ≥1
+        // Phase 4.6.C.3 — huddle participation streak (consecutive days with ≥1
         // huddle joined; independent of period — global current streak).
         if let streak = breakdown.huddleParticipationStreak, streak > 0 {
             payload["huddleParticipationStreak"] = streak

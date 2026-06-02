@@ -1,6 +1,6 @@
-// Phase 4.3 — minimal contract test для StubGitHubAPIProvider.
+// Phase 4.3 — minimal contract test for StubGitHubAPIProvider.
 // Prod parser (REST events feed mapping + ADR-010 enforcement) tested separately
-// в LeafCorePrivateTests/ProdGitHubAPIProviderTests.swift (moat, B5).
+// in LeafCorePrivateTests/ProdGitHubAPIProviderTests.swift (moat, B5).
 
 import XCTest
 @testable import LeafCore

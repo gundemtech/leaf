@@ -1,8 +1,8 @@
 import Foundation
 
-/// Phase Track-4 S3 — pure transition detector для CoreAudio
-/// `kAudioDevicePropertyDeviceIsRunningSomewhere` boolean. Mirror Focus
-/// state-machine pattern: first observation primes state без emit'а;
+/// Phase Track-4 S3 — pure transition detector for the CoreAudio
+/// `kAudioDevicePropertyDeviceIsRunningSomewhere` boolean. Mirrors the Focus
+/// state-machine pattern: first observation primes state without an emit;
 /// 0→1 emits `.entered`, 1→0 emits `.exited`; same-value repeats no-emit.
 public struct MicInUseStateMachine: Sendable, Hashable {
     public enum Transition: Sendable, Hashable {

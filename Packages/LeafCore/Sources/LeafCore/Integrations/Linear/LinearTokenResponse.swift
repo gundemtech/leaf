@@ -2,16 +2,16 @@
 //  LinearTokenResponse.swift
 //  LeafCore
 //
-//  Phase 4.1 — Codable DTOs для /oauth/token и /graphql viewer responses.
-//  Phase 4.2 — moved из Leaf/ в LeafCore (visibility upgraded для cross-binary).
-//  `nonisolated` — DTO читаются JSONDecoder в URLSession callback context
-//  (caller isolation inheriting), не на @MainActor.
+//  Phase 4.1 — Codable DTOs for /oauth/token and /graphql viewer responses.
+//  Phase 4.2 — moved from Leaf/ to LeafCore (visibility upgraded for cross-binary use).
+//  `nonisolated` — the DTOs are decoded by JSONDecoder in the URLSession callback context
+//  (inheriting caller isolation), not on @MainActor.
 //
 
 import Foundation
 
 /// `POST /oauth/token` success response (RFC 6749 §4.1.4 + §6).
-/// Linear возвращает refresh_token и для public PKCE clients (verified).
+/// Linear returns a refresh_token even for public PKCE clients (verified).
 public nonisolated struct LinearTokenResponse: Decodable, Sendable {
     public let accessToken: String
     public let tokenType: String
@@ -29,7 +29,7 @@ public nonisolated struct LinearTokenResponse: Decodable, Sendable {
 }
 
 /// `POST /oauth/token` error response (RFC 6749 §5.2).
-/// Codable с обоими `error` и `error_description`; UI показывает description.
+/// Codable with both `error` and `error_description`; the UI shows the description.
 public nonisolated struct LinearTokenError: Decodable, Sendable {
     public let error: String
     public let errorDescription: String?

@@ -2,8 +2,8 @@ import XCTest
 @testable import LeafCore
 
 final class KeychainKeyStoreTests: XCTestCase {
-    // Unit tests run unsigned → Keychain access group не работает.
-    // Используем пустой access group (default keychain) для теста логики.
+    // Unit tests run unsigned → Keychain access group does not work.
+    // Use an empty access group (default keychain) to test the logic.
     private let service = "tech.gundem.leaf.tests"
     private let account = "test-key-\(UUID().uuidString)"
     private let accessGroup = ""
@@ -61,7 +61,7 @@ final class KeychainKeyStoreTests: XCTestCase {
         )
         try KeychainKeyStore.delete(accessGroup: accessGroup, service: service, account: account)
 
-        // После delete → fetchOrCreate должен сгенерить новый ключ (не равный предыдущему)
+        // After delete → fetchOrCreate must generate a new key (not equal to the previous one)
         let recreated = try KeychainKeyStore.fetchOrCreate(
             accessGroup: accessGroup,
             service: service,

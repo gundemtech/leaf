@@ -1,7 +1,7 @@
 import Foundation
 
-/// Namespace для имён таблиц и колонок. Имена публичны (уже в architecture.md).
-/// SQL тела — не здесь, живут в LeafCorePrivate (moat).
+/// Namespace for table and column names. The names are public (already in architecture.md).
+/// SQL bodies are not here — they live in LeafCorePrivate (moat).
 public enum Schema {
     public enum Events {
         public static let tableName = "events"
@@ -15,8 +15,8 @@ public enum Schema {
         public static let indexBundleTs = "events_bundle_ts"
     }
 
-    /// Phase 2.3 — byte-offset persistence для tail-read collector'ов.
-    /// PK — composite (collector_id, source_id). UPSERT через `INSERT ... ON CONFLICT`.
+    /// Phase 2.3 — byte-offset persistence for tail-read collectors.
+    /// PK — composite (collector_id, source_id). UPSERT via `INSERT ... ON CONFLICT`.
     public enum CollectorOffsets {
         public static let tableName = "collector_offsets"
         public static let collectorID = "collector_id"
@@ -28,8 +28,8 @@ public enum Schema {
         public static let updatedMs = "updated_ms"
     }
 
-    /// Phase 2.4 — user-managed list folder paths под FSEvents-наблюдением.
-    /// PK — `id` (UUID); `path` UNIQUE (canonical absolute, после resolvingSymlinksInPath).
+    /// Phase 2.4 — user-managed list of folder paths under FSEvents watching.
+    /// PK — `id` (UUID); `path` UNIQUE (canonical absolute, after resolvingSymlinksInPath).
     public enum WatchedFolders {
         public static let tableName = "watched_folders"
         public static let id = "id"
@@ -42,9 +42,9 @@ public enum Schema {
         public static let indexEnabled = "watched_folders_enabled"
     }
 
-    /// Phase 4.1 — OAuth credentials для third-party providers (Layer B).
-    /// PK — `provider` (single-row-per-provider в MVP); multi-workspace
-    /// потребует lift PK → composite (provider, workspace_id).
+    /// Phase 4.1 — OAuth credentials for third-party providers (Layer B).
+    /// PK — `provider` (single-row-per-provider in MVP); multi-workspace
+    /// will require lifting PK → composite (provider, workspace_id).
     public enum Integrations {
         public static let tableName = "integrations"
         public static let provider = "provider"
@@ -115,9 +115,9 @@ public enum Schema {
     }
 
     /// Phase 5.1.A — long-term member identity + X25519 public key (contract §4, §7).
-    /// PK — `id` UUID v4. `org_id` — logical FK на `org.id`.
-    /// `removed_at_ms` IS NULL = active member; устанавливается в Phase 5.3
-    /// на removal (contract §10). `role` — `TeamMemberRole.rawValue` ('admin' | 'member').
+    /// PK — `id` UUID v4. `org_id` — logical FK to `org.id`.
+    /// `removed_at_ms` IS NULL = active member; set in Phase 5.3
+    /// on removal (contract §10). `role` — `TeamMemberRole.rawValue` ('admin' | 'member').
     /// `pubkey_hex` — X25519 32-byte public, hex-encoded (64 chars).
     public enum TeamMembers {
         public static let tableName = "team_members"
@@ -129,15 +129,15 @@ public enum Schema {
         public static let addedAtMs = "added_at_ms"
         public static let removedAtMs = "removed_at_ms"
 
-        /// Partial index — active members per workspace для Team UI list.
+        /// Partial index — active members per workspace for the Team UI list.
         public static let indexWorkspaceActive = "team_members_workspace_active"
     }
 
     /// Phase 5.1.A — team key rotation history (contract §7).
-    /// PK — `id` UUID v4 (rotation identity; embedded as 16-byte `keyID` в envelope §6).
-    /// `deprecated_at_ms` IS NULL = current rotation; устанавливается в Phase 5.3.
-    /// `generated_by_member_id` — logical FK на `team_members.id` (audit who created rotation).
-    /// **Forever-retained** — old rows нужны для decrypt'а `presence_history` (contract §12).
+    /// PK — `id` UUID v4 (rotation identity; embedded as 16-byte `keyID` in envelope §6).
+    /// `deprecated_at_ms` IS NULL = current rotation; set in Phase 5.3.
+    /// `generated_by_member_id` — logical FK to `team_members.id` (audit who created rotation).
+    /// **Forever-retained** — old rows are needed to decrypt `presence_history` (contract §12).
     public enum TeamKeys {
         public static let tableName = "team_keys"
         public static let id = "id"
@@ -146,7 +146,7 @@ public enum Schema {
         public static let deprecatedAtMs = "deprecated_at_ms"
         public static let generatedByMemberID = "generated_by_member_id"
 
-        /// Partial index — query "current key" дёшево (1 row).
+        /// Partial index — query "current key" cheaply (1 row).
         public static let indexActive = "team_keys_active"
     }
 
@@ -154,7 +154,7 @@ public enum Schema {
     /// Composite PK `(peer_pubkey_hex, new_key_id)` matches relay's idempotency
     /// key (5.3.C). `posted_at_ms IS NULL` means the POST has not yet succeeded;
     /// `KeyRotationService.resumePendingPosts()` retries on next launch.
-    /// `kind` — `'rotation'` (wrapped new teamKey) или `'tombstone'` (sentinel for removed peer).
+    /// `kind` — `'rotation'` (wrapped new teamKey) or `'tombstone'` (sentinel for removed peer).
     public enum RotationOutbox {
         public static let tableName = "rotation_outbox"
         public static let peerPubkeyHex = "peer_pubkey_hex"
@@ -479,7 +479,7 @@ public enum Schema {
 
     /// Phase Track-4 S3 — per-minute intensity aggregates (CGEventTap counter-only).
     /// PK — `minute_bucket_ms` (minute-truncated wall clock). UPSERT replaces existing
-    /// bucket so re-emission на restart safe. Counter fields counter-only —
+    /// bucket so re-emission on restart is safe. Counter fields counter-only —
     /// NEVER include keycode/characters/modifierFlags per ADR-010 Won't-list.
     public enum IntensityAggregates {
         public static let tableName = "intensity_aggregates"
@@ -502,8 +502,8 @@ public enum Schema {
 
     /// Phase Track-1 D2 — sidecar table mapping FTS5 rowid → (event_id, body_kind).
     /// Contentless `events_fts` does not retain UNINDEXED column values, so the
-    /// side table is the source of truth для retrieval после MATCH (search() join +
-    /// D3 reverse-lookup). Composite write atomic в `EventsFullTextStore.indexEvent`.
+    /// side table is the source of truth for retrieval after MATCH (search() join +
+    /// D3 reverse-lookup). Composite write is atomic in `EventsFullTextStore.indexEvent`.
     public enum EventsFTSMeta {
         public static let tableName = "events_fts_meta"
         public static let ftsRowID = "fts_rowid"
@@ -582,8 +582,8 @@ public enum Schema {
     }
 
     /// Phase Track-1 D3 — decision detector hits (one row per source event).
-    /// `event_id` — logical FK на `events.id` (UNIQUE — per-event idempotency).
-    /// SQL FOREIGN KEY не объявляется (repo convention — см. M013_EventLinks).
+    /// `event_id` — logical FK to `events.id` (UNIQUE — per-event idempotency).
+    /// SQL FOREIGN KEY is not declared (repo convention — see M013_EventLinks).
     public enum Decisions {
         public static let tableName = "decisions"
         public static let id = "id"
@@ -598,8 +598,8 @@ public enum Schema {
 
     /// Phase Track-1 D3 — open question detector hits + resolution flow.
     /// `event_id` UNIQUE (per-event idempotency). `resolved_by_event_id` —
-    /// nullable logical FK на `events.id`, заполняется при матче resolving
-    /// event'а (см. resolution flow в DetectorPipeline).
+    /// nullable logical FK to `events.id`, populated when a resolving event
+    /// is matched (see resolution flow in DetectorPipeline).
     public enum OpenQuestions {
         public static let tableName = "open_questions"
         public static let id = "id"
@@ -619,11 +619,11 @@ public enum Schema {
         public static let indexPR = "idx_open_questions_pr"
     }
 
-    /// Phase Track-1 D3 — blocker hits (один OPEN blocker per
+    /// Phase Track-1 D3 — blocker hits (one OPEN blocker per
     /// `(target_kind, target_ref)`, partial unique index `idx_blockers_open`).
-    /// Resolved rows исключены из uniqueness — позволяет повторно открывать
-    /// blocker после resolve. `detected_by_event_id` / `resolved_by_event_id` —
-    /// nullable logical FKs на `events.id`.
+    /// Resolved rows are excluded from uniqueness — allows reopening a
+    /// blocker after resolve. `detected_by_event_id` / `resolved_by_event_id` —
+    /// nullable logical FKs to `events.id`.
     public enum Blockers {
         public static let tableName = "blockers"
         public static let id = "id"
@@ -640,9 +640,9 @@ public enum Schema {
         public static let indexTarget = "idx_blockers_target"
     }
 
-    /// Phase Track-1 D3 — append-only "where I stopped" snapshots генерируемые
+    /// Phase Track-1 D3 — append-only "where I stopped" snapshots generated by
     /// `WhereStoppedDeriver` (scheduled detector). `anchor_event_id` — nullable
-    /// logical FK на `events.id` (anchor может быть derived window без single
+    /// logical FK to `events.id` (anchor may be a derived window without a single
     /// canonical event).
     public enum WhereStoppedLog {
         public static let tableName = "where_stopped_log"
@@ -655,11 +655,11 @@ public enum Schema {
         public static let indexGeneratedAt = "idx_where_stopped_generated_at"
     }
 
-    /// Phase Track-1 D3 — per-detector progress cursor для incremental
-    /// per-event detector pipeline. PK — `detector_kind`. Pre-seeded в
-    /// миграции тремя строками (`decision`, `open_question`,
+    /// Phase Track-1 D3 — per-detector progress cursor for the incremental
+    /// per-event detector pipeline. PK — `detector_kind`. Pre-seeded in the
+    /// migration with three rows (`decision`, `open_question`,
     /// `blocker_pattern`). Scheduled detectors (linear_stuck, where_stopped)
-    /// cursor не используют.
+    /// do not use a cursor.
     public enum DetectorOffsets {
         public static let tableName = "detector_offsets"
         public static let detectorKind = "detector_kind"
@@ -668,7 +668,7 @@ public enum Schema {
     }
 
     /// Phase Track-1 D3 — `detector_kind` discriminators for
-    /// `detector_offsets.detector_kind`. Single source of truth между
+    /// `detector_offsets.detector_kind`. Single source of truth between the
     /// migration pre-seed + DetectorPipeline cursor reads.
     public enum DetectorKinds {
         public static let decision = "decision"
@@ -678,7 +678,7 @@ public enum Schema {
 
     /// Phase Track-1 D3 — `blocker_kind` discriminators for `blockers.blocker_kind`.
     /// Single source of truth between BlockersStore callers (per-event pattern
-    /// detector + scheduled LinearStuck scanner) и downstream readers.
+    /// detector + scheduled LinearStuck scanner) and downstream readers.
     public enum BlockerKinds {
         public static let patternBlockedOn = "pattern_blocked_on"
         public static let linearStuck = "linear_stuck"
@@ -746,7 +746,7 @@ public enum Schema {
         public static let slackChannelsInfo = "slack_channels_info"
     }
 
-    /// Track-6 P3 — per-domain allow-list для browser URL granularity control.
+    /// Track-6 P3 — per-domain allow-list for browser URL granularity control.
     /// Default empty; non-matching domains resolve to `domainOnly` at filter time.
     /// Migration M029 (renamed from M026 — slot M026 occupied by Track-5/S8
     /// substrate on integration-T10).
@@ -785,22 +785,22 @@ public enum Schema {
     }
 }
 
-/// Канонические `collector_id` значения. Литералы — public, чтобы тесты
-/// и Agent могли передавать одни и те же ID (single source of truth).
+/// Canonical `collector_id` values. The literals are public so that tests
+/// and the Agent can pass the same IDs (single source of truth).
 public enum CollectorID {
     /// Phase 2.3 — Claude Code session jsonl tail-reader.
     public static let claudeCodeJSONL = "claude_code_jsonl"
-    /// Phase 2.4 — FSEvents content collector. Не используется для offsets
-    /// (FSEvents stream-based, не tail-read), но фигурирует в diagnostic logs.
+    /// Phase 2.4 — FSEvents content collector. Not used for offsets
+    /// (FSEvents is stream-based, not tail-read), but appears in diagnostic logs.
     public static let fsEvents = "fs_events"
     /// Phase 4.2 — Linear GraphQL polling collector. `sourceID = "linear:<workspaceID>"`.
-    /// `lastModifiedMs` хранит cursor (epoch ms newest processed `updatedAt`).
+    /// `lastModifiedMs` holds the cursor (epoch ms newest processed `updatedAt`).
     public static let linearPolling = "linear_polling"
     /// Phase 4.3 — GitHub REST events polling collector. `sourceID = "github:<login>"`.
-    /// `lastModifiedMs` хранит cursor (epoch ms newest processed event `created_at`).
+    /// `lastModifiedMs` holds the cursor (epoch ms newest processed event `created_at`).
     public static let githubPolling = "github_polling"
     /// Phase 4.4 — Slack REST polling collector. `sourceID = "slack:<team_id>:<user_id>"`.
-    /// `lastModifiedMs` хранит cursor (epoch ms newest processed message `ts`).
+    /// `lastModifiedMs` holds the cursor (epoch ms newest processed message `ts`).
     public static let slackPolling = "slack_polling"
     /// Phase Track-3 D1 — Linear warm-tier (15m) state sweep:
     /// notifications + cycles + subscribed_issues. sourceID format:
@@ -827,8 +827,8 @@ public enum CollectorID {
     public static let slackColdPolling = "slack_cold_polling"
 }
 
-/// Канонические `provider` значения для `integrations` таблицы. Литералы —
-/// public, single source of truth между OAuth-сервисом, DB и (Phase 4.2+) collector'ами.
+/// Canonical `provider` values for the `integrations` table. The literals are
+/// public, single source of truth between the OAuth service, DB and (Phase 4.2+) collectors.
 public enum IntegrationProvider: String, Sendable, Hashable, CaseIterable {
     case linear
     case github

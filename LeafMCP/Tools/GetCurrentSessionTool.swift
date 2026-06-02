@@ -2,17 +2,17 @@ import Foundation
 import LeafCore
 import LeafMCPProtocol
 
-/// MCP-tool: вернуть текущую (live) сессию пользователя если он активен
-/// в пределах `focusSessionGapSec`, плюс последнюю завершённую как контекст.
-/// Unified shape — consumer (Claude) не ветвится на `active`, всегда читает
-/// одни и те же ключи.
+/// MCP tool: return the user's current (live) session if they have been active
+/// within `focusSessionGapSec`, plus the last completed session as context.
+/// Unified shape — the consumer (Claude) does not branch on `active`, it always
+/// reads the same keys.
 struct GetCurrentSessionTool: ToolExecutor {
     let dbURL: URL
     let dbConfig: DatabaseConfig
     let dbEncryption: EncryptionOptions?
-    /// Threshold "live" — gap к последнему attention event ниже этого значения
-    /// → сессия открыта. Инжектируется из MCPServer.swift (single source of truth
-    /// — moat config или weakDefaults в зависимости от LEAF_PROD).
+    /// "Live" threshold — when the gap to the last attention event is below this value
+    /// → the session is open. Injected from MCPServer.swift (single source of truth
+    /// — moat config or weakDefaults depending on LEAF_PROD).
     let focusSessionGapSec: TimeInterval
 
     static let definition: ToolDefinition = {
@@ -41,9 +41,9 @@ struct GetCurrentSessionTool: ToolExecutor {
         let database = try Database.openForRead(at: dbURL, config: dbConfig, encryption: dbEncryption)
         let insights = DerivedInsightsFactory.make(database: database)
 
-        // Period: последние 24h. Хватает чтобы захватить сегодняшнюю и вчерашнюю
-        // активность; не имеет смысла шире — `currentSession` определяется
-        // recency, `lastSession` — самая последняя в окне.
+        // Period: the last 24h. Enough to capture today's and yesterday's
+        // activity; no point going wider — `currentSession` is determined by
+        // recency, `lastSession` is the most recent one in the window.
         let now = Date()
         let period = DateInterval(start: now.addingTimeInterval(-86_400), end: now)
 
@@ -58,10 +58,11 @@ struct GetCurrentSessionTool: ToolExecutor {
             isActive = false
         }
 
-        // currentSession: самая последняя если live; иначе null.
-        // lastSession: самая последняя session в окне (даже если live она же —
-        // даём её и как currentSession и как lastSession для "что было перед этим"
-        // нужен второй с конца — берём предпоследнюю).
+        // currentSession: the most recent one if live; otherwise null.
+        // lastSession: the most recent session in the window (even if the live one
+        // is the same — we expose it both as currentSession and as lastSession; for
+        // "what came before this" we need the second from the end, so we take the
+        // second-to-last).
         let mostRecent = sessions.last
         let secondMostRecent = sessions.count >= 2 ? sessions[sessions.count - 2] : nil
 

@@ -3,16 +3,16 @@ import GRDB
 
 /// Phase 5.1.A — `team_members` long-term member identity + X25519 pubkey
 /// (Phase 5 architecture contract §4 Identity, §7 Key lifecycle).
-/// Schema публична (whitepaper storage.md). SQL DDL — не moat.
+/// The schema is public (whitepaper storage.md). SQL DDL is not moat.
 ///
-/// `org_id` — logical FK на `org.id`; `removed_at_ms` IS NULL = active member
-/// (устанавливается в Phase 5.3 на removal).
-/// `role` — `TeamMemberRole.rawValue` ('admin' | 'member'); validated в Swift,
-/// без CHECK constraint (см. spec 5.1.A §4).
+/// `org_id` — logical FK to `org.id`; `removed_at_ms` IS NULL = active member
+/// (set in Phase 5.3 on removal).
+/// `role` — `TeamMemberRole.rawValue` ('admin' | 'member'); validated in Swift,
+/// without a CHECK constraint (see spec 5.1.A §4).
 /// `pubkey_hex` — X25519 32-byte public, hex-encoded (64 chars).
 ///
-/// Partial index `team_members_org_active` — под frequent query
-/// "active members этой org" в Team UI.
+/// Partial index `team_members_org_active` — for the frequent query
+/// "active members of this org" in the Team UI.
 public extension DatabaseMigrator {
     mutating func registerMigration007TeamMembers() {
         // Track-5 S2: historical migration — hardcoded literals for the

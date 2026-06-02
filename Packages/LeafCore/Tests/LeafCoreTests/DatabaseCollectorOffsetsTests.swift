@@ -1,5 +1,5 @@
-// Phase 2.3 — public-side tests для byte-offset persistence (M002 + Database
-// offset API). Atomic events+offset write — отдельным файлом ниже.
+// Phase 2.3 — public-side tests for byte-offset persistence (M002 + Database
+// offset API). Atomic events+offset write — in a separate file below.
 
 import XCTest
 @testable import LeafCore
@@ -19,7 +19,7 @@ final class DatabaseCollectorOffsetsTests: XCTestCase {
         try? FileManager.default.removeItem(at: tempDir)
     }
 
-    /// UPSERT round-trip: insert → read → update same PK → read обновлённые поля.
+    /// UPSERT round-trip: insert → read → update same PK → read the updated fields.
     func testWriteAndReadOffset() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -59,16 +59,16 @@ final class DatabaseCollectorOffsetsTests: XCTestCase {
             collectorID: CollectorID.claudeCodeJSONL,
             sourceID: "/tmp/sessionA.jsonl"
         )
-        XCTAssertEqual(read2?.byteOffset, 4096, "UPSERT обновил byteOffset")
-        XCTAssertEqual(read2?.size, 4096, "UPSERT обновил size")
+        XCTAssertEqual(read2?.byteOffset, 4096, "UPSERT updated byteOffset")
+        XCTAssertEqual(read2?.size, 4096, "UPSERT updated size")
 
-        // Sanity: ровно одна row (UPSERT, не двойной insert).
+        // Sanity: exactly one row (UPSERT, not a double insert).
         let listed = try db.listOffsets(collectorID: CollectorID.claudeCodeJSONL)
         XCTAssertEqual(listed.count, 1)
     }
 
-    /// list возвращает только записи запрошенного `collectorID`.
-    /// Future collectors (FSEvents, git polling) не путают друг друга.
+    /// list returns only entries for the requested `collectorID`.
+    /// Future collectors (FSEvents, git polling) don't get mixed up with each other.
     func testListFiltersOnCollectorID() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -99,10 +99,10 @@ final class DatabaseCollectorOffsetsTests: XCTestCase {
         XCTAssertTrue(try db.listOffsets(collectorID: "nope").isEmpty)
     }
 
-    /// M002 idempotent: open writer дважды на той же DB → таблица existsраз,
-    /// нет crash, M001 events table остаётся работоспособной.
+    /// M002 idempotent: open the writer twice on the same DB → the table exists once,
+    /// no crash, M001 events table stays functional.
     func testMigrationIdempotent() throws {
-        // Первый open — создаёт обе таблицы.
+        // First open — creates both tables.
         let db1 = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try db1.write(RawEvent(
             timestamp: Date(timeIntervalSince1970: 1_700_000_000),
@@ -112,10 +112,10 @@ final class DatabaseCollectorOffsetsTests: XCTestCase {
         ))
         try db1.checkpointWAL()
 
-        // Второй open — миграции должны быть skip'нуты GRDB по identifier'у "002_collector_offsets".
+        // Second open — migrations should be skipped by GRDB based on the identifier "002_collector_offsets".
         let db2 = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
-        // Schema check — обе таблицы на месте.
+        // Schema check — both tables are present.
         try db2.readSQL { rawDB in
             let tables = try String.fetchAll(
                 rawDB,
@@ -128,11 +128,11 @@ final class DatabaseCollectorOffsetsTests: XCTestCase {
             )
         }
 
-        // Существующий event цел — M002 не сбросил M001 data.
+        // The existing event is intact — M002 did not wipe M001 data.
         let count = try db2.eventCount(in: DateInterval(
             start: Date(timeIntervalSince1970: 1_699_000_000),
             end: Date(timeIntervalSince1970: 1_701_000_000)
         ))
-        XCTAssertEqual(count, 1, "events from первое open сохранились")
+        XCTAssertEqual(count, 1, "events from the first open were preserved")
     }
 }

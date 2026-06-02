@@ -2,14 +2,14 @@ import Foundation
 import LeafCore
 import LeafMCPProtocol
 
-/// MCP-tool: вернуть AI collaboration breakdown за период (today / yesterday /
-/// last_7_days). Reads same encrypted DB что MenuBar app — single source of truth.
+/// MCP tool: return the AI collaboration breakdown for a period (today / yesterday /
+/// last_7_days). Reads the same encrypted DB as the MenuBar app — single source of truth.
 ///
-/// Output payload (versioned `version: 1` через `ToolResponseBuilder`):
-///   - `period`, `from`, `to` — окно
-///   - `aiRatio` — 0..1, доля AI-active минут от union с attention
+/// Output payload (versioned `version: 1` via `ToolResponseBuilder`):
+///   - `period`, `from`, `to` — the window
+///   - `aiRatio` — 0..1, share of AI-active minutes out of the union with attention
 ///   - `aiActiveSeconds`, `totalActiveSeconds` — for human-readable formatting
-///   - `sessionCount` — distinct Claude Code sessions в окне
+///   - `sessionCount` — distinct Claude Code sessions in the window
 ///   - `topTools[]` — `{name, count}`, top-5 by tool_use count
 ///   - `topProjects[]` — `{cwd, aiActiveSeconds}`, top-5 by AI-active time
 struct GetAiActivityTool: ToolExecutor {

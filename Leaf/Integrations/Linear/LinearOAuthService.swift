@@ -2,15 +2,15 @@
 //  LinearOAuthService.swift
 //  Leaf
 //
-//  Phase 4.1 — @Observable controller для Connections Settings tab.
+//  Phase 4.1 — @Observable controller for the Connections Settings tab.
 //  Owns:
 //   1) State machine (NotConnected → ... → Connected/Error)
-//   2) PKCE flow: загрузка authorize URL, loopback listener, token exchange,
-//      viewer query, persistence в integrations table.
+//   2) PKCE flow: load authorize URL, loopback listener, token exchange,
+//      viewer query, persistence into the integrations table.
 //   3) Disconnect: delete row + DistributedNotification.
 //
-//  В 4.1 main app становится 3rd writer над events.sqlite (Agent + WatchedFolders + здесь).
-//  busyTimeout=5000ms serialize'ит, 100ms retry once на конфликт — паттерн WatchedFoldersService.
+//  In 4.1 the main app becomes the 3rd writer over events.sqlite (Agent + WatchedFolders + here).
+//  busyTimeout=5000ms serializes, 100ms retry once on conflict — WatchedFoldersService pattern.
 //
 
 import Foundation
@@ -35,14 +35,14 @@ final class LinearOAuthService {
         case fetchingWorkspace
         case connected(workspaceName: String, connectedAt: Date)
         /// Phase 4.2 — refresh_token revoked / expired (LinearTokenRefresher
-        /// сделал deleteIntegration + UserDefaults flag + DistributedNotification).
-        /// UI показывает orange "Reconnect needed" warning. Cleared на successful
-        /// `connect()` или manual `disconnect()`.
+        /// performed deleteIntegration + UserDefaults flag + DistributedNotification).
+        /// UI shows orange "Reconnect needed" warning. Cleared on a successful
+        /// `connect()` or a manual `disconnect()`.
         case reconnectNeeded
         case error(message: String)
     }
 
-    /// Public-readable state. UI bind'ится через `@Bindable` / @Environment.
+    /// Public-readable state. UI binds via `@Bindable` / @Environment.
     private(set) var state: ConnectionState = .notConnected
 
     private let databaseURL: URL
@@ -84,21 +84,21 @@ final class LinearOAuthService {
 
     // MARK: - Public API
 
-    /// Перечитывает row из DB → выставляет `.connected`, `.notConnected`,
-    /// или (Phase 4.2) `.reconnectNeeded` если refresher удалил row из-за
-    /// invalid_grant. Settings view вызывает `.onAppear` чтобы реабилитировать
-    /// state после cold launch и после disconnect / reconnect cycles.
+    /// Re-reads the row from the DB → sets `.connected`, `.notConnected`,
+    /// or (Phase 4.2) `.reconnectNeeded` if the refresher deleted the row due to
+    /// invalid_grant. The Settings view calls `.onAppear` to rehabilitate
+    /// state after cold launch and after disconnect / reconnect cycles.
     func reload() {
         do {
             let db = try ensureDatabase()
             let denied = isRefreshDenialFlagSet()
             if let record = try db.readIntegration(provider: .linear) {
-                // Successful row exists — clear stale flag (e.g. юзер вернулся
-                // после reconnect, или manual reconnect через connect()).
+                // Successful row exists — clear stale flag (e.g. the user returned
+                // after a reconnect, or a manual reconnect via connect()).
                 clearRefreshDenialFlag()
                 state = .connected(workspaceName: record.workspaceName, connectedAt: record.connectedAt)
             } else if denied {
-                // Row deleted by refresher's invalid_grant path — UI показывает
+                // Row deleted by refresher's invalid_grant path — UI shows
                 // orange warning "Reconnect needed".
                 state = .reconnectNeeded
             } else {
@@ -110,8 +110,8 @@ final class LinearOAuthService {
         }
     }
 
-    /// Запускает full OAuth flow. Caller — UI button "Connect".
-    /// Вся последовательность runs в Task — в state machine видно где сейчас.
+    /// Starts the full OAuth flow. Caller — UI button "Connect".
+    /// The whole sequence runs in a Task — the state machine shows where it currently is.
     func connect() async {
         guard let clientID = readClientID() else {
             state = .error(message: "LINEAR_OAUTH_CLIENT_ID is not configured. See Config/Local.xcconfig.example.")
@@ -129,10 +129,10 @@ final class LinearOAuthService {
             return
         }
 
-        // Открываем браузер до старта listener'а — иначе race: listener bind может занять
-        // несколько ms, а browser быстрее к этому моменту переходит. Listener стартанёт
-        // up to ~10ms after — Linear redirect занимает >100ms, так что точно успеет.
-        // (Если listener bind упал — тоже тогда видно ДО browser open'а.)
+        // Open the browser before starting the listener — otherwise a race: the listener bind may take
+        // a few ms, while the browser gets going faster by that point. The listener starts
+        // up to ~10ms after — the Linear redirect takes >100ms, so it definitely makes it in time.
+        // (If the listener bind failed — that, too, is visible BEFORE the browser opens.)
         do {
             state = .waitingForCallback(port: port)
             async let listenerTask = LoopbackCallbackListener.awaitCallback(port: port)
@@ -204,7 +204,7 @@ final class LinearOAuthService {
         }
     }
 
-    /// Удаляет row, постит notification (в 4.2 collector подхватит и остановит polling).
+    /// Deletes the row, posts a notification (in 4.2 the collector picks it up and stops polling).
     func disconnect() {
         do {
             let db = try ensureDatabase()
@@ -306,7 +306,7 @@ final class LinearOAuthService {
             let db = try ensureDatabase()
             try db.upsertIntegration(record)
         } catch {
-            // Phase 2.4 R6 паттерн — single 100ms retry на SQLite busy.
+            // Phase 2.4 R6 pattern — single 100ms retry on SQLite busy.
             Thread.sleep(forTimeInterval: 0.1)
             let db = try ensureDatabase()
             try db.upsertIntegration(record)
@@ -329,8 +329,8 @@ final class LinearOAuthService {
 
     // MARK: - Phase 4.2 refreshDenied surface
 
-    /// Cross-process flag set by LinearTokenRefresher на invalid_grant. Mirror
-    /// constant defined в LeafCore (LinearOAuthEndpoints.userDefaultsSuite/Key).
+    /// Cross-process flag set by LinearTokenRefresher on invalid_grant. Mirror
+    /// constant defined in LeafCore (LinearOAuthEndpoints.userDefaultsSuite/Key).
     private func isRefreshDenialFlagSet() -> Bool {
         UserDefaults(suiteName: LinearOAuthEndpoints.userDefaultsSuite)?
             .bool(forKey: LinearOAuthEndpoints.refreshDeniedFlagKey) ?? false
@@ -341,12 +341,12 @@ final class LinearOAuthService {
             .set(false, forKey: LinearOAuthEndpoints.refreshDeniedFlagKey)
     }
 
-    /// Subscribe на DistributedNotification от Refresher (cross-process) и
-    /// own connect/disconnect (intra-process). Когда flag flip'ится → reload()
-    /// видит новое state. Без observer'а юзер увидел бы stale state до next
-    /// `.onAppear` Settings view. Token хранится — `deinit` removeObserver'ит.
-    /// `reloadInFlight` коалесит back-to-back firings (e.g., relay restart
-    /// pump'ит notification N раз в секунду).
+    /// Subscribe to the DistributedNotification from the Refresher (cross-process) and
+    /// own connect/disconnect (intra-process). When the flag flips → reload()
+    /// sees the new state. Without the observer the user would see stale state until the next
+    /// `.onAppear` of the Settings view. The token is retained — `deinit` calls removeObserver.
+    /// `reloadInFlight` coalesces back-to-back firings (e.g., a relay restart
+    /// pumps the notification N times a second).
     private func subscribeToIntegrationChangedNotification() {
         let name = NSNotification.Name(restartTriggerName)
         integrationChangedObserver = DistributedNotificationCenter.default().addObserver(

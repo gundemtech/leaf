@@ -4,9 +4,9 @@ import LeafMCPProtocol
 
 /// Phase Track-1 D3 — `leaf_current_work` MCP tool.
 ///
-/// Тонкая обёртка над `QueryEngine.currentWork(nowMs:)`. Heavy lifting
+/// Thin wrapper around `QueryEngine.currentWork(nowMs:)`. The heavy lifting
 /// (latest-event projections per signal type, where_stopped freshness gate)
-/// живёт в LeafCore. Schema / param decoders shared via `D3ToolSchemas` / `D3ToolParams`.
+/// lives in LeafCore. Schema / param decoders shared via `D3ToolSchemas` / `D3ToolParams`.
 struct CurrentWorkTool: ToolExecutor {
     let dbURL: URL
     let dbConfig: DatabaseConfig

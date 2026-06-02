@@ -1,13 +1,13 @@
 import Foundation
 
-/// Phase Track-4 S3 — delta detector над `NSPasteboard.general.changeCount`.
-/// First observation primes lastCount без emit'а (avoid spam'а на agent
-/// boot когда current changeCount уже большой). Subsequent observation
+/// Phase Track-4 S3 — delta detector over `NSPasteboard.general.changeCount`.
+/// First observation primes lastCount without emitting (avoid spam at agent
+/// boot when the current changeCount is already large). Subsequent observation
 /// emits raw delta if positive.
 ///
-/// **Content никогда не материализуется** (ADR-010 Won't-list — clipboard
-/// → count only). `pasteboardItems` / `string(forType:)` не вызываются —
-/// зашитая дисциплина на ClipboardCollector callsite.
+/// **Content is never materialized** (ADR-010 Won't-list — clipboard
+/// → count only). `pasteboardItems` / `string(forType:)` are not called —
+/// discipline baked in at the ClipboardCollector callsite.
 public struct ClipboardCounterStateMachine: Sendable, Hashable {
     private var lastCount: Int?
 

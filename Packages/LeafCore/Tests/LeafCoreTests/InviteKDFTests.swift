@@ -1,7 +1,7 @@
 // Phase 5.2.A — InviteKDF protocol surface tests (public).
 // Verify Unimplemented placeholder discipline (mirror EnvelopeCodec
 // `UnimplementedEnvelopeCodec` 5.1.C pattern). Real HKDF impl tests
-// живут в LeafCorePrivate `ProdInviteKDFTests` (gitignored moat).
+// live in LeafCorePrivate `ProdInviteKDFTests` (gitignored moat).
 
 import XCTest
 import CryptoKit
@@ -31,16 +31,16 @@ final class InviteKDFTests: XCTestCase {
 
     func testInviteKDFProtocol_ExistentialAccept() {
         let kdf: any InviteKDF = UnimplementedInviteKDF()
-        // Compile-time: `kdf` is `any InviteKDF`. Runtime — нет meaningful action,
-        // smoke check что existential erasure не surprise'ит.
+        // Compile-time: `kdf` is `any InviteKDF`. Runtime — no meaningful action,
+        // just a smoke check that existential erasure holds no surprises.
         XCTAssertNotNil(kdf as Any)
     }
 
     // MARK: - Helpers
 
-    /// Конструируем `SharedSecret` через CryptoKit ECDH (другого пути нет —
-    /// no public init). Used only as input для UnimplementedInviteKDF (которая
-    /// throws до использования).
+    /// Construct a `SharedSecret` via CryptoKit ECDH (there is no other way —
+    /// no public init). Used only as input for UnimplementedInviteKDF (which
+    /// throws before it is used).
     private func makeDummySharedSecret() -> SharedSecret {
         let alice = Curve25519.KeyAgreement.PrivateKey()
         let bob = Curve25519.KeyAgreement.PrivateKey()

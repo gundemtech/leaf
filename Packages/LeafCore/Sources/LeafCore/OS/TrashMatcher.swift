@@ -1,12 +1,12 @@
 import Foundation
 
-/// Phase Track-4 S3 — discrimination + coalesce gate под Trash FSEvents.
+/// Phase Track-4 S3 — discrimination + coalesce gate over Trash FSEvents.
 /// Distinguishes `.added` (single file dragged to trash) vs `.emptied`
 /// (burst of removals after Empty Trash). Coalesces emissions within window
-/// (default 2s mirror S1 SpaceTransitionCoalescer) чтобы Spotlight bursts
-/// не triplicate'или.
+/// (default 2s mirror S1 SpaceTransitionCoalescer) so that Spotlight bursts
+/// don't triplicate.
 ///
-/// **Filename only** — никогда не читает file contents (ADR-010 Won't-list).
+/// **Filename only** — never reads file contents (ADR-010 Won't-list).
 public struct TrashMatcher: Sendable {
     public enum Emission: Sendable, Hashable { case added, emptied }
 
@@ -17,8 +17,8 @@ public struct TrashMatcher: Sendable {
         self.coalesceWindowMs = coalesceWindowMs
     }
 
-    /// Heuristic: large removed-burst (>10) сильно превосходит added → empty;
-    /// otherwise если addedCount > 0 → added. Coalesce drops emissions within
+    /// Heuristic: large removed-burst (>10) far exceeds added → empty;
+    /// otherwise if addedCount > 0 → added. Coalesce drops emissions within
     /// coalesceWindowMs of prior emit.
     ///
     /// **Known false-negative (I5 code review)**: batch like

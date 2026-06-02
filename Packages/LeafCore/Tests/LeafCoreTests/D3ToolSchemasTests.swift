@@ -17,7 +17,7 @@ final class D3ToolSchemasTests: XCTestCase {
         XCTAssertEqual(schema["type"] as? String, "object")
         XCTAssertEqual(schema["additionalProperties"] as? Bool, false)
 
-        // `period` is required; nested object с required start_ms+end_ms integers.
+        // `period` is required; nested object with required start_ms+end_ms integers.
         let required = schema["required"] as? [String] ?? []
         XCTAssertTrue(required.contains("period"))
 

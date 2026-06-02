@@ -6,7 +6,7 @@
 // appear except at legitimate attestation surfaces (AttachedEventRef refs
 // in the footer line — Layer A/B legitimately chose to emit that event_kind).
 //
-// Symmetric с S5 TeamEventPayloadLeakageTests (`Tests/LeafCoreTests/`).
+// Symmetric with S5 TeamEventPayloadLeakageTests (`Tests/LeafCoreTests/`).
 
 import XCTest
 @testable import LeafCore

@@ -1,20 +1,20 @@
 import Foundation
 
-/// Phase 2.4 — структура для конфигурации FSEvents ignore-list.
-/// Сами patterns — moat (`FSEventsIgnoreRulesProd` в LeafCorePrivate);
-/// логика matching универсальна и живёт здесь, чтобы тесты мог дёшево
-/// собрать custom rules без moat-зависимости.
+/// Phase 2.4 — configuration struct for the FSEvents ignore-list.
+/// The patterns themselves are moat (`FSEventsIgnoreRulesProd` in LeafCorePrivate);
+/// the matching logic is generic and lives here so that tests can cheaply
+/// assemble custom rules without a moat dependency.
 public struct FSEventsIgnoreRules: Sendable {
-    /// Имена компонентов path'а — если *любой* component совпадает,
-    /// path ignored. Пример: `"node_modules"`, `".git"`. Полное-name match,
-    /// не glob (точная защита от ложных срабатываний на `node_modules-foo`).
+    /// Path component names — if *any* component matches, the
+    /// path is ignored. Example: `"node_modules"`, `".git"`. Full-name match,
+    /// not glob (precise protection against false positives on `node_modules-foo`).
     public let ignoredDirComponents: Set<String>
-    /// Расширения файла без точки. Пример: `"swp"`, `"tmp"`.
+    /// File extensions without the dot. Example: `"swp"`, `"tmp"`.
     public let ignoredExtensions: Set<String>
-    /// Полные имена файлов. Пример: `".DS_Store"`.
+    /// Full file names. Example: `".DS_Store"`.
     public let ignoredFilenames: Set<String>
-    /// `LIKE`-glob patterns на filename (`*` matches anything, `?` — single char).
-    /// Пример: `"~$*"` (Office lock files), `".~lock.*"` (LibreOffice).
+    /// `LIKE`-glob patterns on the filename (`*` matches anything, `?` — single char).
+    /// Example: `"~$*"` (Office lock files), `".~lock.*"` (LibreOffice).
     public let ignoredFilenameGlobs: [String]
 
     public init(
@@ -29,7 +29,7 @@ public struct FSEventsIgnoreRules: Sendable {
         self.ignoredFilenameGlobs = ignoredFilenameGlobs
     }
 
-    /// True — path должен быть ignored. Order: dir components → filename →
+    /// True — the path should be ignored. Order: dir components → filename →
     /// extension → globs (cheapest first).
     public func shouldIgnore(path: String) -> Bool {
         let url = URL(fileURLWithPath: path)
@@ -50,7 +50,7 @@ public struct FSEventsIgnoreRules: Sendable {
 }
 
 extension FSEventsIgnoreRules {
-    /// Empty rules — `shouldIgnore` always false. Для тестов где нужен router
-    /// без ignore-flow.
+    /// Empty rules — `shouldIgnore` always false. For tests that need a router
+    /// without the ignore-flow.
     public static let empty = FSEventsIgnoreRules()
 }

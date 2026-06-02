@@ -1,10 +1,10 @@
 import Foundation
 
-/// Phase Track-4 S3 — narrow enum для CoreAudio transport-type categorization.
-/// Никогда не материализуется device name / manufacturer info (ADR-010
-/// Won't-list — "Запрещено" §"audio_route → transport-type enum (no device
-/// names)"). raw kAudioDevicePropertyTransportType (UInt32) маппится на этот
-/// enum в `AudioRouteCollector`.
+/// Phase Track-4 S3 — narrow enum for CoreAudio transport-type categorization.
+/// Device name / manufacturer info is never materialized (ADR-010
+/// Won't-list — "Prohibited" §"audio_route → transport-type enum (no device
+/// names)"). raw kAudioDevicePropertyTransportType (UInt32) is mapped to this
+/// enum in `AudioRouteCollector`.
 public enum AudioRouteCategory: String, Sendable, Hashable, CaseIterable {
     case builtin
     case headphones

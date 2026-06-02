@@ -1,13 +1,13 @@
 import Foundation
 
-/// Phase 2.3 — позиция tail-read collector'а в его источнике.
-/// `(collectorID, sourceID)` — composite PK. Для Claude Code:
-/// `collectorID == CollectorID.claudeCodeJSONL`, `sourceID == abs path к .jsonl`.
+/// Phase 2.3 — position of a tail-read collector within its source.
+/// `(collectorID, sourceID)` — composite PK. For Claude Code:
+/// `collectorID == CollectorID.claudeCodeJSONL`, `sourceID == abs path to .jsonl`.
 ///
-/// `byteOffset` — позиция следующего непрочитанного байта (== EOF когда файл
-/// дочитан). `inode`/`size`/`lastModifiedMs` — fingerprint для rotation
-/// detection: при `inode != stored.inode` или `size < stored.byteOffset`
-/// (truncate / replay) collector сбрасывает offset в 0.
+/// `byteOffset` — position of the next unread byte (== EOF when the file is
+/// fully read). `inode`/`size`/`lastModifiedMs` — fingerprint for rotation
+/// detection: on `inode != stored.inode` or `size < stored.byteOffset`
+/// (truncate / replay) the collector resets the offset to 0.
 public struct CollectorOffset: Sendable, Hashable {
     public let collectorID: String
     public let sourceID: String

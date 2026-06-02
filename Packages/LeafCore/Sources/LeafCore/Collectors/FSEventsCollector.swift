@@ -1,16 +1,16 @@
 import Foundation
 import os
 
-/// Phase 2.4 — content collector для file events в watched folders.
+/// Phase 2.4 — content collector for file events in watched folders.
 ///
-/// Pattern идентичен `ClaudeCodeCollector`: actor + start/stop с cancel + await,
-/// reconfig через `DistributedNotificationCenter` + 60s polling fallback.
+/// The pattern is identical to `ClaudeCodeCollector`: actor + start/stop with cancel + await,
+/// reconfig via `DistributedNotificationCenter` + 60s polling fallback.
 ///
 /// Lifecycle:
-///   1. `start()` — `listWatchedFolders` → создать `FSEventStream` →
+///   1. `start()` — `listWatchedFolders` → create `FSEventStream` →
 ///      schedule notify listener + poll task.
-///   2. FSEvents callback → `handleBatch` (via Task hop из `FSEventStream` onEvents).
-///   3. `reload()` — diff с currentPaths → restart stream если diff.
+///   2. FSEvents callback → `handleBatch` (via a Task hop from `FSEventStream` onEvents).
+///   3. `reload()` — diff against currentPaths → restart the stream if it differs.
 ///   4. `stop()` — cancel poll task, await, invalidate stream, remove observer.
 public actor FSEventsCollector {
     private let database: Database
@@ -23,11 +23,11 @@ public actor FSEventsCollector {
     private var stream: FSEventStream?
     private var pollTask: Task<Void, Never>?
     private var notifyToken: NSObjectProtocol?
-    /// Canonical paths текущего активного stream'а. Sorted для детерминистического
-    /// сравнения в reload (paths order сам по себе для FSEvents не важен).
+    /// Canonical paths of the currently active stream. Sorted for deterministic
+    /// comparison in reload (path order itself doesn't matter to FSEvents).
     private var currentPaths: [String] = []
-    /// Snapshot of enabled watched folders, refreshed синхронно с stream restart.
-    /// Передаётся в router на каждый event для granularity / wf_id resolution.
+    /// Snapshot of enabled watched folders, refreshed in sync with the stream restart.
+    /// Passed to the router on every event for granularity / wf_id resolution.
     private var currentFolders: [WatchedFolder] = []
 
     public init(
@@ -54,7 +54,7 @@ public actor FSEventsCollector {
         // Initial load + stream creation.
         await rebuildStream()
 
-        // Darwin notification listener — UI postит при add/remove/toggle.
+        // Darwin notification listener — the UI posts on add/remove/toggle.
         let name = NSNotification.Name(darwinNotificationName)
         notifyToken = DistributedNotificationCenter.default().addObserver(
             forName: name,
@@ -65,7 +65,7 @@ public actor FSEventsCollector {
             Task { await self.reload() }
         }
 
-        // Polling fallback — на случай потерянного notify.
+        // Polling fallback — in case a notify is lost.
         pollTask = Task { [weak self] in
             guard let self else { return }
             await self.runPollLoop()
@@ -92,16 +92,16 @@ public actor FSEventsCollector {
         logger.info("FSEventsCollector stopped")
     }
 
-    /// Re-read watched_folders + restart stream если diff в paths.
-    /// Вызывается из Darwin notification listener + poll fallback + tests.
+    /// Re-read watched_folders + restart the stream if paths differ.
+    /// Called from the Darwin notification listener + poll fallback + tests.
     public func reload() async {
         await rebuildStream()
     }
 
     // MARK: - Internal
 
-    /// Read enabled folders, canonicalize paths, restart stream если diff.
-    /// Идемпотентен — повторный вызов с same paths = no-op (cheap path compare).
+    /// Read enabled folders, canonicalize paths, restart the stream if they differ.
+    /// Idempotent — a repeat call with the same paths = no-op (cheap path compare).
     private func rebuildStream() async {
         let folders = (try? database.listWatchedFolders(includingDisabled: false)) ?? []
         let paths = folders
@@ -118,7 +118,7 @@ public actor FSEventsCollector {
         stream?.stop()
         stream = nil
 
-        // No paths — collector idle (UI пустой / все disabled).
+        // No paths — collector idle (UI empty / all disabled).
         guard !paths.isEmpty else {
             currentPaths = []
             currentFolders = []
@@ -126,7 +126,7 @@ public actor FSEventsCollector {
             return
         }
 
-        // Spin up new stream — onEvents hop'ает обратно в actor через Task.
+        // Spin up new stream — onEvents hops back into the actor via a Task.
         do {
             let newStream = try FSEventStream(
                 paths: paths,
@@ -148,7 +148,7 @@ public actor FSEventsCollector {
     }
 
     private func runPollLoop() async {
-        // Initial half-interval delay чтобы не race'нуть со start'овым rebuild.
+        // Initial half-interval delay so as not to race the start-time rebuild.
         await sleep(seconds: reconfigPollSec / 2)
         while !Task.isCancelled {
             await reload()
@@ -161,8 +161,8 @@ public actor FSEventsCollector {
         try? await Task.sleep(nanoseconds: ns)
     }
 
-    /// FSEvents batch handler — вызывается из FSEventStream callback (через Task).
-    /// Идёт через router → батчит RawEvent → atomic write в `events`.
+    /// FSEvents batch handler — called from the FSEventStream callback (via a Task).
+    /// Goes through the router → batches RawEvent → atomic write to `events`.
     func handleBatch(paths: [String], flags: [UInt32]) async {
         guard paths.count == flags.count else {
             logger.warning("handleBatch: paths.count != flags.count — dropping batch")

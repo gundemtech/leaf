@@ -3,11 +3,11 @@ import GRDB
 
 /// Phase 5.1.A — `org` organization metadata table (1 row per device).
 /// Single-org-per-device per Phase 5 architecture contract §11.
-/// Schema structure публична (whitepaper storage.md). SQL DDL — не moat.
+/// The schema structure is public (whitepaper storage.md). SQL DDL is not moat.
 ///
-/// `created_by_member_id` — logical FK на `team_members.id`; SQL FOREIGN KEY
-/// не объявляется (см. spec 5.1.A §4 — insertion order paradox + foreign_keys
-/// pragma не enabled).
+/// `created_by_member_id` — logical FK to `team_members.id`; no SQL FOREIGN KEY
+/// is declared (see spec 5.1.A §4 — insertion order paradox + foreign_keys
+/// pragma not enabled).
 public extension DatabaseMigrator {
     mutating func registerMigration006Org() {
         // Track-5 S2: historical migration — hardcoded string literals because

@@ -2,8 +2,8 @@
 //  LoopbackCallbackListener.swift
 //  Leaf
 //
-//  Phase 4.1 — minimal HTTP server на 127.0.0.1:47823 для приёма OAuth
-//  redirect от Linear. Live только на время одного flow:
+//  Phase 4.1 — minimal HTTP server on 127.0.0.1:47823 for receiving the OAuth
+//  redirect from Linear. Live only for the duration of a single flow:
 //  start → first valid callback → respond → cancel.
 //
 
@@ -22,10 +22,10 @@ enum LoopbackCallbackError: Error {
 }
 
 nonisolated enum LoopbackCallbackListener {
-    /// Bind на `127.0.0.1:port`, ждать первого `GET /callback?...`,
-    /// послать минимальную HTML-страницу, вернуть `URLComponents` query.
-    /// Cancel listener по timeout либо Task cancellation. Caller достаёт
-    /// `code`/`state`/`error` параметры из вернувшегося `URLComponents`.
+    /// Bind to `127.0.0.1:port`, wait for the first `GET /callback?...`,
+    /// send a minimal HTML page, return the `URLComponents` query.
+    /// Cancel the listener on timeout or Task cancellation. The caller extracts
+    /// the `code`/`state`/`error` parameters from the returned `URLComponents`.
     static func awaitCallback(
         port: UInt16,
         timeout: Duration = .seconds(60),
@@ -50,7 +50,7 @@ nonisolated enum LoopbackCallbackListener {
 
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<URLComponents, Error>) in
-                // Гард на пере-resume.
+                // Guard against re-resume.
                 @Sendable func finish(_ result: Result<URLComponents, Error>) {
                     if coordinator.tryResume() {
                         listener.cancel()
@@ -89,9 +89,9 @@ nonisolated enum LoopbackCallbackListener {
                             return
                         }
 
-                        // Если в query пришёл `error` — всё равно serve финальную страницу
-                        // (юзер должен видеть осмысленное сообщение в браузере),
-                        // дальше caller (LinearOAuthService) интерпретирует error/state/code.
+                        // If `error` arrived in the query — still serve the final page
+                        // (the user should see a meaningful message in the browser),
+                        // then the caller (LinearOAuthService) interprets error/state/code.
                         let isError = components.queryItems?.contains(where: { $0.name == "error" }) ?? false
                         let body = isError ? htmlCancelled(providerLabel: providerLabel) : htmlSuccess(providerLabel: providerLabel)
                         sendResponse(on: connection, status: "200 OK", body: body)
@@ -101,7 +101,7 @@ nonisolated enum LoopbackCallbackListener {
 
                 listener.start(queue: queue)
 
-                // Schedule timeout — async-after на dispatch queue, finish() guards re-resume.
+                // Schedule timeout — async-after on the dispatch queue, finish() guards re-resume.
                 queue.asyncAfter(deadline: .now() + .milliseconds(Int(timeout.components.seconds * 1000))) {
                     finish(.failure(LoopbackCallbackError.timeout))
                 }
@@ -114,7 +114,7 @@ nonisolated enum LoopbackCallbackListener {
     // MARK: - Internals
 
     /// Parse first line `GET /callback?<query> HTTP/1.1` and return path-and-query
-    /// (`/callback?...`). Returns nil если формат не HTTP request.
+    /// (`/callback?...`). Returns nil if the format is not an HTTP request.
     private static func parseRequestLine(_ data: Data) -> String? {
         // Read up to first \r\n.
         guard let crlf = data.firstRange(of: Data("\r\n".utf8)),
@@ -147,8 +147,8 @@ nonisolated enum LoopbackCallbackListener {
     }
 
     private static func htmlSuccess(providerLabel: String) -> String {
-        // Минимальная страница без external assets — браузеры не делают retry,
-        // если получают full Content-Length response.
+        // Minimal page with no external assets — browsers don't retry
+        // if they receive a full Content-Length response.
         let label = htmlEscape(providerLabel)
         return """
         <!DOCTYPE html><html><head><meta charset="utf-8"><title>Leaf — \(label) connected</title></head>
@@ -170,9 +170,9 @@ nonisolated enum LoopbackCallbackListener {
         """
     }
 
-    /// Минимальный HTML-escape для providerLabel (defense in depth — labels у нас
-    /// hardcoded "Linear"/"Slack", но всё равно sanitize чтобы interpolation не
-    /// инжектил ломанную страницу при future expansion).
+    /// Minimal HTML-escape for providerLabel (defense in depth — our labels are
+    /// hardcoded "Linear"/"Slack", but sanitize anyway so interpolation can't
+    /// inject a broken page on future expansion).
     private static func htmlEscape(_ s: String) -> String {
         s.replacingOccurrences(of: "&", with: "&amp;")
          .replacingOccurrences(of: "<", with: "&lt;")
@@ -190,8 +190,8 @@ nonisolated enum LoopbackCallbackListener {
     }
 }
 
-/// Защита от повторного `continuation.resume` — race между normal flow и
-/// timeout / cancellation / listener.failed. NSLock для атомарного swap'а.
+/// Protects against a repeated `continuation.resume` — a race between the normal flow and
+/// timeout / cancellation / listener.failed. NSLock for the atomic swap.
 nonisolated private final class ResumeOnce: @unchecked Sendable {
     private let lock = NSLock()
     private var resumed = false

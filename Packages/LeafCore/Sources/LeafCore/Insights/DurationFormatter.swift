@@ -1,10 +1,10 @@
 import Foundation
 
-/// Короткий формат длительности: `"1h 42m"` / `"12m"` / `"30s"`.
+/// Short duration format: `"1h 42m"` / `"12m"` / `"30s"`.
 ///
-/// Не используем `DateComponentsFormatter` намеренно — он локаль-зависим
-/// ("1 hr 42 min") и медленнее. Этот формат — фиксированный, для UI popover'а
-/// и MCP tool responses.
+/// We deliberately avoid `DateComponentsFormatter` — it's locale-dependent
+/// ("1 hr 42 min") and slower. This format is fixed, for the UI popover
+/// and MCP tool responses.
 public func formatDuration(_ seconds: TimeInterval) -> String {
     let total = Int(seconds.rounded())
     if total >= 3600 {

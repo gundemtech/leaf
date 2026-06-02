@@ -1,19 +1,19 @@
 import Foundation
 import GRDB
 
-/// Phase 4.7.B — single point of write для `presence_state` table.
-/// Idempotent UPSERT по `provider` PK. Каждый collector tick вызывает `upsert(...)`
-/// один раз с current-state snapshot для своего provider'а; дополнительный
-/// "derived" pseudo-provider зарезервирован для Phase 4.9 mode classifier.
+/// Phase 4.7.B — single point of write for the `presence_state` table.
+/// Idempotent UPSERT keyed on the `provider` PK. Each collector tick calls
+/// `upsert(...)` once with a current-state snapshot for its own provider; an
+/// additional "derived" pseudo-provider is reserved for the Phase 4.9 mode classifier.
 ///
-/// ADR-010 redaction — caller responsibility: `state` уже должен быть
-/// очищен от bodies/titles/PII до вызова. Этот helper не валидирует
-/// содержимое словаря и не имеет доступа к Share Controls filter (тот
-/// применяется отдельно в Agent broadcast path в Phase 5).
+/// ADR-010 redaction — caller responsibility: `state` must already be
+/// stripped of bodies/titles/PII before the call. This helper does not validate
+/// the dictionary contents and has no access to the Share Controls filter (that
+/// is applied separately in the Agent broadcast path in Phase 5).
 public struct PresenceStateWriter: Sendable {
-    /// Ключи rows в `presence_state`. Расходится с `IntegrationProvider`
-    /// (linear / github / slack), потому что у presence_state есть extra
-    /// `derived` pseudo-row под Phase 4.9 mode classifier output.
+    /// Row keys in `presence_state`. Diverges from `IntegrationProvider`
+    /// (linear / github / slack) because presence_state has an extra
+    /// `derived` pseudo-row for Phase 4.9 mode classifier output.
     public enum Provider: String, Sendable, Hashable, CaseIterable {
         case github
         case linear
@@ -30,9 +30,9 @@ public struct PresenceStateWriter: Sendable {
         case zoom
     }
 
-    /// UPSERT current-state snapshot. `state` сериализуется в JSON через
-    /// `JSONSerialization` (sortedKeys → детерминированный layout для тестов
-    /// и diffing). `derivedMode` всегда `nil` в Phase 4.7 — populated в 4.9.
+    /// UPSERT a current-state snapshot. `state` is serialized to JSON via
+    /// `JSONSerialization` (sortedKeys → deterministic layout for tests
+    /// and diffing). `derivedMode` is always `nil` in Phase 4.7 — populated in 4.9.
     public static func upsert(
         provider: Provider,
         state: [String: Any],
@@ -40,11 +40,11 @@ public struct PresenceStateWriter: Sendable {
         nowMs: Int64,
         in db: GRDB.Database
     ) throws {
-        // Pre-validate: `JSONSerialization.data(withJSONObject:)` бросает
-        // ObjC NSInvalidArgumentException (а не Swift error) если в словаре
-        // встретится non-serializable значение (Date, Data, custom struct).
-        // ObjC exception нельзя поймать в Swift через `try` — поэтому
-        // защищаемся явным `isValidJSONObject` guard'ом до вызова.
+        // Pre-validate: `JSONSerialization.data(withJSONObject:)` throws an
+        // ObjC NSInvalidArgumentException (not a Swift error) if the dictionary
+        // contains a non-serializable value (Date, Data, custom struct).
+        // An ObjC exception can't be caught in Swift via `try` — so we
+        // guard with an explicit `isValidJSONObject` check before the call.
         guard JSONSerialization.isValidJSONObject(state) else {
             throw LeafError.jsonEncodingFailed
         }
@@ -78,8 +78,8 @@ public struct PresenceStateWriter: Sendable {
         )
     }
 
-    /// Reader для одного provider'а. Returns `nil` если row отсутствует —
-    /// MCP tools интерпретируют как "provider ещё не отчитывался".
+    /// Reader for a single provider. Returns `nil` if the row is absent —
+    /// MCP tools interpret this as "provider hasn't reported yet".
     public static func read(
         provider: Provider,
         in db: GRDB.Database
@@ -99,7 +99,7 @@ public struct PresenceStateWriter: Sendable {
         return try mapRow(row)
     }
 
-    /// Reader для всех provider'ов — bulk fetch для merged snapshot
+    /// Reader for all providers — bulk fetch for the merged snapshot
     /// (`get_current_presence` MCP tool, Phase 4.7.B-15).
     public static func readAll(
         in db: GRDB.Database
@@ -125,9 +125,9 @@ public struct PresenceStateWriter: Sendable {
         return result
     }
 
-    /// DELETE by provider — вызывается при integration disconnect, чтобы
-    /// merged snapshot не показывал stale presence от провайдера, для
-    /// которого юзер только что revoked OAuth.
+    /// DELETE by provider — called on integration disconnect so the
+    /// merged snapshot doesn't show stale presence from a provider for
+    /// which the user just revoked OAuth.
     public static func delete(
         provider: Provider,
         in db: GRDB.Database

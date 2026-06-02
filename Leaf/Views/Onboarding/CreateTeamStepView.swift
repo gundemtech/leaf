@@ -3,7 +3,7 @@
 //  Leaf
 //
 //  Phase 5.5.B — onboarding `.team` admin path: enter display name → calls
-//  OrgReader.createPersonalOrg(displayName:). На success — caller (OnboardingView)
+//  OrgReader.createPersonalOrg(displayName:). On success, the caller (OnboardingView)
 //  advances to `.done` via .onChange.
 //
 //  Track 2 / D4 — migrated to D1 atoms.

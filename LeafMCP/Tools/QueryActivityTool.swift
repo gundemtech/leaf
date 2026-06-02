@@ -4,12 +4,12 @@ import LeafMCPProtocol
 
 /// Phase Track-1 D3 — `leaf_query_activity` MCP tool.
 ///
-/// Тонкая обёртка над `QueryEngine.queryActivity(period:filter:)`. Heavy lifting
-/// (FTS+links+detectors composition, byte-budget trim) живёт в LeafCore чтобы быть
-/// testable через SPM (LeafMCP — Xcode target, в `swift test` не входит).
+/// Thin wrapper over `QueryEngine.queryActivity(period:filter:)`. Heavy lifting
+/// (FTS+links+detectors composition, byte-budget trim) lives in LeafCore so it is
+/// testable via SPM (LeafMCP — Xcode target, not part of `swift test`).
 ///
 /// Schema and param-decoding helpers also live in LeafCore (`D3ToolSchemas` /
-/// `D3ToolParams`) так что can be exercised by SPM tests без xcodebuild.
+/// `D3ToolParams`) so they can be exercised by SPM tests without xcodebuild.
 struct QueryActivityTool: ToolExecutor {
     let dbURL: URL
     let dbConfig: DatabaseConfig

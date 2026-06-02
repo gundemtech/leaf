@@ -1,7 +1,7 @@
-// Phase 5.1.B — public-side tests для team helpers (Org / TeamMember / TeamKey)
-// поверх M006/M007/M008 schema substrate'а 5.1.A. Pure DB I/O round-trip + edge
+// Phase 5.1.B — public-side tests for team helpers (Org / TeamMember / TeamKey)
+// on top of the M006/M007/M008 schema substrate from 5.1.A. Pure DB I/O round-trip + edge
 // cases (partial-index queries via direct `removed_at_ms` / `deprecated_at_ms`
-// SET через `db.writeSQL` raw-SQL escape — mark/deprecate helpers — задача 5.3).
+// SET through the `db.writeSQL` raw-SQL escape — mark/deprecate helpers — task 5.3).
 
 import XCTest
 import GRDB
@@ -24,8 +24,8 @@ final class DatabaseTeamTests: XCTestCase {
 
     // MARK: - Org
 
-    /// Базовый round-trip: upsert → readOrg возвращает тот же row, все 4 поля
-    /// match'ат, Date roundtrip без потерь (whole-second timestamps).
+    /// Basic round-trip: upsert → readOrg returns the same row, all 4 fields
+    /// match, Date round-trips without loss (whole-second timestamps).
     func testUpsertOrgAndReadRoundTrip() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -46,7 +46,7 @@ final class DatabaseTeamTests: XCTestCase {
         XCTAssertEqual(loaded?.createdByMemberID, "member-self")
     }
 
-    /// UPSERT по PK — re-write с тем же `id`, но новым `name`, обновляет fields.
+    /// UPSERT by PK — re-write with the same `id` but a new `name` updates the fields.
     func testUpsertOrgUpdatesFieldsForSameID() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -67,10 +67,10 @@ final class DatabaseTeamTests: XCTestCase {
         try db.upsertWorkspace(renamed)
 
         let loaded = try db.listWorkspaces(includeLeft: true).first
-        XCTAssertEqual(loaded?.name, "Acme Inc", "UPSERT должен был обновить name")
+        XCTAssertEqual(loaded?.name, "Acme Inc", "UPSERT should have updated name")
     }
 
-    /// Fresh DB без upsert'а → readOrg() == nil.
+    /// Fresh DB without an upsert → readOrg() == nil.
     func testReadOrgReturnsNilWhenEmpty() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         let loaded = try db.listWorkspaces(includeLeft: true).first
@@ -79,7 +79,7 @@ final class DatabaseTeamTests: XCTestCase {
 
     // MARK: - TeamMembers
 
-    /// Insert 2 active members → readTeamMembers(includeRemoved:true) возвращает оба,
+    /// Insert 2 active members → readTeamMembers(includeRemoved:true) returns both,
     /// ordered by addedAt.
     func testInsertTeamMemberAndReadAll() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
@@ -107,7 +107,7 @@ final class DatabaseTeamTests: XCTestCase {
 
         let members = try db.readTeamMembers(workspaceID: "org-aaaa", includeRemoved: true)
         XCTAssertEqual(members.count, 2)
-        XCTAssertEqual(members[0].id, "member-self", "должен быть ordered by addedAt ASC")
+        XCTAssertEqual(members[0].id, "member-self", "must be ordered by addedAt ASC")
         XCTAssertEqual(members[0].role, .admin)
         XCTAssertEqual(members[0].pubkeyHex, String(repeating: "ab", count: 32))
         XCTAssertEqual(members[0].displayName, "Alex")
@@ -116,8 +116,8 @@ final class DatabaseTeamTests: XCTestCase {
         XCTAssertEqual(members[1].role, .member)
     }
 
-    /// Default `includeRemoved: false` → исключает members с set'нутым `removed_at_ms`.
-    /// Mark removed setup через writeSQL escape (помощник 5.3, не 5.1.B).
+    /// Default `includeRemoved: false` → excludes members with `removed_at_ms` set.
+    /// Mark-removed setup via the writeSQL escape (5.3 helper, not 5.1.B).
     func testReadTeamMembersExcludesRemovedByDefault() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -136,8 +136,8 @@ final class DatabaseTeamTests: XCTestCase {
         XCTAssertNil(activeOnly[0].removedAt)
     }
 
-    /// `includeRemoved: true` возвращает all rows — active + removed.
-    /// Подтверждает что removed_at_ms корректно сериализуется (Date round-trip).
+    /// `includeRemoved: true` returns all rows — active + removed.
+    /// Confirms that removed_at_ms serializes correctly (Date round-trip).
     func testReadTeamMembersIncludeRemovedReturnsAll() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -157,8 +157,8 @@ final class DatabaseTeamTests: XCTestCase {
         XCTAssertEqual(removed?.removedAt, Date(timeIntervalSince1970: TimeInterval(removedAtMs) / 1000.0))
     }
 
-    /// Sanity: insert members в две разные org_id → readTeamMembers фильтрует
-    /// по orgID. Single-org-per-device на DB-уровне не constraint'ится; защищаемся.
+    /// Sanity: insert members into two different org_id → readTeamMembers filters
+    /// by orgID. Single-org-per-device is not constrained at the DB level; we guard against it.
     func testReadTeamMembersFiltersByOrgID() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -185,8 +185,8 @@ final class DatabaseTeamTests: XCTestCase {
 
     // MARK: - TeamKeys
 
-    /// Insert 1 active key (`deprecatedAt: nil`) → readActiveTeamKey возвращает его,
-    /// все 4 поля match'ат, Date round-trip без потерь.
+    /// Insert 1 active key (`deprecatedAt: nil`) → readActiveTeamKey returns it,
+    /// all 4 fields match, Date round-trips without loss.
     func testInsertTeamKeyAndReadActive() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -208,8 +208,8 @@ final class DatabaseTeamTests: XCTestCase {
         XCTAssertEqual(active?.generatedByMemberID, "member-self")
     }
 
-    /// Mark key as deprecated через writeSQL escape (deprecate helper — задача 5.3) →
-    /// readActiveTeamKey() == nil (partial index `team_keys_active` фильтрует).
+    /// Mark key as deprecated via the writeSQL escape (deprecate helper — task 5.3) →
+    /// readActiveTeamKey() == nil (partial index `team_keys_active` filters it out).
     func testReadActiveTeamKeyExcludesDeprecated() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -232,8 +232,8 @@ final class DatabaseTeamTests: XCTestCase {
         XCTAssertNil(active)
     }
 
-    /// Defensive: при двух active rows (нормально 1, но contract'ом
-    /// на DB-уровне не constrained) — возвращает с latest `generated_at_ms`.
+    /// Defensive: with two active rows (normally 1, but not constrained by
+    /// contract at the DB level) — returns the one with the latest `generated_at_ms`.
     func testReadActiveTeamKeyReturnsLatestByGeneratedAt() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -255,15 +255,15 @@ final class DatabaseTeamTests: XCTestCase {
         try db.insertTeamKey(later)
 
         let active = try db.readActiveTeamKey(workspaceID: "org-aaaa")
-        XCTAssertEqual(active?.id, "key-rotation-2", "ORDER BY generated_at_ms DESC LIMIT 1 — должна вернуться latest")
+        XCTAssertEqual(active?.id, "key-rotation-2", "ORDER BY generated_at_ms DESC LIMIT 1 — the latest must be returned")
     }
 
     // MARK: - Mode guard
 
-    /// Reader-mode `Database` — все 3 write helper'а throw `databaseUnavailable`.
-    /// Покрывает upsertOrg / insertTeamMember / insertTeamKey одной батареей.
+    /// Reader-mode `Database` — all 3 write helpers throw `databaseUnavailable`.
+    /// Covers upsertOrg / insertTeamMember / insertTeamKey in a single battery.
     func testReaderModeWriteHelpersThrowDatabaseUnavailable() throws {
-        // Сначала writer создаёт schema + один row для contention test'а:
+        // First the writer creates the schema + one row for the contention test:
         let writer = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         try writer.upsertWorkspace(Workspace(
             id: "org-aaaa",

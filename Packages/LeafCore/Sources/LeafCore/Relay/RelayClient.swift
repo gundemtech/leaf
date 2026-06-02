@@ -2,9 +2,9 @@
 //  RelayClient.swift
 //  LeafCore
 //
-//  Phase 5.2.D — HTTP wire layer для invite-relay endpoints (POST/GET/DELETE
+//  Phase 5.2.D — HTTP wire layer for invite-relay endpoints (POST/GET/DELETE
 //  /v1/invite/*). Actor — concurrency boundary; URLSession injection (default
-//  `.shared`) — стандартный test-stub pattern (см. SlackTokenRefresher / 4.4).
+//  `.shared`) — standard test-stub pattern (see SlackTokenRefresher / 4.4).
 //
 //  Status mapping:
 //   - 201 (POST) → RelayInviteToken

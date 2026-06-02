@@ -1,11 +1,11 @@
 import Foundation
 
 /// Hardcoded Phase-1 blocklist. Editable Share Controls UI + full per-app whitelist
-/// прилетают в Phase 2 — тогда этот список переезжает в `share_apps` table.
+/// land in Phase 2 — at which point this list moves into the `share_apps` table.
 ///
-/// Философия (whitepaper 03-architecture/share-controls.md): default empty whitelist,
-/// но в dev-режиме мы хотим видеть данные. Hardcoded — только сам Leaf и
-/// system-процессы которые полезных сигналов не дают.
+/// Philosophy (whitepaper 03-architecture/share-controls.md): default empty whitelist,
+/// but in dev mode we want to see data. Hardcoded — only Leaf itself and
+/// system processes that produce no useful signals.
 enum Blocklist {
     static let phase1Default: Set<String> = [
         "tech.gundem.leaf",

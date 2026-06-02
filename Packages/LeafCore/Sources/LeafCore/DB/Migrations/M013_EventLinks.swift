@@ -3,8 +3,8 @@ import GRDB
 
 /// Phase Track-1 D2 — cross-source link graph backing CrossSourceLinkGraph
 /// derive step. Composite PK `(from_event_id, link_kind, target_ref)` dedupes
-/// at insert time (`INSERT OR IGNORE`). `from_event_id` — logical FK на `events.id`,
-/// SQL FOREIGN KEY не объявляется (Schema.swift §76, §86 — repo convention).
+/// at insert time (`INSERT OR IGNORE`). `from_event_id` — logical FK to `events.id`,
+/// no SQL FOREIGN KEY is declared (Schema.swift §76, §86 — repo convention).
 /// Reverse-lookup index `idx_event_links_target` supports D3 query path
 /// "events linking to LEAF-NN".
 public extension DatabaseMigrator {

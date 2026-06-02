@@ -2,27 +2,27 @@
 //  LinearCollector.swift
 //  LeafCore
 //
-//  Phase 4.2 — Linear polling collector. Раз в `intervalSec`:
-//  1. Читает `integrations` row (provider=.linear). Если row нет → tick skipped.
-//  2. `refresher.refreshIfNeeded(now:)` — обновляет access token если истекает.
-//     На `.refreshDenied` (invalid_grant) refresher уже сам делает deleteIntegration
-//     + UserDefaults flag + DistributedNotification → UI surface'ит "Reconnect needed".
+//  Phase 4.2 — Linear polling collector. Every `intervalSec`:
+//  1. Reads the `integrations` row (provider=.linear). If no row → tick skipped.
+//  2. `refresher.refreshIfNeeded(now:)` — refreshes the access token if it is expiring.
+//     On `.refreshDenied` (invalid_grant) the refresher itself already does deleteIntegration
+//     + UserDefaults flag + DistributedNotification → UI surfaces "Reconnect needed".
 //  3. `provider.fetchIssues(accessToken:since:)` — GraphQL POST. `since` =
-//     stored `lastModifiedMs` cursor; bootstrap → `nil` → provider использует
+//     stored `lastModifiedMs` cursor; bootstrap → `nil` → provider uses the
 //     backfill window.
-//  4. Map результат в `[RawEvent]` с `signal_type=.action`, `payload.source=linear`.
-//  5. Atomic write через `writeEventsAndOffset(events:offset:)` — events + cursor
-//     в одной транзакции. Cursor = `batch.cursorMs` (newest updatedAt).
+//  4. Map the result into `[RawEvent]` with `signal_type=.action`, `payload.source=linear`.
+//  5. Atomic write via `writeEventsAndOffset(events:offset:)` — events + cursor
+//     in one transaction. Cursor = `batch.cursorMs` (newest updatedAt).
 //
 
 import Foundation
 import os
 
 public actor LinearCollector {
-    /// Phase 4.5 — UserDefaults flag для одноразового wipe старых
-    /// (контаминированных teammate-noise) Linear events при первом start
-    /// после upgrade. Idempotent: после успешной миграции flag остаётся true,
-    /// last-state-wins при повторном start.
+    /// Phase 4.5 — UserDefaults flag for a one-time wipe of old
+    /// (teammate-noise-contaminated) Linear events on the first start
+    /// after upgrade. Idempotent: after a successful migration the flag stays true,
+    /// last-state-wins on a repeated start.
     public static let attributionV2MigrationFlagKey = "linear.attribution_v2_migrated"
 
     private let database: Database
@@ -32,10 +32,10 @@ public actor LinearCollector {
     private let backfillWindowDays: Int
     private let logger: Logger
     private let restartTriggerName: String
-    /// Phase 4.5 — UserDefaults suite name под Migration flag. Sendable-friendly
-    /// (String) — UserDefaults instance строится lazy внутри actor'а. Тесты
-    /// передают unique suite ("leaf-test-<UUID>") чтобы изолировать flag от
-    /// shared `tech.gundem.leaf` (где живёт production state).
+    /// Phase 4.5 — UserDefaults suite name for the Migration flag. Sendable-friendly
+    /// (String) — the UserDefaults instance is built lazily inside the actor. Tests
+    /// pass a unique suite ("leaf-test-<UUID>") to isolate the flag from the
+    /// shared `tech.gundem.leaf` (where production state lives).
     private let userDefaultsSuiteName: String?
 
     private var loopTask: Task<Void, Never>?
@@ -92,11 +92,11 @@ public actor LinearCollector {
         )
     }
 
-    /// Phase 4.5 — одноразовый wipe Linear events + cursor для перехода на
-    /// per-action attribution. Атомарно (transaction в `purgeLinearAttributionV2`),
-    /// идемпотентно (UserDefaults flag), не bubble'ит ошибки выше — collector
-    /// должен start'ануть даже если миграция fail'нула (например DB locked
-    /// другим процессом), retry на следующий start.
+    /// Phase 4.5 — one-time wipe of Linear events + cursor for the move to
+    /// per-action attribution. Atomic (transaction in `purgeLinearAttributionV2`),
+    /// idempotent (UserDefaults flag), does not bubble errors up — the collector
+    /// must start even if the migration failed (e.g. DB locked
+    /// by another process), retry on the next start.
     private func runOneTimeMigration() {
         guard !userDefaults.bool(forKey: Self.attributionV2MigrationFlagKey) else { return }
         do {
@@ -127,10 +127,10 @@ public actor LinearCollector {
         public let skipped: Bool
         public let issuesProcessed: Int
         public let cursorAdvancedMs: Int64?
-        /// Phase 4.7.A — linear_comment_authored events emitted в этом tick'е (один per issue с count > 0).
+        /// Phase 4.7.A — linear_comment_authored events emitted in this tick (one per issue with count > 0).
         public let commentEventsEmitted: Int
-        /// Phase 4.7.B (B-7) — linear_cycle_progress events emitted в этом tick'е
-        /// (один per team с активным cycle'ом). 0 если ни одна команда не in-cycle.
+        /// Phase 4.7.B (B-7) — linear_cycle_progress events emitted in this tick
+        /// (one per team with an active cycle). 0 if no team is in-cycle.
         public let cycleEventsEmitted: Int
 
         public init(
@@ -162,7 +162,7 @@ public actor LinearCollector {
             return TickResult(skipped: true, issuesProcessed: 0, cursorAdvancedMs: nil)
         }
 
-        // 2. Refresh if needed. .refreshDenied → refresher уже сделал
+        // 2. Refresh if needed. .refreshDenied → refresher already did
         // deleteIntegration + UserDefaults flag + DistributedNotification.
         let refreshed: IntegrationRecord
         do {
@@ -201,22 +201,22 @@ public actor LinearCollector {
             return TickResult(skipped: false, issuesProcessed: 0, cursorAdvancedMs: nil)
         }
 
-        // 5. Map + atomic write. Phase 4.6.B — два event flavors из одного batch:
+        // 5. Map + atomic write. Phase 4.6.B — two event flavors from one batch:
         // (a) issue_updated per touched issue (Phase 4.2 baseline shape),
-        // (b) status_transition per my-actor history entry (filter применён в
-        //     провайдере client-side, см. ProdLinearGraphQLProvider.mapStateTransition).
-        // Phase 4.7.A — третий flavor: linear_comment_authored aggregate per
-        // issue с моими comments в окне tick'а (count-only, не per-comment).
-        // Phase 4.7.B — четвёртый flavor: linear_assigned_workload_pulse — single
-        // event per tick из batch.workload, signal_type=.context (state pulse,
-        // не action). Substrate consistency: emit'ится КАЖДЫЙ tick включая empty
-        // workload (startedCount=0) — downstream aggregator опирается на наличие
-        // sample, чтобы отличать "не успели poll'нуть" от "у юзера 0 in-flight".
-        // Phase 4.7.B (B-7) — пятый flavor: linear_cycle_progress per team с
-        // активным cycle'ом. signal_type=.context. В отличие от workload pulse,
-        // emit'ится conditionally: только для team'ов с populated activeCycle
-        // (`batch.cycles.teams` уже filtered в provider'е). Если ни одна команда
-        // не in-cycle → 0 событий (silent).
+        // (b) status_transition per my-actor history entry (filter applied in
+        //     the provider client-side, see ProdLinearGraphQLProvider.mapStateTransition).
+        // Phase 4.7.A — third flavor: linear_comment_authored aggregate per
+        // issue with my comments in the tick window (count-only, not per-comment).
+        // Phase 4.7.B — fourth flavor: linear_assigned_workload_pulse — single
+        // event per tick from batch.workload, signal_type=.context (state pulse,
+        // not action). Substrate consistency: emitted EVERY tick including empty
+        // workload (startedCount=0) — the downstream aggregator relies on the presence
+        // of a sample to distinguish "didn't get to poll" from "user has 0 in-flight".
+        // Phase 4.7.B (B-7) — fifth flavor: linear_cycle_progress per team with
+        // an active cycle. signal_type=.context. Unlike the workload pulse,
+        // emitted conditionally: only for teams with a populated activeCycle
+        // (`batch.cycles.teams` is already filtered in the provider). If no team
+        // is in-cycle → 0 events (silent).
         let nowMs = Int64(now.timeIntervalSince1970 * 1000)
         var events = batch.issues.map { Self.makeEvent(issue: $0) }
         events.append(contentsOf: batch.transitions.map { Self.makeTransitionEvent($0) })
@@ -225,13 +225,13 @@ public actor LinearCollector {
         // distinguishes flavor.
         let priorityEvents = batch.priorityTransitions.map { Self.makePriorityTransitionEvent($0) }
         events.append(contentsOf: priorityEvents)
-        // Phase 4.7.C — label transitions: один history entry → N+M snap'ов
-        // (added/removed). Каждый snap → один RawEvent с event_kind="linear_label_added"
-        // или "linear_label_removed" (kind enum дискриминирует).
+        // Phase 4.7.C — label transitions: one history entry → N+M snaps
+        // (added/removed). Each snap → one RawEvent with event_kind="linear_label_added"
+        // or "linear_label_removed" (kind enum discriminates).
         let labelEvents = batch.labelTransitions.map { Self.makeLabelTransitionEvent($0) }
         events.append(contentsOf: labelEvents)
-        // Phase 4.7.C — assignee transitions (bucketed). raw assignee IDs не
-        // покидают provider boundary; collector serialize'ит только bucket enum.
+        // Phase 4.7.C — assignee transitions (bucketed). Raw assignee IDs do not
+        // leave the provider boundary; the collector serializes only the bucket enum.
         let assigneeEvents = batch.assigneeTransitions.map { Self.makeAssigneeTransitionEvent($0) }
         events.append(contentsOf: assigneeEvents)
         // Phase 4.7.C — cycle transitions (added/moved/removed).
@@ -241,15 +241,15 @@ public actor LinearCollector {
         let estimateEvents = batch.estimateTransitions.map { Self.makeEstimateTransitionEvent($0) }
         events.append(contentsOf: estimateEvents)
         // Phase 4.7.C — ProjectUpdate authored events (separate Linear top-level
-        // type, piggy-back fragment в той же query).
+        // type, piggy-back fragment in the same query).
         let pUpdateEvents = batch.projectUpdates.map { Self.makeProjectUpdateAuthoredEvent($0) }
         events.append(contentsOf: pUpdateEvents)
-        // Phase 4.7.C — Document edited events (skeleton; empty на workspaces без
+        // Phase 4.7.C — Document edited events (skeleton; empty on workspaces without
         // feature support).
         let docEvents = batch.documents.map { Self.makeDocumentEditedEvent($0) }
         events.append(contentsOf: docEvents)
         // Phase 4.7.C — Initiative observed events (context signal — membership
-        // snapshot per tick, NOT state change). Empty при отсутствии feature support.
+        // snapshot per tick, NOT state change). Empty when there is no feature support.
         let initEvents = batch.initiatives.map { Self.makeInitiativeObservedEvent($0) }
         events.append(contentsOf: initEvents)
         // Phase Track-3 D1 — hot piggy-back additions: 5 new event_kinds emitted
@@ -287,8 +287,8 @@ public actor LinearCollector {
             Self.makeCycleProgressEvent(team: team, nowMs: nowMs)
         }
         events.append(contentsOf: cycleEvents)
-        // Если batch пуст — cursor НЕ двигается (retry next tick на тех же since).
-        // Если batch не пуст — cursor = batch.cursorMs (max updatedAt).
+        // If the batch is empty — the cursor does NOT advance (retry next tick on the same since).
+        // If the batch is non-empty — cursor = batch.cursorMs (max updatedAt).
         let advancedCursor = batch.cursorMs ?? since
         let offset = CollectorOffset(
             collectorID: CollectorID.linearPolling,
@@ -300,13 +300,13 @@ public actor LinearCollector {
             updatedMs: nowMs
         )
         // Phase 4.7.B (B-8) — composite presence_state.linear snapshot.
-        // ADR-010 boundary: только counts / public-safe identifiers / enums.
-        // Никаких title / description / body не попадает (provider их не парсит,
-        // build dict здесь — defensive — мы не reading из event payloads).
+        // ADR-010 boundary: only counts / public-safe identifiers / enums.
+        // No title / description / body gets in (the provider doesn't parse them,
+        // building the dict here is defensive — we don't read from event payloads).
         // JSONSerialization-friendly: Int / Double / String / [String: Any]
-        // / [[String: Any]]. Optional scalars defaulted к "" / 0 per plan literal
-        // (downstream parser проверяет startedCount > 0 чтобы отличить empty от
-        // populated, current_cycle dict пустой если no in-cycle teams).
+        // / [[String: Any]]. Optional scalars defaulted to "" / 0 per plan literal
+        // (the downstream parser checks startedCount > 0 to distinguish empty from
+        // populated, current_cycle dict is empty if there are no in-cycle teams).
         // Track-9 T2 — workspaceSlug already captured into actor state above
         // (before commentToMeEvents emission). Pass cached value to presence
         // dict writer for cross-process readers.
@@ -350,18 +350,18 @@ public actor LinearCollector {
             "project": issue.project,
             "team_key": issue.teamKey,
         ]
-        // Phase 4.6.A.2 — completion duration. Только non-nil → ключ присутствует;
-        // отсутствие ключа в payload отличает "не знаем" от "0 секунд" (instant
-        // close). SQL aggregator фильтрует `IS NOT NULL`, а не `> 0`, чтобы
-        // legitimate zero samples учитывались.
+        // Phase 4.6.A.2 — completion duration. Only non-nil → the key is present;
+        // a missing key in the payload distinguishes "don't know" from "0 seconds" (instant
+        // close). The SQL aggregator filters on `IS NOT NULL`, not `> 0`, so that
+        // legitimate zero samples are counted.
         if let secs = issue.completionSeconds {
             payload["completion_seconds"] = String(secs)
         }
-        // Phase 4.7.B (B-8) — cross-provider links derived из Issue.attachments.
-        // Omit при zero/nil — same convention что completion_seconds: отсутствие
-        // ключа = "no signal", presence ключа = legitimate count (включая edge
-        // cases типа issue с attachments к Figma / Notion / external links но без
-        // GitHub/Slack — те попадут только в linked_attachment_count).
+        // Phase 4.7.B (B-8) — cross-provider links derived from Issue.attachments.
+        // Omitted on zero/nil — same convention as completion_seconds: a missing
+        // key = "no signal", a present key = legitimate count (including edge
+        // cases like an issue with attachments to Figma / Notion / external links but without
+        // GitHub/Slack — those land only in linked_attachment_count).
         if issue.linkedGitHubPRCount > 0 {
             payload["linked_github_pr_count"] = String(issue.linkedGitHubPRCount)
         }
@@ -410,9 +410,9 @@ public actor LinearCollector {
         )
     }
 
-    /// Phase 4.7.A — RawEvent для linear_comment_authored aggregate.
-    /// Single event per issue per tick, count = моих comments в окне.
-    /// ADR-010: bodies НЕ хранятся (provider не запрашивает body вообще).
+    /// Phase 4.7.A — RawEvent for the linear_comment_authored aggregate.
+    /// Single event per issue per tick, count = my comments in the window.
+    /// ADR-010: bodies are NOT stored (the provider doesn't request the body at all).
     static func makeCommentEvent(issue: LinearIssueSnapshot, periodEndMs: Int64) -> RawEvent {
         RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(periodEndMs) / 1000.0),
@@ -429,10 +429,10 @@ public actor LinearCollector {
         )
     }
 
-    /// Track-9 T2 — RawEvent для linear_comment_authored_to_me aggregate.
+    /// Track-9 T2 — RawEvent for the linear_comment_authored_to_me aggregate.
     /// Discriminator sibling to linear_comment_authored: per-issue count of
     /// comments authored BY OTHERS on this viewer-touched issue during the
-    /// polling window (substrate seed для INBOX `commentOnMyWork` Linear branch).
+    /// polling window (substrate seed for the INBOX `commentOnMyWork` Linear branch).
     ///
     /// `linear_issue_url` field composed from cached `workspaceSlug` +
     /// `issue.issueKey` (public-safe identifiers only). Omitted on cold-tick
@@ -468,22 +468,22 @@ public actor LinearCollector {
         )
     }
 
-    /// Phase 4.7.B — RawEvent для linear_assigned_workload_pulse.
-    /// signalType=.context (это state pulse, не action — describes the *current*
-    /// snapshot of viewer's in-flight assigned issues). Emit'ится every tick
-    /// including empty workload (startedCount=0) для substrate consistency.
+    /// Phase 4.7.B — RawEvent for linear_assigned_workload_pulse.
+    /// signalType=.context (this is a state pulse, not an action — describes the *current*
+    /// snapshot of viewer's in-flight assigned issues). Emitted every tick
+    /// including empty workload (startedCount=0) for substrate consistency.
     ///
     /// Payload key conventions:
-    /// - `started_count` — всегда present (включая "0").
-    /// - `top_priority` — всегда present, string enum: "urgent"/"high"/"normal"/"low"/"none"
-    ///   (per plan literal — "none" не omit'ится, чтобы downstream parser не путал
-    ///   missing field с "не запросили").
-    /// - `last_touched_identifier` / `last_touched_ts_ms` — omit'ятся когда nil
-    ///   (consistent с completion_seconds pattern в makeEvent: отсутствие ключа
-    ///   = "no sample", не "" / "0" чтобы SQL `IS NOT NULL` корректно фильтровал).
+    /// - `started_count` — always present (including "0").
+    /// - `top_priority` — always present, string enum: "urgent"/"high"/"normal"/"low"/"none"
+    ///   (per plan literal — "none" is not omitted, so the downstream parser doesn't confuse
+    ///   a missing field with "didn't request it").
+    /// - `last_touched_identifier` / `last_touched_ts_ms` — omitted when nil
+    ///   (consistent with the completion_seconds pattern in makeEvent: a missing key
+    ///   = "no sample", not "" / "0" so that SQL `IS NOT NULL` filters correctly).
     ///
-    /// ADR-010: title issue'а НЕ хранится — даже для lastTouched issue'а; identifier
-    /// (e.g. "LEA-123") public-safe (self-authored team key + sequence number).
+    /// ADR-010: the issue title is NOT stored — even for the lastTouched issue; the identifier
+    /// (e.g. "LEA-123") is public-safe (self-authored team key + sequence number).
     static func makeAssignedWorkloadPulseEvent(
         snapshot: LinearAssignedWorkloadSnapshot,
         nowMs: Int64
@@ -612,19 +612,19 @@ public actor LinearCollector {
         )
     }
 
-    /// Phase 4.7.B (B-7) — RawEvent для linear_cycle_progress per team.
-    /// signalType=.context (cycle progress — state pulse, не action).
-    /// Один event per team с активным cycle'ом; teams без cycle'а в provider'е
-    /// уже отфильтрованы (`batch.cycles.teams` содержит только in-cycle).
+    /// Phase 4.7.B (B-7) — RawEvent for linear_cycle_progress per team.
+    /// signalType=.context (cycle progress — state pulse, not action).
+    /// One event per team with an active cycle; teams without a cycle are already
+    /// filtered out in the provider (`batch.cycles.teams` contains only in-cycle ones).
     ///
     /// Payload key conventions (per plan B-7):
     /// - `team_id` / `team_name` / `cycle_id` / `cycle_name` — public-safe metadata.
-    /// - `completed_pct` — Double serialized via `String(_:)` (e.g. "80.0"); reader
-    ///   parses back с `Double(_:)`.
+    /// - `completed_pct` — Double serialized via `String(_:)` (e.g. "80.0"); the reader
+    ///   parses it back with `Double(_:)`.
     /// - `days_remaining` / `scope_count` — Int.
-    /// - `starts_at_ms` / `ends_at_ms` — для downstream cycle window queries.
+    /// - `starts_at_ms` / `ends_at_ms` — for downstream cycle window queries.
     ///
-    /// ADR-010: cycle.description / goals НЕ хранятся (provider их не запрашивает).
+    /// ADR-010: cycle.description / goals are NOT stored (the provider doesn't request them).
     static func makeCycleProgressEvent(
         team: LinearTeamCycleSnapshot,
         nowMs: Int64
@@ -650,25 +650,25 @@ public actor LinearCollector {
     }
 
     /// Phase 4.7.B (B-8) — build composite `presence_state.linear` JSON dict per
-    /// plan literal. Combines workload (B-6) + cycles (B-7) snapshots в single
-    /// current-state record для presence broadcast (Phase 5) и MCP tools (B-15+).
+    /// plan literal. Combines workload (B-6) + cycles (B-7) snapshots into a single
+    /// current-state record for presence broadcast (Phase 5) and MCP tools (B-15+).
     ///
     /// Schema:
     /// - `started_issues_count: Int` — derived from workload.startedCount.
     /// - `top_priority: String` — "urgent"/"high"/"normal"/"low"/"none" (always present;
-    ///   "none" не omit'ится — downstream parser отличает "не запросили" по отсутствию
-    ///   ключа, а "0 in-flight" / "all priority=0" → "none").
-    /// - `current_cycle: [String: Any] | {}` — first team's cycle если есть, иначе `{}`.
-    ///   Empty dict выбран вместо NSNull чтобы JSON readers могли просто `keys.isEmpty`
-    ///   проверить (mirror pattern из B-5: NSNull только для known-nullable scalar fields).
-    /// - `all_team_cycles: [[String: Any]]` — array per team с cycle (multi-team support
-    ///   для users с >1 team в-cycle simultaneously). Empty array если нет cycles.
+    ///   "none" is not omitted — the downstream parser distinguishes "didn't request it" by a missing
+    ///   key, while "0 in-flight" / "all priority=0" → "none").
+    /// - `current_cycle: [String: Any] | {}` — first team's cycle if present, else `{}`.
+    ///   An empty dict was chosen instead of NSNull so JSON readers can just check
+    ///   `keys.isEmpty` (mirror pattern from B-5: NSNull only for known-nullable scalar fields).
+    /// - `all_team_cycles: [[String: Any]]` — array per team with a cycle (multi-team support
+    ///   for users with >1 team in-cycle simultaneously). Empty array if there are no cycles.
     /// - `last_touched_issue_id: String` — workload.lastTouchedIdentifier ?? "".
     /// - `last_touched_ts: Int` — workload.lastTouchedTs ?? 0.
     ///
-    /// ADR-010 redaction: только counts / enum strings / self-authored identifiers
+    /// ADR-010 redaction: only counts / enum strings / self-authored identifiers
     /// (cycle name, team name, issue identifier "LEA-123") + cycle window timestamps.
-    /// НЕ хранится: cycle.description, issue.title, comment bodies, attachment titles.
+    /// NOT stored: cycle.description, issue.title, comment bodies, attachment titles.
     static func buildLinearPresenceState(
         workload: LinearAssignedWorkloadSnapshot,
         cycles: LinearCycleSnapshot,
@@ -704,8 +704,8 @@ public actor LinearCollector {
         ]
     }
 
-    /// Maps Linear's int priority enum в string token. 0 ("no priority" в Linear UI)
-    /// и nil (workload empty или ни одна issue с priority>0) → "none".
+    /// Maps Linear's int priority enum to a string token. 0 ("no priority" in the Linear UI)
+    /// and nil (workload empty or no issue with priority>0) → "none".
     private static func priorityString(_ value: Int?) -> String {
         switch value {
         case 1: return "urgent"
@@ -716,9 +716,9 @@ public actor LinearCollector {
         }
     }
 
-    /// Phase 4.7.C — RawEvent для linear_initiative_observed. signalType=.context
-    /// (per spec: membership snapshot per tick, не state change). observedAtMs
-    /// — момент tick'а, не initiative.updatedAt.
+    /// Phase 4.7.C — RawEvent for linear_initiative_observed. signalType=.context
+    /// (per spec: membership snapshot per tick, not a state change). observedAtMs
+    /// — the tick moment, not initiative.updatedAt.
     static func makeInitiativeObservedEvent(_ i: LinearInitiativeSnapshot) -> RawEvent {
         var payload: [String: String] = [
             "source": "linear",
@@ -736,9 +736,9 @@ public actor LinearCollector {
         )
     }
 
-    /// Phase 4.7.C — RawEvent для linear_document_edited.
+    /// Phase 4.7.C — RawEvent for linear_document_edited.
     /// signalType=.action; ADR-010 only document.id + updatedAt + project info? +
-    /// title (parity с issue.title); content / preview / body не запрашиваются.
+    /// title (parity with issue.title); content / preview / body are not requested.
     static func makeDocumentEditedEvent(_ d: LinearDocumentSnapshot) -> RawEvent {
         var payload: [String: String] = [
             "source": "linear",
@@ -757,10 +757,10 @@ public actor LinearCollector {
         )
     }
 
-    /// Phase 4.7.C — RawEvent для my projectUpdate authored.
+    /// Phase 4.7.C — RawEvent for my projectUpdate authored.
     /// payload.event_kind="linear_project_update_authored", signalType=.action.
-    /// ADR-010: только id + project metadata + health enum; body НЕ включается
-    /// (provider не запрашивает, defensive — мы и не формируем).
+    /// ADR-010: only id + project metadata + health enum; the body is NOT included
+    /// (the provider doesn't request it, defensive — and we don't compose it either).
     static func makeProjectUpdateAuthoredEvent(_ pu: LinearProjectUpdateSnapshot) -> RawEvent {
         var payload: [String: String] = [
             "source": "linear",
@@ -779,9 +779,9 @@ public actor LinearCollector {
         )
     }
 
-    /// Phase 4.7.C — RawEvent для my estimate transition. signalType=.action,
+    /// Phase 4.7.C — RawEvent for my estimate transition. signalType=.action,
     /// payload.event_kind="linear_estimate_changed". from/to optional Double —
-    /// omit'ятся когда nil (parity с cycle event pattern).
+    /// omitted when nil (parity with the cycle event pattern).
     static func makeEstimateTransitionEvent(_ t: LinearEstimateTransitionSnapshot) -> RawEvent {
         var payload: [String: String] = [
             "source": "linear",
@@ -800,10 +800,10 @@ public actor LinearCollector {
         )
     }
 
-    /// Phase 4.7.C — RawEvent для my cycle transition. signalType=.action,
+    /// Phase 4.7.C — RawEvent for my cycle transition. signalType=.action,
     /// payload.event_kind="linear_cycle_changed". from/to optional pairs (id+name) —
-    /// omit'ятся когда nil (parity с completion_seconds pattern: отсутствие ключа =
-    /// "no value", presence ключа = legitimate value).
+    /// omitted when nil (parity with the completion_seconds pattern: a missing key =
+    /// "no value", a present key = legitimate value).
     static func makeCycleTransitionEvent(_ t: LinearCycleTransitionSnapshot) -> RawEvent {
         var payload: [String: String] = [
             "source": "linear",
@@ -824,9 +824,9 @@ public actor LinearCollector {
         )
     }
 
-    /// Phase 4.7.C — RawEvent для my assignee transition. signalType=.action,
+    /// Phase 4.7.C — RawEvent for my assignee transition. signalType=.action,
     /// payload.event_kind="linear_assignee_changed". Bucket — anonymized
-    /// self/other (raw third-party IDs не покидают provider'а — ADR-010 PII).
+    /// self/other (raw third-party IDs do not leave the provider — ADR-010 PII).
     static func makeAssigneeTransitionEvent(_ t: LinearAssigneeTransitionSnapshot) -> RawEvent {
         RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(t.transitionAtMs) / 1000.0),
@@ -843,13 +843,13 @@ public actor LinearCollector {
         )
     }
 
-    /// Phase 4.7.C — RawEvent для my label transition. signalType=.action,
-    /// payload.event_kind="linear_label_added" или "linear_label_removed" в
-    /// зависимости от `kind`. Один history entry с N добавленных + M удалённых
-    /// labels раскладывается parser'ом в N+M snap'ов; collector эмитит N+M
-    /// отдельных events.
-    /// ADR-010: только label.id + label.name (self-authored, public-safe);
-    /// label description / color / created_by / любой text body НЕ запрашиваются.
+    /// Phase 4.7.C — RawEvent for my label transition. signalType=.action,
+    /// payload.event_kind="linear_label_added" or "linear_label_removed" depending
+    /// on `kind`. One history entry with N added + M removed
+    /// labels is expanded by the parser into N+M snaps; the collector emits N+M
+    /// separate events.
+    /// ADR-010: only label.id + label.name (self-authored, public-safe);
+    /// label description / color / created_by / any text body are NOT requested.
     static func makeLabelTransitionEvent(_ t: LinearLabelTransitionSnapshot) -> RawEvent {
         RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(t.transitionAtMs) / 1000.0),
@@ -867,11 +867,11 @@ public actor LinearCollector {
         )
     }
 
-    /// Phase 4.7.C — RawEvent для my priority transition. signalType=.action,
-    /// payload.event_kind="linear_priority_changed" — отдельный flavor от
+    /// Phase 4.7.C — RawEvent for my priority transition. signalType=.action,
+    /// payload.event_kind="linear_priority_changed" — a separate flavor from
     /// linear_status_transition. ADR-010: only raw int values + history id +
-    /// timestamp; никаких display labels (Linear's "Urgent"/"High"/etc — UI mapping,
-    /// derive'ится downstream).
+    /// timestamp; no display labels (Linear's "Urgent"/"High"/etc — a UI mapping,
+    /// derived downstream).
     static func makePriorityTransitionEvent(_ t: LinearPriorityTransitionSnapshot) -> RawEvent {
         RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(t.transitionAtMs) / 1000.0),
@@ -889,9 +889,9 @@ public actor LinearCollector {
         )
     }
 
-    /// Phase 4.6.B — RawEvent для my status transition. signalType=.action,
-    /// payload.event_kind="status_transition" — discriminator отделяет от
-    /// existing issue_updated events. ADR-010: payload содержит только
+    /// Phase 4.6.B — RawEvent for my status transition. signalType=.action,
+    /// payload.event_kind="status_transition" — the discriminator separates it from
+    /// existing issue_updated events. ADR-010: the payload contains only
     /// public-safe metadata (state names + types + history id).
     static func makeTransitionEvent(_ t: LinearStateTransitionSnapshot) -> RawEvent {
         var payload: [String: String] = [

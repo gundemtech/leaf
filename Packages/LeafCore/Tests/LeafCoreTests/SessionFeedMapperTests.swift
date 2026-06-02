@@ -3,13 +3,13 @@ import XCTest
 
 /// Phase 4.10.B — SessionFeedMapper aggregation contract.
 ///
-/// Mapper — pure stateless. Тесты проверяют:
+/// Mapper — pure stateless. The tests verify:
 ///  1. Boundary cases (empty / single / nil bundle / unknown signal_type).
-///  2. Run-aggregation: same (bundle, contextKey) within gap → одна сессия.
-///  3. Boundaries: смена bundle / смена title / idle context / gap > threshold.
-///  4. End-point semantics при разных способах закрытия сессии.
-///  5. minDurationSec фильтр.
-///  6. Категория проставляется через `AppCategoryClassifier`.
+///  2. Run-aggregation: same (bundle, contextKey) within gap → one session.
+///  3. Boundaries: bundle change / title change / idle context / gap > threshold.
+///  4. End-point semantics across the different ways a session is closed.
+///  5. minDurationSec filter.
+///  6. Category is set via `AppCategoryClassifier`.
 final class SessionFeedMapperTests: XCTestCase {
 
     // MARK: - Helpers

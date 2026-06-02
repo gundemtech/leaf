@@ -1,6 +1,6 @@
-// Phase 2.4 — public-side tests для FSEventsCollector lifecycle + StubFSEventsRouter.
-// Не тестируем actual filesystem events (это integration smoke в Day 3) —
-// только actor lifecycle: start/stop, reload diff, no-op без watched folders.
+// Phase 2.4 — public-side tests for FSEventsCollector lifecycle + StubFSEventsRouter.
+// We don't test actual filesystem events (that's integration smoke in Day 3) —
+// only the actor lifecycle: start/stop, reload diff, no-op without watched folders.
 
 import XCTest
 import OSLog
@@ -25,9 +25,9 @@ final class FSEventsCollectorTests: XCTestCase {
 
     // MARK: - Stub router
 
-    /// StubFSEventsRouter всегда `.filtered("stub")`. CI-builds без moat
-    /// должны компилиться + работать (collector лучшего идёт через nodes
-    /// без записи событий в БД).
+    /// StubFSEventsRouter always returns `.filtered("stub")`. CI builds without moat
+    /// must compile + run (the collector simply routes through nodes
+    /// without writing events to the DB).
     func testStubRouterAlwaysFiltered() async {
         let stub = StubFSEventsRouter()
         let result = await stub.route(
@@ -46,7 +46,7 @@ final class FSEventsCollectorTests: XCTestCase {
 
     // MARK: - Lifecycle: empty
 
-    /// start без watched folders — no-op (stream не создаётся), stop чистый.
+    /// start without watched folders — no-op (stream not created), stop is clean.
     func testStartWithoutFoldersIsNoOp() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         let collector = FSEventsCollector(
@@ -59,17 +59,17 @@ final class FSEventsCollectorTests: XCTestCase {
         )
 
         await collector.start()
-        // collector сейчас в idle state — нет folders, нет stream. start() уже
-        // installed notify listener + poll task; они должны cancel'ятся cleanly.
+        // collector is now in idle state — no folders, no stream. start() already
+        // installed the notify listener + poll task; they must cancel cleanly.
         await collector.stop()
-        // Если до сюда дошли без deadlock'а — stop() корректно cancel'ит.
+        // If we got here without a deadlock — stop() cancelled correctly.
     }
 
     // MARK: - Lifecycle: with folders
 
-    /// start с одной watched folder → stream создаётся; stop → cleanly tears down.
-    /// Не проверяем events delivery (это integration smoke), только что
-    /// actor лекально handle'ит paths array.
+    /// start with one watched folder → stream created; stop → cleanly tears down.
+    /// We don't verify events delivery (that's integration smoke), only that
+    /// the actor handles the paths array locally.
     func testStartWithOneFolder() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -100,9 +100,9 @@ final class FSEventsCollectorTests: XCTestCase {
 
     // MARK: - reload diff
 
-    /// reload с no diff в paths → no-op (stream not torn down).
-    /// reload с diff → stream torn down + recreated. Тест проверяет что
-    /// reload не падает + не deadlock'ит при повторных вызовах.
+    /// reload with no diff in paths → no-op (stream not torn down).
+    /// reload with a diff → stream torn down + recreated. The test verifies that
+    /// reload doesn't crash + doesn't deadlock on repeated calls.
     func testReloadIdempotentAndDiffSafe() async throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -145,7 +145,7 @@ final class FSEventsCollectorTests: XCTestCase {
         ))
         await collector.reload()
 
-        // Disable A → reload → stream rebuilds with только B.
+        // Disable A → reload → stream rebuilds with only B.
         try db.updateWatchedFolder(id: "id-A", enabled: false)
         await collector.reload()
 
