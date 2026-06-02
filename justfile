@@ -3,6 +3,20 @@
 default:
     @just --list
 
+# Phase-done gate (R1): every guard + full build + SPM tests must pass. Fail-fast,
+# cheap guards first so a leak/token/migration slip aborts before the slow build.
+# Green here ⟺ the phase may merge. gitleaks needs `brew install gitleaks`.
+preflight:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "▶ preflight 1/6 — leak-guard";              ./scripts/leak-guard.sh --report
+    echo "▶ preflight 2/6 — check-tokens";            ./scripts/check-tokens.sh
+    echo "▶ preflight 3/6 — check-migrations";        ./scripts/check-migrations.sh
+    echo "▶ preflight 4/6 — gitleaks";                ./scripts/gitleaks-scan.sh
+    echo "▶ preflight 5/6 — build-all (5 schemes)";   just build-all
+    echo "▶ preflight 6/6 — SPM tests";               just test-core
+    echo "✅ preflight: all 6 checks green — phase may merge."
+
 # Token-discipline guard — Track 2 D1+. Fails if Leaf/Theme/ or
 # Leaf/Views/Tokens/ contain raw colours/spacing/radii.
 check-tokens:
