@@ -447,8 +447,9 @@ final class RealtimeHeartbeatTests: XCTestCase {
             heartbeatIntervalSec: 0.05
         )
         try await driver.connect(url: url, jwt: "JWT.xx")
-        // Let one tick fire (counter → 1 unanswered).
-        try await Task.sleep(nanoseconds: 100_000_000)
+        // Poll until ≥1 unanswered heartbeat is recorded instead of a fixed
+        // sleep the loaded-CI timer Task can outrun.
+        try await waitForCondition { await driver.currentMissedHeartbeats() >= 1 }
         let beforeReply = await driver.currentMissedHeartbeats()
         XCTAssertGreaterThanOrEqual(beforeReply, 1)
         // Synthesize the server's phx_reply for heartbeat.
@@ -474,14 +475,16 @@ final class RealtimeHeartbeatTests: XCTestCase {
         )
         let stream = await driver.events
         try await driver.connect(url: url, jwt: "JWT.xx")
-        // Sleep ~5 tick intervals — 3+ heartbeats fire unanswered → trigger reconnect.
-        try await Task.sleep(nanoseconds: 300_000_000)
-        // Drain stream until we see .disconnected.
-        let disc = await firstDisconnectEvent(from: stream, withinSec: 0.5)
+        // 3 unanswered heartbeats (3×0.03s) trigger reconnect. Drain the stream
+        // for .disconnected with a generous timeout instead of a fixed pre-sleep
+        // a loaded CI runner can outrun.
+        let disc = await firstDisconnectEvent(from: stream, withinSec: 5.0)
         XCTAssertNotNil(disc, "expected .disconnected event after 3 missed heartbeats")
-        // After handleConnectionLoss → startReconnectLoop, state should be .reconnecting.
-        // Allow brief window for the reconnect task to set state.
-        try await Task.sleep(nanoseconds: 50_000_000)
+        // Poll until handleConnectionLoss → startReconnectLoop sets .reconnecting.
+        try await waitForCondition {
+            if case .reconnecting = await driver.state { return true }
+            return false
+        }
         let s = await driver.state
         if case .reconnecting = s {
             // ok
@@ -541,10 +544,10 @@ final class RealtimeHeartbeatTests: XCTestCase {
     /// Returns silently on timeout — the caller's assert then reports the unmet
     /// condition.
     private func waitForCondition(timeoutNanos: UInt64 = 5_000_000_000,
-                                  predicate: () -> Bool) async throws {
+                                  predicate: () async throws -> Bool) async throws {
         let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanos
         while DispatchTime.now().uptimeNanoseconds < deadline {
-            if predicate() { return }
+            if try await predicate() { return }
             try await Task.sleep(nanoseconds: 5_000_000)
         }
     }
