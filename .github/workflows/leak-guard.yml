@@ -39,3 +39,15 @@ jobs:
 
       - name: gitleaks secret scan (tracked tree)
         run: ./scripts/gitleaks-scan.sh
+
+      # Hygiene guards (R3 + token-discipline) — enforced in CI, not just local
+      # `just preflight`. Closes the parallel-work gap that produced the
+      # M024↔M028 migration-number split. Both are Bash-3.2/ubuntu-portable.
+      - name: Migration-linearity guard self-test (R3 regression)
+        run: ./scripts/tests/test-check-migrations.sh
+
+      - name: Migration linearity (R3)
+        run: ./scripts/check-migrations.sh
+
+      - name: Token-discipline (Track 2)
+        run: ./scripts/check-tokens.sh
