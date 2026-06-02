@@ -383,8 +383,15 @@ final class RealtimeHeartbeatTests: XCTestCase {
             heartbeatIntervalSec: 0.05
         )
         try await driver.connect(url: url, jwt: "JWT.xx")
-        // Wait for ~2 tick intervals → expect at least one heartbeat frame.
-        try await Task.sleep(nanoseconds: 150_000_000)
+        // Condition-based wait: poll until ≥1 heartbeat frame is on the wire
+        // instead of sleeping a fixed window — the timer Task starves on a
+        // loaded CI runner and the fixed window false-fails. Fast locally.
+        try await waitForCondition {
+            mock.outgoing.contains { msg in
+                guard case .string(let s) = msg else { return false }
+                return s.contains("\"event\":\"heartbeat\"")
+            }
+        }
         let hbCount = mock.outgoing.filter { msg in
             guard case .string(let s) = msg else { return false }
             return s.contains("\"event\":\"heartbeat\"")
@@ -402,7 +409,14 @@ final class RealtimeHeartbeatTests: XCTestCase {
             heartbeatIntervalSec: 0.05
         )
         try await driver.connect(url: url, jwt: "JWT.xx")
-        try await Task.sleep(nanoseconds: 100_000_000)
+        // Poll until a heartbeat frame appears (instead of a fixed sleep) so a
+        // starved timer Task on loaded CI doesn't false-fail before disconnect.
+        try await waitForCondition {
+            mock.outgoing.contains { msg in
+                guard case .string(let s) = msg else { return false }
+                return s.contains("\"event\":\"heartbeat\"")
+            }
+        }
         await driver.disconnect()
         let hbFrame = mock.outgoing.compactMap { msg -> String? in
             guard case .string(let s) = msg else { return nil }
@@ -518,6 +532,20 @@ final class RealtimeHeartbeatTests: XCTestCase {
             let r = await group.next() ?? nil
             group.cancelAll()
             return r
+        }
+    }
+
+    /// Spin until `predicate()` is true or the deadline elapses (default 5s).
+    /// Replaces fixed `Task.sleep` windows in heartbeat-timer assertions so a
+    /// slow / contended CI runner that starves the timer Task doesn't false-fail.
+    /// Returns silently on timeout — the caller's assert then reports the unmet
+    /// condition.
+    private func waitForCondition(timeoutNanos: UInt64 = 5_000_000_000,
+                                  predicate: () -> Bool) async throws {
+        let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanos
+        while DispatchTime.now().uptimeNanoseconds < deadline {
+            if predicate() { return }
+            try await Task.sleep(nanoseconds: 5_000_000)
         }
     }
 }
