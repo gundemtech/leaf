@@ -77,4 +77,10 @@ public enum LeafError: Error, Sendable {
   // peer point rejected: low-order / small-subgroup (CryptoKit corecrypto −7 on
   // macOS ≥ 26) or an all-zero shared secret (RFC 7748 §6.1, older OS).
   case lowOrderPoint
+  // Ph C migration-guard (consumers: Database.openForWrite/openForRead schema
+  // guard; LeafApp recovery alert; Agent/MCP log+bail). The on-disk DB carries
+  // migration identifiers this binary does not know — it was written by a NEWER
+  // Leaf build. Never silently migrate or serve partial data; surface recovery
+  // (Backup & Reset / update Leaf). `unknown` = the sorted unknown identifiers.
+  case databaseSchemaFromFuture(unknown: [String])
 }

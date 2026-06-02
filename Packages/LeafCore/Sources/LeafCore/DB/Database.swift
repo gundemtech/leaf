@@ -39,6 +39,22 @@ public final class Database: @unchecked Sendable {
 
         let pool = try DatabasePool(path: url.path, configuration: grdbConfig)
 
+        let migrator = makeAppMigrator()
+        // Ph C migration-guard (R7): if the DB carries migrations this binary does
+        // not know (written by a newer Leaf build), refuse to migrate — surface a
+        // recovery path instead of mangling/“Couldn't load Home”.
+        try assertSchemaNotFromFuture(pool, migrator: migrator)
+        try migrator.migrate(pool)
+
+        return Database(pool: pool, config: config, mode: .writer)
+    }
+
+    /// All registered schema migrations, in order. Single source of truth shared
+    /// by `openForWrite` (which migrates) and the read/write schema guard (which
+    /// only needs the registered identifier set). Adding a migration = append one
+    /// `registerMigrationNNN…()` line here (next number, never reuse — see
+    /// scripts/check-migrations.sh).
+    static func makeAppMigrator() -> DatabaseMigrator {
         var migrator = DatabaseMigrator()
         migrator.registerMigration001Events()
         migrator.registerMigration002CollectorOffsets()
@@ -77,9 +93,20 @@ public final class Database: @unchecked Sendable {
         // occupied by InviteSystemRedesign on the integration trunk). Clean
         // append after M029 — Ph B trunk unification.
         migrator.registerMigration030GoogleCalendarTracker()
-        try migrator.migrate(pool)
+        return migrator
+    }
 
-        return Database(pool: pool, config: config, mode: .writer)
+    /// Throws `LeafError.databaseSchemaFromFuture` if the database has applied
+    /// migration identifiers the supplied migrator does not register — i.e. the
+    /// file was written by a newer Leaf build. GRDB's `migrate()` would silently
+    /// ignore unknown applied migrations, so this explicit check is required on
+    /// BOTH the writer and reader paths (MCP read tools use `openForRead`).
+    static func assertSchemaNotFromFuture(_ pool: DatabasePool, migrator: DatabaseMigrator) throws {
+        guard try pool.read(migrator.hasBeenSuperseded) else { return }
+        let unknown = try pool.read(migrator.appliedIdentifiers)
+            .subtracting(migrator.migrations)
+            .sorted()
+        throw LeafError.databaseSchemaFromFuture(unknown: unknown)
     }
 
     public static func openForRead(
@@ -93,6 +120,9 @@ public final class Database: @unchecked Sendable {
         applyEncryption(encryption, to: &grdbConfig)
 
         let pool = try DatabasePool(path: url.path, configuration: grdbConfig)
+        // Ph C migration-guard (R7): readers (MCP tools) never run the migrator,
+        // so a future-schema DB would otherwise serve partial/garbled data. Refuse.
+        try assertSchemaNotFromFuture(pool, migrator: makeAppMigrator())
         return Database(pool: pool, config: config, mode: .reader)
     }
 
