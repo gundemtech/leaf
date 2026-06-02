@@ -140,8 +140,13 @@ struct NotificationsSettingsSection: View {
           testStatus =
             "Notifications denied for Leaf. Open System Settings → Notifications → Leaf → toggle Allow notifications ON, then try again."
         case .notDetermined:
-          // First-time ask — request now and on grant, schedule.
-          center.requestAuthorization(options: [.alert, .sound, .badge]) {
+          // First-time ask — request now and on grant, schedule. Re-acquire the
+          // shared center here instead of capturing the outer `center`: the
+          // latter is non-Sendable and capturing it into this main-async closure
+          // "sends" it across an isolation boundary (Swift 6 data-race error).
+          UNUserNotificationCenter.current().requestAuthorization(
+            options: [.alert, .sound, .badge]
+          ) {
             granted, error in
             DispatchQueue.main.async {
               if let error {
