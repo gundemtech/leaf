@@ -2,7 +2,7 @@ import Foundation
 
 /// Phase Track-1 D3 — JSON-RPC argument decoders for the 3 high-level structured
 /// MCP tools. Lives in LeafCore (not LeafMCP) so SPM tests can exercise the
-/// parsing branches без xcodebuild — LeafMCP itself has no SPM test target.
+/// parsing branches without xcodebuild — LeafMCP itself has no SPM test target.
 ///
 /// All decoders are pure / Sendable. They produce either a typed value or a
 /// human-readable error message intended to be surfaced as
@@ -86,7 +86,7 @@ public enum D3ToolParams {
 /// flows through `ToolResponseBuilder.versionedJSONResult`. Our 3 D3 tools
 /// own typed `Codable` responses (per-response `schemaVersion: "1.0"`); we
 /// run them through `JSONEncoder` and back through `JSONSerialization` so
-/// they can join the same `versionedJSONResult` path и stamp `version: 1`
+/// they can join the same `versionedJSONResult` path and stamp `version: 1`
 /// consistently across all 15 tools.
 public enum D3ResponseEncoder {
     public static func toDict<T: Encodable>(_ value: T) throws -> [String: Any] {

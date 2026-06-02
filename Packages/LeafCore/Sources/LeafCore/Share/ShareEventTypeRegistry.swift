@@ -1,22 +1,22 @@
 import Foundation
 
-/// Phase 4.7.A — registry of canonical event_kinds для share-controls
+/// Phase 4.7.A — registry of canonical event_kinds for the share-controls
 /// whitelist (whitepaper Section 7 / Share Controls model).
 ///
-/// **Scope в Phase 4.7.A:** code-level constants only. `share_event_types`
-/// table ещё не создана — runtime UPSERT logic откладывается до Phase 5
-/// prep / отдельной mini-migration. До тех пор registry служит single source
-/// of truth для:
-/// - downstream code (share-control filters могут assert'ить полный set
-///   известных event_kinds);
+/// **Scope in Phase 4.7.A:** code-level constants only. The `share_event_types`
+/// table is not created yet — runtime UPSERT logic is deferred to Phase 5
+/// prep / a separate mini-migration. Until then the registry serves as the single
+/// source of truth for:
+/// - downstream code (share-control filters can assert against the full set
+///   of known event_kinds);
 /// - onboarding default presets (`ShareEventTypeDefaults`);
-/// - test coverage (любой новый event_kind должен быть registered).
+/// - test coverage (every new event_kind must be registered).
 ///
-/// Naming: rawValue матчит discriminator value в `events.payload_json.event_kind`
-/// 1-в-1 — single string identity между registry, runtime emission и downstream
+/// Naming: rawValue matches the discriminator value in `events.payload_json.event_kind`
+/// one-to-one — a single string identity across registry, runtime emission, and downstream
 /// SQL queries.
 public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
-    // MARK: - Phase 4.4 baseline (already shipped в alpha.5/6)
+    // MARK: - Phase 4.4 baseline (already shipped in alpha.5/6)
     // Track-3 D2: GitHub rawValues renamed to canonical `gh_*` form via M016
     // (Swift identifiers preserved for call-site stability).
     case slackMessageAuthored = "slack_message_authored_aggregate"
@@ -87,8 +87,8 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
 
     // MARK: - Phase Track-1 D3 — semantic detection facts
     // Default OFF: detector outputs expose deeper inference than raw events
-    // (decisions / open questions / blockers извлекаются из тел сообщений
-    // post-D1). Per Track 1 contract §5.3 — opt-in only, юзер сам включает.
+    // (decisions / open questions / blockers are extracted from message bodies
+    // post-D1). Per Track 1 contract §5.3 — opt-in only, the user enables it themselves.
     case decisionDetected = "decision_detected"
     case openQuestionOpened = "open_question_opened"
     case openQuestionResolved = "open_question_resolved"
@@ -294,9 +294,9 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
 }
 
 /// Phase 4.7.A — onboarding default enabled-state per event_kind.
-/// Recommendation для UI Settings → Share Controls onboarding template
-/// ("common dev defaults"). Юзер всегда может override per-key. Persistence
-/// шкафа — Phase 5 prep (`share_event_types` table).
+/// Recommendation for the UI Settings → Share Controls onboarding template
+/// ("common dev defaults"). The user can always override per-key. Persistence
+/// of the store — Phase 5 prep (`share_event_types` table).
 public struct ShareEventTypeDefault: Sendable, Hashable {
     public let key: ShareEventTypeKey
     public let defaultEnabled: Bool
@@ -308,7 +308,7 @@ public struct ShareEventTypeDefault: Sendable, Hashable {
 }
 
 public enum ShareEventTypeDefaults {
-    /// Полный default set across baseline + Phase 4.7.A. Defaults reflect
+    /// Full default set across baseline + Phase 4.7.A. Defaults reflect
     /// "common dev team" preset: outcome-bearing events default ON, niche
     /// social-feature events (discussions) default OFF.
     public static let all: [ShareEventTypeDefault] = [
@@ -339,7 +339,7 @@ public enum ShareEventTypeDefaults {
         .init(key: .githubBranchCreated, defaultEnabled: true),
         .init(key: .githubBranchDeleted, defaultEnabled: true),
         .init(key: .githubTagCreated, defaultEnabled: true),
-        // Discussions — нишевые; OFF by default (юзер может включить).
+        // Discussions — niche; OFF by default (the user can enable them).
         .init(key: .githubDiscussionAuthored, defaultEnabled: false),
         .init(key: .githubDiscussionCommentAuthored, defaultEnabled: false),
         .init(key: .slackThreadReplyAggregate, defaultEnabled: true),
@@ -357,15 +357,15 @@ public enum ShareEventTypeDefaults {
         .init(key: .githubCheckRunsStatus, defaultEnabled: true),
         .init(key: .linearAssignedWorkloadPulse, defaultEnabled: true),
         .init(key: .linearCycleProgress, defaultEnabled: true),
-        // Slack presence/DND — Slack уже шарит это нативно, default ON.
+        // Slack presence/DND — Slack already shares this natively, default ON.
         .init(key: .slackPresenceState, defaultEnabled: true),
         .init(key: .slackDNDState, defaultEnabled: true),
         .init(key: .slackMentionReceivedAggregate, defaultEnabled: true),
         .init(key: .slackFileUploadedAggregate, defaultEnabled: true),
 
         // Phase 4.7.C — outcome-bearing transitions / project updates ON;
-        // skeleton-style features (documents / initiatives) OFF на legacy
-        // workspaces без feature support.
+        // skeleton-style features (documents / initiatives) OFF on legacy
+        // workspaces without feature support.
         .init(key: .linearPriorityChanged, defaultEnabled: true),
         .init(key: .linearLabelAdded, defaultEnabled: true),
         .init(key: .linearLabelRemoved, defaultEnabled: true),
@@ -373,14 +373,14 @@ public enum ShareEventTypeDefaults {
         .init(key: .linearCycleChanged, defaultEnabled: true),
         .init(key: .linearEstimateChanged, defaultEnabled: true),
         .init(key: .linearProjectUpdateAuthored, defaultEnabled: true),
-        // Skeleton — могут вернуть 0 events на workspaces без feature; OFF.
+        // Skeleton — may return 0 events on workspaces without the feature; OFF.
         .init(key: .linearDocumentEdited, defaultEnabled: false),
         .init(key: .linearInitiativeObserved, defaultEnabled: false),
         .init(key: .githubPullRequestReviewThreadResolved, defaultEnabled: true),
 
-        // Phase Track-1 D3 — semantic detection facts. Все OFF by default:
-        // detector outputs выводят более глубокий смысл из bodies (см. §5.3
-        // контракта Track 1), юзер должен явно opt-in перед broadcast.
+        // Phase Track-1 D3 — semantic detection facts. All OFF by default:
+        // detector outputs infer deeper meaning from bodies (see §5.3 of the
+        // Track 1 contract), so the user must explicitly opt in before broadcast.
         .init(key: .decisionDetected, defaultEnabled: false),
         .init(key: .openQuestionOpened, defaultEnabled: false),
         .init(key: .openQuestionResolved, defaultEnabled: false),

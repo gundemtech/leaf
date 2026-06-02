@@ -1,7 +1,7 @@
 // Phase Track-4 S4 — ActivityFeedMapper LocalOS branch coverage.
 //
-// Track-4 S1+S2+S3 landed 36 new `event_kind` discriminators под different
-// signal types (`.attention` / `.context` / `.action` / `.content`) без
+// Track-4 S1+S2+S3 landed 36 new `event_kind` discriminators across different
+// signal types (`.attention` / `.context` / `.action` / `.content`) without a
 // `payload["source"]` key — without an explicit whitelist they fall through
 // to the generic mapAttention/mapIntegration paths and either drop or render
 // without semantic copy. This test suite locks in:

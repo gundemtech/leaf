@@ -1,11 +1,11 @@
 import Foundation
 import os
 
-// SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor → globals по умолчанию MainActor-isolated.
-// Явный `nonisolated` чтобы Logger был доступен из actor'ов (EventWriter) без hop'ов.
-// Logger is Sendable, поэтому `unsafe` не нужен.
+// SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor → globals are MainActor-isolated by default.
+// Explicit `nonisolated` so Logger is reachable from actors (EventWriter) without hops.
+// Logger is Sendable, so `unsafe` is not needed.
 
-/// Subsystem для всего Agent'а. Viewable в Console.app → filter by subsystem.
+/// Subsystem for the whole Agent. Viewable in Console.app → filter by subsystem.
 nonisolated let agentLogger = Logger(subsystem: "tech.gundem.leaf.agent", category: "core")
 nonisolated let collectorLogger = Logger(subsystem: "tech.gundem.leaf.agent", category: "collectors")
 nonisolated let writerLogger = Logger(subsystem: "tech.gundem.leaf.agent", category: "writer")

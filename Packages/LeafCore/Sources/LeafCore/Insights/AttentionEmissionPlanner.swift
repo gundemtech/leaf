@@ -2,39 +2,39 @@
 //  AttentionEmissionPlanner.swift
 //  LeafCore
 //
-//  Phase 4.10.B — pure decision logic для attention emission. Принимает
+//  Phase 4.10.B — pure decision logic for attention emission. Takes
 //  (bundleID, pid, reason) + injected `WindowContextProvider` / `AXTrustChecker`
-//  / `AttentionGranularityPolicy` → возвращает `RawEvent?` (nil если diff
-//  suppression срабатывает на windowPoll).
+//  / `AttentionGranularityPolicy` → returns `RawEvent?` (nil when diff
+//  suppression triggers on a windowPoll).
 //
-//  Отделён от `ActiveAppCollector` чтобы тесты не зависели от NSWorkspace + AX.
+//  Split out of `ActiveAppCollector` so tests don't depend on NSWorkspace + AX.
 //
 
 import Foundation
 
-/// Отвечает за чтение window-контекста через AX (или эквивалент).
-/// Реальная имплементация живёт в LeafAgent (`AXWindowContextProvider`).
+/// Responsible for reading window context via AX (or an equivalent).
+/// The real implementation lives in LeafAgent (`AXWindowContextProvider`).
 public protocol WindowContextProvider: Sendable {
     func windowTitle(forPid pid: pid_t, bundleID: String) -> String?
     func browserURL(forPid pid: pid_t, bundleID: String) -> String?
 }
 
-/// Обёртка над `AXIsProcessTrusted()` — выделена в протокол чтобы тесты
-/// детерминированно эмулировали обе ветки.
+/// Wrapper around `AXIsProcessTrusted()` — extracted into a protocol so tests
+/// can deterministically emulate both branches.
 public protocol AXTrustChecker: Sendable {
     func isAXTrusted() -> Bool
 }
 
-/// Причина emit'а. App switch — explicit user action (всегда emit). Window
-/// poll — internal periodic tick (diff suppression: skip если ничего не
-/// изменилось с прошлого раза).
+/// Reason for the emit. App switch — explicit user action (always emit). Window
+/// poll — internal periodic tick (diff suppression: skip if nothing changed
+/// since last time).
 public enum AttentionEmitReason: Sendable {
     case appSwitch
     case windowPoll
 }
 
-/// Stateful planner: хранит last-emitted (bundleID, title) для diff
-/// suppression. Не Sendable — рассчитан на вызовы с одного потока (main).
+/// Stateful planner: holds the last-emitted (bundleID, title) for diff
+/// suppression. Not Sendable — designed to be called from a single thread (main).
 public final class AttentionEmissionPlanner {
     private let policy: AttentionGranularityPolicy
     private let classifier: any AppCategoryClassifier
@@ -44,12 +44,12 @@ public final class AttentionEmissionPlanner {
     private var lastBundleID: String?
     private var lastWindowTitle: String?
 
-    /// Жёсткий cap на длину window title — защита от UI mishaps и DB bloat.
-    /// Совпадает с capacity, ожидаемым `ActivityFeedMapper` /
+    /// Hard cap on window title length — guards against UI mishaps and DB bloat.
+    /// Matches the capacity expected by `ActivityFeedMapper` /
     /// `SessionFeedMapper`.
     public static let titleMaxLength = 200
 
-    /// Жёсткий cap на длину browser URL после sanitize. `sanitizeURL` always drops
+    /// Hard cap on browser URL length after sanitization. `sanitizeURL` always drops
     /// the fragment + non-allowlisted query, then truncates the result to this length.
     public static let urlMaxLength = 1024
 
@@ -65,8 +65,8 @@ public final class AttentionEmissionPlanner {
         self.trustChecker = trustChecker
     }
 
-    /// Главная entry point. Возвращает `RawEvent` для записи или nil если
-    /// событие подавлено diff-suppression (только windowPoll).
+    /// Main entry point. Returns a `RawEvent` to persist, or nil if the
+    /// event was suppressed by diff suppression (windowPoll only).
     public func plan(
         bundleID: String,
         pid: pid_t,
@@ -85,7 +85,7 @@ public final class AttentionEmissionPlanner {
                 payload["window_title"] = sanitized
             }
 
-            // Browser URL — только для browse-категории (Safari / Chrome / Arc / ...).
+            // Browser URL — only for the browse category (Safari / Chrome / Arc / ...).
             if classifier.category(for: bundleID) == .browse,
                let raw = contextProvider.browserURL(forPid: pid, bundleID: bundleID),
                let sanitized = Self.sanitizeURL(raw) {
@@ -122,7 +122,7 @@ public final class AttentionEmissionPlanner {
             }
         }
 
-        // Diff suppression — только для polling tick'ов. App switch всегда emit.
+        // Diff suppression — only for polling ticks. App switch always emits.
         if reason == .windowPoll,
            bundleID == lastBundleID,
            diffKey == lastWindowTitle {

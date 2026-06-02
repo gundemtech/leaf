@@ -6,19 +6,19 @@ import GRDB
 /// where_stopped_log) plus per-detector progress cursor (detector_offsets).
 ///
 /// Logical FKs only: `event_id` / `resolved_by_event_id` / `detected_by_event_id`
-/// / `anchor_event_id` reference `events.id` без SQL FOREIGN KEY clause
-/// (см. M013_EventLinks.swift §4-5 + Schema.swift §74-75, §219 — repo convention).
-/// Cleanup orphans on `events` deletion — задача application layer (D3
-/// retention sweep), не SQL CASCADE.
+/// / `anchor_event_id` reference `events.id` without a SQL FOREIGN KEY clause
+/// (see M013_EventLinks.swift §4-5 + Schema.swift §74-75, §219 — repo convention).
+/// Cleaning up orphans on `events` deletion — application-layer responsibility (D3
+/// retention sweep), not SQL CASCADE.
 ///
 /// Partial unique index `idx_blockers_open` enforces "one OPEN blocker per
 /// (target_kind, target_ref)" — resolved rows (resolved_at_ms IS NOT NULL)
-/// исключены из uniqueness, что позволяет повторно открывать blocker после
-/// resolve (плановое поведение D3 §3.1).
+/// are excluded from uniqueness, which allows reopening a blocker after it has been
+/// resolved (intended D3 §3.1 behavior).
 ///
-/// Pre-seeds `detector_offsets` тремя строками (decision / open_question /
+/// Pre-seeds `detector_offsets` with three rows (decision / open_question /
 /// blocker_pattern) — per-event detector cursors. Scheduled detectors
-/// (linear_stuck / where_stopped) cursor не используют (run on-demand или
+/// (linear_stuck / where_stopped) do not use a cursor (run on-demand or
 /// per-tick).
 public extension DatabaseMigrator {
     mutating func registerMigration014DetectionTables() {

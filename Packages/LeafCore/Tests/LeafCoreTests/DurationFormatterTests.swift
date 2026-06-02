@@ -14,7 +14,7 @@ final class DurationFormatterTests: XCTestCase {
 
     func testMinuteBoundary() {
         XCTAssertEqual(formatDuration(60), "1m")
-        XCTAssertEqual(formatDuration(59.5), "1m", "Округление вверх в минуту")
+        XCTAssertEqual(formatDuration(59.5), "1m", "Rounds up to a minute")
     }
 
     func testMinutesOnly() {

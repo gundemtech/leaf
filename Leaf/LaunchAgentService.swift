@@ -2,12 +2,12 @@
 //  LaunchAgentService.swift
 //  Leaf
 //
-//  Обёртка над SMAppService.agent(plistName:) — user-visible toggle в
-//  System Settings → Login Items → Background. Пользователь может отключить
-//  agent в любой момент одним кликом.
+//  Wrapper around SMAppService.agent(plistName:) — a user-visible toggle in
+//  System Settings → Login Items → Background. The user can disable the
+//  agent at any moment with a single click.
 //
-//  Phase 3.1 — D1 hygiene: register() filter "already registered" SMAppServiceErrorDomain
-//  чтобы не флешить spurious red error в Settings UI после relaunch.
+//  Phase 3.1 — D1 hygiene: register() filters the "already registered" SMAppServiceErrorDomain
+//  so it doesn't flash a spurious red error in the Settings UI after relaunch.
 //
 
 import Foundation
@@ -37,11 +37,11 @@ final class LaunchAgentService {
             try service.register()
             lastErrorMessage = nil
         } catch {
-            // D1 (Phase 3.1) — filter "already registered" — нормальный post-update
-            // restoration state (LeafApp.init вызывает register() через idempotent guard).
-            // SMAppService возвращает SMAppServiceErrorDomain с message text типа
-            // "Service has already been registered." — щадящий filter по message text
-            // vs hardcoded error code (varies между macOS versions).
+            // D1 (Phase 3.1) — filter "already registered" — a normal post-update
+            // restoration state (LeafApp.init calls register() through an idempotent guard).
+            // SMAppService returns SMAppServiceErrorDomain with message text like
+            // "Service has already been registered." — a lenient filter on message text
+            // vs a hardcoded error code (which varies between macOS versions).
             if isAlreadyRegisteredError(error) {
                 lastErrorMessage = nil
             } else {
@@ -86,15 +86,15 @@ final class LaunchAgentService {
 
 // MARK: - Test plan
 //
-// Manual smoke кейсы для Phase 3.5+ (Phase 3.4 D9 precedent):
+// Manual smoke cases for Phase 3.5+ (Phase 3.4 D9 precedent):
 //
-// 1. Idempotent register: app relaunch с уже-registered service (LeafApp.init
-//    вызывает register через D1 guard) → register() filters "already registered"
-//    error → lastErrorMessage остаётся nil → no spurious red text в Settings UI.
+// 1. Idempotent register: app relaunch with an already-registered service (LeafApp.init
+//    calls register through the D1 guard) → register() filters the "already registered"
+//    error → lastErrorMessage stays nil → no spurious red text in the Settings UI.
 //
-// 2. Real error путь: например, missing LaunchAgent plist → register() throws
-//    legitimate error → lastErrorMessage = localizedDescription → user видит
-//    error в General tab → "Last error" LabeledContent.
+// 2. Real error path: e.g. a missing LaunchAgent plist → register() throws a
+//    legitimate error → lastErrorMessage = localizedDescription → the user sees the
+//    error in the General tab → "Last error" LabeledContent.
 //
-// 3. Toggle ON/OFF idempotency: user toggle ON в Settings → register() succeeds
+// 3. Toggle ON/OFF idempotency: user toggles ON in Settings → register() succeeds
 //    → status = .enabled. Toggle OFF → unregister() → status = .notRegistered.

@@ -18,7 +18,7 @@ final class LinearIDExtractorTests: XCTestCase {
         )
     }
 
-    /// "MAX-1024" matches regex но prefix не whitelist'ed → nil.
+    /// "MAX-1024" matches the regex but the prefix is not whitelisted → nil.
     func testExtract_WrongPrefixRejected() {
         XCTAssertNil(
             LinearIDExtractor.extract(text: "screen 1920x1080 MAX-1024 pixels",
@@ -44,36 +44,36 @@ final class LinearIDExtractorTests: XCTestCase {
         )
     }
 
-    /// Lowercase rejected (case-sensitive — снижаем false positives типа "non-1").
+    /// Lowercase rejected (case-sensitive — reduces false positives like "non-1").
     func testExtract_LowercaseRejected() {
         XCTAssertNil(
             LinearIDExtractor.extract(text: "fix leaf-123", knownPrefixes: ["LEAF", "leaf"])
         )
     }
 
-    /// Prefix > 5 chars не matches (regex max). Even если whitelisted.
+    /// Prefix > 5 chars does not match (regex max). Even if whitelisted.
     func testExtract_PrefixTooLong() {
         XCTAssertNil(
             LinearIDExtractor.extract(text: "ABCDEF-1", knownPrefixes: ["ABCDEF"])
         )
     }
 
-    /// Prefix < 2 chars не matches (regex min — first char + 1-4 more = 2-5 total).
+    /// Prefix < 2 chars does not match (regex min — first char + 1-4 more = 2-5 total).
     func testExtract_PrefixTooShort() {
         XCTAssertNil(
             LinearIDExtractor.extract(text: "X-1", knownPrefixes: ["X"])
         )
     }
 
-    /// "LEAF-abc" не matches — после dash должны быть digits.
+    /// "LEAF-abc" does not match — digits must follow the dash.
     func testExtract_DigitsRequired() {
         XCTAssertNil(
             LinearIDExtractor.extract(text: "LEAF-abc", knownPrefixes: ["LEAF"])
         )
     }
 
-    /// Linear allows team keys с digits (e.g. "TEAM2"). Regex
-    /// `[A-Z][A-Z0-9]{1,4}-\d+` поддерживает.
+    /// Linear allows team keys with digits (e.g. "TEAM2"). The regex
+    /// `[A-Z][A-Z0-9]{1,4}-\d+` supports them.
     func testExtract_TeamKeyWithDigits() {
         XCTAssertEqual(
             LinearIDExtractor.extract(text: "ship TEAM2-99", knownPrefixes: ["TEAM2"]),
@@ -81,7 +81,7 @@ final class LinearIDExtractorTests: XCTestCase {
         )
     }
 
-    /// Empty whitelist → nil немедленно (graceful no-op).
+    /// Empty whitelist → nil immediately (graceful no-op).
     func testExtract_EmptyKnownPrefixes() {
         XCTAssertNil(
             LinearIDExtractor.extract(text: "LEAF-1", knownPrefixes: [])
@@ -94,8 +94,8 @@ final class LinearIDExtractorTests: XCTestCase {
         )
     }
 
-    /// Non-ASCII letters считаются word-boundary chars в NSRegularExpression
-    /// → regex matches LEAF-1 surrounded русскими словами. Acceptable behaviour.
+    /// Non-ASCII letters are treated as word-boundary chars in NSRegularExpression
+    /// → the regex matches LEAF-1 surrounded by Russian words. Acceptable behaviour.
     func testExtract_UnicodeBoundary() {
         XCTAssertEqual(
             LinearIDExtractor.extract(text: "Привет LEAF-1 мир", knownPrefixes: ["LEAF"]),
@@ -118,12 +118,12 @@ final class LinearIDExtractorTests: XCTestCase {
                 await counter.increment()
                 return ["LEAF"]
             },
-            ttl: 60  // достаточно длинный TTL — сразу второй вызов попадает в cache
+            ttl: 60  // long enough TTL — the immediate second call hits the cache
         )
         _ = await cache.currentPrefixes()
         _ = await cache.currentPrefixes()
         let count = await counter.get()
-        XCTAssertEqual(count, 1, "fetcher вызывается только один раз в окне TTL")
+        XCTAssertEqual(count, 1, "fetcher is called only once within the TTL window")
     }
 
     func testCache_InvalidateForcesRefresh() async {
@@ -139,10 +139,10 @@ final class LinearIDExtractorTests: XCTestCase {
         await cache.invalidate()
         _ = await cache.currentPrefixes()
         let count = await counter.get()
-        XCTAssertEqual(count, 2, "invalidate сбрасывает TTL — следующий доступ refresh'ит")
+        XCTAssertEqual(count, 2, "invalidate resets the TTL — the next access refreshes")
     }
 
-    /// Helper actor для счётчика вызовов fetcher'а.
+    /// Helper actor for counting fetcher calls.
     private actor CallCounter {
         private var count = 0
         func increment() { count += 1 }

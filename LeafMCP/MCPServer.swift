@@ -35,7 +35,7 @@ enum MCPMain {
         // `prodDetectorMoat()` (LeafCorePrivate moat: pattern catalogues +
         // threshold constants + Levenshtein fuzz match). Substrate build keeps
         // `.publicSubstrate` (no-op detectors — `leaf_query_activity` still
-        // works через FTS+links, `leaf_get_decision` / `leaf_current_work`
+        // works via FTS+links, `leaf_get_decision` / `leaf_current_work`
         // gracefully return empty results).
         #if LEAF_PROD
         let detectorMoat: DetectorMoat = prodDetectorMoat()
@@ -117,8 +117,8 @@ enum MCPMain {
             }
         }()
 
-        // Notifications (`notifications/*`) обрабатываются Dispatcher'ом через
-        // id == nil short-circuit — отдельный handler регистрировать не нужно.
+        // Notifications (`notifications/*`) are handled by the Dispatcher via
+        // the id == nil short-circuit — no separate handler needs to be registered.
         // Track 5 / S8 / T7 — tools list + registry conditionally include
         // `leaf_query_team` only when the Database open above succeeded.
         // Without a DB handle the tool cannot serve any query; surfacing its
@@ -172,11 +172,11 @@ enum MCPMain {
 
         let transport = StdioTransport(dispatcher: dispatcher)
 
-        // Shutdown: Claude Code закрывает stdin перед SIGTERM (см. MCP spec
-        // lifecycle). В async main() без RunLoop.main.run() DispatchSource
-        // signal handlers на .main queue ненадёжны (cooperative concurrency
-        // runtime vs explicit runloop pumping) → полагаемся на stdin EOF для
-        // graceful shutdown и default SIGTERM action для forced kill.
+        // Shutdown: Claude Code closes stdin before SIGTERM (see MCP spec
+        // lifecycle). In async main() without RunLoop.main.run(), DispatchSource
+        // signal handlers on the .main queue are unreliable (cooperative concurrency
+        // runtime vs explicit runloop pumping) → we rely on stdin EOF for
+        // graceful shutdown and the default SIGTERM action for forced kill.
         do {
             try await transport.serve()
             MCPLog.info("transport returned normally — exit(0)")

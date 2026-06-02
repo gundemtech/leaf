@@ -4,15 +4,15 @@ import LeafMCPProtocol
 
 /// Phase 4.7.B-18 — `get_cross_provider_thread` MCP tool.
 ///
-/// Тонкая обёртка над `CrossProviderInsights.crossProviderThread(database:linearIssueID:)`.
-/// Heavy lifting (UNION SQL, payload whitelist projection) живёт в LeafCore
-/// чтобы быть testable через SPM (LeafMCP — Xcode target, в `swift test` не входит).
+/// A thin wrapper over `CrossProviderInsights.crossProviderThread(database:linearIssueID:)`.
+/// Heavy lifting (UNION SQL, payload whitelist projection) lives in LeafCore
+/// so it stays testable via SPM (LeafMCP is an Xcode target, not part of `swift test`).
 ///
-/// `linear_issue_id` — required argument. Если отсутствует или не строка →
-/// returns `ToolCallResult.isError = true` (per plan literal — НЕ throws
-/// MCPProtocolError). Это distinct shape от `get_timeline` (там strict throw)
-/// и от `get_workload_pulse` (permissive default) — следуем plan'у в каждом
-/// конкретном tool.
+/// `linear_issue_id` — required argument. If absent or not a string →
+/// returns `ToolCallResult.isError = true` (per plan literal — does NOT throw
+/// MCPProtocolError). This is a distinct shape from `get_timeline` (which strict-throws)
+/// and from `get_workload_pulse` (permissive default) — we follow the plan for each
+/// individual tool.
 struct GetCrossProviderThreadTool: ToolExecutor {
     let dbURL: URL
     let dbConfig: DatabaseConfig

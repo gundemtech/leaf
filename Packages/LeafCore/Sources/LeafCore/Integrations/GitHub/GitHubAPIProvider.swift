@@ -2,53 +2,53 @@
 //  GitHubAPIProvider.swift
 //  LeafCore
 //
-//  Phase 4.3 — protocol для REST polling GitHub events feed.
+//  Phase 4.3 — protocol for REST polling the GitHub events feed.
 //  Prod implementation (`GET /users/<login>/events?per_page=100`, parsing
 //  PushEvent/PullRequestEvent/IssuesEvent/PullRequestReviewEvent payloads,
-//  ADR-010 enforcement) живёт в LeafCorePrivate (moat). Public Stub возвращает
-//  empty result — CI builds компилируются, runtime no-op.
+//  ADR-010 enforcement) lives in LeafCorePrivate (moat). The public Stub returns
+//  an empty result — CI builds compile, runtime no-op.
 //
 
 import Foundation
 
 public protocol GitHubAPIProvider: Sendable {
-    /// `since` — epoch ms cursor (newest processed `created_at` от прошлого tick'а).
-    /// `nil` = bootstrap, provider решает window сам (default: первая страница events feed,
-    /// REST events ограничен ~90 днями).
-    /// Provider фильтрует client-side: `event.createdAtMs > since`. Возвращает batch + cursor;
-    /// throws на network/parsing failures. `login` — viewer login из `GET /user`,
-    /// used для path `/users/<login>/events`.
+    /// `since` — epoch ms cursor (newest processed `created_at` from the previous tick).
+    /// `nil` = bootstrap, provider decides the window itself (default: the first page of the events feed,
+    /// REST events are limited to ~90 days).
+    /// The provider filters client-side: `event.createdAtMs > since`. Returns batch + cursor;
+    /// throws on network/parsing failures. `login` — viewer login from `GET /user`,
+    /// used for the path `/users/<login>/events`.
     func fetchEvents(accessToken: String, login: String, since: Int64?) async throws -> GitHubEventBatch
 
     /// Phase 4.7.B-1 — `GET /notifications?all=false&participating=false&per_page=50`.
-    /// State pulse — что в моём inbox прямо сейчас. Returns total unread count + breakdown
+    /// State pulse — what's in my inbox right now. Returns total unread count + breakdown
     /// by `reason`. Reasons we track: "review_requested", "mention", "ci_activity", "comment",
-    /// "team_mention", "author", "subscribed", "manual", "state_change". Bucket "other" для unknown.
-    /// Body / subject text НЕ extract'им (ADR-010). Provider возвращает `.empty(nowMs:)` на
-    /// non-200 / parse failure — graceful degradation, не блокирует events tick.
+    /// "team_mention", "author", "subscribed", "manual", "state_change". Bucket "other" for unknown.
+    /// Body / subject text is NOT extracted (ADR-010). The provider returns `.empty(nowMs:)` on
+    /// non-200 / parse failure — graceful degradation, does not block the events tick.
     func fetchNotifications(accessToken: String) async throws -> GitHubNotificationsSummary
 
     /// Phase 4.7.B-2 — `GET /search/issues?q=review-requested:@me+is:open+is:pr&per_page=50`.
-    /// State pulse — сколько PRs ждут моего review прямо сейчас + top repo
-    /// (most pending PRs). Body / title text НЕ extract'им (ADR-010) — только count
-    /// + repo identifier (parsed из `repository_url` каждого item'а). Provider возвращает
-    /// `.empty(nowMs:)` на non-200 / parse failure — graceful degradation.
-    /// `login` сейчас не used (`@me` query token), но reserved для future per-org filter.
+    /// State pulse — how many PRs are awaiting my review right now + top repo
+    /// (most pending PRs). Body / title text is NOT extracted (ADR-010) — only count
+    /// + repo identifier (parsed from each item's `repository_url`). The provider returns
+    /// `.empty(nowMs:)` on non-200 / parse failure — graceful degradation.
+    /// `login` is not used right now (`@me` query token), but reserved for a future per-org filter.
     func fetchPRsAwaitingReview(accessToken: String, login: String) async throws -> GitHubReviewQueueSummary
 
     /// Phase 4.7.B-2 — `GET /search/issues?q=author:@me+is:open+is:pr&per_page=50`.
-    /// State pulse — сколько моих PRs открыто across orgs. ADR-010: ни title ни body
-    /// не читаем; берём только count. Provider возвращает `.empty(nowMs:)` на failure.
+    /// State pulse — how many of my PRs are open across orgs. ADR-010: we read neither title nor body;
+    /// we take only the count. The provider returns `.empty(nowMs:)` on failure.
     func fetchMyOpenPRs(accessToken: String, login: String) async throws -> GitHubMyOpenPRsSummary
 
     /// Phase 4.7.B-3 — `GET /repos/{owner}/{repo}/actions/runs?actor=<login>&per_page=10&created=>=<sinceISO>`.
-    /// Возвращает Actions runs запущенные пользователем во all `repos` начиная с `since`.
-    /// `repos` — pre-computed top-N most-recently-pushed репо (collector сам derive'ит
-    /// через `Database.queryActiveGitHubRepos`); empty list → 0 HTTP calls, returns [].
-    /// Per-repo failures (404 / 401 / non-200) — silent skip без fail всего batch'а.
-    /// `since` — epoch ms; provider конвертирует в ISO-8601 для query string.
-    /// ADR-010: `head_commit.message`, `name` of run (часто defaults к commit subject)
-    /// — НЕ store. `workflowName` (file-based: `release.yml` → "Release") — public-safe metadata.
+    /// Returns Actions runs triggered by the user across all `repos` starting from `since`.
+    /// `repos` — pre-computed top-N most-recently-pushed repos (the collector derives them itself
+    /// via `Database.queryActiveGitHubRepos`); empty list → 0 HTTP calls, returns [].
+    /// Per-repo failures (404 / 401 / non-200) — silent skip without failing the whole batch.
+    /// `since` — epoch ms; the provider converts it to ISO-8601 for the query string.
+    /// ADR-010: `head_commit.message`, `name` of run (often defaults to the commit subject)
+    /// — NOT stored. `workflowName` (file-based: `release.yml` → "Release") — public-safe metadata.
     func fetchActionsRunsForActor(
         accessToken: String,
         login: String,
@@ -57,13 +57,13 @@ public protocol GitHubAPIProvider: Sendable {
     ) async throws -> [GitHubActionsRunSnapshot]
 
     /// Phase 4.7.B-4 — `GET /repos/{owner}/{repo}/commits/{sha}/check-runs`.
-    /// Push-triggered (вызывается только при наличии `gh_commit_pushed` events в текущем
-    /// tick'е) — bounded cost: N HTTP calls = N unique (repo, sha) pairs за tick.
-    /// Returns aggregate counts по 5 buckets для HEAD commit'а.
+    /// Push-triggered (called only when there are `gh_commit_pushed` events in the current
+    /// tick) — bounded cost: N HTTP calls = N unique (repo, sha) pairs per tick.
+    /// Returns aggregate counts across 5 buckets for the HEAD commit.
     /// ADR-010: `name` of check-run, `output.title` / `output.summary` / `output.text`
-    /// — НЕ читаем. Только `status` + `conclusion` enums per run для bucket'ировки.
-    /// Returns `.empty(...)` при non-200 / parse failure / 404 (commit deleted) —
-    /// graceful, не fail entire tick.
+    /// — NOT read. Only `status` + `conclusion` enums per run for bucketing.
+    /// Returns `.empty(...)` on non-200 / parse failure / 404 (commit deleted) —
+    /// graceful, does not fail the entire tick.
     func fetchCheckRunsForCommit(
         accessToken: String,
         repo: String,
@@ -71,15 +71,15 @@ public protocol GitHubAPIProvider: Sendable {
     ) async throws -> GitHubCheckRunsSummary
 
     /// Phase 4.7.B-5 — GraphQL `viewer.contributionsCollection.contributionCalendar`.
-    /// Single call в день (collector сам gates через `lastContributionsFetchDay` —
-    /// in-memory `"yyyy-MM-dd"` cooldown). Возвращает 53-week heatmap + today's count
-    /// для self-UI и `presence_state.github.contributions_today`. NOT emitted as
-    /// per-tick event — это presence-state pulse, не activity log.
-    /// GitHub auto-includes private contributions если они visible to self
-    /// (по `Profile → Settings → Contributions`).
-    /// Returns `.empty` на non-200 / GraphQL error / parse failure — graceful
-    /// degradation, не блокирует other fetches и не сдвигает cooldown (collector
-    /// retry'ит на следующий tick если day всё ещё current).
+    /// A single call per day (the collector gates it itself via `lastContributionsFetchDay` —
+    /// an in-memory `"yyyy-MM-dd"` cooldown). Returns a 53-week heatmap + today's count
+    /// for the self-UI and `presence_state.github.contributions_today`. NOT emitted as
+    /// a per-tick event — this is a presence-state pulse, not an activity log.
+    /// GitHub auto-includes private contributions if they're visible to self
+    /// (per `Profile → Settings → Contributions`).
+    /// Returns `.empty` on non-200 / GraphQL error / parse failure — graceful
+    /// degradation, does not block other fetches and does not advance the cooldown (the collector
+    /// retries on the next tick if the day is still current).
     func fetchContributionsCalendar(accessToken: String) async throws -> GitHubContributionsCalendar
 
     // MARK: - Phase Track-3 D2 — warm tier
@@ -101,10 +101,10 @@ public protocol GitHubAPIProvider: Sendable {
     func fetchOrgAuditLog(accessToken: String, org: String, since: Int64?) async throws -> GitHubOrgAuditLogBatch
 }
 
-/// Результат одного REST fetch'а. `cursorMs` — `max(createdAt)` across `events`
+/// The result of a single REST fetch. `cursorMs` — `max(createdAt)` across `events`
 /// (REST events feed DESC by `created_at` → `events.first?.createdAtMs`),
-/// или `nil` если batch пуст (cursor не двигается, retry next tick).
-/// Mirroring `LinearIssueBatch` — schema-aligned timestamp cursor вместо eventID-as-cursor
+/// or `nil` if the batch is empty (cursor doesn't advance, retry next tick).
+/// Mirroring `LinearIssueBatch` — schema-aligned timestamp cursor instead of eventID-as-cursor
 /// (collector_offsets.last_modified_ms — strictly INTEGER).
 public struct GitHubEventBatch: Sendable, Hashable {
     public let events: [GitHubEventSnapshot]
@@ -152,15 +152,15 @@ public struct PRMetadata: Codable, Sendable, Hashable {
     }
 }
 
-/// Один event в batch'е — public-safe metadata (whitepaper Section 6 Action signal).
+/// A single event in the batch — public-safe metadata (whitepaper Section 6 Action signal).
 /// Track-1 D1 §6 amendment: PR body / issue-comment body / commit full message
 /// captured on-device (SQLCipher); relay never sees. `body` field = already
 /// BodyCap-truncated at the LeafCorePrivate moat boundary.
 public struct GitHubEventSnapshot: Sendable, Hashable {
-    /// REST events `id` — used for parser-side dedup внутри одного fetch'а
-    /// (cursor-by-timestamp imperfect для events с identical `created_at`).
+    /// REST events `id` — used for parser-side dedup within a single fetch
+    /// (cursor-by-timestamp is imperfect for events with identical `created_at`).
     public let eventID: String
-    /// Канонический kind после маппинга raw GitHub `type` + `payload.action`.
+    /// Canonical kind after mapping raw GitHub `type` + `payload.action`.
     /// Phase 4.6 baseline: "gh_commit_pushed" | "gh_pr_opened" | "gh_pr_merged" | "gh_pr_closed"
     /// | "gh_issue_opened" | "gh_issue_closed" | "gh_pr_review_submitted".
     /// Phase 4.7.A additions: "gh_pr_review_comment_authored" | "gh_issue_comment_authored"
@@ -171,27 +171,27 @@ public struct GitHubEventSnapshot: Sendable, Hashable {
     public let eventKind: String
     /// "owner/name" — self-authored repo identifier, public-safe.
     public let repoFullName: String
-    /// Commit subject (только первая строка) для gh_commit_pushed; PR title; issue title.
+    /// Commit subject (first line only) for gh_commit_pushed; PR title; issue title.
     public let title: String
-    /// PR/issue/discussion number; `nil` для gh_commit_pushed / gh_pr_review_submitted без issue context.
+    /// PR/issue/discussion number; `nil` for gh_commit_pushed / gh_pr_review_submitted without issue context.
     public let number: Int?
-    /// Commit SHA (short or full) для PushEvent; `nil` для не-push.
+    /// Commit SHA (short or full) for PushEvent; `nil` for non-push.
     public let sha: String?
-    /// Branch ref (e.g. "main") для PushEvent / gh_branch_created / gh_branch_deleted.
+    /// Branch ref (e.g. "main") for PushEvent / gh_branch_created / gh_branch_deleted.
     public let branch: String?
-    /// Epoch ms — становится cursor для следующего polling tick'а (max `createdAtMs`
-    /// идёт в `GitHubEventBatch.cursorMs` → `collector_offsets.last_modified_ms`).
+    /// Epoch ms — becomes the cursor for the next polling tick (max `createdAtMs`
+    /// goes into `GitHubEventBatch.cursorMs` → `collector_offsets.last_modified_ms`).
     public let createdAtMs: Int64
-    /// Phase 4.6.A.1 — для `gh_pr_merged`: `closed_at - created_at` в секундах. `nil` для
-    /// других eventKind'ов или если timestamps отсутствуют в payload (clock skew clamped к 0).
+    /// Phase 4.6.A.1 — for `gh_pr_merged`: `closed_at - created_at` in seconds. `nil` for
+    /// other eventKinds or if timestamps are missing from the payload (clock skew clamped to 0).
     public let cycleSeconds: Int?
-    /// Phase 4.6.A.1 — для `gh_pr_review_submitted`: `review.submitted_at - pull_request.created_at`
-    /// в секундах. `nil` для других eventKind'ов или missing timestamps.
+    /// Phase 4.6.A.1 — for `gh_pr_review_submitted`: `review.submitted_at - pull_request.created_at`
+    /// in seconds. `nil` for other eventKinds or missing timestamps.
     public let reviewDelaySeconds: Int?
-    /// Phase 4.7.A — extension slot для new event_kinds с per-kind payload fields
+    /// Phase 4.7.A — extension slot for new event_kinds with per-kind payload fields
     /// (`action`, `tag_name`, `category`, `comment_id`, `is_pull_request`,
-    /// `linked_linear_id`). `nil` или empty dict — не emit'им keys в payload (отличает
-    /// "не знаем" от пустого значения). Existing baseline event_kinds оставляют nil.
+    /// `linked_linear_id`). `nil` or empty dict — we don't emit keys in the payload (distinguishes
+    /// "don't know" from an empty value). Existing baseline event_kinds leave it nil.
     public let metadata: [String: String]?
     /// Phase Track-1 D1 — already BodyCap-truncated body text (PR body / comment text /
     /// full commit message). Moat boundary: truncation applied inside LeafCorePrivate.
@@ -243,17 +243,17 @@ public struct GitHubEventSnapshot: Sendable, Hashable {
     }
 }
 
-/// Phase 4.7.B-1 — summary одного `/notifications` fetch'а. State snapshot (не events log):
-/// `totalUnread` = что лежит в inbox прямо сейчас, `byReason` — breakdown.
-/// Включается в events feed как single `gh_notifications_pulse` event с
-/// `signal_type=.context` (не `.action` — это state pulse, не user action).
+/// Phase 4.7.B-1 — summary of a single `/notifications` fetch. State snapshot (not an events log):
+/// `totalUnread` = what's sitting in the inbox right now, `byReason` — breakdown.
+/// Included in the events feed as a single `gh_notifications_pulse` event with
+/// `signal_type=.context` (not `.action` — this is a state pulse, not a user action).
 public struct GitHubNotificationsSummary: Sendable, Hashable {
-    /// Сумма unread notifications across all reasons. `byReason.values.sum()`,
-    /// но stored independently на случай если parsing бакета `other` отстаёт от raw count.
+    /// Sum of unread notifications across all reasons. `byReason.values.sum()`,
+    /// but stored independently in case parsing of the `other` bucket lags behind the raw count.
     public let totalUnread: Int
-    /// Reason → count. Только non-zero buckets (parser не emit'ит ключ если 0).
+    /// Reason → count. Only non-zero buckets (the parser doesn't emit a key if 0).
     public let byReason: [String: Int]
-    /// `now` от Agent'а в момент fetch'а — used как `observed_at_ms` в payload event'а.
+    /// `now` from the Agent at fetch time — used as `observed_at_ms` in the event payload.
     public let observedAtMs: Int64
 
     public init(totalUnread: Int, byReason: [String: Int], observedAtMs: Int64) {
@@ -262,25 +262,25 @@ public struct GitHubNotificationsSummary: Sendable, Hashable {
         self.observedAtMs = observedAtMs
     }
 
-    /// Used при non-200 / parse failure / collector graceful degradation.
-    /// `observedAtMs` всё равно populated — потому что pulse event с total_unread=0
-    /// семантически валиден ("inbox empty в момент N").
+    /// Used on non-200 / parse failure / collector graceful degradation.
+    /// `observedAtMs` is still populated — because a pulse event with total_unread=0
+    /// is semantically valid ("inbox empty at moment N").
     public static func empty(nowMs: Int64) -> GitHubNotificationsSummary {
         GitHubNotificationsSummary(totalUnread: 0, byReason: [:], observedAtMs: nowMs)
     }
 }
 
 /// Phase 4.7.B-2 — summary `/search/issues?q=review-requested:@me+is:open+is:pr`.
-/// State snapshot: количество PRs ждущих моего review + top repo (most pending PRs)
-/// для self-UI. ADR-010: ни title, ни body items не читаем — только `repository_url`.
-/// Эмитится как `gh_pr_awaiting_review_count` event с `signal_type=.context`.
+/// State snapshot: the number of PRs awaiting my review + top repo (most pending PRs)
+/// for the self-UI. ADR-010: we read neither title nor body of items — only `repository_url`.
+/// Emitted as a `gh_pr_awaiting_review_count` event with `signal_type=.context`.
 public struct GitHubReviewQueueSummary: Sendable, Hashable {
-    /// Сумма PRs awaiting my review (search.issues `total_count` или len(items[])).
+    /// Sum of PRs awaiting my review (search.issues `total_count` or len(items[])).
     public let count: Int
-    /// "owner/repo" с most-pending PRs. `nil` если `count == 0`.
-    /// На равенстве — берём первый встреченный (search.issues порядок by best-match).
+    /// "owner/repo" with the most-pending PRs. `nil` if `count == 0`.
+    /// On a tie — we take the first one encountered (search.issues order by best-match).
     public let topRepo: String?
-    /// `now` от Agent'а в момент fetch'а. Used как `observed_at_ms` в payload.
+    /// `now` from the Agent at fetch time. Used as `observed_at_ms` in the payload.
     public let observedAtMs: Int64
 
     public init(count: Int, topRepo: String?, observedAtMs: Int64) {
@@ -289,20 +289,20 @@ public struct GitHubReviewQueueSummary: Sendable, Hashable {
         self.observedAtMs = observedAtMs
     }
 
-    /// Used при non-200 / parse failure / graceful degradation. `count=0` +
-    /// `topRepo=nil` — семантически валиден ("review queue empty в момент N").
+    /// Used on non-200 / parse failure / graceful degradation. `count=0` +
+    /// `topRepo=nil` — semantically valid ("review queue empty at moment N").
     public static func empty(nowMs: Int64) -> GitHubReviewQueueSummary {
         GitHubReviewQueueSummary(count: 0, topRepo: nil, observedAtMs: nowMs)
     }
 }
 
 /// Phase 4.7.B-2 — summary `/search/issues?q=author:@me+is:open+is:pr`.
-/// State snapshot: количество моих open PRs across orgs. ADR-010: ни title, ни body
-/// не читаем — только count. Эмитится как `gh_my_open_pr_count` event, `signal_type=.context`.
+/// State snapshot: the number of my open PRs across orgs. ADR-010: we read neither title nor body
+/// — only the count. Emitted as a `gh_my_open_pr_count` event, `signal_type=.context`.
 public struct GitHubMyOpenPRsSummary: Sendable, Hashable {
-    /// Сумма моих open PRs.
+    /// Sum of my open PRs.
     public let count: Int
-    /// `now` от Agent'а в момент fetch'а. Used как `observed_at_ms` в payload.
+    /// `now` from the Agent at fetch time. Used as `observed_at_ms` in the payload.
     public let observedAtMs: Int64
 
     public init(count: Int, observedAtMs: Int64) {
@@ -310,24 +310,24 @@ public struct GitHubMyOpenPRsSummary: Sendable, Hashable {
         self.observedAtMs = observedAtMs
     }
 
-    /// Used при non-200 / parse failure / graceful degradation.
+    /// Used on non-200 / parse failure / graceful degradation.
     public static func empty(nowMs: Int64) -> GitHubMyOpenPRsSummary {
         GitHubMyOpenPRsSummary(count: 0, observedAtMs: nowMs)
     }
 }
 
-/// Phase 4.7.B-3 — один `workflow_runs[]` элемент `/repos/{owner}/{repo}/actions/runs`.
-/// Public-safe metadata (whitepaper Section 6 Action signal). ADR-010: ни
-/// `head_commit.message`, ни `name` of run (часто equals commit subject), ни
-/// `output.title`/`output.summary` — НЕ хранятся. `workflowName` derived from
+/// Phase 4.7.B-3 — a single `workflow_runs[]` element of `/repos/{owner}/{repo}/actions/runs`.
+/// Public-safe metadata (whitepaper Section 6 Action signal). ADR-010: neither
+/// `head_commit.message`, nor `name` of run (often equals commit subject), nor
+/// `output.title`/`output.summary` — are stored. `workflowName` derived from the
 /// workflow file slug (e.g. `release.yml` → "Release") — public-safe.
 public struct GitHubActionsRunSnapshot: Sendable, Hashable {
-    /// REST `id` поля run'а — used для dedup на одном fetch'е.
+    /// The run's REST `id` field — used for dedup within a single fetch.
     public let runID: Int64
     /// "owner/repo" — public-safe identifier.
     public let repo: String
-    /// File-based workflow name (slug → display name). НЕ run-name (тот часто
-    /// equals commit subject — ADR-010 unsafe).
+    /// File-based workflow name (slug → display name). NOT the run-name (that often
+    /// equals the commit subject — ADR-010 unsafe).
     public let workflowName: String
     /// Trigger event: "push" | "pull_request" | "schedule" | "workflow_dispatch" | ...
     public let event: String
@@ -335,9 +335,9 @@ public struct GitHubActionsRunSnapshot: Sendable, Hashable {
     public let status: String
     /// "success" | "failure" | "cancelled" | "skipped" | nil if not completed.
     public let conclusion: String?
-    /// Epoch ms of `created_at` (когда run был initiated).
+    /// Epoch ms of `created_at` (when the run was initiated).
     public let createdAtMs: Int64
-    /// Branch ref (e.g. "main"). Может отсутствовать для некоторых trigger types.
+    /// Branch ref (e.g. "main"). May be absent for some trigger types.
     public let headBranch: String?
 
     public init(
@@ -361,13 +361,13 @@ public struct GitHubActionsRunSnapshot: Sendable, Hashable {
     }
 }
 
-/// Phase 4.7.B-4 — aggregate check-runs summary для одного HEAD commit'а
+/// Phase 4.7.B-4 — aggregate check-runs summary for a single HEAD commit
 /// (`/repos/{owner}/{repo}/commits/{sha}/check-runs`). State pulse — current
-/// CI status of HEAD после push'а. ADR-010: provider читает только
-/// `status` + `conclusion` enum'ы per run, не `name` / `output.*` / `details_url`.
-/// `total` = sum по всем 5 bucket'ам = response `total_count`.
+/// CI status of HEAD after a push. ADR-010: the provider reads only
+/// `status` + `conclusion` enums per run, not `name` / `output.*` / `details_url`.
+/// `total` = sum across all 5 buckets = response `total_count`.
 public struct GitHubCheckRunsSummary: Sendable, Hashable {
-    /// Сумма check-runs across всех buckets. Equivalent response `total_count`.
+    /// Sum of check-runs across all buckets. Equivalent to response `total_count`.
     public let total: Int
     /// `status="completed"` + `conclusion="success"` bucket.
     public let success: Int
@@ -387,29 +387,29 @@ public struct GitHubCheckRunsSummary: Sendable, Hashable {
         self.neutral = neutral
     }
 
-    /// Used при non-200 / parse failure / 404 / network error — graceful degradation.
-    /// `total=0` всё ещё семантически валиден ("у HEAD commit'а нет check-runs").
+    /// Used on non-200 / parse failure / 404 / network error — graceful degradation.
+    /// `total=0` is still semantically valid ("the HEAD commit has no check-runs").
     public static let empty = GitHubCheckRunsSummary(
         total: 0, success: 0, failure: 0, inProgress: 0, neutral: 0
     )
 }
 
 /// Phase 4.7.B-5 — GraphQL `viewer.contributionsCollection.contributionCalendar`
-/// snapshot. Daily fetch (collector cooldown), used для self-UI heatmap +
-/// `presence_state.github.contributions_today`. ADR-010-safe — это aggregate
-/// counts per day (нет titles / bodies / repo-level breakdown).
+/// snapshot. Daily fetch (collector cooldown), used for the self-UI heatmap +
+/// `presence_state.github.contributions_today`. ADR-010-safe — these are aggregate
+/// counts per day (no titles / bodies / repo-level breakdown).
 public struct GitHubContributionsCalendar: Sendable, Hashable {
-    /// Aggregate over fetched range (≈ last 365 days). Equivalent
-    /// `contributionCalendar.totalContributions` в GraphQL response.
+    /// Aggregate over fetched range (≈ last 365 days). Equivalent to
+    /// `contributionCalendar.totalContributions` in the GraphQL response.
     public let totalContributions: Int
-    /// Today's count — derived из `weeks[].contributionDays[]` где
-    /// `date == today` в UTC. `0` если today ещё нет в response (calendar
-    /// для recent timezone shifts может не содержать сегодняшний day) или
-    /// при `.empty` fallback.
+    /// Today's count — derived from `weeks[].contributionDays[]` where
+    /// `date == today` in UTC. `0` if today isn't in the response yet (the calendar
+    /// may not contain today's day for recent timezone shifts) or
+    /// on the `.empty` fallback.
     public let todayCount: Int
-    /// Last 53 weeks по убыванию давности (oldest first, как returns GitHub).
-    /// Used для self-UI heatmap rendering — collector в `presence_state` его
-    /// не пишет (raw heatmap живёт в memory + UI cache, не в SQLCipher).
+    /// Last 53 weeks by descending age (oldest first, as GitHub returns them).
+    /// Used for self-UI heatmap rendering — the collector does not write it to
+    /// `presence_state` (the raw heatmap lives in memory + UI cache, not in SQLCipher).
     public let weeks: [Week]
 
     public struct Week: Sendable, Hashable {
@@ -417,7 +417,7 @@ public struct GitHubContributionsCalendar: Sendable, Hashable {
         public init(days: [Day]) { self.days = days }
     }
     public struct Day: Sendable, Hashable {
-        /// "yyyy-MM-dd" в UTC (GitHub returns ISO date strings).
+        /// "yyyy-MM-dd" in UTC (GitHub returns ISO date strings).
         public let date: String
         public let count: Int
         /// 0..4 — bucket level; 0 = `NONE`, 4 = `FOURTH_QUARTILE`.
@@ -435,16 +435,16 @@ public struct GitHubContributionsCalendar: Sendable, Hashable {
         self.weeks = weeks
     }
 
-    /// Used при non-200 / GraphQL error / parse failure / network error.
-    /// `todayCount=0` семантически корректен ("calendar недоступен сейчас, у
-    /// presence_state.contributions_today останется previous value до next day").
+    /// Used on non-200 / GraphQL error / parse failure / network error.
+    /// `todayCount=0` is semantically correct ("the calendar is unavailable right now,
+    /// presence_state.contributions_today keeps its previous value until the next day").
     public static let empty = GitHubContributionsCalendar(
         totalContributions: 0, todayCount: 0, weeks: []
     )
 }
 
-/// Stub для CI / dev-без-moat сборок. Никогда не делает HTTP call, возвращает
-/// `.empty` — GitHubCollector tick проходит no-op.
+/// Stub for CI / dev-without-moat builds. Never makes an HTTP call, returns
+/// `.empty` — the GitHubCollector tick passes as a no-op.
 public struct StubGitHubAPIProvider: GitHubAPIProvider {
     public init() {}
     public func fetchEvents(accessToken: String, login: String, since: Int64?) async throws -> GitHubEventBatch {

@@ -1,9 +1,9 @@
 import Foundation
 
-/// Заголовок encrypted presence envelope.
+/// Header of the encrypted presence envelope.
 /// Bytes layout: [version:1B | keyID:16B | nonce:12B | ciphertext | tag:16B]
 /// Public envelope shape — whitepaper presence-relay.md §6.
-/// Точный AAD/nonce/byte assembly — moat в `LeafCorePrivate/Prod/Crypto/`.
+/// The exact AAD/nonce/byte assembly is moat in `LeafCorePrivate/Prod/Crypto/`.
 public struct EnvelopeHeader: Sendable, Hashable {
     public let version: UInt8
     public let keyID: Data
@@ -15,15 +15,15 @@ public struct EnvelopeHeader: Sendable, Hashable {
 
     public static let currentVersion: UInt8 = 1
 
-    /// Размер plaintext header prefix в envelope: 1B version + 16B keyID.
+    /// Size of the plaintext header prefix in the envelope: 1B version + 16B keyID.
     public static let prefixSize: Int = 17
 
-    /// Read-only parse первых 17 байт envelope (1B version + 16B keyID).
-    /// No crypto. Caller использует возвращённый `keyID`, чтобы найти
-    /// соответствующий teamKey в keystore (history rotation), потом вызывает
+    /// Read-only parse of the first 17 bytes of the envelope (1B version + 16B keyID).
+    /// No crypto. The caller uses the returned `keyID` to find the
+    /// matching teamKey in the keystore (history rotation), then calls
     /// `EnvelopeCodec.decode(bytes, teamKey)`.
-    /// Throws `LeafError.corruptedEnvelope` если bytes короче 17 или version
-    /// не равна `currentVersion` (per architecture contract §12: implementations
+    /// Throws `LeafError.corruptedEnvelope` if bytes are shorter than 17 or the version
+    /// does not equal `currentVersion` (per architecture contract §12: implementations
     /// MUST reject unknown versions).
     public static func peek(from bytes: Data) throws -> EnvelopeHeader {
         guard bytes.count >= prefixSize else {
@@ -41,27 +41,27 @@ public struct EnvelopeHeader: Sendable, Hashable {
 }
 
 public protocol EnvelopeCodec: Sendable {
-    /// Сериализует snapshot и шифрует под `teamKey`, embedd'ит `keyID` в header.
+    /// Serializes the snapshot and encrypts it under `teamKey`, embedding `keyID` in the header.
     /// - Parameters:
     ///   - snapshot: payload to serialise + encrypt.
-    ///   - keyID: ровно 16 bytes (UUID `team_keys.id` raw bytes).
-    ///   - teamKey: ровно 32 bytes raw AES-256 key.
+    ///   - keyID: exactly 16 bytes (UUID `team_keys.id` raw bytes).
+    ///   - teamKey: exactly 32 bytes raw AES-256 key.
     /// - Returns: bytes envelope `[ver:1B|keyID:16B|nonce:12B|ct|tag:16B]`.
-    /// - Throws: `LeafError.corruptedEnvelope` на bad input sizes.
+    /// - Throws: `LeafError.corruptedEnvelope` on bad input sizes.
     func encode(_ snapshot: PresenceSnapshot,
                 keyID: Data,
                 teamKey: Data) throws -> Data
 
-    /// Расшифровывает envelope под `teamKey`. Caller обязан ДО вызова
-    /// peek'нуть header (`EnvelopeHeader.peek(from:)`) и найти
-    /// teamKey по `header.keyID` в keystore (history rotation).
-    /// - Throws: `LeafError.corruptedEnvelope` на short bytes / unknown version /
+    /// Decrypts the envelope under `teamKey`. Before calling, the caller MUST
+    /// peek the header (`EnvelopeHeader.peek(from:)`) and find the
+    /// teamKey by `header.keyID` in the keystore (history rotation).
+    /// - Throws: `LeafError.corruptedEnvelope` on short bytes / unknown version /
     ///           AES-GCM tag mismatch / JSON decode failure.
     func decode(_ bytes: Data, teamKey: Data) throws -> PresenceSnapshot
 }
 
-/// Phase-0 / CI заглушка. Реальный codec — `ProdEnvelopeCodec`
-/// в LeafCorePrivate/Prod/Crypto/ (Phase 5.1.C).
+/// Phase-0 / CI stub. The real codec is `ProdEnvelopeCodec`
+/// in LeafCorePrivate/Prod/Crypto/ (Phase 5.1.C).
 public struct UnimplementedEnvelopeCodec: EnvelopeCodec {
     public init() {}
     public func encode(_ snapshot: PresenceSnapshot,

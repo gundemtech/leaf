@@ -1,21 +1,21 @@
 import Foundation
 
-/// Phase Track-4 S3 — TCC state для Input Monitoring (CGEventTap requires
-/// kIOHIDRequestTypeListenEvent). Mirror `AppleScriptPermissionState` shape
-/// (S2 precedent) с 24h denial backoff. Single-row state (не per-bundle),
-/// поскольку Input Monitoring — TCC уровня процесса, не пары source/target.
+/// Phase Track-4 S3 — TCC state for Input Monitoring (CGEventTap requires
+/// kIOHIDRequestTypeListenEvent). Mirrors the `AppleScriptPermissionState` shape
+/// (S2 precedent) with a 24h denial backoff. Single-row state (not per-bundle),
+/// because Input Monitoring TCC is process-level, not per source/target pair.
 public enum InputMonitoringPermissionState: Equatable, Sendable {
     case notRequested
     case granted
-    case denied(Int64)   // ms epoch когда зарегистрировано
+    case denied(Int64)   // ms epoch when recorded
     case unavailable
 }
 
 /// Phase Track-4 S3 — UserDefaults-backed Input Monitoring TCC state cache.
-/// 24h denial backoff чтобы CGEventTapCollector не дёргал TCC API каждые 60с
-/// флэш-loop'а на устройстве, где юзер уже отказал. Per-process state — нет
-/// `bundleID` параметра, т.к. Input Monitoring TCC scoped не к target app
-/// (как AppleScript), а к запрашивающему процессу.
+/// 24h denial backoff so CGEventTapCollector doesn't hit the TCC API every 60s
+/// in a flash-loop on a device where the user already denied. Per-process state — no
+/// `bundleID` parameter, since Input Monitoring TCC is scoped not to a target app
+/// (like AppleScript) but to the requesting process.
 public final class InputMonitoringPermissionStore: @unchecked Sendable {
     public static let denialBackoffMs: Int64 = 24 * 3600 * 1000
 
@@ -24,9 +24,9 @@ public final class InputMonitoringPermissionStore: @unchecked Sendable {
 
     private let defaults: UserDefaults
 
-    /// Default backing store — shared suite `tech.gundem.leaf` (та же, что
+    /// Default backing store — shared suite `tech.gundem.leaf` (the same one as
     /// `LocalAppsStore` / `SystemObserversStore`). Cross-process visibility:
-    /// Settings UI читает кэш Agent'а и наоборот.
+    /// the Settings UI reads the Agent's cache and vice versa.
     public init(defaults: UserDefaults = SystemObserversStore.sharedDefaults) {
         self.defaults = defaults
     }
@@ -67,7 +67,7 @@ public final class InputMonitoringPermissionStore: @unchecked Sendable {
     public func shouldProbe(nowMs: Int64) -> Bool {
         switch cachedState() {
         case .notRequested: return true
-        case .granted: return true   // re-check: юзер мог revoke в System Settings
+        case .granted: return true   // re-check: user may have revoked in System Settings
         case .denied(let t): return (nowMs - t) > Self.denialBackoffMs
         case .unavailable: return false
         }

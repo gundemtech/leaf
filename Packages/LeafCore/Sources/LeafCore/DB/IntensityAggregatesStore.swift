@@ -2,9 +2,9 @@ import Foundation
 import GRDB
 
 /// Phase Track-4 S3 — single record returned by `IntensityAggregatesStore.read`.
-/// Counter-only — keycode/characters/modifierFlags никогда не материализуются
-/// в этом типе (ADR-010 Won't-list). `foregroundApp` обнуляется flush'ем, если
-/// bucket выпал на locked/sleeping window (см. `IntensityBucketAccumulator`).
+/// Counter-only — keycode/characters/modifierFlags are never materialized
+/// in this type (ADR-010 Won't-list). `foregroundApp` is cleared by the flush if
+/// the bucket landed on a locked/sleeping window (see `IntensityBucketAccumulator`).
 public struct IntensityAggregateRecord: Sendable, Equatable {
     public let minuteBucketMs: Int64
     public let keystrokes: Int
@@ -28,9 +28,9 @@ public struct IntensityAggregateRecord: Sendable, Equatable {
 }
 
 /// Phase Track-4 S3 — DAO over `intensity_aggregates`. Static methods receive raw
-/// `GRDB.Database` handle (caller wraps в pool.write/.read), mirror
-/// `PendingInvitesStore` shape. UPSERT semantics через INSERT OR REPLACE по PK
-/// `minute_bucket_ms` — повторный flush на restart идемпотентен.
+/// `GRDB.Database` handle (caller wraps it in pool.write/.read), mirror
+/// `PendingInvitesStore` shape. UPSERT semantics via INSERT OR REPLACE on PK
+/// `minute_bucket_ms` — a repeated flush on restart is idempotent.
 public struct IntensityAggregatesStore: Sendable {
 
     public static func upsert(

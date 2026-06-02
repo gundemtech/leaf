@@ -1,23 +1,23 @@
 //
 //  Sidebar.swift
-//  Track 2 / D2 — three-group sidebar (LEAF / COLLABORATION / ACCOUNT) на
-//  LeafNavRow (D1 organism O3). Grouping живёт исключительно тут — каждая
-//  группа хардкодит свои WindowSection cases. Badge slot и shortcut slot
-//  пустые (D2 baseline; D3+ может wire'нуть для Activity unread / etc).
+//  Track 2 / D2 — three-group sidebar (LEAF / COLLABORATION / ACCOUNT) built on
+//  LeafNavRow (D1 organism O3). Grouping lives exclusively here — each
+//  group hardcodes its own WindowSection cases. Badge slot and shortcut slot
+//  are empty (D2 baseline; D3+ may wire them up for Activity unread / etc).
 //
 //  Render pattern matches LeafNavRowPreview (TokensPreview) — flat VStack,
-//  not List. macOS' List(selection:) с .listStyle(.sidebar) накладывает
-//  native sidebar selection chrome (saturated accent fill) поверх
-//  LeafNavRow's own accent.subtle background — design-system intent
-//  единственно one source of truth for selection visuals: LeafNavRow.
+//  not List. macOS' List(selection:) with .listStyle(.sidebar) overlays
+//  native sidebar selection chrome (saturated accent fill) on top of
+//  LeafNavRow's own accent.subtle background — design-system intent is a
+//  single source of truth for selection visuals: LeafNavRow.
 //
 //  Track 3 D2 — Connections nav row gains a small red attention dot when
 //  GitHubScopesReader signals `.connectedScopeOutdated`. Track 3 D3 extends
 //  the OR-condition to also fire when SlackScopesReader is outdated; Linear
-//  scope reader будет wire'нут в Track 3 D4. Dot rendered как
-//  `LeafDot(tone: .danger, size: .sm)` overlay topTrailing на nav row
-//  (LeafNavRow API не трогаем — `badge: Int?` это отдельная количественная
-//  семантика, attention dot — bool urgency cue, ортогонально).
+//  scope reader will be wired up in Track 3 D4. Dot rendered as
+//  `LeafDot(tone: .danger, size: .sm)` overlay topTrailing on the nav row
+//  (LeafNavRow API stays untouched — `badge: Int?` is separate quantitative
+//  semantics, the attention dot is a bool urgency cue, orthogonal).
 //
 //  Track 5 / S7 G.12 — removed `.organization` from COLLABORATION group;
 //  replaced with LeafWorkspaceSwitcher anchored at the sidebar bottom.

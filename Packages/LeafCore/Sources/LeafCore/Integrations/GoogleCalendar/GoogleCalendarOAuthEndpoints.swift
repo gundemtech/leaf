@@ -3,7 +3,7 @@
 //  LeafCore
 //
 //  Track-6 P4 — Google Identity Platform OAuth 2.0 endpoints + PKCE authorize URL builder.
-//  Mirrors LinearOAuthEndpoints pattern; token exchange shipped в Task 9.
+//  Mirrors LinearOAuthEndpoints pattern; token exchange shipped in Task 9.
 //
 //  WHY split this out: cross-binary access (Agent collector + main app OAuthService).
 //  Constants pinned per Google Identity docs (verified 2026-05-16):
@@ -23,18 +23,18 @@ public struct GoogleCalendarOAuthEndpoints {
     public static let tokenURL = URL(string: "https://oauth2.googleapis.com/token")!
 
     // Scope: see Stage 0 OQ-1 — calendar.readonly (single broad scope).
-    // Не calendar.events.readonly (более узкий, но не даёт calendarList.list).
+    // Not calendar.events.readonly (narrower, but doesn't grant calendarList.list).
     public static let scope = "https://www.googleapis.com/auth/calendar.readonly"
 
     // Loopback redirect — ephemeral port (per spec §6.9, distinct from Linear=47823
-    // fixed / Slack=47824 fixed). Google разрешает variable port в loopback redirect
-    // (RFC 8252 compliant), unlike Linear которые требуют exact-match port. Caller
+    // fixed / Slack=47824 fixed). Google allows a variable port in the loopback redirect
+    // (RFC 8252 compliant), unlike Linear which requires an exact-match port. Caller
     // passes the port assigned by NWListener.
     public static let redirectHost = "127.0.0.1"
     public static let redirectPath = "/callback"
 
     // Info.plist key names — values plumbed at build time from .env per spec §7.6.
-    // Никогда не hardcode client_id/client_secret в source — moat per CLAUDE.md.
+    // Never hardcode client_id/client_secret in source — moat per CLAUDE.md.
     public static let infoPlistClientIDKey = "LeafGoogleCalendarOAuthClientID"
     public static let infoPlistClientSecretKey = "LeafGoogleCalendarOAuthClientSecret"
 
@@ -47,7 +47,7 @@ public struct GoogleCalendarOAuthEndpoints {
     /// Build the authorization URL with PKCE + state + ephemeral redirect port.
     /// Per spec §7.1: `access_type=offline` + `prompt=consent` to receive `refresh_token`
     /// on first launch; `include_granted_scopes=true` to allow incremental authorization
-    /// в v1.1 без потери этого grant.
+    /// in v1.1 without losing this grant.
     public static func authorizeURL(
         clientID: String,
         challenge: String,

@@ -1,5 +1,5 @@
 // Phase 5.3.C — RelayClient rotation methods HTTP wire tests.
-// URLProtocol stub harness mirror'ит RelayClientTests pattern (file-local
+// URLProtocol stub harness mirrors the RelayClientTests pattern (file-local
 // subclass duplicate per spec §5.1 — test isolation, no cross-file static state).
 
 import XCTest

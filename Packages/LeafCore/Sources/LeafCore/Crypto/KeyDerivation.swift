@@ -2,10 +2,10 @@ import CryptoKit
 import Foundation
 
 /// Phase 5.2.A — `InviteKDF` protocol surface. Real impl —
-/// `ProdInviteKDF` в LeafCorePrivate (gitignored moat: HKDF info string +
+/// `ProdInviteKDF` in LeafCorePrivate (gitignored moat: HKDF info string +
 /// OTP→salt construction). Mirror discipline `EnvelopeCodec` / 5.1.C.
 ///
-/// Derives 256-bit AES wrap key из ECDH shared secret + 6-digit OTP.
+/// Derives a 256-bit AES wrap key from the ECDH shared secret + 6-digit OTP.
 /// OTP — exactly 6 ASCII digits 0-9; impl throws `LeafError.invalidPayload`
 /// otherwise.
 public protocol InviteKDF: Sendable {
@@ -18,7 +18,7 @@ public protocol InviteKDF: Sendable {
     func hashOTPForServerStorage(otp: String) -> Data
 }
 
-/// Phase-0 / CI заглушка. Реальный KDF — `ProdInviteKDF` в
+/// Phase-0 / CI stub. The real KDF is `ProdInviteKDF` in
 /// LeafCorePrivate/Prod/Crypto/.
 public struct UnimplementedInviteKDF: InviteKDF {
     public init() {}

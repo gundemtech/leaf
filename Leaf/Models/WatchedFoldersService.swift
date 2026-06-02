@@ -2,9 +2,9 @@
 //  WatchedFoldersService.swift
 //  Leaf
 //
-//  Phase 2.4 — @Observable controller для UI Settings → Folders tab.
-//  Открывает Database в writer mode, поддерживает CRUD над `watched_folders`,
-//  postит DistributedNotification после изменения чтобы Agent перезапустил
+//  Phase 2.4 — @Observable controller for the UI Settings → Folders tab.
+//  Opens the Database in writer mode, supports CRUD over `watched_folders`,
+//  and posts a DistributedNotification after a change so the Agent restarts
 //  FSEventStream.
 //
 
@@ -28,7 +28,7 @@ final class WatchedFoldersService {
     private let databaseURL: URL
     private let databaseConfig: DatabaseConfig
     private let databaseEncryption: EncryptionOptions?
-    /// Lazy-open writer cached на lifetime service. Closed при dealloc.
+    /// Lazy-open writer cached for the service's lifetime. Closed on dealloc.
     private var database: Database?
 
     init(
@@ -45,8 +45,8 @@ final class WatchedFoldersService {
 
     // MARK: - Public API
 
-    /// Перечитывает state из DB (after add/remove/update или manual refresh).
-    /// `database` lazy-open'ит при первом вызове.
+    /// Re-reads state from the DB (after add/remove/update or a manual refresh).
+    /// `database` lazy-opens on the first call.
     func reload() {
         do {
             let db = try ensureDatabase()
@@ -58,8 +58,8 @@ final class WatchedFoldersService {
         }
     }
 
-    /// Add folder. `path` канонизируется (resolvingSymlinksInPath) перед INSERT.
-    /// UNIQUE conflict (folder уже добавлен) → lastErrorMessage updates.
+    /// Add folder. `path` is canonicalized (resolvingSymlinksInPath) before INSERT.
+    /// UNIQUE conflict (folder already added) → lastErrorMessage updates.
     func add(path: String, granularity: WatchedFolderGranularity = .L4) {
         let canonical = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
         let now = Date()
@@ -90,9 +90,9 @@ final class WatchedFoldersService {
 
     // MARK: - Internals
 
-    /// Phase 2.4 R6: SQLite multi-process write — App второй writer наряду с
-    /// Agent. busyTimeout serialize'ит, но если конфликт — graceful retry once
-    /// после 100ms backoff. Финальный fail surface'ится в UI.
+    /// Phase 2.4 R6: SQLite multi-process write — App is the second writer alongside
+    /// the Agent. busyTimeout serializes them, but on a conflict, gracefully retry once
+    /// after a 100ms backoff. The final failure surfaces in the UI.
     private func performWriteWithRetry(operation: String, _ block: (Database) throws -> Void) {
         do {
             let db = try ensureDatabase()

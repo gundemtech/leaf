@@ -2,8 +2,8 @@ import XCTest
 @testable import LeafCore
 
 /// Phase Track-4 S3 — generic per-collector source-grep. Catches the
-/// boundary-read bypass где разработчик добавляет forbidden API call
-/// в S3 collector. Compile-time guard via state machines + matchers —
+/// boundary-read bypass where a developer adds a forbidden API call
+/// to an S3 collector. Compile-time guard via state machines + matchers —
 /// primary safety; this test is the secondary belt+suspenders.
 final class S3CollectorSourceGrepTests: XCTestCase {
 
@@ -50,7 +50,7 @@ final class S3CollectorSourceGrepTests: XCTestCase {
         ])
     }
 
-    /// MicInUseCollector listens к `kAudioDevicePropertyDeviceIsRunningSomewhere`.
+    /// MicInUseCollector listens to `kAudioDevicePropertyDeviceIsRunningSomewhere`.
     /// NEVER imports AVFoundation / opens AVCaptureSession / AVAudioRecorder
     /// (audio samples capture).
     func testMicInUseCollectorReadsNoAudioSamples() throws {
@@ -84,7 +84,7 @@ final class S3CollectorSourceGrepTests: XCTestCase {
         ])
     }
 
-    /// DisplayCollector listens на reconfiguration; NEVER captures pixels via
+    /// DisplayCollector listens for reconfiguration; NEVER captures pixels via
     /// CGDisplayCreateImage / CGWindowListCreateImage / ScreenCaptureKit.
     func testDisplayCollectorReadsNoPixels() throws {
         try grepForbiddenList("LeafAgent/Collectors/DisplayCollector.swift", [
@@ -117,7 +117,7 @@ final class S3CollectorSourceGrepTests: XCTestCase {
         ])
     }
 
-    /// CGEventTapCollector — duplicate fence (redundant с
+    /// CGEventTapCollector — duplicate fence (redundant with
     /// CGEventTapNoContentLeakageTests, intentional belt+suspenders).
     func testCGEventTapCollectorReadsNoEventContent() throws {
         try grepForbiddenList("LeafAgent/Collectors/CGEventTapCollector.swift", [

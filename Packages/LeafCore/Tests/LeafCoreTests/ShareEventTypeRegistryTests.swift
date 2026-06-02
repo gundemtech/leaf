@@ -3,8 +3,8 @@ import XCTest
 
 final class ShareEventTypeRegistryTests: XCTestCase {
 
-    /// Каждый case в `ShareEventTypeKey.allCases` должен иметь default entry —
-    /// guard против забытого default'а при добавлении нового event_kind.
+    /// Every case in `ShareEventTypeKey.allCases` must have a default entry —
+    /// a guard against a forgotten default when adding a new event_kind.
     func testAllKeysHaveDefaults() {
         let allKeys = Set(ShareEventTypeKey.allCases.map { $0.rawValue })
         let defaultKeys = Set(ShareEventTypeDefaults.all.map { $0.key.rawValue })
@@ -12,7 +12,7 @@ final class ShareEventTypeRegistryTests: XCTestCase {
                        "Each ShareEventTypeKey case must have ShareEventTypeDefault entry")
     }
 
-    /// rawValue uniqueness — два case'а не могут иметь одинаковый
+    /// rawValue uniqueness — two cases cannot share the same
     /// payload.event_kind discriminator.
     func testKeysAreUnique() {
         let raws = ShareEventTypeKey.allCases.map { $0.rawValue }
@@ -20,7 +20,7 @@ final class ShareEventTypeRegistryTests: XCTestCase {
     }
 
     /// Track 3 D1 — registry total 66 keys (Track-1 D3 baseline 48 + Track-3 D1 18 Linear deep sweep).
-    /// Если ломается при добавлении в новые phase'ы — обновить counter сознательно.
+    /// If this breaks when adding new phases — update the counter deliberately.
     func testRegistrySize66AfterD1() {
         // Superseded by testCount116 after Track-3 D3 — kept as historical anchor.
         XCTAssertGreaterThanOrEqual(ShareEventTypeKey.allCases.count, 66,
@@ -36,7 +36,7 @@ final class ShareEventTypeRegistryTests: XCTestCase {
         XCTAssertEqual(ShareEventTypeKey.allCases.count, 198)
     }
 
-    /// Track 3 D2 — все GitHub keys must use the canonical `gh_*` rawValue
+    /// Track 3 D2 — all GitHub keys must use the canonical `gh_*` rawValue
     /// prefix mirroring `GitHubEventKindKey`.
     func testAllGitHubKeysHaveGhPrefix() {
         let githubKeys = ShareEventTypeKey.allCases.filter { $0.rawValue.contains("gh_") || $0.rawValue.hasPrefix("github_") }
@@ -46,7 +46,7 @@ final class ShareEventTypeRegistryTests: XCTestCase {
         }
     }
 
-    /// Track 3 D2 — все 31 новые GitHub kinds default OFF per ADR-020
+    /// Track 3 D2 — all 31 new GitHub kinds default OFF per ADR-020
     /// (capture-everything locally, share-selectively).
     func testNewD2GitHubKindsAllDefaultOff() {
         let new: Set<String> = [
@@ -82,7 +82,7 @@ final class ShareEventTypeRegistryTests: XCTestCase {
             "ShareEventTypeKey GitHub raw values must match GitHubEventKindKey.allCases 1:1")
     }
 
-    /// Phase Track-3 D1 — все 18 новых Linear kinds default OFF per ADR-020
+    /// Phase Track-3 D1 — all 18 new Linear kinds default OFF per ADR-020
     /// (capture-everything locally, share-selectively).
     func testTrack3D1KindsAreDefaultOff() {
         let d1Keys: Set<ShareEventTypeKey> = [
@@ -102,7 +102,7 @@ final class ShareEventTypeRegistryTests: XCTestCase {
         }
     }
 
-    /// Discussions default OFF (нишевые). Verify that key design intent сохранён.
+    /// Discussions default OFF (niche). Verify that key design intent is preserved.
     func testDiscussionsDefaultOff() {
         let dDefault = ShareEventTypeDefaults.all.first { $0.key == .githubDiscussionAuthored }
         XCTAssertEqual(dDefault?.defaultEnabled, false)
@@ -110,8 +110,8 @@ final class ShareEventTypeRegistryTests: XCTestCase {
         XCTAssertEqual(dcDefault?.defaultEnabled, false)
     }
 
-    /// Phase 4.7.B — все 11 новых keys должны быть registered и defaultEnabled=true.
-    /// Любая регрессия (missing key / wrong default) — сразу видна.
+    /// Phase 4.7.B — all 11 new keys must be registered with defaultEnabled=true.
+    /// Any regression (missing key / wrong default) is immediately visible.
     func testPhase47BNewKeysDefaults() {
         let phase47BKeys: [ShareEventTypeKey] = [
             .githubNotificationsPulse,
@@ -136,7 +136,7 @@ final class ShareEventTypeRegistryTests: XCTestCase {
         }
     }
 
-    /// Phase 4.7.C — все 10 новых keys должны быть registered.
+    /// Phase 4.7.C — all 10 new keys must be registered.
     func testPhase47CNewKeysPresent() {
         let phase47CKeys: [ShareEventTypeKey] = [
             .linearPriorityChanged,
@@ -160,8 +160,8 @@ final class ShareEventTypeRegistryTests: XCTestCase {
     }
 
     /// Phase 4.7.C — defaults split: 8 ON (transition flavors + projectUpdate +
-    /// pr_review_thread_resolved), 2 OFF (skeleton-style для unstable APIs:
-    /// documents + initiatives — могут вернуть 0 events на legacy workspaces).
+    /// pr_review_thread_resolved), 2 OFF (skeleton-style for unstable APIs:
+    /// documents + initiatives — may return 0 events on legacy workspaces).
     func testPhase47CDefaults() {
         let onByDefault: Set<ShareEventTypeKey> = [
             .linearPriorityChanged, .linearLabelAdded, .linearLabelRemoved,
@@ -182,8 +182,8 @@ final class ShareEventTypeRegistryTests: XCTestCase {
         }
     }
 
-    /// Phase 4.7.C raw value literals — single source of truth между registry,
-    /// runtime emission, и downstream SQL queries.
+    /// Phase 4.7.C raw value literals — single source of truth between registry,
+    /// runtime emission, and downstream SQL queries.
     func testPhase47CRawValueLiterals() {
         XCTAssertEqual(ShareEventTypeKey.linearPriorityChanged.rawValue, "linear_priority_changed")
         XCTAssertEqual(ShareEventTypeKey.linearLabelAdded.rawValue, "linear_label_added")
@@ -197,8 +197,8 @@ final class ShareEventTypeRegistryTests: XCTestCase {
         XCTAssertEqual(ShareEventTypeKey.githubPullRequestReviewThreadResolved.rawValue, "gh_pr_review_thread_resolved")
     }
 
-    /// rawValue strings должны матчить плановые literal'ы — single source of truth
-    /// между registry, runtime emission и downstream SQL queries.
+    /// rawValue strings must match the planned literals — single source of truth
+    /// between registry, runtime emission, and downstream SQL queries.
     func testPhase47BRawValueLiterals() {
         XCTAssertEqual(ShareEventTypeKey.githubNotificationsPulse.rawValue, "gh_notifications_pulse")
         XCTAssertEqual(ShareEventTypeKey.githubPRAwaitingReviewCount.rawValue, "gh_pr_awaiting_review_count")

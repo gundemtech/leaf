@@ -1,6 +1,6 @@
 //
 //  StreaksCard.swift
-//  Track-9 T9 — 5 streak rows в single LeafCard. SF Symbol icon +
+//  Track-9 T9 — 5 streak rows in a single LeafCard. SF Symbol icon +
 //  label + count per row. "—" for zero, "N day(s)" for positive.
 //
 

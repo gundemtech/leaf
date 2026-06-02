@@ -1,18 +1,18 @@
 // Phase 4.7.B-16 — `PresenceInsights.workloadPulse` (testable backing
-// для `get_workload_pulse` MCP tool).
+// for the `get_workload_pulse` MCP tool).
 //
-// LeafMCP target живёт под Xcode (не под `swift test`), поэтому tool-struct
-// `GetWorkloadPulseTool` в `LeafMCP/Tools/` тестируется через свой
-// LeafCore helper. Здесь — все 3 плановых case'а:
+// The LeafMCP target lives under Xcode (not under `swift test`), so the
+// tool struct `GetWorkloadPulseTool` in `LeafMCP/Tools/` is tested through its
+// LeafCore helper. Here — all 3 planned cases:
 //
 //   - testExecute_PeriodToday_AggregatesCorrectly
 //   - testExecute_NoData_ReturnsZeros
 //   - testExecute_InvalidPeriod_DefaultsToToday
 //
-// "Invalid period" handled на tool-обёртке (permissive parse → defaults
-// to today). На уровне helper'а enum strict — InvalidPeriod test
-// верифицирует, что `WorkloadPulsePeriod(rawValue:)` returns nil для
-// невалидного raw, и что .today как default produces валидный payload.
+// "Invalid period" is handled in the tool wrapper (permissive parse → defaults
+// to today). At the helper level the enum is strict — the InvalidPeriod test
+// verifies that `WorkloadPulsePeriod(rawValue:)` returns nil for an
+// invalid raw, and that .today as the default produces a valid payload.
 
 import XCTest
 import GRDB
@@ -90,9 +90,9 @@ final class WorkloadPulseTests: XCTestCase {
 
     // MARK: - testExecute_NoData_ReturnsZeros
 
-    /// Свежая (только что созданная) DB → все subkey'и со значениями-по-умолчанию:
-    /// 0 для счётчиков, "none" для top_priority, "unknown" для native_presence,
-    /// false для dnd_active, `{}` для current_cycle. Top-level keys присутствуют.
+    /// Fresh (just-created) DB → all subkeys with default values:
+    /// 0 for counters, "none" for top_priority, "unknown" for native_presence,
+    /// false for dnd_active, `{}` for current_cycle. Top-level keys are present.
     func testExecute_NoData_ReturnsZeros() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -125,8 +125,8 @@ final class WorkloadPulseTests: XCTestCase {
 
     /// Seed presence_state.{github,linear,slack} composite + events:
     /// 2 mention events (count=3 each, today) + 1 file-upload (count=5, today)
-    /// + 1 actions_run_initiated в in_progress (24h window).
-    /// → workloadPulse('today') aggregates корректно.
+    /// + 1 actions_run_initiated in in_progress (24h window).
+    /// → workloadPulse('today') aggregates correctly.
     func testExecute_PeriodToday_AggregatesCorrectly() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -193,13 +193,13 @@ final class WorkloadPulseTests: XCTestCase {
             )
         }
 
-        // 2. Seed events с timestamp'ами в today (relative to now).
-        // Используем `now` через Calendar.startOfDay для детерминированного теста.
+        // 2. Seed events with timestamps in today (relative to now).
+        // Use `now` via Calendar.startOfDay for a deterministic test.
         let now = Date()
         let calendar = Calendar.current
         let todayStart = calendar.startOfDay(for: now)
-        // Поставим events на todayStart + 1h, чтобы точно попасть в today window
-        // и НЕ попасть в "до полуночи" edge.
+        // Place events at todayStart + 1h to land firmly inside the today window
+        // and NOT hit the "before midnight" edge.
         let eventTime = todayStart.addingTimeInterval(60 * 60)
         let eventMs = Int64(eventTime.timeIntervalSince1970 * 1000)
 
@@ -210,7 +210,7 @@ final class WorkloadPulseTests: XCTestCase {
 
         try db.write([mention1, mention2, fileUpload, actionsRun])
 
-        // 3. Call workloadPulse with period=today, now=now (для детерминизма).
+        // 3. Call workloadPulse with period=today, now=now (for determinism).
         let payload = try PresenceInsights.workloadPulse(database: db, period: .today, now: now)
 
         // 4. Assert github subkeys correct.
@@ -226,8 +226,8 @@ final class WorkloadPulseTests: XCTestCase {
         XCTAssertEqual(linear["top_priority"] as? String, "high")
         let cycle = try XCTUnwrap(linear["current_cycle"] as? [String: Any])
         XCTAssertEqual(cycle["cycle_name"] as? String, "Sprint 27")
-        // completed_pct после JSON roundtrip может быть Double или NSNumber —
-        // unwrap'аем через NSNumber для robust сравнения.
+        // completed_pct after a JSON roundtrip may be Double or NSNumber —
+        // unwrap via NSNumber for a robust comparison.
         let completedPct = (cycle["completed_pct"] as? NSNumber)?.doubleValue
         XCTAssertEqual(completedPct, 60.0)
         XCTAssertEqual(cycle["days_remaining"] as? Int, 3)
@@ -246,21 +246,21 @@ final class WorkloadPulseTests: XCTestCase {
 
     // MARK: - testExecute_InvalidPeriod_DefaultsToToday
 
-    /// Permissive parse: на уровне tool-обёртки невалидный raw → defaults to
-    /// today (verified в integration через GetWorkloadPulseTool, не здесь).
-    /// На уровне helper'а проверяем: (a) `WorkloadPulsePeriod(rawValue:)`
-    /// returns nil для невалидного, (b) helper с явным `period: .today` (как
-    /// и сделает tool после fallback) produces валидный payload без падений.
+    /// Permissive parse: in the tool wrapper an invalid raw → defaults to
+    /// today (verified in integration via GetWorkloadPulseTool, not here).
+    /// At the helper level we check: (a) `WorkloadPulsePeriod(rawValue:)`
+    /// returns nil for an invalid value, (b) the helper with an explicit `period: .today` (as
+    /// the tool will do after fallback) produces a valid payload without crashing.
     func testExecute_InvalidPeriod_DefaultsToToday() throws {
-        // (a) Невалидный raw → nil.
+        // (a) Invalid raw → nil.
         XCTAssertNil(PresenceInsights.WorkloadPulsePeriod(rawValue: "invalid_period"))
         XCTAssertNil(PresenceInsights.WorkloadPulsePeriod(rawValue: ""))
         XCTAssertNil(PresenceInsights.WorkloadPulsePeriod(rawValue: "yesterday"),
-                     "yesterday — TimelinePeriod value, не WorkloadPulsePeriod (расходящиеся enum'ы)")
+                     "yesterday — TimelinePeriod value, not WorkloadPulsePeriod (diverging enums)")
 
-        // (b) Валидный fallback на today produces non-throwing payload даже
-        // на пустой DB (mirror к testExecute_NoData_ReturnsZeros, но проверяет
-        // tool-style fallback path конкретно).
+        // (b) A valid fallback to today produces a non-throwing payload even
+        // on an empty DB (mirrors testExecute_NoData_ReturnsZeros, but checks
+        // the tool-style fallback path specifically).
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
         let raw = "invalid_period"

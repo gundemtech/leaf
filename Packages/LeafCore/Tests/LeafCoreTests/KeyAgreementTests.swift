@@ -1,6 +1,6 @@
 // Phase 5.2.A — KeyAgreement (X25519 ECDH wrapper) tests.
 // Verifies CryptoKit Curve25519 ECDH symmetry + hex decode validation
-// для invitee/admin pubkey exchange (5.2.D/E callers).
+// for invitee/admin pubkey exchange (5.2.D/E callers).
 
 import XCTest
 import CryptoKit
@@ -28,7 +28,7 @@ final class KeyAgreementTests: XCTestCase {
             peerPublicKeyHex: alicePubHex
         )
 
-        // SharedSecret не Equatable (constant-time semantics) → compare bytes.
+        // SharedSecret is not Equatable (constant-time semantics) → compare bytes.
         let aliceBytes = aliceSide.withUnsafeBytes { Data($0) }
         let bobBytes = bobSide.withUnsafeBytes { Data($0) }
         XCTAssertEqual(aliceBytes, bobBytes)
@@ -62,13 +62,13 @@ final class KeyAgreementTests: XCTestCase {
         }
     }
 
-    // MARK: - 5. Lenient case — uppercase hex decodes равно lowercase
+    // MARK: - 5. Lenient case — uppercase hex decodes the same as lowercase
 
     /// Pubkeys serialize through `String(format: "%02x", _)` → always lowercase
-    /// в нашем flow. Defensive: lenient decoder survives accidental uppercase
-    /// (e.g., copy-paste из tool которое автоматически uppercase'ит). Test
-    /// pins lenient capability, чтобы не drift'нуть в strict-lowercase
-    /// silently при будущих refactor'ах.
+    /// in our flow. Defensive: lenient decoder survives accidental uppercase
+    /// (e.g., copy-paste from a tool that auto-uppercases). Test
+    /// pins lenient capability so we don't silently drift into strict-lowercase
+    /// in future refactors.
     func testDecodePublicKey_UppercaseHex_DecodesEqualToLowercase() throws {
         let priv = Curve25519.KeyAgreement.PrivateKey()
         let lowerHex = priv.publicKey.rawRepresentation

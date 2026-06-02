@@ -1,11 +1,11 @@
 import Foundation
 
-/// Phase 2.4 — превращает absolute path в `displayName` для UI:
-/// basename + cache tooltip полного path. Pattern идентичен `AppNameResolver`.
+/// Phase 2.4 — turns an absolute path into a `displayName` for UI:
+/// basename + cache a tooltip of the full path. Pattern is identical to `AppNameResolver`.
 ///
-/// - L4 events хранят parent dir как `path` → displayName = "Project/" (базовое
-///   имя последнего компонента + trailing slash для distinction).
-/// - L5 events хранят full file path → displayName = "main.swift".
+/// - L4 events store the parent dir as `path` → displayName = "Project/" (basename
+///   of the last component + trailing slash for distinction).
+/// - L5 events store the full file path → displayName = "main.swift".
 public final class FilenameResolver: @unchecked Sendable {
     public static let shared = FilenameResolver()
 
@@ -14,8 +14,8 @@ public final class FilenameResolver: @unchecked Sendable {
 
     public init() {}
 
-    /// Возвращает basename (последний path component) с trailing `/` если path
-    /// — directory. Cache — purely string-based (не stat'аем filesystem).
+    /// Returns the basename (last path component) with a trailing `/` if the path
+    /// is a directory. Cache is purely string-based (we don't stat the filesystem).
     public func displayName(for path: String) -> String {
         if let cached = queue.sync(execute: { cache[path] }) {
             return cached
@@ -25,7 +25,7 @@ public final class FilenameResolver: @unchecked Sendable {
         return resolved
     }
 
-    /// Сбросить кэш (для тестов).
+    /// Reset the cache (for tests).
     public func flushCache() {
         queue.sync { cache.removeAll() }
     }
@@ -34,8 +34,8 @@ public final class FilenameResolver: @unchecked Sendable {
         let url = URL(fileURLWithPath: path)
         let name = url.lastPathComponent
         guard !name.isEmpty else { return path }
-        // Heuristic для distinct'а folder vs file: path не имеет extension — likely folder (L4).
-        // Не stat'аем actual filesystem — path может уже не существовать (removed event).
+        // Heuristic to distinguish folder vs file: path has no extension — likely a folder (L4).
+        // We don't stat the actual filesystem — the path may no longer exist (removed event).
         if url.pathExtension.isEmpty {
             return "\(name)/"
         }

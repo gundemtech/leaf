@@ -17,9 +17,9 @@ enum LeafStatusPillTokens {
     static let pulseScale:        CGFloat = 2.0
     static let pulseDuration:     Double  = 1.2
 
-    /// Track 2 / D2 — boundary за которой most-recent session считается "stale";
-    /// status pill flips active → idle. Default 60s балансирует "юзер ушёл"
-    /// сигнал и flicker prevention. Phase 5.4 reuse'нет тот же token для
+    /// Track 2 / D2 — boundary beyond which the most-recent session is considered "stale";
+    /// status pill flips active → idle. Default 60s balances the "user left"
+    /// signal against flicker prevention. Phase 5.4 reuses the same token for
     /// presence_outgoing snapshot derive (single source of truth).
     static let activeThresholdSeconds: TimeInterval = 60
 }

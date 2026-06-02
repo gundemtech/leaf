@@ -4,15 +4,15 @@ import LeafMCPProtocol
 
 /// Phase 4.7.B-17 — `get_review_activity` MCP tool.
 ///
-/// Тонкая обёртка над `ReviewActivityInsights.reviewActivity(database:period:repo:)`.
+/// Thin wrapper over `ReviewActivityInsights.reviewActivity(database:period:repo:)`.
 /// Heavy lifting (DB scan, GROUP BY event_kind, by_repo + linked_prs aggregation)
-/// живёт в LeafCore чтобы быть testable через SPM (LeafMCP — Xcode target,
-/// в `swift test` не входит).
+/// lives in LeafCore so it's testable via SPM (LeafMCP — Xcode target,
+/// not included in `swift test`).
 ///
-/// `period` — optional argument, mirror к other tools (today / yesterday /
-/// last_7_days). Невалидный raw → invalidParams (strict — mirror к
-/// `get_timeline`, в отличие от B-16 permissive shape для `workload_pulse`).
-/// `repo` — optional "owner/name" filter; если присутствует и не пустой →
+/// `period` — optional argument, mirroring other tools (today / yesterday /
+/// last_7_days). Invalid raw → invalidParams (strict — mirrors
+/// `get_timeline`, unlike the B-16 permissive shape for `workload_pulse`).
+/// `repo` — optional "owner/name" filter; if present and non-empty →
 /// limit aggregation to that repo.
 struct GetReviewActivityTool: ToolExecutor {
     let dbURL: URL

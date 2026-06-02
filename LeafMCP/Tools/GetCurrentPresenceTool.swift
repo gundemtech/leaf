@@ -4,9 +4,9 @@ import LeafMCPProtocol
 
 /// Phase 4.7.B-15 — `get_current_presence` MCP tool.
 ///
-/// Тонкая обёртка над `PresenceInsights.currentSnapshot(database:)`.
-/// Heavy lifting (DB read, payload shape) живёт в LeafCore чтобы быть
-/// testable через SPM (LeafMCP — Xcode target, в `swift test` не входит).
+/// A thin wrapper over `PresenceInsights.currentSnapshot(database:)`.
+/// Heavy lifting (DB read, payload shape) lives in LeafCore so it stays
+/// testable via SPM (LeafMCP is an Xcode target, not part of `swift test`).
 struct GetCurrentPresenceTool: ToolExecutor {
     let dbURL: URL
     let dbConfig: DatabaseConfig

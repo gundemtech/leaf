@@ -2,7 +2,7 @@
 //  InviteOutboxReader.swift
 //  Leaf
 //
-//  Phase 5.2.D — @Observable wrapper для InviteService. Lazy-init Database +
+//  Phase 5.2.D — @Observable wrapper for InviteService. Lazy-init Database +
 //  RelayClient + InviteService. State machine drives GenerateInviteSheet.
 //  Mirror OrgReader (5.1.E) lazy-init pattern + composition root #if LEAF_PROD.
 //

@@ -2,17 +2,17 @@ import Foundation
 import GRDB
 
 /// Phase Track-1 D2 — FTS5 keyword index over event bodies. Contentless mode
-/// (`content = ''`) — body не дублируется в FTS internal tables (рост контролируется
-/// на стороне `events.payload_json` каплингом D1 BodyCap 64KB).
+/// (`content = ''`) — the body is not duplicated in FTS internal tables (growth is
+/// bounded on the `events.payload_json` side by the D1 BodyCap of 64KB).
 /// Tokenizer `unicode61` Unicode-aware + `remove_diacritics 2` (ru/en mix) +
-/// `tokenchars '_-'` для snake_case + kebab-case identifiers.
-/// Idempotent через `IF NOT EXISTS` — reopen DB безопасно.
+/// `tokenchars '_-'` for snake_case + kebab-case identifiers.
+/// Idempotent via `IF NOT EXISTS` — reopening the DB is safe.
 ///
-/// **Sidecar `events_fts_meta`** — contentless FTS5 не возвращает значения UNINDEXED
-/// колонок при SELECT (даже после MATCH). Поэтому для retrieval `event_id` / `body_kind`
-/// поверх matched rowid'а держим side table `(fts_rowid, event_id, body_kind)`,
-/// записывается атомарно вместе с FTS5 INSERT'ом в `EventsFullTextStore.indexEvent`.
-/// Index `idx_events_fts_meta_event_id` для reverse lookup (D3 needs).
+/// **Sidecar `events_fts_meta`** — contentless FTS5 does not return the values of
+/// UNINDEXED columns on SELECT (even after MATCH). So, to retrieve `event_id` / `body_kind`
+/// on top of a matched rowid, we keep a side table `(fts_rowid, event_id, body_kind)`,
+/// written atomically together with the FTS5 INSERT in `EventsFullTextStore.indexEvent`.
+/// Index `idx_events_fts_meta_event_id` for reverse lookup (D3 needs).
 public extension DatabaseMigrator {
     mutating func registerMigration012EventsFTS() {
         registerMigration("012_events_fts") { db in

@@ -2,7 +2,7 @@
 //  GitHubOAuthService.swift
 //  Leaf
 //
-//  Phase 4.3 — @Observable controller для Connections Settings tab (GitHub).
+//  Phase 4.3 — @Observable controller for the Connections Settings tab (GitHub).
 //  Owns:
 //   1) State machine (NotConnected → RequestingDeviceCode → AwaitingAuthorization
 //      → ExchangingToken → FetchingViewer → Connected/Error/ReconnectNeeded).
@@ -13,8 +13,8 @@
 //      workspaceName=<login>.
 //   4) Disconnect: deleteIntegration + DistributedNotification (Agent picks up).
 //
-//  PKCE / LoopbackCallbackListener — НЕ нужны (Device Flow не использует
-//  loopback redirect; client_id публичный).
+//  PKCE / LoopbackCallbackListener — NOT needed (Device Flow does not use a
+//  loopback redirect; the client_id is public).
 //
 
 import Foundation
@@ -53,7 +53,7 @@ final class GitHubOAuthService {
     enum ConnectionState: Sendable, Equatable {
         case notConnected
         case requestingDeviceCode
-        /// Юзер видит userCode + кнопки Open browser / Copy / Cancel.
+        /// User sees userCode + Open browser / Copy / Cancel buttons.
         /// expiresAt — wall-clock deadline (RFC 8628 device_code TTL ~15 min).
         case awaitingAuthorization(userCode: String, verificationURI: URL, expiresAt: Date)
         case exchangingToken
@@ -64,10 +64,10 @@ final class GitHubOAuthService {
         /// (Tasks 18-21). Connection remains usable for endpoints whose scopes
         /// already granted; warm/cold gated calls degrade gracefully.
         case connectedScopeOutdated(login: String, connectedAt: Date, missing: Set<String>)
-        /// refresh_token revoked / expired (GitHubTokenRefresher сделал
+        /// refresh_token revoked / expired (GitHubTokenRefresher performed
         /// deleteIntegration + UserDefaults flag + DistributedNotification).
-        /// UI показывает orange "Reconnect needed". Cleared на successful
-        /// `connect()` или manual `disconnect()`.
+        /// UI shows orange "Reconnect needed". Cleared on a successful
+        /// `connect()` or a manual `disconnect()`.
         case reconnectNeeded
         case error(message: String)
     }
@@ -116,8 +116,8 @@ final class GitHubOAuthService {
 
     // MARK: - Public API
 
-    /// Перечитывает row из DB → выставляет `.connected`, `.notConnected`, или
-    /// `.reconnectNeeded` если refresher удалил row из-за invalid_grant.
+    /// Re-reads the row from the DB → sets `.connected`, `.notConnected`, or
+    /// `.reconnectNeeded` if the refresher deleted the row due to invalid_grant.
     func reload() {
         do {
             let db = try ensureDatabase()
@@ -146,7 +146,7 @@ final class GitHubOAuthService {
         }
     }
 
-    /// Запускает full Device Flow. Caller — UI button "Connect GitHub".
+    /// Starts the full Device Flow. Caller — UI button "Connect GitHub".
     /// Convenience overload preserving the existing call shape; delegates to
     /// `connect(scopes:)` with the canonical `GitHubScopesService.requested()`
     /// (D2 scope-bump baseline = required core ∪ optional).
@@ -164,7 +164,7 @@ final class GitHubOAuthService {
             return
         }
 
-        // Cancel any in-flight polling task (re-entry на awaitingAuthorization).
+        // Cancel any in-flight polling task (re-entry on awaitingAuthorization).
         pollingTask?.cancel()
         pollingTask = nil
 
@@ -192,7 +192,7 @@ final class GitHubOAuthService {
             expiresAt: expiresAt
         )
 
-        // Открываем браузер сразу (verificationURIComplete pre-fills user_code если поддерживается).
+        // Open the browser right away (verificationURIComplete pre-fills user_code if supported).
         let openURL = device.verificationURIComplete.flatMap(URL.init(string:)) ?? verificationURL
         NSWorkspace.shared.open(openURL)
 
@@ -207,14 +207,14 @@ final class GitHubOAuthService {
         }
     }
 
-    /// Cancels in-flight Device Flow polling. UI кнопка "Cancel" в `.awaitingAuthorization`.
+    /// Cancels in-flight Device Flow polling. UI button "Cancel" in `.awaitingAuthorization`.
     func cancel() {
         pollingTask?.cancel()
         pollingTask = nil
         state = .notConnected
     }
 
-    /// Удаляет row, постит notification (Agent collector подхватит и остановит polling).
+    /// Deletes the row, posts a notification (the Agent collector picks it up and stops polling).
     func disconnect() {
         pollingTask?.cancel()
         pollingTask = nil
@@ -443,7 +443,7 @@ final class GitHubOAuthService {
             let db = try ensureDatabase()
             try db.upsertIntegration(record)
         } catch {
-            // Single 100ms retry на SQLite busy (Phase 2.4 R6 паттерн, mirrored from Linear).
+            // Single 100ms retry on SQLite busy (Phase 2.4 R6 pattern, mirrored from Linear).
             Thread.sleep(forTimeInterval: 0.1)
             let db = try ensureDatabase()
             try db.upsertIntegration(record)

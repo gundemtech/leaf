@@ -1,12 +1,12 @@
 import Foundation
 
-/// Phase 2.4 — strategy для перевода raw FSEvents (path + flag bitmask) в
-/// `RawEvent` для записи в `events`. Реализация ignore-list, L4/L5 mapping,
-/// coalesce dedup — moat (`FSEventsRouterProd`); public side только знает
-/// контракт + Stub.
+/// Phase 2.4 — strategy for translating raw FSEvents (path + flag bitmask) into
+/// a `RawEvent` for writing to `events`. The ignore-list implementation, L4/L5 mapping,
+/// and coalesce dedup are moat (`FSEventsRouterProd`); the public side only knows
+/// the contract + Stub.
 ///
-/// `async` — Prod использует mutable coalesce state (LRU мапа `[String: Date]`
-/// per-actor), и реализуется как actor. Stub возвращает синхронно через async-no-op.
+/// `async` — Prod uses mutable coalesce state (a per-actor LRU map `[String: Date]`)
+/// and is implemented as an actor. Stub returns synchronously via an async no-op.
 public protocol FSEventsRouting: Sendable {
     func route(
         path: String,
@@ -16,21 +16,21 @@ public protocol FSEventsRouting: Sendable {
     ) async -> FSEventsRouteResult
 }
 
-/// Результат маршрутизации одного FSEvents callback path.
+/// Result of routing a single FSEvents callback path.
 public enum FSEventsRouteResult: Sendable {
-    /// Pass-through в EventWriter — будет записан в `events`.
+    /// Pass-through to EventWriter — will be written to `events`.
     case event(RawEvent)
-    /// Filtered — известная причина (ignore-list match, coalesce, granularity stripped).
-    /// Логируется на уровне `debug`, не warning.
+    /// Filtered — known reason (ignore-list match, coalesce, granularity stripped).
+    /// Logged at `debug` level, not warning.
     case filtered(reason: String)
-    /// Unknown flag bitmask — нет explicit mapping для этой комбинации FSEvent flags.
-    /// Skip silent (не считается ошибкой, FSEvents flags расширяются между macOS-версиями).
+    /// Unknown flag bitmask — no explicit mapping for this combination of FSEvent flags.
+    /// Skip silently (not treated as an error; FSEvents flags expand between macOS versions).
     case unknown
 }
 
-/// Default-flow stub для CI и dev-без-moat сборок: всегда `.filtered`.
-/// FSEventsCollector будет работать (callback пишет/читает), но events
-/// не пишутся. Это удобно для testов lifecycle без moat-зависимости.
+/// Default-flow stub for CI and dev-without-moat builds: always `.filtered`.
+/// FSEventsCollector still works (the callback writes/reads), but events
+/// are not written. This is convenient for lifecycle tests without a moat dependency.
 public struct StubFSEventsRouter: FSEventsRouting {
     public init() {}
 

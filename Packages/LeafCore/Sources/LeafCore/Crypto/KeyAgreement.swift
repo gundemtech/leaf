@@ -1,20 +1,20 @@
 import CryptoKit
 import Foundation
 
-/// Phase 5.2.A — pure passthrough wrapper над CryptoKit X25519 ECDH +
-/// hex-decode для invitee/admin pubkey exchange. No state. Mirror
+/// Phase 5.2.A — pure passthrough wrapper over CryptoKit X25519 ECDH +
+/// hex-decode for invitee/admin pubkey exchange. No state. Mirror
 /// enum-namespace style of `IdentityService` / `TeamKeystore`.
 ///
-/// ECDH symmetric: same `SharedSecret` bytes когда вызывается из обеих
-/// сторон keypair pair. Caller (5.2.B `ProdInviteBlobCodec`) feeds the
-/// resulting `SharedSecret` в HKDF-SHA256 (`InviteKDF.deriveWrapKey`).
+/// ECDH symmetric: same `SharedSecret` bytes when called from both
+/// sides of the keypair pair. Caller (5.2.B `ProdInviteBlobCodec`) feeds the
+/// resulting `SharedSecret` into HKDF-SHA256 (`InviteKDF.deriveWrapKey`).
 public enum KeyAgreement {
 
     /// X25519 ECDH. Decodes peer pub from hex, computes shared secret.
     /// 32 bytes (constant-time compare semantic).
-    /// - Throws: `LeafError.invalidPayload` если hex bad / wrong length;
-    ///   `LeafError.lowOrderPoint` если peer point low-order / small-subgroup
-    ///   (rejected by CryptoKit) либо shared secret all-zero (RFC 7748 §6.1).
+    /// - Throws: `LeafError.invalidPayload` if hex bad / wrong length;
+    ///   `LeafError.lowOrderPoint` if peer point low-order / small-subgroup
+    ///   (rejected by CryptoKit) or shared secret all-zero (RFC 7748 §6.1).
     public static func sharedSecret(
         privateKey: Curve25519.KeyAgreement.PrivateKey,
         peerPublicKeyHex: String
@@ -43,7 +43,7 @@ public enum KeyAgreement {
 
     /// Hex → `Curve25519.KeyAgreement.PublicKey`. Lenient case (accepts
     /// 0-9 a-f A-F); strict length (exactly 64 chars).
-    /// - Throws: `LeafError.invalidPayload` если hex bad / wrong length.
+    /// - Throws: `LeafError.invalidPayload` if hex bad / wrong length.
     public static func decodePublicKey(hex: String) throws -> Curve25519.KeyAgreement.PublicKey {
         let raw = try decodeHex32(hex)
         return try Curve25519.KeyAgreement.PublicKey(rawRepresentation: raw)

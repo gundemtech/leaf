@@ -1,19 +1,19 @@
 import Foundation
 import CoreServices
 
-/// Phase 2.4 — internal Swift wrapper над `FSEventStreamCreate` C API.
-/// Не public — moat-релевантного здесь нет, но интерфейс specific к
-/// реализации FSEventsCollector. Owned by collector, retained как stored property.
+/// Phase 2.4 — internal Swift wrapper over the `FSEventStreamCreate` C API.
+/// Not public — nothing moat-relevant here, but the interface is specific to
+/// the FSEventsCollector implementation. Owned by the collector, retained as a stored property.
 ///
 /// Concurrency:
-///   - `@unchecked Sendable` — `FSEventStreamRef` thread-safe после `Schedule`
-///     (документировано Apple).
-///   - C callback (`@convention(c)`) без captures — self передаётся через
-///     `FSEventStreamContext.info` как opaque pointer.
-///   - `onEvents` callback вызывается на dispatch queue (utility QoS) — caller
-///     внутри hop'ает в actor через `Task { await ... }`.
+///   - `@unchecked Sendable` — `FSEventStreamRef` is thread-safe after `Schedule`
+///     (documented by Apple).
+///   - The C callback (`@convention(c)`) has no captures — self is passed via
+///     `FSEventStreamContext.info` as an opaque pointer.
+///   - The `onEvents` callback is invoked on a dispatch queue (utility QoS) — the caller
+///     inside hops into the actor via `Task { await ... }`.
 final class FSEventStream: @unchecked Sendable {
-    /// Sync callback — paths + raw flags. Caller сам решает как hop'нуть в actor.
+    /// Sync callback — paths + raw flags. The caller decides how to hop into the actor.
     typealias EventsHandler = @Sendable (_ paths: [String], _ flags: [UInt32]) -> Void
 
     private var stream: FSEventStreamRef?
@@ -33,14 +33,14 @@ final class FSEventStream: @unchecked Sendable {
             throw FSEventStreamError.noPaths
         }
 
-        // Path canonicalization — symlinks → realpath, чтобы callback paths
-        // были консистентны со stored values. Делается caller'ом тоже, но
-        // защищаемся defensively.
+        // Path canonicalization — symlinks → realpath, so callback paths
+        // are consistent with stored values. Done by the caller too, but
+        // we guard defensively.
         let canonicalPaths = paths.map { URL(fileURLWithPath: $0).resolvingSymlinksInPath().path }
         let cfPaths = canonicalPaths as CFArray
 
-        // FSEventStreamContext — info указатель на self (passUnretained ok т.к.
-        // collector retains FSEventStream через stored property).
+        // FSEventStreamContext — info points to self (passUnretained is ok since
+        // the collector retains FSEventStream via a stored property).
         var context = FSEventStreamContext(
             version: 0,
             info: Unmanaged.passUnretained(self).toOpaque(),
@@ -70,20 +70,20 @@ final class FSEventStream: @unchecked Sendable {
     }
 
     deinit {
-        // Defensive cleanup — collector обычно вызывает stop() явно.
+        // Defensive cleanup — the collector usually calls stop() explicitly.
         teardown()
     }
 
     // MARK: - Lifecycle
 
-    /// Schedule + Start. После start callback'и идут пока не вызван stop.
+    /// Schedule + Start. After start, callbacks keep coming until stop is called.
     func start() {
         guard let stream else { return }
         FSEventStreamSetDispatchQueue(stream, queue)
         FSEventStreamStart(stream)
     }
 
-    /// Stop + Invalidate + Release. Идемпотентен (повторные вызовы — no-op).
+    /// Stop + Invalidate + Release. Idempotent (repeated calls — no-op).
     func stop() {
         teardown()
     }
@@ -98,8 +98,8 @@ final class FSEventStream: @unchecked Sendable {
 
     // MARK: - C callback bridge
 
-    /// `@convention(c)` — нельзя captures. Self извлекается из `info`,
-    /// preformatted CFArray<CFString> кастится в `[String]`.
+    /// `@convention(c)` — no captures allowed. Self is extracted from `info`,
+    /// and the preformatted CFArray<CFString> is cast to `[String]`.
     private static let callback: FSEventStreamCallback = {
         (_ streamRef: ConstFSEventStreamRef,
          _ clientCallBackInfo: UnsafeMutableRawPointer?,
@@ -111,13 +111,13 @@ final class FSEventStream: @unchecked Sendable {
         guard let info = clientCallBackInfo else { return }
         let owner = Unmanaged<FSEventStream>.fromOpaque(info).takeUnretainedValue()
 
-        // UseCFTypes => eventPaths указывает на CFArray<CFString>.
+        // UseCFTypes => eventPaths points to a CFArray<CFString>.
         let cfArray = Unmanaged<CFArray>.fromOpaque(eventPaths).takeUnretainedValue()
         guard let pathsArray = cfArray as? [String] else { return }
 
-        // Flags — fixed-size buffer в numEvents элементов; копируем в [UInt32]
-        // т.к. caller (Task hop) может пережить callback (lifetime буфера — only
-        // current callback invocation).
+        // Flags — fixed-size buffer of numEvents elements; copy into [UInt32]
+        // because the caller (Task hop) may outlive the callback (the buffer's
+        // lifetime is only the current callback invocation).
         let flagsBuffer = UnsafeBufferPointer(start: eventFlags, count: numEvents)
         let flags: [UInt32] = flagsBuffer.map { UInt32($0) }
 

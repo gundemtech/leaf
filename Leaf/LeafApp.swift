@@ -121,27 +121,27 @@ struct LeafApp: App {
   @Environment(\.scenePhase) private var scenePhase
 
   init() {
-    // Phase 3.4.5 — материализуем db.key из main app's Keychain group ДО `agent.register()`.
-    // Helpers (LeafAgent/LeafMCP) живут в other default Keychain access groups (без shared
-    // entitlement они не видят main app's group), поэтому если LeafAgent стартанёт первым,
-    // он сгенерит свой random key и разломает alpha.2 БД, зашифрованную main app's K1.
-    // Eager call здесь решает race детерминированно.
+    // Phase 3.4.5 — materialize db.key from the main app's Keychain group BEFORE `agent.register()`.
+    // Helpers (LeafAgent/LeafMCP) live in other default Keychain access groups (without the shared
+    // entitlement they can't see the main app's group), so if LeafAgent starts first,
+    // it would generate its own random key and break the alpha.2 DB encrypted with the main app's K1.
+    // The eager call here resolves the race deterministically.
     #if LEAF_PROD
       do {
         _ = try FileKeyStore.fetchOrCreate()
         FileKeyStore.cleanupLegacyKeychainBestEffort()
       } catch {
-        // Не падаем — popover/Settings покажет error через InsightsReader state machine.
+        // Don't crash — popover/Settings will surface the error via the InsightsReader state machine.
         leafAppLogger.error(
           "FileKeyStore.fetchOrCreate failed at init: \(String(describing: error), privacy: .public)"
         )
       }
     #endif
 
-    // Register Derived Insights provider once per app launch. Прямой
-    // import + register здесь возможен т.к. app target гарантированно
-    // получает флаг LEAF_PROD из xcconfig (в отличие от SPM
-    // dependencies, куда флаг не пропагируется).
+    // Register Derived Insights provider once per app launch. A direct
+    // import + register is possible here because the app target is guaranteed
+    // to receive the LEAF_PROD flag from xcconfig (unlike SPM
+    // dependencies, where the flag isn't propagated).
     #if LEAF_PROD
       DerivedInsightsFactory.register { LeafCorePrivate.ProdInsights(database: $0) }
       // Track-10 T2 — subprocess-backed git delta reader for RESUME hero card.
@@ -154,10 +154,10 @@ struct LeafApp: App {
       OnboardingShareTemplateFactory.register(LeafCorePrivate.ProdOnboardingShareTemplate())
     #endif
 
-    // D13 (Phase 3.1) — explicit _state = State(initialValue:) pattern для
-    // ordered initialization @State properties (нужен для post-init register
-    // call ниже). LaunchAgentService init синхронно reads SMAppService.status
-    // → нужна детерминированная сборка inline.
+    // D13 (Phase 3.1) — explicit _state = State(initialValue:) pattern for
+    // ordered initialization of @State properties (needed for the post-init register
+    // call below). LaunchAgentService init synchronously reads SMAppService.status
+    // → deterministic inline construction is required.
     // Ph C migration-guard (D-C4 / R7) — single pre-flight BEFORE the ~25
     // scattered openForWrite callers below. If the DB was written by a newer
     // Leaf build, every opener would throw/degrade-to-nil (and the TeamFeed
@@ -170,9 +170,9 @@ struct LeafApp: App {
     _launchAgent = State(initialValue: agent)
     _updater = State(initialValue: UpdaterController())
 
-    // Track 5 S2 Task 10 — explicit init pair: ActiveWorkspaceStore владеет
-    // active-workspace UD ключом, WorkspaceReader подписывается на неё. Оба
-    // @MainActor — App.init implicitly @MainActor, конструкторы OK.
+    // Track 5 S2 Task 10 — explicit init pair: ActiveWorkspaceStore owns
+    // the active-workspace UD key, WorkspaceReader subscribes to it. Both are
+    // @MainActor — App.init is implicitly @MainActor, so the constructors are OK.
     //
     // Track 5 / S8 / T8 — WorkspaceCascadeDeleter share the same shared
     // SQLCipher DB handle as the Team feed substrate. We open the handle
@@ -250,11 +250,11 @@ struct LeafApp: App {
 
     // Track 5 / S6 T13 — cross-post composition wiring.
     // Track 5 / S8 carry-over (M20) — Slack channel picker production wiring.
-    // ProdSlackChannelsProvider lives в LeafCorePrivate moat (gitignored);
+    // ProdSlackChannelsProvider lives in the LeafCorePrivate moat (gitignored);
     // token resolution closure captures `sharedTeamFeedDB` opened above
     // for the WorkspaceCascadeDeleter and reads the OAuth access_token
     // from the IntegrationRecord on-demand per call — rotation pushed by
-    // SlackTokenRefresher подхватывается без re-construction.
+    // SlackTokenRefresher is picked up without re-construction.
     // Non-LEAF_PROD builds fall back to the empty-list Stub.
     #if LEAF_PROD
       let slackTokenProvider: @Sendable () async throws -> String = { [sharedTeamFeedDB] in
@@ -284,7 +284,7 @@ struct LeafApp: App {
     #endif
 
     // Track 5 / S8 carry-over (M20) — Linear team picker production wiring.
-    // ProdLinearTeamsProvider lives в LeafCorePrivate moat (gitignored);
+    // ProdLinearTeamsProvider lives in the LeafCorePrivate moat (gitignored);
     // same token-provider pattern as ProdSlackChannelsProvider above —
     // captures `sharedTeamFeedDB` and reads `IntegrationRecord(.linear)`
     // accessToken on-demand. Stub fallback for non-LEAF_PROD builds.
@@ -330,7 +330,7 @@ struct LeafApp: App {
       ))
 
     // LinearUsersResolver — fuzzy assignee resolution (T9).
-    // Track 5 / S8 carry-over (M20) — swap Stub к ProdLinearAccessibleUsersClient
+    // Track 5 / S8 carry-over (M20) — swap Stub for ProdLinearAccessibleUsersClient
     // under #if LEAF_PROD. The `linearTokenProvider` closure declared above
     // (inside the LinearTeams #if LEAF_PROD block) is reused here — both
     // call sites pull the same `IntegrationRecord(.linear).accessToken`.
@@ -570,14 +570,14 @@ struct LeafApp: App {
         ))
     }
 
-    // D1 — idempotent register для post-update relaunch restoration.
-    // Sparkle relaunch'ает app после bundle replace + cold launch без update flow:
-    // если уже enabled (status restored launchd) — register() filter "already
-    // registered" в LaunchAgentService предотвращает spurious red error.
+    // D1 — idempotent register for post-update relaunch restoration.
+    // Sparkle relaunches the app after a bundle replace + cold launch without the update flow:
+    // if already enabled (status restored by launchd) — the register() "already
+    // registered" filter in LaunchAgentService prevents a spurious red error.
     // Multi-process choreography: SMAppService.register triggers launchd to
-    // SIGTERM old agent (если другой binary path) и start new agent — existing
-    // SignalHandlers (Agent.swift:131) flush WAL gracefully. См. UpdaterController
-    // doc-comment про D14 deviation от master plan A2 D2.
+    // SIGTERM the old agent (if a different binary path) and start the new agent — existing
+    // SignalHandlers (Agent.swift:131) flush WAL gracefully. See the UpdaterController
+    // doc-comment about the D14 deviation from master plan A2 D2.
     if !agent.isEnabled {
       agent.register()
     }
@@ -680,7 +680,7 @@ struct LeafApp: App {
         }
         .onChange(of: scenePhase) { _, newPhase in
           // Phase 5.5.B — invitee comes back to Leaf after admin sent invite link;
-          // probe clipboard для auto-fetch без manual paste step. Deep-link path
+          // probe the clipboard for auto-fetch without a manual paste step. Deep-link path
           // (`.onOpenURL`) covers click-to-open; this covers Cmd-Tab-from-chat-app.
           guard newPhase == .active else { return }
           if case .inviteURL(let url) = inviteURLHandler.probeClipboard() {
@@ -919,9 +919,9 @@ struct LeafApp: App {
   }
 }
 
-/// `applicationShouldHandleReopen` нужен чтобы клик по Dock-иконке (после
-/// того как юзер закрыл окно) снова открывал главное окно. Без этого SwiftUI
-/// `Window` не реагирует на reopen — менюбар-присутствие "съедает" событие.
+/// `applicationShouldHandleReopen` is needed so that a click on the Dock icon (after
+/// the user has closed the window) reopens the main window. Without it, the SwiftUI
+/// `Window` doesn't react to reopen — the menu-bar presence "swallows" the event.
 ///
 /// Track 5 / S4 — Stage 6 review C1 fix: APNs callbacks added.
 /// AppDelegate keeps weak refs to readers via MainActor-isolated static
@@ -946,7 +946,7 @@ final class LeafAppDelegate: NSObject, NSApplicationDelegate, UNUserNotification
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool
   {
     if !flag {
-      // Найти существующее SwiftUI Window (id="main") по identifier и поднять.
+      // Find the existing SwiftUI Window (id="main") by its identifier and bring it forward.
       for window in sender.windows where window.identifier?.rawValue.contains("main") == true {
         window.makeKeyAndOrderFront(nil)
         sender.activate(ignoringOtherApps: true)
@@ -1172,7 +1172,7 @@ final class LeafAppDelegate: NSObject, NSApplicationDelegate, UNUserNotification
   }
 }
 
-/// View-обёртка чтобы `@Environment(\.openWindow)` резолвился внутри `CommandGroup`.
+/// A view wrapper so that `@Environment(\.openWindow)` resolves inside a `CommandGroup`.
 private struct OpenSettingsCommand: View {
   let windowState: WindowState
   @Environment(\.openWindow) private var openWindow
@@ -1188,8 +1188,8 @@ private struct OpenSettingsCommand: View {
 }
 
 #if DEBUG
-  /// Track 2 / D1 — debug-only ⌘⌥T menu item открывающее TokensPreviewScreen.
-  /// Скрывается из release builds (#if DEBUG), но файлы компилятся для тестов.
+  /// Track 2 / D1 — debug-only ⌘⌥T menu item that opens TokensPreviewScreen.
+  /// Hidden from release builds (#if DEBUG), but the files compile for tests.
   private struct OpenTokensPreviewCommand: View {
     @Environment(\.openWindow) private var openWindow
     var body: some View {

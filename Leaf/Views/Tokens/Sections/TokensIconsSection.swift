@@ -1,8 +1,8 @@
 //
 //  TokensIconsSection.swift
 //  Track 2 / D1 — Inventory of every glyph used across the app, grouped by
-//  semantic purpose. Custom Figma SVG set (template-rendered) для всего, кроме
-//  search / filter — те остаются SF Symbols по design-call'у.
+//  semantic purpose. Custom Figma SVG set (template-rendered) for everything except
+//  search / filter — those stay SF Symbols per the design call.
 //
 
 import SwiftUI

@@ -38,7 +38,7 @@ final class GitHubScopesServiceTests: XCTestCase {
         XCTAssertEqual(missing, ["read:project"])
     }
 
-    /// Granted = supersetОфCore → missing empty.
+    /// Granted = superset of Core → missing empty.
     func testMissingEmptyWhenSuperset() async {
         let granted = GitHubScopesService.requiredCore.union(["unrelated:scope", "extra"])
         let s = GitHubScopesService(grantedOverride: granted)
@@ -71,7 +71,7 @@ final class GitHubScopesServiceTests: XCTestCase {
 
     /// Granted = full requiredCore, no optional → missing empty,
     /// missingOptional contains both optional scopes. Optional gaps must NOT
-    /// surface in `missing()` (they are informational, не blocking).
+    /// surface in `missing()` (they are informational, not blocking).
     func testMissingOptionalSeparatedFromMissing() async {
         let s = GitHubScopesService(grantedOverride: GitHubScopesService.requiredCore)
 

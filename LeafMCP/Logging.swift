@@ -1,16 +1,16 @@
 import Foundation
 
-/// Direct stderr writes — `os.Logger` роутит в unified log, невидим в
-/// Claude Code's MCP debug output. MCP spec (stdio transport): stdout —
-/// только MCP messages, stderr — любое логирование.
+/// Direct stderr writes — `os.Logger` routes to the unified log, invisible in
+/// Claude Code's MCP debug output. MCP spec (stdio transport): stdout — only
+/// MCP messages, stderr — any logging.
 enum MCPLogLevel: String {
     case debug, info, warn, error
 }
 
-/// Namespace'd static методы. `nonisolated` явно, т.к. project default —
-/// MainActor isolation (Swift 6.1 `SWIFT_DEFAULT_ACTOR_ISOLATION=MainActor`),
-/// а мы логируем из `actor StdioTransport` — без nonisolated каждый вызов
-/// требовал бы `await`.
+/// Namespaced static methods. `nonisolated` explicitly, since the project default
+/// is MainActor isolation (Swift 6.1 `SWIFT_DEFAULT_ACTOR_ISOLATION=MainActor`),
+/// but we log from `actor StdioTransport` — without nonisolated every call
+/// would require `await`.
 enum MCPLog {
     nonisolated static func log(_ level: MCPLogLevel, _ message: @autoclosure () -> String) {
         let ts = ISO8601DateFormatter().string(from: Date())

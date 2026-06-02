@@ -3,48 +3,48 @@
 //  LeafCore
 //
 //  Phase 4.10.B — aggregated work session derived from `attention` events
-//  (+ `context` boundary markers) by `SessionFeedMapper`. Покрывает кейс
-//  "что я делал в Xcode за последние 3 часа": одна строка = один непрерывный
-//  блок работы в (bundle, window/url) с длительностью.
+//  (+ `context` boundary markers) by `SessionFeedMapper`. Covers the case
+//  "what was I doing in Xcode over the last 3 hours": one row = one continuous
+//  block of work in (bundle, window/url) with a duration.
 //
-//  Поле `bundleID` хранится сырым; UI резолвит human-readable имя через
-//  `AppNameResolver` на presentation-слое (тот же паттерн что у
-//  `ActivityFeedEntry`). Это держит модель свободной от AppKit.
+//  The `bundleID` field is stored raw; the UI resolves a human-readable name via
+//  `AppNameResolver` at the presentation layer (same pattern as
+//  `ActivityFeedEntry`). This keeps the model free of AppKit.
 //
 
 import Foundation
 
-/// Один блок непрерывной работы в одном (приложении, окне/URL).
+/// One block of continuous work in a single (application, window/URL).
 ///
-/// Identity = id первого attention-события сессии. Это даёт стабильный ключ для
-/// SwiftUI ForEach и простой способ сослаться на raw event для последующих
-/// drill-down'ов (если когда-то понадобится).
+/// Identity = id of the session's first attention event. This gives a stable key for
+/// SwiftUI ForEach and an easy way to reference the raw event for later
+/// drill-downs (should they ever be needed).
 public struct ActivitySession: Identifiable, Sendable, Hashable {
-    /// id первого attention event'а в сессии. Стабильный SwiftUI identity.
+    /// id of the session's first attention event. Stable SwiftUI identity.
     public let id: Int64
 
-    /// Bundle identifier приложения (`com.apple.dt.Xcode`).
+    /// Bundle identifier of the application (`com.apple.dt.Xcode`).
     public let bundleID: String
 
-    /// Категория для colored dot в UI (dev/browse/communication/design/other).
+    /// Category for the colored dot in the UI (dev/browse/communication/design/other).
     public let category: AppCategory
 
-    /// Подзаголовок строки — заголовок focused window или browser URL.
-    /// `nil` когда AX permission не выдан или granularity ceiling = L1.
+    /// Row subtitle — the focused window title or browser URL.
+    /// `nil` when AX permission is not granted or the granularity ceiling = L1.
     public let contextLabel: String?
 
-    /// Начало сессии — timestamp первого attention события.
+    /// Session start — timestamp of the first attention event.
     public let start: Date
 
-    /// Конец сессии. Семантика зависит от того, как сессия закрылась:
-    ///   * закрылась переключением → end = ts следующего event'а (без gap'а).
-    ///   * закрылась idle context → end = ts idle event'а.
-    ///   * закрылась таймаутом (gap > threshold) → end = `lastEventTs + gap`.
-    ///   * trailing (последняя в выборке) → end = `min(lastEventTs + gap, refEnd)`.
+    /// Session end. The semantics depend on how the session was closed:
+    ///   * closed by a switch → end = ts of the next event (no gap).
+    ///   * closed by idle context → end = ts of the idle event.
+    ///   * closed by timeout (gap > threshold) → end = `lastEventTs + gap`.
+    ///   * trailing (last in the selection) → end = `min(lastEventTs + gap, refEnd)`.
     public let end: Date
 
-    /// Сколько raw attention events схлопнулось в эту сессию (poll'ы +
-    /// app-switch'и с одинаковым (bundle, contextLabel)).
+    /// How many raw attention events collapsed into this session (polls +
+    /// app-switches with the same (bundle, contextLabel)).
     public let eventCount: Int
 
     public init(

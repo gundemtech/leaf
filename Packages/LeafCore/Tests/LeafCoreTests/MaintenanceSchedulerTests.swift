@@ -28,7 +28,7 @@ final class MaintenanceSchedulerTests: XCTestCase {
         let base = Date(timeIntervalSince1970: 0)
         let events = (0..<12_000).map { i in
             RawEvent(
-                timestamp: base.addingTimeInterval(TimeInterval(i) * 0.0001),  // все ts < 2ms
+                timestamp: base.addingTimeInterval(TimeInterval(i) * 0.0001),  // all ts < 2ms
                 signalType: .attention,
                 bundleID: "X"
             )
@@ -37,7 +37,7 @@ final class MaintenanceSchedulerTests: XCTestCase {
 
         let scheduler = MaintenanceScheduler(
             database: db,
-            walCheckpointIntervalSec: 999,  // не триггерится в этом тесте
+            walCheckpointIntervalSec: 999,  // not triggered in this test
             retentionSweepIntervalSec: 999,
             retentionDays: 0,               // cutoff == nowMs
             chunkLimit: 5_000,
@@ -46,7 +46,7 @@ final class MaintenanceSchedulerTests: XCTestCase {
 
         await scheduler.performRetentionSweep(nowMs: Int64(Date().timeIntervalSince1970 * 1000))
 
-        // All events must be gone (retentionDays=0 → cutoff == now → всё прошлое удалено).
+        // All events must be gone (retentionDays=0 → cutoff == now → everything in the past is deleted).
         let remaining = try db.eventCount(in: DateInterval(
             start: Date(timeIntervalSince1970: -10),
             end: Date(timeIntervalSince1970: 10_000_000_000)
@@ -129,7 +129,7 @@ final class MaintenanceSchedulerTests: XCTestCase {
             logger: logger
         )
 
-        // performCheckpoint сам глотает ошибку — тест что await завершается без crash.
+        // performCheckpoint swallows the error itself — this tests that the await completes without a crash.
         await scheduler.performCheckpoint()
     }
 
@@ -139,20 +139,20 @@ final class MaintenanceSchedulerTests: XCTestCase {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
         let scheduler = MaintenanceScheduler(
             database: db,
-            walCheckpointIntervalSec: 3_600,       // час — не должен сработать
-            retentionSweepIntervalSec: 3_600,      // час — половина = 30 мин first tick
+            walCheckpointIntervalSec: 3_600,       // one hour — should not fire
+            retentionSweepIntervalSec: 3_600,      // one hour — half = 30 min first tick
             retentionDays: 180,
             chunkLimit: 5_000,
             logger: logger
         )
 
         await scheduler.start()
-        // Even with hour-long intervals, stop() не должен ждать тика —
-        // initial sleep прерывается через Task.cancel().
+        // Even with hour-long intervals, stop() must not wait for a tick —
+        // the initial sleep is interrupted via Task.cancel().
         let startTime = Date()
         await scheduler.stop()
         let elapsed = Date().timeIntervalSince(startTime)
-        XCTAssertLessThan(elapsed, 1.0, "stop() должен возвращать < 1s (sleep cancel-aware)")
+        XCTAssertLessThan(elapsed, 1.0, "stop() must return in < 1s (sleep cancel-aware)")
     }
 
     func testStartStopIsIdempotent() async throws {
@@ -167,9 +167,9 @@ final class MaintenanceSchedulerTests: XCTestCase {
         )
 
         await scheduler.start()
-        await scheduler.start()  // повторный start — no-op, не создаёт второй Task
+        await scheduler.start()  // repeated start — no-op, does not create a second Task
         await scheduler.stop()
-        await scheduler.stop()   // повторный stop — no-op
+        await scheduler.stop()   // repeated stop — no-op
         // No crash → test passes.
     }
 }

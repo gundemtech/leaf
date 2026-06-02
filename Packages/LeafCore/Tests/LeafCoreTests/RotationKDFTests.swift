@@ -1,6 +1,6 @@
 // Phase 5.3.B — RotationKDF protocol surface tests (public).
 // Verify Unimplemented placeholder discipline (mirror InviteKDF 5.2.A pattern).
-// Real HKDF impl tests живут в LeafCorePrivate `ProdRotationKDFTests` (gitignored moat).
+// Real HKDF impl tests live in LeafCorePrivate `ProdRotationKDFTests` (gitignored moat).
 
 import XCTest
 import CryptoKit

@@ -4,7 +4,7 @@
 //  previous Top Apps row with per-session list (window context + duration).
 //  Top 8 sessions sorted by start desc.
 //
-//  Empty state: LeafEmptyState (D1 O7) с SF "clock.arrow.circlepath" instead
+//  Empty state: LeafEmptyState (D1 O7) with SF "clock.arrow.circlepath" instead
 //  of bare text — gives the panel actual mass on a fresh install.
 //
 

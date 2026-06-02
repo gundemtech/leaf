@@ -27,7 +27,7 @@ final class SlackOAuthServiceConnectScopesTests: XCTestCase {
 
     func testRequestedScopeParameterIsCommaSeparated() {
         // Slack's authorize URL uses comma-separated user_scope (NOT space —
-        // в отличие от GitHub Device Flow `scope` param).
+        // unlike the GitHub Device Flow `scope` param).
         let param = SlackOAuthEndpoints.requestedScopeParameter()
         XCTAssertFalse(param.contains(" "))
         XCTAssertTrue(param.contains(","))

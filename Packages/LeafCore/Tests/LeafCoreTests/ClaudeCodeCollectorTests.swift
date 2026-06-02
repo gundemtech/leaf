@@ -1,5 +1,5 @@
-// Phase 2.3 — integration test для tail-read mechanics. Mock parser в этом
-// файле — schema mapping тестируется отдельно в LeafCorePrivateTests/
+// Phase 2.3 — integration test for tail-read mechanics. Mock parser in this
+// file — schema mapping is tested separately in LeafCorePrivateTests/
 // ClaudeCodeJSONLParserTests.swift (moat).
 
 import XCTest
@@ -30,7 +30,7 @@ final class ClaudeCodeCollectorTests: XCTestCase {
     ///   append 2 lines.
     ///   tick 2: only delta (2 events) → events count == 5, offset advanced.
     func testTailReadResumesFromOffset() async throws {
-        // Arrange: project dir + .jsonl с 3 строками.
+        // Arrange: project dir + .jsonl with 3 lines.
         let projectDir = projectsRoot.appendingPathComponent("-Users-x-proj", isDirectory: true)
         try FileManager.default.createDirectory(at: projectDir, withIntermediateDirectories: true)
         let sessionFile = projectDir.appendingPathComponent("session-A.jsonl")
@@ -45,12 +45,12 @@ final class ClaudeCodeCollectorTests: XCTestCase {
             database: writer,
             parser: MockOneEventParser(),
             projectsRoot: projectsRoot,
-            intervalSec: 999,  // не запускаем loop — только performTick напрямую
+            intervalSec: 999,  // don't run the loop — only performTick directly
             backfillWindowDays: 7,
             logger: logger
         )
 
-        // Act 1: первый tick — backfill (mtime в пределах окна) от offset 0.
+        // Act 1: first tick — backfill (mtime within the window) from offset 0.
         let now = Date()
         let result1 = await collector.performTick(now: now)
 
@@ -68,8 +68,8 @@ final class ClaudeCodeCollectorTests: XCTestCase {
             sourceID: sessionFile.resolvingSymlinksInPath().path
         )
         XCTAssertNotNil(offset1)
-        // EOF position == bytes prefix to last \n inclusive — для backfill case
-        // == file size (все строки terminated \n).
+        // EOF position == bytes prefix to last \n inclusive — for the backfill case
+        // == file size (all lines terminated with \n).
         let initialAttrs = try FileManager.default.attributesOfItem(atPath: sessionFile.path)
         let initialSize = (initialAttrs[.size] as? NSNumber)?.int64Value ?? 0
         XCTAssertEqual(offset1?.byteOffset, initialSize, "consumed == EOF")
@@ -83,15 +83,15 @@ final class ClaudeCodeCollectorTests: XCTestCase {
         try handle.write(contentsOf: appendData)
         try handle.close()
 
-        // Slight delay чтобы mtime сдвинулась — APFS даёт ms-precision, обычно
-        // достаточно одного поля file write (atomic file rename меняет mtime).
+        // Slight delay so mtime shifts — APFS gives ms-precision, usually one
+        // file write is enough (an atomic file rename changes mtime).
         try await Task.sleep(nanoseconds: 30_000_000)
 
-        // Act 3: второй tick — только дельта.
+        // Act 3: second tick — delta only.
         let result2 = await collector.performTick(now: Date())
         XCTAssertEqual(result2.filesScanned, 1)
         XCTAssertEqual(result2.eventsWritten, 2, "delta only — 2 new lines")
-        XCTAssertEqual(result2.bootstrappedFiles, 0, "уже не bootstrap")
+        XCTAssertEqual(result2.bootstrappedFiles, 0, "no longer a bootstrap")
 
         let events2 = try writer.events(in: allRange)
         XCTAssertEqual(events2.count, 5, "3 initial + 2 delta")
@@ -106,14 +106,14 @@ final class ClaudeCodeCollectorTests: XCTestCase {
         XCTAssertEqual(offset2?.byteOffset, finalSize, "offset advanced to new EOF")
     }
 
-    /// Bootstrap skip-backward для старых файлов (mtime < now - backfillWindowDays).
-    /// offset = file size, БЕЗ events.
+    /// Bootstrap skip-backward for old files (mtime < now - backfillWindowDays).
+    /// offset = file size, WITHOUT events.
     func testBootstrapSkipsBackwardForOldFiles() async throws {
         let projectDir = projectsRoot.appendingPathComponent("-Users-x-old", isDirectory: true)
         try FileManager.default.createDirectory(at: projectDir, withIntermediateDirectories: true)
         let oldFile = projectDir.appendingPathComponent("ancient.jsonl")
 
-        // Создаём файл и устанавливаем mtime на 30 дней назад.
+        // Create the file and set its mtime to 30 days ago.
         try #"{"type":"user","content":"x"}"#.write(to: oldFile, atomically: true, encoding: .utf8)
         let oldDate = Date().addingTimeInterval(-30 * 86_400)
         try FileManager.default.setAttributes([.modificationDate: oldDate], ofItemAtPath: oldFile.path)
@@ -132,7 +132,7 @@ final class ClaudeCodeCollectorTests: XCTestCase {
         XCTAssertEqual(result.eventsWritten, 0, "old file → skip-backward, no events")
         XCTAssertEqual(result.bootstrappedFiles, 1)
 
-        // Offset upsert'ed на file size — следующий append подхватим.
+        // Offset upsert'ed to file size — we'll pick up the next append.
         let stored = try writer.readOffset(
             collectorID: CollectorID.claudeCodeJSONL,
             sourceID: oldFile.resolvingSymlinksInPath().path
@@ -265,8 +265,8 @@ final class ClaudeCodeCollectorTests: XCTestCase {
 
 // MARK: - Mock parser
 
-/// Возвращает `.events([RawEvent])` size 1 для каждой непустой line. Не парсит
-/// JSON — нужен только для проверки collector mechanics (split / offset / atomic write).
+/// Returns `.events([RawEvent])` of size 1 for each non-empty line. Doesn't parse
+/// JSON — needed only to verify collector mechanics (split / offset / atomic write).
 private struct MockOneEventParser: ClaudeCodeJSONLParsing {
     func parse(line: String, source: String, now: Date) -> ClaudeCodeParseResult {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)

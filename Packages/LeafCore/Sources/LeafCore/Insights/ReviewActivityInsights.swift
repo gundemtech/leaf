@@ -11,23 +11,23 @@ import GRDB
 ///   counts it so downstream is forward-compatible). Phase 4.7.B will return 0
 ///   for this aggregate until C lands.
 ///
-/// Лежит в LeafCore (а не в LeafMCP/Tools/), чтобы быть testable из SPM —
-/// `LeafMCP` это Xcode target и под `swift test` не собирается. Tool struct
-/// `GetReviewActivityTool` в `LeafMCP/Tools/` — пятистрочная обёртка над этим
-/// helper'ом.
+/// Lives in LeafCore (rather than LeafMCP/Tools/) so it is testable from SPM —
+/// `LeafMCP` is an Xcode target and is not built under `swift test`. The tool
+/// struct `GetReviewActivityTool` in `LeafMCP/Tools/` is a five-line wrapper over
+/// this helper.
 ///
-/// ADR-010: helper не парсит bodies / titles / diffs / review-comment text —
-/// все aggregates считаются по `event_kind` + numeric `repo`/`pr_number`
-/// metadata. `linked_linear_id` уже sanitized GitHub collector'ом
-/// (Phase 4.7.A LinearIDExtractor — только matched ID substring,
-/// без surrounding text).
+/// ADR-010: the helper does not parse bodies / titles / diffs / review-comment text —
+/// all aggregates are computed over `event_kind` + numeric `repo`/`pr_number`
+/// metadata. `linked_linear_id` is already sanitized by the GitHub collector
+/// (Phase 4.7.A LinearIDExtractor — only the matched ID substring,
+/// without surrounding text).
 public enum ReviewActivityInsights {
-    /// Period для `reviewActivity(database:period:repo:)`. Mirror к
+    /// Period for `reviewActivity(database:period:repo:)`. Mirrors the
     /// `LeafMCP.TimelinePeriod` raw values (today/yesterday/last_7_days) —
-    /// LeafMCP target живёт под Xcode и тестируется через Insights helper'ы
-    /// в LeafCore (SPM); поэтому enum дублируется здесь, чтобы tool struct
-    /// мог `if let p = ReviewActivityPeriod(rawValue: raw)` без cross-target
-    /// import'а. Tool обёртка mapper'ит `TimelinePeriod` → `ReviewActivityPeriod`
+    /// the LeafMCP target lives under Xcode and is tested through the Insights helpers
+    /// in LeafCore (SPM); hence the enum is duplicated here so the tool struct
+    /// can do `if let p = ReviewActivityPeriod(rawValue: raw)` without a cross-target
+    /// import. The tool wrapper maps `TimelinePeriod` → `ReviewActivityPeriod`
     /// 1:1 (same raw values).
     public enum ReviewActivityPeriod: String, Sendable {
         case today
@@ -56,7 +56,7 @@ public enum ReviewActivityInsights {
     /// given period. Optional `repo` filter narrows aggregation to a single
     /// "owner/name" repo full name.
     ///
-    /// Returns payload готовый к сериализации:
+    /// Returns a payload ready for serialization:
     /// ```
     /// {
     ///   "period": String,                                    // echo of period arg
@@ -75,13 +75,13 @@ public enum ReviewActivityInsights {
     ///   ]
     /// }
     /// ```
-    /// Empty events → counts=0, `by_repo=[]`, `linked_prs=[]` — top-level
-    /// shape сохраняется (mirror к B-16 zero-data discipline).
+    /// Empty events → counts=0, `by_repo=[]`, `linked_prs=[]` — the top-level
+    /// shape is preserved (mirrors the B-16 zero-data discipline).
     ///
-    /// `by_repo` отсортирован по DESC sum(reviews+comments) — top-of-mind
-    /// first для AI-клиента читающего ответ. `linked_prs` deduplicated
-    /// SELECT DISTINCT по (repo, pr_number, linked_linear_id) и отсортирован
-    /// по (repo ASC, pr_number ASC) для детерминизма.
+    /// `by_repo` is sorted by DESC sum(reviews+comments) — top-of-mind
+    /// first for the AI client reading the response. `linked_prs` is deduplicated
+    /// via SELECT DISTINCT on (repo, pr_number, linked_linear_id) and sorted
+    /// by (repo ASC, pr_number ASC) for determinism.
     public static func reviewActivity(
         database: Database,
         period: ReviewActivityPeriod = .today,
@@ -100,7 +100,7 @@ public enum ReviewActivityInsights {
 
         try database.readSQL { rawDB in
             // 1. Top-level counts per event_kind. Single SQL grouped scan —
-            // дешевле трёх отдельных COUNT(*) запросов на one events table scan.
+            // cheaper than three separate COUNT(*) queries on one events table scan.
             let countsSQL = """
                 SELECT json_extract(\(Schema.Events.payloadJSON), '$.event_kind') AS k, COUNT(*) AS c
                 FROM \(Schema.Events.tableName)
@@ -125,7 +125,7 @@ public enum ReviewActivityInsights {
             }
 
             // 2. by_repo aggregation — GROUP BY repo, conditional sums.
-            // SQLite supports `SUM(CASE WHEN ... THEN 1 ELSE 0 END)` для conditional counts.
+            // SQLite supports `SUM(CASE WHEN ... THEN 1 ELSE 0 END)` for conditional counts.
             let byRepoSQL = """
                 SELECT
                   json_extract(\(Schema.Events.payloadJSON), '$.repo') AS repo,
@@ -154,10 +154,10 @@ public enum ReviewActivityInsights {
             }
 
             // 3. linked_prs — distinct (repo, pr_number, linked_linear_id) tuples
-            // на gh_pr_* event'ах с непустым linked_linear_id. Phase 4.7.A `gh_pr_opened`
-            // / `gh_pr_merged` / `gh_pr_closed` / `gh_commit_pushed` могут нести этот field.
-            // Filter: pr_number != "" (gh_commit_pushed без PR context отбрасываем).
-            // Period фильтр сохраняется — same window as review aggregates.
+            // over gh_pr_* events with a non-empty linked_linear_id. Phase 4.7.A `gh_pr_opened`
+            // / `gh_pr_merged` / `gh_pr_closed` / `gh_commit_pushed` may carry this field.
+            // Filter: pr_number != "" (gh_commit_pushed without PR context is dropped).
+            // The period filter is preserved — same window as review aggregates.
             let linkedSQL = """
                 SELECT DISTINCT
                   json_extract(\(Schema.Events.payloadJSON), '$.repo') AS repo,
@@ -178,7 +178,7 @@ public enum ReviewActivityInsights {
             let linkedRows = try GRDB.Row.fetchAll(rawDB, sql: linkedSQL, arguments: StatementArguments(args))
             for row in linkedRows {
                 let r = row["repo"] as? String ?? ""
-                // pr_number stored as String ("42") поверх RawEvent [String:String] payload;
+                // pr_number stored as String ("42") on top of the RawEvent [String:String] payload;
                 // json_extract returns it as TEXT → cast to Int safely.
                 let prNumberRaw = row["pr_number"] as? String ?? ""
                 guard let prNumber = Int(prNumberRaw) else { continue }

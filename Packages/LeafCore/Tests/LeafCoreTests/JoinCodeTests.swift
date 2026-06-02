@@ -350,8 +350,8 @@ final class JoinCodeTests: XCTestCase {
   }
 
   func testFormat_AllNullsCollapseToBareLEAF() {
-    // Antоn's repro: typing 0's only — all 0/1's dropped, no payload chars,
-    // output settles to bare «LEAF» which fails verifyChecksum (length != 19).
+    // Repro: typing 0's only — all 0/1's dropped, no payload chars,
+    // output settles to bare "LEAF" which fails verifyChecksum (length != 19).
     XCTAssertEqual(JoinCode.format("00000000000000000000"), "LEAF")
     XCTAssertFalse(JoinCode.verifyChecksum(JoinCode.format("00000000000000000000")))
   }

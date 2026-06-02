@@ -2,7 +2,7 @@ import Foundation
 import GRDB
 
 /// Track-6 P1 — partial expression index on `events.payload_json.$.agent_id`
-/// для subagent rollup queries. AI-rows only (per `WHERE signal_type
+/// for subagent rollup queries. AI-rows only (per `WHERE signal_type
 /// = 'aiCollaboration'`) — keeps the index narrow even on large events tables.
 ///
 /// Numbering: M028 — renamed from M024 because Track-5/S5/S7 broadcast

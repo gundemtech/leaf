@@ -1,99 +1,99 @@
 import Foundation
 
-/// View-model для popover (и любого другого consumer'а) — агрегированный
-/// результат одного refresh-цикла Derived Insights Engine.
+/// View-model for the popover (and any other consumer) — the aggregated
+/// result of a single refresh cycle of the Derived Insights Engine.
 ///
-/// Phase 2.1 — три метрики (timeInApp + sessions + switchRate). Phase 2.2
-/// расширен trends-полями (deepWorkStreak / peakHour / wow / activeDaysInRow).
-/// Phase 2.3 — `aiRatio`. Trend-поля добавляются с semantic zero defaults
-/// в convenience init'е — не ломает existing test callsite'ы.
+/// Phase 2.1 — three metrics (timeInApp + sessions + switchRate). Phase 2.2
+/// adds trend fields (deepWorkStreak / peakHour / wow / activeDaysInRow).
+/// Phase 2.3 — `aiRatio`. Trend fields are added with semantic zero defaults
+/// in the convenience init — does not break existing test callsites.
 ///
-/// Snapshot consider'ится empty если ВСЕ 7 текущих метрик пусты/zero/nil.
-/// Partial-empty (есть topApps, нет sessions, нет trends) — `.loaded` с
-/// placeholder в соответствующем UI-блоке.
+/// A snapshot is considered empty if ALL 7 current metrics are empty/zero/nil.
+/// Partial-empty (has topApps, no sessions, no trends) — `.loaded` with a
+/// placeholder in the corresponding UI block.
 public struct InsightsSnapshot: Sendable, Hashable {
     public let topApps: [AppTimeEntry]
     public let sessions: [FocusSession]
-    /// Switches per active hour. `0.0` если active hours == 0.
+    /// Switches per active hour. `0.0` if active hours == 0.
     public let switchRate: Double
-    /// Precomputed: count of sessions с `duration >= deepSessionMinSec`.
-    /// Делается на producer-side чтобы UI не таскал threshold.
+    /// Precomputed: count of sessions with `duration >= deepSessionMinSec`.
+    /// Done on the producer side so the UI doesn't have to carry the threshold.
     public let deepSessionsCount: Int
-    /// Phase 2.2 — consecutive days с deep session + cumulative deep time.
-    /// `DeepWorkStreak.empty` == семантический "нет streak'а".
+    /// Phase 2.2 — consecutive days with a deep session + cumulative deep time.
+    /// `DeepWorkStreak.empty` == the semantic "no streak".
     public let deepWorkStreak: DeepWorkStreak
-    /// Phase 2.2 — hour-of-day (0..23) наибольшей attention'а в trailing
-    /// `peakHourWindowDays`. `nil` = данных меньше `peakHourMinActiveDays`.
+    /// Phase 2.2 — hour-of-day (0..23) of peak attention over the trailing
+    /// `peakHourWindowDays`. `nil` = less data than `peakHourMinActiveDays`.
     public let peakProductivityHour: Int?
-    /// Phase 2.2 — signed fractional change attention time (`+0.12` = +12%).
-    /// `nil` = baseline insufficient (prev week empty или `< wowBaselineMinActiveDays`).
+    /// Phase 2.2 — signed fractional change in attention time (`+0.12` = +12%).
+    /// `nil` = baseline insufficient (prev week empty or `< wowBaselineMinActiveDays`).
     public let weekOverWeekDelta: Double?
     /// Phase 2.2 — consecutive active days ending at today/yesterday.
-    /// `0` = сегодня не active и yesterday не active.
+    /// `0` = not active today and not active yesterday.
     public let activeDaysInRow: Int
     /// Phase 2.3 — per-minute bucket union ratio aiCollab/(ai∪attention).
-    /// `0` = либо нет AI events, либо нет ни одной активной минуты в окне.
+    /// `0` = either no AI events, or no active minute at all in the window.
     public let aiRatio: Double
-    /// Phase 2.3 — distinct minutes с AI activity × 60. UI показывает рядом с %.
+    /// Phase 2.3 — distinct minutes with AI activity × 60. UI shows it next to %.
     public let aiActiveSeconds: TimeInterval
-    /// Phase 2.4 — top-N file paths за `period` (recency-ordered, MAX 10).
-    /// Содержит уже granularity-mapped paths (router'ом on write — L4 даёт
-    /// folder-level, L5 — full path). UI показывает basename + tooltip.
+    /// Phase 2.4 — top-N file paths over `period` (recency-ordered, MAX 10).
+    /// Already contains granularity-mapped paths (by the router on write — L4 gives
+    /// folder-level, L5 — full path). UI shows basename + tooltip.
     public let filesTouched: [String]
-    /// Phase 4.2 — distinct Linear issue keys touched за `period`.
+    /// Phase 4.2 — distinct Linear issue keys touched over `period`.
     public let linearIssuesTouched: Int
     /// Phase 4.2 — top-5 projects by issue count, descending.
     public let linearByProject: [ProjectCountEntry]
     /// Phase 4.2 — top-5 statuses by issue count, descending.
     public let linearByStatus: [StatusCountEntry]
-    /// Phase 4.6.A.2 — completion duration distribution для issues, completed
-    /// в `period`. `nil` если samples=0 (никто не закрыт за окно).
+    /// Phase 4.6.A.2 — completion duration distribution for issues completed
+    /// in `period`. `nil` if samples=0 (nothing closed in the window).
     public let linearCompletionDurationStats: LatencyStats?
-    /// Phase 4.3 — total GitHub events за `period` (commits / PRs / issues / reviews).
+    /// Phase 4.3 — total GitHub events over `period` (commits / PRs / issues / reviews).
     public let githubEventsCount: Int
     /// Phase 4.3 — top-5 repos by event count, descending.
     public let githubByRepo: [RepoCountEntry]
     /// Phase 4.3 — top-5 event_kinds by count, descending.
     public let githubByEventKind: [EventKindCountEntry]
-    /// Phase 4.6.A.1 — `gh_pr_merged` cycle time distribution. `nil` если samples=0.
+    /// Phase 4.6.A.1 — `gh_pr_merged` cycle time distribution. `nil` if samples=0.
     public let githubPRCycleStats: LatencyStats?
-    /// Phase 4.6.A.1 — `gh_pr_review_submitted` review delay distribution. `nil` если samples=0.
+    /// Phase 4.6.A.1 — `gh_pr_review_submitted` review delay distribution. `nil` if samples=0.
     public let githubReviewDelayStats: LatencyStats?
-    /// Phase 4.4 — total Slack messages authored за `period` (sum of per-channel counts).
+    /// Phase 4.4 — total Slack messages authored over `period` (sum of per-channel counts).
     public let slackMessagesCount: Int
-    /// Phase 4.4 — total minutes юзер провёл в huddle'е за `period`, walk'ом
-    /// huddle_state_change context events с clipping к границам periodа.
+    /// Phase 4.4 — total minutes the user spent in a huddle over `period`, by walking
+    /// huddle_state_change context events with clipping to the period boundaries.
     public let slackHuddleMinutes: Int
-    /// Phase 4.4 — top-5 channels by message count, descending. DM channels уже
-    /// merged'ы в один "DM" bucket (ADR-010 anonymization).
+    /// Phase 4.4 — top-5 channels by message count, descending. DM channels are already
+    /// merged into a single "DM" bucket (ADR-010 anonymization).
     public let slackByChannel: [SlackActivityBreakdown.ChannelCountEntry]
-    /// Phase 4.6.A.3 — sum реакций на authored messages за `period` (aggregate
-    /// numeric). `0` ↔ нет реакций / Slack не подключён / pre-4.6 events. UI
-    /// conditional на `> 0` для рендера.
+    /// Phase 4.6.A.3 — sum of reactions on authored messages over `period` (aggregate
+    /// numeric). `0` ↔ no reactions / Slack not connected / pre-4.6 events. UI is
+    /// conditional on `> 0` for rendering.
     public let slackReactionsReceived: Int
-    /// Phase 4.6.A.3 — distribution длительностей huddle sessions. `nil` ↔
-    /// samples=0 (не было пар transitions в окне). Отличает "одна 45m" от
-    /// "пять 9m" сессий — current `slackHuddleMinutes` total это растворяет.
+    /// Phase 4.6.A.3 — distribution of huddle session durations. `nil` ↔
+    /// samples=0 (no transition pairs in the window). Distinguishes "one 45m" from
+    /// "five 9m" sessions — the current `slackHuddleMinutes` total dissolves that.
     public let slackHuddleSessionStats: LatencyStats?
-    /// Phase 4.6.C.2 — самое длинное окно в `period` без events из Linear/
-    /// GitHub/Slack. Proxy для "deep async work session" — integration silence,
-    /// не macOS-level idle. `nil` ↔ period degenerate ИЛИ impl не поддерживает.
+    /// Phase 4.6.C.2 — the longest window in `period` with no events from Linear/
+    /// GitHub/Slack. Proxy for a "deep async work session" — integration silence,
+    /// not macOS-level idle. `nil` ↔ degenerate period OR impl does not support it.
     public let longestUninterruptedWindow: UninterruptedWindow?
-    /// Phase 4.6.C.3 — consecutive days с ≥1 closed Linear issue (60-day
-    /// lookback, period-independent). `0` ↔ нет closes ни сегодня, ни вчера.
-    /// UI рендерит "Streak: 🔥 N days" в tooltip при `>= 3`.
+    /// Phase 4.6.C.3 — consecutive days with ≥1 closed Linear issue (60-day
+    /// lookback, period-independent). `0` ↔ no closes today or yesterday.
+    /// UI renders "Streak: 🔥 N days" in a tooltip when `>= 3`.
     public let linearIssueCloseStreak: Int
-    /// Phase 4.6.C.3 — consecutive days с ≥1 GitHub commit pushed
-    /// (60-day lookback, period-independent). `0` ↔ ни сегодня, ни вчера.
+    /// Phase 4.6.C.3 — consecutive days with ≥1 GitHub commit pushed
+    /// (60-day lookback, period-independent). `0` ↔ neither today nor yesterday.
     public let githubCommitStreak: Int
-    /// Phase 4.6.C.3 — consecutive days с ≥1 Slack huddle joined
+    /// Phase 4.6.C.3 — consecutive days with ≥1 Slack huddle joined
     /// (state='in_a_huddle' transition, 60-day lookback, period-independent).
     public let slackHuddleParticipationStreak: Int
-    /// Phase 4.6.B — counts моих status transitions за `period`. `nil` ↔ нет
-    /// transitions в окне / Linear не подключён.
+    /// Phase 4.6.B — counts of my status transitions over `period`. `nil` ↔ no
+    /// transitions in the window / Linear not connected.
     public let linearTransitions: LinearTransitionBreakdown?
     /// Phase 4.6.B — soft follow-through ratio (completed / (completed + started
-    /// + reopened)). `nil` ↔ `completed == 0` (см. LinearActivityBreakdown doc).
+    /// + reopened)). `nil` ↔ `completed == 0` (see LinearActivityBreakdown doc).
     public let linearCompletionRate: Double?
     /// Phase 4.10.A — current cross-provider presence (live state — not period
     /// scoped). Drives the Live Presence widget on Home. `.empty` ↔ no
@@ -293,11 +293,11 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.standupRecap = standupRecap
     }
 
-    /// Convenience init — рассчитывает `deepSessionsCount` по threshold'у.
-    /// Phase 2.2 — trend-поля с default'ами; Phase 2.3 — AI-поля с default'ами;
-    /// Phase 2.4 — `filesTouched` с default `[]`. Phase 4.2 — Linear-поля с defaults.
-    /// Phase 4.3 — GitHub-поля с defaults. Phase 4.4 — Slack-поля с defaults.
-    /// Existing test/UI callsite'ы не ломаются.
+    /// Convenience init — computes `deepSessionsCount` from the threshold.
+    /// Phase 2.2 — trend fields with defaults; Phase 2.3 — AI fields with defaults;
+    /// Phase 2.4 — `filesTouched` with default `[]`. Phase 4.2 — Linear fields with defaults.
+    /// Phase 4.3 — GitHub fields with defaults. Phase 4.4 — Slack fields with defaults.
+    /// Existing test/UI callsites don't break.
     public init(
         topApps: [AppTimeEntry],
         sessions: [FocusSession],
@@ -413,7 +413,7 @@ public struct InsightsSnapshot: Sendable, Hashable {
             && recentSessions.isEmpty
     }
 
-    /// Average session duration. `0` если sessions пуст.
+    /// Average session duration. `0` if sessions is empty.
     public var avgSessionDuration: TimeInterval {
         guard !sessions.isEmpty else { return 0 }
         return sessions.reduce(0.0) { $0 + $1.duration } / Double(sessions.count)

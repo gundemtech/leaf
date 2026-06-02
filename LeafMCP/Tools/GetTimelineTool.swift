@@ -2,8 +2,8 @@ import Foundation
 import LeafCore
 import LeafMCPProtocol
 
-// `TimelinePeriod` extracted в `Tools/Period.swift` (Phase 2.3) — shared с
-// `get_ai_activity` и future tools. Реализация enum'а живёт там.
+// `TimelinePeriod` extracted into `Tools/Period.swift` (Phase 2.3) — shared with
+// `get_ai_activity` and future tools. The enum's implementation lives there.
 
 struct GetTimelineTool: ToolExecutor {
     let dbURL: URL

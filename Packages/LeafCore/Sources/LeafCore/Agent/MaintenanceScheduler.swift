@@ -1,24 +1,24 @@
 import Foundation
 import os
 
-/// Периодические hygiene-операции: WAL checkpoint + retention sweep.
+/// Periodic hygiene operations: WAL checkpoint + retention sweep.
 ///
-/// Живёт в LeafCore (не в LeafAgent binary), чтобы тестироваться через `LeafCoreTests`
-/// без отдельного Xcode test target. В Agent.main() инстанциируется один раз
-/// и стартует рядом с EventWriter.
+/// Lives in LeafCore (not the LeafAgent binary) so it can be tested via `LeafCoreTests`
+/// without a separate Xcode test target. In Agent.main() it is instantiated once
+/// and started alongside EventWriter.
 ///
-/// Два независимых loop'а:
-/// - WAL checkpoint раз в `walCheckpointIntervalSec` (первый тик — через полный интервал).
-/// - Retention sweep раз в `retentionSweepIntervalSec` (первый тик — через половину,
-///   чтобы cleanup случился за одну сессию, а не через полный interval offline).
+/// Two independent loops:
+/// - WAL checkpoint once per `walCheckpointIntervalSec` (first tick after a full interval).
+/// - Retention sweep once per `retentionSweepIntervalSec` (first tick after half,
+///   so cleanup happens within a single session rather than after a full interval offline).
 ///
-/// Chunked DELETE: sweep вызывает `Database.deleteEventsOlderThan(tsMs:limit:)` в
-/// цикле пока возвращается `chunkLimit`. Между чанками — `Task.sleep(200ms)` yield,
-/// чтобы writer из EventWriter успевал flush батчей.
+/// Chunked DELETE: the sweep calls `Database.deleteEventsOlderThan(tsMs:limit:)` in a
+/// loop while it keeps returning `chunkLimit`. Between chunks — a `Task.sleep(200ms)` yield,
+/// so the EventWriter's writer can keep flushing batches.
 ///
-/// Shutdown: `stop()` cancel'ит оба Task'а и `await task.value` — ждёт завершения
-/// in-flight итерации. Без этого `Task.cancel()` **не** прерывает `pool.write { ... }`
-/// (GRDB не cancellation-aware), и launchd SIGKILL'ит через 20с.
+/// Shutdown: `stop()` cancels both Tasks and `await task.value` — waits for the
+/// in-flight iteration to finish. Without this `Task.cancel()` does **not** interrupt `pool.write { ... }`
+/// (GRDB is not cancellation-aware), and launchd SIGKILLs after 20s.
 public actor MaintenanceScheduler {
     private let database: Database
     private let walCheckpointIntervalSec: TimeInterval
@@ -101,7 +101,7 @@ public actor MaintenanceScheduler {
         // (no chunking — rows are tiny, ~1440/day worst case = 4.3k rows over
         // default 3-day retention; bounded scan).
         // Intentionally runs even if events loop exited via cancellation —
-        // bounded + fast, and ensures retention doesn't drift между restarts.
+        // bounded + fast, and ensures retention doesn't drift between restarts.
         do {
             try database.purgeIntensityAggregates(before: cutoff)
         } catch {

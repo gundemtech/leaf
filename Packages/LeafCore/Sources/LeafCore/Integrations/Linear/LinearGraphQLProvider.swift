@@ -2,18 +2,18 @@
 //  LinearGraphQLProvider.swift
 //  LeafCore
 //
-//  Phase 4.2 — protocol для GraphQL polling Linear (issues filter updatedAt).
-//  Prod implementation (paginated + retry + complexity budget) живёт в
-//  LeafCorePrivate (moat). Public Stub возвращает empty result —
-//  CI builds компилируются, runtime no-op.
+//  Phase 4.2 — protocol for GraphQL polling Linear (issues filter updatedAt).
+//  Prod implementation (paginated + retry + complexity budget) lives in
+//  LeafCorePrivate (moat). Public Stub returns an empty result —
+//  CI builds compile, runtime no-op.
 //
 
 import Foundation
 
 public protocol LinearGraphQLProvider: Sendable {
-    /// `since` — epoch ms cursor (newest processed `updatedAt` от прошлого tick'а).
-    /// `nil` = bootstrap: provider решает window сам (default 7d backwards).
-    /// Возвращает batch + cursor; throws на network/parsing failures.
+    /// `since` — epoch ms cursor (newest processed `updatedAt` from the previous tick).
+    /// `nil` = bootstrap: provider decides the window itself (default 7d backwards).
+    /// Returns batch + cursor; throws on network/parsing failures.
     func fetchIssues(accessToken: String, since: Int64?) async throws -> LinearIssueBatch
     /// Phase Track-3 D1 — warm tier (15m) state sweep: notifications + cycles
     /// + subscribed issues. Single GraphQL call combining 3 top-level fields.
@@ -25,17 +25,17 @@ public protocol LinearGraphQLProvider: Sendable {
     func fetchColdState(accessToken: String) async throws -> LinearColdBatch
 }
 
-/// Результат одного GraphQL fetch'а. `cursorMs` — `max(updatedAt)` across `issues`,
-/// или `nil` если batch пуст (cursor не двигается, retry на следующем tick).
-/// Phase 4.6.B — additive `transitions` поле: my status transitions из nested
-/// IssueHistory fragment, после client-side filter (Linear API не поддерживает
-/// `actor.isMe` filter на history connection).
+/// Result of a single GraphQL fetch. `cursorMs` — `max(updatedAt)` across `issues`,
+/// or `nil` if the batch is empty (cursor does not advance, retry on the next tick).
+/// Phase 4.6.B — additive `transitions` field: my status transitions from the nested
+/// IssueHistory fragment, after client-side filter (the Linear API does not support
+/// an `actor.isMe` filter on the history connection).
 /// Phase 4.7.B — additive `workload` field: viewer's currently-`started` assigned
-/// issues snapshot. Single page (≤50 issues per user типично), single HTTP call —
-/// piggy-back на existing `fetchIssues` query через `viewer.assignedIssues` root field.
+/// issues snapshot. Single page (≤50 issues per user typically), single HTTP call —
+/// piggy-back on the existing `fetchIssues` query via the `viewer.assignedIssues` root field.
 /// Phase 4.7.B (B-7) — additive `cycles` field: viewer's teams current active cycle
 /// progress. Up to 5 teams (cap per design budget), single HTTP call — piggy-back
-/// на existing `fetchIssues` query через `viewer.teams.activeCycle` block.
+/// on the existing `fetchIssues` query via the `viewer.teams.activeCycle` block.
 public struct LinearIssueBatch: Sendable, Hashable {
     public let issues: [LinearIssueSnapshot]
     public let cursorMs: Int64?
@@ -43,23 +43,23 @@ public struct LinearIssueBatch: Sendable, Hashable {
     public let workload: LinearAssignedWorkloadSnapshot
     public let cycles: LinearCycleSnapshot
     /// Phase 4.7.C — additive transition flavors (priority/labels/assignee/cycle/estimate).
-    /// Все piggy-back на той же `Issue.history` connection — никаких extra HTTP calls.
-    /// Каждый array — independent: один history entry может породить 0+ snap'ов разных
-    /// flavors (priority change + label add + assignee bucket в одной mutation).
+    /// All piggy-back on the same `Issue.history` connection — no extra HTTP calls.
+    /// Each array is independent: one history entry may produce 0+ snaps of different
+    /// flavors (priority change + label add + assignee bucket in one mutation).
     public let priorityTransitions: [LinearPriorityTransitionSnapshot]
     public let labelTransitions: [LinearLabelTransitionSnapshot]
     public let assigneeTransitions: [LinearAssigneeTransitionSnapshot]
     public let cycleTransitions: [LinearCycleTransitionSnapshot]
     public let estimateTransitions: [LinearEstimateTransitionSnapshot]
     /// Phase 4.7.C — ProjectUpdate authored snaps (separate top-level Linear type,
-    /// piggy-back fragment в той же query). Empty если provider degrade'нулся
-    /// или у юзера нет updates в окне.
+    /// piggy-back fragment in the same query). Empty if the provider degraded
+    /// or the user has no updates in the window.
     public let projectUpdates: [LinearProjectUpdateSnapshot]
-    /// Phase 4.7.C — Linear Document snaps (skeleton). Empty при отсутствии
-    /// feature support или нулевой activity юзера.
+    /// Phase 4.7.C — Linear Document snaps (skeleton). Empty when there is no
+    /// feature support or the user has zero activity.
     public let documents: [LinearDocumentSnapshot]
-    /// Phase 4.7.C — Initiatives membership snapshot (skeleton). Empty при
-    /// отсутствии feature support / на legacy plans.
+    /// Phase 4.7.C — Initiatives membership snapshot (skeleton). Empty when there is
+    /// no feature support / on legacy plans.
     public let initiatives: [LinearInitiativeSnapshot]
     /// Phase Track-3 D1 — hot piggy-back additions. Each array is additive on
     /// existing `fetchIssues` GraphQL query (no extra HTTP calls). Defaults are
@@ -123,26 +123,26 @@ public struct LinearIssueBatch: Sendable, Hashable {
     )
 }
 
-/// Phase 4.7.B — snapshot моих assigned `started` issues (current workload pulse).
-/// Substrate под Phase 5 broadcast (presence_state.linear) и MCP `get_workload_pulse`.
-/// Источник: `viewer.assignedIssues(filter: { state: { type: { in: [started] } } })`,
+/// Phase 4.7.B — snapshot of my assigned `started` issues (current workload pulse).
+/// Substrate for the Phase 5 broadcast (presence_state.linear) and MCP `get_workload_pulse`.
+/// Source: `viewer.assignedIssues(filter: { state: { type: { in: [started] } } })`,
 /// single page first:50.
 ///
-/// ADR-010 — title / description / body НЕ запрашиваются. Public-safe metadata only:
+/// ADR-010 — title / description / body are NOT requested. Public-safe metadata only:
 /// counts, priority enum (Linear's int), identifier (self-authored label), updatedAt.
 public struct LinearAssignedWorkloadSnapshot: Sendable, Hashable {
-    /// Сколько issues с `state.type == "started"` assigned на меня прямо сейчас.
-    /// 0 если у меня ничего in-flight.
+    /// How many issues with `state.type == "started"` are assigned to me right now.
+    /// 0 if I have nothing in-flight.
     public let startedCount: Int
-    /// Linear priority enum: 1=urgent, 2=high, 3=normal, 4=low. `nil` если:
-    /// (а) startedCount == 0, (б) все issues с priority == 0 ("no priority" в Linear).
-    /// Минимум по issues — самый срочный приоритет в текущей нагрузке.
+    /// Linear priority enum: 1=urgent, 2=high, 3=normal, 4=low. `nil` if:
+    /// (a) startedCount == 0, (b) all issues have priority == 0 ("no priority" in Linear).
+    /// Minimum across issues — the most urgent priority in the current workload.
     public let topPriority: Int?
-    /// Identifier (e.g. "LEA-123") issue с самым свежим `updatedAt` в started bucket.
-    /// `nil` если startedCount == 0.
+    /// Identifier (e.g. "LEA-123") of the issue with the most recent `updatedAt` in the started bucket.
+    /// `nil` if startedCount == 0.
     public let lastTouchedIdentifier: String?
-    /// Epoch ms того самого most-recent `updatedAt`.
-    /// `nil` если startedCount == 0.
+    /// Epoch ms of that same most-recent `updatedAt`.
+    /// `nil` if startedCount == 0.
     public let lastTouchedTs: Int64?
 
     public init(
@@ -166,11 +166,11 @@ public struct LinearAssignedWorkloadSnapshot: Sendable, Hashable {
 }
 
 /// Phase 4.7.B (B-7) — per-team current active cycle progress snapshot.
-/// Один из ≤5 teams юзера (`viewer.teams(first: 5).nodes[].activeCycle`).
+/// One of the user's ≤5 teams (`viewer.teams(first: 5).nodes[].activeCycle`).
 /// Source: `viewer.teams.activeCycle.{scopeHistory, completedScopeHistory, progress}`.
 ///
-/// ADR-010 — cycle.description / cycle goals / любой long-form text НЕ запрашиваются
-/// и НЕ парсятся. Только public-safe metadata: cycle id (internal), self-authored
+/// ADR-010 — cycle.description / cycle goals / any long-form text are NOT requested
+/// and NOT parsed. Only public-safe metadata: cycle id (internal), self-authored
 /// cycle name (e.g. "Sprint 42"), scope counts, days remaining, completed pct.
 public struct LinearTeamCycleSnapshot: Sendable, Hashable {
     /// Linear's internal team UUID. Public-safe metadata (not PII).
@@ -188,9 +188,9 @@ public struct LinearTeamCycleSnapshot: Sendable, Hashable {
     /// 0-100. Derived from `completedScopeHistory.last / scopeHistory.last * 100`,
     /// fallback to `progress * 100` if histories missing/empty.
     public let completedPct: Double
-    /// `(endsAtMs - nowMs) / 86_400_000` floored, clamped к 0 если cycle уже завершён.
+    /// `(endsAtMs - nowMs) / 86_400_000` floored, clamped to 0 if the cycle has already ended.
     public let daysRemaining: Int
-    /// Total scope (`scopeHistory.last` rounded к Int). 0 если scope history пуст.
+    /// Total scope (`scopeHistory.last` rounded to Int). 0 if scope history is empty.
     public let scopeCount: Int
 
     public init(
@@ -216,14 +216,14 @@ public struct LinearTeamCycleSnapshot: Sendable, Hashable {
     }
 }
 
-/// Phase 4.7.B (B-7) — aggregate snapshot всех teams юзера с активным cycle'ом.
-/// Teams без `activeCycle` (Linear возвращает null) skip'аются — `teams` array
-/// содержит только teams где cycle in-flight. Empty `teams` = nothing in-flight,
-/// downstream LinearCollector ничего не emit'ит (никаких cycle events).
+/// Phase 4.7.B (B-7) — aggregate snapshot of all the user's teams with an active cycle.
+/// Teams without an `activeCycle` (Linear returns null) are skipped — the `teams` array
+/// contains only teams where a cycle is in-flight. Empty `teams` = nothing in-flight,
+/// downstream LinearCollector emits nothing (no cycle events).
 public struct LinearCycleSnapshot: Sendable, Hashable {
-    /// Per-team снимок active cycle. Up to 5 entries (provider cap).
+    /// Per-team snapshot of the active cycle. Up to 5 entries (provider cap).
     public let teams: [LinearTeamCycleSnapshot]
-    /// Snapshot capture timestamp (epoch ms). 0 если snapshot пуст (`.empty`).
+    /// Snapshot capture timestamp (epoch ms). 0 if the snapshot is empty (`.empty`).
     public let observedAtMs: Int64
 
     public init(teams: [LinearTeamCycleSnapshot], observedAtMs: Int64) {
@@ -248,53 +248,53 @@ public struct LinearCommentBody: Codable, Sendable, Hashable {
     }
 }
 
-/// Один issue в batch'е — public-safe metadata (whitepaper Section 6 Action signal).
+/// One issue in the batch — public-safe metadata (whitepaper Section 6 Action signal).
 /// Track-1 D1: description + comment bodies + attachment metadata added (on-device only).
 public struct LinearIssueSnapshot: Sendable, Hashable {
     /// e.g. "LEA-123" — self-authored label, public-safe.
     public let issueKey: String
-    /// Self-authored, OK по Section 6.
+    /// Self-authored, OK per Section 6.
     public let title: String
     /// Workflow state name, e.g. "In Progress".
     public let status: String
-    /// Project name; "" если issue не в project.
+    /// Project name; "" if the issue is not in a project.
     public let project: String
     /// Team key, e.g. "LEA".
     public let teamKey: String
-    /// Epoch ms — становится cursor для следующего polling tick'а.
+    /// Epoch ms — becomes the cursor for the next polling tick.
     public let updatedAtMs: Int64
-    /// Phase 4.6.A.2 — `completedAt - startedAt` в секундах для issues, completed
-    /// в polling window (provider dedup'ит чтобы не пересчитывать sample при
-    /// post-completion активности). `nil` если: (а) issue не completed,
-    /// (б) startedAt отсутствует, (в) completedAt раньше polling cursor'а.
-    /// Clock skew clamped к 0.
+    /// Phase 4.6.A.2 — `completedAt - startedAt` in seconds for issues completed
+    /// within the polling window (the provider dedups so the sample is not recounted on
+    /// post-completion activity). `nil` if: (a) the issue is not completed,
+    /// (b) startedAt is missing, (c) completedAt is earlier than the polling cursor.
+    /// Clock skew clamped to 0.
     public let completionSeconds: Int?
-    /// Phase 4.7.A — count моих comment'ов в этом issue, приходящихся на tick window
-    /// (`createdAt > effectiveSince`, filter actor по `user.id == viewer.id`,
-    /// applied client-side в parser'е). 0 если не было моих comments.
-    /// ADR-010: bodies НЕ запрашиваются — только id + createdAt + user.id для filter.
+    /// Phase 4.7.A — count of my comments on this issue that fall within the tick window
+    /// (`createdAt > effectiveSince`, actor filtered by `user.id == viewer.id`,
+    /// applied client-side in the parser). 0 if there were no comments of mine.
+    /// ADR-010: bodies are NOT requested — only id + createdAt + user.id for the filter.
     public let commentCountInWindow: Int
     /// Track-9 T2 — discriminator counterpart to `commentCountInWindow`: count comments
     /// authored BY OTHERS (`comment.user.id != viewer.id`) on this viewer-touched issue
-    /// within the polling window. Substrate seed для `linear_comment_authored_to_me`
-    /// sibling event_kind. 0 если не было comments-to-me. ADR-010: same allowlist —
-    /// только id + createdAt + user.id для filter, bodies не trip'нут provider.
+    /// within the polling window. Substrate seed for the `linear_comment_authored_to_me`
+    /// sibling event_kind. 0 if there were no comments-to-me. ADR-010: same allowlist —
+    /// only id + createdAt + user.id for the filter, bodies won't trip the provider.
     public let incomingCommentCount: Int
-    /// Phase 4.7.B (B-8) — counts of GitHub PR attachments на этом issue, derived
-    /// из `Issue.attachments(first: 10)` block'а парсером URL'ов. 0 если ни один
-    /// attachment не matched GitHub PR pattern (или вообще не attached).
+    /// Phase 4.7.B (B-8) — counts of GitHub PR attachments on this issue, derived
+    /// from the `Issue.attachments(first: 10)` block by the URL parser. 0 if no
+    /// attachment matched the GitHub PR pattern (or nothing was attached at all).
     public let linkedGitHubPRCount: Int
-    /// Phase 4.7.B (B-8) — most-frequent `<owner>/<repo>` среди GitHub PR attachments
-    /// на этом issue. `nil` если linkedGitHubPRCount==0. Tie-break — lex-smallest
-    /// repo при равных counts (deterministic across test fixtures + production).
+    /// Phase 4.7.B (B-8) — most-frequent `<owner>/<repo>` among the GitHub PR attachments
+    /// on this issue. `nil` if linkedGitHubPRCount==0. Tie-break — lex-smallest
+    /// repo on equal counts (deterministic across test fixtures + production).
     public let linkedGitHubTopRepo: String?
     /// Phase 4.7.B (B-8) — counts Slack permalink attachments (matched
     /// `https://<workspace>.slack.com/archives/<channel>/p<ts>` pattern).
-    /// 0 если ни один attachment не matched. ADR-010: только URL structure парсится,
-    /// message text / preview не запрашиваются.
+    /// 0 if no attachment matched. ADR-010: only the URL structure is parsed,
+    /// message text / preview are not requested.
     public let linkedSlackMessageCount: Int
-    /// Phase 4.7.B (B-8) — total count attachments на issue (всех типов: GitHub /
-    /// Slack / другие external links). 0 если attachments пусты.
+    /// Phase 4.7.B (B-8) — total count of attachments on the issue (of all kinds: GitHub /
+    /// Slack / other external links). 0 if attachments are empty.
     /// (`linkedGitHubPRCount + linkedSlackMessageCount + other`).
     public let linkedAttachmentCount: Int
     /// Phase Track-1 D1 — issue.description body (markdown). nil if Linear returned null.
@@ -351,21 +351,21 @@ public struct LinearIssueSnapshot: Sendable, Hashable {
     }
 }
 
-/// Phase 4.6.B — мой status transition в Linear (my-actor filter применён
-/// client-side в провайдере, потому что `Issue.history` connection в Linear API
-/// не поддерживает `filter` arg). Public-safe: state names + types + history id.
-/// ADR-010: actor display name / state UUIDs / comment bodies НЕ покидают парсер.
+/// Phase 4.6.B — my status transition in Linear (the my-actor filter is applied
+/// client-side in the provider, because the `Issue.history` connection in the Linear API
+/// does not support a `filter` arg). Public-safe: state names + types + history id.
+/// ADR-010: actor display name / state UUIDs / comment bodies do NOT leave the parser.
 public struct LinearStateTransitionSnapshot: Sendable, Hashable {
-    /// e.g. "LEA-123" — same convention что и LinearIssueSnapshot.
+    /// e.g. "LEA-123" — same convention as LinearIssueSnapshot.
     public let issueKey: String
-    /// Linear's IssueHistory.id — для client-side dedup на retry tick'ах.
-    /// Internal API id, не PII.
+    /// Linear's IssueHistory.id — for client-side dedup on retry ticks.
+    /// Internal API id, not PII.
     public let historyId: String
-    /// Epoch ms — момент transition (history.createdAt).
+    /// Epoch ms — the moment of the transition (history.createdAt).
     public let transitionAtMs: Int64
-    /// nil если from-state отсутствует (e.g. issue creation).
+    /// nil if the from-state is missing (e.g. issue creation).
     public let fromStateName: String?
-    /// nil если from-state отсутствует. Linear's WorkflowState.type enum:
+    /// nil if the from-state is missing. Linear's WorkflowState.type enum:
     /// triage / backlog / unstarted / started / completed / canceled.
     public let fromStateType: String?
     public let toStateName: String
@@ -391,20 +391,20 @@ public struct LinearStateTransitionSnapshot: Sendable, Hashable {
 }
 
 /// Phase 4.7.C — Linear Initiative observation. Membership-style snapshot
-/// (NOT state-change). Emit'ится один-к-одному per initiative per tick;
-/// `observedAtMs` фиксируется как tick timestamp (НЕ initiative.updatedAt) —
-/// каждый tick "наблюдает" текущий список my-related initiatives. Skeleton-
-/// style: viewer.initiatives — newer Linear API; graceful degrade на
+/// (NOT state-change). Emitted one-to-one per initiative per tick;
+/// `observedAtMs` is fixed as the tick timestamp (NOT initiative.updatedAt) —
+/// each tick "observes" the current list of my-related initiatives. Skeleton-
+/// style: viewer.initiatives — newer Linear API; graceful degrade on a
 /// missing/null field.
 /// ADR-010: id + name + status (raw enum string)?; description / goals /
-/// content — никогда (provider их и не запрашивает).
+/// content — never (the provider does not even request them).
 public struct LinearInitiativeSnapshot: Sendable, Hashable {
     public let initiativeId: String
     /// Self-authored initiative name. Public-safe.
     public let name: String
-    /// Linear's status enum raw string; `nil` если status field omitted.
+    /// Linear's status enum raw string; `nil` if the status field is omitted.
     public let status: String?
-    /// Tick timestamp (epoch ms) — момент наблюдения, НЕ initiative.updatedAt.
+    /// Tick timestamp (epoch ms) — the moment of observation, NOT initiative.updatedAt.
     public let observedAtMs: Int64
 
     public init(initiativeId: String, name: String, status: String?, observedAtMs: Int64) {
@@ -417,13 +417,13 @@ public struct LinearInitiativeSnapshot: Sendable, Hashable {
 
 /// Phase 4.7.C — Linear Document snapshot. Document — first-class top-level
 /// type in Linear, similar to wiki page. Skeleton-style: not all workspaces
-/// expose feature → graceful degrade на missing field.
-/// ADR-010: id + updatedAt + project{id,name}? + title (parity с issue.title);
-/// content / preview / body — никогда.
+/// expose feature → graceful degrade on a missing field.
+/// ADR-010: id + updatedAt + project{id,name}? + title (parity with issue.title);
+/// content / preview / body — never.
 public struct LinearDocumentSnapshot: Sendable, Hashable {
     public let documentId: String
     public let updatedAtMs: Int64
-    /// `nil` если document standalone (не привязан к project).
+    /// `nil` if the document is standalone (not tied to a project).
     public let projectId: String?
     public let projectName: String?
     /// Self-authored document title (e.g. "Q4 Roadmap"). Public-safe per Section 6.
@@ -440,9 +440,9 @@ public struct LinearDocumentSnapshot: Sendable, Hashable {
 }
 
 /// Phase 4.7.C — ProjectUpdate snapshot. ProjectUpdate — first-class top-level
-/// type в Linear; piggy-back fragment в основной query через
+/// type in Linear; piggy-back fragment in the main query via
 /// `projectUpdates(filter: { user: { isMe: { eq: true } } })`.
-/// ADR-010: body НЕ запрашивается; health enum (onTrack/atRisk/offTrack) +
+/// ADR-010: body is NOT requested; health enum (onTrack/atRisk/offTrack) +
 /// project.id + project.name (self-authored, public-safe).
 public struct LinearProjectUpdateSnapshot: Sendable, Hashable {
     public let updateId: String
@@ -450,7 +450,7 @@ public struct LinearProjectUpdateSnapshot: Sendable, Hashable {
     public let projectId: String
     public let projectName: String
     /// Linear's health enum raw string ("onTrack" / "atRisk" / "offTrack");
-    /// `nil` если field omitted (project без health tracking).
+    /// `nil` if the field is omitted (project without health tracking).
     public let health: String?
 
     public init(updateId: String, createdAtMs: Int64,
@@ -464,8 +464,8 @@ public struct LinearProjectUpdateSnapshot: Sendable, Hashable {
 }
 
 /// Phase 4.7.C — estimate transition (story points). Optional from/to:
-/// `nil` ↔ unestimated. Linear API stores estimate как Float / Double.
-/// Reject equal (`from == to`) и обе nil.
+/// `nil` ↔ unestimated. Linear API stores estimate as Float / Double.
+/// Reject equal (`from == to`) and both nil.
 public struct LinearEstimateTransitionSnapshot: Sendable, Hashable {
     public let issueKey: String
     public let historyId: String
@@ -488,9 +488,9 @@ public struct LinearEstimateTransitionSnapshot: Sendable, Hashable {
 /// - added (from nil → cycle)
 /// - moved between cycles (different ids)
 /// - removed (cycle → nil)
-/// Reject: `from == to` (defensive, degenerate noop) и обе nil.
+/// Reject: `from == to` (defensive, degenerate noop) and both nil.
 /// ADR-010: cycle.id + cycle.name (self-authored team-level metadata, public-safe);
-/// description / goals НЕ запрашиваются.
+/// description / goals are NOT requested.
 public struct LinearCycleTransitionSnapshot: Sendable, Hashable {
     public let issueKey: String
     public let historyId: String
@@ -516,9 +516,9 @@ public struct LinearCycleTransitionSnapshot: Sendable, Hashable {
 }
 
 /// Phase 4.7.C — assignee transition snapshot. Anonymized self/other bucketing
-/// — raw third-party assignee IDs НЕ хранятся (ADR-010 PII concern). Bucket
-/// захватывает actionable shape (`reassigned_self_to_other` информативно для
-/// user'ского workload sense, без раскрытия coworker identity).
+/// — raw third-party assignee IDs are NOT stored (ADR-010 PII concern). The bucket
+/// captures the actionable shape (`reassigned_self_to_other` is informative for the
+/// user's workload sense, without revealing coworker identity).
 public struct LinearAssigneeTransitionSnapshot: Sendable, Hashable {
     public enum Bucket: String, Sendable, Hashable {
         case assignedToSelf = "assigned_to_self"
@@ -543,10 +543,10 @@ public struct LinearAssigneeTransitionSnapshot: Sendable, Hashable {
     }
 }
 
-/// Phase 4.7.C — label transition. Один history entry с N added + M removed
-/// labels раскладывается в N+M snap'ов (один per label change). Каждый snap
-/// несёт kind discriminator + label.id + label.name. ADR-010: только id + name —
-/// label description / color НЕ запрашиваются провайдером.
+/// Phase 4.7.C — label transition. One history entry with N added + M removed
+/// labels expands into N+M snaps (one per label change). Each snap
+/// carries a kind discriminator + label.id + label.name. ADR-010: only id + name —
+/// label description / color are NOT requested by the provider.
 public struct LinearLabelTransitionSnapshot: Sendable, Hashable {
     public enum Kind: String, Sendable, Hashable {
         case added
@@ -574,8 +574,8 @@ public struct LinearLabelTransitionSnapshot: Sendable, Hashable {
 
 /// Phase 4.7.C — priority transition (Linear int enum: 1=Urgent .. 4=Low; 0=NoPriority).
 /// Mirrors LinearStateTransitionSnapshot: same actor-filter + cursor-guard discipline,
-/// emit'ится один-к-одному per qualifying history entry.
-/// ADR-010: только raw int values + history id + timestamp; никаких display labels.
+/// emitted one-to-one per qualifying history entry.
+/// ADR-010: only raw int values + history id + timestamp; no display labels.
 public struct LinearPriorityTransitionSnapshot: Sendable, Hashable {
     public let issueKey: String
     public let historyId: String
@@ -838,8 +838,8 @@ public struct LinearColdBatch: Sendable, Hashable {
     public static let empty = LinearColdBatch()
 }
 
-/// Stub для CI / dev-без-moat сборок. Никогда не делает HTTP call,
-/// возвращает `.empty` — LinearCollector tick проходит no-op.
+/// Stub for CI / dev-without-moat builds. Never makes an HTTP call,
+/// returns `.empty` — the LinearCollector tick runs as a no-op.
 public struct StubLinearGraphQLProvider: LinearGraphQLProvider, LinearGraphQLProviding {
     public init() {}
     public func fetchIssues(accessToken: String, since: Int64?) async throws -> LinearIssueBatch {
@@ -861,7 +861,7 @@ public struct StubLinearGraphQLProvider: LinearGraphQLProvider, LinearGraphQLPro
 // MARK: - Track 5 / S6 T9 — LinearGraphQLProviding (assignee resolution surface)
 
 /// Phase Track-5 S6 T9 — narrow Sendable surface used by `LinearUsersResolver`
-/// для resolution Leaf member → Linear user UUID.
+/// for resolving Leaf member → Linear user UUID.
 ///
 /// Separate protocol from `LinearGraphQLProvider` because:
 ///  - resolver doesn't need access tokens passed in — caller (composition root)
@@ -873,7 +873,7 @@ public struct StubLinearGraphQLProvider: LinearGraphQLProvider, LinearGraphQLPro
 /// Production impl lives in LeafCorePrivate (`ProdLinearGraphQLProvider`
 /// extension); it executes:
 ///   `query LeafAccessibleUsers { users(first: 250) { nodes { id name displayName } } }`
-/// and maps nodes к `LinearUsersResolver.ResolvedUser`.
+/// and maps nodes to `LinearUsersResolver.ResolvedUser`.
 public protocol LinearGraphQLProviding: Sendable {
     /// Returns viewer's accessible Linear users (~50 typically; Linear API
     /// pages at 250). One HTTP call; caller (resolver) caches with 5min TTL.

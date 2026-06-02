@@ -1,9 +1,9 @@
 import Foundation
 import LeafMCPProtocol
 
-/// Читает newline-delimited JSON-RPC сообщения со stdin, пишет responses
-/// в stdout. Per MCP spec (2025-11-25): stdout MUST contain only valid MCP
-/// messages; logging — только в stderr.
+/// Reads newline-delimited JSON-RPC messages from stdin, writes responses
+/// to stdout. Per MCP spec (2025-11-25): stdout MUST contain only valid MCP
+/// messages; logging — only to stderr.
 actor StdioTransport {
     private let dispatcher: Dispatcher
     private let encoder: JSONEncoder
@@ -12,7 +12,7 @@ actor StdioTransport {
     init(dispatcher: Dispatcher) {
         self.dispatcher = dispatcher
         let e = JSONEncoder()
-        // NOT .prettyPrinted — JSON-RPC message должен быть single-line.
+        // NOT .prettyPrinted — a JSON-RPC message must be single-line.
         e.outputFormatting = [.withoutEscapingSlashes]
         self.encoder = e
         self.decoder = JSONDecoder()
@@ -40,7 +40,7 @@ actor StdioTransport {
             request = try decoder.decode(JSONRPCRequest.self, from: Data(trimmed.utf8))
         } catch {
             // JSON-RPC 2.0: parse error SHOULD include id:null response.
-            // Наш JSONRPCID не моделирует null → MVP пропускаем response.
+            // Our JSONRPCID does not model null → for the MVP we skip the response.
             // Claude Code handles via transport-level retry/timeout.
             MCPLog.error("Parse error: \(error.localizedDescription)")
             return

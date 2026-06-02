@@ -1,12 +1,12 @@
 import Foundation
 
-/// Phase 2.3 — shared период enum для всех LeafMCP tools (`get_timeline`,
-/// `get_ai_activity`, future). Single source of truth для `interval(now:)`
-/// логики, чтобы tool'ы не дрейфовали между собой ("today" определяет
-/// одинаково везде).
+/// Phase 2.3 — shared period enum for all LeafMCP tools (`get_timeline`,
+/// `get_ai_activity`, future). Single source of truth for the `interval(now:)`
+/// logic, so tools don't drift apart ("today" is defined
+/// the same way everywhere).
 ///
-/// Nonisolated т.к. вызывается из `actor StdioTransport` (project default —
-/// MainActor isolation; но Period — value type, безопасно).
+/// Nonisolated because it is called from `actor StdioTransport` (project default —
+/// MainActor isolation; but Period is a value type, so it's safe).
 nonisolated enum TimelinePeriod: String, Codable {
     case today = "today"
     case yesterday = "yesterday"

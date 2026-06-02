@@ -1,33 +1,33 @@
 import Foundation
 
-/// Phase 4.4 — Slack activity для DerivedInsights.slackActivity(period:).
-/// Метаданные only — channel name (с DM-anonymization "DM" bucket'ом),
-/// per-channel message counts (NO bodies), huddle minutes — derived из
-/// context events (state transitions). ADR-010 enforced на стороне
-/// ProdSlackAPIProvider parser'а (bodies discard'ятся до записи в RawEvent).
+/// Phase 4.4 — Slack activity for DerivedInsights.slackActivity(period:).
+/// Metadata only — channel name (with DM-anonymization "DM" bucket),
+/// per-channel message counts (NO bodies), huddle minutes — derived from
+/// context events (state transitions). ADR-010 enforced on the
+/// ProdSlackAPIProvider parser side (bodies are discarded before writing into RawEvent).
 public struct SlackActivityBreakdown: Sendable, Hashable {
-    /// Sum всех `count` значений из action events с
+    /// Sum of all `count` values from action events with
     /// `payload.source='slack' AND event_kind='slack_message_authored_aggregate'`
-    /// в окне periodа.
+    /// within the period window.
     public let messagesCount: Int
-    /// Total minutes юзер провёл в huddle'е в окне periodа. Считается walk'ом
-    /// пар context events `huddle_state_change` (in_a_huddle → default_unset),
-    /// clipped к границам periodа.
+    /// Total minutes the user spent in a huddle within the period window. Computed by walking
+    /// pairs of context events `huddle_state_change` (in_a_huddle → default_unset),
+    /// clipped to the period boundaries.
     public let huddleMinutes: Int
-    /// Top-5 channel bucket'ов по count, descending. DM channels уже
-    /// слиты в один "DM" bucket до записи (ADR-010 anonymization).
+    /// Top-5 channel buckets by count, descending. DM channels are already
+    /// merged into a single "DM" bucket before write (ADR-010 anonymization).
     public let byChannel: [ChannelCountEntry]
-    /// Phase 4.6.A.3 — sum реакций на authored messages за `period` (aggregate
-    /// numeric only). `nil` ↔ нет message events с populated reactions_count
-    /// (старые pre-4.6 events / 0 реакций — индистигвишабл, UI conditional на > 0).
+    /// Phase 4.6.A.3 — sum of reactions on authored messages over `period` (aggregate
+    /// numeric only). `nil` ↔ no message events with a populated reactions_count
+    /// (old pre-4.6 events / 0 reactions — indistinguishable, UI conditional on > 0).
     public let reactionsReceived: Int?
-    /// Phase 4.6.A.3 — distribution длительностей huddle sessions (clipped к
-    /// границам periodа). `nil` ↔ samples=0 (не было пар transitions в окне).
-    /// Отличает "одна 45m huddle" от "пять 9m huddles" (тот же huddleMinutes total).
+    /// Phase 4.6.A.3 — distribution of huddle session durations (clipped to
+    /// the period boundaries). `nil` ↔ samples=0 (no pairs of transitions in the window).
+    /// Distinguishes "one 45m huddle" from "five 9m huddles" (same huddleMinutes total).
     public let huddleSessionStats: LatencyStats?
-    /// Phase 4.6.C.1 — reserved под per-provider WoW в 4.7+. Сейчас всегда nil.
+    /// Phase 4.6.C.1 — reserved for per-provider WoW in 4.7+. Currently always nil.
     public let wowDeltaPct: Double?
-    /// Phase 4.6.C.3 — consecutive days с ≥1 huddle begin-transition
+    /// Phase 4.6.C.3 — consecutive days with ≥1 huddle begin-transition
     /// (event_kind='slack_huddle_state_change' AND state='in_a_huddle'),
     /// ending today/yesterday. 60-day lookback, independent of `period`.
     /// `nil` ↔ streak=0.

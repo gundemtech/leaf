@@ -2,34 +2,34 @@ import Foundation
 
 /// Phase 4.7.A — cross-provider Linear ID extraction. Pure function, no I/O.
 ///
-/// Extracts Linear-shaped issue IDs (e.g. "LEAF-123", "ENG-9999") из произвольного
-/// текста + validates prefix против whitelist (Linear team-keys из integration
-/// record / `viewer.teams { key }`). Применяется в hooks: GitHub commit message,
-/// GitHub PR title (Phase 4.7.A); Slack message text — отложен в Track B
-/// (aggregate semantics conflict; см. plan A-4).
+/// Extracts Linear-shaped issue IDs (e.g. "LEAF-123", "ENG-9999") from arbitrary
+/// text + validates the prefix against a whitelist (Linear team-keys from the integration
+/// record / `viewer.teams { key }`). Used in hooks: GitHub commit message,
+/// GitHub PR title (Phase 4.7.A); Slack message text — deferred to Track B
+/// (aggregate semantics conflict; see plan A-4).
 ///
-/// **ADR-010 invariant:** extractor работает на already-in-memory text; matched
-/// ID (substring) копируется в payload, body-text discard'ится в caller'е до
-/// payload-finalize step. Никогда не персистит body.
+/// **ADR-010 invariant:** the extractor works on already-in-memory text; the matched
+/// ID (substring) is copied into the payload, and the body-text is discarded in the caller before
+/// the payload-finalize step. Never persists the body.
 ///
-/// **Pattern:** `[A-Z][A-Z0-9]{1,4}-\d+` — первая буква обязательно alpha,
-/// 1-4 следующих символов могут быть alphanumeric (Linear позволяет team
-/// keys типа "LEAF" или "TEAM2"). Word boundary anchored. Case-sensitive
-/// (lowercase intentionally rejected — reduces false positives на natural
-/// English с suffix чисел).
+/// **Pattern:** `[A-Z][A-Z0-9]{1,4}-\d+` — the first letter must be alpha,
+/// the next 1-4 characters may be alphanumeric (Linear allows team
+/// keys like "LEAF" or "TEAM2"). Word boundary anchored. Case-sensitive
+/// (lowercase intentionally rejected — reduces false positives on natural
+/// English with number suffixes).
 public enum LinearIDExtractor {
 
-    /// Force-try OK — pattern constant, validated в test suite.
+    /// Force-try OK — pattern constant, validated in the test suite.
     private static let pattern: NSRegularExpression = {
         try! NSRegularExpression(pattern: #"\b([A-Z][A-Z0-9]{1,4})-(\d+)\b"#, options: [])
     }()
 
-    /// Extracts first Linear-ID-shaped match с known prefix. Returns full ID
-    /// (e.g. "LEAF-456") если matched + prefix в whitelist. `nil` иначе.
+    /// Extracts the first Linear-ID-shaped match with a known prefix. Returns the full ID
+    /// (e.g. "LEAF-456") if matched + prefix in the whitelist. `nil` otherwise.
     /// Multiple matches → first one wins (most-recent-context heuristic;
-    /// commit message subject обычно ставит intent впереди).
+    /// a commit message subject usually puts the intent up front).
     /// Empty `knownPrefixes` → returns nil immediately (graceful no-op
-    /// если Linear collector ещё не initialized).
+    /// if the Linear collector is not initialized yet).
     public static func extract(text: String, knownPrefixes: Set<String>) -> String? {
         guard !text.isEmpty, !knownPrefixes.isEmpty else { return nil }
         let range = NSRange(text.startIndex..., in: text)
@@ -73,10 +73,10 @@ public enum LinearIDExtractor {
     }
 }
 
-/// Phase 4.7.A — in-memory TTL cache для Linear team-key prefixes.
-/// Backed by a fetcher closure (refreshed на access if cache stale).
-/// Single-instance per app process; зависит от Linear collector wiring
-/// (Phase 4.7.B / онбординг). До первого refresh'а — empty set, extractor
+/// Phase 4.7.A — in-memory TTL cache for Linear team-key prefixes.
+/// Backed by a fetcher closure (refreshed on access if cache stale).
+/// Single-instance per app process; depends on Linear collector wiring
+/// (Phase 4.7.B / onboarding). Before the first refresh — empty set, extractor
 /// returns nil — graceful no-op.
 public actor LinearIDPrefixCache {
     private let fetcher: @Sendable () async -> Set<String>
@@ -84,10 +84,10 @@ public actor LinearIDPrefixCache {
     private var cached: Set<String>
     private var lastRefreshAt: Date?
 
-    /// `fetcher` — closure возвращающая current team-key set (e.g. wrapping
-    /// Linear `viewer.teams { key }` query). На любую ошибку fetcher должен
-    /// вернуть empty set — cache trust'ает return value.
-    /// `ttl` — сколько cache живёт после refresh; default 1 час.
+    /// `fetcher` — closure returning the current team-key set (e.g. wrapping the
+    /// Linear `viewer.teams { key }` query). On any error the fetcher should
+    /// return an empty set — the cache trusts the return value.
+    /// `ttl` — how long the cache lives after a refresh; default 1 hour.
     public init(
         fetcher: @escaping @Sendable () async -> Set<String>,
         ttl: TimeInterval = 3600
@@ -98,9 +98,9 @@ public actor LinearIDPrefixCache {
         self.lastRefreshAt = nil
     }
 
-    /// Возвращает текущий prefix set. Если cache stale (> ttl с последнего
-    /// refresh) или ещё не initialized — fetches asynchronously, обновляет
-    /// cache, возвращает свежий результат.
+    /// Returns the current prefix set. If the cache is stale (> ttl since the last
+    /// refresh) or not initialized yet — fetches asynchronously, updates the
+    /// cache, returns the fresh result.
     public func currentPrefixes() async -> Set<String> {
         let now = Date()
         if let last = lastRefreshAt, now.timeIntervalSince(last) < ttl {
@@ -112,7 +112,7 @@ public actor LinearIDPrefixCache {
         return fresh
     }
 
-    /// Force-refresh cache (e.g. после Linear reconnect / integration change).
+    /// Force-refresh cache (e.g. after a Linear reconnect / integration change).
     public func invalidate() {
         lastRefreshAt = nil
     }

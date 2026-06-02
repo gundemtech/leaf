@@ -2,31 +2,31 @@ import Foundation
 import GRDB
 import Security
 
-/// Diagnostic helpers для понимания «почему опять не детектит» без поиска.
-/// Surface (Settings → Diagnostics) показывает:
+/// Diagnostic helpers for figuring out "why isn't it detecting again" without digging.
+/// The surface (Settings → Diagnostics) shows:
 ///   - main app CDHash + bundle path + AX trust state
-///   - Agent CDHash + bundle path + AX trust state (через heartbeat file)
+///   - Agent CDHash + bundle path + AX trust state (via heartbeat file)
 ///   - events.sqlite size + total events + last event age + events/min
 ///
-/// Не gated `#if DEBUG` — alpha build шипится с теми же гарантиями,
-/// и юзеру нужна та же видимость в проде.
+/// Not gated by `#if DEBUG` — the alpha build ships with the same guarantees,
+/// and the user needs the same visibility in production.
 public enum DebugDiagnostics {
 
     // MARK: - Code signing identity
 
-    /// CDHash текущего процесса. Hex-encoded, 40 chars (SHA-1) или 64 chars
-    /// (SHA-256) в зависимости от signing identity. Возвращает nil если
-    /// process unsigned (rare на macOS, но допустимо в headless CI).
+    /// CDHash of the current process. Hex-encoded, 40 chars (SHA-1) or 64 chars
+    /// (SHA-256) depending on the signing identity. Returns nil if the
+    /// process is unsigned (rare on macOS, but acceptable in headless CI).
     public static func currentProcessCDHash() -> String? {
         var code: SecCode?
         guard SecCodeCopySelf([], &code) == errSecSuccess, let code else { return nil }
         return cdHash(from: code)
     }
 
-    /// CDHash живого процесса по PID. Возвращает nil если PID не существует
-    /// либо если процесс ad-hoc-signed (CDHash присутствует, но без identity
-    /// reference). Использует `SecCodeCopyGuestWithAttributes` поверх hostess
-    /// kernel — стандартный path для cross-process inspect.
+    /// CDHash of a live process by PID. Returns nil if the PID doesn't exist
+    /// or if the process is ad-hoc-signed (CDHash present, but without an identity
+    /// reference). Uses `SecCodeCopyGuestWithAttributes` over the hostess
+    /// kernel — the standard path for cross-process inspection.
     public static func cdHash(forPID pid: pid_t) -> String? {
         var host: SecCode?
         guard SecCodeCopySelf([], &host) == errSecSuccess, let host else { return nil }
@@ -37,20 +37,20 @@ public enum DebugDiagnostics {
         return cdHash(from: guest)
     }
 
-    /// Bundle path текущего процесса — куда LaunchServices фактически resolve'нул
-    /// executable. Полезно для проверки «работаю ли я из DerivedData или из
-    /// /Applications hijack».
+    /// Bundle path of the current process — where LaunchServices actually resolved
+    /// the executable. Useful for checking "am I running from DerivedData or from
+    /// an /Applications hijack".
     public static func currentProcessBundlePath() -> String {
         Bundle.main.bundleURL.path
     }
 
     // MARK: - launchd / BTM state
 
-    /// Состояние Agent labels в user-domain launchd. Возвращается parse'ом
-    /// `launchctl list` (public API, без sudo). Когда BTM parent disposition
-    /// = disabled (recurring Sequoia bug после sleep/wake/rebuild), agent
-    /// label loaded в launchd но не запущен → `loaded=true, runningPID=nil`.
-    /// Это сигнал для UI показать «Open Login Items» banner.
+    /// State of the Agent labels in user-domain launchd. Obtained by parsing
+    /// `launchctl list` (public API, no sudo). When the BTM parent disposition
+    /// = disabled (recurring Sequoia bug after sleep/wake/rebuild), the agent
+    /// label is loaded in launchd but not running → `loaded=true, runningPID=nil`.
+    /// That's the signal for the UI to show the "Open Login Items" banner.
     public struct AgentLaunchdState: Sendable, Equatable {
         public let loaded: Bool
         public let runningPID: pid_t?
@@ -107,15 +107,15 @@ public enum DebugDiagnostics {
 
     // MARK: - Event capture stats
 
-    /// Размер events.sqlite в байтах. Возвращает 0 если файл отсутствует.
-    /// WAL + SHM tracked отдельно — caller суммирует если хочет total disk.
+    /// Size of events.sqlite in bytes. Returns 0 if the file is absent.
+    /// WAL + SHM are tracked separately — the caller sums them if it wants total disk.
     public static func dbFileSize(at url: URL = DatabasePath.defaultURL()) -> Int64 {
         let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
         return (attrs?[.size] as? NSNumber)?.int64Value ?? 0
     }
 
-    /// Размер `-wal` sidecar. Если ненулевой — Agent активно пишет, просто
-    /// checkpoint ещё не сработал. Это нормально, не bug.
+    /// Size of the `-wal` sidecar. If non-zero — the Agent is actively writing,
+    /// the checkpoint just hasn't fired yet. This is normal, not a bug.
     public static func dbWalSize(at url: URL = DatabasePath.defaultURL()) -> Int64 {
         let wal = url.deletingLastPathComponent()
             .appendingPathComponent(url.lastPathComponent + "-wal")
@@ -123,16 +123,16 @@ public enum DebugDiagnostics {
         return (attrs?[.size] as? NSNumber)?.int64Value ?? 0
     }
 
-    /// Timestamp (ms epoch) самого свежего события в `events` таблице.
-    /// Возвращает nil если таблица пустая.
+    /// Timestamp (ms epoch) of the most recent event in the `events` table.
+    /// Returns nil if the table is empty.
     public static func lastEventAtMs(database: Database) throws -> Int64? {
         try database.pool.read { db in
             try Int64.fetchOne(db, sql: "SELECT MAX(\(Schema.Events.ts)) FROM \(Schema.Events.tableName)")
         }
     }
 
-    /// Кол-во events записанных за последнюю минуту относительно `now`.
-    /// Используется для «healthy capture»-индикатора (≥1 = pipeline жив).
+    /// Number of events written in the last minute relative to `now`.
+    /// Used for the "healthy capture" indicator (≥1 = pipeline alive).
     public static func eventsInLastMinute(database: Database, now: Date = Date()) throws -> Int {
         let cutoffMs = Int64(now.timeIntervalSince1970 * 1000) - 60_000
         return try database.pool.read { db in
@@ -154,12 +154,12 @@ public enum DebugDiagnostics {
 
 // MARK: - Agent heartbeat
 
-/// Cross-process status pipe. Agent раз в N секунд пишет heartbeat файл с
-/// текущим PID, AX trust state, CDHash, и timestamp. Main app читает чтобы
-/// показать в Diagnostics секции (без XPC, без socket connection).
+/// Cross-process status pipe. Every N seconds the Agent writes a heartbeat file
+/// with the current PID, AX trust state, CDHash, and timestamp. The main app reads it
+/// to display in the Diagnostics section (no XPC, no socket connection).
 ///
-/// Если файл older `staleThresholdSec` — Agent считается unresponsive
-/// (либо crashed, либо launchd не respawn'ит).
+/// If the file is older than `staleThresholdSec` — the Agent is considered unresponsive
+/// (either crashed, or launchd isn't respawning it).
 public struct DebugHeartbeat: Codable, Sendable, Hashable {
     public let pid: Int32
     public let axTrusted: Bool
@@ -175,16 +175,16 @@ public struct DebugHeartbeat: Codable, Sendable, Hashable {
         self.tsMs = tsMs
     }
 
-    /// Канонический путь heartbeat файла. Тот же каталог что и events.sqlite —
-    /// permissions/ownership уже user-owned.
+    /// Canonical path of the heartbeat file. Same directory as events.sqlite —
+    /// permissions/ownership are already user-owned.
     public static func defaultURL() -> URL {
         DatabasePath.defaultURL()
             .deletingLastPathComponent()
             .appendingPathComponent("agent-heartbeat.json", isDirectory: false)
     }
 
-    /// Atomic write через temp + rename. Не throw — caller обрабатывает
-    /// graceful (Agent логирует один раз и продолжает работу).
+    /// Atomic write via temp + rename. Does not throw — the caller handles it
+    /// gracefully (the Agent logs once and keeps running).
     public func write(to url: URL = DebugHeartbeat.defaultURL()) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -195,20 +195,20 @@ public struct DebugHeartbeat: Codable, Sendable, Hashable {
         _ = try FileManager.default.replaceItemAt(url, withItemAt: tmp)
     }
 
-    /// Чтение последнего heartbeat. nil если файл отсутствует / corrupted.
+    /// Read the latest heartbeat. nil if the file is absent / corrupted.
     public static func read(from url: URL = DebugHeartbeat.defaultURL()) -> DebugHeartbeat? {
         guard let data = try? Data(contentsOf: url) else { return nil }
         return try? JSONDecoder().decode(DebugHeartbeat.self, from: data)
     }
 
-    /// Возраст heartbeat относительно `now` в секундах. nil если нет heartbeat.
+    /// Age of the heartbeat relative to `now` in seconds. nil if there is no heartbeat.
     public var ageSec: TimeInterval {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         return TimeInterval(nowMs - tsMs) / 1000.0
     }
 
-    /// Heartbeat считается stale (Agent unresponsive) если age > threshold.
-    /// Default 120s — Agent пишет каждые 30s, threshold 4× даёт запас на
+    /// The heartbeat is considered stale (Agent unresponsive) if age > threshold.
+    /// Default 120s — the Agent writes every 30s, a 4× threshold leaves headroom for
     /// system sleep / heavy I/O.
     public func isStale(staleThresholdSec: TimeInterval = 120) -> Bool {
         ageSec > staleThresholdSec

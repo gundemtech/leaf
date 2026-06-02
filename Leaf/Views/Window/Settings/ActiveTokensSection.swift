@@ -17,7 +17,7 @@ struct ActiveTokensSection: View {
   /// Drives `.task(id:)` re-runs on sidebar workspace switch — without this
   /// the section keeps showing the previous workspace's active tokens
   /// until `.onAppear` next fires (cross-workspace leak: dogfooding round
-  /// 6 saw invite «уаыва» from workspace «anton» rendered under «5555»).
+  /// 6 saw invite "uyava" from workspace "acme" rendered under "5555").
   @Environment(ActiveWorkspaceStore.self) private var activeWorkspaceStore
 
   @State private var generateInvitePresented = false

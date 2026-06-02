@@ -2,10 +2,10 @@ import Foundation
 
 /// Phase Track-5 S2 — multi-workspace identity value type (replaces single-org
 /// `Org` model). One Mac device = N workspaces; each has independent teamKey
-/// material. Stored в `workspaces` table (Schema.Workspaces, M019).
+/// material. Stored in the `workspaces` table (Schema.Workspaces, M019).
 ///
-/// `createdByMemberID` — logical FK на `team_members.id`; SQL FOREIGN KEY
-/// не объявляется (mirror Org 5.1.B convention).
+/// `createdByMemberID` — logical FK to `team_members.id`; no SQL FOREIGN KEY
+/// is declared (mirror Org 5.1.B convention).
 ///
 /// `leftAt` IS NULL = active membership. Non-NULL = soft-mark from
 /// `WorkspaceService.markLeft` (OQ-T5-2 resolution — data preserved, UI hides

@@ -1,13 +1,13 @@
 import Foundation
 
-/// JSON-encoded plaintext sealed внутри `RotationBlob` (Phase 5.3.B).
+/// JSON-encoded plaintext sealed inside `RotationBlob` (Phase 5.3.B).
 ///
-/// Wire shape — spec §3.3 (snake_case keys). Single struct с `kind` discriminator
+/// Wire shape — spec §3.3 (snake_case keys). Single struct with a `kind` discriminator
 /// (`.rotation` | `.tombstone`) — keeps blob shape uniform; cross-field invariants
 /// validated post-decrypt by `ProdRotationBlobCodec.decode`.
 ///
 /// `newTeamKeyBase64` carries raw 32B AES-256 team_key as base64 string for
-/// `.rotation`; empty string для `.tombstone`. Caller decodes на boundary.
+/// `.rotation`; empty string for `.tombstone`. Caller decodes at the boundary.
 public struct RotationPlaintext: Sendable, Hashable, Codable {
     public let kind: RotationKind
     public let newTeamKeyBase64: String

@@ -1,9 +1,9 @@
 import Foundation
 import GRDB
 
-/// Registers migration 002 — добавляет таблицу `collector_offsets` для tail-read
-/// collector'ов (Phase 2.3 Claude Code jsonl, Phase 2.4 FSEvents).
-/// Schema namespace в `Schema.CollectorOffsets`. Composite PK (collector_id, source_id).
+/// Registers migration 002 — adds the `collector_offsets` table for tail-read
+/// collectors (Phase 2.3 Claude Code jsonl, Phase 2.4 FSEvents).
+/// Schema namespace in `Schema.CollectorOffsets`. Composite PK (collector_id, source_id).
 public extension DatabaseMigrator {
     mutating func registerMigration002CollectorOffsets() {
         registerMigration("002_collector_offsets") { db in

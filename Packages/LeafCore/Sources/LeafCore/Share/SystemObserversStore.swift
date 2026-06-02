@@ -3,28 +3,28 @@ import Foundation
 import Combine
 #endif
 
-/// Phase Track-4 S3 — master toggle для системных наблюдателей (CGEventTap
+/// Phase Track-4 S3 — master toggle for system observers (CGEventTap
 /// intensity / clipboard / wifi / vpn / audio_route / mic_in_use / display /
 /// screenshot_watcher / downloads_watcher / trash_watcher). UserDefaults-backed,
-/// shared suite `tech.gundem.leaf` (та же, что `LocalAppsStore`).
+/// shared suite `tech.gundem.leaf` (the same one as `LocalAppsStore`).
 ///
-/// Default ON для всех, кроме `intensity` — он гейтит CGEventTap который
-/// требует Input Monitoring TCC, поэтому остаётся explicit opt-in (см.
+/// Default ON for all except `intensity` — it gates the CGEventTap which
+/// requires Input Monitoring TCC, so it stays explicit opt-in (see
 /// `InputMonitoringPermissionStore` + `PermissionsService`).
 public final class SystemObserversStore: ObservableObject, @unchecked Sendable {
     public static let sharedSuiteName = "tech.gundem.leaf"
 
     /// `nonisolated(unsafe)` — UserDefaults thread-safe per Apple docs;
-    /// matches OAuth-suite global-let pattern из Phase 4.2 + S2 LocalAppsStore.
+    /// matches the OAuth-suite global-let pattern from Phase 4.2 + S2 LocalAppsStore.
     public nonisolated(unsafe) static let sharedDefaults: UserDefaults =
         UserDefaults(suiteName: sharedSuiteName) ?? .standard
 
-    /// Observers, которые по умолчанию OFF. CGEventTap intensity единственный —
-    /// он требует Input Monitoring TCC, поэтому остаётся explicit opt-in.
+    /// Observers that are OFF by default. CGEventTap intensity is the only one —
+    /// it requires Input Monitoring TCC, so it stays explicit opt-in.
     public static let defaultsOff: Set<String> = ["intensity"]
 
-    /// 10 observers — single source of truth между Agent.main() wiring,
-    /// Settings UI (SystemObserversSettingsSection) и tests.
+    /// 10 observers — single source of truth across Agent.main() wiring,
+    /// Settings UI (SystemObserversSettingsSection), and tests.
     public static let allObservers: [String] = [
         "intensity",
         "clipboard",

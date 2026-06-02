@@ -1,14 +1,14 @@
 // Phase 4.7.B B-0 — `PresenceStateWriter` UPSERT helper.
-// Single point of write для presence_state; collector ticks выкручивают через
-// него current-state snapshot. Тесты покрывают:
-//   - happy path INSERT/UPDATE по PK provider,
-//   - reader API (read / readAll) с roundtrip словарей,
-//   - delete на disconnect,
-//   - derived_mode null-инвариант (Phase 4.9 starts populating),
-//   - boundary: caller передаёт "body" key — writer его не трогает (ADR-010
-//     enforcement живёт upstream в каждом collector'е),
-//   - атомарность writeEventsOffsetAndPresence: ошибка при сериализации
-//     state не должна оставить partial state (нет events, нет offset, нет
+// Single point of write for presence_state; collector ticks push the
+// current-state snapshot through it. The tests cover:
+//   - happy path INSERT/UPDATE by PK provider,
+//   - reader API (read / readAll) with dictionary roundtrip,
+//   - delete on disconnect,
+//   - derived_mode null invariant (Phase 4.9 starts populating),
+//   - boundary: caller passes a "body" key — the writer leaves it untouched (ADR-010
+//     enforcement lives upstream in each collector),
+//   - atomicity of writeEventsOffsetAndPresence: a failure serializing
+//     state must not leave partial state behind (no events, no offset, no
 //     presence row).
 
 import XCTest
@@ -37,7 +37,7 @@ final class PresenceStateWriterTests: XCTestCase {
 
         let nowMs: Int64 = 1_700_000_000_000
         try db.readSQL { rawDB in
-            // Sanity — пустая таблица.
+            // Sanity — empty table.
             let countBefore = try Int.fetchOne(
                 rawDB,
                 sql: "SELECT count(*) FROM \(Schema.PresenceState.tableName)"
@@ -70,7 +70,7 @@ final class PresenceStateWriterTests: XCTestCase {
             XCTAssertEqual(row[Schema.PresenceState.provider] as String?, "github")
             XCTAssertEqual(row[Schema.PresenceState.updatedAtMs] as Int64?, nowMs)
             XCTAssertNil(row[Schema.PresenceState.derivedMode] as String?)
-            // sortedKeys ⇒ детерминированная raw-форма.
+            // sortedKeys ⇒ deterministic raw form.
             XCTAssertEqual(
                 row[Schema.PresenceState.stateJSON] as String?,
                 #"{"open_prs":3,"status":"online"}"#
@@ -108,7 +108,7 @@ final class PresenceStateWriterTests: XCTestCase {
                 rawDB,
                 sql: "SELECT count(*) FROM \(Schema.PresenceState.tableName)"
             )
-            XCTAssertEqual(count, 1, "PK conflict должен схлопнуть в один row")
+            XCTAssertEqual(count, 1, "PK conflict must collapse into a single row")
 
             let row = try XCTUnwrap(try Row.fetchOne(
                 rawDB,
@@ -152,7 +152,7 @@ final class PresenceStateWriterTests: XCTestCase {
         XCTAssertEqual(unwrapped.state["active_cycle"] as? String, "Cycle 23")
         XCTAssertEqual(unwrapped.state["is_in_focus"] as? Bool, true)
 
-        // Несуществующий provider → nil.
+        // Nonexistent provider → nil.
         let missing = try db.readSQL { rawDB -> (state: [String: Any], derivedMode: String?, updatedAtMs: Int64)? in
             try PresenceStateWriter.read(provider: .slack, in: rawDB)
         }
@@ -220,7 +220,7 @@ final class PresenceStateWriterTests: XCTestCase {
         }
         XCTAssertEqual(all.count, 0)
 
-        // Idempotent — повторный delete не падает.
+        // Idempotent — a repeated delete does not fail.
         try writeInPool(db) { rawDB in
             try PresenceStateWriter.delete(provider: .github, in: rawDB)
         }
@@ -235,7 +235,7 @@ final class PresenceStateWriterTests: XCTestCase {
             try PresenceStateWriter.upsert(
                 provider: .github,
                 state: ["status": "online"],
-                // derivedMode опускаем — defaults to nil; Phase 4.9 начнёт populate.
+                // derivedMode omitted — defaults to nil; Phase 4.9 will start populating it.
                 nowMs: 1_700_000_000_000,
                 in: rawDB
             )
@@ -249,16 +249,16 @@ final class PresenceStateWriterTests: XCTestCase {
 
     // MARK: - ADR-010 boundary
 
-    /// Defensive test: writer не магически вырезает потенциально-чувствительные
-    /// ключи из state dict. Очистка от bodies/titles/PII живёт upstream в
-    /// каждом провайдере (LinearGraphQLProvider / GitHubAPIProvider /
-    /// SlackAPIProvider), здесь мы только убеждаемся, что boundary не
-    /// сдвинулась — иначе test упадёт и заставит обновить контракт.
+    /// Defensive test: the writer does not magically strip potentially-sensitive
+    /// keys from the state dict. Scrubbing of bodies/titles/PII lives upstream in
+    /// each provider (LinearGraphQLProvider / GitHubAPIProvider /
+    /// SlackAPIProvider); here we only confirm that the boundary has not
+    /// shifted — otherwise the test fails and forces a contract update.
     func testStateJSONRedactionRespected() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
-        // Caller "забыл" применить redaction и положил поле "body" — это
-        // ошибка caller'а, но writer её не маскирует.
+        // The caller "forgot" to apply redaction and stored a "body" field — this
+        // is a caller bug, but the writer does not mask it.
         try writeInPool(db) { rawDB in
             try PresenceStateWriter.upsert(
                 provider: .slack,
@@ -273,18 +273,18 @@ final class PresenceStateWriterTests: XCTestCase {
             try PresenceStateWriter.read(provider: .slack, in: rawDB)
         }
         let state = try XCTUnwrap(result).state
-        // "body" сохранён, как был передан — caller responsibility.
+        // "body" is stored exactly as passed — caller responsibility.
         XCTAssertEqual(state["body"] as? String, "PRIVATE_LEAK")
         XCTAssertEqual(state["channel"] as? String, "general")
     }
 
     // MARK: - atomicity
 
-    /// Атомарность `writeEventsOffsetAndPresence`: если presence сериализация
-    /// падает (non-JSON-serializable значение в state), вся транзакция
-    /// откатывается — ни events, ни offset, ни presence row.
-    /// `Date()` через JSONSerialization не сериализуется → throw перед
-    /// любым `db.execute`. Verifies all-or-nothing invariant.
+    /// Atomicity of `writeEventsOffsetAndPresence`: if presence serialization
+    /// fails (a non-JSON-serializable value in state), the entire transaction
+    /// rolls back — no events, no offset, no presence row.
+    /// `Date()` does not serialize through JSONSerialization → it throws before
+    /// any `db.execute`. Verifies all-or-nothing invariant.
     func testWriteEventsOffsetAndPresenceAtomic() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -312,8 +312,8 @@ final class PresenceStateWriterTests: XCTestCase {
             offset: offset,
             presence: (
                 provider: .github,
-                // Date — не JSON-serializable через JSONSerialization →
-                // upsert бросит .jsonEncodingFailed до db.execute.
+                // Date is not JSON-serializable through JSONSerialization →
+                // upsert throws .jsonEncodingFailed before db.execute.
                 state: ["bad": Date()],
                 derivedMode: nil
             ),
@@ -325,18 +325,18 @@ final class PresenceStateWriterTests: XCTestCase {
             }
         }
 
-        // Полный rollback: ни events, ни offset, ни presence row.
+        // Full rollback: no events, no offset, no presence row.
         let allEvents = try db.events(in: DateInterval(
             start: .distantPast,
             end: .distantFuture
         ))
-        XCTAssertTrue(allEvents.isEmpty, "events не должны просочиться при failed presence write")
+        XCTAssertTrue(allEvents.isEmpty, "events must not leak through on a failed presence write")
 
         let storedOffset = try db.readOffset(
             collectorID: CollectorID.githubPolling,
             sourceID: "github:demoffsrmain"
         )
-        XCTAssertNil(storedOffset, "offset не должен advance при failed presence write")
+        XCTAssertNil(storedOffset, "offset must not advance on a failed presence write")
 
         let presenceAll = try db.readSQL { rawDB in
             try PresenceStateWriter.readAll(in: rawDB)
@@ -344,8 +344,8 @@ final class PresenceStateWriterTests: XCTestCase {
         XCTAssertEqual(presenceAll.count, 0)
     }
 
-    /// Happy path для writeEventsOffsetAndPresence — sanity, что combined
-    /// write реально пишет все три сущности атомарно.
+    /// Happy path for writeEventsOffsetAndPresence — sanity check that the combined
+    /// write actually writes all three entities atomically.
     func testWriteEventsOffsetAndPresenceHappyPath() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
@@ -399,9 +399,9 @@ final class PresenceStateWriterTests: XCTestCase {
 
     // MARK: - Helpers
 
-    /// Локальный helper: `Database.readSQL` readonly, поэтому здесь
-    /// используем internal `writeSQL` bridge для прямого вызова
-    /// `PresenceStateWriter.upsert` / `delete` в транзакции.
+    /// Local helper: `Database.readSQL` is read-only, so here we
+    /// use the internal `writeSQL` bridge to call
+    /// `PresenceStateWriter.upsert` / `delete` directly inside a transaction.
     private func writeInPool(_ db: LeafCore.Database, _ block: (GRDB.Database) throws -> Void) throws {
         try db.writeSQL(block)
     }

@@ -4,17 +4,17 @@ import os
 import LeafCore
 
 /// Phase Track-4 S3 — `NEVPNManager.shared()` status observer. Emits
-/// `vpn_state_changed` на transition между stable states. Intermediate states
-/// (.connecting / .disconnecting / .reasserting) ignored — иначе flap при
-/// каждом dial.
+/// `vpn_state_changed` on transition between stable states. Intermediate states
+/// (.connecting / .disconnecting / .reasserting) ignored — otherwise it flaps on
+/// every dial.
 ///
-/// **NEVER** reads serverAddress / passwordReference / любые credential fields
+/// **NEVER** reads serverAddress / passwordReference / any credential fields
 /// (ADR-010 Won't-list — VPN → state only).
 ///
-/// **Limitation:** NEVPNManager.shared() observes только the first
+/// **Limitation:** NEVPNManager.shared() observes only the first
 /// system-configured VPN profile. Third-party VPNs that ship as Network
-/// Extension (Cloudflare WARP, Tailscale, NordVPN tunnel-mode) не surface
-/// here. Documented в OQ-S3-5.
+/// Extension (Cloudflare WARP, Tailscale, NordVPN tunnel-mode) do not surface
+/// here. Documented in OQ-S3-5.
 @MainActor
 final class VPNCollector {
     private let writer: EventWriter

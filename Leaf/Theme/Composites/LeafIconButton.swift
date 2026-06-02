@@ -63,7 +63,7 @@ struct LeafIconButton: View {
     private var iconView: some View {
         // Both render paths use the same baseSize (button.height × 0.45).
         // No SF→asset compensation: visual variance between tightly-packed
-        // SVGs (close/trash) и padded SVGs (sidebar/app-placeholder) is
+        // SVGs (close/trash) and padded SVGs (sidebar/app-placeholder) is
         // a source-of-truth concern handled in Figma, not at render time.
         let baseSize = size.height * 0.45
         switch source {

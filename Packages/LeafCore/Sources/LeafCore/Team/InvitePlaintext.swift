@@ -1,9 +1,9 @@
 import Foundation
 
-/// JSON-encoded plaintext sealed внутри `InviteBlob` (Phase 5.2.B).
+/// JSON-encoded plaintext sealed inside `InviteBlob` (Phase 5.2.B).
 ///
 /// Wire shape — decomposition spec §4.3 (snake_case keys). `teamKeyBase64`
-/// carries raw 32B AES-256 team_key as base64 string (caller decodes на boundary).
+/// carries raw 32B AES-256 team_key as base64 string (caller decodes at the boundary).
 public struct InvitePlaintext: Sendable, Hashable, Codable {
     public let teamKeyBase64: String
     public let teamKeyID: String

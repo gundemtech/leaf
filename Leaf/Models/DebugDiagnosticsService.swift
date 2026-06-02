@@ -2,10 +2,10 @@
 //  DebugDiagnosticsService.swift
 //  fix/dev-launch-reliability
 //
-//  Main app сторона diagnostics: читает heartbeat файл написанный Agent'ом
-//  + опционально открывает events.sqlite read-only для capture stats.
+//  Main-app side of diagnostics: reads the heartbeat file written by the Agent
+//  + optionally opens events.sqlite read-only for capture stats.
 //  Surface — Settings → Diagnostics. Manual refresh (no polling) —
-//  пользователь открывает редко, обновляется по тапу [Refresh].
+//  the user opens it rarely, it refreshes on a [Refresh] tap.
 //
 
 import AppKit
@@ -19,7 +19,7 @@ import LeafCorePrivate
 #endif
 import SwiftUI
 
-/// Снимок состояния процессов + DB на один момент времени.
+/// Snapshot of process + DB state at a single point in time.
 struct DebugDiagnosticsSnapshot: Sendable, Equatable {
     // Main app process state
     let mainBundlePath: String
@@ -43,20 +43,20 @@ struct DebugDiagnosticsSnapshot: Sendable, Equatable {
     // launchd / BTM state
     let agentLaunchd: DebugDiagnostics.AgentLaunchdState
 
-    /// Recurring Sequoia bug: BTM parent disposition сваливается в disabled
-    /// после sleep/wake/rebuild цикла. launchd показывает agent label loaded
-    /// но без running PID. Юзеру надо toggle Login Items OFF→ON чтобы
-    /// re-enable BTM parent.
+    /// Recurring Sequoia bug: the BTM parent disposition drops to disabled
+    /// after a sleep/wake/rebuild cycle. launchd shows the agent label loaded
+    /// but without a running PID. The user has to toggle Login Items OFF→ON to
+    /// re-enable the BTM parent.
     var btmLikelyDisabled: Bool {
         agentLaunchd.loaded && agentLaunchd.runningPID == nil
     }
 
-    /// CDHash mismatch flag — всегда false. Main app и Agent — это два разных
-    /// бинарника с разными bundle IDs (`tech.gundem.leaf` vs `tech.gundem.leaf.agent`).
-    /// У каждого target свой CDHash; сравнивать их между собой некорректно.
-    /// Поле сохранено для UI backward compat; в будущем может расширяться для
-    /// сравнения main app's CDHash против `/Applications/Leaf.app` stale copy
-    /// (та же bundle ID, разные binaries — там mismatch имеет смысл).
+    /// CDHash mismatch flag — always false. The main app and the Agent are two
+    /// different binaries with different bundle IDs (`tech.gundem.leaf` vs `tech.gundem.leaf.agent`).
+    /// Each target has its own CDHash; comparing them against each other is incorrect.
+    /// The field is kept for UI backward compat; in the future it may be extended to
+    /// compare the main app's CDHash against a `/Applications/Leaf.app` stale copy
+    /// (same bundle ID, different binaries — there a mismatch is meaningful).
     var cdHashMismatch: Bool { false }
 }
 
@@ -78,11 +78,11 @@ final class DebugDiagnosticsService {
         self.databaseConfig = databaseConfig
         self.databaseEncryption = databaseEncryption
         self.snapshot = Self.makeEmptySnapshot(at: databaseURL)
-        // Не auto-refresh при init — пользователь сам нажимает [Refresh]
-        // когда открывает секцию. Init дешёвый (UI рендерится сразу).
+        // No auto-refresh on init — the user presses [Refresh] themselves
+        // when they open the section. Init is cheap (the UI renders immediately).
     }
 
-    /// Manual refresh — собирает свежий snapshot.
+    /// Manual refresh — builds a fresh snapshot.
     func refresh() {
         let mainPath = DebugDiagnostics.currentProcessBundlePath()
         let mainHash = DebugDiagnostics.currentProcessCDHash()
@@ -140,15 +140,15 @@ final class DebugDiagnosticsService {
         )
     }
 
-    /// Открыть System Settings → General → Login Items. Использует
-    /// `open` через NSWorkspace (без AppleScript). Доступ к pane
-    /// требует exact extension identifier — `com.apple.LoginItems-Settings.extension`.
+    /// Open System Settings → General → Login Items. Uses
+    /// `open` via NSWorkspace (without AppleScript). Access to the pane
+    /// requires the exact extension identifier — `com.apple.LoginItems-Settings.extension`.
     func openLoginItems() {
         guard let url = URL(string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension") else { return }
         NSWorkspace.shared.open(url)
     }
 
-    /// Reveal a path в Finder (если файл существует).
+    /// Reveal a path in Finder (if the file exists).
     func revealInFinder(_ path: String) {
         let url = URL(fileURLWithPath: path)
         if FileManager.default.fileExists(atPath: path) {
@@ -162,7 +162,7 @@ final class DebugDiagnosticsService {
         }
     }
 
-    /// Сборка plain-text дампа для bug-репорта в clipboard.
+    /// Build a plain-text dump for a bug report into the clipboard.
     func copyToClipboard() {
         let s = snapshot
         var lines: [String] = []
@@ -209,9 +209,9 @@ final class DebugDiagnosticsService {
         NSPasteboard.general.setString(text, forType: .string)
     }
 
-    /// Открыть Console.app с предзаполненной search query (best-effort).
-    /// Console.app не имеет publicly documented x-callback URL для search,
-    /// поэтому просто открываем приложение — юзер сам введёт subsystem.
+    /// Open Console.app with a pre-filled search query (best-effort).
+    /// Console.app has no publicly documented x-callback URL for search,
+    /// so we just open the app — the user enters the subsystem themselves.
     func openConsoleApp() {
         if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Console") {
             NSWorkspace.shared.open(url)

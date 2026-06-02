@@ -1,6 +1,6 @@
 //
 //  TokensPreviewScreen.swift
-//  Track 2 / D1 — Debug-only storybook за ⌘⌥T. Renders all 28 components +
+//  Track 2 / D1 — Debug-only storybook behind ⌘⌥T. Renders all 28 components +
 //  T2 token sections in a scrollable single-window view. Light/Dark/Auto
 //  switcher, reduceMotion override, force-fallback-glass toggle.
 //

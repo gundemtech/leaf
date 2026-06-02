@@ -1,8 +1,8 @@
 import Foundation
 
-/// Phase Track-4 S3 — pure transition detector для audio routing category.
+/// Phase Track-4 S3 — pure transition detector for audio routing category.
 /// Mirror Focus/Meeting state-machine pattern: first observation primes state
-/// без emit'а (avoid re-emitting "transition to builtin" на каждом agent restart);
+/// without emitting (avoid re-emitting "transition to builtin" on every agent restart);
 /// subsequent same-category observations no-emit; category change emits the
 /// new category.
 public struct AudioRouteStateMachine: Sendable, Hashable {

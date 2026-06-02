@@ -20,7 +20,7 @@
 //
 //  Why two init paths:
 //   - `init(grantedOverride:)` — synchronous test injection. Refresh is
-//     a no-op (override is the source of truth, нет DB к чтению).
+//     a no-op (override is the source of truth, no DB to read).
 //   - `init(database:)` — production path. Lazy load on first read so
 //     `Agent.main()` boot ordering does not depend on integrations row
 //     existing yet (user may not have completed OAuth at first launch).
@@ -32,9 +32,9 @@ import os
 private let scopesLogger = Logger(subsystem: "tech.gundem.leaf.core", category: "github-scopes")
 
 public actor GitHubScopesService {
-    /// Scopes без которых ключевые feed/state endpoints деградируют до
-    /// бесполезного состояния. Re-auth banner surface'ит missing core
-    /// сразу как блокер.
+    /// Scopes without which the key feed/state endpoints degrade to
+    /// a useless state. The re-auth banner surfaces missing core
+    /// immediately as a blocker.
     public static let requiredCore: Set<String> = [
         "repo",
         "read:user",
@@ -42,15 +42,15 @@ public actor GitHubScopesService {
         "read:project"
     ]
 
-    /// Scopes которые расширяют покрытие, но MVP без них ship'ится.
-    /// Banner упоминает, но не блокирует.
+    /// Scopes that extend coverage, but the MVP ships without them.
+    /// The banner mentions them, but doesn't block.
     public static let requiredOptional: Set<String> = [
         "security_events",
         "read:audit_log"
     ]
 
     /// Sorted union — Device Flow scope param construction (Task 14).
-    /// Sort нужен для deterministic test asserts.
+    /// The sort is needed for deterministic test asserts.
     public static func requested() -> [String] {
         Array(requiredCore.union(requiredOptional)).sorted()
     }
@@ -62,14 +62,14 @@ public actor GitHubScopesService {
 
     // MARK: - Init
 
-    /// Test injection. `grantedOverride` — the eternal source of truth для
-    /// этого instance; `refresh()` no-op.
+    /// Test injection. `grantedOverride` — the eternal source of truth for
+    /// this instance; `refresh()` no-op.
     public init(grantedOverride: Set<String>) {
         self.database = nil
         self.cached = grantedOverride
     }
 
-    /// Production. Lazy: `integrations.scope` читается на первой query.
+    /// Production. Lazy: `integrations.scope` is read on the first query.
     public init(database: Database) {
         self.database = database
         self.cached = nil
@@ -77,8 +77,8 @@ public actor GitHubScopesService {
 
     // MARK: - Public API
 
-    /// Текущий granted-set. Production path читает из DB при первом обращении
-    /// (после refresh — снова при следующем).
+    /// The current granted-set. The production path reads from the DB on first access
+    /// (after refresh — again on the next one).
     public func currentGranted() -> Set<String> {
         if let cached {
             return cached
@@ -88,23 +88,23 @@ public actor GitHubScopesService {
         return loaded
     }
 
-    /// Scopes из `requiredCore` которых нет в granted. Empty == healthy.
+    /// Scopes from `requiredCore` that are not in granted. Empty == healthy.
     public func missing() -> Set<String> {
         Self.requiredCore.subtracting(currentGranted())
     }
 
-    /// Scopes из `requiredOptional` которых нет в granted. Informational —
-    /// caller (UI) рендерит "Optional features unavailable" но не блокирует.
+    /// Scopes from `requiredOptional` that are not in granted. Informational —
+    /// the caller (UI) renders "Optional features unavailable" but doesn't block.
     public func missingOptional() -> Set<String> {
         Self.requiredOptional.subtracting(currentGranted())
     }
 
-    /// Membership predicate — protocol entry point для warm/cold collectors.
+    /// Membership predicate — protocol entry point for warm/cold collectors.
     public func has(_ scope: String) -> Bool {
         currentGranted().contains(scope)
     }
 
-    /// Сбросить кэш — следующий вызов перечитает `integrations.scope`.
+    /// Reset the cache — the next call re-reads `integrations.scope`.
     /// Override-path no-op (override is the truth).
     public func refresh() {
         guard database != nil else { return }
@@ -113,7 +113,7 @@ public actor GitHubScopesService {
 
     // MARK: - Private
 
-    /// Парсит `integrations.scope` для `github` provider'а.
+    /// Parses `integrations.scope` for the `github` provider.
     /// Disconnect / DB-read failure → empty set (caller treats as
     /// "not granted" → skip gated endpoints, surface re-auth banner).
     private func loadFromDatabase() -> Set<String> {

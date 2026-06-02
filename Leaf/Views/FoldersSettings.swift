@@ -1,7 +1,7 @@
 //
 //  FoldersSettings.swift
-//  Phase 2.4b — Settings tab "Folders" с per-folder L4/L5 toggle, enable/disable,
-//  remove, и "Add folder…" через NSOpenPanel.
+//  Phase 2.4b — Settings tab "Folders" with per-folder L4/L5 toggle, enable/disable,
+//  remove, and "Add folder…" via NSOpenPanel.
 //
 //  Track 2 / D4 — migrated to LeafSection (cta-slot Add) + LeafCard wrapping
 //  ad-hoc folder rows. LeafEmptyState empty; LeafBanner.danger error.
@@ -132,7 +132,7 @@ struct FoldersSettings: View {
     // MARK: - NSOpenPanel
 
     private func addFoldersViaPanel() {
-        // LSUIElement quirk — без activate panel может оказаться "за" другими.
+        // LSUIElement quirk — without activate the panel can end up "behind" other windows.
         NSApp.activate(ignoringOtherApps: true)
 
         let panel = NSOpenPanel()
@@ -146,7 +146,7 @@ struct FoldersSettings: View {
 
         for url in panel.urls {
             // Default granularity L4 — privacy-first per architecture.md.
-            // L5 — explicit per-folder opt-in через Picker после add.
+            // L5 — explicit per-folder opt-in via Picker after add.
             service.add(path: url.path, granularity: .L4)
         }
     }

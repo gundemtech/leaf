@@ -1,12 +1,12 @@
 import Foundation
 
 /// Phase 5.1.B — long-term member identity + X25519 public key (contract §4, §7).
-/// Хранится в `team_members` таблице (Schema.TeamMembers, M007).
+/// Stored in the `team_members` table (Schema.TeamMembers, M007).
 ///
-/// `removedAt` IS NULL = active member. Set при removal (Phase 5.3 flow).
+/// `removedAt` IS NULL = active member. Set on removal (Phase 5.3 flow).
 ///
 /// `pubkeyHex` — X25519 32-byte public, hex-encoded (64 chars). Private
-/// 32 байт никогда не попадают в DB — keystore-файл (5.1.D, contract §7).
+/// 32 bytes never touch the DB — keystore file (5.1.D, contract §7).
 ///
 /// Phase Track-5 S2 — `orgID` renamed → `workspaceID` (M019). Back-compat
 /// `orgID` computed property + init overload were deleted in Task 12 cleanup;

@@ -1,8 +1,8 @@
 import Foundation
 import GRDB
 
-/// Registers migration 001 — создаёт таблицу events и 2 индекса.
-/// Schema structure публична (уже в architecture.md). SQL DDL — не moat.
+/// Registers migration 001 — creates the events table and 2 indexes.
+/// Schema structure is public (already in architecture.md). SQL DDL is not moat.
 public extension DatabaseMigrator {
     mutating func registerMigration001Events() {
         registerMigration("001_events") { db in

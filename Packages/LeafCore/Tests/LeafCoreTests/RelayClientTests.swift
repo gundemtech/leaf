@@ -1,5 +1,5 @@
 // Phase 5.2.D — RelayClient HTTP wire tests.
-// URLProtocol stub harness mirror'ит SlackTokenRefresherTests pattern: file-local
+// URLProtocol stub harness mirrors the SlackTokenRefresherTests pattern: file-local
 // subclass, ephemeral session per call, setUp/tearDown reset static handler.
 
 import XCTest

@@ -1,10 +1,10 @@
 import Foundation
 
-/// 16 функций Derived Insights Engine (см. architecture.md).
-/// Phase 1.1 — сигнатуры + StubInsights что throws .notImplemented.
-/// Phase 1.3 — ProdInsights с реальными SQL (в LeafCorePrivate, gitignored).
+/// The 16 functions of the Derived Insights Engine (see architecture.md).
+/// Phase 1.1 — signatures + StubInsights that throws .notImplemented.
+/// Phase 1.3 — ProdInsights with real SQL (in LeafCorePrivate, gitignored).
 ///
-/// Callsite (Agent/App/MCP) выбирает provider компиляцией:
+/// The callsite (Agent/App/MCP) picks the provider at compile time:
 /// ```swift
 /// import LeafCore
 /// #if LEAF_PROD
@@ -27,27 +27,27 @@ public protocol DerivedInsights: Sendable {
 
     // AI collaboration
     func aiRatio(period: DateInterval) throws -> Double
-    /// Phase 2.3 — детальный AI-collaboration breakdown для MCP / popover.
-    /// `aiRatio` делегирует в `aiActivityBreakdown(period:).ratio`.
+    /// Phase 2.3 — detailed AI-collaboration breakdown for MCP / popover.
+    /// `aiRatio` delegates to `aiActivityBreakdown(period:).ratio`.
     func aiActivityBreakdown(period: DateInterval) throws -> AIActivityBreakdown
 
     // External integrations (Phase 4.2+ Layer B)
-    /// Phase 4.2 — Linear issue activity для periodа.
-    /// Source filter: events с `signal_type='action'` AND `payload_json.source='linear'`.
+    /// Phase 4.2 — Linear issue activity for the period.
+    /// Source filter: events with `signal_type='action'` AND `payload_json.source='linear'`.
     /// Returns issuesTouched (distinct issue_key count) + breakdown by project/status.
-    /// Linear не подключён → .empty (не throws — opt-in feature, no-data ≠ error).
+    /// Linear not connected → .empty (does not throw — opt-in feature, no-data ≠ error).
     func linearActivity(period: DateInterval) throws -> LinearActivityBreakdown
 
-    /// Phase 4.3 — GitHub events activity для periodа.
-    /// Source filter: events с `signal_type='action'` AND `payload_json.source='github'`.
-    /// Returns eventsCount + breakdown by repo/event_kind. GitHub не подключён → .empty.
+    /// Phase 4.3 — GitHub events activity for the period.
+    /// Source filter: events with `signal_type='action'` AND `payload_json.source='github'`.
+    /// Returns eventsCount + breakdown by repo/event_kind. GitHub not connected → .empty.
     func githubActivity(period: DateInterval) throws -> GitHubActivityBreakdown
 
-    /// Phase 4.4 — Slack activity для periodа.
-    /// Action events с `payload_json.source='slack' AND event_kind='slack_message_authored_aggregate'`
-    /// дают `messagesCount` (sum of `count` field) + `byChannel` (top-5).
-    /// Context events с `event_kind='slack_huddle_state_change'` walk'ом дают `huddleMinutes`.
-    /// Slack не подключён → .empty (default ext) — opt-in feature, no-data ≠ error.
+    /// Phase 4.4 — Slack activity for the period.
+    /// Action events with `payload_json.source='slack' AND event_kind='slack_message_authored_aggregate'`
+    /// yield `messagesCount` (sum of `count` field) + `byChannel` (top-5).
+    /// Context events with `event_kind='slack_huddle_state_change'` yield `huddleMinutes` via a walk.
+    /// Slack not connected → .empty (default ext) — opt-in feature, no-data ≠ error.
     func slackActivity(period: DateInterval) throws -> SlackActivityBreakdown
 
     // Team (Phase 2+)
@@ -59,31 +59,31 @@ public protocol DerivedInsights: Sendable {
     func weekOverWeekDelta() throws -> Double?
     func activeDaysInRow() throws -> Int
 
-    /// Phase 4.6.C.2 — самое длинное окно в `period` без events из Layer B
-    /// integrations (Linear/GitHub/Slack). Proxy для "deep async work session" —
-    /// время непрерывной работы без notification-interruption из tracked
-    /// интеграций. Period bounds — anchors: gap может начинаться в `period.start`
-    /// (первый event сильно позже) и заканчиваться в `period.end` (последний event
-    /// сильно раньше). Returns nil если period degenerate (zero/negative length)
-    /// ИЛИ если impl не поддерживает (default extension nil — graceful для stubs).
+    /// Phase 4.6.C.2 — the longest window in `period` without events from Layer B
+    /// integrations (Linear/GitHub/Slack). A proxy for a "deep async work session" —
+    /// continuous work time without notification interruption from tracked
+    /// integrations. Period bounds act as anchors: the gap can start at `period.start`
+    /// (first event much later) and end at `period.end` (last event much earlier).
+    /// Returns nil if the period is degenerate (zero/negative length)
+    /// OR if the impl doesn't support it (default extension nil — graceful for stubs).
     func longestUninterruptedWindow(period: DateInterval) throws -> UninterruptedWindow?
 
-    /// Phase 4.6.B — counts моих status transitions в Linear за `period`.
-    /// Source filter: events с `signal_type='action' AND source='linear' AND
-    /// event_kind='status_transition'`. Default extension возвращает `.empty`
-    /// (для StubInsights / iOS-future graceful).
+    /// Phase 4.6.B — counts my status transitions in Linear over `period`.
+    /// Source filter: events with `signal_type='action' AND source='linear' AND
+    /// event_kind='status_transition'`. Default extension returns `.empty`
+    /// (graceful for StubInsights / iOS-future).
     func linearTransitions(period: DateInterval) throws -> LinearTransitionBreakdown
 
     /// Phase 4.6.B — soft follow-through ratio = `completed / (completed +
-    /// started + reopened)` через тот же aggregator. `nil` ↔ `completed == 0`
-    /// (избегает misleading "0% follow-through" в типичный in-progress день).
-    /// Default extension возвращает `nil`.
+    /// started + reopened)` via the same aggregator. `nil` ↔ `completed == 0`
+    /// (avoids a misleading "0% follow-through" on a typical in-progress day).
+    /// Default extension returns `nil`.
     func linearCompletionRate(period: DateInterval) throws -> Double?
 
     // Activity lookup (Phase 2.1).
-    /// Last attention event, опционально отфильтрованный по `bundleID`.
-    /// Возвращает `nil` если matching events нет (пустая БД, неизвестный bundle).
-    /// `nil` — semantically valid "нет данных", не error → не throws при empty result.
+    /// Last attention event, optionally filtered by `bundleID`.
+    /// Returns `nil` if there are no matching events (empty DB, unknown bundle).
+    /// `nil` is a semantically valid "no data", not an error → does not throw on empty result.
     func lastActivity(bundleID: String?) throws -> ActivitySnapshot?
 
     /// Phase 4.10.A — chronological per-event feed for the Activity tab.
@@ -174,21 +174,21 @@ public protocol DerivedInsights: Sendable {
     func openBlockers() throws -> [Blocker]
 }
 
-/// Default implementations — конформер'ы могут override'ить, но без явного
-/// override получают `.empty` (opt-in feature, no-data ≠ error).
+/// Default implementations — conformers may override, but without an explicit
+/// override they get `.empty` (opt-in feature, no-data ≠ error).
 public extension DerivedInsights {
     func slackActivity(period: DateInterval) throws -> SlackActivityBreakdown { .empty }
 
-    /// Phase 4.6.C.2 — default nil чтобы StubInsights / iOS-future free от обновления.
+    /// Phase 4.6.C.2 — default nil so StubInsights / iOS-future stay free of updating.
     func longestUninterruptedWindow(period: DateInterval) throws -> UninterruptedWindow? { nil }
 
-    /// Phase 4.6.B — default `.empty` для StubInsights / iOS-future.
+    /// Phase 4.6.B — default `.empty` for StubInsights / iOS-future.
     func linearTransitions(period: DateInterval) throws -> LinearTransitionBreakdown { .empty }
 
-    /// Phase 4.6.B — default `nil` для StubInsights / iOS-future.
+    /// Phase 4.6.B — default `nil` for StubInsights / iOS-future.
     func linearCompletionRate(period: DateInterval) throws -> Double? { nil }
 
-    /// Phase 4.10.B — default empty list для StubInsights / iOS-future.
+    /// Phase 4.10.B — default empty list for StubInsights / iOS-future.
     func recentSessions(period: DateInterval, limit: Int) throws -> [ActivitySession] { [] }
 
     /// IV.A.2 partial substrate — Track-7 P3 `openBlockers` default empty
@@ -235,7 +235,7 @@ public extension DerivedInsights {
     func recentActivityFeed(since: Int64, limit: Int) throws -> [ActivityFeedItem] { [] }
 }
 
-/// Phase 1.1 / CI fallback. Все методы бросают .notImplemented.
+/// Phase 1.1 / CI fallback. All methods throw .notImplemented.
 public struct StubInsights: DerivedInsights {
     public let database: Database
     public init(database: Database) { self.database = database }

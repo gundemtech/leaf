@@ -1,35 +1,35 @@
 import Foundation
 import Security
 
-/// Phase 5.1.D — file-based key writer/reader для team primitives:
+/// Phase 5.1.D — file-based key writer/reader for team primitives:
 /// X25519 long-term private (per device, contract §7) + per-rotation teamKey
-/// файлы (current + history, contract §7 "key lifecycle"). Рядом с `db.key`
-/// (FileKeyStore) живут в `~/Library/Application Support/Leaf/keystore/`.
+/// files (current + history, contract §7 "key lifecycle"). They live next to `db.key`
+/// (FileKeyStore) in `~/Library/Application Support/Leaf/keystore/`.
 ///
-/// Защита: file permissions 0o600 + FileVault. Sensitivity сравнима с самой
-/// DB файлом (`events.sqlite`).
+/// Protection: file permissions 0o600 + FileVault. Sensitivity comparable to the
+/// DB file itself (`events.sqlite`).
 ///
 /// Layout (Track-5 S2 multi-workspace):
 /// - `<root>/x25519.priv` — 32 bytes raw, single file per device. NOT
-///   workspace-scoped — это long-term device identity, used для invite
+///   workspace-scoped — this is a long-term device identity, used for invite
 ///   handshake ECDH (contract §7).
 /// - `<root>/workspaces/<workspace_id>/team-keys/<UUID>.key` — 32 bytes raw,
 ///   one file per rotation per workspace. Filename = `team_keys.id` (UUID
-///   lowercase canonical). "Current rotation" определяется через
+///   lowercase canonical). The "current rotation" is determined via
 ///   `Database.readActiveTeamKey(workspaceID:)` → file lookup by id within
 ///   workspace sub-folder. No separate "current" pointer — DB-driven, no
 ///   split-brain risk. Cross-workspace read fails by path (OS-enforced
 ///   isolation, not naming-discipline-dependent).
 /// - Legacy alpha.x layout `<root>/team-keys/<UUID>.key` (pre-M019,
 ///   single-org era) — best-effort relocation by `relocateLegacyTeamKeys`,
-///   invoked from M019 Step 9 для alpha.x upgrade compatibility.
+///   invoked from M019 Step 9 for alpha.x upgrade compatibility.
 ///
-/// Concurrency: atomic write (`Data.write` с `.atomic` → POSIX `rename(2)`).
-/// Mirror discipline `FileKeyStore`. Write-then-read-back-verify не нужен —
-/// 5.1.D writers вызываются только из `WorkspaceService.createWorkspace`
-/// (single point per workspace), не из distributed processes (mirrors
-/// KeyStore-for-DB pattern, где race important; team keystore материализуется
-/// один раз per workspace).
+/// Concurrency: atomic write (`Data.write` with `.atomic` → POSIX `rename(2)`).
+/// Mirror discipline of `FileKeyStore`. Write-then-read-back-verify is not needed —
+/// 5.1.D writers are called only from `WorkspaceService.createWorkspace`
+/// (single point per workspace), not from distributed processes (mirrors the
+/// KeyStore-for-DB pattern, where the race matters; the team keystore is materialized
+/// once per workspace).
 public enum TeamKeystore {
     public static let x25519PrivateFilename = "x25519.priv"
     public static let teamKeysSubdir = "team-keys"
@@ -40,9 +40,9 @@ public enum TeamKeystore {
     public static let x25519PrivateLength = 32
     public static let teamKeyLength = 32
 
-    /// `~/Library/Application Support/Leaf/keystore/`. Co-located с `db.key` —
-    /// та же subdir что у `DatabasePath`, отдельная sub-folder под team
-    /// material (изоляция от SQLCipher key файла).
+    /// `~/Library/Application Support/Leaf/keystore/`. Co-located with `db.key` —
+    /// the same subdir as `DatabasePath`, a separate sub-folder for team
+    /// material (isolation from the SQLCipher key file).
     public static func defaultRoot() -> URL {
         let support = FileManager.default.urls(
             for: .applicationSupportDirectory,
@@ -65,7 +65,7 @@ public enum TeamKeystore {
         return try readExisting(at: url, expectedLength: x25519PrivateLength)
     }
 
-    /// Test/dev only — recursive removeItem на `<root>/`.
+    /// Test/dev only — recursive removeItem on `<root>/`.
     public static func deleteAll(at root: URL = defaultRoot()) throws {
         if FileManager.default.fileExists(atPath: root.path) {
             try FileManager.default.removeItem(at: root)

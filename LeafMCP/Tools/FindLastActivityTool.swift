@@ -2,9 +2,9 @@ import Foundation
 import LeafCore
 import LeafMCPProtocol
 
-/// MCP-tool: вернуть последний attention event, опционально отфильтрованный
-/// по `bundle_id`. Помогает AI-клиентам отвечать на вопросы вроде
-/// "когда я последний раз работал с Xcode?".
+/// MCP tool: return the last attention event, optionally filtered
+/// by `bundle_id`. Helps AI clients answer questions like
+/// "when did I last work with Xcode?".
 struct FindLastActivityTool: ToolExecutor {
     let dbURL: URL
     let dbConfig: DatabaseConfig

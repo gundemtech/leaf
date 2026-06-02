@@ -1,6 +1,6 @@
 // Phase 4.7.B-3 — Database.queryActiveGitHubRepos helper tests.
-// Helper выбирает top-N repos (DESC by `commit_pushed` count) для bounded
-// fan-out actions/runs polling. SQL: json_extract фильтр по source=github +
+// Helper picks the top-N repos (DESC by `commit_pushed` count) for bounded
+// fan-out actions/runs polling. SQL: json_extract filter on source=github +
 // event_kind=commit_pushed + ts >= sinceMs + repo IS NOT NULL.
 
 import XCTest
@@ -47,7 +47,7 @@ final class DatabaseGitHubQueriesTests: XCTestCase {
         let db = try makeDB()
         let baseMs: Int64 = 1_700_000_000_000
         var events: [RawEvent] = []
-        // 6 pushes к X1, 4 к X2, 2 к X3.
+        // 6 pushes to X1, 4 to X2, 2 to X3.
         for i in 0..<6 { events.append(pushEvent(repo: "octocat/X1", atMs: baseMs + Int64(i))) }
         for i in 0..<4 { events.append(pushEvent(repo: "octocat/X2", atMs: baseMs + 100 + Int64(i))) }
         for i in 0..<2 { events.append(pushEvent(repo: "octocat/X3", atMs: baseMs + 200 + Int64(i))) }
@@ -58,7 +58,7 @@ final class DatabaseGitHubQueriesTests: XCTestCase {
         XCTAssertEqual(repos, ["octocat/X1", "octocat/X2", "octocat/X3"], "ordered DESC by push count")
     }
 
-    /// `limit` параметр действительно ограничивает результат.
+    /// The `limit` parameter actually constrains the result.
     func testActiveReposQuery_RespectsLimit() throws {
         let db = try makeDB()
         let baseMs: Int64 = 1_700_000_000_000
@@ -72,7 +72,7 @@ final class DatabaseGitHubQueriesTests: XCTestCase {
         XCTAssertEqual(top2, ["octocat/X1", "octocat/X2"], "limit=2 → top 2 only")
     }
 
-    /// `sinceMs` cutoff — events до cutoff'а не учитываются.
+    /// `sinceMs` cutoff — events before the cutoff are not counted.
     func testActiveReposQuery_SinceCutoffFilters() throws {
         let db = try makeDB()
         let oldMs: Int64 = 1_700_000_000_000
@@ -82,19 +82,19 @@ final class DatabaseGitHubQueriesTests: XCTestCase {
             pushEvent(repo: "octocat/old", atMs: oldMs + 1),
             pushEvent(repo: "octocat/new", atMs: newMs)
         ])
-        // sinceMs между old и new → только octocat/new.
+        // sinceMs between old and new → only octocat/new.
         let repos = try db.queryActiveGitHubRepos(sinceMs: newMs - 100, limit: 10)
-        XCTAssertEqual(repos, ["octocat/new"], "events до sinceMs filtered out")
+        XCTAssertEqual(repos, ["octocat/new"], "events before sinceMs filtered out")
     }
 
-    /// Не-github events / не-commit_pushed events НЕ должны попадать в результат.
+    /// Non-github events / non-commit_pushed events must NOT end up in the result.
     func testActiveReposQuery_FiltersBySourceAndEventKind() throws {
         let db = try makeDB()
         let baseMs: Int64 = 1_700_000_000_000
         try db.write([
             // github commit_pushed — should count.
             pushEvent(repo: "octocat/A", atMs: baseMs),
-            // linear event с repo — should NOT count (source != github).
+            // linear event with repo — should NOT count (source != github).
             RawEvent(
                 timestamp: Date(timeIntervalSince1970: TimeInterval(baseMs + 1) / 1000.0),
                 signalType: .action,
@@ -119,17 +119,17 @@ final class DatabaseGitHubQueriesTests: XCTestCase {
         ])
 
         let repos = try db.queryActiveGitHubRepos(sinceMs: baseMs - 1000, limit: 10)
-        XCTAssertEqual(repos, ["octocat/A"], "только github commit_pushed events учитываются")
+        XCTAssertEqual(repos, ["octocat/A"], "only github commit_pushed events are counted")
     }
 
-    /// Empty events table → empty result, не error.
+    /// Empty events table → empty result, not an error.
     func testActiveReposQuery_EmptyTable_ReturnsEmpty() throws {
         let db = try makeDB()
         let repos = try db.queryActiveGitHubRepos(sinceMs: 0, limit: 10)
         XCTAssertEqual(repos, [])
     }
 
-    /// `limit <= 0` — defensive guard, не SQL error.
+    /// `limit <= 0` — defensive guard, not a SQL error.
     func testActiveReposQuery_ZeroLimit_ReturnsEmpty() throws {
         let db = try makeDB()
         try db.write([pushEvent(repo: "octocat/A", atMs: 1_700_000_000_000)])

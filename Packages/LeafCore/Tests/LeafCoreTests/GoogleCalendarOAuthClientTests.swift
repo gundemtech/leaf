@@ -1,5 +1,5 @@
 // Track-6 P4 Task 9 — GoogleCalendarOAuthClient tests.
-// Mock URLSession через URLProtocol + ephemeral session — same pattern as
+// Mock URLSession via URLProtocol + ephemeral session — same pattern as
 // SlackTokenRefresherTests / RelayClientTests.
 
 import Foundation

@@ -34,7 +34,7 @@ final class IntensityBucketAccumulatorTests: XCTestCase {
     }
 
     func testZeroBucketStillSnapshots() {
-        // All-zero bucket valid; UPSERT idempotent on PK даёт row для retention.
+        // All-zero bucket valid; UPSERT idempotent on PK yields a row for retention.
         let accumulator = IntensityBucketAccumulator()
         let snap = accumulator.flushTo(
             bucketMs: 60_000,

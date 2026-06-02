@@ -72,9 +72,9 @@ struct ConnectionsView: View {
         "read:audit_log": "Recommended: tracks admin actions on your GitHub Organization."
     ]
 
-    /// Per-scope explainer copy для Slack — D3 Task 20. Только missing-core
-    /// scope'ы получают per-scope LeafBanner.warning; missing-optional —
-    /// single subtle hint, без объяснения per scope.
+    /// Per-scope explainer copy for Slack — D3 Task 20. Only missing-core
+    /// scopes get a per-scope LeafBanner.warning; missing-optional —
+    /// single subtle hint, without a per-scope explanation.
     private static let slackScopeExplainer: [String: String] = [
         "users:read": "Required to resolve usernames and identify self-authored messages.",
         "users.profile:read": "Required to read your profile (status, presence) for huddle and Focus integration.",
@@ -408,7 +408,7 @@ struct ConnectionsView: View {
         case .connectedScopeOutdated(let workspaceName, let connectedAt, _):
             // Phase Track-3 D3 — Tasks 19-21 add the dedicated re-auth banner /
             // missing-scopes detail UI. Until then surface as plain connected so
-            // the substrate ships без UI regression.
+            // the substrate ships without a UI regression.
             connectedBlock(
                 title: workspaceName,
                 connectedAt: connectedAt,
@@ -521,9 +521,9 @@ struct ConnectionsView: View {
 
     // MARK: - Labels
 
-    /// `RelativeDateTimeFormatter` для свежей даты возвращает "in 0 seconds" из-за
-    /// nanosecond drift между timestamp создания row и rendered Date(). Под 5s
-    /// ставим стабильный лейбл; выше — относительный formatter.
+    /// `RelativeDateTimeFormatter` for a fresh date returns "in 0 seconds" due to
+    /// nanosecond drift between the row's creation timestamp and the rendered Date(). Under 5s
+    /// we use a stable label; above that — the relative formatter.
     private func connectedLabel(connectedAt: Date) -> String {
         let elapsed = abs(Date().timeIntervalSince(connectedAt))
         if elapsed < 5 {
@@ -532,7 +532,7 @@ struct ConnectionsView: View {
         return "Connected \(Self.relativeFormatter.localizedString(for: connectedAt, relativeTo: Date()))"
     }
 
-    /// MM:SS countdown до истечения device_code (RFC 8628 §3.2 expiresIn).
+    /// MM:SS countdown until the device_code expires (RFC 8628 §3.2 expiresIn).
     /// Pure — caller supplies the reference `now` (the driving `TimelineView`
     /// context date), so no parent-level @State tick is needed.
     private func countdownLabel(expiresAt: Date, now: Date) -> String {

@@ -10,7 +10,7 @@
 //   - Reader needs a different query (`viewer.teams.nodes { id name key }`)
 //     than the existing users-resolution surface;
 //   - Keeps the test stub tiny;
-//   - Symmetric с `SlackChannelsProviding` (T11 sibling).
+//   - Symmetric with `SlackChannelsProviding` (T11 sibling).
 //
 //  Production impl lives in `LeafCorePrivate` (moat). The stub returns an
 //  empty list so non-LeafCorePrivate builds (CI / dev) compile.

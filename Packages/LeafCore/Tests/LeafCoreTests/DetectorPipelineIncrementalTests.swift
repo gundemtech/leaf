@@ -132,7 +132,7 @@ final class DetectorPipelineIncrementalTests: XCTestCase {
 
     func testCursorAdvancesPastProcessedEvents() throws {
         let db = try openDB()
-        // 3 plain events, no body — cursor должен advance до последнего id.
+        // 3 plain events, no body — cursor must advance to the last id.
         try writeEvent(db, tsMs: 1_000, payload: ["event_kind": "issue_updated"])
         try writeEvent(db, tsMs: 2_000, payload: ["event_kind": "issue_updated"])
         try writeEvent(db, tsMs: 3_000, payload: ["event_kind": "issue_updated"])

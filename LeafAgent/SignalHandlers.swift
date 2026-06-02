@@ -2,17 +2,17 @@ import Foundation
 import os
 
 /// Graceful shutdown: SIGTERM/SIGINT → run shutdown closure → exit(0).
-/// Держим DispatchSource refs в глобалах чтобы не уехали в ARC.
-/// `nonisolated(unsafe)` — write только из `installSignalHandlers` один раз
-/// при bootstrap, после чего сорсы только resume'ятся внутри dispatch queue.
+/// Keep DispatchSource refs in globals so they aren't reclaimed by ARC.
+/// `nonisolated(unsafe)` — written only from `installSignalHandlers` once
+/// at bootstrap, after which the sources are merely resumed inside the dispatch queue.
 nonisolated(unsafe) private var sigtermSource: DispatchSourceSignal?
 nonisolated(unsafe) private var sigintSource: DispatchSourceSignal?
 
-/// Устанавливает handler'ы на SIGTERM + SIGINT. `shutdown` closure вызывается
-/// сериализованно на main queue, внутри `Task { ... }` — т.е. имеет право
-/// `await` на actor'ах и БД-writes. После завершения closure — `exit(0)`.
+/// Installs handlers for SIGTERM + SIGINT. The `shutdown` closure is invoked
+/// serially on the main queue, inside a `Task { ... }` — i.e. it is allowed to
+/// `await` on actors and DB writes. After the closure completes — `exit(0)`.
 ///
-/// Порядок shutdown задаёт caller (обычно maintenance → writer → exit).
+/// The shutdown order is set by the caller (usually maintenance → writer → exit).
 func installSignalHandlers(shutdown: @Sendable @escaping () async -> Void) {
     sigtermSource = makeHandler(signal: SIGTERM, name: "SIGTERM", shutdown: shutdown)
     sigintSource = makeHandler(signal: SIGINT, name: "SIGINT", shutdown: shutdown)
@@ -23,7 +23,7 @@ private func makeHandler(
     name: String,
     shutdown: @Sendable @escaping () async -> Void
 ) -> DispatchSourceSignal {
-    // Disable default handler так чтобы наш DispatchSource поймал сигнал.
+    // Disable default handler so that our DispatchSource catches the signal.
     signal(sig, SIG_IGN)
 
     let source = DispatchSource.makeSignalSource(signal: sig, queue: .main)

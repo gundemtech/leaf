@@ -24,9 +24,9 @@ public struct ToolsCallHandler: MethodHandler {
         }
 
         let argsValue = raw["arguments"]
-        // .fragmentsAllowed — если клиент послал "arguments" как не-object
-        // (String/Number/null) не падаем на JSONSerialization; tool сам решит
-        // принимать или отвергать.
+        // .fragmentsAllowed — if the client sent "arguments" as a non-object
+        // (String/Number/null) we don't fail in JSONSerialization; the tool itself
+        // decides whether to accept or reject.
         let argsData = try JSONSerialization.data(
             withJSONObject: argsValue ?? NSNull(),
             options: [.fragmentsAllowed]

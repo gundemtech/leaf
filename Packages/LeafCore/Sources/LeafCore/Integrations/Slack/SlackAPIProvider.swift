@@ -2,12 +2,12 @@
 //  SlackAPIProvider.swift
 //  LeafCore
 //
-//  Phase 4.4 — protocol для Slack tick polling. Один tick = (huddle state из
-//  users.profile.get) + (message counts batched per channel из search.messages
-//  с query `from:me after:<DATE>`). Prod implementation (HTTP, JSON parsing,
-//  ADR-010 enforcement: bodies/permalinks отбрасываем; DM names → "DM"
-//  bucket) живёт в LeafCorePrivate (moat). Public Stub возвращает .empty —
-//  CI builds компилируются, runtime no-op.
+//  Phase 4.4 — protocol for Slack tick polling. One tick = (huddle state from
+//  users.profile.get) + (message counts batched per channel from search.messages
+//  with the query `from:me after:<DATE>`). The prod implementation (HTTP, JSON parsing,
+//  ADR-010 enforcement: we drop bodies/permalinks; DM names → "DM"
+//  bucket) lives in LeafCorePrivate (moat). The public Stub returns .empty —
+//  CI builds compile, runtime is a no-op.
 //
 
 import Foundation
@@ -17,10 +17,10 @@ import Foundation
 
 public protocol SlackAPIProvider: Sendable {
     /// One tick = (huddle state + message counts batched per channel since `since`).
-    /// `since` — epoch ms cursor (max ts ms из prev'ого batch'а; nil → bootstrap
-    /// 7-day window backwards). `userID` — Slack user id из integration record;
-    /// search query использует `from:me` (alias авторизованного юзера), userID
-    /// сохранён в сигнатуре на случай fallback path / диагностики.
+    /// `since` — epoch ms cursor (max ts ms from the previous batch; nil → bootstrap
+    /// 7-day window backwards). `userID` — Slack user id from the integration record;
+    /// the search query uses `from:me` (alias of the authorized user), userID
+    /// is kept in the signature for the fallback path / diagnostics.
     func fetchTick(
         accessToken: String,
         userID: String,
@@ -29,35 +29,35 @@ public protocol SlackAPIProvider: Sendable {
     ) async throws -> SlackTickResult
 
     /// Phase 4.7.B-9 — Slack `users.getPresence` (Tier 3). Returns "active" | "away"
-    /// для авторизованного юзера (т.е. self). `userID` обязателен Slack API
-    /// signature даже для self-call. Graceful: 401/429/network/parse fail →
-    /// `.unknown` (collector ВСЁ РАВНО emit'ит pulse, чтобы downstream ввёл
-    /// continuity — отсутствие event'а != отсутствие observation).
-    /// ADR-010: тело response ничего PII не содержит (только presence enum).
+    /// for the authorized user (i.e. self). `userID` is required by the Slack API
+    /// signature even for a self-call. Graceful: 401/429/network/parse fail →
+    /// `.unknown` (the collector STILL emits a pulse so that downstream maintains
+    /// continuity — absence of an event != absence of observation).
+    /// ADR-010: the response body contains no PII (only the presence enum).
     func fetchPresence(
         accessToken: String,
         userID: String
     ) async throws -> SlackPresenceState
 
-    /// Phase 4.7.B-10 — Slack `dnd.info` (Tier 3). Returns текущий DND-state
-    /// + scheduled DND window + user-set snooze (до какого ts тишина).
-    /// Self-call (юзер запрашивает свой dnd state); `userID` обязателен Slack API
-    /// signature. Graceful: 401/429/network/parse fail → `.empty`. Collector ВСЁ
-    /// РАВНО emit'ит pulse — `slack_dnd_state` per-tick observation continuity.
-    /// ADR-010: response не содержит body / PII — только booleans + ts.
+    /// Phase 4.7.B-10 — Slack `dnd.info` (Tier 3). Returns the current DND state
+    /// + scheduled DND window + user-set snooze (until which ts it is silent).
+    /// Self-call (the user requests their own dnd state); `userID` is required by the Slack API
+    /// signature. Graceful: 401/429/network/parse fail → `.empty`. The collector STILL
+    /// emits a pulse — `slack_dnd_state` per-tick observation continuity.
+    /// ADR-010: the response contains no body / PII — only booleans + ts.
     func fetchDND(
         accessToken: String,
         userID: String
     ) async throws -> SlackDNDState
 
     /// Phase 4.7.B-11 — `search.messages?query=<@USER_ID>+after:<sinceISO>`.
-    /// Tier 2 endpoint. Возвращает per-channel aggregate count'ы сообщений, в
-    /// которых юзер был mention'нут (`<@USER_ID>` — canonical Slack mention syntax).
-    /// `since` — epoch ms (collector предоставляет cursor / nowMs - bootstrap),
-    /// конвертируется в `YYYY-MM-DD` (Slack `after:` имеет day-resolution).
+    /// Tier 2 endpoint. Returns per-channel aggregate counts of messages in
+    /// which the user was mentioned (`<@USER_ID>` — canonical Slack mention syntax).
+    /// `since` — epoch ms (the collector provides cursor / nowMs - bootstrap),
+    /// converted to `YYYY-MM-DD` (Slack's `after:` has day-resolution).
     /// DM channels (is_im / is_mpim) → bucket "DM" (anonymization, ADR-010).
-    /// ADR-010: `match.text` (само mention'ящее сообщение) и `match.user` (кто
-    /// mention'ил) — НЕ читаем; это body / from-user attribution, не наша cardinality.
+    /// ADR-010: `match.text` (the mentioning message itself) and `match.user` (who
+    /// mentioned) — we do NOT read; that is body / from-user attribution, not our cardinality.
     /// Graceful degrade: 401/429/network/parse fail → `[]` (no events emitted).
     func fetchMentionsReceived(
         accessToken: String,
@@ -67,19 +67,19 @@ public protocol SlackAPIProvider: Sendable {
 
     /// Phase 4.7.B-12 — `search.files?query=from:me+after:<sinceISO>&count=100`.
     /// Tier 2 endpoint. Returns aggregate count + mime-type bucket distribution
-    /// of files юзер uploaded в окне `[since, now]`. Single aggregate per tick
-    /// (not per-file) — мы хотим объёмную картину "сколько и какого типа", не
+    /// of files the user uploaded in the `[since, now]` window. Single aggregate per tick
+    /// (not per-file) — we want a volume picture of "how much and of what type", not an
     /// individual file timeline.
-    /// `since` — epoch ms; provider конвертирует в UTC `YYYY-MM-DD` (Slack
-    /// `after:` имеет day-resolution).
+    /// `since` — epoch ms; the provider converts to UTC `YYYY-MM-DD` (Slack's
+    /// `after:` has day-resolution).
     /// ADR-010: filenames (`file.name` / `file.title` / `file.permalink_*`),
     /// preview text (`file.preview` / `file.preview_highlight`), thumbs
-    /// (`file.thumb_*`) — НИКОГДА не читаем. Извлекаем ТОЛЬКО `file.mimetype`
-    /// для bucket'ирования; всё остальное игнорируется на parsing'е.
+    /// (`file.thumb_*`) — we NEVER read. We extract ONLY `file.mimetype`
+    /// for bucketing; everything else is ignored at parsing.
     /// Buckets (provider-side): `image` / `code` / `doc` / `other`.
-    /// Graceful degrade: 401/429/network/parse fail → `.empty(...)` с count=0,
-    /// типs пустой; collector ВСЁ РАВНО emit'ит aggregate event (substrate
-    /// continuity — отсутствие event'а != отсутствие observation).
+    /// Graceful degrade: 401/429/network/parse fail → `.empty(...)` with count=0,
+    /// empty types; the collector STILL emits an aggregate event (substrate
+    /// continuity — absence of an event != absence of observation).
     func fetchFilesUploaded(
         accessToken: String,
         userID: String,
@@ -135,22 +135,22 @@ public protocol SlackAPIProvider: Sendable {
     ) async throws -> SlackColdBatch
 }
 
-/// Результат одного Slack tick'а. Huddle state — point-in-time snapshot;
-/// channel counts — aggregated over [since, now] window.
-/// `cursorMs` = max(ts ms) across processed messages (advance cursor для next tick),
-/// `nil` если в batch'е сообщений не было — cursor не двигается.
+/// Result of one Slack tick. Huddle state — point-in-time snapshot;
+/// channel counts — aggregated over the [since, now] window.
+/// `cursorMs` = max(ts ms) across processed messages (advance cursor for the next tick),
+/// `nil` if there were no messages in the batch — the cursor does not move.
 /// Phase 4.7.A: + statusEmoji / statusExpirationTs (Slack custom status). ADR-010:
-/// `status_text` (body) НЕ извлекается на provider-side.
+/// `status_text` (body) is NOT extracted on the provider-side.
 public struct SlackTickResult: Sendable, Hashable {
     public let huddle: SlackHuddleState
     public let channelMessageCounts: [SlackChannelMessageCount]
     public let cursorMs: Int64?
     public let periodStartMs: Int64
     public let periodEndMs: Int64
-    /// Phase 4.7.A — Slack custom status emoji (e.g. ":pizza:"), пустая строка если
-    /// не выставлен. ADR-010: status_text (body) ИГНОРИРУЕМ на parsing'е.
+    /// Phase 4.7.A — Slack custom status emoji (e.g. ":pizza:"), empty string if
+    /// not set. ADR-010: status_text (body) — we IGNORE at parsing.
     public let statusEmoji: String
-    /// Phase 4.7.A — epoch ms когда status истекает (0 = no expiration).
+    /// Phase 4.7.A — epoch ms when the status expires (0 = no expiration).
     public let statusExpirationTs: Int64
 
     public init(
@@ -180,18 +180,18 @@ public struct SlackTickResult: Sendable, Hashable {
     )
 }
 
-/// Huddle state, как его отдаёт Slack `users.profile.get` в `profile.huddle_state`.
-/// rawValue матчит API string 1-в-1 (без явного rawValue Swift сгенерил бы
-/// "defaultUnset" / "inAHuddle", и `init(rawValue:)` не маппил бы Slack-ответ).
-/// `.unknown` — sentinel: provider не смог распарсить (forward-compat для
-/// будущих state'ов или 401/ratelimited path) → collector НЕ emit'ит transition,
-/// чтобы не плодить noisy события.
+/// Huddle state as returned by Slack `users.profile.get` in `profile.huddle_state`.
+/// rawValue matches the API string 1-to-1 (without an explicit rawValue Swift would generate
+/// "defaultUnset" / "inAHuddle", and `init(rawValue:)` would not map the Slack response).
+/// `.unknown` — sentinel: the provider failed to parse (forward-compat for
+/// future states or the 401/ratelimited path) → the collector does NOT emit a transition,
+/// to avoid producing noisy events.
 public enum SlackHuddleState: String, Sendable, Hashable {
     case unknown = "unknown"
     case defaultUnset = "default_unset"
     case inAHuddle = "in_a_huddle"
 
-    /// Forward-compat: неизвестные Slack values → .unknown.
+    /// Forward-compat: unknown Slack values → .unknown.
     public init(slackAPIString: String) {
         self = SlackHuddleState(rawValue: slackAPIString) ?? .unknown
     }
@@ -286,15 +286,15 @@ public struct SlackThreadReplyBatch: Sendable {
     public static let empty = SlackThreadReplyBatch(parent: nil, replies: [], nextCursor: nil)
 }
 
-/// Bucket: количество self-authored сообщений в одном канале за период tick'а.
-/// `channelName` — public name канала ("engineering"), либо литерал `"DM"` для
-/// IM/MPIM (одна корзина на все DMs — anonymization, ADR-010).
-/// `reactionsCount` (Phase 4.6.A.3) — sum по `match.reactions[].count` всех
-/// сообщений канала в окне tick'а (aggregate numeric only; emoji name / users —
-/// никогда не читаются, ADR-010).
-/// `threadReplyCount` (Phase 4.7.A) — subset of `count` где `thread_ts != ts`
-/// (т.е. message — это reply в чужом thread'е, не initiation). Aggregate
-/// numeric. ADR-010: text/permalink не сохраняются как и раньше.
+/// Bucket: number of self-authored messages in one channel over the tick period.
+/// `channelName` — the channel's public name ("engineering"), or the literal `"DM"` for
+/// IM/MPIM (one bucket for all DMs — anonymization, ADR-010).
+/// `reactionsCount` (Phase 4.6.A.3) — sum over `match.reactions[].count` of all
+/// of the channel's messages in the tick window (aggregate numeric only; emoji name / users —
+/// never read, ADR-010).
+/// `threadReplyCount` (Phase 4.7.A) — subset of `count` where `thread_ts != ts`
+/// (i.e. the message is a reply in someone else's thread, not an initiation). Aggregate
+/// numeric. ADR-010: text/permalink are not stored, as before.
 /// `messages` (Phase Track-1 D1) — optional per-message records with BodyCap-applied
 /// text, populated by ProdSlackAPIProvider. Nil for stub / graceful-degrade paths.
 /// Existing callers that only read `count` / `reactionsCount` / `threadReplyCount`
@@ -324,28 +324,28 @@ public struct SlackChannelMessageCount: Sendable, Hashable {
     }
 }
 
-/// Phase 4.7.B-9 — Slack presence state, как его отдаёт `users.getPresence`.
-/// rawValue матчит API string ("active" | "away"); `.unknown` — sentinel для
-/// graceful degrade (401 / ratelimited / network / parse fail на provider-side).
-/// Collector ВСЕГДА emit'ит pulse — на `.unknown` payload содержит state="unknown",
-/// чтобы downstream видел observation continuity без gap'ов между tick'ами.
+/// Phase 4.7.B-9 — Slack presence state as returned by `users.getPresence`.
+/// rawValue matches the API string ("active" | "away"); `.unknown` — sentinel for
+/// graceful degrade (401 / ratelimited / network / parse fail on the provider-side).
+/// The collector ALWAYS emits a pulse — on `.unknown` the payload contains state="unknown",
+/// so that downstream sees observation continuity without gaps between ticks.
 public enum SlackPresenceState: String, Sendable, Hashable {
     case active
     case away
     case unknown
 }
 
-/// Phase 4.7.B-10 — Slack DND snapshot, как его отдаёт `dnd.info`.
-/// `dndEnabled` — true если юзер сейчас в DND (либо scheduled DND window сейчас
-/// active, либо user-set snooze active). Slack возвращает это напрямую полем
-/// `dnd_enabled`; мы дополнительно OR'им с `snooze_endtime > now` defensively.
-/// `snoozeUntilMs` — user-set snooze (например "Pause notifications for 1h"),
+/// Phase 4.7.B-10 — Slack DND snapshot as returned by `dnd.info`.
+/// `dndEnabled` — true if the user is currently in DND (either a scheduled DND window is
+/// currently active, or a user-set snooze is active). Slack returns this directly in the
+/// `dnd_enabled` field; we additionally OR it with `snooze_endtime > now` defensively.
+/// `snoozeUntilMs` — user-set snooze (e.g. "Pause notifications for 1h"),
 /// 0 / nil = no active snooze.
 /// `nextDNDStartMs` / `nextDNDEndMs` — scheduled DND window (recurring user
 /// schedule). 0 / nil = no scheduled DND.
-/// Все ts конвертированы в epoch ms (Slack отдаёт seconds → multiply by 1000).
-/// `.empty` = "couldn't determine" (graceful degrade на 401/429/network/parse).
-/// ADR-010: response не содержит body content или PII.
+/// All ts are converted to epoch ms (Slack returns seconds → multiply by 1000).
+/// `.empty` = "couldn't determine" (graceful degrade on 401/429/network/parse).
+/// ADR-010: the response contains no body content or PII.
 public struct SlackDNDState: Sendable, Hashable {
     public let dndEnabled: Bool
     public let snoozeUntilMs: Int64?
@@ -364,9 +364,9 @@ public struct SlackDNDState: Sendable, Hashable {
         self.nextDNDEndMs = nextDNDEndMs
     }
 
-    /// Graceful sentinel: provider не смог определить state (401 / 429 / network /
-    /// parse fail). Collector emit'ит pulse с `dnd_enabled=false` — downstream
-    /// видит observation continuity без gap'ов между tick'ами.
+    /// Graceful sentinel: the provider could not determine the state (401 / 429 / network /
+    /// parse fail). The collector emits a pulse with `dnd_enabled=false` — downstream
+    /// sees observation continuity without gaps between ticks.
     public static let empty = SlackDNDState(
         dndEnabled: false,
         snoozeUntilMs: nil,
@@ -375,15 +375,15 @@ public struct SlackDNDState: Sendable, Hashable {
     )
 }
 
-/// Phase 4.7.B-11 — per-channel aggregate "сколько раз меня mention'нули" в
-/// окне `[periodStartMs, periodEndMs]`. Mirror'ит shape `SlackChannelMessageCount`
-/// (channel name + count + period boundaries), но семантика другая: not authored,
-/// а received-as-mention. DM channels collapse'ятся в literal bucket "DM"
-/// (ADR-010 anonymization, как existing message aggregate).
-/// Period boundaries — derived collector'ом из `since` / `nowMs` чтобы downstream
-/// мог nominally считать "mentions per hour" без re-fetching cursor history.
+/// Phase 4.7.B-11 — per-channel aggregate "how many times I was mentioned" in
+/// the `[periodStartMs, periodEndMs]` window. Mirrors the shape of `SlackChannelMessageCount`
+/// (channel name + count + period boundaries), but the semantics differ: not authored,
+/// but received-as-mention. DM channels collapse into the literal bucket "DM"
+/// (ADR-010 anonymization, like the existing message aggregate).
+/// Period boundaries — derived by the collector from `since` / `nowMs` so that downstream
+/// can nominally compute "mentions per hour" without re-fetching cursor history.
 public struct SlackMentionChannelCount: Sendable, Hashable {
-    /// Public channel name ("engineering") или literal "DM" для IM/MPIM.
+    /// Public channel name ("engineering") or the literal "DM" for IM/MPIM.
     public let channelName: String
     public let count: Int
     public let periodStartMs: Int64
@@ -402,24 +402,24 @@ public struct SlackMentionChannelCount: Sendable, Hashable {
     }
 }
 
-/// Phase 4.7.B-12 — aggregate snapshot of files юзер uploaded в окне tick'а.
-/// `count` — total files (sum'а across всех bucket'ов). `typesSummary` — count
+/// Phase 4.7.B-12 — aggregate snapshot of files the user uploaded in the tick window.
+/// `count` — total files (sum across all buckets). `typesSummary` — count
 /// per mime-type bucket; canonical buckets `"image"` / `"code"` / `"doc"` /
-/// `"other"`. Bucket с zero-count omittable (consumer flatten'ит — отсутствующий
-/// ключ читаем как 0).
-/// Period boundaries — derived collector'ом / provider'ом из `since` / `nowMs`,
-/// downstream может nominally считать "files per hour" без re-fetching cursor.
-/// `.empty(...)` — graceful sentinel когда provider не смог fetch (401/429/parse);
-/// collector emit'ит aggregate с count=0 чтобы downstream видел observation continuity.
-/// ADR-010: filename / preview / permalink / thumbs — НИКОГДА не читаются на
-/// provider-side; провайдер извлекает только mimetype для bucket'ирования.
+/// `"other"`. A zero-count bucket is omittable (the consumer flattens — a missing
+/// key is read as 0).
+/// Period boundaries — derived by the collector / provider from `since` / `nowMs`,
+/// downstream can nominally compute "files per hour" without re-fetching the cursor.
+/// `.empty(...)` — graceful sentinel when the provider could not fetch (401/429/parse);
+/// the collector emits an aggregate with count=0 so that downstream sees observation continuity.
+/// ADR-010: filename / preview / permalink / thumbs — are NEVER read on the
+/// provider-side; the provider extracts only the mimetype for bucketing.
 /// `files` (Phase Track-1 D1) — optional per-file metadata populated by
 /// ProdSlackAPIProvider. Existing consumers that only read `count`/`typesSummary`
 /// are unaffected (additive field, default nil).
 public struct SlackFileUploadSummary: Sendable, Hashable {
     public let count: Int
-    /// Canonical buckets: "image" / "code" / "doc" / "other". Bucket с 0 files —
-    /// допустимо отсутствовать; consumer flatten'ит (default 0).
+    /// Canonical buckets: "image" / "code" / "doc" / "other". A bucket with 0 files —
+    /// may be absent; the consumer flattens (default 0).
     public let typesSummary: [String: Int]
     public let periodStartMs: Int64
     public let periodEndMs: Int64
@@ -441,9 +441,9 @@ public struct SlackFileUploadSummary: Sendable, Hashable {
         self.files = files
     }
 
-    /// Graceful sentinel: provider не смог определить state (401 / 429 / network /
-    /// parse fail). Collector emit'ит aggregate event с count=0 — downstream
-    /// видит observation continuity без gap'ов между tick'ами.
+    /// Graceful sentinel: the provider could not determine the state (401 / 429 / network /
+    /// parse fail). The collector emits an aggregate event with count=0 — downstream
+    /// sees observation continuity without gaps between ticks.
     public static func empty(periodStartMs: Int64, periodEndMs: Int64) -> SlackFileUploadSummary {
         SlackFileUploadSummary(
             count: 0,
@@ -454,8 +454,8 @@ public struct SlackFileUploadSummary: Sendable, Hashable {
     }
 }
 
-/// Stub для CI / dev-без-moat сборок. Никогда не делает HTTP call, возвращает
-/// `.empty` — SlackCollector tick проходит no-op.
+/// Stub for CI / dev-without-moat builds. Never makes an HTTP call, returns
+/// `.empty` — the SlackCollector tick runs as a no-op.
 public struct StubSlackAPIProvider: SlackAPIProvider {
     public init() {}
     public func fetchTick(

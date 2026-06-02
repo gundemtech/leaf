@@ -1,6 +1,6 @@
 import Foundation
 
-/// Phase 5.3.D — result of `KeyRotationService.removeMember(...)` или
+/// Phase 5.3.D — result of `KeyRotationService.removeMember(...)` or
 /// `.resumePendingPosts()`. `postedCount + pendingCount == totalCount`. For
 /// resume calls that drain rows from multiple historical events, `newKeyID` and
 /// `priorKeyID` are empty strings (the outcome aggregates across keys).

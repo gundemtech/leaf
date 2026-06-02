@@ -2,9 +2,9 @@ import Foundation
 import GRDB
 import os
 
-/// GRDB 7.x wrapper с опциональной SQLCipher-шифровкой.
-/// Writer (Agent) и Reader (App / MCP) — разные `Database` instance'ы поверх одного файла через WAL.
-/// `encryption: nil` на open* → plaintext (CI / unit-тесты). `.some(...)` → SQLCipher-encrypted.
+/// GRDB 7.x wrapper with optional SQLCipher encryption.
+/// Writer (Agent) and Reader (App / MCP) are separate `Database` instances over the same file via WAL.
+/// `encryption: nil` on open* → plaintext (CI / unit tests). `.some(...)` → SQLCipher-encrypted.
 public final class Database: @unchecked Sendable {
     public enum Mode: Sendable { case writer, reader }
 
@@ -263,11 +263,11 @@ public final class Database: @unchecked Sendable {
 
     // MARK: - Maintenance
 
-    /// Принудительный `PRAGMA wal_checkpoint(TRUNCATE)`.
-    /// При активных reader'ах SQLite может сделать partial checkpoint (advance только
-    /// до hwm самого отстающего reader'а) — это штатный graceful degradation, не ошибка.
-    /// В этом случае WAL-файл не усохнет до 0, но продолжит контролироваться следующим
-    /// успешным checkpoint'ом. Retry / force никакой не нужен.
+    /// Forced `PRAGMA wal_checkpoint(TRUNCATE)`.
+    /// With active readers SQLite may perform a partial checkpoint (advancing only
+    /// to the hwm of the most-lagging reader) — this is expected graceful degradation, not an error.
+    /// In that case the WAL file won't shrink to 0, but will keep being kept in check by the next
+    /// successful checkpoint. No retry / force needed.
     public func checkpointWAL() throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         try pool.writeWithoutTransaction { db in
@@ -275,15 +275,15 @@ public final class Database: @unchecked Sendable {
         }
     }
 
-    /// Удаляет до `limit` старейших строк из `events` со `ts < tsMs`.
-    /// Возвращает реальное количество удалённых строк (`db.changesCount`).
-    /// Используется retention sweep в `MaintenanceScheduler`; вызывается в цикле,
-    /// пока `return < limit` — чанк-за-чанком, чтобы не держать writer-транзакцию
-    /// дольше `busyTimeoutMs` при миллионных таблицах.
+    /// Deletes up to `limit` oldest rows from `events` with `ts < tsMs`.
+    /// Returns the actual number of deleted rows (`db.changesCount`).
+    /// Used by the retention sweep in `MaintenanceScheduler`; called in a loop,
+    /// while `return < limit` — chunk by chunk, so as not to hold the writer transaction
+    /// longer than `busyTimeoutMs` on million-row tables.
     ///
-    /// Subquery-pattern (не `DELETE ... LIMIT ?`): SQLCipher build не включает
-    /// `SQLITE_ENABLE_UPDATE_DELETE_LIMIT`, поэтому `LIMIT` допустим только
-    /// во вложенном `SELECT`.
+    /// Subquery pattern (not `DELETE ... LIMIT ?`): the SQLCipher build does not include
+    /// `SQLITE_ENABLE_UPDATE_DELETE_LIMIT`, so `LIMIT` is only allowed
+    /// inside the nested `SELECT`.
     public func deleteEventsOlderThan(tsMs: Int64, limit: Int) throws -> Int {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         guard limit > 0 else { return 0 }
@@ -300,19 +300,19 @@ public final class Database: @unchecked Sendable {
         }
     }
 
-    /// Internal-intent bridge для LeafCorePrivate (moat-реализация
-    /// Derived Insights), которой нужен raw GRDB handle для оконных функций
-    /// и CTE. Не использовать из публичных callsites — публичные high-level
-    /// accessors (`events(in:)`, `eventCount(in:)`) остаются primary API.
-    /// Схема таблиц в whitepaper, конкретные query — в moat.
+    /// Internal-intent bridge for LeafCorePrivate (the moat implementation
+    /// of Derived Insights), which needs a raw GRDB handle for window functions
+    /// and CTEs. Do not use from public callsites — the public high-level
+    /// accessors (`events(in:)`, `eventCount(in:)`) remain the primary API.
+    /// Table schema is in the whitepaper, the concrete queries are in the moat.
     public func readSQL<T>(_ block: (GRDB.Database) throws -> T) throws -> T {
         try pool.read(block)
     }
 
     // MARK: - Phase Track-4 S3 — intensity_aggregates
 
-    /// UPSERT минутного bucket'а counter-only intensity. Идемпотентно по PK
-    /// `minute_bucket_ms` — re-flush на agent restart перезаписывает row.
+    /// UPSERT of a per-minute bucket of counter-only intensity. Idempotent by PK
+    /// `minute_bucket_ms` — a re-flush on agent restart overwrites the row.
     public func upsertIntensityAggregate(
         minuteBucketMs: Int64,
         keystrokes: Int,
@@ -339,8 +339,8 @@ public final class Database: @unchecked Sendable {
         }
     }
 
-    /// Retention sweep — вызывается `MaintenanceScheduler` с тем же cutoff,
-    /// что и `deleteEventsOlderThan`.
+    /// Retention sweep — called by `MaintenanceScheduler` with the same cutoff
+    /// as `deleteEventsOlderThan`.
     public func purgeIntensityAggregates(before cutoffMs: Int64) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         try pool.write { db in
@@ -348,11 +348,11 @@ public final class Database: @unchecked Sendable {
         }
     }
 
-    /// Internal-intent bridge на write transaction для unit-тестов
-    /// (`PresenceStateWriterTests`). Production callsites используют
-    /// высокоуровневые методы (`writeEventsOffsetAndPresence`,
-    /// `writeEventsAndOffset`, `upsertIntegration` и т.д.) — этот handle
-    /// не предназначен для них и поэтому `internal`, не `public`.
+    /// Internal-intent bridge to a write transaction for unit tests
+    /// (`PresenceStateWriterTests`). Production callsites use the
+    /// high-level methods (`writeEventsOffsetAndPresence`,
+    /// `writeEventsAndOffset`, `upsertIntegration`, etc.) — this handle
+    /// is not meant for them, which is why it is `internal`, not `public`.
     internal func writeSQL<T>(_ block: (GRDB.Database) throws -> T) throws -> T {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         return try pool.write(block)
@@ -499,16 +499,16 @@ public final class Database: @unchecked Sendable {
 
     // MARK: - Collector offsets (Phase 2.3)
 
-    /// Reads single offset by composite PK. Returns `nil` если записи нет —
-    /// callsite (collector bootstrap branch) трактует как "ещё не видели этот файл".
+    /// Reads single offset by composite PK. Returns `nil` if there is no row —
+    /// the callsite (collector bootstrap branch) treats it as "haven't seen this file yet".
     public func readOffset(collectorID: String, sourceID: String) throws -> CollectorOffset? {
         try pool.read { db in
             try Self.fetchOffset(db, collectorID: collectorID, sourceID: sourceID)
         }
     }
 
-    /// Returns все offsets для данного `collectorID`. Order — по `sourceID` ASC
-    /// для детерминизма (тесты ассертят последовательность).
+    /// Returns all offsets for the given `collectorID`. Order is by `sourceID` ASC
+    /// for determinism (tests assert the sequence).
     public func listOffsets(collectorID: String) throws -> [CollectorOffset] {
         try pool.read { db in
             try Row.fetchAll(db, sql: """
@@ -526,8 +526,8 @@ public final class Database: @unchecked Sendable {
     }
 
     /// UPSERT single offset — INSERT or UPDATE in-place. Writer-only.
-    /// Для bootstrap rows и edge cases (skip-backward branch без events).
-    /// Для совмещённого `events + offset` write используй `writeEventsAndOffset`.
+    /// For bootstrap rows and edge cases (skip-backward branch without events).
+    /// For a combined `events + offset` write use `writeEventsAndOffset`.
     public func writeOffset(_ offset: CollectorOffset) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         try pool.write { db in
@@ -535,11 +535,11 @@ public final class Database: @unchecked Sendable {
         }
     }
 
-    /// Atomic batch insert of `events` + offset UPSERT в одной транзакции.
-    /// Phase 2.3 ClaudeCodeCollector — primary API: либо обе записи попадают
-    /// в WAL, либо ни одной (Agent crash посреди flush → no duplicates +
-    /// no lost-but-marked-as-read events). `offset == nil` допустим для
-    /// чистых event-write'ов, но для regular collector flow всегда передаётся.
+    /// Atomic batch insert of `events` + offset UPSERT in a single transaction.
+    /// Phase 2.3 ClaudeCodeCollector — primary API: either both writes land
+    /// in the WAL, or neither (Agent crash mid-flush → no duplicates +
+    /// no lost-but-marked-as-read events). `offset == nil` is allowed for
+    /// pure event-writes, but for the regular collector flow it is always passed.
     public func writeEventsAndOffset(_ events: [RawEvent], offset: CollectorOffset?) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         guard !events.isEmpty || offset != nil else { return }
@@ -557,11 +557,11 @@ public final class Database: @unchecked Sendable {
     }
 
     /// Phase 4.7.B — atomic `events` + `offset` + `presence_state` UPSERT.
-    /// All-or-nothing per tick: если presence write падает, cursor не двигается
-    /// и ни одного event не вставляется → следующий tick пере-fetch'ит и
-    /// перепишет presence на свежем snapshot'е. `presence == nil` допустим
-    /// (тики, в которых нечего обновлять — например, polling response
-    /// идентичен previous).
+    /// All-or-nothing per tick: if the presence write fails, the cursor does not move
+    /// and not a single event is inserted → the next tick re-fetches and
+    /// rewrites presence on a fresh snapshot. `presence == nil` is allowed
+    /// (ticks with nothing to update — for example, a polling response
+    /// identical to the previous one).
     public func writeEventsOffsetAndPresence(
         _ events: [RawEvent],
         offset: CollectorOffset,
@@ -659,8 +659,8 @@ public final class Database: @unchecked Sendable {
         )
     }
 
-    /// SQLite 3.24+ UPSERT (Zetetic SQLCipher 4.14 поверх 3.46+ — supported).
-    /// Атомарно INSERT-or-UPDATE по composite PK (collector_id, source_id).
+    /// SQLite 3.24+ UPSERT (Zetetic SQLCipher 4.14 on top of 3.46+ — supported).
+    /// Atomically INSERT-or-UPDATE by the composite PK (collector_id, source_id).
     private static func upsertOffset(_ offset: CollectorOffset, in db: GRDB.Database) throws {
         try db.execute(sql: """
             INSERT INTO \(Schema.CollectorOffsets.tableName) (
@@ -693,9 +693,9 @@ public final class Database: @unchecked Sendable {
 
     // MARK: - Watched folders (Phase 2.4)
 
-    /// Returns watched folders ordered by `added_ts` ASC (детерминированный
-    /// порядок для UI + tests). `includingDisabled=false` (default) — только
-    /// `enabled=1`; UI Settings показывает все, FSEventsCollector — только enabled.
+    /// Returns watched folders ordered by `added_ts` ASC (deterministic
+    /// order for UI + tests). `includingDisabled=false` (default) — only
+    /// `enabled=1`; UI Settings shows all, FSEventsCollector — only enabled.
     public func listWatchedFolders(includingDisabled: Bool = false) throws -> [WatchedFolder] {
         try pool.read { db in
             let sql: String
@@ -721,8 +721,8 @@ public final class Database: @unchecked Sendable {
         }
     }
 
-    /// INSERT — fails on UNIQUE(`path`) conflict (юзер пытается добавить
-    /// already-watched folder). Caller обрабатывает GRDB DatabaseError SQLITE_CONSTRAINT.
+    /// INSERT — fails on UNIQUE(`path`) conflict (the user tries to add an
+    /// already-watched folder). The caller handles the GRDB DatabaseError SQLITE_CONSTRAINT.
     public func addWatchedFolder(_ folder: WatchedFolder) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         try pool.write { db in
@@ -748,8 +748,8 @@ public final class Database: @unchecked Sendable {
         }
     }
 
-    /// DELETE by `id`. No-op если row не существует (idempotent — UI можно
-    /// безопасно вызывать multiple раз).
+    /// DELETE by `id`. No-op if the row does not exist (idempotent — the UI can
+    /// safely call it multiple times).
     public func removeWatchedFolder(id: String) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         try pool.write { db in
@@ -761,8 +761,8 @@ public final class Database: @unchecked Sendable {
         }
     }
 
-    /// Partial UPDATE. `nil` параметр — поле не меняется. `updated_ms` — bumped always
-    /// при любом change (audit trail). No-op если оба `enabled` и `maxGranularity` nil.
+    /// Partial UPDATE. A `nil` parameter — the field is left unchanged. `updated_ms` — bumped always
+    /// on any change (audit trail). No-op if both `enabled` and `maxGranularity` are nil.
     public func updateWatchedFolder(
         id: String,
         enabled: Bool? = nil,
@@ -852,8 +852,8 @@ public final class Database: @unchecked Sendable {
     // MARK: - Integrations (Phase 4.1)
 
     /// UPSERT one integration row keyed by `provider`. Writer-only.
-    /// Single-row-per-provider — переcoединение тех же workspace либо
-    /// switch на другой workspace одного provider'а просто перезаписывает row.
+    /// Single-row-per-provider — reconnecting the same workspace or
+    /// switching to another workspace of the same provider simply overwrites the row.
     public func upsertIntegration(_ record: IntegrationRecord) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         try pool.write { db in
@@ -894,9 +894,9 @@ public final class Database: @unchecked Sendable {
         }
     }
 
-    /// Returns row keyed by `provider`, либо nil если ещё не подключено.
-    /// Reader API — App потребляет в Settings UI rehydration, MCP/collector
-    /// (Phase 4.2) — для polling auth.
+    /// Returns row keyed by `provider`, or nil if not connected yet.
+    /// Reader API — App consumes it during Settings UI rehydration, MCP/collector
+    /// (Phase 4.2) — for polling auth.
     public func readIntegration(provider: IntegrationProvider) throws -> IntegrationRecord? {
         try pool.read { db in
             let row = try Row.fetchOne(db, sql: """
@@ -914,8 +914,8 @@ public final class Database: @unchecked Sendable {
         }
     }
 
-    /// DELETE by `provider`. Idempotent — no-op для отсутствующего row.
-    /// "Disconnect" в UI; refresh-flow тоже вызывает при `invalid_grant`.
+    /// DELETE by `provider`. Idempotent — no-op for a missing row.
+    /// "Disconnect" in the UI; the refresh flow also calls it on `invalid_grant`.
     public func deleteIntegration(provider: IntegrationProvider) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         try pool.write { db in
@@ -928,8 +928,8 @@ public final class Database: @unchecked Sendable {
 
     // MARK: - Workspace (Phase 5.1.B + Track-5 S2)
 
-    /// UPSERT по `id`. Идемпотентность создания + update'а `name` /
-    /// `created_by_member_id` / `left_at_ms` зашиты на UPSERT-семантику.
+    /// UPSERT by `id`. Idempotency of creation + updates to `name` /
+    /// `created_by_member_id` / `left_at_ms` rely on UPSERT semantics.
     /// Track-5 S2: renamed from `upsertOrg` and threads `left_at_ms` column.
     public func upsertWorkspace(_ workspace: Workspace) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
@@ -1018,7 +1018,7 @@ public final class Database: @unchecked Sendable {
             )
             if db.changesCount == 1 { return }
 
-            // changesCount == 0: либо already-left (idempotent no-op), либо missing row.
+            // changesCount == 0: either already-left (idempotent no-op) or missing row.
             let row = try Row.fetchOne(db, sql: """
                 SELECT \(Schema.Workspaces.leftAtMs)
                 FROM \(Schema.Workspaces.tableName)
@@ -1032,7 +1032,7 @@ public final class Database: @unchecked Sendable {
     }
 
     /// Clears `left_at_ms = NULL`. Used by `WorkspaceService.rejoin` (Task 11).
-    /// Idempotent — no-op if workspace already active или missing.
+    /// Idempotent — no-op if workspace already active or missing.
     public func clearWorkspaceLeftAt(workspaceID: String) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         try pool.write { db in
@@ -1063,9 +1063,9 @@ public final class Database: @unchecked Sendable {
         }
     }
 
-    /// Strict INSERT — re-insert того же UUID — это bug (caller контролирует
-    /// PK). Идемпотентность создания workspace+self-row на caller'е (5.1.D
-    /// `OrgService.createPersonalOrg` проверяет `listWorkspaces()` first).
+    /// Strict INSERT — re-inserting the same UUID is a bug (the caller controls
+    /// the PK). Idempotency of workspace+self-row creation is on the caller (5.1.D
+    /// `OrgService.createPersonalOrg` checks `listWorkspaces()` first).
     public func insertTeamMember(_ member: TeamMember) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         try pool.write { db in
@@ -1093,9 +1093,9 @@ public final class Database: @unchecked Sendable {
         }
     }
 
-    /// Returns members одного workspace, ordered by `added_at_ms` ASC.
-    /// `includeRemoved: false` (default) — active members only через partial
-    /// index `team_members_workspace_active`. UI Team list — default-call.
+    /// Returns members of a single workspace, ordered by `added_at_ms` ASC.
+    /// `includeRemoved: false` (default) — active members only via the partial
+    /// index `team_members_workspace_active`. UI Team list — default call.
     /// Track-5 S2: `orgID:` parameter label renamed → `workspaceID:`.
     public func readTeamMembers(workspaceID: String, includeRemoved: Bool = false) throws -> [TeamMember] {
         try pool.read { db in
@@ -1114,7 +1114,7 @@ public final class Database: @unchecked Sendable {
         }
     }
 
-    /// Strict INSERT — каждая rotation — уникальная запись (history forever-retained,
+    /// Strict INSERT — each rotation is a unique row (history forever-retained,
     /// contract §12). UUID PK collision = bug. Track-5 S2: persists `workspace_id`
     /// from the `TeamKey` value (M019 backfilled column).
     public func insertTeamKey(_ key: TeamKey) throws {
@@ -1171,8 +1171,8 @@ public final class Database: @unchecked Sendable {
     }
 
     /// Returns latest active rotation for the given workspace (`deprecated_at_ms IS NULL`
-    /// scoped by `workspace_id`). ORDER+LIMIT — defensive под edge case "две active
-    /// rows" (нормально 1 row, contract'ом на DB-уровне не constraint'ится).
+    /// scoped by `workspace_id`). ORDER+LIMIT — defensive against the edge case of "two active
+    /// rows" (normally 1 row, not constrained at the DB level by contract).
     /// Track-5 S2: now scoped by `workspaceID` parameter (M019).
     public func readActiveTeamKey(workspaceID: String) throws -> TeamKey? {
         try pool.read { db in
@@ -1194,9 +1194,9 @@ public final class Database: @unchecked Sendable {
 
     // MARK: - Team lifecycle (Phase 5.3.A)
 
-    /// Soft-delete на team_members row. Sets `removed_at_ms = at`. Idempotent
-    /// re-call на already-removed row preserves original timestamp (silent no-op).
-    /// Throws `LeafError.invalidPayload` если member не существует.
+    /// Soft-delete on a team_members row. Sets `removed_at_ms = at`. An idempotent
+    /// re-call on an already-removed row preserves the original timestamp (silent no-op).
+    /// Throws `LeafError.invalidPayload` if the member does not exist.
     public func markTeamMemberRemoved(memberID: String, at removedAt: Date) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         try pool.write { db in
@@ -1213,7 +1213,7 @@ public final class Database: @unchecked Sendable {
             )
             if db.changesCount == 1 { return }
 
-            // changesCount == 0: либо already-removed (idempotent no-op), либо missing row.
+            // changesCount == 0: either already-removed (idempotent no-op) or missing row.
             let row = try Row.fetchOne(db, sql: """
                 SELECT \(Schema.TeamMembers.removedAtMs)
                 FROM \(Schema.TeamMembers.tableName)
@@ -1223,16 +1223,16 @@ public final class Database: @unchecked Sendable {
                 arguments: [memberID]
             )
             guard row != nil else { throw LeafError.invalidPayload }
-            // row exists с не-NULL removed_at_ms → idempotent no-op, return.
+            // row exists with non-NULL removed_at_ms → idempotent no-op, return.
         }
     }
 
     /// Marks team_keys row deprecated. Sets `deprecated_at_ms = at`.
     /// **Sole-active-per-workspace invariant:** throws `LeafError.invalidPayload`
-    /// если deprecating этот key оставит 0 active rows within `workspaceID`.
-    /// Caller (5.3.D KeyRotationService) должен `insertTeamKey(new)` first в той
-    /// же tx. Idempotent re-call на already-deprecated row preserves original
-    /// timestamp. Throws `LeafError.invalidPayload` если key не существует.
+    /// if deprecating this key would leave 0 active rows within `workspaceID`.
+    /// The caller (5.3.D KeyRotationService) must `insertTeamKey(new)` first in the
+    /// same tx. An idempotent re-call on an already-deprecated row preserves the original
+    /// timestamp. Throws `LeafError.invalidPayload` if the key does not exist.
     /// Track-5 S2: added `workspaceID` parameter so the invariant scopes per
     /// workspace (M019).
     public func deprecateTeamKey(workspaceID: String, keyID: String, at deprecatedAt: Date) throws {
@@ -1261,8 +1261,8 @@ public final class Database: @unchecked Sendable {
                     // Target is the sole active row — deprecate would leave 0 active.
                     throw LeafError.invalidPayload
                 }
-                // Иначе — target либо already-deprecated (idempotent path),
-                // либо missing (handled by zero-changesCount branch ниже).
+                // Otherwise — the target is either already-deprecated (idempotent path)
+                // or missing (handled by the zero-changesCount branch below).
                 // Bypass guard, continue to step 2.
             }
 
@@ -1280,8 +1280,8 @@ public final class Database: @unchecked Sendable {
             )
             if db.changesCount == 1 { return }
 
-            // changesCount == 0: либо already-deprecated (idempotent no-op),
-            // либо missing row.
+            // changesCount == 0: either already-deprecated (idempotent no-op)
+            // or missing row.
             let row = try Row.fetchOne(db, sql: """
                 SELECT \(Schema.TeamKeys.deprecatedAtMs)
                 FROM \(Schema.TeamKeys.tableName)
@@ -1291,14 +1291,14 @@ public final class Database: @unchecked Sendable {
                 arguments: [keyID]
             )
             guard row != nil else { throw LeafError.invalidPayload }
-            // row exists с не-NULL deprecated_at_ms → idempotent no-op.
+            // row exists with non-NULL deprecated_at_ms → idempotent no-op.
         }
     }
 
     /// Returns team_keys row by id, regardless of deprecated status.
-    /// Used by Phase 5.3.E peer-side flow для decrypt'а incoming snapshot
-    /// под previously-rotated keyID (forever-retained per contract §12).
-    /// Reader-mode safe — read-only API без mode guard.
+    /// Used by the Phase 5.3.E peer-side flow to decrypt an incoming snapshot
+    /// under a previously-rotated keyID (forever-retained per contract §12).
+    /// Reader-mode safe — read-only API without a mode guard.
     public func readTeamKey(byID id: String) throws -> TeamKey? {
         try pool.read { db in
             let row = try Row.fetchOne(db, sql: """
@@ -1382,7 +1382,7 @@ public final class Database: @unchecked Sendable {
             if db.changesCount != 1 {
                 // changesCount 0 → either missing row or already-deprecated. Both
                 // surface as .invalidPayload per spec §9 (caller bug — admin shouldn't
-                // initiate rotation от стейта где prior-key already deprecated/missing).
+                // initiate rotation from a state where the prior key is already deprecated/missing).
                 throw LeafError.invalidPayload
             }
 
@@ -1519,12 +1519,12 @@ public final class Database: @unchecked Sendable {
 
     // MARK: - Linear attribution v2 migration (Phase 4.5)
 
-    /// Phase 4.5 — одноразовая wipe Linear events + cursor для миграции на
-    /// per-action attribution. Старая query `{updatedAt:{gt:$since}}` была
-    /// workspace-wide и засчитывала teammate updates как user actions; existing
-    /// rows контаминированы. Caller (`LinearCollector.runOneTimeMigration`)
-    /// гарантирует idempotency через UserDefaults flag.
-    /// Возвращает `(eventsDeleted, offsetsDeleted)` для diagnostic logging.
+    /// Phase 4.5 — a one-time wipe of Linear events + cursor for the migration to
+    /// per-action attribution. The old query `{updatedAt:{gt:$since}}` was
+    /// workspace-wide and counted teammate updates as user actions; existing
+    /// rows are contaminated. The caller (`LinearCollector.runOneTimeMigration`)
+    /// guarantees idempotency via a UserDefaults flag.
+    /// Returns `(eventsDeleted, offsetsDeleted)` for diagnostic logging.
     public func purgeLinearAttributionV2() throws -> (eventsDeleted: Int, offsetsDeleted: Int) {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         return try pool.write { db in
@@ -1551,12 +1551,12 @@ public final class Database: @unchecked Sendable {
 
     // MARK: - GitHub collector helpers (Phase 4.7.B-3)
 
-    /// Phase 4.7.B-3 — derive top-N repos для bounded fan-out actions/runs polling.
-    /// Возвращает "owner/repo" identifier'ы упорядоченные по count `gh_commit_pushed`
-    /// events DESC начиная с `sinceMs` (typically `now - 7 days`).
-    /// Используется `GitHubCollector.performTick()` перед `fetchActionsRunsForActor` —
-    /// ограничивает per-tick HTTP cost N calls (one per repo) и фокусирует на
-    /// реально активных репо. Empty result → no actions/runs HTTP call вообще.
+    /// Phase 4.7.B-3 — derive top-N repos for bounded fan-out actions/runs polling.
+    /// Returns "owner/repo" identifiers ordered by count of `gh_commit_pushed`
+    /// events DESC since `sinceMs` (typically `now - 7 days`).
+    /// Used by `GitHubCollector.performTick()` before `fetchActionsRunsForActor` —
+    /// caps the per-tick HTTP cost at N calls (one per repo) and focuses on
+    /// genuinely active repos. Empty result → no actions/runs HTTP call at all.
     /// Reader-mode safe (read-only). Returns repos in DESC order by push count.
     public func queryActiveGitHubRepos(sinceMs: Int64, limit: Int) throws -> [String] {
         guard limit > 0 else { return [] }
@@ -1617,13 +1617,13 @@ public final class Database: @unchecked Sendable {
 
     // MARK: - Slack collector helpers (Phase 4.4)
 
-    /// Phase 4.4 B6 — узкий summary для последнего Slack `huddle_state_change`
-    /// context-event. Полная `RawEvent` reconstruction collector'у не нужна —
-    /// он сравнивает только `state` для transition detection.
+    /// Phase 4.4 B6 — a narrow summary for the latest Slack `huddle_state_change`
+    /// context event. The collector does not need a full `RawEvent` reconstruction —
+    /// it only compares `state` for transition detection.
     public struct SlackHuddleEventSummary: Sendable, Equatable {
-        /// Raw API string ("in_a_huddle" / "default_unset" / etc) — collector
-        /// сам конвертит в `SlackHuddleState` через `init(slackAPIString:)`,
-        /// чтобы forward-compat с unknown values остался у одного callsite.
+        /// Raw API string ("in_a_huddle" / "default_unset" / etc) — the collector
+        /// converts it to `SlackHuddleState` itself via `init(slackAPIString:)`,
+        /// so that forward-compat with unknown values stays at a single callsite.
         public let state: String
         public let tsMs: Int64
 
@@ -1633,11 +1633,11 @@ public final class Database: @unchecked Sendable {
         }
     }
 
-    /// Возвращает (state, ts_ms) последнего slack huddle_state_change context-event,
-    /// или nil если ни одного нет в DB. Используется SlackCollector для transition
-    /// detection. Фильтр по `signal_type='context'` + JSON1 `payload.source='slack'`
-    /// + `payload.event_kind='slack_huddle_state_change'` исключает action events
-    /// (message aggregates) и события других providers.
+    /// Returns (state, ts_ms) of the latest slack huddle_state_change context event,
+    /// or nil if there is none in the DB. Used by SlackCollector for transition
+    /// detection. The filter on `signal_type='context'` + JSON1 `payload.source='slack'`
+    /// + `payload.event_kind='slack_huddle_state_change'` excludes action events
+    /// (message aggregates) and events from other providers.
     public func readLatestSlackHuddleEvent() throws -> SlackHuddleEventSummary? {
         try pool.read { db in
             let row = try Row.fetchOne(db, sql: """
@@ -1802,9 +1802,9 @@ public final class Database: @unchecked Sendable {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
-    /// Устанавливает `prepareDatabase` hook на GRDB Configuration, применяющий
+    /// Installs a `prepareDatabase` hook on the GRDB Configuration that applies
     /// SQLCipher pragmas per-connection. Ordering: pre-key → `PRAGMA key = x'HEX'` → post-key.
-    /// Если `opts == nil` — ничего не делаем, DB открывается как plaintext SQLite.
+    /// If `opts == nil` — do nothing, the DB opens as plaintext SQLite.
     private static func applyEncryption(_ opts: EncryptionOptions?, to config: inout Configuration) {
         guard let opts else { return }
         config.prepareDatabase { db in
@@ -1820,12 +1820,12 @@ public final class Database: @unchecked Sendable {
         }
     }
 
-    /// Detection + rename plaintext SQLite при первом encrypted-boot.
-    /// Запускается только в writer mode (юзер уже писал → что-то есть для миграции),
-    /// и только если передан encryption (nil = остаёмся на plaintext).
-    /// Strategy (D-1.5-2): если первые 16 байт == "SQLite format 3\0" → переименовать
-    /// в `events.sqlite.pre-sqlcipher.bak`, удалить WAL/SHM sidecar'ы, запустить
-    /// нормальный open-flow (создаст свежую encrypted).
+    /// Detection + rename of plaintext SQLite on the first encrypted boot.
+    /// Runs only in writer mode (the user already wrote → there is something to migrate),
+    /// and only if encryption is passed (nil = stay on plaintext).
+    /// Strategy (D-1.5-2): if the first 16 bytes == "SQLite format 3\0" → rename
+    /// to `events.sqlite.pre-sqlcipher.bak`, delete the WAL/SHM sidecars, run the
+    /// normal open flow (creates a fresh encrypted one).
     private static func migrateFromPlaintextIfNeeded(at url: URL, encryption: EncryptionOptions?) throws {
         guard encryption != nil else { return }
         let path = url.path

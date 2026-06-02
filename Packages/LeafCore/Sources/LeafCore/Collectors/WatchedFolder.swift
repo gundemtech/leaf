@@ -1,25 +1,25 @@
 import Foundation
 
-/// Phase 2.4 — public-Core type для row из `watched_folders` таблицы.
-/// Юзер управляет списком через Settings; `FSEventsCollector` читает
-/// при старте + на каждый Darwin notify / poll-fallback tick.
+/// Phase 2.4 — public-Core type for a row from the `watched_folders` table.
+/// The user manages the list via Settings; `FSEventsCollector` reads it
+/// at startup + on every Darwin notify / poll-fallback tick.
 public struct WatchedFolder: Sendable, Hashable {
-    /// UUID — stable identity при rename folder (если когда-то добавим auto-detect)
-    /// и для `update`/`remove` API. Не path, чтобы не каскадить переименования.
+    /// UUID — stable identity when a folder is renamed (if we ever add auto-detect)
+    /// and for the `update`/`remove` API. Not the path, to avoid cascading renames.
     public let id: String
     /// Canonical absolute path (`URL.resolvingSymlinksInPath`).
-    /// `/var/...` и `/private/var/...` — один и тот же путь; канонизация делается
-    /// и в UI service (перед INSERT), и в FSEventsCollector (перед `FSEventStreamCreate`).
+    /// `/var/...` and `/private/var/...` — the same path; canonicalization is done
+    /// both in the UI service (before INSERT) and in FSEventsCollector (before `FSEventStreamCreate`).
     public let path: String
     /// L4 = parent dir at write-time (privacy-first default per architecture.md);
-    /// L5 = full file path. Toggle применяется только к future events.
+    /// L5 = full file path. The toggle applies only to future events.
     public let maxGranularity: WatchedFolderGranularity
-    /// `false` — collector не пишет new events, но historical events остаются
-    /// (non-retroactive; right-to-deletion — отдельный flow OT-1).
+    /// `false` — the collector stops writing new events, but historical events remain
+    /// (non-retroactive; right-to-deletion is a separate flow OT-1).
     public let enabled: Bool
-    /// Когда юзер добавил folder.
+    /// When the user added the folder.
     public let addedAt: Date
-    /// Последний UPDATE этой row (toggle, granularity change, etc).
+    /// Last UPDATE of this row (toggle, granularity change, etc).
     public let updatedAt: Date
 
     public init(
@@ -39,11 +39,11 @@ public struct WatchedFolder: Sendable, Hashable {
     }
 }
 
-/// L4 vs L5 — per-folder ceiling. См. architecture.md "Granularity levels":
-/// L6 (content) запрещено всегда; этот enum только про L4↔L5 trade-off.
+/// L4 vs L5 — per-folder ceiling. See architecture.md "Granularity levels":
+/// L6 (content) is always forbidden; this enum is only about the L4↔L5 trade-off.
 public enum WatchedFolderGranularity: String, Sendable, Hashable {
-    /// "App + folder/module" — payload пишет parent dir, без basename.
+    /// "App + folder/module" — payload writes the parent dir, without basename.
     case L4
-    /// "App + file name" — payload пишет full file path. Opt-in per folder.
+    /// "App + file name" — payload writes the full file path. Opt-in per folder.
     case L5
 }

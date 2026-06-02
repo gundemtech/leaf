@@ -10,7 +10,7 @@ final class ToolResponseBuilderTests: XCTestCase {
         guard case .text(let tc) = result.content[0] else {
             return XCTFail("Expected .text content")
         }
-        // sortedKeys → "entries" до "version"; substring check устойчив к пробелам.
+        // sortedKeys → "entries" before "version"; substring check is whitespace-tolerant.
         XCTAssertTrue(tc.text.contains("\"version\":1"),
                       "Output should contain version:1, got: \(tc.text)")
 

@@ -28,8 +28,8 @@ public enum ActivityFeedMapper {
         let eventKind = payload["event_kind"] ?? ""
 
         // Track-4 S4 early dispatch — skip-list + LocalOS whitelist run before
-        // signalType routing. Layer A events (S1+S2+S3) land под various signal
-        // types без `payload["source"]` key, so signalType-based routing alone
+        // signalType routing. Layer A events (S1+S2+S3) land under various signal
+        // types without a `payload["source"]` key, so signalType-based routing alone
         // would drop them or render without semantic copy.
         if Self.skippedKinds.contains(eventKind) { return nil }
         if Self.trackFourLocalOSKinds.contains(eventKind) {
@@ -585,7 +585,7 @@ public enum ActivityFeedMapper {
         "linear_assigned_workload_pulse",
         "linear_cycle_progress",
         // Track-4 S4 — high-cadence substrate metrics, not chronological events.
-        // intensity_snapshot (per-minute aggregate когда intensity ON → 60/hour),
+        // intensity_snapshot (per-minute aggregate when intensity ON → 60/hour),
         // intensity_bucket_dropped (AFK debug marker), clipboard_event_count
         // (per-tick counter). Surfaced via Derived Insights Engine (Phase 4.9).
         "intensity_snapshot",

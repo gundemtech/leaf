@@ -1,26 +1,26 @@
 import Foundation
 
-/// Helper для сборки tool-response JSON с общим полем `"version"`.
+/// Helper for assembling tool-response JSON with a shared `"version"` field.
 ///
-/// Все MCP-tools Leaf возвращают payload в виде JSON-строки внутри
-/// `ToolCallResult.content[0].text`. Чтобы клиенты (Claude Code и будущие)
-/// могли distinguish schema versions между релизами Leaf, добавляем
-/// top-level `"version": N` в каждый payload. Bumping `schemaVersion` —
-/// breaking change для tool consumer'ов.
+/// All Leaf MCP tools return their payload as a JSON string inside
+/// `ToolCallResult.content[0].text`. So that clients (Claude Code and future
+/// ones) can distinguish schema versions across Leaf releases, we add a
+/// top-level `"version": N` to every payload. Bumping `schemaVersion` is a
+/// breaking change for tool consumers.
 ///
-/// Это **tool-output schema version**, НЕ MCP-protocol version
-/// (MCP protocol version negotiated в `InitializeHandler`).
+/// This is the **tool-output schema version**, NOT the MCP-protocol version
+/// (the MCP protocol version is negotiated in `InitializeHandler`).
 public enum ToolResponseBuilder {
-    /// Текущая версия schema tool outputs. Инкрементировать только при
-    /// breaking изменениях (переименование поля, смена типа, удаление ключа).
-    /// Добавление опциональных полей — compatible, не требует bump'а.
+    /// Current schema version of tool outputs. Increment only on
+    /// breaking changes (renaming a field, changing a type, removing a key).
+    /// Adding optional fields is compatible and does not require a bump.
     public static let schemaVersion = 1
 
-    /// Сериализует payload в JSON с добавленным `"version": schemaVersion`
-    /// и возвращает готовый `ToolCallResult`.
+    /// Serializes the payload to JSON with `"version": schemaVersion` added
+    /// and returns a ready `ToolCallResult`.
     ///
-    /// - `payload` не должен содержать ключ `"version"` — он перезапишется.
-    /// - `JSONSerialization` options: `.sortedKeys` для deterministic output.
+    /// - `payload` must not contain a `"version"` key — it will be overwritten.
+    /// - `JSONSerialization` options: `.sortedKeys` for deterministic output.
     public static func versionedJSONResult(_ payload: [String: Any]) throws -> ToolCallResult {
         var p = payload
         p["version"] = schemaVersion

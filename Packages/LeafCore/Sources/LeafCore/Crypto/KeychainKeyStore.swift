@@ -2,19 +2,19 @@ import Foundation
 import Security
 
 /// **DEPRECATED — kept for one-shot migration to FileKeyStore (Phase 3.4.5).**
-/// Удалить вместе с `LeafError.keychainUnavailable` в Phase 3.5+ после
-/// confirmed stable runtime у alpha-юзеров.
+/// Remove together with `LeafError.keychainUnavailable` in Phase 3.5+ after
+/// confirmed stable runtime for alpha users.
 ///
-/// Раньше генерил 32-byte random key для SQLCipher и хранил его в macOS Keychain.
+/// Previously generated a 32-byte random key for SQLCipher and stored it in the macOS Keychain.
 ///
-/// - Accessibility: `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` — доступ
-///   после первого unlock'а сессии, не синкается на iCloud.
-/// - Access group: shared между app / agent / mcp (`$(TeamID).tech.gundem.leaf`).
-///   Все три процесса читали один и тот же ключ → единая DB.
+/// - Accessibility: `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` — accessible
+///   after the session's first unlock, not synced to iCloud.
+/// - Access group: shared across app / agent / mcp (`$(TeamID).tech.gundem.leaf`).
+///   All three processes read the same key → a single DB.
 ///
-/// Phase 3.4.5 заменил это на `FileKeyStore` — keychain access group sharing
-/// требует Developer ID Provisioning Profile, которого нет на distribution.
-/// `fetchOnly` остаётся для bridge migration в FileKeyStore (legacy alpha.2 пользователи).
+/// Phase 3.4.5 replaced this with `FileKeyStore` — keychain access group sharing
+/// requires a Developer ID Provisioning Profile, which is not present on distribution.
+/// `fetchOnly` remains for bridge migration into FileKeyStore (legacy alpha.2 users).
 public enum KeychainKeyStore {
     public static let keyLengthBytes = 32
 
@@ -33,10 +33,10 @@ public enum KeychainKeyStore {
         return newKey
     }
 
-    /// Fetch-only без auto-create. Возвращает `nil` если `errSecItemNotFound`.
-    /// Используется `FileKeyStore.fetchOrCreate` для bridge migration —
-    /// alpha.2 main app записал ключ в default Keychain group, Phase 3.4.5
-    /// переносит его в `~/Library/Application Support/Leaf/db.key`.
+    /// Fetch-only without auto-create. Returns `nil` if `errSecItemNotFound`.
+    /// Used by `FileKeyStore.fetchOrCreate` for bridge migration —
+    /// the alpha.2 main app wrote the key into the default Keychain group, Phase 3.4.5
+    /// moves it to `~/Library/Application Support/Leaf/db.key`.
     public static func fetchOnly(
         accessGroup: String = "",
         service: String = "tech.gundem.leaf",
@@ -45,7 +45,7 @@ public enum KeychainKeyStore {
         return try fetch(accessGroup: accessGroup, service: service, account: account)
     }
 
-    /// Удаляет ключ. Для dev reset / тестового tearDown.
+    /// Deletes the key. For dev reset / test tearDown.
     public static func delete(
         accessGroup: String,
         service: String = "tech.gundem.leaf",
@@ -100,13 +100,13 @@ public enum KeychainKeyStore {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
-            // Phase 3.5 — silent migration: если Keychain locked / нужна authorization,
-            // вернём errSecInteractionNotAllowed без UI prompt вместо modal у юзера.
-            // SecItemAdd параметр игнорирует, fetch/delete получают тихий fail.
+            // Phase 3.5 — silent migration: if the Keychain is locked / authorization is required,
+            // return errSecInteractionNotAllowed without a UI prompt instead of a modal for the user.
+            // SecItemAdd ignores this parameter; fetch/delete get a silent fail.
             kSecUseAuthenticationUI as String: kSecUseAuthenticationUISkip
         ]
-        // Access group применяется только для подписанных бинарей (с подходящим entitlement).
-        // В unit-тестах (unsigned) оставляем пустой — Keychain работает в default keychain.
+        // Access group applies only to signed binaries (with the matching entitlement).
+        // In unit tests (unsigned) we leave it empty — the Keychain operates in the default keychain.
         if !accessGroup.isEmpty {
             q[kSecAttrAccessGroup as String] = accessGroup
         }

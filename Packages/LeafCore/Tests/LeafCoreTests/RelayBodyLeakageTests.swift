@@ -2065,8 +2065,8 @@ final class RelayBodyLeakageTests: XCTestCase {
     // MARK: - Phase Track-4 S3 — system observers + intensity walkbacks (13)
 
     /// 13 walkbacks — one per new event_kind. Each smuggles content marker
-    /// фейковым payload key (body / characters / pixels / etc) и assert'ит
-    /// что marker не появляется в presence_state.state_json.
+    /// via a fake payload key (body / characters / pixels / etc) and asserts
+    /// that the marker does not appear in presence_state.state_json.
 
     func testRelayDoesNotLeakIntensitySnapshot_S3() throws {
         try assertS2DoesNotLeak(

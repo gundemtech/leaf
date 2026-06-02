@@ -3,13 +3,13 @@ import Foundation
 import LeafCore
 import os
 
-/// Cross-process status pipe — Agent периодически записывает heartbeat файл
-/// чтобы main app мог в Settings → Diagnostics показать «Agent жив, AX granted,
-/// CDHash X, последний heartbeat N сек назад». См. `LeafCore.DebugHeartbeat`
-/// для shape + canonical путь.
+/// Cross-process status pipe — the Agent periodically writes a heartbeat file
+/// so the main app can show in Settings → Diagnostics "Agent alive, AX granted,
+/// CDHash X, last heartbeat N sec ago". See `LeafCore.DebugHeartbeat`
+/// for the shape + canonical path.
 ///
-/// Не throw'ит: write failures логируются один раз и проглатываются — heartbeat
-/// optional, не должен валить Agent.
+/// Does not throw: write failures are logged once and swallowed — the heartbeat
+/// is optional and must not take down the Agent.
 actor HeartbeatWriter {
     private let intervalSec: TimeInterval
     private var task: Task<Void, Never>?
@@ -53,7 +53,7 @@ actor HeartbeatWriter {
         )
         do {
             try heartbeat.write()
-            // Reset «logged failure once» так что новые failure'ы тоже залогаются.
+            // Reset "logged failure once" so that new failures get logged too.
             loggedWriteFailure = false
         } catch {
             if !loggedWriteFailure {

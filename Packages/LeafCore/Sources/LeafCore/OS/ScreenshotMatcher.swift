@@ -2,10 +2,10 @@ import Foundation
 
 /// Phase Track-4 S3 — locale-aware screenshot filename matcher. Recognises
 /// macOS default screenshot prefixes for 10 locales + extension whitelist.
-/// **Filename only** — никогда не читает file contents (ADR-010 Won't-list).
+/// **Filename only** — never reads file contents (ADR-010 Won't-list).
 public struct ScreenshotMatcher: Sendable {
-    /// 10-locale prefix bank — single source of truth для test fixtures.
-    /// Case-insensitive prefix match; user может override через
+    /// 10-locale prefix bank — single source of truth for test fixtures.
+    /// Case-insensitive prefix match; user can override via
     /// `additionalPrefixes` (testing / custom screenshot tools).
     public static let defaultPrefixes: [String] = [
         "Screenshot",

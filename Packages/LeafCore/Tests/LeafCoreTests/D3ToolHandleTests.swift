@@ -168,9 +168,9 @@ final class D3ToolHandleTests: XCTestCase {
         }
     }
 
-    /// Round-trip the `CurrentWorkResponse` dict back into the typed struct и
+    /// Round-trip the `CurrentWorkResponse` dict back into the typed struct and
     /// verify `schemaVersion` survives. This guards against future Codable
-    /// renames that would silently drop the version stamp в production output.
+    /// renames that would silently drop the version stamp in production output.
     func testJSONEncodingPreservesSchemaVersion() throws {
         let original = CurrentWorkResponse(
             currentApp: "com.example",

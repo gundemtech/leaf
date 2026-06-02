@@ -2,20 +2,20 @@
 //  SessionFeedMapper.swift
 //  LeafCore
 //
-//  Phase 4.10.B — pure stateless mapper из chronological events ->
-//  `[ActivitySession]`. ADR-010: читает только safe-fields (`window_title`,
-//  `browser_url`, `state`); content body / preview / description никогда.
+//  Phase 4.10.B — pure stateless mapper from chronological events ->
+//  `[ActivitySession]`. ADR-010: reads only safe fields (`window_title`,
+//  `browser_url`, `state`); content body / preview / description never.
 //
-//  Вход — generic-shape rows (id / ts / signalType / bundleID / payload),
-//  чтобы mapper тестировался без БД. Реальный caller (Prod insights) кормит
-//  результат `SELECT FROM events WHERE signal_type IN ('attention','context')`.
+//  Input — generic-shape rows (id / ts / signalType / bundleID / payload),
+//  so the mapper can be tested without a DB. The real caller (Prod insights) feeds
+//  the result of `SELECT FROM events WHERE signal_type IN ('attention','context')`.
 //
 
 import Foundation
 
-/// Generic shape строки для mapper'а — позволяет тестам подавать данные без
-/// привязки к GRDB. id и timestamp обязательны (sort key + identity);
-/// остальное — как в `events` table.
+/// Generic shape of a row for the mapper — lets tests supply data without
+/// being tied to GRDB. id and timestamp are required (sort key + identity);
+/// the rest mirrors the `events` table.
 public struct SessionMapperRow: Sendable, Hashable {
     public let id: Int64
     public let timestamp: Date
@@ -39,22 +39,22 @@ public struct SessionMapperRow: Sendable, Hashable {
 }
 
 public enum SessionFeedMapper {
-    /// Сложить упорядоченную ленту attention/context events в список
-    /// `ActivitySession`. Алгоритм single-pass O(N).
+    /// Fold an ordered feed of attention/context events into a list of
+    /// `ActivitySession`. Single-pass O(N) algorithm.
     ///
-    /// Поведение:
-    /// * Run consecutive attention events с одинаковым (bundle, contextKey)
-    ///   и gap'ом ≤ `gapThresholdSec` — одна сессия.
-    /// * Смена bundle, смена contextKey (window_title или browser_url),
-    ///   `signal_type=context` с `state=idle`, либо gap > `gapThresholdSec` —
-    ///   закрытие текущей и открытие новой.
-    /// * Сессии с `duration < minDurationSec` отсеиваются (защита от
-    ///   мгновенных переключений).
+    /// Behavior:
+    /// * A run of consecutive attention events with the same (bundle, contextKey)
+    ///   and a gap ≤ `gapThresholdSec` — one session.
+    /// * A bundle change, a contextKey change (window_title or browser_url),
+    ///   `signal_type=context` with `state=idle`, or a gap > `gapThresholdSec` —
+    ///   closes the current session and opens a new one.
+    /// * Sessions with `duration < minDurationSec` are filtered out (guards against
+    ///   instantaneous switches).
     ///
-    /// `referenceEnd` — момент, до которого имеет смысл "тянуть" последнюю
-    /// открытую сессию. Без него trailing session получает `end = lastEventTs`
-    /// (длительность 0) и режется минимальным фильтром, поэтому caller
-    /// обычно передаёт `Date()` или верхнюю границу периода.
+    /// `referenceEnd` — the moment up to which it makes sense to "stretch" the last
+    /// open session. Without it the trailing session gets `end = lastEventTs`
+    /// (duration 0) and is cut by the minimum-duration filter, so the caller
+    /// usually passes `Date()` or the upper bound of the period.
     public static func map(
         rows: [SessionMapperRow],
         classifier: any AppCategoryClassifier = EmptyAppCategoryClassifier(),
@@ -73,8 +73,8 @@ public enum SessionFeedMapper {
         for row in sorted {
             switch row.signalType {
             case "context":
-                // Idle context = жёсткая граница. "active" / прочие — игнор:
-                // следующий attention сам начнёт новую сессию если key не совпал.
+                // Idle context = hard boundary. "active" / others — ignored:
+                // the next attention event itself starts a new session if the key didn't match.
                 if row.payload["state"] == "idle", let s = open {
                     result.append(s.close(end: clamp(s.lastEventTs, max: row.timestamp, refEnd: refEnd)))
                     open = nil
@@ -94,9 +94,9 @@ public enum SessionFeedMapper {
                         s.eventCount += 1
                         open = s
                     } else {
-                        // Закрываем текущую и открываем новую. End point зависит от
-                        // того, успел ли gap превысить threshold (значит сессия
-                        // тихо умерла где-то в середине gap'а — кэпим длительность).
+                        // Close the current session and open a new one. The end point depends on
+                        // whether the gap exceeded the threshold (meaning the session
+                        // quietly died somewhere in the middle of the gap — we cap the duration).
                         let end: Date
                         if gap > gapThresholdSec {
                             end = min(s.lastEventTs.addingTimeInterval(gapThresholdSec), row.timestamp)
@@ -131,9 +131,9 @@ public enum SessionFeedMapper {
             }
         }
 
-        // Trailing session: тянем до `min(lastEventTs + gap, refEnd)`.
-        // Это даёт ongoing-сессии видимую длительность ("вы здесь ~30s") без
-        // оптимистичного "вы тут уже 4 часа" если последний event давний.
+        // Trailing session: stretch up to `min(lastEventTs + gap, refEnd)`.
+        // This gives an ongoing session a visible duration ("you're here ~30s") without
+        // an optimistic "you've been here for 4 hours" if the last event is old.
         if let s = open {
             let trailingEnd = min(s.lastEventTs.addingTimeInterval(gapThresholdSec), refEnd)
             result.append(s.close(end: max(s.lastEventTs, trailingEnd)))
@@ -166,8 +166,8 @@ public enum SessionFeedMapper {
         }
     }
 
-    /// Window title в приоритете, browser_url fallback. Пустые / whitespace-only
-    /// строки трактуем как отсутствие — иначе "" и nil дали бы разные сессии.
+    /// Window title takes priority, browser_url is the fallback. Empty / whitespace-only
+    /// strings are treated as absent — otherwise "" and nil would yield different sessions.
     private static func extractContextKey(payload: [String: String]) -> String? {
         if let title = payload["window_title"], !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return title
@@ -178,8 +178,8 @@ public enum SessionFeedMapper {
         return nil
     }
 
-    /// `lastEventTs <= candidate <= refEnd` — защита от негативных длительностей
-    /// и overshoot'а за период выборки.
+    /// `lastEventTs <= candidate <= refEnd` — guards against negative durations
+    /// and overshooting past the sampling period.
     private static func clamp(_ lastEventTs: Date, max candidate: Date, refEnd: Date) -> Date {
         let upper = min(candidate, refEnd)
         return Swift.max(lastEventTs, upper)

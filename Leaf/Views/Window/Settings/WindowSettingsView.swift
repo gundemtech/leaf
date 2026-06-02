@@ -4,7 +4,7 @@
 //  split into 5 categories switched via a top LeafTab strip (mirrors the
 //  Activity screen's header → LeafTab → content layout). Only the selected
 //  category's sub-sections mount at a time, so each view is a short scroll
-//  instead of one километровый dump.
+//  instead of one mile-long dump.
 //
 //  Categories (see SettingsCategory):
 //    • Workspace      — WorkspaceSettingsSection
@@ -105,7 +105,7 @@ struct WindowSettingsView: View {
                 AdvancedSettingsSection()
                 UpdatesSection(updater: updater)
                 // Always visible (incl. signed release): this is a user-facing
-                // troubleshooting panel ("почему не детектит"), not a dev-only
+                // troubleshooting panel ("why isn't it detecting"), not a dev-only
                 // tool — matches DebugDiagnosticsSection's own design intent.
                 DebugDiagnosticsSection()
             }

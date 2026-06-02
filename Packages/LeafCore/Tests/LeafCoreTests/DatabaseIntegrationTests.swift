@@ -116,7 +116,7 @@ final class DatabaseIntegrationTests: XCTestCase {
     func testDeleteEventsOlderThanRemovesOldRowsAndReturnsCount() throws {
         let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
 
-        // Вставляем события с ts в секундах 100, 200, 300 (в Date через /1000).
+        // Insert events with ts in seconds 100, 200, 300 (into Date via /1000).
         let events = [100, 200, 300].map { tsSec in
             RawEvent(
                 timestamp: Date(timeIntervalSince1970: TimeInterval(tsSec) / 1000.0),
@@ -126,7 +126,7 @@ final class DatabaseIntegrationTests: XCTestCase {
         }
         try db.write(events)
 
-        // Cutoff 250ms → удалиться должны две старейших (ts=100, ts=200).
+        // Cutoff 250ms → the two oldest (ts=100, ts=200) should be deleted.
         let deleted = try db.deleteEventsOlderThan(tsMs: 250, limit: 1000)
         XCTAssertEqual(deleted, 2)
 
@@ -151,7 +151,7 @@ final class DatabaseIntegrationTests: XCTestCase {
         }
         try db.write(events)
 
-        // Cutoff в далёком будущем → все 100 подпадают. Лимит 10 → только 10 удалятся.
+        // Cutoff far in the future → all 100 qualify. Limit 10 → only 10 are deleted.
         let cutoff = Int64((base.timeIntervalSince1970 + 1000) * 1000)
         let deleted = try db.deleteEventsOlderThan(tsMs: cutoff, limit: 10)
         XCTAssertEqual(deleted, 10)

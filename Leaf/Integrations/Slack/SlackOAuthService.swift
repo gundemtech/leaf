@@ -2,21 +2,21 @@
 //  SlackOAuthService.swift
 //  Leaf
 //
-//  Phase 4.4 — @Observable controller для Connections Settings tab (Slack).
-//  Mirror'ит LinearOAuthService 1:1 по structure (PKCE loopback flow), с
+//  Phase 4.4 — @Observable controller for the Connections Settings tab (Slack).
+//  Mirrors LinearOAuthService 1:1 in structure (PKCE loopback flow), with
 //  Slack-specific deviations:
-//   - authorize URL использует `user_scope` (НЕ `scope`) — Slack v2 разделяет
+//   - the authorize URL uses `user_scope` (NOT `scope`) — Slack v2 separates
 //     bot/user scopes;
-//   - `oauth.v2.access` для initial code exchange НЕ требует `grant_type` —
-//     inferred Slack'ом из presence `code`;
-//   - response shape отдельный (SlackOAuthV2Response), user-token живёт в
-//     `authed_user.access_token` (xoxp-);
-//   - workspaceID = "<team_id>:<user_id>" composite identifier (без `slack:`
-//     prefix — mirror Linear где workspaceID = просто org UUID);
-//   - дополнительный auth.test НЕ нужен — oauth.v2.access уже даёт team+user.
+//   - `oauth.v2.access` for the initial code exchange does NOT require a
+//     `grant_type` — inferred by Slack from the presence of `code`;
+//   - the response shape is separate (SlackOAuthV2Response), the user-token
+//     lives in `authed_user.access_token` (xoxp-);
+//   - workspaceID = "<team_id>:<user_id>" composite identifier (without the
+//     `slack:` prefix — mirrors Linear where workspaceID = just the org UUID);
+//   - a separate auth.test is NOT needed — oauth.v2.access already gives team+user.
 //
-//  Reuses `PKCE.swift` и `LoopbackCallbackListener.swift` из Linear namespace
-//  (тот же Swift module Leaf — namespace это просто папка).
+//  Reuses `PKCE.swift` and `LoopbackCallbackListener.swift` from the Linear
+//  namespace (same Swift module Leaf — a namespace is just a folder).
 //
 
 import Foundation
@@ -42,14 +42,14 @@ final class SlackOAuthService {
         case connected(workspaceName: String, connectedAt: Date)
         /// Phase Track-3 D3 — token still valid but Slack scopes incomplete after
         /// scope-bump release (D3 added 9 new optional scopes for warm/cold
-        /// coverage). UI surface'ит banner + red dot + re-authorize CTA
-        /// (Tasks 19-21). Connection остаётся usable для endpoints с already-granted
-        /// scope; warm/cold gated calls degrade gracefully.
+        /// coverage). The UI surfaces a banner + red dot + re-authorize CTA
+        /// (Tasks 19-21). The connection stays usable for endpoints with
+        /// already-granted scope; warm/cold gated calls degrade gracefully.
         case connectedScopeOutdated(workspaceName: String, connectedAt: Date, missing: Set<String>)
         /// refresh_token revoked / expired (SlackTokenRefresher Phase 4.4 B3
-        /// сделает deleteIntegration + UserDefaults flag + DistributedNotification).
-        /// UI показывает orange "Reconnect needed". Cleared на successful
-        /// `connect()` или manual `disconnect()`.
+        /// will do deleteIntegration + UserDefaults flag + DistributedNotification).
+        /// The UI shows an orange "Reconnect needed". Cleared on a successful
+        /// `connect()` or a manual `disconnect()`.
         case reconnectNeeded
         case error(message: String)
     }
@@ -97,9 +97,9 @@ final class SlackOAuthService {
 
     // MARK: - Public API
 
-    /// Перечитывает row из DB → выставляет `.connected`,
-    /// `.connectedScopeOutdated`, `.notConnected`, или `.reconnectNeeded` если
-    /// refresher (B3) удалил row из-за invalid_grant. Scope-outdated detection
+    /// Re-reads the row from the DB → sets `.connected`,
+    /// `.connectedScopeOutdated`, `.notConnected`, or `.reconnectNeeded` if the
+    /// refresher (B3) deleted the row due to invalid_grant. Scope-outdated detection
     /// mirrors GitHubOAuthService.reload — `requiredCore.subtracting(granted)`
     /// drives both this state AND the parallel `SlackScopesReader` observable
     /// consumed by Home banner / Sidebar dot / Connections section (I1 review fix).
@@ -131,7 +131,7 @@ final class SlackOAuthService {
         }
     }
 
-    /// Запускает full PKCE flow. Caller — UI button "Connect Slack".
+    /// Starts the full PKCE flow. Caller — the "Connect Slack" UI button.
     /// Convenience overload preserving the existing call shape; delegates to
     /// `connect(scopes:)` with the canonical `SlackScopesService.requested()`
     /// (D3 scope-bump baseline = required core ∪ optional).
@@ -165,8 +165,8 @@ final class SlackOAuthService {
             return
         }
 
-        // Открываем браузер до старта listener'а — чтобы избежать race window
-        // (см. LinearOAuthService комментарий, паттерн идентичный).
+        // Open the browser before starting the listener — to avoid a race window
+        // (see the LinearOAuthService comment, the pattern is identical).
         do {
             state = .waitingForCallback(port: port)
             async let listenerTask = LoopbackCallbackListener.awaitCallback(
@@ -201,7 +201,7 @@ final class SlackOAuthService {
                 verifier: challenge.verifier
             )
 
-            // oauth.v2.access уже содержит team+user — отдельный auth.test НЕ нужен.
+            // oauth.v2.access already contains team+user — a separate auth.test is NOT needed.
             state = .fetchingWorkspace
             guard let team = tokenResponse.team,
                   let authedUser = tokenResponse.authedUser,
@@ -212,18 +212,18 @@ final class SlackOAuthService {
                 return
             }
 
-            // workspaceID = "<team_id>:<user_id>" composite (без `slack:` prefix —
-            // mirror Linear где workspaceID = org UUID без `linear:` prefix; provider
-            // prefix добавляется только при derivation sourceID для CollectorOffset).
+            // workspaceID = "<team_id>:<user_id>" composite (without the `slack:` prefix —
+            // mirrors Linear where workspaceID = org UUID without the `linear:` prefix; the
+            // provider prefix is added only when deriving the sourceID for CollectorOffset).
             let now = Date()
             let workspaceID = "\(team.id):\(authedUser.id)"
             let expiresAt: Date? = {
                 guard let seconds = authedUser.expiresIn, seconds > 0 else { return nil }
                 return now.addingTimeInterval(TimeInterval(seconds))
             }()
-            // Granted scopes (user scopes) live в authed_user.scope. Top-level
-            // tokenResponse.scope — bot-token scopes (мы их не запрашиваем, но
-            // берём fallback на пустую строку).
+            // Granted scopes (user scopes) live in authed_user.scope. Top-level
+            // tokenResponse.scope — bot-token scopes (we don't request them, but
+            // we fall back to an empty string).
             let scope = authedUser.scope ?? tokenResponse.scope ?? ""
             let record = IntegrationRecord(
                 provider: .slack,
@@ -272,7 +272,7 @@ final class SlackOAuthService {
         }
     }
 
-    /// Удаляет row, постит notification (Agent collector в B6 подхватит и остановит polling).
+    /// Deletes the row, posts a notification (the Agent collector in B6 picks it up and stops polling).
     func disconnect() {
         do {
             let db = try ensureDatabase()
@@ -298,12 +298,12 @@ final class SlackOAuthService {
 
     private func buildAuthorizeURL(clientID: String, challenge: PKCE.Challenge, scopeParameter: String) throws -> URL {
         var components = URLComponents(url: SlackOAuthEndpoints.authorize, resolvingAgainstBaseURL: false)
-        // Slack v2 разделяет bot/user scopes:
-        //   `scope` — bot-token scopes (мы их НЕ запрашиваем — нужен user-token only)
+        // Slack v2 separates bot/user scopes:
+        //   `scope` — bot-token scopes (we do NOT request them — user-token only is needed)
         //   `user_scope` — user-token scopes (D3: comma-separated from
         //   SlackScopesService.requested() via connect(scopes:) overload)
-        // Slack accepts PKCE с `code_challenge_method=S256` для distributed/public apps
-        // с 2026-03-30. `redirect_uri` обязателен exact-match с тем что в app config.
+        // Slack accepts PKCE with `code_challenge_method=S256` for distributed/public apps
+        // as of 2026-03-30. `redirect_uri` must be an exact-match with the one in the app config.
         components?.queryItems = [
             URLQueryItem(name: "client_id", value: clientID),
             URLQueryItem(name: "user_scope", value: scopeParameter),
@@ -323,9 +323,9 @@ final class SlackOAuthService {
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        // NB: Slack `oauth.v2.access` для initial code exchange НЕ принимает
-        // `grant_type=authorization_code` — он inferred из presence `code`.
-        // Для refresh-flow (B3) `grant_type=refresh_token` обязателен.
+        // NB: Slack `oauth.v2.access` for the initial code exchange does NOT accept
+        // `grant_type=authorization_code` — it's inferred from the presence of `code`.
+        // For the refresh-flow (B3) `grant_type=refresh_token` is mandatory.
         request.httpBody = Self.formEncoded([
             "client_id": clientID,
             "code": code,
@@ -337,7 +337,7 @@ final class SlackOAuthService {
         guard let http = response as? HTTPURLResponse else {
             throw makeError("Token endpoint returned non-HTTP response.")
         }
-        // Slack возвращает 200 даже для ошибок — error info в JSON `ok=false` body.
+        // Slack returns 200 even for errors — the error info is in the JSON `ok=false` body.
         guard http.statusCode == 200 else {
             throw makeError("Token endpoint returned HTTP \(http.statusCode).")
         }
@@ -353,7 +353,7 @@ final class SlackOAuthService {
             let db = try ensureDatabase()
             try db.upsertIntegration(record)
         } catch {
-            // Single 100ms retry на SQLite busy (Phase 2.4 R6 паттерн).
+            // Single 100ms retry on SQLite busy (Phase 2.4 R6 pattern).
             Thread.sleep(forTimeInterval: 0.1)
             let db = try ensureDatabase()
             try db.upsertIntegration(record)

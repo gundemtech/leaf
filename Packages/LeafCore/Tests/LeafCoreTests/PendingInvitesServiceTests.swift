@@ -228,7 +228,7 @@ final class PendingInvitesServiceTests: XCTestCase {
         }
 
         let svc = makeService(database: db)
-        try await svc.revoke(token: "trev2______________________________")  // best-effort — не throws
+        try await svc.revoke(token: "trev2______________________________")  // best-effort — does not throw
 
         XCTAssertEqual(
             try db.readAllPendingInvites().first { $0.token == "trev2______________________________" }?.status,

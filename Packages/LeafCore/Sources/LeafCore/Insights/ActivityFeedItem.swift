@@ -1,10 +1,10 @@
 import Foundation
 
-/// Track-10 T5 — per-event substrate row из `DerivedInsights.recentActivityFeed(since:limit:)`.
+/// Track-10 T5 — per-event substrate row from `DerivedInsights.recentActivityFeed(since:limit:)`.
 /// Metadata only (eventKind discriminator + actor display + target ref/title + repo hint).
 /// Body fields (comment_body, note_body, email_subject, file_contents, raw_prompt,
-/// tool_input, tool_response, prompt) NEVER read — sentinel-injection regression test
-/// `LEAKED_SENTINEL_T5_RECENT_FEED` в RelayBodyLeakageTests guards walkback discipline.
+/// tool_input, tool_response, prompt) NEVER read — the sentinel-injection regression test
+/// `LEAKED_SENTINEL_T5_RECENT_FEED` in RelayBodyLeakageTests guards walkback discipline.
 public struct ActivityFeedItem: Sendable, Hashable, Codable {
     public let ts: Int64
     public let source: SinceSource

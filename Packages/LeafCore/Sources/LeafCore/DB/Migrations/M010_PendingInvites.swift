@@ -7,8 +7,8 @@ import GRDB
 ///
 /// Index `idx_pending_invites_status` — non-partial b-tree on `status`. Phase 5.5.C
 /// reads `WHERE status='pending'` for TeamView "Pending invites" section; partial
-/// index не выбран чтобы поддержать любой filter (consumed/revoked/expired) без
-/// disk-cost'а separate index'а. Cardinality 5 — index size negligible.
+/// index was not chosen so that any filter (consumed/revoked/expired) is supported
+/// without the disk cost of a separate index. Cardinality 5 — index size negligible.
 ///
 /// OTP at rest: acceptable per Phase 5.5 §4.2 — sits in same SQLCipher DB as
 /// teamKey (no incremental confidentiality risk).

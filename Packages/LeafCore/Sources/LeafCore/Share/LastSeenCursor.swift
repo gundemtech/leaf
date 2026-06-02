@@ -1,7 +1,7 @@
 import Foundation
 
-/// Track-10 T5 — UserDefaults-backed cursor для SINCE YOU WERE LAST ACTIVE
-/// timeline. Single-source-of-truth для "how far back to look for delta events".
+/// Track-10 T5 — UserDefaults-backed cursor for the SINCE YOU WERE LAST ACTIVE
+/// timeline. Single-source-of-truth for "how far back to look for delta events".
 ///
 /// Semantics:
 /// - First read (no UserDefaults value) — seeds to `now() - 24h` AND persists immediately.
