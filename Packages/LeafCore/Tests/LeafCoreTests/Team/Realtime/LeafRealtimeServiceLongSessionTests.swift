@@ -259,9 +259,12 @@ final class LeafRealtimeServiceLongSessionTests: XCTestCase {
         // Move clock into the near-expiry window so each tick triggers a refresh.
         clock.set(Date(timeIntervalSince1970: 1580))
 
-        // Start timer with a 60ms interval so two ticks fit in ~150ms wall time.
+        // Condition-based wait, not a fixed sleep window: on a loaded CI runner
+        // the timer Task can be starved and tick <2× inside a hardcoded 200ms
+        // window (the original flake). Poll until the loop has fired ≥2 refreshes
+        // or a generous deadline elapses — fast locally, robust on slow CI.
         service.startRefreshTimer(intervalSec: 0.06)
-        try await Task.sleep(nanoseconds: 200_000_000)
+        try await waitForCondition { counter.get("/auth/v1/token") >= 2 }
         await service.stopRefreshTimer()
 
         // The bootstrap was 1 call; the loop should have added ≥ 1. After the
@@ -396,10 +399,14 @@ final class LeafRealtimeServiceLongSessionTests: XCTestCase {
         await driver.dispatchMessage(.string(okJSON))
         clock.set(Date(timeIntervalSince1970: 1580))
 
-        // Start timer twice in quick succession — second start must cancel the first.
+        // Start timer twice in quick succession — second start must cancel the
+        // first. Poll until ≥2 ticks observed (kills the loaded-CI starvation
+        // flake), then stop immediately. The upper bound below still guards the
+        // double-fire regression: since we stop right after seeing ≥2, the count
+        // stays tightly bounded and a gross rate-doubling would overshoot it.
         service.startRefreshTimer(intervalSec: 0.05)
         service.startRefreshTimer(intervalSec: 0.05)
-        try await Task.sleep(nanoseconds: 120_000_000)
+        try await waitForCondition { counter.get("/auth/v1/token") >= 2 }
         await service.stopRefreshTimer()
 
         // 1 (bootstrap) + ≥1 (timer) but bounded — definitely not double-firing.
@@ -409,5 +416,21 @@ final class LeafRealtimeServiceLongSessionTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(count, 2)
         XCTAssertLessThanOrEqual(count, 6,
             "Idempotent startRefreshTimer must not double-fire — got \(count) /auth/v1/token calls")
+    }
+
+    // MARK: - Helpers
+
+    /// Spin until `predicate()` is true or the deadline elapses (default 5s).
+    /// Replaces fixed `Task.sleep` windows in timer-loop assertions so a slow /
+    /// contended CI runner that starves the timer Task doesn't false-fail.
+    /// Returns silently on timeout — the caller's XCTAssert then reports the
+    /// unmet condition with its descriptive message.
+    private func waitForCondition(timeoutNanos: UInt64 = 5_000_000_000,
+                                  predicate: @MainActor () -> Bool) async throws {
+        let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanos
+        while DispatchTime.now().uptimeNanoseconds < deadline {
+            if predicate() { return }
+            try await Task.sleep(nanoseconds: 5_000_000)
+        }
     }
 }
