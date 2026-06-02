@@ -109,6 +109,42 @@ public final class Database: @unchecked Sendable {
         throw LeafError.databaseSchemaFromFuture(unknown: unknown)
     }
 
+    /// Move the database file and its `-wal`/`-shm` sidecars aside to timestamped
+    /// backups, freeing the path so the next `openForWrite` creates a fresh DB.
+    /// Backs the "Backup & Reset" action of the migration-guard recovery alert
+    /// (Ph C / D-C4). The plaintext-migration backup (`events.sqlite.pre-sqlcipher.bak`)
+    /// is intentionally NOT part of the moved set. Returns the main backup URL.
+    ///
+    /// The caller MUST ensure no process still holds the DB open (stop the Agent
+    /// first) — this only moves files, it does not coordinate cross-process locks.
+    /// `now` is injectable for deterministic tests.
+    @discardableResult
+    public static func backupAndReset(at url: URL, now: Date = Date()) throws -> URL {
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "en_US_POSIX")
+        fmt.timeZone = TimeZone(identifier: "UTC")
+        fmt.dateFormat = "yyyyMMdd-HHmmss"
+        let suffix = "backup-\(fmt.string(from: now))"
+
+        let fm = FileManager.default
+        let candidates = [
+            url,
+            URL(fileURLWithPath: url.path + "-wal"),
+            URL(fileURLWithPath: url.path + "-shm"),
+        ]
+        for src in candidates {
+            guard fm.fileExists(atPath: src.path) else { continue }
+            let dst = src.appendingPathExtension(suffix)
+            if fm.fileExists(atPath: dst.path) { try fm.removeItem(at: dst) }
+            try fm.moveItem(at: src, to: dst)
+        }
+        Logger(subsystem: "tech.gundem.leaf.core", category: "db")
+            .warning(
+                "backupAndReset: moved DB + sidecars aside as .\(suffix, privacy: .public); a fresh DB will be created on next open."
+            )
+        return url.appendingPathExtension(suffix)
+    }
+
     public static func openForRead(
         at url: URL,
         config: DatabaseConfig,

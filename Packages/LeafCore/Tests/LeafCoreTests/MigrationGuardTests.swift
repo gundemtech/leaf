@@ -62,4 +62,39 @@ final class MigrationGuardTests: XCTestCase {
     _ = try Database.openForWrite(at: url, config: .weakDefaults, encryption: .deterministicTest)
     _ = try Database.openForRead(at: url, config: .weakDefaults, encryption: .deterministicTest)
   }
+
+  /// backupAndReset moves the DB + -wal/-shm sidecars to a timestamped backup,
+  /// leaves .pre-sqlcipher.bak untouched, and frees the path so a fresh DB opens.
+  func testBackupAndResetMovesDbAndSidecarsKeepsPreSqlcipherBak() throws {
+    let url = tempDir.appendingPathComponent("events.sqlite")
+    _ = try Database.openForWrite(at: url, config: .weakDefaults, encryption: .deterministicTest)
+
+    // Guarantee sidecars + a stale plaintext backup exist at reset time.
+    let wal = URL(fileURLWithPath: url.path + "-wal")
+    let shm = URL(fileURLWithPath: url.path + "-shm")
+    let preBak = url.appendingPathExtension("pre-sqlcipher.bak")
+    try Data("w".utf8).write(to: wal)
+    try Data("s".utf8).write(to: shm)
+    try Data("legacy".utf8).write(to: preBak)
+
+    // 2023-11-14 22:13:20 UTC -> deterministic backup suffix.
+    let fixed = Date(timeIntervalSince1970: 1_700_000_000)
+    let backupURL = try Database.backupAndReset(at: url, now: fixed)
+
+    let fm = FileManager.default
+    // Originals moved away.
+    XCTAssertFalse(fm.fileExists(atPath: url.path))
+    XCTAssertFalse(fm.fileExists(atPath: wal.path))
+    XCTAssertFalse(fm.fileExists(atPath: shm.path))
+    // Deterministic backup names present + non-empty.
+    XCTAssertEqual(backupURL.lastPathComponent, "events.sqlite.backup-20231114-221320")
+    XCTAssertTrue(fm.fileExists(atPath: backupURL.path))
+    XCTAssertTrue(fm.fileExists(atPath: url.path + "-wal.backup-20231114-221320"))
+    XCTAssertTrue(fm.fileExists(atPath: url.path + "-shm.backup-20231114-221320"))
+    // Plaintext-migration backup is NOT part of the reset set.
+    XCTAssertTrue(fm.fileExists(atPath: preBak.path))
+
+    // Path is free → a fresh, current-schema DB opens.
+    _ = try Database.openForWrite(at: url, config: .weakDefaults, encryption: .deterministicTest)
+  }
 }
