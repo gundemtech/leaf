@@ -42,14 +42,31 @@ moat-sync *ARGS:
 moat-push:
     @./scripts/moat-push.sh
 
-# Build all 5 Xcode schemes (Debug).
+# Build all 5 Xcode schemes (Debug). Exit-honest: a BUILD FAILED in any scheme
+# aborts non-zero (do NOT pipe xcodebuild→tail under set -e — the pipe's exit is
+# tail's 0 and masks failure, giving preflight a false green). Full output is
+# captured per-scheme; tail-3 on success, tail-40 + the kept logfile on failure.
 build-all:
     #!/usr/bin/env bash
-    set -e
+    set -euo pipefail
     for s in LeafCore LeafCorePrivate Leaf LeafAgent LeafMCP; do
         echo "=== $s ==="
-        xcodebuild -scheme "$s" -configuration Debug build -quiet 2>&1 | tail -3
+        log="$(mktemp -t "leaf-build-$s.XXXXXX")"
+        if xcodebuild -scheme "$s" -configuration Debug build -quiet >"$log" 2>&1; then
+            tail -3 "$log"; rm -f "$log"
+        else
+            rc=$?
+            echo "✘ BUILD FAILED ($s, exit $rc) — last 40 lines of $log:"
+            tail -40 "$log"
+            exit "$rc"
+        fi
     done
+    echo "✓ build-all: all 5 schemes built"
+
+# Self-test build-all exit propagation: a stub xcodebuild that always fails must
+# make `just build-all` exit non-zero (guards the pipe-to-tail masking regression).
+build-all-self-test:
+    @./scripts/tests/test-build-all-exit.sh
 
 # Run LeafCore SPM tests.
 test-core:
