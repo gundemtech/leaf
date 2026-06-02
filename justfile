@@ -21,15 +21,15 @@ leak-guard:
 leak-guard-self-test:
     @./scripts/tests/test-leak-guard.sh
 
-# Install the git pre-push hook (thin wrapper around leak-guard.sh).
-# Run once per clone. Bypass a single push with `git push --no-verify`.
+# Point git at the tracked .githooks/ dir (run once per clone). The pre-push hook
+# there runs leak-guard before every push to the public repo. This OVERWRITES any
+# existing core.hooksPath and means per-clone .git/hooks/* no longer fire (we ship
+# none that matter). Bypass a single push with `git push --no-verify`.
 install-hooks:
     #!/usr/bin/env bash
     set -euo pipefail
-    hook=.git/hooks/pre-push
-    printf '#!/usr/bin/env bash\nexec "$(git rev-parse --show-toplevel)/scripts/leak-guard.sh"\n' > "$hook"
-    chmod +x "$hook"
-    echo "Installed $hook → scripts/leak-guard.sh"
+    git config core.hooksPath .githooks
+    echo "Set core.hooksPath → .githooks (pre-push runs scripts/leak-guard.sh)"
 
 # Clone/refresh the private moat (gundemtech/leaf-private) into the gitignored
 # build paths. Run once on a fresh clone; re-run to pull moat updates.
