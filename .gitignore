@@ -66,7 +66,13 @@ build/releases/
 # Supabase CLI workspace cache (created when supabase CLI is run from leaf/)
 supabase/
 
-# Understand-Anything knowledge-graph — intermediate artifacts (not committed; regenerated per run)
-.understand-anything/intermediate/
-.understand-anything/tmp/
-.understand-anything/diff-overlay.json
+# Understand-Anything — knowledge-graph + ignore config (local plugin, regenerated per run).
+# Весь каталог + config: личный инструмент разработчика, не командный артефакт.
+.understand-anything/
+.understandignore
+
+# Claude Code session transcripts — могут содержать moat/секреты, НИКОГДА в public tree.
+.claude/sessions/
+
+# Superpowers local plugin state — генерируется локально, не командный артефакт.
+.superpowers/
