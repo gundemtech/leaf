@@ -39,6 +39,22 @@ public final class Database: @unchecked Sendable {
 
         let pool = try DatabasePool(path: url.path, configuration: grdbConfig)
 
+        let migrator = makeAppMigrator()
+        // Ph C migration-guard (R7): if the DB carries migrations this binary does
+        // not know (written by a newer Leaf build), refuse to migrate — surface a
+        // recovery path instead of mangling/“Couldn't load Home”.
+        try assertSchemaNotFromFuture(pool, migrator: migrator)
+        try migrator.migrate(pool)
+
+        return Database(pool: pool, config: config, mode: .writer)
+    }
+
+    /// All registered schema migrations, in order. Single source of truth shared
+    /// by `openForWrite` (which migrates) and the read/write schema guard (which
+    /// only needs the registered identifier set). Adding a migration = append one
+    /// `registerMigrationNNN…()` line here (next number, never reuse — see
+    /// scripts/check-migrations.sh).
+    static func makeAppMigrator() -> DatabaseMigrator {
         var migrator = DatabaseMigrator()
         migrator.registerMigration001Events()
         migrator.registerMigration002CollectorOffsets()
@@ -77,9 +93,56 @@ public final class Database: @unchecked Sendable {
         // occupied by InviteSystemRedesign on the integration trunk). Clean
         // append after M029 — Ph B trunk unification.
         migrator.registerMigration030GoogleCalendarTracker()
-        try migrator.migrate(pool)
+        return migrator
+    }
 
-        return Database(pool: pool, config: config, mode: .writer)
+    /// Throws `LeafError.databaseSchemaFromFuture` if the database has applied
+    /// migration identifiers the supplied migrator does not register — i.e. the
+    /// file was written by a newer Leaf build. GRDB's `migrate()` would silently
+    /// ignore unknown applied migrations, so this explicit check is required on
+    /// BOTH the writer and reader paths (MCP read tools use `openForRead`).
+    static func assertSchemaNotFromFuture(_ pool: DatabasePool, migrator: DatabaseMigrator) throws {
+        guard try pool.read(migrator.hasBeenSuperseded) else { return }
+        let unknown = try pool.read(migrator.appliedIdentifiers)
+            .subtracting(migrator.migrations)
+            .sorted()
+        throw LeafError.databaseSchemaFromFuture(unknown: unknown)
+    }
+
+    /// Move the database file and its `-wal`/`-shm` sidecars aside to timestamped
+    /// backups, freeing the path so the next `openForWrite` creates a fresh DB.
+    /// Backs the "Backup & Reset" action of the migration-guard recovery alert
+    /// (Ph C / D-C4). The plaintext-migration backup (`events.sqlite.pre-sqlcipher.bak`)
+    /// is intentionally NOT part of the moved set. Returns the main backup URL.
+    ///
+    /// The caller MUST ensure no process still holds the DB open (stop the Agent
+    /// first) — this only moves files, it does not coordinate cross-process locks.
+    /// `now` is injectable for deterministic tests.
+    @discardableResult
+    public static func backupAndReset(at url: URL, now: Date = Date()) throws -> URL {
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "en_US_POSIX")
+        fmt.timeZone = TimeZone(identifier: "UTC")
+        fmt.dateFormat = "yyyyMMdd-HHmmss"
+        let suffix = "backup-\(fmt.string(from: now))"
+
+        let fm = FileManager.default
+        let candidates = [
+            url,
+            URL(fileURLWithPath: url.path + "-wal"),
+            URL(fileURLWithPath: url.path + "-shm"),
+        ]
+        for src in candidates {
+            guard fm.fileExists(atPath: src.path) else { continue }
+            let dst = src.appendingPathExtension(suffix)
+            if fm.fileExists(atPath: dst.path) { try fm.removeItem(at: dst) }
+            try fm.moveItem(at: src, to: dst)
+        }
+        Logger(subsystem: "tech.gundem.leaf.core", category: "db")
+            .warning(
+                "backupAndReset: moved DB + sidecars aside as .\(suffix, privacy: .public); a fresh DB will be created on next open."
+            )
+        return url.appendingPathExtension(suffix)
     }
 
     public static func openForRead(
@@ -93,6 +156,9 @@ public final class Database: @unchecked Sendable {
         applyEncryption(encryption, to: &grdbConfig)
 
         let pool = try DatabasePool(path: url.path, configuration: grdbConfig)
+        // Ph C migration-guard (R7): readers (MCP tools) never run the migrator,
+        // so a future-schema DB would otherwise serve partial/garbled data. Refuse.
+        try assertSchemaNotFromFuture(pool, migrator: makeAppMigrator())
         return Database(pool: pool, config: config, mode: .reader)
     }
 

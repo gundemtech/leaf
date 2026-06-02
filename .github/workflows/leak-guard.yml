@@ -1,14 +1,17 @@
 name: leak-guard
 
-# OSS leak guard — fails any PR or push to main that re-introduces a forbidden
-# pattern (team-member names, tuned moat numerics, secrets, tracked moat source,
-# hardcoded signing identity). Single source of truth: scripts/leak-guard.sh.
+# OSS leak guard — fails any PR or push to the dev trunk / main that re-introduces
+# a forbidden pattern (team-member names, tuned moat numerics, secrets, tracked
+# moat source, hardcoded signing identity). Two layers: the bespoke
+# scripts/leak-guard.sh (moat/name/pragma patterns) + gitleaks (generic secrets,
+# pinned binary — no org-license action). gitleaks lives here + in `just preflight`,
+# never in the pre-push hook (that stays leak-guard-only for speed).
 
 on:
   push:
-    branches: [main]
+    branches: [dev, main]
   pull_request:
-    branches: [main]
+    branches: [dev, main]
   workflow_dispatch:
 
 jobs:
@@ -26,3 +29,13 @@ jobs:
         env:
           LEAF_LEAK_GUARD_FIXTURES_ONLY: "0"  # never let the scan be narrowed to fixtures
         run: ./scripts/leak-guard.sh --report
+
+      - name: Install gitleaks (pinned binary — gitleaks-action@v2 needs a paid org license)
+        run: |
+          ver=8.30.1
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${ver}/gitleaks_${ver}_linux_x64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+
+      - name: gitleaks secret scan (tracked tree)
+        run: ./scripts/gitleaks-scan.sh

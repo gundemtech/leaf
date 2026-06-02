@@ -698,38 +698,32 @@ final class TeamFeedReaderBusinessTests: XCTestCase {
 
 // MARK: - MockThrowingQueryService
 
-/// A thin wrapper that provides a TeamFeedQueryService backed by a DB whose
-/// underlying file is removed before the first read, causing all fetch calls to fail.
+/// A thin wrapper that provides a TeamFeedQueryService backed by a DB whose feed
+/// tables have been dropped, causing all fetch calls to fail with "no such table".
 ///
 /// We cannot subclass/mock `TeamFeedQueryService` directly (it's a concrete actor),
-/// so we manufacture a real instance on a broken DB path.
+/// so we manufacture a real instance on a deliberately broken DB. We DROP the two
+/// tables the feed query reads rather than deleting the DB files: a dropped table
+/// is visible to every pooled connection via WAL, whereas unlinking the files is
+/// defeated by any already-open reader connection (whose fd keeps the unlinked
+/// inode alive and serves empty results instead of throwing).
 private enum MockThrowingQueryService {
     static func makeQueryService() -> TeamFeedQueryService {
-        // Open an in-memory DB (not on disk — write will succeed but we want reads to fail).
-        // A simpler trick: create a real DB then return a service pointing at a file
-        // we'll remove. Actually the cleanest: use a real DB that was opened for write
-        // but pass a nonsense workspace that has no rows — that works for .error tests.
-        //
-        // But we need a *throw* for the error-state tests. We achieve this by initializing
-        // with a DatabasePool that will fail to open (path in a non-existent directory).
-        // LeafCore.Database.openForWrite will throw — we catch and return a "poison" service
-        // using a fallback. Since we can't propagate the error from a non-throwing context,
-        // use a temp file that is immediately deleted after open.
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("poison-\(UUID().uuidString)")
             .appendingPathComponent("events.sqlite")
-        // The parent directory doesn't exist → openForWrite will throw at the callsite,
-        // but we need to return a TeamFeedQueryService. Work-around: open a valid DB,
-        // then immediately delete the WAL+shm+sqlite file so reads fail.
         let dir = tmp.deletingLastPathComponent()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         // swiftlint:disable:next force_try
         let db = try! LeafCore.Database.openForWrite(at: tmp, config: .weakDefaults, encryption: .deterministicTest)
         let service = TeamFeedQueryService(database: db)
-        // Delete the underlying files → subsequent reads will fail with a GRDB/SQLite error.
-        try? FileManager.default.removeItem(at: tmp)
-        try? FileManager.default.removeItem(at: tmp.appendingPathExtension("wal"))
-        try? FileManager.default.removeItem(at: tmp.appendingPathExtension("shm"))
+        // Drop the feed tables → every fetch throws "no such table", robustly and
+        // independent of connection/file state.
+        // swiftlint:disable:next force_try
+        try! db.pool.write { rawDB in
+            try rawDB.execute(sql: "DROP TABLE IF EXISTS \(Schema.MessagesMirror.tableName)")
+            try rawDB.execute(sql: "DROP TABLE IF EXISTS \(Schema.TeamEventsMirror.tableName)")
+        }
         return service
     }
 }

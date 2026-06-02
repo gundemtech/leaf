@@ -39,12 +39,16 @@ Packages/*/Package.resolved
 
 # LeafCorePrivate — implementation moat живёт локально.
 # Tracked только Placeholder.swift; все остальные swift-файлы — dev-only.
+# `.disabled-*` суффикс (renamed/parked moat tests) тоже игнорируем — иначе
+# *.swift glob его не ловит и moat-файл утекает в public tree.
 Packages/LeafCore/Sources/LeafCorePrivate/**/*.swift
+Packages/LeafCore/Sources/LeafCorePrivate/**/*.disabled-*
 !Packages/LeafCore/Sources/LeafCorePrivate/Placeholder.swift
 
 # LeafCorePrivateTests — тесты для moat-модуля (SQL assertions и т.п.).
 # Tracked только Placeholder.swift, реальные тесты — dev-only.
 Packages/LeafCore/Tests/LeafCorePrivateTests/**/*.swift
+Packages/LeafCore/Tests/LeafCorePrivateTests/**/*.disabled-*
 !Packages/LeafCore/Tests/LeafCorePrivateTests/Placeholder.swift
 
 # Local xcconfig — dev-only флаги для LeafCorePrivate prod-сборки.
@@ -61,3 +65,8 @@ build/releases/
 
 # Supabase CLI workspace cache (created when supabase CLI is run from leaf/)
 supabase/
+
+# Understand-Anything knowledge-graph — intermediate artifacts (not committed; regenerated per run)
+.understand-anything/intermediate/
+.understand-anything/tmp/
+.understand-anything/diff-overlay.json

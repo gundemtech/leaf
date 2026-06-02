@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# pre-push — OSS leak guard for the public gundemtech/leaf repo.
+#
+# Tracked under .githooks/ (vs per-clone .git/hooks/) so it travels with every
+# clone once `core.hooksPath .githooks` is set (run `just install-hooks` once).
+# Fast by design (~2s, leak-guard only) — the heavier gitleaks + build + tests
+# live in `just preflight`, not on the push path.
+#
+# Bypass a single push deliberately with `git push --no-verify` (state the reason).
+exec "$(git rev-parse --show-toplevel)/scripts/leak-guard.sh"
