@@ -129,18 +129,18 @@ public actor VSCodeWorkspaceWatcher {
     /// Implementation tier (not test-covered at unit level — covered by
     /// integration smoke in Stage 7).
     private let homeDir: String
-    private let watchedFolderResolver: (_ path: String) -> String?
-    private let eventSink: (RawEvent) -> Void
-    private let clock: () -> Int64
+    private let watchedFolderResolver: @Sendable (_ path: String) -> String?
+    private let eventSink: @Sendable (RawEvent) -> Void
+    private let clock: @Sendable () -> Int64
     private let localAppsStore: LocalAppsStore
     /// One FSEvents stream per existing vendor root's `workspaceStorage/`.
     private var streams: [FSEventStream] = []
 
     public init(
         homeDir: String = NSHomeDirectory(),
-        watchedFolderResolver: @escaping (_ path: String) -> String?,
-        eventSink: @escaping (RawEvent) -> Void,
-        clock: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
+        watchedFolderResolver: @escaping @Sendable (_ path: String) -> String?,
+        eventSink: @escaping @Sendable (RawEvent) -> Void,
+        clock: @escaping @Sendable () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
         localAppsStore: LocalAppsStore = LocalAppsStore()
     ) {
         self.homeDir = homeDir

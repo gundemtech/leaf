@@ -27,6 +27,11 @@ public actor JetBrainsRecentProjectsWatcher {
     public struct InferredIDE: Equatable {
         public let bundleID: String
         public let versionDir: String
+
+        public init(bundleID: String, versionDir: String) {
+            self.bundleID = bundleID
+            self.versionDir = versionDir
+        }
     }
 
     /// Extract bundle ID from JetBrains version-dir component.
@@ -179,9 +184,9 @@ public actor JetBrainsRecentProjectsWatcher {
     // MARK: - Lifecycle (stubbed — integration smoke in Stage 7)
 
     private let homeDir: String
-    private let watchedFolderResolver: (_ path: String) -> String?
-    private let eventSink: (RawEvent) -> Void
-    private let clock: () -> Int64
+    private let watchedFolderResolver: @Sendable (_ path: String) -> String?
+    private let eventSink: @Sendable (RawEvent) -> Void
+    private let clock: @Sendable () -> Int64
     private let localAppsStore: LocalAppsStore
     /// Single recursive FSEvents stream on `~/Library/Application Support/JetBrains/`.
     private var stream: FSEventStream?
@@ -208,9 +213,9 @@ public actor JetBrainsRecentProjectsWatcher {
 
     public init(
         homeDir: String = NSHomeDirectory(),
-        watchedFolderResolver: @escaping (_ path: String) -> String?,
-        eventSink: @escaping (RawEvent) -> Void,
-        clock: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
+        watchedFolderResolver: @escaping @Sendable (_ path: String) -> String?,
+        eventSink: @escaping @Sendable (RawEvent) -> Void,
+        clock: @escaping @Sendable () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
         localAppsStore: LocalAppsStore = LocalAppsStore()
     ) {
         self.homeDir = homeDir

@@ -614,6 +614,46 @@ enum AgentMain {
         )
         AgentLifetime.browserBookmarksWatcher = browserBookmarksWatcher
 
+        // Settings dead-toggle remediation (WS1) — VSCode + JetBrains workspace
+        // FSEvents watchers. Both gate on LocalAppsStore (vscode/jetbrains storage
+        // toggles). LOCAL capture only — ShareSourceClassifier has no IDE source,
+        // so these never team-broadcast (privacy-safe). eventSink writes straight
+        // to the DB (low-frequency workspace-open events; mirrors
+        // BrowserBookmarksWatcher's direct write, bypasses EventWriter buffering).
+        let ideEventSink: @Sendable (RawEvent) -> Void = { ev in
+            do { try database.write([ev]) } catch {
+                agentLogger.error(
+                    "IDE watcher write failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        let ideWatchedFolderResolver: @Sendable (String) -> String? = { tildePath in
+            let folders = (try? database.listWatchedFolders(includingDisabled: false)) ?? []
+            return WatchedFolderResolver.resolveID(tildePath: tildePath, in: folders)
+        }
+        let vscodeWorkspaceWatcher = VSCodeWorkspaceWatcher(
+            watchedFolderResolver: ideWatchedFolderResolver,
+            eventSink: ideEventSink,
+            localAppsStore: localAppsStore
+        )
+        let jetbrainsRecentProjectsWatcher = JetBrainsRecentProjectsWatcher(
+            watchedFolderResolver: ideWatchedFolderResolver,
+            eventSink: ideEventSink,
+            localAppsStore: localAppsStore
+        )
+        // Prod-side <Product><Y> → bundle resolver (moat naming map). MUST be set
+        // BEFORE start() — without it inferIDE returns nil and JetBrains emits
+        // nothing (dev/CI builds without LeafCorePrivate therefore emit nothing).
+        #if LEAF_PROD
+        JetBrainsRecentProjectsWatcher._versionDirResolver = { versionDir in
+            guard let split = ProdJetBrainsProductMap.split(versionDir: versionDir),
+                let bundleID = ProdJetBrainsProductMap.productToBundleID[split.product]
+            else { return nil }
+            return .init(bundleID: bundleID, versionDir: versionDir)
+        }
+        #endif
+        AgentLifetime.vscodeWorkspaceWatcher = vscodeWorkspaceWatcher
+        AgentLifetime.jetbrainsRecentProjectsWatcher = jetbrainsRecentProjectsWatcher
+
         // Phase 5.3.D — Key rotation orchestrator + RotationOutbox resume.
         // Drains unposted rotation_outbox rows from prior sessions on startup
         // (fire-and-forget). Composition root for ProdRotationKDF/ProdRotationBlobCodec
@@ -753,6 +793,10 @@ enum AgentMain {
         // Phase Track-6 P3 — BrowserBookmarksWatcher. Sets up FSEventStreams for
         // Chrome (multi-profile) and Safari (FDA-gated) bookmark file monitoring.
         Task { await browserBookmarksWatcher.start() }
+        // Settings dead-toggle remediation (WS1) — start IDE workspace watchers
+        // (each gates internally on its LocalAppsStore toggle).
+        Task { await vscodeWorkspaceWatcher.start() }
+        Task { await jetbrainsRecentProjectsWatcher.start() }
         Task { await rotationFetchScheduler.start() }
         Task { await detectorScheduler.start() }
 
@@ -817,6 +861,9 @@ enum AgentMain {
             await MainActor.run { AgentLifetime.localFilesWatcher?.stop() }
             // Phase Track-6 P3 — stop browser bookmark watcher after localFiles.
             if let b = AgentLifetime.browserBookmarksWatcher { await b.stop() }
+            // Settings dead-toggle remediation (WS1) — stop IDE workspace watchers.
+            if let v = AgentLifetime.vscodeWorkspaceWatcher { await v.stop() }
+            if let j = AgentLifetime.jetbrainsRecentProjectsWatcher { await j.stop() }
             // Phase Track-6 P3 — remove allow-list darwin observer.
             if let t = AgentLifetime.allowListObserverToken {
                 DistributedNotificationCenter.default().removeObserver(t)
@@ -923,6 +970,9 @@ enum AgentLifetime {
     nonisolated(unsafe) static var googleCalendarCollector: GoogleCalendarCollector?
     // Phase Track-6 P3 — browser bookmark FSEvents watcher.
     nonisolated(unsafe) static var browserBookmarksWatcher: BrowserBookmarksWatcher?
+    // Settings dead-toggle remediation (WS1) — IDE workspace FSEvents watchers.
+    nonisolated(unsafe) static var vscodeWorkspaceWatcher: VSCodeWorkspaceWatcher?
+    nonisolated(unsafe) static var jetbrainsRecentProjectsWatcher: JetBrainsRecentProjectsWatcher?
     // Phase Track-6 P3 — darwin notification observer token for browser allow-list
     // cross-process invalidation. Retained here so it lives for the Agent's lifetime.
     nonisolated(unsafe) static var allowListObserverToken: NSObjectProtocol?
