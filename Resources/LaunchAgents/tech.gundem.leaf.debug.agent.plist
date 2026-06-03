@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>tech.gundem.leaf.debug.agent</string>
+
+	<!-- Debug counterpart of tech.gundem.leaf.agent.plist. Distinct Label so a
+	     Debug build's launchd registration never collides with the prod agent.
+	     BundleProgram is relative to the calling .app, so it resolves to the
+	     Debug bundle's own LeafAgent binary. -->
+	<key>BundleProgram</key>
+	<string>Contents/MacOS/LeafAgent</string>
+
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+
+	<key>RunAtLoad</key>
+	<true/>
+
+	<key>ProcessType</key>
+	<string>Background</string>
+</dict>
+</plist>

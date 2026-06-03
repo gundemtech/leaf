@@ -17,7 +17,16 @@ import SwiftUI
 @MainActor
 @Observable
 final class LaunchAgentService {
-    static let plistName = "tech.gundem.leaf.agent.plist"
+    /// Per-build agent label so a Debug build never clobbers the prod agent's
+    /// launchd registration. Debug (bundle id contains ".debug") registers
+    /// tech.gundem.leaf.debug.agent; prod registers tech.gundem.leaf.agent.
+    /// The matching plist is embedded at Contents/Library/LaunchAgents/<name>.
+    static var plistName: String {
+        let id = Bundle.main.bundleIdentifier ?? "tech.gundem.leaf"
+        return id.contains(".debug")
+            ? "tech.gundem.leaf.debug.agent.plist"
+            : "tech.gundem.leaf.agent.plist"
+    }
 
     private(set) var status: SMAppService.Status = .notRegistered
     private(set) var lastErrorMessage: String?
