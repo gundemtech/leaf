@@ -18,6 +18,7 @@
 		E0192A42BE48990A6ABC3993 /* LeafCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5C6E93B7D5BA63F53057E5BD /* LeafCore */; };
 		F3E5D5DB835340572123E0D5 /* LeafCore in Frameworks */ = {isa = PBXBuildFile; productRef = DF87B75D3DB9208E396D0AB8 /* LeafCore */; settings = {ATTRIBUTES = (); }; };
 		FBDE789863EA1EAA8C2B84B1 /* Resources/LaunchAgents/tech.gundem.leaf.agent.plist in Embed LaunchAgent Plist */ = {isa = PBXBuildFile; fileRef = AAFF44718B4072844D5C6FF3 /* Resources/LaunchAgents/tech.gundem.leaf.agent.plist */; };
+		FBDE789863EA1EAA8C2B84B2 /* Resources/LaunchAgents/tech.gundem.leaf.debug.agent.plist in Embed LaunchAgent Plist */ = {isa = PBXBuildFile; fileRef = AAFF44718B4072844D5C6FF4 /* Resources/LaunchAgents/tech.gundem.leaf.debug.agent.plist */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -45,6 +46,7 @@
 			dstSubfolderSpec = 1;
 			files = (
 				FBDE789863EA1EAA8C2B84B1 /* Resources/LaunchAgents/tech.gundem.leaf.agent.plist in Embed LaunchAgent Plist */,
+				FBDE789863EA1EAA8C2B84B2 /* Resources/LaunchAgents/tech.gundem.leaf.debug.agent.plist in Embed LaunchAgent Plist */,
 			);
 			name = "Embed LaunchAgent Plist";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -65,6 +67,7 @@
 
 /* Begin PBXFileReference section */
 		AAFF44718B4072844D5C6FF3 /* Resources/LaunchAgents/tech.gundem.leaf.agent.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Resources/LaunchAgents/tech.gundem.leaf.agent.plist; sourceTree = "<group>"; };
+		AAFF44718B4072844D5C6FF4 /* Resources/LaunchAgents/tech.gundem.leaf.debug.agent.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Resources/LaunchAgents/tech.gundem.leaf.debug.agent.plist; sourceTree = "<group>"; };
 		B0EC45208EBCB3682E080571 /* LeafAgent */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = LeafAgent; sourceTree = BUILT_PRODUCTS_DIR; };
 		C8DAA11FC3F5FFF6580F491A /* LeafMCP */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = LeafMCP; sourceTree = BUILT_PRODUCTS_DIR; };
 		D81CFDB62F97B50500D2D372 /* Leaf.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Leaf.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -150,6 +153,7 @@
 				14B6E7581FBDB34479727CBD /* Config */,
 				F5623F079AF6FD8D42A82215 /* Config/Base.xcconfig */,
 				AAFF44718B4072844D5C6FF3 /* Resources/LaunchAgents/tech.gundem.leaf.agent.plist */,
+				AAFF44718B4072844D5C6FF4 /* Resources/LaunchAgents/tech.gundem.leaf.debug.agent.plist */,
 			);
 			sourceTree = "<group>";
 		};
@@ -383,7 +387,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = "1.0.0-alpha.25";
-				PRODUCT_BUNDLE_IDENTIFIER = tech.gundem.leaf.agent;
+				PRODUCT_BUNDLE_IDENTIFIER = tech.gundem.leaf.debug.agent;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
@@ -414,7 +418,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = "1.0.0-alpha.25";
-				PRODUCT_BUNDLE_IDENTIFIER = tech.gundem.leaf.mcp;
+				PRODUCT_BUNDLE_IDENTIFIER = tech.gundem.leaf.debug.mcp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
@@ -589,7 +593,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = Leaf/Leaf.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Leaf/Leaf.debug.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 25;
@@ -606,7 +610,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = "1.0.0-alpha.25";
-				PRODUCT_BUNDLE_IDENTIFIER = tech.gundem.leaf;
+				PRODUCT_BUNDLE_IDENTIFIER = tech.gundem.leaf.debug;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Debug-config entitlements for the tech.gundem.leaf.debug bundle id.
+	     Deliberately minimal (mirrors LeafAgent/LeafMCP): no application-identifier,
+	     no aps-environment, no keychain-access-groups — so automatic Development
+	     signing for the .debug app id needs zero portal capabilities. Debug uses a
+	     file-based key (FileKeyStore) + no SQLCipher, and push is prod-only, so none
+	     of the dropped entitlements are needed at runtime. Prod stays on Leaf.entitlements. -->
+	<key>com.apple.security.app-sandbox</key>
+	<false/>
+</dict>
+</plist>

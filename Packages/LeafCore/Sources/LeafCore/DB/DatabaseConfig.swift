@@ -23,7 +23,22 @@ public struct DatabaseConfig: Sendable, Hashable {
 /// Canonical path of the sqlite file.
 public enum DatabasePath {
     public static let filename = "events.sqlite"
-    public static let applicationSupportSubdir = "Leaf"
+
+    /// Application Support subdir, isolated per build flavour. A Debug build
+    /// (bundle id contains ".debug") resolves to "Leaf-Debug" so it can never
+    /// open/clobber the prod "Leaf/events.sqlite" — prod is SQLCipher-encrypted,
+    /// Debug is plaintext, and sharing one file produced the 4KB-stub corruption.
+    /// All three prod processes (app/agent/mcp) share "Leaf"; all three debug
+    /// processes share "Leaf-Debug".
+    public static var applicationSupportSubdir: String {
+        subdir(forBundleID: Bundle.main.bundleIdentifier)
+    }
+
+    /// Pure, testable resolver: "Leaf-Debug" for any *.debug* bundle id, else "Leaf".
+    public static func subdir(forBundleID bundleID: String?) -> String {
+        if let bundleID, bundleID.contains(".debug") { return "Leaf-Debug" }
+        return "Leaf"
+    }
 
     public static func defaultURL() -> URL {
         let support = FileManager.default.urls(

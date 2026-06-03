@@ -121,3 +121,10 @@ dev-clean:
 # Stream both main app + agent logs (Ctrl-C to detach).
 dev-log:
     @log stream --predicate 'subsystem CONTAINS "tech.gundem.leaf"' --info
+
+# Break-glass: un-wedge LaunchServices when `open Leaf` / Spotlight / a Sparkle
+# relaunch resolve a stale phantom bundle (post-update / dev-build pollution).
+# Removes only regenerable DerivedData + repo build/ Leaf.app copies, rebuilds
+# the LS database, restarts lsd, re-registers /Applications. Idempotent.
+fix-launch:
+    @./scripts/fix-launch.sh
