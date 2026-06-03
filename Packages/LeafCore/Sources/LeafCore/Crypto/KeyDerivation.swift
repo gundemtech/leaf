@@ -5,10 +5,18 @@ import Foundation
 /// `ProdInviteKDF` in LeafCorePrivate (gitignored moat: HKDF info string +
 /// OTP→salt construction). Mirror discipline `EnvelopeCodec` / 5.1.C.
 ///
-/// Derives a 256-bit AES wrap key from the ECDH shared secret + 6-digit OTP.
-/// OTP — exactly 6 ASCII digits 0-9; impl throws `LeafError.invalidPayload`
-/// otherwise.
+/// Derives a 256-bit AES wrap key from the ECDH shared secret and an optional
+/// OTP. The per-pair X25519 ECDH `sharedSecret` is the sole 256-bit entropy
+/// source; the OTP, when supplied, folds a second factor into the salt.
 public protocol InviteKDF: Sendable {
+    /// - Parameter otp: Either a 6-digit ASCII OTP, or the empty string `""`
+    ///   for the **no-OTP mode** — used by every requireOTP=false URL invite
+    ///   (`InviteService` / `InviteAcceptService`) and by M027 closed-mode
+    ///   join-by-code (`JoinRequestService.approve` / `acceptApproved`). Both
+    ///   sides must pass the SAME otp so the derived key matches.
+    /// - Throws: `LeafError.invalidPayload` only when a NON-empty OTP is not
+    ///   exactly 6 ASCII digits. `otp == ""` is valid and must NOT throw —
+    ///   rejecting it broke every no-OTP invite accept with NSError code 13.
     func deriveWrapKey(sharedSecret: SharedSecret, otp: String) throws -> SymmetricKey
 
     /// Track 5 / S3 — HMACs the OTP for server-side storage (`invites.otp_hash bytea`).
