@@ -20,7 +20,7 @@ public struct NotificationPresentation: Equatable, Sendable {
 /// governed server-side and is out of scope here.
 public enum NotificationPresentationDecider {
     /// Coalesce window + threshold — ordinary client constants (not moat).
-    static let coalesceWindowMs: Int64 = 5 * 60 * 1000
+    public static let coalesceWindowMs: Int64 = 5 * 60 * 1000
     static let coalesceThreshold = 3
 
     /// `recentPresentationsMs` are timestamps of prior foreground presentations.

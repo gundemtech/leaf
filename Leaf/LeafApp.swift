@@ -532,6 +532,10 @@ struct LeafApp: App {
     // for symmetry with the static-bridge convention used by the other
     // AppDelegate consumers and for future Track 6 reply-send wiring).
     LeafAppDelegate.directMessageSendReader = sendReader
+    // Settings dead-toggle remediation (WS2) — willPresent reads notification
+    // prefs + latest focus state from the shared events DB (same SQLCipher file
+    // the agent writes focus_mode_* events into).
+    LeafAppDelegate.notificationDatabase = sharedTeamFeedDB
 
     // Track 5 / S8 T6 — construct PendingMarkDoneRetryService over the
     // shared Team feed DB handle (same SQLCipher events.sqlite file as the
@@ -943,6 +947,14 @@ final class LeafAppDelegate: NSObject, NSApplicationDelegate, UNUserNotification
   /// the user taps in-app or via banner action.
   @MainActor static weak var directMessageSendReader: DirectMessageSendReader?
 
+  /// Settings dead-toggle remediation (WS2) — strong handle to the local
+  /// events DB so willPresent can read notification prefs + the latest focus
+  /// state. Strong (not weak): a menubar app keeps this for its whole lifetime,
+  /// and willPresent must never lose the pref store. Populated by LeafApp.init.
+  @MainActor static var notificationDatabase: LeafCore.Database?
+  /// Foreground-presentation timestamps for the coalesce window (WS2).
+  @MainActor private static var recentPresentationsMs: [Int64] = []
+
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool
   {
     if !flag {
@@ -1030,7 +1042,34 @@ final class LeafAppDelegate: NSObject, NSApplicationDelegate, UNUserNotification
     _ center: UNUserNotificationCenter,
     willPresent notification: UNNotification
   ) async -> UNNotificationPresentationOptions {
-    return [.banner, .sound, .badge]
+    let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+    return await MainActor.run { Self.foregroundPresentationOptions(nowMs: nowMs) }
+  }
+
+  /// Settings dead-toggle remediation (WS2) — decide foreground banner/sound/
+  /// badge from the user's Behavior prefs (respectFocus / sound / coalesce) plus
+  /// the latest focus state (read from the shared DB the agent writes). Applies
+  /// only while Leaf is foreground — background delivery is server-governed.
+  /// Fail-open to the full set if the pref store is unreachable.
+  @MainActor
+  static func foregroundPresentationOptions(nowMs: Int64) -> UNNotificationPresentationOptions {
+    guard let db = notificationDatabase else { return [.banner, .sound, .badge] }
+    let sound = (try? db.isNotificationPrefEnabled(.sound)) ?? true
+    let respectFocus = (try? db.isNotificationPrefEnabled(.respectFocus)) ?? true
+    let coalesce = (try? db.isNotificationPrefEnabled(.coalesce)) ?? true
+    let inFocus = (try? db.latestFocusIsActive()) ?? false
+    recentPresentationsMs = recentPresentationsMs.filter {
+      nowMs - $0 < NotificationPresentationDecider.coalesceWindowMs
+    }
+    let decision = NotificationPresentationDecider.decide(
+      soundEnabled: sound, respectFocus: respectFocus, inFocus: inFocus,
+      coalesceEnabled: coalesce, recentPresentationsMs: recentPresentationsMs, nowMs: nowMs)
+    if decision.banner { recentPresentationsMs.append(nowMs) }
+    var opts: UNNotificationPresentationOptions = []
+    if decision.banner { opts.insert(.banner) }
+    if decision.sound { opts.insert(.sound) }
+    if decision.badge { opts.insert(.badge) }
+    return opts
   }
 
   /// User clicked notification (default tap) OR a banner action button:
