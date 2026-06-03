@@ -49,6 +49,11 @@ final class InviteTokensReader {
   private let databaseEncryption: EncryptionOptions?
   private let logger = Logger(subsystem: "tech.gundem.leaf.app", category: "invite-tokens")
 
+  /// Upper bound on the `refreshFromServer` round-trip before the UI gives up
+  /// and shows an error rather than an indefinite spinner. Comfortably above a
+  /// healthy request yet well under the retry loop's worst-case wall-clock.
+  private static let networkTimeoutSeconds = 30
+
   init(
     supabase: SupabaseClient,
     workspaceReader: WorkspaceReader,
@@ -75,7 +80,13 @@ final class InviteTokensReader {
       do {
         let svc = try self.ensureService()
         state = .loading
-        _ = try await svc.refreshFromServer()
+        // Bound the server round-trip so a stalled request (slow server, wedged
+        // auth bootstrap, retry-loop backoff) can't pin "Refreshing pending
+        // invites…" forever — surface .error instead. listActive() below is a
+        // local SQLCipher read, so it stays outside the deadline.
+        _ = try await withTimeout(.seconds(InviteTokensReader.networkTimeoutSeconds)) {
+          try await svc.refreshFromServer()
+        }
         let active = try svc.listActive()
         state = .loaded(active: active)
       } catch {
@@ -277,6 +288,9 @@ final class InviteTokensReader {
   private func friendlyMessage(for error: Error) -> String {
     if let tokenErr = error as? InviteTokenError, tokenErr == .maxActiveTokensReached {
       return "Max active tokens reached (10). Delete one to create another."
+    }
+    if error is TimeoutError {
+      return "Timed out refreshing invites. Check your connection and try again."
     }
     if let leafErr = error as? LeafError {
       // Distinguish workspace-sync upsert failure from the generic «manage
