@@ -183,6 +183,28 @@ public actor JetBrainsRecentProjectsWatcher {
     private let eventSink: (RawEvent) -> Void
     private let clock: () -> Int64
     private let localAppsStore: LocalAppsStore
+    /// Single recursive FSEvents stream on `~/Library/Application Support/JetBrains/`.
+    private var stream: FSEventStream?
+    /// Per-file (keyed by full path) last-parsed snapshot, for activation-timestamp diffing.
+    private var snapshots: [String: [ParsedEntry]] = [:]
+
+    /// Recents-file name suffixes JetBrains writes (atomic write on project
+    /// close / switch). Both map to the same diff path.
+    static func isRecentProjectsXML(_ path: String) -> Bool {
+        path.hasSuffix("/recentProjects.xml") || path.hasSuffix("/recentProjectDirectories.xml")
+    }
+
+    /// Extract the `<Product><Year>` version-dir component from a recents path
+    /// shaped `…/JetBrains/<versionDir>/options/recentProjects*.xml`. Returns nil
+    /// for any path not under `JetBrains/<versionDir>/options/`.
+    static func versionDir(forPath path: String) -> String? {
+        let comps = path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+        guard let idx = comps.firstIndex(of: "JetBrains"),
+            idx + 2 < comps.count,
+            comps[idx + 2] == "options"
+        else { return nil }
+        return comps[idx + 1]
+    }
 
     public init(
         homeDir: String = NSHomeDirectory(),
@@ -199,16 +221,61 @@ public actor JetBrainsRecentProjectsWatcher {
     }
 
     public func start() async {
-        // 1. Initial glob ~/Library/Application Support/JetBrains/<Product><Y>/options/recentProjects*.xml.
-        // 2. Register FSEvents stream on parent dir (~/Library/Application Support/JetBrains/).
-        // 3. For each matched IDE-version dir, register sub-stream on options/.
-        // 4. On parent CREATE → 500ms debounce → re-glob → add streams.
-        // 5. On xml UPDATE → parse → diff snapshot → emit per new entry.
-        // Implementation deferred to Stage 7 integration smoke.
+        // Feature gate (ADR-020 opt-in). Toggle-flip takes effect on Agent restart.
+        guard localAppsStore.jetbrainsStorageEnabled else { return }
+        let jetBrainsRoot = homeDir + "/Library/Application Support/JetBrains"
+        guard FileManager.default.fileExists(atPath: jetBrainsRoot) else { return }
+        // 1. Seed per-file snapshots from existing recents files — NO emit (cold
+        //    path: only activations *after* start() are surfaced).
+        seedSnapshots(jetBrainsRoot: jetBrainsRoot)
+        // 2. One recursive stream on the JetBrains root catches new <Product><Y>/
+        //    dirs and recents-xml UPDATEs (atomic writes on project close/switch).
+        let onEvents: FSEventStream.EventsHandler = { [weak self] paths, _ in
+            guard let self else { return }
+            for path in paths where Self.isRecentProjectsXML(path) {
+                Task { await self.handleRecentProjectsFile(path: path) }
+            }
+        }
+        stream = try? FSEventStream(
+            paths: [jetBrainsRoot],
+            latency: 1.5,
+            queueLabel: "tech.gundem.leaf.fsevents.jetbrains",
+            onEvents: onEvents
+        )
+        stream?.start()
     }
 
     public func stop() async {
-        // Tear down all streams.
+        stream?.stop()
+        stream = nil
+        snapshots.removeAll()
+    }
+
+    /// Seed snapshots for every existing `recentProjects*.xml` so the first
+    /// post-start UPDATE diffs against the current state (no historical replay).
+    private func seedSnapshots(jetBrainsRoot: String) {
+        let fm = FileManager.default
+        guard let versionDirs = try? fm.contentsOfDirectory(atPath: jetBrainsRoot) else { return }
+        for versionDir in versionDirs {
+            let optionsDir = jetBrainsRoot + "/" + versionDir + "/options"
+            for name in ["recentProjects.xml", "recentProjectDirectories.xml"] {
+                let p = optionsDir + "/" + name
+                guard let body = try? String(contentsOfFile: p, encoding: .utf8) else { continue }
+                snapshots[p] = Self.parseRecentProjectsXML(body)
+            }
+        }
+    }
+
+    /// Read an updated recents file (inside actor isolation — off the FSEvents
+    /// queue) and diff against the prior snapshot via the existing emit path.
+    private func handleRecentProjectsFile(path: String) async {
+        guard localAppsStore.jetbrainsStorageEnabled else { return }
+        guard let versionDir = Self.versionDir(forPath: path) else { return }
+        guard let body = try? String(contentsOfFile: path, encoding: .utf8) else { return }
+        let prior = snapshots[path] ?? []
+        let newSnapshot = await onRecentProjectsXMLUpdated(
+            versionDir: versionDir, xmlBody: body, priorSnapshot: prior)
+        snapshots[path] = newSnapshot
     }
 
     /// Test hook — synthesize an XML-update event without real FSEvents.
