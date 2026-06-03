@@ -139,6 +139,35 @@ final class AppleScriptCollectorDispatchTests: XCTestCase {
     }
 
     @MainActor
+    func testSkipsIfNotRunning() async {
+        // Settings dead-toggle remediation (WS4): a closed-but-installed app must
+        // not be dispatched (no auto-launch, no diagnostic) — silent skip.
+        let bridge = AppleScriptBridge(executor: { _ in
+            XCTFail("bridge invoked despite app not running")
+            return .unavailable
+        })
+        let perm = AppleScriptPermissionStore(defaults: defaults)
+        let store = LocalAppsStore(defaults: defaults)
+        store.setEnabled("com.example.x", true)
+        var adapter: any AppleScriptAdapter = SpyAdapter(targetBundleIDs: ["com.example.x"])
+        let out = await AppleScriptDispatchLogic.tickAdapter(
+            &adapter,
+            bridge: bridge,
+            permissionStore: perm,
+            localAppsStore: store,
+            isInstalled: { _ in true },
+            isRunning: { _ in false },
+            nowMs: 7_000_000
+        )
+        XCTAssertTrue(out.events.isEmpty)
+        XCTAssertTrue(out.diagnostics.isEmpty)
+        // Not-running is a silent skip (like .appNotRunning) — no state recorded.
+        if case .notRequested = perm.cachedState(for: "com.example.x") {} else {
+            XCTFail("expected unchanged .notRequested when not running")
+        }
+    }
+
+    @MainActor
     func testTimeoutDiagnosticEmitted() async {
         let bridge = AppleScriptBridge(executor: { _ in .timeout })
         let perm = AppleScriptPermissionStore(defaults: defaults)

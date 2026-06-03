@@ -43,6 +43,7 @@ public enum AppleScriptDispatchLogic {
         permissionStore: AppleScriptPermissionStore,
         localAppsStore: LocalAppsStore,
         isInstalled: @Sendable (String) -> Bool,
+        isRunning: @Sendable (String) -> Bool = { _ in true },
         nowMs: Int64
     ) async -> TickOutcome {
         var allEvents: [RawEvent] = []
@@ -55,6 +56,11 @@ public enum AppleScriptDispatchLogic {
                 permissionStore.record(.appNotInstalled, for: bundleID, nowMs: nowMs)
                 continue
             }
+            // Settings dead-toggle remediation (WS4): skip apps that are installed
+            // but not running. Sending an AppleEvent to a closed app auto-launches
+            // it every tick (a real UX bug) and produces the per-tick error spam.
+            // Silent skip — no dispatch, no diagnostic (mirrors `.appNotRunning`).
+            guard isRunning(bundleID) else { continue }
             let script = adapter.tickScript(for: bundleID)
             let result = await bridge.executeScript(script, timeoutSec: adapter.timeoutSec)
             switch result {
