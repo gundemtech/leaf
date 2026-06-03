@@ -410,6 +410,27 @@ public final class Database: @unchecked Sendable {
         }
     }
 
+    /// Settings dead-toggle remediation (WS2) — true iff the most recent
+    /// focus_mode_* event (written by the agent's FocusModeCollector) is
+    /// `focus_mode_enabled`. Lets the app's willPresent honor "Respect macOS
+    /// Focus mode" by reading the shared DB (no second INFocusStatusCenter TCC
+    /// prompt). Fails open: no event → false (show the notification).
+    public func latestFocusIsActive() throws -> Bool {
+        try pool.read { rawDB in
+            let kind = try String.fetchOne(
+                rawDB,
+                sql: """
+                    SELECT json_extract(payload_json, '$.event_kind')
+                    FROM events
+                    WHERE json_extract(payload_json, '$.event_kind')
+                          IN ('focus_mode_enabled', 'focus_mode_disabled')
+                    ORDER BY ts DESC
+                    LIMIT 1
+                    """)
+            return kind == "focus_mode_enabled"
+        }
+    }
+
     /// UPSERT toggle per `NotificationKind`. Rejects disabling a locked kind
     /// (currently `.handoff`) via `NotificationPrefsStore.Error.cannotDisableLockedKind`.
     /// Caller (`NotificationPrefsReader.setEnabled`) refreshes the in-memory map
