@@ -66,6 +66,18 @@ final class ShareSourceClassifierTests: XCTestCase {
         XCTAssertNil(classifier.classify(eventKind: "music_track_changed"))
     }
 
+    func testIDEWorkspaceKindsAreLocalOnly() {
+        // Settings dead-toggle remediation (WS1): the IDE workspace watchers
+        // emit these kinds, but there is no IDE ShareSource — they are LOCAL-only
+        // (Native UI / MCP / YOU·NOW) and must never be auto-shareable. classify()
+        // returning nil → TeamEventBroadcastService skips them (.skip "unmapped").
+        XCTAssertNil(classifier.classify(eventKind: "vscode_workspace_opened"))
+        XCTAssertNil(classifier.classify(eventKind: "jetbrains_recent_project_observed"))
+        XCTAssertFalse(ShareSourceClassifier.knownEventKinds.contains("vscode_workspace_opened"))
+        XCTAssertFalse(
+            ShareSourceClassifier.knownEventKinds.contains("jetbrains_recent_project_observed"))
+    }
+
     func testAIContentKindsNotClassified() {
         // Defense in depth — even if such a kind existed, it must not be auto-shareable.
         XCTAssertNil(classifier.classify(eventKind: "ai_prompt_submitted"))
