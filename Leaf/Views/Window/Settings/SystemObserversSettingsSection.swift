@@ -214,7 +214,7 @@ private struct IDEStorageSettingsSection: View {
             IDEStorageToggleRow(
                 sfSymbol: "chevron.left.forwardslash.chevron.right",
                 displayName: "VSCode workspace tracking",
-                explainer: "Detects workspace opens across VSCode, Cursor, Insiders, and VSCodium. Workspace name only — never file contents.",
+                explainer: "Detects workspace opens across VSCode, Cursor, Insiders, and VSCodium. Workspace name — never file contents. (Path captured only if IDE workspace path tracking is on below.)",
                 isOn: Binding(
                     get: { store.vscodeStorageEnabled },
                     set: { store.vscodeStorageEnabled = $0 }
@@ -224,7 +224,7 @@ private struct IDEStorageSettingsSection: View {
             IDEStorageToggleRow(
                 sfSymbol: "cube",
                 displayName: "JetBrains recent projects",
-                explainer: "Detects recent project activations across IntelliJ, PyCharm, GoLand, etc. Project display name only — never file contents.",
+                explainer: "Detects recent project activations across IntelliJ, PyCharm, GoLand, etc. Project display name — never file contents. (Path captured only if IDE workspace path tracking is on below.)",
                 isOn: Binding(
                     get: { store.jetbrainsStorageEnabled },
                     set: { store.jetbrainsStorageEnabled = $0 }
