@@ -172,20 +172,18 @@ public struct InviteAcceptService: Sendable {
                                       keyID: plaintext.teamKeyID,
                                       at: keystoreRoot)
 
-        // 13. DB writes (three-path: fresh / rejoin / already-current)
-        if let existing = try database.readWorkspace(id: workspaceID) {
-            guard existing.leftAt != nil else {
-                throw LeafError.inviteAlreadyAccepted
-            }
-            try database.clearWorkspaceLeftAt(workspaceID: workspaceID)
-            try database.insertTeamMember(selfMember)
-            try database.insertTeamKeyIfAbsent(teamKey)
-        } else {
-            try database.upsertWorkspace(workspaceRow)
-            try database.insertTeamMember(adminMember)
-            try database.insertTeamMember(selfMember)
-            try database.insertTeamKey(teamKey)
-        }
+        // 13. Atomic, idempotent, self-healing DB write — one transaction that
+        // converges to {workspace + admin + self + key} from any prior local
+        // state (fresh / half-materialised orphan / left / deleted). Replaces
+        // the old fresh/rejoin/already-current branch (separate transactions +
+        // a partial-state `inviteAlreadyAccepted` throw that reported success
+        // over an empty team). Shared with `JoinRequestService.acceptApproved`.
+        try database.materializeJoinedWorkspace(
+            workspace: workspaceRow,
+            adminMember: adminMember,
+            selfMember: selfMember,
+            teamKey: teamKey
+        )
 
         // 14. Best-effort workspace_members remote sync with bounded retry (in-process).
         // Failures do NOT roll back local state (invitee can use Team locally; admin's
