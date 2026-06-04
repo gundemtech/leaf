@@ -389,45 +389,169 @@ final class JoinRequestServiceAcceptApprovedTests: XCTestCase {
     XCTAssertEqual(selfM?.displayName, "Eve")
   }
 
-  // MARK: - 8. Already-current path — workspace active + self already present
+  // MARK: - 8. Idempotency + self-heal (acceptApproved is now total)
 
-  func testAcceptApproved_AlreadyCurrent_ThrowsInviteAlreadyAccepted() async throws {
+  /// Workspace fully materialised already (admin + self + key) → idempotent
+  /// no-op, returns `.joined`, no duplicate rows. (Replaces the old
+  /// `inviteAlreadyAccepted`-throw behaviour.)
+  func testAcceptApproved_AlreadyFullyMaterialised_NoOpReturnsJoined() async throws {
     bootstrap()
-    // Seed an active workspace with self already as member — idempotent
-    // poll re-tick shouldn't duplicate-INSERT.
     let selfPub = try selfPubkeyHex()
     try db.writeSQL { raw in
-      try raw.execute(
-        sql: """
-          INSERT INTO \(Schema.Workspaces.tableName)
-              (\(Schema.Workspaces.id), \(Schema.Workspaces.name),
-               \(Schema.Workspaces.createdAtMs), \(Schema.Workspaces.createdByMemberID))
-          VALUES (?, 'TestRoom', 1700000000000, ?)
-          """, arguments: [workspaceID, adminMemberID])
-      try raw.execute(
-        sql: """
-          INSERT INTO \(Schema.TeamMembers.tableName)
-              (\(Schema.TeamMembers.id), \(Schema.TeamMembers.workspaceID),
-               \(Schema.TeamMembers.role), \(Schema.TeamMembers.pubkeyHex),
-               \(Schema.TeamMembers.displayName), \(Schema.TeamMembers.addedAtMs))
-          VALUES ('self-existing', ?, 'member', ?, 'Eve', 1700000000000)
-          """, arguments: [workspaceID, selfPub])
+      try raw.execute(sql: """
+        INSERT INTO \(Schema.Workspaces.tableName)
+            (\(Schema.Workspaces.id), \(Schema.Workspaces.name),
+             \(Schema.Workspaces.createdAtMs), \(Schema.Workspaces.createdByMemberID))
+        VALUES (?, 'TestRoom', 1700000000000, ?)
+        """, arguments: [workspaceID, adminMemberID])
+      try raw.execute(sql: """
+        INSERT INTO \(Schema.TeamMembers.tableName)
+            (\(Schema.TeamMembers.id), \(Schema.TeamMembers.workspaceID),
+             \(Schema.TeamMembers.role), \(Schema.TeamMembers.pubkeyHex),
+             \(Schema.TeamMembers.displayName), \(Schema.TeamMembers.addedAtMs))
+        VALUES (?, ?, 'admin', ?, 'Alice', 1700000000000)
+        """, arguments: [adminMemberID, workspaceID, adminPubkeyHex.lowercased()])
+      try raw.execute(sql: """
+        INSERT INTO \(Schema.TeamMembers.tableName)
+            (\(Schema.TeamMembers.id), \(Schema.TeamMembers.workspaceID),
+             \(Schema.TeamMembers.role), \(Schema.TeamMembers.pubkeyHex),
+             \(Schema.TeamMembers.displayName), \(Schema.TeamMembers.addedAtMs))
+        VALUES ('self-existing', ?, 'member', ?, 'Eve', 1700001000000)
+        """, arguments: [workspaceID, selfPub])
+      try raw.execute(sql: """
+        INSERT INTO \(Schema.TeamKeys.tableName)
+            (\(Schema.TeamKeys.id), \(Schema.TeamKeys.workspaceID),
+             \(Schema.TeamKeys.generatedAtMs), \(Schema.TeamKeys.generatedByMemberID))
+        VALUES (?, ?, 1700000000000, ?)
+        """, arguments: [teamKeyID, workspaceID, adminMemberID])
     }
 
     let codec = RecordingDecoderCodec()
     codec.stubPlaintext = makePlaintext()
-    let request = try makeRequest()
+    let accepted = try await makeService(codec: codec).acceptApproved(request: try makeRequest())
 
-    do {
-      _ = try await makeService(codec: codec).acceptApproved(request: request)
-      XCTFail("expected .inviteAlreadyAccepted")
-    } catch LeafError.inviteAlreadyAccepted {
-      // pass
+    XCTAssertEqual(accepted.orgID, workspaceID)
+    let members = try db.readTeamMembers(workspaceID: workspaceID, includeRemoved: true)
+    XCTAssertEqual(members.count, 2, "no duplicate admin/self by pubkey")
+  }
+
+  /// Orphan half-workspace: a prior failed/crashed accept left ONLY the
+  /// workspace row (active, no members, no key). The OLD code threw
+  /// `inviteAlreadyAccepted` here → reader reported "joined" over an EMPTY
+  /// team. The new total method self-heals to {admin + self + key}.
+  func testAcceptApproved_OrphanWorkspaceOnly_SelfHeals() async throws {
+    bootstrap()
+    try db.writeSQL { raw in
+      try raw.execute(sql: """
+        INSERT INTO \(Schema.Workspaces.tableName)
+            (\(Schema.Workspaces.id), \(Schema.Workspaces.name),
+             \(Schema.Workspaces.createdAtMs), \(Schema.Workspaces.createdByMemberID))
+        VALUES (?, 'TestRoom', 1700000000000, ?)
+        """, arguments: [workspaceID, adminMemberID])
     }
 
-    // Defence: no duplicate INSERT — exactly one member row still.
-    let members = try db.readTeamMembers(workspaceID: workspaceID, includeRemoved: false)
-    XCTAssertEqual(members.count, 1, "already-current path must not duplicate-INSERT")
+    let codec = RecordingDecoderCodec()
+    codec.stubPlaintext = makePlaintext()
+    let accepted = try await makeService(codec: codec).acceptApproved(request: try makeRequest())
+
+    XCTAssertEqual(accepted.orgID, workspaceID)
+    let members = try db.readTeamMembers(workspaceID: workspaceID)
+    XCTAssertEqual(members.count, 2, "self-heal adds admin + self")
+    XCTAssertNotNil(members.first(where: { $0.role == .admin }))
+    XCTAssertNotNil(members.first(where: { $0.role == .member }))
+    XCTAssertEqual(try db.readActiveTeamKey(workspaceID: workspaceID)?.id, teamKeyID)
+  }
+
+  /// Running the full accept twice (e.g. relaunch mid-flow) → no duplicate rows.
+  func testAcceptApproved_RunTwice_Idempotent() async throws {
+    bootstrap()
+    let codec = RecordingDecoderCodec()
+    codec.stubPlaintext = makePlaintext()
+    let svc = makeService(codec: codec)
+    _ = try await svc.acceptApproved(request: try makeRequest())
+    let second = try await svc.acceptApproved(request: try makeRequest())
+    XCTAssertEqual(second.orgID, workspaceID)
+    XCTAssertEqual(try db.readTeamMembers(workspaceID: workspaceID, includeRemoved: true).count, 2)
+  }
+
+  /// F11 — realistic rejoin: leaving sets only `workspace.left_at`; the self
+  /// member row PERSISTS active. The OLD `insertTeamMember(selfMember)` with a
+  /// fresh PK would insert a SECOND active self row (dup by pubkey). The
+  /// insert-if-absent-by-pubkey helper keeps it at exactly one.
+  func testAcceptApproved_RealisticRejoin_NoDuplicateSelf() async throws {
+    bootstrap()
+    let selfPub = try selfPubkeyHex()
+    try db.writeSQL { raw in
+      try raw.execute(sql: """
+        INSERT INTO \(Schema.Workspaces.tableName)
+            (\(Schema.Workspaces.id), \(Schema.Workspaces.name),
+             \(Schema.Workspaces.createdAtMs), \(Schema.Workspaces.createdByMemberID),
+             \(Schema.Workspaces.leftAtMs))
+        VALUES (?, 'TestRoom', 1700000000000, ?, 1715000000000)
+        """, arguments: [workspaceID, adminMemberID])
+      try raw.execute(sql: """
+        INSERT INTO \(Schema.TeamMembers.tableName)
+            (\(Schema.TeamMembers.id), \(Schema.TeamMembers.workspaceID),
+             \(Schema.TeamMembers.role), \(Schema.TeamMembers.pubkeyHex),
+             \(Schema.TeamMembers.displayName), \(Schema.TeamMembers.addedAtMs))
+        VALUES (?, ?, 'admin', ?, 'Alice', 1700000000000)
+        """, arguments: [adminMemberID, workspaceID, adminPubkeyHex.lowercased()])
+      try raw.execute(sql: """
+        INSERT INTO \(Schema.TeamMembers.tableName)
+            (\(Schema.TeamMembers.id), \(Schema.TeamMembers.workspaceID),
+             \(Schema.TeamMembers.role), \(Schema.TeamMembers.pubkeyHex),
+             \(Schema.TeamMembers.displayName), \(Schema.TeamMembers.addedAtMs))
+        VALUES ('self-old', ?, 'member', ?, 'Eve', 1700001000000)
+        """, arguments: [workspaceID, selfPub])
+    }
+
+    let codec = RecordingDecoderCodec()
+    codec.stubPlaintext = makePlaintext()
+    _ = try await makeService(codec: codec).acceptApproved(request: try makeRequest())
+
+    XCTAssertNil(try db.readWorkspace(id: workspaceID)?.leftAt, "rejoin clears left_at")
+    let members = try db.readTeamMembers(workspaceID: workspaceID, includeRemoved: true)
+    XCTAssertEqual(members.count, 2, "no duplicate self — admin + the persisted self")
+    XCTAssertEqual(members.filter { $0.role == .member }.count, 1, "exactly one self row")
+  }
+
+  /// Atomicity at the service level — a mid-write collision rolls back the whole
+  /// materialisation (no partial workspace). Pre-seed a stray member whose id
+  /// collides with the fixed selfMemberID but a DIFFERENT pubkey, in a workspace
+  /// marked left, so the self insert fails AFTER the workspace upsert + admin
+  /// insert have run inside the transaction.
+  func testAcceptApproved_MidWriteFailure_NoPartialRows() async throws {
+    bootstrap()
+    try db.writeSQL { raw in
+      try raw.execute(sql: """
+        INSERT INTO \(Schema.Workspaces.tableName)
+            (\(Schema.Workspaces.id), \(Schema.Workspaces.name),
+             \(Schema.Workspaces.createdAtMs), \(Schema.Workspaces.createdByMemberID),
+             \(Schema.Workspaces.leftAtMs))
+        VALUES (?, 'TestRoom', 1700000000000, ?, 1715000000000)
+        """, arguments: [workspaceID, adminMemberID])
+      try raw.execute(sql: """
+        INSERT INTO \(Schema.TeamMembers.tableName)
+            (\(Schema.TeamMembers.id), \(Schema.TeamMembers.workspaceID),
+             \(Schema.TeamMembers.role), \(Schema.TeamMembers.pubkeyHex),
+             \(Schema.TeamMembers.displayName), \(Schema.TeamMembers.addedAtMs))
+        VALUES (?, ?, 'member', ?, 'Stray', 1700000500000)
+        """, arguments: [fixedSelfMemberID, workspaceID, String(repeating: "f", count: 64)])
+    }
+
+    let codec = RecordingDecoderCodec()
+    codec.stubPlaintext = makePlaintext()
+    do {
+      _ = try await makeService(codec: codec).acceptApproved(request: try makeRequest())
+      XCTFail("expected mid-write failure to propagate")
+    } catch {
+      // expected — PK collision on the self insert
+    }
+
+    XCTAssertNotNil(try db.readWorkspace(id: workspaceID)?.leftAt, "left_at must NOT be cleared (rollback)")
+    let members = try db.readTeamMembers(workspaceID: workspaceID, includeRemoved: true)
+    XCTAssertEqual(members.count, 1, "admin insert rolled back — only the stray remains")
+    XCTAssertFalse(members.contains { $0.pubkeyHex == adminPubkeyHex.lowercased() })
   }
 }
 

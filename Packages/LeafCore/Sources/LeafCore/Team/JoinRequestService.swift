@@ -96,7 +96,8 @@ public struct JoinRequestService: Sendable {
   public func approve(
     workspaceID: String,
     requestID: String,
-    inviteePubkeyHex: String
+    inviteePubkeyHex: String,
+    inviteeDisplayName: String
   ) async throws {
     // Validate hex shape upfront (Edge Function also validates, but we
     // want to fail fast before doing local ECDH work).
@@ -111,7 +112,17 @@ public struct JoinRequestService: Sendable {
       throw LeafError.databaseUnavailable
     }
     let members = try database.readTeamMembers(workspaceID: workspace.id, includeRemoved: false)
-    guard let selfMember = members.first else { throw LeafError.databaseUnavailable }
+
+    // Resolve self by identity pubkey, NOT list order. `createWorkspace`
+    // stores the admin's own member with `identity().publicKey` lowercase hex,
+    // so this matches exactly. Robust now that the invitee insert below adds
+    // more members (added_at ordering is no longer load-bearing).
+    let adminPriv = try identity()
+    let adminPubkeyHex = adminPriv.publicKey.rawRepresentation
+      .map { String(format: "%02x", $0) }.joined()
+    guard let selfMember = members.first(where: {
+      $0.pubkeyHex.lowercased() == adminPubkeyHex.lowercased()
+    }) else { throw LeafError.databaseUnavailable }
     guard let activeKey = try database.readActiveTeamKey(workspaceID: workspace.id) else {
       throw LeafError.databaseUnavailable
     }
@@ -121,7 +132,6 @@ public struct JoinRequestService: Sendable {
 
     // ECDH(admin_priv, invitee_pub) → HKDF (otp="" — closed-mode invites
     // don't carry an OTP; AES-GCM tag provides primary security per S3).
-    let adminPriv = try identity()
     let shared = try KeyAgreement.sharedSecret(
       privateKey: adminPriv, peerPublicKeyHex: inviteePubkeyHex.lowercased()
     )
@@ -146,6 +156,24 @@ public struct JoinRequestService: Sendable {
     // performs the PATCH + RPC + best-effort apns_push.
     try await supabase.invokeApproveJoinRequest(
       requestID: requestID, encryptedTeamKey: blob.bytes
+    )
+
+    // Bug B — add the approved invitee to the admin's LOCAL roster so the
+    // approving device sees them immediately, independent of the invitee's
+    // accept or any `workspace_members` read-back (which doesn't exist).
+    // Idempotent by pubkey: re-approve / re-tick is a no-op. The invitee's
+    // own accept later mints their own member row by the same pubkey on
+    // their device — cross-device identity is the pubkey, not the id.
+    try database.insertTeamMemberIfAbsent(
+      TeamMember(
+        id: generateMemberID(),
+        workspaceID: workspace.id,
+        role: .member,
+        pubkeyHex: inviteePubkeyHex.lowercased(),
+        displayName: inviteeDisplayName,
+        addedAt: now(),
+        removedAt: nil
+      )
     )
   }
 
@@ -173,11 +201,14 @@ public struct JoinRequestService: Sendable {
   /// steps 8-14 (decode, value-type build, keystore-first write, three-
   /// path DB writes, best-effort remote member sync).
   ///
-  /// **Idempotent on the «already-current» path** — re-invoking with a row
-  /// whose workspace is already locally joined and not left is a no-op +
-  /// `inviteAlreadyAccepted` throw, so the JoinRequestsReader poll loop
-  /// can safely call this on every `.approved` tick without duplicating
-  /// rows.
+  /// **Total + idempotent + self-healing.** The local write (step 9) goes
+  /// through `Database.materializeJoinedWorkspace` — one transaction that
+  /// converges to {workspace + admin + self + key} regardless of prior local
+  /// state (fresh / half-materialised orphan / previously-left / deleted) and
+  /// never duplicates by pubkey. So the JoinRequestsReader poll loop can call
+  /// this on every `.approved` tick (and across relaunches) without churn, and
+  /// a prior partial attempt self-heals on the next run. No longer throws
+  /// `inviteAlreadyAccepted`.
   public func acceptApproved(request: JoinRequest) async throws -> AcceptedInvite {
     // 1. Pre-conditions — server-side CHECK constraint already enforces
     // approved ⇒ encryptedTeamKey non-null (migration §92), but defensive
@@ -276,26 +307,18 @@ public struct JoinRequestService: Sendable {
       at: keystoreRoot
     )
 
-    // 9. Three-path DB writes: fresh / rejoin / already-current.
-    if let existing = try database.readWorkspace(id: workspaceID) {
-      guard existing.leftAt != nil else {
-        // Already-current — no mutation. UI surfaces an idempotent return
-        // (status will already be .joined on next poll for this device).
-        throw LeafError.inviteAlreadyAccepted
-      }
-      // Rejoin: clear left_at, re-insert self as a member, add the key
-      // version if we don't already have it (returning member kept the
-      // historical keys per S2 audit invariant).
-      try database.clearWorkspaceLeftAt(workspaceID: workspaceID)
-      try database.insertTeamMember(selfMember)
-      try database.insertTeamKeyIfAbsent(teamKey)
-    } else {
-      // Fresh: full workspace + admin + self + key materialisation.
-      try database.upsertWorkspace(workspaceRow)
-      try database.insertTeamMember(adminMember)
-      try database.insertTeamMember(selfMember)
-      try database.insertTeamKey(teamKey)
-    }
+    // 9. Atomic, idempotent, self-healing DB write. One transaction converges
+    // to {workspace + admin + self + key} from ANY prior local state — fresh,
+    // half-materialised orphan, previously-left, or locally-deleted. Replaces
+    // the old fresh/rejoin/already-current branch whose separate transactions
+    // could commit a partial workspace and whose already-current early-return
+    // reported success over an empty team (the two-Mac dogfood bug).
+    try database.materializeJoinedWorkspace(
+      workspace: workspaceRow,
+      adminMember: adminMember,
+      selfMember: selfMember,
+      teamKey: teamKey
+    )
 
     // 10. Best-effort `workspace_members` remote sync. Failures don't roll
     // back the local commit — the user can use the workspace immediately;

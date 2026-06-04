@@ -1114,6 +1114,124 @@ public final class Database: @unchecked Sendable {
         }
     }
 
+    /// Insert-if-absent by pubkey, within an existing transaction. An ACTIVE
+    /// match (`removed_at_ms IS NULL`) → no-op; otherwise full INSERT.
+    /// `team_members` has no UNIQUE(pubkey_hex); idempotency is this in-tx
+    /// SELECT-then-INSERT, race-free under the serialized writer (the writer
+    /// holds the connection exclusively, so no second writer interleaves
+    /// between SELECT and INSERT). A previously-REMOVED member with the same
+    /// pubkey is re-activated as a fresh active row — the removed row stays for
+    /// audit (forever-retention invariant).
+    private static func insertTeamMemberIfAbsentInTx(_ member: TeamMember, _ db: GRDB.Database) throws {
+        let match = try Row.fetchOne(db, sql: """
+            SELECT 1 FROM \(Schema.TeamMembers.tableName)
+            WHERE \(Schema.TeamMembers.workspaceID) = ?
+              AND \(Schema.TeamMembers.pubkeyHex) = ?
+              AND \(Schema.TeamMembers.removedAtMs) IS NULL
+            LIMIT 1
+            """,
+            arguments: [member.workspaceID, member.pubkeyHex]
+        )
+        if match != nil { return }
+        try db.execute(sql: """
+            INSERT INTO \(Schema.TeamMembers.tableName) (
+                \(Schema.TeamMembers.id),
+                \(Schema.TeamMembers.workspaceID),
+                \(Schema.TeamMembers.role),
+                \(Schema.TeamMembers.pubkeyHex),
+                \(Schema.TeamMembers.displayName),
+                \(Schema.TeamMembers.addedAtMs),
+                \(Schema.TeamMembers.removedAtMs)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            arguments: [
+                member.id,
+                member.workspaceID,
+                member.role.rawValue,
+                member.pubkeyHex,
+                member.displayName,
+                Int64(member.addedAt.timeIntervalSince1970 * 1000),
+                member.removedAt.map { Int64($0.timeIntervalSince1970 * 1000) }
+            ]
+        )
+    }
+
+    /// Idempotent-by-pubkey team-member insert. Used by the admin's `approve()`
+    /// to add the freshly-approved invitee to the local roster without
+    /// duplicating on re-approve. See `insertTeamMemberIfAbsentInTx`.
+    public func insertTeamMemberIfAbsent(_ member: TeamMember) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in try Self.insertTeamMemberIfAbsentInTx(member, db) }
+    }
+
+    /// Atomic, idempotent, self-healing materialisation of a joined workspace —
+    /// the single write shared by both invite-accept paths
+    /// (`JoinRequestService.acceptApproved`, `InviteAcceptService.acceptInvite`).
+    /// All four writes run in ONE transaction; any failure rolls back the whole
+    /// thing (no half-materialised orphan):
+    ///   1. workspace — INSERT, or on conflict clear `left_at_ms` AND
+    ///      `deleted_at_ms` (accept always wants the workspace active+visible),
+    ///      PRESERVING `name` / `created_at_ms` / `created_by_member_id` (so a
+    ///      possibly-stale blob name never overwrites the local one).
+    ///   2. admin member — insert-if-absent by pubkey.
+    ///   3. self member — insert-if-absent by pubkey.
+    ///   4. teamKey — insert-if-absent by id.
+    /// Converges to {workspace + admin + self + key} from ANY prior local state
+    /// (fresh / orphan / left / deleted), so a re-run heals a partial orphan.
+    public func materializeJoinedWorkspace(
+        workspace: Workspace,
+        adminMember: TeamMember,
+        selfMember: TeamMember,
+        teamKey: TeamKey
+    ) throws {
+        guard mode == .writer else { throw LeafError.databaseUnavailable }
+        try pool.write { db in
+            // 1. Workspace — INSERT-or-resurrect.
+            try db.execute(sql: """
+                INSERT INTO \(Schema.Workspaces.tableName) (
+                    \(Schema.Workspaces.id),
+                    \(Schema.Workspaces.name),
+                    \(Schema.Workspaces.createdAtMs),
+                    \(Schema.Workspaces.createdByMemberID),
+                    \(Schema.Workspaces.leftAtMs)
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(\(Schema.Workspaces.id)) DO UPDATE SET
+                    \(Schema.Workspaces.leftAtMs)    = NULL,
+                    \(Schema.Workspaces.deletedAtMs) = NULL
+                """,
+                arguments: [
+                    workspace.id,
+                    workspace.name,
+                    Int64(workspace.createdAt.timeIntervalSince1970 * 1000),
+                    workspace.createdByMemberID,
+                    workspace.leftAt.map { Int64($0.timeIntervalSince1970 * 1000) }
+                ]
+            )
+            // 2 + 3. Members — insert-if-absent by pubkey.
+            try Self.insertTeamMemberIfAbsentInTx(adminMember, db)
+            try Self.insertTeamMemberIfAbsentInTx(selfMember, db)
+            // 4. TeamKey — insert-if-absent by id (mirrors `insertTeamKeyIfAbsent`).
+            try db.execute(sql: """
+                INSERT INTO \(Schema.TeamKeys.tableName) (
+                    \(Schema.TeamKeys.id),
+                    \(Schema.TeamKeys.workspaceID),
+                    \(Schema.TeamKeys.generatedAtMs),
+                    \(Schema.TeamKeys.deprecatedAtMs),
+                    \(Schema.TeamKeys.generatedByMemberID)
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(\(Schema.TeamKeys.id)) DO NOTHING
+                """,
+                arguments: [
+                    teamKey.id,
+                    teamKey.workspaceID,
+                    Int64(teamKey.generatedAt.timeIntervalSince1970 * 1000),
+                    teamKey.deprecatedAt.map { Int64($0.timeIntervalSince1970 * 1000) },
+                    teamKey.generatedByMemberID
+                ]
+            )
+        }
+    }
+
     /// Returns members of a single workspace, ordered by `added_at_ms` ASC.
     /// `includeRemoved: false` (default) — active members only via the partial
     /// index `team_members_workspace_active`. UI Team list — default call.

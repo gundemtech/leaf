@@ -73,6 +73,19 @@ final class JoinRequestsReader {
   /// duplicate-INSERT churn on every tick after a .approved transition.
   private var materialisationInFlightRequestIDs: Set<String> = []
 
+  /// Late-bound roster-refresh hook. The composition root (`LeafApp.onAppear`)
+  /// wires this to `WorkspaceReader.refresh()` so the admin's Team roster
+  /// updates immediately after an approve — which now inserts the invitee into
+  /// the local `team_members` (Bug B). The invitee side self-heals via the
+  /// waiting card's `switchActive → refresh`, so it needs no hook here.
+  private var onRosterChanged: (@MainActor () -> Void)?
+
+  /// Composition-root wiring (mirrors the `InviteURLHandler.wireM027` late-bind
+  /// pattern — both readers are app-lifetime `@State` in `LeafApp`).
+  func wireRosterRefresh(_ callback: @escaping @MainActor () -> Void) {
+    onRosterChanged = callback
+  }
+
   private let supabase: SupabaseClient
   private let activeWorkspaceStore: ActiveWorkspaceStore
   private let databaseURL: URL
@@ -145,9 +158,12 @@ final class JoinRequestsReader {
         try await svc.approve(
           workspaceID: request.workspaceID,
           requestID: request.requestID,
-          inviteePubkeyHex: request.inviteePubkeyHex
+          inviteePubkeyHex: request.inviteePubkeyHex,
+          inviteeDisplayName: request.inviteeDisplayName
         )
         self.refreshAdminQueue()
+        // Invitee now in the local roster — refresh the admin's Team view.
+        self.onRosterChanged?()
       } catch {
         self.logger.error("approve: \(String(describing: error), privacy: .public)")
         self.adminQueue = .error(message: friendlyMessage(for: error))
@@ -180,13 +196,17 @@ final class JoinRequestsReader {
     Task { @MainActor [weak self] in
       guard let self else { return }
       defer { self.isBulkOpRunning = false }
+      // Refresh the admin roster once at the end — even on partial failure,
+      // approvals before the throw already committed local member rows.
+      defer { self.onRosterChanged?() }
       do {
         let svc = try self.ensureService()
         for req in requests {
           try await svc.approve(
             workspaceID: req.workspaceID,
             requestID: req.requestID,
-            inviteePubkeyHex: req.inviteePubkeyHex
+            inviteePubkeyHex: req.inviteePubkeyHex,
+            inviteeDisplayName: req.inviteeDisplayName
           )
         }
         self.refreshAdminQueue()
@@ -305,19 +325,14 @@ final class JoinRequestsReader {
   /// Runs the invitee-side post-approval materialisation. Stays on the
   /// approved state during the in-flight window so the WaitingCard can
   /// render «Approved — joining…»; transitions to `.joined(workspaceName:)`
-  /// on success, or `.error` on local failure. On `.inviteAlreadyAccepted`
-  /// (idempotent re-tick), transitions straight to `.joined` since the
-  /// previous run already committed the rows.
+  /// on success, or `.error` on local failure. `acceptApproved` is now total +
+  /// idempotent (converges from any prior local state, never throws
+  /// `inviteAlreadyAccepted`), so a re-tick / relaunch re-run is a safe no-op.
   private func materialiseApproved(row: JoinRequest, service svc: JoinRequestService) async {
     do {
       let accepted = try await svc.acceptApproved(request: row)
       self.inviteeState = .joined(
         workspaceID: accepted.orgID, workspaceName: accepted.orgName)
-    } catch LeafError.inviteAlreadyAccepted {
-      // Local rows already in place — treat as success. WorkspaceReader
-      // will already have the row on next refresh.
-      let name = (try? ensureDatabase().readWorkspace(id: row.workspaceID))?.name ?? ""
-      self.inviteeState = .joined(workspaceID: row.workspaceID, workspaceName: name)
     } catch {
       self.logger.error(
         "materialiseApproved: \(String(describing: error), privacy: .public)")
