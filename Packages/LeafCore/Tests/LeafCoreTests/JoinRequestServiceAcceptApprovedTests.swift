@@ -435,10 +435,10 @@ final class JoinRequestServiceAcceptApprovedTests: XCTestCase {
     XCTAssertEqual(members.count, 2, "no duplicate admin/self by pubkey")
   }
 
-  /// Anton-orphan: a prior failed/crashed attempt left ONLY the workspace row
-  /// (active, no members, no key). The OLD code threw `inviteAlreadyAccepted`
-  /// here → reader reported "joined" over an EMPTY team. The new total method
-  /// self-heals to {admin + self + key}.
+  /// Orphan half-workspace: a prior failed/crashed accept left ONLY the
+  /// workspace row (active, no members, no key). The OLD code threw
+  /// `inviteAlreadyAccepted` here → reader reported "joined" over an EMPTY
+  /// team. The new total method self-heals to {admin + self + key}.
   func testAcceptApproved_OrphanWorkspaceOnly_SelfHeals() async throws {
     bootstrap()
     try db.writeSQL { raw in
