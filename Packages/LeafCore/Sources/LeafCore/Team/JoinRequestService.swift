@@ -173,11 +173,14 @@ public struct JoinRequestService: Sendable {
   /// steps 8-14 (decode, value-type build, keystore-first write, three-
   /// path DB writes, best-effort remote member sync).
   ///
-  /// **Idempotent on the «already-current» path** — re-invoking with a row
-  /// whose workspace is already locally joined and not left is a no-op +
-  /// `inviteAlreadyAccepted` throw, so the JoinRequestsReader poll loop
-  /// can safely call this on every `.approved` tick without duplicating
-  /// rows.
+  /// **Total + idempotent + self-healing.** The local write (step 9) goes
+  /// through `Database.materializeJoinedWorkspace` — one transaction that
+  /// converges to {workspace + admin + self + key} regardless of prior local
+  /// state (fresh / half-materialised orphan / previously-left / deleted) and
+  /// never duplicates by pubkey. So the JoinRequestsReader poll loop can call
+  /// this on every `.approved` tick (and across relaunches) without churn, and
+  /// a prior partial attempt self-heals on the next run. No longer throws
+  /// `inviteAlreadyAccepted`.
   public func acceptApproved(request: JoinRequest) async throws -> AcceptedInvite {
     // 1. Pre-conditions — server-side CHECK constraint already enforces
     // approved ⇒ encryptedTeamKey non-null (migration §92), but defensive
@@ -276,26 +279,18 @@ public struct JoinRequestService: Sendable {
       at: keystoreRoot
     )
 
-    // 9. Three-path DB writes: fresh / rejoin / already-current.
-    if let existing = try database.readWorkspace(id: workspaceID) {
-      guard existing.leftAt != nil else {
-        // Already-current — no mutation. UI surfaces an idempotent return
-        // (status will already be .joined on next poll for this device).
-        throw LeafError.inviteAlreadyAccepted
-      }
-      // Rejoin: clear left_at, re-insert self as a member, add the key
-      // version if we don't already have it (returning member kept the
-      // historical keys per S2 audit invariant).
-      try database.clearWorkspaceLeftAt(workspaceID: workspaceID)
-      try database.insertTeamMember(selfMember)
-      try database.insertTeamKeyIfAbsent(teamKey)
-    } else {
-      // Fresh: full workspace + admin + self + key materialisation.
-      try database.upsertWorkspace(workspaceRow)
-      try database.insertTeamMember(adminMember)
-      try database.insertTeamMember(selfMember)
-      try database.insertTeamKey(teamKey)
-    }
+    // 9. Atomic, idempotent, self-healing DB write. One transaction converges
+    // to {workspace + admin + self + key} from ANY prior local state — fresh,
+    // half-materialised orphan, previously-left, or locally-deleted. Replaces
+    // the old fresh/rejoin/already-current branch whose separate transactions
+    // could commit a partial workspace and whose already-current early-return
+    // reported success over an empty team (the two-Mac dogfood bug).
+    try database.materializeJoinedWorkspace(
+      workspace: workspaceRow,
+      adminMember: adminMember,
+      selfMember: selfMember,
+      teamKey: teamKey
+    )
 
     // 10. Best-effort `workspace_members` remote sync. Failures don't roll
     // back the local commit — the user can use the workspace immediately;
