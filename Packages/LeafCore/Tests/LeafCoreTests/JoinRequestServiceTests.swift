@@ -17,6 +17,9 @@ final class JoinRequestServiceTests: XCTestCase {
     private let teamKeyID = "22222222-2222-2222-2222-222222222222"
     private let adminPubkey = String(repeating: "a", count: 64)
     private let inviteePubkey = String(repeating: "e", count: 64)
+    /// Service identity (admin) private key bytes. Its derived pubkey is what
+    /// m1 is seeded with, so `approve()` resolves self by pubkey.
+    private let adminPrivBytes = Data(repeating: 0xBB, count: 32)
     private let anonKey = "test-anon"
     private let baseURL = URL(string: "https://test.supabase.co")!
 
@@ -30,6 +33,11 @@ final class JoinRequestServiceTests: XCTestCase {
             encryption: .deterministicTest
         )
         // Seed workspace + admin member + active teamKey + teamKey bytes.
+        // m1's pubkey == the service identity's derived pubkey so approve()
+        // can resolve self by pubkey rather than list order.
+        let adminSelfPubkey = try Curve25519.KeyAgreement.PrivateKey(
+            rawRepresentation: adminPrivBytes
+        ).publicKey.rawRepresentation.map { String(format: "%02x", $0) }.joined()
         try db.writeSQL { raw in
             try raw.execute(sql: """
                 INSERT INTO \(Schema.Workspaces.tableName)
@@ -43,7 +51,7 @@ final class JoinRequestServiceTests: XCTestCase {
                      \(Schema.TeamMembers.role), \(Schema.TeamMembers.pubkeyHex),
                      \(Schema.TeamMembers.displayName), \(Schema.TeamMembers.addedAtMs))
                 VALUES ('m1', ?, 'admin', ?, 'Admin', 1700000000000)
-                """, arguments: [workspaceID, adminPubkey])
+                """, arguments: [workspaceID, adminSelfPubkey])
             try raw.execute(sql: """
                 INSERT INTO \(Schema.TeamKeys.tableName)
                     (\(Schema.TeamKeys.id), \(Schema.TeamKeys.workspaceID),
@@ -172,7 +180,7 @@ final class JoinRequestServiceTests: XCTestCase {
         supabase: SupabaseClient? = nil
     ) -> JoinRequestService {
         let keystoreRoot = tempDir.appendingPathComponent("keystore")
-        let adminPrivBytes = Data(repeating: 0xBB, count: 32)
+        let adminPrivBytes = self.adminPrivBytes
         return JoinRequestService(
             database: db,
             supabase: supabase ?? makeSupabase(),
@@ -237,7 +245,8 @@ final class JoinRequestServiceTests: XCTestCase {
         try await service.approve(
             workspaceID: workspaceID,
             requestID: "33333333-3333-3333-3333-333333333333",
-            inviteePubkeyHex: inviteePubkey
+            inviteePubkeyHex: inviteePubkey,
+            inviteeDisplayName: "Eve"
         )
 
         // KDF received ECDH shared secret + empty OTP (closed-mode invite).
@@ -273,7 +282,8 @@ final class JoinRequestServiceTests: XCTestCase {
             try await service.approve(
                 workspaceID: workspaceID,
                 requestID: "33333333-3333-3333-3333-333333333333",
-                inviteePubkeyHex: "SHORT"
+                inviteePubkeyHex: "SHORT",
+                inviteeDisplayName: "Eve"
             )
             XCTFail("expected throw on malformed pubkey")
         } catch let error as LeafError {
@@ -282,6 +292,54 @@ final class JoinRequestServiceTests: XCTestCase {
             default: XCTFail("expected .invalidPayload, got \(error)")
             }
         }
+    }
+
+    // MARK: - approve (admin) — Bug B: local roster insert
+
+    /// After approve succeeds, the invitee must appear in the admin's LOCAL
+    /// team_members so the approving device's roster updates immediately
+    /// (independent of the invitee's accept or any workspace_members read-back).
+    func testApprove_InsertsInviteeIntoLocalRoster() async throws {
+        bootstrap(approveHandler: { request, _ in
+            let resp = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (resp, #"{"ok": true}"#.data(using: .utf8)!)
+        })
+        let service = makeService()
+        try await service.approve(
+            workspaceID: workspaceID,
+            requestID: "33333333-3333-3333-3333-333333333333",
+            inviteePubkeyHex: inviteePubkey,
+            inviteeDisplayName: "Eve"
+        )
+
+        let members = try db.readTeamMembers(workspaceID: workspaceID, includeRemoved: false)
+        let invitee = members.first { $0.pubkeyHex == inviteePubkey.lowercased() }
+        XCTAssertNotNil(invitee, "approved invitee must be in the admin's local roster")
+        XCTAssertEqual(invitee?.role, .member)
+        XCTAssertEqual(invitee?.displayName, "Eve")
+        XCTAssertEqual(members.count, 2, "admin (m1) + invitee")
+    }
+
+    /// Re-approve of the same request/pubkey must not duplicate the invitee
+    /// (idempotent insert-if-absent by pubkey).
+    func testApprove_ReApprove_NoDuplicateInvitee() async throws {
+        bootstrap(approveHandler: { request, _ in
+            let resp = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (resp, #"{"ok": true}"#.data(using: .utf8)!)
+        })
+        let service = makeService()
+        for _ in 0..<2 {
+            try await service.approve(
+                workspaceID: workspaceID,
+                requestID: "33333333-3333-3333-3333-333333333333",
+                inviteePubkeyHex: inviteePubkey,
+                inviteeDisplayName: "Eve"
+            )
+        }
+        let members = try db.readTeamMembers(workspaceID: workspaceID, includeRemoved: true)
+        XCTAssertEqual(members.filter { $0.pubkeyHex == inviteePubkey.lowercased() }.count, 1,
+            "re-approve must not duplicate the invitee")
+        XCTAssertEqual(members.count, 2)
     }
 
     // MARK: - decline / cancel / delete

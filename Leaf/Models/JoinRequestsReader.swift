@@ -145,7 +145,8 @@ final class JoinRequestsReader {
         try await svc.approve(
           workspaceID: request.workspaceID,
           requestID: request.requestID,
-          inviteePubkeyHex: request.inviteePubkeyHex
+          inviteePubkeyHex: request.inviteePubkeyHex,
+          inviteeDisplayName: request.inviteeDisplayName
         )
         self.refreshAdminQueue()
       } catch {
@@ -186,7 +187,8 @@ final class JoinRequestsReader {
           try await svc.approve(
             workspaceID: req.workspaceID,
             requestID: req.requestID,
-            inviteePubkeyHex: req.inviteePubkeyHex
+            inviteePubkeyHex: req.inviteePubkeyHex,
+            inviteeDisplayName: req.inviteeDisplayName
           )
         }
         self.refreshAdminQueue()

@@ -96,7 +96,8 @@ public struct JoinRequestService: Sendable {
   public func approve(
     workspaceID: String,
     requestID: String,
-    inviteePubkeyHex: String
+    inviteePubkeyHex: String,
+    inviteeDisplayName: String
   ) async throws {
     // Validate hex shape upfront (Edge Function also validates, but we
     // want to fail fast before doing local ECDH work).
@@ -111,7 +112,17 @@ public struct JoinRequestService: Sendable {
       throw LeafError.databaseUnavailable
     }
     let members = try database.readTeamMembers(workspaceID: workspace.id, includeRemoved: false)
-    guard let selfMember = members.first else { throw LeafError.databaseUnavailable }
+
+    // Resolve self by identity pubkey, NOT list order. `createWorkspace`
+    // stores the admin's own member with `identity().publicKey` lowercase hex,
+    // so this matches exactly. Robust now that the invitee insert below adds
+    // more members (added_at ordering is no longer load-bearing).
+    let adminPriv = try identity()
+    let adminPubkeyHex = adminPriv.publicKey.rawRepresentation
+      .map { String(format: "%02x", $0) }.joined()
+    guard let selfMember = members.first(where: {
+      $0.pubkeyHex.lowercased() == adminPubkeyHex.lowercased()
+    }) else { throw LeafError.databaseUnavailable }
     guard let activeKey = try database.readActiveTeamKey(workspaceID: workspace.id) else {
       throw LeafError.databaseUnavailable
     }
@@ -121,7 +132,6 @@ public struct JoinRequestService: Sendable {
 
     // ECDH(admin_priv, invitee_pub) → HKDF (otp="" — closed-mode invites
     // don't carry an OTP; AES-GCM tag provides primary security per S3).
-    let adminPriv = try identity()
     let shared = try KeyAgreement.sharedSecret(
       privateKey: adminPriv, peerPublicKeyHex: inviteePubkeyHex.lowercased()
     )
@@ -146,6 +156,24 @@ public struct JoinRequestService: Sendable {
     // performs the PATCH + RPC + best-effort apns_push.
     try await supabase.invokeApproveJoinRequest(
       requestID: requestID, encryptedTeamKey: blob.bytes
+    )
+
+    // Bug B — add the approved invitee to the admin's LOCAL roster so the
+    // approving device sees them immediately, independent of the invitee's
+    // accept or any `workspace_members` read-back (which doesn't exist).
+    // Idempotent by pubkey: re-approve / re-tick is a no-op. The invitee's
+    // own accept later mints their own member row by the same pubkey on
+    // their device — cross-device identity is the pubkey, not the id.
+    try database.insertTeamMemberIfAbsent(
+      TeamMember(
+        id: generateMemberID(),
+        workspaceID: workspace.id,
+        role: .member,
+        pubkeyHex: inviteePubkeyHex.lowercased(),
+        displayName: inviteeDisplayName,
+        addedAt: now(),
+        removedAt: nil
+      )
     )
   }
 
