@@ -35,12 +35,30 @@ public final class AppleScriptBridge {
     }
 
     #if canImport(AppKit)
-    /// Production factory — runs `NSAppleScript` on the main actor. Error
-    /// dictionary parsed for canonical AppleEvent codes.
+    /// Serial off-main queue for `NSAppleScript` execution.
+    ///
+    /// WS3 (Settings dead-toggle remediation): the synchronous
+    /// `executeAndReturnError` previously ran on the main actor (`MainActor.run`).
+    /// With one polling task per adapter, the per-adapter calls serialized on the
+    /// main actor and stalled the WHOLE agent main actor + RunLoop (other
+    /// collectors + NSWorkspace delivery), and adapters queued past the
+    /// cumulative timeout budget spuriously reported `.timeout` — even though
+    /// each call is fast (<0.2s, measured, incl. Safari with 70+ tabs). Running
+    /// off-main frees the main actor and lets the timeout race actually preempt.
+    /// AppleEvent replies are serviced without a manual RunLoop on a background
+    /// queue (verified empirically). Serial is sufficient because the running-app
+    /// precheck already caps how many adapters dispatch per cycle.
+    nonisolated private static let executionQueue = DispatchQueue(
+        label: "tech.gundem.leaf.applescript.exec", qos: .utility)
+
+    /// Production factory — runs `NSAppleScript` off the main actor on
+    /// `executionQueue`. Error dictionary parsed for canonical AppleEvent codes.
     public static func production() -> AppleScriptBridge {
         AppleScriptBridge(executor: { script in
-            await MainActor.run {
-                Self.runNSAppleScript(script)
+            await withCheckedContinuation { (cont: CheckedContinuation<AppleScriptResult, Never>) in
+                executionQueue.async {
+                    cont.resume(returning: Self.runNSAppleScript(script))
+                }
             }
         })
     }

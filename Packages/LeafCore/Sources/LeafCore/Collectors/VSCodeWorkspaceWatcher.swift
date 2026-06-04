@@ -129,16 +129,18 @@ public actor VSCodeWorkspaceWatcher {
     /// Implementation tier (not test-covered at unit level — covered by
     /// integration smoke in Stage 7).
     private let homeDir: String
-    private let watchedFolderResolver: (_ path: String) -> String?
-    private let eventSink: (RawEvent) -> Void
-    private let clock: () -> Int64
+    private let watchedFolderResolver: @Sendable (_ path: String) -> String?
+    private let eventSink: @Sendable (RawEvent) -> Void
+    private let clock: @Sendable () -> Int64
     private let localAppsStore: LocalAppsStore
+    /// One FSEvents stream per existing vendor root's `workspaceStorage/`.
+    private var streams: [FSEventStream] = []
 
     public init(
         homeDir: String = NSHomeDirectory(),
-        watchedFolderResolver: @escaping (_ path: String) -> String?,
-        eventSink: @escaping (RawEvent) -> Void,
-        clock: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
+        watchedFolderResolver: @escaping @Sendable (_ path: String) -> String?,
+        eventSink: @escaping @Sendable (RawEvent) -> Void,
+        clock: @escaping @Sendable () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
         localAppsStore: LocalAppsStore = LocalAppsStore()
     ) {
         self.homeDir = homeDir
@@ -149,17 +151,51 @@ public actor VSCodeWorkspaceWatcher {
     }
 
     public func start() async {
-        // FSEvents stream registration for each vendor-root's workspaceStorage/.
-        // Mirror P3 BrowserBookmarksWatcher pattern. Cold path: no replay.
-        // (Implementation body uses FSEventStreamCreate + dispatch — see
-        // BrowserBookmarksWatcher for reference. Unit-test scope is on
-        // parse/build helpers; lifecycle covered by integration smoke.)
-        // TODO at Task 14b (separate commit if scope creeps): wire actual
-        // FSEvents loop here.
+        // Feature gate (ADR-020 opt-in): no streams unless the user enabled
+        // VSCode-family workspace tracking. Toggle-flip takes effect on Agent
+        // restart (mirror P3 BrowserBookmarksWatcher v1 constraint).
+        guard localAppsStore.vscodeStorageEnabled else { return }
+        let base = homeDir + "/Library/Application Support/"
+        for root in Self.vendorRoots {
+            let storagePath = base + root + "/User/workspaceStorage"
+            guard FileManager.default.fileExists(atPath: storagePath) else { continue }
+            // One stream per existing vendor root; the closure captures `root`
+            // so we never need to parse the vendor back out of the event path.
+            // Cold path: kFSEventStreamEventIdSinceNow → no replay of existing
+            // workspaceStorage/<hash>/ dirs (stale-timestamped).
+            let onEvents: FSEventStream.EventsHandler = { [weak self] paths, _ in
+                guard let self else { return }
+                for path in paths where path.hasSuffix("/workspace.json") {
+                    // Keep the @Sendable utility-queue callback cheap: hop into
+                    // the actor and read the file there (avoid blocking the
+                    // shared FSEvents queue on disk I/O).
+                    Task { await self.handleWorkspaceFile(vendorRoot: root, path: path) }
+                }
+            }
+            guard let stream = try? FSEventStream(
+                paths: [storagePath],
+                latency: 1.5,
+                queueLabel: "tech.gundem.leaf.fsevents.vscode",
+                onEvents: onEvents
+            ) else { continue }
+            stream.start()
+            streams.append(stream)
+        }
     }
 
     public func stop() async {
-        // Tear down FSEvents streams.
+        for stream in streams { stream.stop() }
+        streams.removeAll()
+    }
+
+    /// Read a `workspace.json` discovered by FSEvents and feed it through the
+    /// shared parse+emit path. Runs inside actor isolation (called from the
+    /// callback's `Task`-hop), so the disk read is off the FSEvents queue.
+    private func handleWorkspaceFile(vendorRoot: String, path: String) async {
+        // Defense-in-depth: drop events if the toggle flipped off after start().
+        guard localAppsStore.vscodeStorageEnabled else { return }
+        guard let body = try? String(contentsOfFile: path, encoding: .utf8) else { return }
+        await onWorkspaceStorageDirCreated(vendorRoot: vendorRoot, workspaceJSONBody: body)
     }
 
     /// Test hook — exposed for tests to drive a synthetic CREATE event without

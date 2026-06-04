@@ -81,6 +81,9 @@ final class AppleScriptCollector {
             isInstalled: { bundleID in
                 NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) != nil
             },
+            isRunning: { bundleID in
+                NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == bundleID }
+            },
             nowMs: nowMs
         )
         adapters[index] = adapter

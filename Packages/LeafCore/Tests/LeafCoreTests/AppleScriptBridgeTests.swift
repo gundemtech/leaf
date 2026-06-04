@@ -68,6 +68,30 @@ final class AppleScriptBridgeTests: XCTestCase {
     }
 
     @MainActor
+    func testProductionExecutorCompletesOffMainWithoutDeadlock() async {
+        // WS3: production() runs NSAppleScript off the main actor on its own
+        // queue. `return 1` needs no app/TCC. The property under test: the
+        // off-main continuation resumes (no deadlock/hang) — a broken dispatch
+        // would surface as `.timeout` (the sentinel winning because the executor
+        // child never completed). Any non-timeout result proves the path works.
+        let bridge = AppleScriptBridge.production()
+        let result = await bridge.executeScript("return 1", timeoutSec: 2.0)
+        if case .timeout = result {
+            XCTFail("off-main dispatch did not resume within budget (deadlock?)")
+        }
+    }
+
+    @MainActor
+    func testProductionExecutorConcurrentRealScriptsDoNotDeadlock() async {
+        let bridge = AppleScriptBridge.production()
+        async let a = bridge.executeScript("return 1", timeoutSec: 2.0)
+        async let b = bridge.executeScript("return 2", timeoutSec: 2.0)
+        let (ra, rb) = await (a, b)
+        if case .timeout = ra { XCTFail("first off-main call timed out (deadlock?)") }
+        if case .timeout = rb { XCTFail("second off-main call timed out (deadlock?)") }
+    }
+
+    @MainActor
     func testConcurrentInvocationsSucceed() async {
         let bridge = AppleScriptBridge(executor: { _ in
             try? await Task.sleep(nanoseconds: 20_000_000)

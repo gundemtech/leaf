@@ -57,7 +57,8 @@ struct NotificationsSettingsSection: View {
         )
         subGroup(
           title: "Behavior",
-          description: "How and when Leaf delivers the pushes you've opted into above.",
+          description:
+            "How Leaf presents notifications while it's the active app. Background alerts follow your macOS notification settings.",
           kinds: [.respectFocus, .coalesce, .sound]
         )
         #if DEBUG
