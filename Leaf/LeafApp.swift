@@ -668,6 +668,13 @@ struct LeafApp: App {
             joinRequestsReader: joinRequestsReader,
             windowState: windowState
           )
+          // Admin roster refreshes immediately after an approve (Bug B inserts
+          // the invitee into the local team_members). Both readers are
+          // app-lifetime; weak capture for symmetry, no retain cycle.
+          let wsReader = workspaceReader
+          joinRequestsReader.wireRosterRefresh { [weak wsReader] in
+            wsReader?.refresh()
+          }
         }
                 .task {
                     // Track-10 T6 (Phase IV.B) — inject ActiveWorkspaceStore
