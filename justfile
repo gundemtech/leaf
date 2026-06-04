@@ -9,13 +9,14 @@ default:
 preflight:
     #!/usr/bin/env bash
     set -euo pipefail
-    echo "▶ preflight 1/6 — leak-guard";              ./scripts/leak-guard.sh --report
-    echo "▶ preflight 2/6 — check-tokens";            ./scripts/check-tokens.sh
-    echo "▶ preflight 3/6 — check-migrations";        ./scripts/check-migrations.sh
-    echo "▶ preflight 4/6 — gitleaks";                ./scripts/gitleaks-scan.sh
-    echo "▶ preflight 5/6 — build-all (5 schemes)";   just build-all
-    echo "▶ preflight 6/6 — SPM tests";               just test-core
-    echo "✅ preflight: all 6 checks green — phase may merge."
+    echo "▶ preflight 1/7 — leak-guard";              ./scripts/leak-guard.sh --report
+    echo "▶ preflight 2/7 — check-tokens";            ./scripts/check-tokens.sh
+    echo "▶ preflight 3/7 — check-migrations";        ./scripts/check-migrations.sh
+    echo "▶ preflight 4/7 — gitleaks";                ./scripts/gitleaks-scan.sh
+    echo "▶ preflight 5/7 — bundle-split guard";      ./scripts/check-bundle-split.sh
+    echo "▶ preflight 6/7 — build-all (5 schemes)";   just build-all
+    echo "▶ preflight 7/7 — SPM tests";               just test-core
+    echo "✅ preflight: all 7 checks green — phase may merge."
 
 # Token-discipline guard — Track 2 D1+. Fails if Leaf/Theme/ or
 # Leaf/Views/Tokens/ contain raw colours/spacing/radii.
@@ -39,6 +40,16 @@ check-migrations:
 # Needs `brew install gitleaks`. Allowlist in .gitleaks.toml.
 gitleaks:
     @./scripts/gitleaks-scan.sh
+
+# Regression guard (#26): Debug configs must use a distinct .debug bundle id and
+# Release must not — keeps dev builds out of the prod LaunchServices/DB namespace
+# (the post-Sparkle launch-breakage root cause). Fails if ever re-unified.
+check-bundle-split:
+    @./scripts/check-bundle-split.sh
+
+# Fixture-based self-test for check-bundle-split.
+check-bundle-split-self-test:
+    @./scripts/tests/test-check-bundle-split.sh
 
 # Run the fixture-based self-test for check-migrations.
 check-migrations-self-test:

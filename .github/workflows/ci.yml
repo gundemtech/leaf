@@ -25,6 +25,9 @@ jobs:
       - name: Swift version
         run: swift --version
 
+      - name: Bundle-split guard (#26 — Debug/prod bundle-id isolation must hold)
+        run: ./scripts/check-bundle-split.sh
+
       - name: Build Leaf (app)
         run: |
           xcodebuild \
