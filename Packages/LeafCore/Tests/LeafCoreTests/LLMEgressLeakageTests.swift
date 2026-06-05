@@ -94,6 +94,31 @@ final class LLMEgressLeakageTests: XCTestCase {
     XCTAssertTrue(r.contains("additions=5"))
   }
 
+  // 5b. DM detected via raw IM channel id ("D"-prefix), no channel_name present.
+  func testSlackDMByChannelIDDroppedEntirely() {
+    let ctx = policy.makeContext(events: [
+      event("slack_reaction_added", ["channel_id": "D0123456789", "reaction_count": "4"]),
+      event("issue_updated", ["additions": "5"]),  // positive gate
+    ])
+    let r = rendered(ctx)
+    XCTAssertFalse(r.contains("reaction_count=4"), "IM-id (D-prefix) DM event dropped even without channel_name")
+    XCTAssertTrue(r.contains("additions=5"))
+  }
+
+  // 5c. CHARACTERIZATION of the documented P1 residual (CTO-2 / §8.5): a group-DM
+  // (MPIM, "G" id) event arriving WITHOUT a "DM" channel_name cannot be
+  // distinguished from a private work channel by prefix, so its scalar facts
+  // currently project. This test pins that behavior so the P1 capture-side
+  // is_dm fix is visible as a change here, not a silent one.
+  func testKnownGap_groupDMWithoutNameStillProjectsScalarFacts() {
+    let ctx = policy.makeContext(events: [
+      event("slack_reaction_added", ["channel_id": "G0123456789", "reaction_count": "4"])
+    ])
+    XCTAssertTrue(
+      rendered(ctx).contains("reaction_count=4"),
+      "documented residual: MPIM-without-name leaks scalar count+timing until the P1 is_dm flag lands")
+  }
+
   // 6.
   func testSelfAuthoredCommitReachesContextUnderDistinctKey() {
     let ctx = policy.makeContext(events: [

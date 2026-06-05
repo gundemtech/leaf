@@ -32,9 +32,22 @@ public struct LLMPolicy: EgressPolicy {
     if let bundleID = event.bundleID, moat.neverToCloudBundleIDs.contains(bundleID) {
       return true
     }
+    // Slack DM: the aggregate path anonymizes the name to the literal "DM"
+    // bucket at capture; non-aggregate Slack events instead carry a raw IM
+    // channel id, which is exclusively "D"-prefixed (private channels / MPIMs
+    // are "G"/"C", so this has no false positives on work channels). Both →
+    // drop the whole event (existence + timing is bucket-1, §4.1).
     if event.payload[Schema.EventPayloadKeys.channelName] == "DM" {
       return true
     }
+    if let channelID = event.payload[Schema.EventPayloadKeys.channelId], channelID.hasPrefix("D") {
+      return true
+    }
+    // KNOWN GAP (P1, CTO-2 / §8.5): group-DM (MPIM) events that arrive without
+    // a "DM" channel_name share the "G" id prefix with private work channels,
+    // so they cannot be dropped by prefix here. The robust fix is a
+    // capture-emitted `is_dm` flag (P1). Scalar facts of such an event would
+    // still leak count+timing — documented residual, characterized by a test.
     return false
   }
 

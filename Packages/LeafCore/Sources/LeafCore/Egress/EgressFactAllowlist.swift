@@ -26,7 +26,9 @@ public enum EgressFactAllowlist {
     Schema.EventPayloadKeys.projectId,
     Schema.EventPayloadKeys.teamId,
     Schema.EventPayloadKeys.alertNumber,
-    "pr_number", "number", "sha",  // GitHub collector literals (opaque)
+    // GitHub-collector top-level literals (numeric/opaque, deliberately not in
+    // Schema.EventPayloadKeys). Kept narrow; never add a free-text literal here.
+    "pr_number", "number", "sha",
     // counts
     Schema.EventPayloadKeys.additions,
     Schema.EventPayloadKeys.deletions,
