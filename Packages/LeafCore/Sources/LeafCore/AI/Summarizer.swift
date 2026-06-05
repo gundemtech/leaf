@@ -69,4 +69,27 @@ public protocol Summarizer: Sendable {
     model: SummarizerModel,
     maxTokens: Int
   ) async throws -> SummarizerOutput
+
+  /// P1 — question-aware overload for the Default Q&A path. The `question` is a
+  /// `PromptSafeQuestion` (the user's own normalized input, see `LLMPolicy.makeQuestion`).
+  /// The default implementation forwards to the no-question method, so existing
+  /// conformers (`NoOpSummarizer`, test fakes) compile and behave unchanged;
+  /// production summarizers override it to thread the question into the prompt.
+  func summarize(
+    _ context: PromptSafeContext,
+    question: PromptSafeQuestion,
+    model: SummarizerModel,
+    maxTokens: Int
+  ) async throws -> SummarizerOutput
+}
+
+extension Summarizer {
+  public func summarize(
+    _ context: PromptSafeContext,
+    question: PromptSafeQuestion,
+    model: SummarizerModel,
+    maxTokens: Int
+  ) async throws -> SummarizerOutput {
+    try await summarize(context, model: model, maxTokens: maxTokens)
+  }
 }

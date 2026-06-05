@@ -83,4 +83,20 @@ public struct LLMPolicy: EgressPolicy {
   static func authoredByViewer(_ event: EgressEvent) -> Bool {
     event.payload["authored_by_viewer"] == "true"
   }
+
+  /// P1 — the user's own question, normalized into a single segment. Collapses
+  /// every whitespace/newline/control-character run to one space (so a crafted
+  /// question can't forge a `Facts:` header in the rendered prompt — §8.3, N-4),
+  /// then caps length (cost / DoS guard). The question is user-authored input,
+  /// not corpus-derived, so it is NOT projected through `FactProjection`.
+  public static let questionCharCap = 1000
+
+  public func makeQuestion(_ raw: String) -> PromptSafeQuestion {
+    let separators = CharacterSet.whitespacesAndNewlines.union(.controlCharacters)
+    let collapsed = raw
+      .components(separatedBy: separators)
+      .filter { !$0.isEmpty }
+      .joined(separator: " ")
+    return PromptSafeQuestion(text: String(collapsed.prefix(Self.questionCharCap)))
+  }
 }
