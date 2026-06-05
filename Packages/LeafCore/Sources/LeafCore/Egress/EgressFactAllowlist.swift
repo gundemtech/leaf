@@ -68,6 +68,26 @@ public enum EgressFactAllowlist {
     Schema.EventPayloadKeys.savedAtMs,
   ]
 
+  /// P1 — synthetic derived/recap fact keys emitted ONLY by `WorkFactGatherer`'s
+  /// synthetic `EgressEvent`s (recap_metrics / blocker_fact / open_question_fact /
+  /// where_stopped_fact). Kept SEPARATE from `scalarFacts` (which are raw collector
+  /// keys) so provenance stays auditable; `FactProjection` honors the union of both.
+  /// Scalar-only, fail-closed. NEVER add a free-text/excerpt/path key here — those
+  /// belong in `bodyFields`. Keys already present in `scalarFacts` (e.g.
+  /// `started_at_ms`, `observed_at_ms`) are NOT repeated here (disjointness invariant).
+  public static let derivedScalarFacts: Set<String> = [
+    // recap_metrics — identity-free holistic magnitudes (no app identity, no paths)
+    "focus_session_count", "focus_total_seconds", "ai_ratio_pct", "peak_productivity_hour",
+    "files_touched_count", "commit_count", "pr_opened_count", "issue_opened_count",
+    "branch_created_count", "open_question_count", "blocker_count",
+    // blocker_fact — structured refs/enums (started_at_ms rides scalarFacts)
+    "target_kind", "target_ref", "blocker_kind",
+    // open_question_fact — structured refs (not in scalarFacts)
+    "linear_issue_ref", "github_pr_ref", "slack_thread_ts", "opened_at_ms",
+    // where_stopped_fact — wip booleans + its own ms-timestamp
+    "wip_commit", "wip_ci_failing", "wip_mid_edit", "generated_at_ms",
+  ]
+
   /// Truncation cap for a self-authored label (matches relay §6 budget).
   public static let selfAuthoredCap = 140
 
@@ -107,5 +127,15 @@ public enum EgressFactAllowlist {
     Schema.EventPayloadKeys.gistDescription,
     "title",  // raw PR/issue/commit/bookmark/tab title (free text)
     "branch",  // raw branch label (free text)
+    // P1 — detector free-text excerpts (escalation-only, P3) + window title (L3
+    // content). Fenced so the unconditional bodies-fence test backstops the
+    // synthetic-fact path: none of these may ever be a projection OUTPUT key.
+    "reasoning_excerpt",  // decisions.reasoning_excerpt
+    "question_excerpt",  // open_questions.question_excerpt
+    "alternatives_json",  // open_questions.alternatives_json (free-text alternatives)
+    "blocker_excerpt",  // blockers.blocker_excerpt
+    "excerpt",  // where_stopped_log.excerpt
+    "window_title",  // L3 window title (file/doc/customer names)
+    "files_touched",  // L4 file paths — count only (files_touched_count) ever ships
   ]
 }

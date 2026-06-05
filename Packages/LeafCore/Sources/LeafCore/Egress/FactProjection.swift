@@ -24,8 +24,13 @@ public enum FactProjection {
   ) -> [String: String] {
     var out: [String: String] = [:]
 
-    // 1. Scalar facts pass through under their raw names.
-    for (key, value) in event.payload where EgressFactAllowlist.scalarFacts.contains(key) {
+    // 1. Scalar facts pass through under their raw names. Two allow-listed
+    //    families: raw collector keys (`scalarFacts`) and P1 synthetic
+    //    recap/detector keys (`derivedScalarFacts`). Their union is honored;
+    //    every other key — including any future collector key — is dropped.
+    for (key, value) in event.payload
+    where EgressFactAllowlist.scalarFacts.contains(key)
+      || EgressFactAllowlist.derivedScalarFacts.contains(key) {
       out[key] = value
     }
 
