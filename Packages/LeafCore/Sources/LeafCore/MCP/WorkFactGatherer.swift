@@ -42,6 +42,10 @@ public struct WorkFactGatherer: Sendable {
   /// Bound on cross_link_fact events fed to the prompt (cost / latency guard).
   static let crossLinkCap = 100
 
+  /// P3 — bound on the number of explicitly-selected events an escalation may
+  /// send (cost guard; the user / AI-client names these ids — §13.4 consent act).
+  public static let escalationEventIDCap = 50
+
   /// from_ref priority — SAFE structural ids only. NEVER `branch`/`title`
   /// (free text, fenced by the boundary; CR-3). First present wins.
   private static let crossLinkFromRefKeys = ["pr_number", "number", "issue_identifier", "sha"]
@@ -124,6 +128,43 @@ public struct WorkFactGatherer: Sendable {
       out.append(trendEvent)
       if let latencyEvent { out.append(latencyEvent) }
       return out
+    }
+  }
+
+  /// P3 escalation retrieval — fetch the explicitly-selected events' FULL
+  /// payloads (including `body`) by id, carrying `bundleID` FROM THE `bundle_id`
+  /// COLUMN so the boundary's bucket-1 drop works (CR-5 — the other gather
+  /// helpers use `bundleID:nil`; this one must NOT). Distinct from
+  /// `QueryEngine.projectEvents` (the trusted-client capped-body wire — never
+  /// reuse as egress); the caller runs these through `LLMPolicy.makeEscalation`
+  /// (bucket-1 drop + cap + provenance) before any wire. Scoped to the top-level
+  /// `body` key (covers GitHub PR/issue comments + commits + Linear desc + Slack
+  /// thread parent); array-aggregated bodies are a documented follow-up.
+  public func gatherSelectedBodies(eventIDs: [Int64]) throws -> [EgressEvent] {
+    guard !eventIDs.isEmpty else { return [] }
+    let capped = Array(eventIDs.prefix(Self.escalationEventIDCap))
+    let db = try Database.openForRead(at: dbURL, config: dbConfig, encryption: dbEncryption)
+    return try db.readSQL { rawDB -> [EgressEvent] in
+      let placeholders = capped.map { _ in "?" }.joined(separator: ",")
+      let rows = try Row.fetchAll(
+        rawDB,
+        sql: """
+          SELECT id, ts, signal_type, bundle_id, payload_json
+            FROM events
+           WHERE id IN (\(placeholders))
+           ORDER BY ts ASC
+          """,
+        arguments: StatementArguments(capped))
+      return rows.compactMap { row in
+        let ts: Int64 = row["ts"] ?? 0
+        let bundleID: String? = row["bundle_id"]
+        let json: String = (row["payload_json"] as String?) ?? "{}"
+        guard let payload = Self.decodePayload(json) else { return nil }
+        let kind = payload["event_kind"] ?? (row["signal_type"] as String?) ?? "event"
+        return EgressEvent(
+          timestamp: Date(timeIntervalSince1970: TimeInterval(ts) / 1000.0),
+          kind: kind, bundleID: bundleID, payload: payload)
+      }
     }
   }
 

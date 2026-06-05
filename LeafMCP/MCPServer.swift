@@ -96,6 +96,16 @@ enum MCPMain {
             dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption,
             policy: llmPolicy, summarizerMoat: aiSummarizerMoat, modelGateMoat: modelGateMoat
         )
+        // Track AI Coworker P3 — escalation (bodies-on-demand) + the read-back log.
+        // `escalate_to_ai` opens a brief writer for the audit append (ADR-019
+        // departure — see EscalateToAITool); `get_ai_escalation_log` is read-only.
+        let escalateToAITool = EscalateToAITool(
+            dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption,
+            policy: llmPolicy, summarizerMoat: aiSummarizerMoat, modelGateMoat: modelGateMoat
+        )
+        let aiEscalationLogTool = GetAIEscalationLogTool(
+            dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption
+        )
 
         // Track 5 / S8 / T7 — `leaf_query_team` tool. Constructs a
         // reader-mode Database handle (MCPServer is a read-only process per
@@ -147,7 +157,8 @@ enum MCPMain {
         // Without a DB handle the tool cannot serve any query; surfacing its
         // schema in `tools/list` but failing every call is worse UX than
         // omitting it (AI client will not advertise a feature that always
-        // errors). MCP tool count: 16 base + 1 (S8/T7) = 17 when active.
+        // errors). MCP tool count: 18 base (+P3 escalate_to_ai +
+        // get_ai_escalation_log) + 1 (S8/T7) = 19 when active.
         var toolDefinitions: [ToolDefinition] = [
             GetTimelineTool.definition,
             FindLastActivityTool.definition,
@@ -164,7 +175,9 @@ enum MCPMain {
             QueryActivityTool.definition,
             GetDecisionTool.definition,
             CurrentWorkTool.definition,
-            AskAboutMyWorkTool.definition
+            AskAboutMyWorkTool.definition,
+            EscalateToAITool.definition,
+            GetAIEscalationLogTool.definition
         ]
         var toolRegistry: [String: any ToolExecutor] = [
             "get_timeline": timelineTool,
@@ -182,7 +195,9 @@ enum MCPMain {
             "leaf_query_activity": queryActivityTool,
             "leaf_get_decision": getDecisionTool,
             "leaf_current_work": currentWorkTool,
-            "ask_about_my_work": askAboutMyWorkTool
+            "ask_about_my_work": askAboutMyWorkTool,
+            "escalate_to_ai": escalateToAITool,
+            "get_ai_escalation_log": aiEscalationLogTool
         ]
         if let qtt = queryTeamTool {
             toolDefinitions.append(QueryTeamTool.definition)

@@ -336,6 +336,49 @@ final class WorkFactGathererTests: XCTestCase {
     XCTAssertFalse(r.contains("SECRET-TITLE"), "title never the from_ref (CR-3)")
   }
 
+  // MARK: - 9b. gatherSelectedBodies (P3 escalation retrieval): carries bundleID
+  //          from the column so makeEscalation's bucket-1 drop works (CR-5).
+
+  func testGatherSelectedBodies_carriesBundleIDForBucket1Drop() throws {
+    let db = try openWriter()
+    // id=1 — a normal work comment with a body.
+    try writeEvent(
+      db, tsMs: 5_000,
+      payload: ["event_kind": "gh_pr_review_comment_authored", "body": "WORK-BODY"])
+    // id=2 — a personal-app event with a body (bundle_id on the COLUMN).
+    try writeEvent(
+      db, tsMs: 6_000, bundleID: "com.test.personal",
+      payload: ["event_kind": "attention", "body": "PERSONAL-BODY"])
+    // id=3 — a Slack DM (channel_name == "DM") with a body.
+    try writeEvent(
+      db, tsMs: 7_000,
+      payload: ["event_kind": "slack_thread_reply_aggregate", "channel_name": "DM", "body": "DM-BODY"])
+
+    let selected = try makeGatherer().gatherSelectedBodies(eventIDs: [1, 2, 3])
+    XCTAssertEqual(selected.count, 3, "all named events are fetched")
+    // The personal-app event must carry its bundleID FROM THE COLUMN (else the
+    // boundary's bucket-1 drop fails open — CR-5).
+    let personal = try XCTUnwrap(selected.first { $0.payload["body"] == "PERSONAL-BODY" })
+    XCTAssertEqual(personal.bundleID, "com.test.personal")
+
+    // End-to-end: makeEscalation drops the personal + DM bodies, keeps the work body.
+    let escalated = LLMPolicy(moat: LLMEgressMoat(neverToCloudBundleIDs: ["com.test.personal"]))
+      .makeEscalation(selected: selected)
+    let flat = escalated.bodies.map(\.text).joined(separator: "|")
+    XCTAssertTrue(flat.contains("WORK-BODY"))
+    XCTAssertFalse(flat.contains("PERSONAL-BODY"), "personal-app body must not escalate (bundleID from column)")
+    XCTAssertFalse(flat.contains("DM-BODY"), "Slack DM body must not escalate")
+    XCTAssertEqual(escalated.bodies.count, 1)
+  }
+
+  func testGatherSelectedBodies_emptyAndMissingIDs() throws {
+    let db = try openWriter()
+    try writeEvent(db, tsMs: 5_000, payload: ["event_kind": "gh_pr_opened", "body": "x"])
+    XCTAssertTrue(try makeGatherer().gatherSelectedBodies(eventIDs: []).isEmpty)
+    // Non-existent ids → silently absent.
+    XCTAssertTrue(try makeGatherer().gatherSelectedBodies(eventIDs: [999]).isEmpty)
+  }
+
   // MARK: - 10. trend_metrics + latency_metrics (P2 cluster 4) from the insights engine.
 
   private struct TrendFakeInsights: DerivedInsights {
