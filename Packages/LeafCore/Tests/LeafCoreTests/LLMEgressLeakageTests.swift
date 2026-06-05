@@ -377,4 +377,48 @@ final class LLMEgressLeakageTests: XCTestCase {
       outputKeys.isDisjoint(with: EgressFactAllowlist.bodyFields),
       "no fenced key projects on cross_link_fact")
   }
+
+  // MARK: - P2 cluster 4 — trend_metrics + latency_metrics (identity-free magnitudes)
+
+  // 23. trend_metrics magnitudes survive; a planted source-NAME list is dropped
+  //     (only the COUNT of active sources ever ships, never the names — CR-5).
+  func testTrendMetricsMagnitudesSurvive_noSourceNames() {
+    let ctx = policy.makeContext(events: [
+      event(
+        "trend_metrics",
+        [
+          "wow_delta_pct": "-15",
+          "linear_completion_rate_pct": "80",
+          "commit_streak": "4",
+          "uninterrupted_window_seconds": "5400",
+          "uninterrupted_window_sources_count": "1",
+          "uninterrupted_window_sources": "slack,linear",  // free-text names — must NOT ship
+          "linear_completed_count": "3",
+        ])
+    ])
+    let r = rendered(ctx)
+    XCTAssertTrue(r.contains("wow_delta_pct=-15"))
+    XCTAssertTrue(r.contains("commit_streak=4"))
+    XCTAssertTrue(r.contains("uninterrupted_window_sources_count=1"))
+    XCTAssertTrue(r.contains("linear_completed_count=3"))
+    XCTAssertFalse(r.contains("slack,linear"), "source NAMES never ship — only the count (CR-5)")
+  }
+
+  // 24. latency_metrics: Int-second magnitudes survive.
+  func testLatencyMetricsMagnitudesSurvive() {
+    let ctx = policy.makeContext(events: [
+      event(
+        "latency_metrics",
+        [
+          "pr_cycle_median_sec": "3600",
+          "pr_cycle_max_sec": "86400",
+          "pr_cycle_sample_count": "7",
+          "huddle_session_median_sec": "1800",
+        ])
+    ])
+    let r = rendered(ctx)
+    XCTAssertTrue(r.contains("pr_cycle_median_sec=3600"))
+    XCTAssertTrue(r.contains("pr_cycle_sample_count=7"))
+    XCTAssertTrue(r.contains("huddle_session_median_sec=1800"))
+  }
 }

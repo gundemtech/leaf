@@ -99,6 +99,23 @@ public enum EgressFactAllowlist {
     // `target_kind`/`target_ref` already ride the set above. NO free text, NO
     // `link_confidence` (a private moat constant).
     "from_kind", "from_ref", "link_kind",
+    // P2 cluster 4 — trend_metrics. Identity-free magnitudes (no app identity, no
+    // paths, no source NAMES — only the count). Trailing-7d: wow_delta_pct,
+    // *_streak, active_days_in_row. Period-scoped: completion rate, window, Linear
+    // transition counts.
+    "wow_delta_pct", "linear_completion_rate_pct",
+    "uninterrupted_window_seconds", "uninterrupted_window_sources_count",
+    "commit_streak", "issue_close_streak", "huddle_streak", "focus_session_streak",
+    "heavy_pulse_streak", "deep_work_streak_days", "deep_work_streak_seconds",
+    "active_days_in_row",
+    "linear_started_count", "linear_completed_count", "linear_canceled_count",
+    "linear_reopened_count",
+    // P2 cluster 4 — latency_metrics. Distribution magnitudes (median/max seconds +
+    // sample count) per provider metric. Omitted wholesale when no samples.
+    "pr_cycle_median_sec", "pr_cycle_max_sec", "pr_cycle_sample_count",
+    "review_delay_median_sec", "review_delay_max_sec", "review_delay_sample_count",
+    "linear_completion_median_sec", "linear_completion_max_sec", "linear_completion_sample_count",
+    "huddle_session_median_sec", "huddle_session_max_sec", "huddle_session_sample_count",
   ]
 
   /// Truncation cap for a self-authored label (matches relay §6 budget).
