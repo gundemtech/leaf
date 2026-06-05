@@ -80,6 +80,12 @@ public struct WorkFactGatherer: Sendable {
     let peakHour = (try? insights.peakProductivityHour()).flatMap { $0 }
     let filesTouchedCount = ((try? insights.filesTouched(period: period)) ?? []).count
 
+    // Cluster-4 trend/latency — computed on the same `insights` handle as the
+    // cluster-1 magnitudes above (each read `try?`-graceful). trend is always
+    // emitted (streaks default 0); latency only when ≥1 sample exists.
+    let trendEvent = Self.trendMetrics(period: period, nowMs: nowMs, insights: insights)
+    let latencyEvent = Self.latencyMetrics(period: period, insights: insights)
+
     let startMs = Int64(period.start.timeIntervalSince1970 * 1000)
     let endMs = Int64(period.end.timeIntervalSince1970 * 1000)
 
@@ -108,8 +114,16 @@ public struct WorkFactGatherer: Sendable {
       let recapEvent = EgressEvent(
         timestamp: period.end, kind: "recap_metrics", bundleID: nil, payload: recap)
 
-      return [recapEvent] + blockerEvents + questionEvents
-        + (whereStopped.map { [$0] } ?? []) + selfAuthored + crossLinks
+      // Built step-by-step (a single long `+` chain over-taxes the type-checker).
+      var out: [EgressEvent] = [recapEvent]
+      out.append(contentsOf: blockerEvents)
+      out.append(contentsOf: questionEvents)
+      if let whereStopped { out.append(whereStopped) }
+      out.append(contentsOf: selfAuthored)
+      out.append(contentsOf: crossLinks)
+      out.append(trendEvent)
+      if let latencyEvent { out.append(latencyEvent) }
+      return out
     }
   }
 
@@ -301,6 +315,73 @@ public struct WorkFactGatherer: Sendable {
     }
     guard let s, !s.isEmpty else { return nil }
     return s
+  }
+
+  /// Cluster 4 — identity-free trend magnitudes (mirrors recap_metrics: no app
+  /// identity, no paths, no source NAMES — only counts/deltas/streaks/durations).
+  /// Trailing-7d: `wow_delta_pct`, `*_streak`, `active_days_in_row`.
+  /// Period-scoped: completion rate, uninterrupted window, Linear transition
+  /// counts. Every read is `try?`-graceful (stub/no-data → key omitted or 0).
+  private static func trendMetrics(
+    period: DateInterval, nowMs: Int64, insights: any DerivedInsights
+  ) -> EgressEvent {
+    var p: [String: String] = [:]
+    // Trailing-7d / global.
+    if let wow = try? insights.weekOverWeekDelta() {
+      p["wow_delta_pct"] = String(Int((wow * 100).rounded()))
+    }
+    let now = Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0)
+    let weekly = (try? insights.weeklyMetrics(now: now)) ?? .empty
+    p["commit_streak"] = String(weekly.commitStreak)
+    p["issue_close_streak"] = String(weekly.issueCloseStreak)
+    p["huddle_streak"] = String(weekly.huddleStreak)
+    p["focus_session_streak"] = String(weekly.focusSessionStreak)
+    p["heavy_pulse_streak"] = String(weekly.heavyPulseStreak)
+    if let dws = try? insights.deepWorkStreak() {
+      p["deep_work_streak_days"] = String(dws.days)
+      p["deep_work_streak_seconds"] = String(Int(dws.totalSeconds.rounded()))
+    }
+    if let active = try? insights.activeDaysInRow() {
+      p["active_days_in_row"] = String(active)
+    }
+    // Period-scoped.
+    if let rate = try? insights.linearCompletionRate(period: period) {
+      p["linear_completion_rate_pct"] = String(Int((rate * 100).rounded()))
+    }
+    if let win = try? insights.longestUninterruptedWindow(period: period) {
+      p["uninterrupted_window_seconds"] = String(win.durationSeconds)
+      // COUNT only — never the source names (CR-5).
+      p["uninterrupted_window_sources_count"] = String(win.sourcesActiveInPeriod.count)
+    }
+    if let tr = try? insights.linearTransitions(period: period) {
+      p["linear_started_count"] = String(tr.started)
+      p["linear_completed_count"] = String(tr.completed)
+      p["linear_canceled_count"] = String(tr.canceled)
+      p["linear_reopened_count"] = String(tr.reopened)
+    }
+    return EgressEvent(timestamp: period.end, kind: "trend_metrics", bundleID: nil, payload: p)
+  }
+
+  /// Cluster 4 — latency distribution magnitudes (median/max seconds + sample
+  /// count) per provider metric. A metric's keys are omitted when its
+  /// `LatencyStats` is nil (no samples); the whole event is omitted when empty.
+  private static func latencyMetrics(
+    period: DateInterval, insights: any DerivedInsights
+  ) -> EgressEvent? {
+    var p: [String: String] = [:]
+    func put(_ prefix: String, _ stats: LatencyStats?) {
+      guard let stats else { return }
+      p["\(prefix)_median_sec"] = String(stats.medianSeconds)
+      p["\(prefix)_max_sec"] = String(stats.maxSeconds)
+      p["\(prefix)_sample_count"] = String(stats.sampleCount)
+    }
+    let gh = try? insights.githubActivity(period: period)
+    put("pr_cycle", gh?.prCycleStats)
+    put("review_delay", gh?.reviewDelayStats)
+    put("linear_completion", (try? insights.linearActivity(period: period))?.completionDurationStats)
+    put("huddle_session", (try? insights.slackActivity(period: period))?.huddleSessionStats)
+    guard !p.isEmpty else { return nil }
+    return EgressEvent(timestamp: period.end, kind: "latency_metrics", bundleID: nil, payload: p)
   }
 
   /// Decode a stored `payload_json` object to `[String: String]`. String values

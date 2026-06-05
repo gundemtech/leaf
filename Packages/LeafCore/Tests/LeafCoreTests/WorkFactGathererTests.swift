@@ -323,4 +323,102 @@ final class WorkFactGathererTests: XCTestCase {
     XCTAssertFalse(r.contains("feature/secret"), "branch never the from_ref (CR-3)")
     XCTAssertFalse(r.contains("SECRET-TITLE"), "title never the from_ref (CR-3)")
   }
+
+  // MARK: - 10. trend_metrics + latency_metrics (P2 cluster 4) from the insights engine.
+
+  private struct TrendFakeInsights: DerivedInsights {
+    func timeInApp(period: DateInterval) throws -> [AppTimeEntry] { [] }
+    func focusSessions(period: DateInterval) throws -> [FocusSession] { [] }
+    func contextSwitchRate(period: DateInterval) throws -> Double { 0 }
+    func deepWorkStreak() throws -> DeepWorkStreak { DeepWorkStreak(days: 3, totalSeconds: 9000) }
+    func peakProductivityHour() throws -> Int? { nil }
+    func filesTouched(period: DateInterval) throws -> [String] { [] }
+    func aiRatio(period: DateInterval) throws -> Double { 0 }
+    func aiActivityBreakdown(period: DateInterval) throws -> AIActivityBreakdown { .empty }
+    func teamPresenceOverlap(team: [String], period: DateInterval) throws -> TimeInterval { 0 }
+    func teamFocusAlignment(team: [String], period: DateInterval) throws -> Double { 0 }
+    func teamTimeline(team: [String], period: DateInterval) throws -> [AppTimeEntry] { [] }
+    func lastActivity(bundleID: String?) throws -> ActivitySnapshot? { nil }
+    func weekOverWeekDelta() throws -> Double? { -0.15 }
+    func activeDaysInRow() throws -> Int { 5 }
+    func weeklyMetrics(now: Date) throws -> WeeklyMetrics {
+      WeeklyMetrics(
+        dailySeries: Array(repeating: .empty, count: 7), peakHour: 15, wowDelta: -0.15,
+        commitStreak: 4, issueCloseStreak: 2, huddleStreak: 1, focusSessionStreak: 3,
+        heavyPulseStreak: 6)
+    }
+    func longestUninterruptedWindow(period: DateInterval) throws -> UninterruptedWindow? {
+      UninterruptedWindow(
+        start: Date(timeIntervalSince1970: 0), end: Date(timeIntervalSince1970: 5400),
+        durationSeconds: 5400, sourcesActiveInPeriod: ["slack"])
+    }
+    func linearTransitions(period: DateInterval) throws -> LinearTransitionBreakdown {
+      LinearTransitionBreakdown(started: 3, completed: 2, canceled: 1, reopened: 0)
+    }
+    func linearCompletionRate(period: DateInterval) throws -> Double? { 0.8 }
+    func githubActivity(period: DateInterval) throws -> GitHubActivityBreakdown {
+      GitHubActivityBreakdown(
+        eventsCount: 0, byRepo: [], byEventKind: [],
+        prCycleStats: LatencyStats(
+          medianSeconds: 3600, avgSeconds: 4000, maxSeconds: 86400, sampleCount: 7),
+        reviewDelayStats: nil)  // nil → its keys must be omitted
+    }
+    func linearActivity(period: DateInterval) throws -> LinearActivityBreakdown {
+      LinearActivityBreakdown(
+        issuesTouched: 0, byProject: [], byStatus: [],
+        completionDurationStats: LatencyStats(
+          medianSeconds: 7200, avgSeconds: 8000, maxSeconds: 100_000, sampleCount: 4))
+    }
+    func slackActivity(period: DateInterval) throws -> SlackActivityBreakdown {
+      SlackActivityBreakdown(
+        messagesCount: 0, huddleMinutes: 0, byChannel: [],
+        huddleSessionStats: LatencyStats(
+          medianSeconds: 1800, avgSeconds: 1900, maxSeconds: 3600, sampleCount: 2))
+    }
+  }
+
+  func testTrendMetrics_magnitudes_noSourceNames() throws {
+    _ = try openWriter()
+    let events = try makeGatherer(insights: TrendFakeInsights()).gather(period: period, nowMs: nowMs)
+    let trend = try XCTUnwrap(events.first { $0.kind == "trend_metrics" })
+    XCTAssertEqual(trend.payload["wow_delta_pct"], "-15", "fractional delta quantized to signed pct")
+    XCTAssertEqual(trend.payload["commit_streak"], "4")
+    XCTAssertEqual(trend.payload["heavy_pulse_streak"], "6")
+    XCTAssertEqual(trend.payload["deep_work_streak_days"], "3")
+    XCTAssertEqual(trend.payload["deep_work_streak_seconds"], "9000")
+    XCTAssertEqual(trend.payload["active_days_in_row"], "5")
+    XCTAssertEqual(trend.payload["linear_completion_rate_pct"], "80")
+    XCTAssertEqual(trend.payload["uninterrupted_window_seconds"], "5400")
+    XCTAssertEqual(trend.payload["uninterrupted_window_sources_count"], "1")
+    XCTAssertEqual(trend.payload["linear_started_count"], "3")
+    XCTAssertEqual(trend.payload["linear_completed_count"], "2")
+    XCTAssertEqual(trend.payload["linear_canceled_count"], "1")
+    XCTAssertEqual(trend.payload["linear_reopened_count"], "0")
+    XCTAssertNil(trend.bundleID)
+    XCTAssertFalse(
+      trend.payload.values.contains("slack"), "source NAMES are never gathered — only the count (CR-5)")
+  }
+
+  func testLatencyMetrics_nilStatsOmitted() throws {
+    _ = try openWriter()
+    let events = try makeGatherer(insights: TrendFakeInsights()).gather(period: period, nowMs: nowMs)
+    let lat = try XCTUnwrap(events.first { $0.kind == "latency_metrics" })
+    XCTAssertEqual(lat.payload["pr_cycle_median_sec"], "3600")
+    XCTAssertEqual(lat.payload["pr_cycle_max_sec"], "86400")
+    XCTAssertEqual(lat.payload["pr_cycle_sample_count"], "7")
+    XCTAssertEqual(lat.payload["linear_completion_median_sec"], "7200")
+    XCTAssertEqual(lat.payload["huddle_session_median_sec"], "1800")
+    XCTAssertNil(lat.payload["review_delay_median_sec"], "nil LatencyStats → keys omitted (CR-8)")
+    XCTAssertNil(lat.bundleID)
+  }
+
+  func testLatencyMetricsOmittedWhenNoSamples_trendStillEmitted() throws {
+    _ = try openWriter()  // default FakeInsights → all .empty / nil → no latency samples
+    let events = try makeGatherer().gather(period: period, nowMs: nowMs)
+    XCTAssertFalse(
+      events.contains { $0.kind == "latency_metrics" }, "no latency event when every stat is nil (CR-8)")
+    let trend = try XCTUnwrap(events.first { $0.kind == "trend_metrics" }, "trend_metrics always emitted")
+    XCTAssertEqual(trend.payload["commit_streak"], "0", "default streaks are 0, not a crash (tiny/empty period)")
+    XCTAssertNil(trend.payload["wow_delta_pct"], "nil WoW → omitted")
+  }
 }
