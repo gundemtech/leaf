@@ -21,8 +21,8 @@ final class AnthropicKeyStoreTests: XCTestCase {
   }
 
   func testStoreThenLoadRoundTrips() throws {
-    try store.storeKey("sk-ant-test-ABC123")
-    XCTAssertEqual(try store.loadKey(), "sk-ant-test-ABC123")
+    try store.storeKey("byok-test-key-ABC123")
+    XCTAssertEqual(try store.loadKey(), "byok-test-key-ABC123")
   }
 
   func testLoadReturnsNilWhenAbsent() throws {
