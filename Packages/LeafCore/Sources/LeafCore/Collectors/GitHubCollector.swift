@@ -507,6 +507,15 @@ public actor GitHubCollector {
         )
     }
 
+    /// §4.3 — event kinds in the viewer's own events feed that are provably
+    /// authored by the viewer (single actor). `gh_commit_pushed` is intentionally
+    /// NOT here (CR-1: pushing ≠ authoring).
+    static let selfAuthoredEventKinds: Set<String> = [
+        GitHubEventKindKey.prOpened.rawValue,
+        GitHubEventKindKey.issueOpened.rawValue,
+        GitHubEventKindKey.branchCreated.rawValue,
+    ]
+
     static func makeEvent(snapshot: GitHubEventSnapshot) -> RawEvent {
         var payload: [String: String] = [
             "source": "github",
@@ -517,6 +526,16 @@ public actor GitHubCollector {
             "sha": snapshot.sha ?? "",
             "branch": snapshot.branch ?? "",
         ]
+        // Track AI Coworker P1 (§4.3) — self-authored attribution. This feed is
+        // the viewer's OWN activity (`/users/<login>/events`), so an opened
+        // PR/issue/branch here has a single actor = the viewer. Emit the explicit
+        // signal the LLM egress boundary's self-authored carve-out consumes.
+        // `gh_commit_pushed` is EXCLUDED (pushing ≠ authoring — a push can carry
+        // merges/rebases/others' commits; per-commit author verification is a
+        // follow-up). Reserved below so metadata cannot shadow it.
+        if Self.selfAuthoredEventKinds.contains(snapshot.eventKind) {
+            payload["authored_by_viewer"] = "true"
+        }
         // Phase 4.6.A.1 — latency fields. Only non-nil → the key is present;
         // an absent key in the payload distinguishes "we don't know" from "0 seconds".
         if let cycle = snapshot.cycleSeconds {
@@ -533,7 +552,7 @@ public actor GitHubCollector {
         if let metadata = snapshot.metadata {
             let reserved: Set<String> = [
                 "source", "event_kind", "repo", "title", "number", "sha", "branch",
-                "cycle_seconds", "review_delay_seconds",
+                "cycle_seconds", "review_delay_seconds", "authored_by_viewer",
                 // Track-1 D1 — body + PR metadata keys also reserved
                 Schema.EventPayloadKeys.body,
                 Schema.EventPayloadKeys.bodyTruncated,
