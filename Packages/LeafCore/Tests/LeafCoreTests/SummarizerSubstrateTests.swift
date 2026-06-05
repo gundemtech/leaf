@@ -25,6 +25,18 @@ final class SummarizerSubstrateTests: XCTestCase {
     }
   }
 
+  func testBudgetExhaustedEquatable() {
+    XCTAssertEqual(
+      SummarizerError.budgetExhausted(retryAfter: 5),
+      SummarizerError.budgetExhausted(retryAfter: 5))
+    XCTAssertNotEqual(
+      SummarizerError.budgetExhausted(retryAfter: 5),
+      SummarizerError.budgetExhausted(retryAfter: nil))
+    XCTAssertNotEqual(
+      SummarizerError.budgetExhausted(retryAfter: nil),
+      SummarizerError.rateLimited(retryAfter: nil))
+  }
+
   func testFakeSummarizerProvesSeamCallable() async throws {
     struct FakeSummarizer: Summarizer {
       func summarize(_ context: PromptSafeContext, model: SummarizerModel, maxTokens: Int)
