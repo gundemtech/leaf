@@ -343,4 +343,38 @@ final class LLMEgressLeakageTests: XCTestCase {
       EgressFactAllowlist.bodyFields.contains("repo"),
       "repo (owner/repo slug) must be fenced — it is free text, not a dry fact")
   }
+
+  // MARK: - P2 cluster 3b — cross_link_fact (event_links) projects structural refs only
+
+  // 22. cross_link_fact: the structural link fields ship; a planted free-text key
+  //     (repo / branch) on the same event is fenced. The `owner/repo`-never-ships
+  //     guarantee for github_pr targets is enforced upstream (the gatherer's
+  //     target_kind='linear_issue' filter) and proven in WorkFactGathererTests —
+  //     `target_ref` is a trusted-value allow-listed key here.
+  func testCrossLinkFactStructuralFieldsShip_freeTextFenced() {
+    let ctx = policy.makeContext(events: [
+      event(
+        "cross_link_fact",
+        [
+          "from_kind": "gh_pr_review_comment_authored",
+          "from_ref": "57",
+          "link_kind": "linear_id_in_text",
+          "target_kind": "linear_issue",
+          "target_ref": "LEAF-88",
+          "repo": "acme/secret-repo",  // free text — must NOT ship
+          "branch": "feature/secret",  // free text — must NOT ship
+        ])
+    ])
+    let r = rendered(ctx)
+    XCTAssertTrue(r.contains("from_kind=gh_pr_review_comment_authored"), "source kind ships")
+    XCTAssertTrue(r.contains("from_ref=57"), "from-side ref ships")
+    XCTAssertTrue(r.contains("link_kind=linear_id_in_text"), "link kind ships")
+    XCTAssertTrue(r.contains("target_ref=LEAF-88"), "Linear-issue target ref ships")
+    XCTAssertFalse(r.contains("acme/secret-repo"), "repo slug fenced on cross_link_fact")
+    XCTAssertFalse(r.contains("feature/secret"), "branch fenced on cross_link_fact")
+    let outputKeys = Set(ctx.facts.flatMap { $0.fields.keys })
+    XCTAssertTrue(
+      outputKeys.isDisjoint(with: EgressFactAllowlist.bodyFields),
+      "no fenced key projects on cross_link_fact")
+  }
 }

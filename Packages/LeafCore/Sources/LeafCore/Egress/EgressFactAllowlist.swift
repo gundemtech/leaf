@@ -92,6 +92,13 @@ public enum EgressFactAllowlist {
     // self-authored gh_* events already gathered, pairing PR↔task inline next
     // to `number` + `self_authored_title`. A work-namespace id, not free text.
     "linked_linear_id",
+    // P2 cluster 3b — cross_link_fact structural fields (from the event_links
+    // graph, target_kind='linear_issue' ONLY). `from_kind` is a source
+    // event_kind enum; `from_ref` is a structural id (pr_number/number/sha —
+    // never branch/title; resolved in the gatherer); `link_kind` is a link enum.
+    // `target_kind`/`target_ref` already ride the set above. NO free text, NO
+    // `link_confidence` (a private moat constant).
+    "from_kind", "from_ref", "link_kind",
   ]
 
   /// Truncation cap for a self-authored label (matches relay §6 budget).
