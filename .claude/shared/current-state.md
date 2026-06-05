@@ -17,7 +17,7 @@ _Срез "где мы сейчас" за 30 секунд. Детали — git 
 - **Foundation + Distribution + Layer B** (Linear/GitHub/Slack OAuth+polling), **Phase 4.6/4.7 A–C** (event_kinds + `presence_state` + MCP), **Phase 5.1–5.3/5.5** (E2E team relay: invite/rotation/removal) — shipped, в трунке.
 - **Tracks 1–5 + integration-T10 P1–P7** влиты в трунк (integration-канон): T1 capture/FTS/detectors · T2 design tokens · T3 Linear/GitHub/Slack depth · T4 Layer A collectors + intensity · T5 Supabase backend + multi-workspace + magic-link + DM + broadcast + tier-gate · T10 Claude/Xcode/Browser/Zoom/IDE deep. **Ждут two-Mac signed-build acceptance gate** (работа в `dev`, не в отдельных ветках).
 - **alpha.24** signed; grant-once daily-driver работает.
-- **AI Coworker P0 закрыт** (2026-06-05, PR #29 `71112962`): LLM egress-граница (fail-closed allow-list `LeafCore/Egress/*` + opaque `PromptSafeContext` — §8.1) + `Summarizer`/BYOK-Anthropic backend seam (`LeafCore/AI/*`). Прод (personal-app список, raw-HTTP client, prompt-scaffolding) — в gitignored `LeafCorePrivate/Prod/{Egress,AI}`. Без миграций. Канон+трекер — `.claude/plans/2026-05-31-ai-coworker-track.md`.
+- **AI Coworker P0 + P0b закрыты** (2026-06-05): **P0** (PR #29 `71112962`) — LLM egress-граница (fail-closed `LeafCore/Egress/*` + opaque `PromptSafeContext` §8.1) + `Summarizer`/BYOK-Anthropic seam (`LeafCore/AI/*`). **P0b** (PR #30 `96b47df5`, moat `4a7c4ac`) — AI-included путь: публичный seam `ModelGate`/`AIInferenceAuthTokenProvider` + `SummarizerError.budgetExhausted`; клиент `RelayProxySummarizer` (→ `/v1/ai/*`, Supabase-JWT Bearer, opus-reject, host-allowlist, 402→budgetExhausted) + `ProdModelGate` + shared `LLMRequestScaffolding` в gitignored `LeafCorePrivate/Prod/AI`. Без миграций; без app-wiring (P1). Канон — `.claude/plans/2026-05-31-ai-coworker-track.md`.
 
 ## Архитектура
 
@@ -29,7 +29,7 @@ _Срез "где мы сейчас" за 30 секунд. Детали — git 
 - **Track-7/9 detail-UI + GoogleCalendar-UI re-apply** на unified trunk — отдельный post-Ph-C трек. Источник: теги `dev-track7-source` + `archive/code-style-phase-2-3-C` (Track-7 P1–P5 detail screens).
 - **leaf-private follow-up**: `SlackD3SmokeInspector.testInspectLiveDB` + 2 stale handshake integration-теста → catch `databaseSchemaFromFuture`/skip + org→workspace API refresh. NB: локальная dev `events.sqlite` может быть pre-unification-несовместима с трунком (migration-guard на ней корректно срабатывает; recovery/wipe — решение владельца машины).
 - **Cleanup**: delete `KeychainKeyStore.swift` после stable runtime; leaf-relay README + CI deploy hook.
-- **AI Coworker P0b** (AI-included/прокси-путь §13.1: `RelayProxySummarizer` в тот же `AISummarizerMoat` seam + per-team budget на прослойке + leaf-relay Worker эндпоинт) — новая сессия. §8.1-граница из P0 переиспользуется как есть.
+- **AI Coworker P1** (Default Q&A §10): `QueryEngine`→prompt (кластеры 1-2 рекап/resume) + composition-root wiring (`#if LEAF_PROD` инжектит `prodAIProxySummarizerMoat`/`prodModelGateMoat` + concrete Supabase-backed `AIInferenceAuthTokenProvider` через `ensureFreshSession()`) + self-authored граница. §8.1 + P0/P0b seam переиспользуются. **leaf-relay Worker `/v1/ai/*`** (SigV4→Bedrock + per-team budget + JWT local-verify) — отдельный трек в `gundemtech/leaf-relay` (контракт в P0b plan).
 
 ## Open tensions
 
