@@ -310,7 +310,8 @@ public struct WorkFactGatherer: Sendable {
     switch value.storage {
     case .string(let str): s = str
     case .int64(let i): s = String(i)
-    case .double(let d): s = String(d)
+    // Integral REAL affinity (e.g. a json number id) → no trailing ".0".
+    case .double(let d): s = d == d.rounded() ? String(Int64(d)) : String(d)
     case .null, .blob: s = nil
     }
     guard let s, !s.isEmpty else { return nil }

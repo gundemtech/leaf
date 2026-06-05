@@ -380,45 +380,42 @@ final class LLMEgressLeakageTests: XCTestCase {
 
   // MARK: - P2 cluster 4 — trend_metrics + latency_metrics (identity-free magnitudes)
 
-  // 23. trend_metrics magnitudes survive; a planted source-NAME list is dropped
-  //     (only the COUNT of active sources ever ships, never the names — CR-5).
+  // 23. ALL trend_metrics magnitudes survive the boundary; a planted source-NAME
+  //     list is dropped (only the COUNT of active sources ever ships — CR-5).
   func testTrendMetricsMagnitudesSurvive_noSourceNames() {
-    let ctx = policy.makeContext(events: [
-      event(
-        "trend_metrics",
-        [
-          "wow_delta_pct": "-15",
-          "linear_completion_rate_pct": "80",
-          "commit_streak": "4",
-          "uninterrupted_window_seconds": "5400",
-          "uninterrupted_window_sources_count": "1",
-          "uninterrupted_window_sources": "slack,linear",  // free-text names — must NOT ship
-          "linear_completed_count": "3",
-        ])
-    ])
-    let r = rendered(ctx)
-    XCTAssertTrue(r.contains("wow_delta_pct=-15"))
-    XCTAssertTrue(r.contains("commit_streak=4"))
-    XCTAssertTrue(r.contains("uninterrupted_window_sources_count=1"))
-    XCTAssertTrue(r.contains("linear_completed_count=3"))
-    XCTAssertFalse(r.contains("slack,linear"), "source NAMES never ship — only the count (CR-5)")
+    let trendKeys = [
+      "wow_delta_pct", "linear_completion_rate_pct",
+      "uninterrupted_window_seconds", "uninterrupted_window_sources_count",
+      "commit_streak", "issue_close_streak", "huddle_streak", "focus_session_streak",
+      "heavy_pulse_streak", "deep_work_streak_days", "deep_work_streak_seconds",
+      "active_days_in_row",
+      "linear_started_count", "linear_completed_count", "linear_canceled_count",
+      "linear_reopened_count",
+    ]
+    var payload = Dictionary(uniqueKeysWithValues: trendKeys.map { ($0, "1") })
+    payload["uninterrupted_window_sources"] = "slack,linear"  // free-text names — must NOT ship
+    let ctx = policy.makeContext(events: [event("trend_metrics", payload)])
+    let outputKeys = Set(ctx.facts.flatMap { $0.fields.keys })
+    for key in trendKeys {
+      XCTAssertTrue(outputKeys.contains(key), "trend magnitude \(key) must survive the boundary")
+    }
+    XCTAssertFalse(
+      rendered(ctx).contains("slack,linear"), "source NAMES never ship — only the count (CR-5)")
   }
 
-  // 24. latency_metrics: Int-second magnitudes survive.
+  // 24. ALL latency_metrics Int-second magnitudes survive the boundary.
   func testLatencyMetricsMagnitudesSurvive() {
-    let ctx = policy.makeContext(events: [
-      event(
-        "latency_metrics",
-        [
-          "pr_cycle_median_sec": "3600",
-          "pr_cycle_max_sec": "86400",
-          "pr_cycle_sample_count": "7",
-          "huddle_session_median_sec": "1800",
-        ])
-    ])
-    let r = rendered(ctx)
-    XCTAssertTrue(r.contains("pr_cycle_median_sec=3600"))
-    XCTAssertTrue(r.contains("pr_cycle_sample_count=7"))
-    XCTAssertTrue(r.contains("huddle_session_median_sec=1800"))
+    let latencyKeys = [
+      "pr_cycle_median_sec", "pr_cycle_max_sec", "pr_cycle_sample_count",
+      "review_delay_median_sec", "review_delay_max_sec", "review_delay_sample_count",
+      "linear_completion_median_sec", "linear_completion_max_sec", "linear_completion_sample_count",
+      "huddle_session_median_sec", "huddle_session_max_sec", "huddle_session_sample_count",
+    ]
+    let payload = Dictionary(uniqueKeysWithValues: latencyKeys.map { ($0, "60") })
+    let ctx = policy.makeContext(events: [event("latency_metrics", payload)])
+    let outputKeys = Set(ctx.facts.flatMap { $0.fields.keys })
+    for key in latencyKeys {
+      XCTAssertTrue(outputKeys.contains(key), "latency magnitude \(key) must survive the boundary")
+    }
   }
 }
