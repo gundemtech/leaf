@@ -95,6 +95,8 @@ public final class Database: @unchecked Sendable {
         migrator.registerMigration030GoogleCalendarTracker()
         // M031 — Track AI Coworker P3 escalation reverse-audit (append-only).
         migrator.registerMigration031AIEscalationAudit()
+        // M032 — Track AI Coworker P4 team-handoff reverse-audit (append-only).
+        migrator.registerMigration032HandoffAudit()
         return migrator
     }
 
