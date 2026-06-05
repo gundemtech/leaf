@@ -64,7 +64,8 @@ final class M011EventKindIndexTests: XCTestCase {
             // integration-T10 branch).
             // M030 Track-6 P4 GoogleCalendar tracker (Ph B trunk unification).
             // M031 AI Coworker P3 ai_escalation_audit (append-only reverse audit).
-            XCTAssertEqual(applied.count, 31)
+            // M032 AI Coworker P4 handoff_audit (append-only team-handoff reverse audit).
+            XCTAssertEqual(applied.count, 32)
         }
     }
 }

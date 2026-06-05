@@ -807,6 +807,35 @@ public enum Schema {
 
         public static let indexGeneratedAt = "idx_ai_escalation_audit_generated_at"
     }
+
+    /// Phase AI Coworker P4 — `handoff_audit`, the append-only reverse audit of
+    /// every AI-assisted team handoff the user approves + sends (§8 п.4). Written
+    /// at SEND time (the auditable team-egress is the E2E DM, not the discardable
+    /// draft). Records the AI provenance of the push — never bodies, never the
+    /// recipient pubkey: `recipient_member_id` = TeamMember.id ref, `topic_excerpt`
+    /// = the user's OWN normalized topic, `source_summary` = counts+kinds, `model`
+    /// + `path` = which model/seam drafted it, `crossposted_*` = whether the body
+    /// also left E2E to Slack/Linear (CR-1 accountability), `message_id` = soft-FK
+    /// into `messages_mirror`. `escalated` = always 0 in P4 (forward-compat).
+    public enum HandoffAudit {
+        public static let tableName = "handoff_audit"
+        public static let id = "id"
+        public static let generatedAtMs = "generated_at_ms"
+        public static let messageID = "message_id"
+        public static let recipientMemberID = "recipient_member_id"
+        public static let model = "model"
+        public static let path = "path"
+        public static let periodStartMs = "period_start_ms"
+        public static let periodEndMs = "period_end_ms"
+        public static let factCount = "fact_count"
+        public static let escalated = "escalated"
+        public static let crosspostedSlack = "crossposted_slack"
+        public static let crosspostedLinear = "crossposted_linear"
+        public static let sourceSummary = "source_summary"
+        public static let topicExcerpt = "topic_excerpt"
+
+        public static let indexGeneratedAt = "idx_handoff_audit_generated_at"
+    }
 }
 
 /// Canonical `collector_id` values. The literals are public so that tests
