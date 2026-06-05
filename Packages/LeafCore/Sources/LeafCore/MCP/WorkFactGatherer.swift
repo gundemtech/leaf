@@ -39,6 +39,13 @@ public struct WorkFactGatherer: Sendable {
   /// Detector facts older than this are stale (mirrors `QueryEngine`).
   static let whereStoppedFreshnessWindowMs: Int64 = 24 * 60 * 60 * 1000
 
+  /// Bound on cross_link_fact events fed to the prompt (cost / latency guard).
+  static let crossLinkCap = 100
+
+  /// from_ref priority — SAFE structural ids only. NEVER `branch`/`title`
+  /// (free text, fenced by the boundary; CR-3). First present wins.
+  private static let crossLinkFromRefKeys = ["pr_number", "number", "issue_identifier", "sha"]
+
   private static let selfAuthoredKinds = ["gh_pr_opened", "gh_issue_opened", "gh_branch_created"]
   private static let countedKinds = [
     "gh_commit_pushed", "gh_pr_opened", "gh_issue_opened", "gh_branch_created",
@@ -82,6 +89,7 @@ public struct WorkFactGatherer: Sendable {
       let questionEvents = try Self.openQuestionFacts(in: rawDB)
       let whereStopped = try Self.whereStoppedFact(nowMs: nowMs, in: rawDB)
       let selfAuthored = try Self.selfAuthoredEvents(startMs: startMs, endMs: endMs, in: rawDB)
+      let crossLinks = try Self.crossLinkFacts(startMs: startMs, endMs: endMs, in: rawDB)
 
       var recap: [String: String] = [
         "focus_session_count": String(focus.count),
@@ -101,7 +109,7 @@ public struct WorkFactGatherer: Sendable {
         timestamp: period.end, kind: "recap_metrics", bundleID: nil, payload: recap)
 
       return [recapEvent] + blockerEvents + questionEvents
-        + (whereStopped.map { [$0] } ?? []) + selfAuthored
+        + (whereStopped.map { [$0] } ?? []) + selfAuthored + crossLinks
     }
   }
 
@@ -226,6 +234,73 @@ public struct WorkFactGatherer: Sendable {
         timestamp: Date(timeIntervalSince1970: TimeInterval(ts) / 1000.0),
         kind: kind, bundleID: nil, payload: payload)
     }
+  }
+
+  /// Cluster 3b — cross-provider links from the `event_links` graph, RESTRICTED
+  /// to `target_kind='linear_issue'`. That target_ref is always a work-namespace
+  /// Linear ID (e.g. "LEAF-88"); `github_pr` targets (whose target_ref is the
+  /// free-text `owner/repo/pull/N` slug), `github_user` (3rd-party login) and
+  /// `calendar_event` are excluded here — never trust target_ref values past
+  /// this filter (CR-1/CR-2). The from-side is identified by a SAFE structural
+  /// id (`from_ref`), never branch/title (CR-3). No `confidence` (moat constant).
+  private static func crossLinkFacts(
+    startMs: Int64, endMs: Int64, in db: GRDB.Database
+  ) throws -> [EgressEvent] {
+    let rows = try Row.fetchAll(
+      db,
+      sql: """
+        SELECT el.link_kind  AS link_kind,
+               el.target_ref AS target_ref,
+               e.ts          AS ts,
+               json_extract(e.payload_json, '$.event_kind')       AS from_kind,
+               json_extract(e.payload_json, '$.pr_number')        AS pr_number,
+               json_extract(e.payload_json, '$.number')           AS number,
+               json_extract(e.payload_json, '$.issue_identifier') AS issue_identifier,
+               json_extract(e.payload_json, '$.sha')              AS sha
+          FROM event_links el
+          JOIN events e ON e.id = el.from_event_id
+         WHERE e.ts BETWEEN ? AND ?
+           AND el.target_kind = ?
+         ORDER BY e.ts DESC
+         LIMIT \(crossLinkCap)
+        """,
+      arguments: [startMs, endMs, Schema.TargetKinds.linearIssue])
+    return rows.compactMap { row in
+      guard let targetRef: String = row["target_ref"], !targetRef.isEmpty else { return nil }
+      var payload: [String: String] = [
+        "target_kind": Schema.TargetKinds.linearIssue,
+        "target_ref": targetRef,
+      ]
+      if let linkKind: String = row["link_kind"] { payload["link_kind"] = linkKind }
+      if let fromKind = coerceString(row, "from_kind") { payload["from_kind"] = fromKind }
+      // from_ref: first present SAFE structural id — never branch/title (CR-3).
+      for key in crossLinkFromRefKeys {
+        if let ref = coerceString(row, key) {
+          payload["from_ref"] = ref
+          break
+        }
+      }
+      let ts: Int64 = row["ts"] ?? 0
+      return EgressEvent(
+        timestamp: Date(timeIntervalSince1970: TimeInterval(ts) / 1000.0),
+        kind: "cross_link_fact", bundleID: nil, payload: payload)
+    }
+  }
+
+  /// Read a (possibly json_extract'd) column as a non-empty String regardless of
+  /// SQLite affinity — payload values are JSON strings here, but json_extract can
+  /// surface a numeric value as INTEGER/REAL affinity (CR-15). NULL/empty → nil.
+  private static func coerceString(_ row: GRDB.Row, _ column: String) -> String? {
+    let value: DatabaseValue = row[column]
+    let s: String?
+    switch value.storage {
+    case .string(let str): s = str
+    case .int64(let i): s = String(i)
+    case .double(let d): s = String(d)
+    case .null, .blob: s = nil
+    }
+    guard let s, !s.isEmpty else { return nil }
+    return s
   }
 
   /// Decode a stored `payload_json` object to `[String: String]`. String values

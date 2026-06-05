@@ -256,4 +256,71 @@ final class WorkFactGathererTests: XCTestCase {
     XCTAssertFalse(events.contains { $0.kind == "gh_pr_opened" })
     XCTAssertFalse(renderThroughBoundary(events).contains("EVE-PR"))
   }
+
+  // MARK: - 9. cross_link_fact (P2 cluster 3b): linear_issue links only; github_pr /
+  //          github_user excluded; from_ref resolves from safe keys, never branch/title.
+
+  func testCrossLinkFact_linearIssueOnly_fromRefResolved_ownerRepoExcluded() throws {
+    let db = try openWriter()
+    // id=1 — a PR I reviewed; number=57 → from_ref=57. Carries repo (must never ship).
+    try writeEvent(
+      db, tsMs: 5_000,
+      payload: [
+        "event_kind": "gh_pr_review_comment_authored", "number": "57", "repo": "acme/secret-repo",
+      ])
+    // id=2 — a slack thread referencing a PR URL (the github_pr / owner-repo link source).
+    try writeEvent(db, tsMs: 6_000, payload: ["event_kind": "slack_thread_reply_aggregate"])
+    // id=3 — a source with ONLY branch+title (no safe id key) → from_ref must be omitted.
+    try writeEvent(
+      db, tsMs: 7_000,
+      payload: ["event_kind": "gh_commit_pushed", "branch": "feature/secret", "title": "SECRET-TITLE"])
+
+    func insertLink(_ from: Int64, _ kind: String, _ tk: String, _ ref: String, _ ts: Int64) throws {
+      try db.writeSQL { rawDB in
+        try rawDB.execute(
+          sql: """
+            INSERT INTO event_links
+              (from_event_id, link_kind, target_kind, target_ref, confidence, created_at_ms)
+            VALUES (?,?,?,?,?,?)
+            """,
+          arguments: [from, kind, tk, ref, 0.5, ts])
+      }
+    }
+    // linear_issue link on id=1 → EMITTED (target_ref = LEAF-88).
+    try insertLink(1, Schema.LinkKinds.linearIDInText, Schema.TargetKinds.linearIssue, "LEAF-88", 5_000)
+    // reviewer_assigned (github_user, 3rd-party login) on id=1 → EXCLUDED (CR-2).
+    try insertLink(1, Schema.LinkKinds.reviewerAssigned, Schema.TargetKinds.githubUser, "eve-login", 5_000)
+    // pr_url_in_slack (github_pr → owner/repo/pull/42) on id=2 → EXCLUDED (CR-1).
+    try insertLink(
+      2, Schema.LinkKinds.prURLInSlack, Schema.TargetKinds.githubPR, "owner/repo/pull/42", 6_000)
+    // branch_name_linear_ref (linear_issue) on id=3 → EMITTED, from_ref omitted (no safe key).
+    try insertLink(
+      3, Schema.LinkKinds.branchNameLinearRef, Schema.TargetKinds.linearIssue, "LEAF-99", 7_000)
+
+    let events = try makeGatherer().gather(period: period, nowMs: nowMs)
+    let links = events.filter { $0.kind == "cross_link_fact" }
+    XCTAssertEqual(links.count, 2, "only the two linear_issue links are emitted")
+
+    let toLEAF88 = try XCTUnwrap(links.first { $0.payload["target_ref"] == "LEAF-88" })
+    XCTAssertEqual(toLEAF88.payload["from_kind"], "gh_pr_review_comment_authored")
+    XCTAssertEqual(toLEAF88.payload["from_ref"], "57", "from_ref resolves from the safe `number` key")
+    XCTAssertEqual(toLEAF88.payload["link_kind"], Schema.LinkKinds.linearIDInText)
+    XCTAssertEqual(toLEAF88.payload["target_kind"], Schema.TargetKinds.linearIssue)
+    XCTAssertNil(toLEAF88.payload["link_confidence"], "confidence (moat constant) is never emitted (CR-4)")
+
+    let toLEAF99 = try XCTUnwrap(links.first { $0.payload["target_ref"] == "LEAF-99" })
+    XCTAssertNil(
+      toLEAF99.payload["from_ref"], "from_ref omitted when only branch/title present (CR-3)")
+
+    XCTAssertTrue(links.allSatisfy { $0.bundleID == nil }, "bucket-1-safe by construction")
+
+    let r = renderThroughBoundary(events)
+    XCTAssertTrue(r.contains("target_ref=LEAF-88"))
+    XCTAssertTrue(r.contains("target_ref=LEAF-99"))
+    XCTAssertFalse(r.contains("owner/repo/pull/42"), "github_pr target (owner/repo) excluded (CR-1)")
+    XCTAssertFalse(r.contains("eve-login"), "github_user 3rd-party login excluded (CR-2)")
+    XCTAssertFalse(r.contains("acme/secret-repo"), "repo slug never enters the cross_link_fact")
+    XCTAssertFalse(r.contains("feature/secret"), "branch never the from_ref (CR-3)")
+    XCTAssertFalse(r.contains("SECRET-TITLE"), "title never the from_ref (CR-3)")
+  }
 }
