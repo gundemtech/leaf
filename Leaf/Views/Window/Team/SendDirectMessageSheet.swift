@@ -56,6 +56,15 @@ struct SendDirectMessageSheet: View {
     /// WorkspaceCreateSheet pattern).
     @State private var showUpgrade: Bool = false
 
+    /// AI Coworker P4 — "Draft with AI" sub-flow (handoff kind only). `topicText`
+    /// is what the handoff is about; `draftProvenance` is set when an AI draft
+    /// fills `bodyText` and is carried to the SEND-time M032 audit. It survives
+    /// edits (an edited AI draft is still AI-originated team-egress) and is
+    /// cleared on Discard or when the kind switches away from `.handoff`.
+    @Environment(HandoffDraftReader.self) private var handoffReader
+    @State private var topicText: String = ""
+    @State private var draftProvenance: HandoffProvenance? = nil
+
     init(
         recipient: TeamMember,
         onReauthorizeSlack: @escaping @MainActor () async -> Void = {},
@@ -86,6 +95,23 @@ struct SendDirectMessageSheet: View {
                 onSubmitEmail: { email in await submitToWaitlist(email) }
             )
         }
+        // AI draft ready → fill the editable body + stash provenance for the
+        // send-time audit. The user edits/approves the body before Send.
+        .onChange(of: handoffReader.state) { _, newState in
+            if case .drafted(let text, let provenance) = newState {
+                bodyText = text
+                draftProvenance = provenance
+            }
+        }
+        // Switching away from Handoff clears the AI sub-flow so a Task/Ping send
+        // never carries handoff provenance.
+        .onChange(of: kind) { _, newKind in
+            if newKind != .handoff {
+                topicText = ""
+                draftProvenance = nil
+                handoffReader.reset()
+            }
+        }
     }
 
     // MARK: - T4 UpgradeChip
@@ -115,9 +141,23 @@ struct SendDirectMessageSheet: View {
             composeCard
         case .sending:
             HStack { Spacer(); ProgressView("Sending…"); Spacer() }
-        case .sent(_, let status, let crossPost):
+        case .sent(let messageID, let status, let crossPost):
             sentCard(status: status, crossPost: crossPost)
                 .task {
+                    // AI Coworker P4 (§8 п.4) — record the AI-assisted handoff
+                    // SEND in the M032 reverse-audit (body-free; carries AI
+                    // provenance + whether the body also left E2E via cross-post).
+                    // Only when an AI draft fed this send (draftProvenance != nil);
+                    // a purely manual handoff writes no row. Best-effort — the DM
+                    // already sent, so a failed audit must not surface an error.
+                    if let provenance = draftProvenance {
+                        try? await HandoffAuditWriter().record(
+                            messageID: messageID,
+                            recipientMemberID: recipient.id,
+                            provenance: provenance,
+                            crosspostedSlack: slackEnabled,
+                            crosspostedLinear: linearEnabled)
+                    }
                     // A9 timing — 1.5s auto-dismiss ONLY when every requested
                     // channel succeeded. Any failure → stay open; user reads
                     // status rows; [Done] button manually closes.
@@ -148,6 +188,9 @@ struct SendDirectMessageSheet: View {
         LeafCard(variant: .raised, padding: .regular) {
             VStack(alignment: .leading, spacing: LeafSpace.lg) {
                 kindPicker
+                if kind == .handoff {
+                    draftWithAISection
+                }
                 bodyTextarea
                 ChannelsPickerSection(
                     slackEnabled: $slackEnabled,
@@ -163,6 +206,50 @@ struct SendDirectMessageSheet: View {
                 )
                 notifyToggle
             }
+        }
+    }
+
+    // AI Coworker P4 — handoff-only "Draft with AI". Fills the editable body
+    // below; the user reviews/edits before Send. The draft is built from the
+    // user's OWN body-free facts via the same §8.1 boundary (HandoffDrafter).
+    private var draftWithAISection: some View {
+        VStack(alignment: .leading, spacing: LeafSpace.xs) {
+            Text("TOPIC").leafSectionLabel().foregroundStyle(LeafColor.text.tertiary)
+            HStack(spacing: LeafSpace.sm) {
+                TextField("What's this handoff about? (e.g. auth refactor)", text: $topicText)
+                    .textFieldStyle(.plain)
+                    .font(LeafType.body.regular)
+                    .padding(LeafSpace.xs)
+                    .background(LeafColor.surface.canvas)
+                    .clipShape(RoundedRectangle(cornerRadius: LeafRadius.sm))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: LeafRadius.sm)
+                            .stroke(LeafColor.border.subtle, lineWidth: 1))
+                draftButton
+            }
+            if case .error(let message) = handoffReader.state {
+                Text(message)
+                    .font(LeafType.body.small)
+                    .foregroundStyle(LeafColor.status.warning)
+            }
+            Text("Drafts from your own recent activity (last 7 days). Review before sending.")
+                .font(LeafType.body.small)
+                .foregroundStyle(LeafColor.text.tertiary)
+        }
+    }
+
+    @ViewBuilder
+    private var draftButton: some View {
+        if handoffReader.state == .drafting {
+            ProgressView().controlSize(.small)
+        } else {
+            LeafButton("Draft with AI", variant: .secondary, size: .sm) {
+                Task {
+                    await handoffReader.draft(
+                        recipientName: recipient.displayName, topic: topicText)
+                }
+            }
+            .disabled(topicText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
     }
 
@@ -308,6 +395,11 @@ struct SendDirectMessageSheet: View {
 
     private func discardAndDismiss() {
         reader.reset()
+        // AI Coworker P4 — clear the AI draft sub-flow so a reopened sheet starts
+        // fresh and never carries stale handoff provenance into the next send.
+        handoffReader.reset()
+        topicText = ""
+        draftProvenance = nil
         // Regenerate idempotency key so the next sheet open starts a fresh
         // Linear issue dedupe scope. Discarding and reopening should NEVER
         // collapse with a previous send.
