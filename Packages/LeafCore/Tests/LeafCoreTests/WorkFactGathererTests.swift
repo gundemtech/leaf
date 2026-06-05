@@ -257,10 +257,11 @@ final class WorkFactGathererTests: XCTestCase {
     XCTAssertFalse(renderThroughBoundary(events).contains("EVE-PR"))
   }
 
-  // MARK: - 9. cross_link_fact (P2 cluster 3b): linear_issue links only; github_pr /
-  //          github_user excluded; from_ref resolves from safe keys, never branch/title.
+  // MARK: - 9. cross_link_fact: linear_issue verbatim + github_pr NORMALIZED to
+  //          #N (P3 — owner/repo stripped); github_user excluded; non-canonical
+  //          github_pr dropped; from_ref resolves from safe keys, never branch/title.
 
-  func testCrossLinkFact_linearIssueOnly_fromRefResolved_ownerRepoExcluded() throws {
+  func testCrossLinkFact_linearAndNormalizedGithubPR_ownerRepoStripped() throws {
     let db = try openWriter()
     // id=1 — a PR I reviewed; number=57 → from_ref=57. Carries repo (must never ship).
     try writeEvent(
@@ -290,16 +291,19 @@ final class WorkFactGathererTests: XCTestCase {
     try insertLink(1, Schema.LinkKinds.linearIDInText, Schema.TargetKinds.linearIssue, "LEAF-88", 5_000)
     // reviewer_assigned (github_user, 3rd-party login) on id=1 → EXCLUDED (CR-2).
     try insertLink(1, Schema.LinkKinds.reviewerAssigned, Schema.TargetKinds.githubUser, "eve-login", 5_000)
-    // pr_url_in_slack (github_pr → owner/repo/pull/42) on id=2 → EXCLUDED (CR-1).
+    // non-canonical github_pr on id=1 (compare URL, not /pull/N) → fail-closed DROP (P3).
     try insertLink(
-      2, Schema.LinkKinds.prURLInSlack, Schema.TargetKinds.githubPR, "owner/repo/pull/42", 6_000)
+      1, Schema.LinkKinds.prURLInSlack, Schema.TargetKinds.githubPR, "acme/secret-repo/compare/x", 5_000)
+    // pr_url_in_slack (github_pr → owner/repo/pull/42) on id=2 → P3: EMITTED, NORMALIZED to #42.
+    try insertLink(
+      2, Schema.LinkKinds.prURLInSlack, Schema.TargetKinds.githubPR, "acme/secret-repo/pull/42", 6_000)
     // branch_name_linear_ref (linear_issue) on id=3 → EMITTED, from_ref omitted (no safe key).
     try insertLink(
       3, Schema.LinkKinds.branchNameLinearRef, Schema.TargetKinds.linearIssue, "LEAF-99", 7_000)
 
     let events = try makeGatherer().gather(period: period, nowMs: nowMs)
     let links = events.filter { $0.kind == "cross_link_fact" }
-    XCTAssertEqual(links.count, 2, "only the two linear_issue links are emitted")
+    XCTAssertEqual(links.count, 3, "two linear_issue + one normalized github_pr (#42); github_user + non-canonical dropped")
 
     let toLEAF88 = try XCTUnwrap(links.first { $0.payload["target_ref"] == "LEAF-88" })
     XCTAssertEqual(toLEAF88.payload["from_kind"], "gh_pr_review_comment_authored")
@@ -312,14 +316,22 @@ final class WorkFactGathererTests: XCTestCase {
     XCTAssertNil(
       toLEAF99.payload["from_ref"], "from_ref omitted when only branch/title present (CR-3)")
 
+    // P3 — normalized github_pr link. The owner/repo slug is stripped to bare #42.
+    let toPR = try XCTUnwrap(links.first { $0.payload["target_ref"] == "#42" })
+    XCTAssertEqual(toPR.payload["target_kind"], Schema.TargetKinds.githubPR)
+    XCTAssertEqual(toPR.payload["from_kind"], "slack_thread_reply_aggregate")
+    XCTAssertNil(toPR.payload["from_ref"], "slack source carries no safe id key → from_ref omitted")
+
     XCTAssertTrue(links.allSatisfy { $0.bundleID == nil }, "bucket-1-safe by construction")
 
     let r = renderThroughBoundary(events)
     XCTAssertTrue(r.contains("target_ref=LEAF-88"))
     XCTAssertTrue(r.contains("target_ref=LEAF-99"))
-    XCTAssertFalse(r.contains("owner/repo/pull/42"), "github_pr target (owner/repo) excluded (CR-1)")
+    XCTAssertTrue(r.contains("target_ref=#42"), "github_pr normalized to bare #N (P3)")
+    XCTAssertFalse(r.contains("owner/repo/pull/42"), "raw owner/repo/pull slug never ships")
+    XCTAssertFalse(r.contains("acme/secret-repo"), "repo slug never enters the cross_link_fact (CR-2/value sentinel)")
+    XCTAssertFalse(r.contains("/compare/"), "non-canonical github_pr ref is dropped fail-closed")
     XCTAssertFalse(r.contains("eve-login"), "github_user 3rd-party login excluded (CR-2)")
-    XCTAssertFalse(r.contains("acme/secret-repo"), "repo slug never enters the cross_link_fact")
     XCTAssertFalse(r.contains("feature/secret"), "branch never the from_ref (CR-3)")
     XCTAssertFalse(r.contains("SECRET-TITLE"), "title never the from_ref (CR-3)")
   }

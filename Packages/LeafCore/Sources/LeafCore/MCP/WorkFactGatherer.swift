@@ -250,22 +250,25 @@ public struct WorkFactGatherer: Sendable {
     }
   }
 
-  /// Cluster 3b — cross-provider links from the `event_links` graph, RESTRICTED
-  /// to `target_kind='linear_issue'`. That target_ref is always a work-namespace
-  /// Linear ID (e.g. "LEAF-88"); `github_pr` targets (whose target_ref is the
-  /// free-text `owner/repo/pull/N` slug), `github_user` (3rd-party login) and
-  /// `calendar_event` are excluded here — never trust target_ref values past
-  /// this filter (CR-1/CR-2). The from-side is identified by a SAFE structural
-  /// id (`from_ref`), never branch/title (CR-3). No `confidence` (moat constant).
+  /// Cluster 3b — cross-provider links from the `event_links` graph. Two
+  /// target kinds ship: `linear_issue` (target_ref is a work-namespace Linear ID
+  /// like "LEAF-88", verbatim) and `github_pr` (P3 — target_ref is the leaky
+  /// `owner/repo/pull/N` slug, NORMALIZED to bare `#N` via `PRRefNormalizer`,
+  /// fail-closed on an unrecognized shape; this also de-leaks the existing
+  /// PR-URL-in-Slack links). `github_user` (3rd-party login) and `calendar_event`
+  /// are excluded — never trust target_ref values past this filter (CR-2). The
+  /// from-side is identified by a SAFE structural id (`from_ref`), never
+  /// branch/title (CR-3). No `confidence` (moat constant).
   private static func crossLinkFacts(
     startMs: Int64, endMs: Int64, in db: GRDB.Database
   ) throws -> [EgressEvent] {
     let rows = try Row.fetchAll(
       db,
       sql: """
-        SELECT el.link_kind  AS link_kind,
-               el.target_ref AS target_ref,
-               e.ts          AS ts,
+        SELECT el.link_kind   AS link_kind,
+               el.target_kind AS target_kind,
+               el.target_ref  AS target_ref,
+               e.ts           AS ts,
                json_extract(e.payload_json, '$.event_kind')       AS from_kind,
                json_extract(e.payload_json, '$.pr_number')        AS pr_number,
                json_extract(e.payload_json, '$.number')           AS number,
@@ -274,16 +277,31 @@ public struct WorkFactGatherer: Sendable {
           FROM event_links el
           JOIN events e ON e.id = el.from_event_id
          WHERE e.ts BETWEEN ? AND ?
-           AND el.target_kind = ?
+           AND el.target_kind IN (?, ?)
          ORDER BY e.ts DESC
          LIMIT \(crossLinkCap)
         """,
-      arguments: [startMs, endMs, Schema.TargetKinds.linearIssue])
+      arguments: [startMs, endMs, Schema.TargetKinds.linearIssue, Schema.TargetKinds.githubPR])
     return rows.compactMap { row in
       guard let targetRef: String = row["target_ref"], !targetRef.isEmpty else { return nil }
+      let targetKind: String = row["target_kind"] ?? Schema.TargetKinds.linearIssue
+      // De-leak per target_kind: linear_issue ships verbatim (bare LEAF-NN);
+      // github_pr is normalized owner/repo/pull/N → #N (strips the org/repo slug),
+      // fail-closed (unrecognized shape → drop). Nothing else is trusted past the
+      // IN-filter.
+      let shippedRef: String
+      switch targetKind {
+      case Schema.TargetKinds.linearIssue:
+        shippedRef = targetRef
+      case Schema.TargetKinds.githubPR:
+        guard let bare = PRRefNormalizer.bareNumber(fromCanonicalPRRef: targetRef) else { return nil }
+        shippedRef = bare
+      default:
+        return nil
+      }
       var payload: [String: String] = [
-        "target_kind": Schema.TargetKinds.linearIssue,
-        "target_ref": targetRef,
+        "target_kind": targetKind,
+        "target_ref": shippedRef,
       ]
       if let linkKind: String = row["link_kind"] { payload["link_kind"] = linkKind }
       if let fromKind = coerceString(row, "from_kind") { payload["from_kind"] = fromKind }
