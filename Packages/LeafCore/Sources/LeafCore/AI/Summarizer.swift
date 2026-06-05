@@ -1,10 +1,9 @@
 import Foundation
 
-/// Models reachable on the BYOK path. Haiku is the default (last-mile
-/// synthesis, ~80% of requests); Sonnet for heavy synthesis; Opus is reachable
-/// only with the user's own key. The *selection policy* (which request gets
-/// which model — §13.8 thresholds) is moat and lives in `LeafCorePrivate`; this
-/// enum is just the public vocabulary. IDs verified current (claude-api ref).
+/// Models reachable for summarization. Haiku is the default; Sonnet for heavier
+/// synthesis; Opus is reachable only with the user's own key. The selection
+/// policy is moat and lives in `LeafCorePrivate`; this enum is just the public
+/// vocabulary. IDs verified current (claude-api ref).
 public enum SummarizerModel: String, Sendable, CaseIterable {
   case haiku
   case sonnet
@@ -57,6 +56,7 @@ public enum SummarizerError: Error, Equatable, Sendable {
   case network(String)
   case decode(String)
   case contextEmpty
+  case budgetExhausted(retryAfter: Int?)  // 402 — hard stop (team overdraft disabled)
 }
 
 /// Produces a natural-language summary over an already-egress-filtered context.
