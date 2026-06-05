@@ -106,6 +106,11 @@ enum MCPMain {
         let aiEscalationLogTool = GetAIEscalationLogTool(
             dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption
         )
+        // Track AI Coworker P4 — read-back for the "AI handoffs" feed (M032
+        // handoff_audit). Read-only; metadata/refs only, never the handoff body.
+        let handoffLogTool = GetHandoffLogTool(
+            dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption
+        )
 
         // Track 5 / S8 / T7 — `leaf_query_team` tool. Constructs a
         // reader-mode Database handle (MCPServer is a read-only process per
@@ -158,7 +163,7 @@ enum MCPMain {
         // schema in `tools/list` but failing every call is worse UX than
         // omitting it (AI client will not advertise a feature that always
         // errors). MCP tool count: 18 base (+P3 escalate_to_ai +
-        // get_ai_escalation_log) + 1 (S8/T7) = 19 when active.
+        // get_ai_escalation_log +P4 get_handoff_log) + 1 (S8/T7) = 20 when active.
         var toolDefinitions: [ToolDefinition] = [
             GetTimelineTool.definition,
             FindLastActivityTool.definition,
@@ -177,7 +182,8 @@ enum MCPMain {
             CurrentWorkTool.definition,
             AskAboutMyWorkTool.definition,
             EscalateToAITool.definition,
-            GetAIEscalationLogTool.definition
+            GetAIEscalationLogTool.definition,
+            GetHandoffLogTool.definition
         ]
         var toolRegistry: [String: any ToolExecutor] = [
             "get_timeline": timelineTool,
@@ -197,7 +203,8 @@ enum MCPMain {
             "leaf_current_work": currentWorkTool,
             "ask_about_my_work": askAboutMyWorkTool,
             "escalate_to_ai": escalateToAITool,
-            "get_ai_escalation_log": aiEscalationLogTool
+            "get_ai_escalation_log": aiEscalationLogTool,
+            "get_handoff_log": handoffLogTool
         ]
         if let qtt = queryTeamTool {
             toolDefinitions.append(QueryTeamTool.definition)
