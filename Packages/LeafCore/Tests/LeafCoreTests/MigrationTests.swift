@@ -496,7 +496,9 @@ final class MigrationTests: XCTestCase {
                 Schema.BrowserDomainAllow.tableName,
                 // M030 Track-6 P4 GoogleCalendar typed-event tracker (renamed from
                 // dev M027; Ph B trunk unification — appended after M029).
-                Schema.GoogleCalendarTracker.tableName
+                Schema.GoogleCalendarTracker.tableName,
+                // M031 AI Coworker P3 — ai_escalation_audit (append-only reverse audit).
+                Schema.AIEscalationAudit.tableName
             ]
             XCTAssertEqual(tables, expected)
         }
