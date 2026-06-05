@@ -201,4 +201,110 @@ final class LLMEgressLeakageTests: XCTestCase {
     let ctx = policy.makeContext(events: [event("issue_updated", ["additions": "1"])])
     XCTAssertEqual(ctx.facts.count, 1)
   }
+
+  // MARK: - P1 synthetic-fact shapes (CR-3 — the new gatherer path must obey §8.1 too)
+
+  // 13. Synthetic recap metrics: identity-free scalars survive; planted file path
+  //     + app-name free text are dropped (CR-2 / N-1).
+  func testRecapMetricsScalarsSurvive_noPathOrAppName() {
+    let ctx = policy.makeContext(events: [
+      event(
+        "recap_metrics",
+        [
+          "focus_session_count": "12",
+          "ai_ratio_pct": "30",
+          "files_touched_count": "47",
+          "files_touched": "/Users/alice/secret-acquisition.md",  // path — must NOT ship
+          "app_time_top_app_name": "SENTINEL-APPNAME",  // free text — must NOT ship
+        ])
+    ])
+    let r = rendered(ctx)
+    XCTAssertFalse(r.contains("secret-acquisition"), "file paths never reach the LLM (CR-2)")
+    XCTAssertFalse(r.contains("SENTINEL-APPNAME"), "app-name free text never reaches the LLM")
+    XCTAssertTrue(r.contains("focus_session_count=12"))
+    XCTAssertTrue(r.contains("ai_ratio_pct=30"))
+    XCTAssertTrue(r.contains("files_touched_count=47"), "positive gate: the count (not the paths) survives")
+  }
+
+  // 14. blocker_fact structured-only — excerpt dropped, refs/kinds survive.
+  func testBlockerFactStructuredOnly_excerptDropped() {
+    let ctx = policy.makeContext(events: [
+      event(
+        "blocker_fact",
+        [
+          "target_kind": "github_pr", "target_ref": "PR-42", "blocker_kind": "awaiting_review",
+          "started_at_ms": "1700000000000",
+          "blocker_excerpt": "SENTINEL-BLOCKER-EXCERPT",
+        ])
+    ])
+    let r = rendered(ctx)
+    XCTAssertFalse(r.contains("SENTINEL-BLOCKER-EXCERPT"), "detector excerpt is escalation-only (P3)")
+    XCTAssertTrue(r.contains("target_ref=PR-42"))
+    XCTAssertTrue(r.contains("blocker_kind=awaiting_review"))
+  }
+
+  // 15. open_question_fact structured-only — excerpt + alternatives dropped, refs survive.
+  func testOpenQuestionFactStructuredOnly_excerptDropped() {
+    let ctx = policy.makeContext(events: [
+      event(
+        "open_question_fact",
+        [
+          "linear_issue_ref": "LEA-88", "opened_at_ms": "1700000000000",
+          "question_excerpt": "SENTINEL-Q-EXCERPT",
+          "alternatives_json": "SENTINEL-ALTS",
+        ])
+    ])
+    let r = rendered(ctx)
+    XCTAssertFalse(r.contains("SENTINEL-Q-EXCERPT"))
+    XCTAssertFalse(r.contains("SENTINEL-ALTS"))
+    XCTAssertTrue(r.contains("linear_issue_ref=LEA-88"))
+  }
+
+  // 16. where_stopped_fact — wip booleans only, excerpt dropped.
+  func testWhereStoppedFactWipOnly_excerptDropped() {
+    let ctx = policy.makeContext(events: [
+      event(
+        "where_stopped_fact",
+        [
+          "wip_commit": "true", "wip_ci_failing": "false", "wip_mid_edit": "true",
+          "generated_at_ms": "1700000000000",
+          "excerpt": "SENTINEL-WHERE-EXCERPT",
+        ])
+    ])
+    let r = rendered(ctx)
+    XCTAssertFalse(r.contains("SENTINEL-WHERE-EXCERPT"))
+    XCTAssertTrue(r.contains("wip_commit=true"))
+  }
+
+  // 17. Self-authored PR title (a P1 self-authored kind) under a distinct output key.
+  func testSelfAuthoredPRTitleUnderDistinctKey() {
+    let ctx = policy.makeContext(events: [
+      event("gh_pr_opened", ["title": "ALICE-PR-REFACTOR-AUTH", "authored_by_viewer": "true", "additions": "9"])
+    ])
+    let r = rendered(ctx)
+    XCTAssertTrue(r.contains("self_authored_title=ALICE-PR-REFACTOR-AUTH"))
+    // Assert on the actual output KEY set — the raw `title` key must not appear
+    // (a substring check would false-match inside `self_authored_title`).
+    let outputKeys = Set(ctx.facts.flatMap { $0.fields.keys })
+    XCTAssertFalse(outputKeys.contains("title"), "raw `title` key never an output key")
+    XCTAssertTrue(outputKeys.contains("self_authored_title"))
+  }
+
+  // 18. window_title (L3 content) is fenced — never an output key.
+  func testWindowTitleFenced() {
+    let ctx = policy.makeContext(events: [
+      event("attention", ["window_title": "SENTINEL-WINDOW-TITLE", "additions": "1"])
+    ])
+    XCTAssertFalse(rendered(ctx).contains("SENTINEL-WINDOW-TITLE"), "window_title is never projected")
+  }
+
+  // 19. Disjointness invariants for the P1 derived set.
+  func testDerivedScalarFactsDisjointInvariants() {
+    XCTAssertTrue(
+      EgressFactAllowlist.derivedScalarFacts.isDisjoint(with: EgressFactAllowlist.bodyFields),
+      "a derived scalar key must never also be a fenced body key")
+    XCTAssertTrue(
+      EgressFactAllowlist.derivedScalarFacts.isDisjoint(with: EgressFactAllowlist.scalarFacts),
+      "no drift/dup between the raw and derived scalar sets")
+  }
 }

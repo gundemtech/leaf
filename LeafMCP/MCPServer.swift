@@ -43,6 +43,25 @@ enum MCPMain {
         let detectorMoat: DetectorMoat = .publicSubstrate
         #endif
 
+        // Track AI Coworker P1 — Default Q&A (`ask_about_my_work`). Prod wires the
+        // BYOK summarizer (key read from the file-based store — MCPServer can't
+        // reach the app Keychain), the model gate, and the LLM egress moat
+        // (bucket-1 personal-app list). Substrate keeps NoOp/empty → the tool
+        // returns a graceful "no API key" error. The AI-included (proxy) path is
+        // built/tested but NOT wired here (it needs the app's Supabase session).
+        #if LEAF_PROD
+        let aiSummarizerMoat: AISummarizerMoat = prodAISummarizerMoat(keyStore: FileAnthropicKeyStore())
+        let modelGateMoat: ModelGateMoat = prodModelGateMoat()
+        let llmEgressMoat: LLMEgressMoat = prodLLMEgressMoat()
+        #else
+        let aiSummarizerMoat: AISummarizerMoat = .publicSubstrate
+        let modelGateMoat: ModelGateMoat = .publicSubstrate
+        let llmEgressMoat: LLMEgressMoat = .publicSubstrate
+        #endif
+        let llmPolicy = LLMPolicy(
+            moat: llmEgressMoat,
+            config: LLMPolicyConfig(strictMode: StrictModeReader.read()))
+
         let dbURL = DatabasePath.defaultURL()
         let timelineTool = GetTimelineTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
         let findLastActivityTool = FindLastActivityTool(dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption)
@@ -72,6 +91,10 @@ enum MCPMain {
         let currentWorkTool = CurrentWorkTool(
             dbURL: dbURL, dbConfig: dbConfig,
             dbEncryption: dbEncryption, detectorMoat: detectorMoat
+        )
+        let askAboutMyWorkTool = AskAboutMyWorkTool(
+            dbURL: dbURL, dbConfig: dbConfig, dbEncryption: dbEncryption,
+            policy: llmPolicy, summarizerMoat: aiSummarizerMoat, modelGateMoat: modelGateMoat
         )
 
         // Track 5 / S8 / T7 — `leaf_query_team` tool. Constructs a
@@ -124,7 +147,7 @@ enum MCPMain {
         // Without a DB handle the tool cannot serve any query; surfacing its
         // schema in `tools/list` but failing every call is worse UX than
         // omitting it (AI client will not advertise a feature that always
-        // errors). MCP tool count: 15 base + 1 (S8/T7) = 16 when active.
+        // errors). MCP tool count: 16 base + 1 (S8/T7) = 17 when active.
         var toolDefinitions: [ToolDefinition] = [
             GetTimelineTool.definition,
             FindLastActivityTool.definition,
@@ -140,7 +163,8 @@ enum MCPMain {
             GetCrossProviderThreadTool.definition,
             QueryActivityTool.definition,
             GetDecisionTool.definition,
-            CurrentWorkTool.definition
+            CurrentWorkTool.definition,
+            AskAboutMyWorkTool.definition
         ]
         var toolRegistry: [String: any ToolExecutor] = [
             "get_timeline": timelineTool,
@@ -157,7 +181,8 @@ enum MCPMain {
             "get_cross_provider_thread": crossProviderThreadTool,
             "leaf_query_activity": queryActivityTool,
             "leaf_get_decision": getDecisionTool,
-            "leaf_current_work": currentWorkTool
+            "leaf_current_work": currentWorkTool,
+            "ask_about_my_work": askAboutMyWorkTool
         ]
         if let qtt = queryTeamTool {
             toolDefinitions.append(QueryTeamTool.definition)

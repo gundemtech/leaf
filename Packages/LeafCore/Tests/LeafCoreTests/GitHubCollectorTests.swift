@@ -291,6 +291,37 @@ final class GitHubCollectorTests: XCTestCase {
         XCTAssertEqual(logins, ["octocat"])
     }
 
+    // Track AI Coworker P1 (§4.3) — authored_by_viewer is emitted ONLY for the
+    // three provably-viewer-authored kinds; gh_commit_pushed is excluded (CR-1).
+    func testAuthoredByViewer_OnlyForOpenedKinds() {
+        func payload(_ kind: String) -> [String: String] {
+            GitHubCollector.makeEvent(
+                snapshot: GitHubEventSnapshot(
+                    eventID: "e", eventKind: kind, repoFullName: "octocat/leaf",
+                    title: "t", number: 1, sha: nil, branch: "b", createdAtMs: 1)
+            ).payload
+        }
+        XCTAssertEqual(payload("gh_pr_opened")["authored_by_viewer"], "true")
+        XCTAssertEqual(payload("gh_issue_opened")["authored_by_viewer"], "true")
+        XCTAssertEqual(payload("gh_branch_created")["authored_by_viewer"], "true")
+        // Pushing ≠ authoring; review/comment kinds are others' content → no flag.
+        XCTAssertNil(payload("gh_commit_pushed")["authored_by_viewer"])
+        XCTAssertNil(payload("gh_pr_review_submitted")["authored_by_viewer"])
+        XCTAssertNil(payload("gh_issue_comment_authored")["authored_by_viewer"])
+    }
+
+    // Metadata cannot inject authorship onto a non-authored event (reserved key).
+    func testAuthoredByViewer_MetadataCannotShadow() {
+        let ev = GitHubCollector.makeEvent(
+            snapshot: GitHubEventSnapshot(
+                eventID: "e", eventKind: "gh_commit_pushed", repoFullName: "r", title: "t",
+                number: nil, sha: "s", branch: "b", createdAtMs: 1,
+                metadata: ["authored_by_viewer": "true"]))
+        XCTAssertNil(
+            ev.payload["authored_by_viewer"],
+            "reserved key — metadata cannot inject authorship onto a pushed commit")
+    }
+
     /// Phase 4.6.A.1 — latency fields from the snapshot must make it into events.payload.
     /// A snapshot with `cycleSeconds=10800` → payload contains the key `cycle_seconds = "10800"`;
     /// a snapshot without latency → the key is absent (not an empty string).
