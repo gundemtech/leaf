@@ -81,6 +81,21 @@ public protocol Summarizer: Sendable {
     model: SummarizerModel,
     maxTokens: Int
   ) async throws -> SummarizerOutput
+
+  /// P3 — escalation overload. Carries the body-free `context` AND the opaque
+  /// body-bearing `escalated` payload (the explicitly-selected, consented event
+  /// bodies). The default implementation IGNORES `escalated` and forwards to the
+  /// QA overload — so a summarizer that has not opted into the body-bearing path
+  /// NEVER ships a body (fail-safe: an un-upgraded backend silently degrades to
+  /// body-free, never the reverse). Production backends override it to render the
+  /// retrieved-bodies-as-DATA segment with anti-injection framing.
+  func summarize(
+    _ context: PromptSafeContext,
+    question: PromptSafeQuestion,
+    escalated: EscalatedBodies,
+    model: SummarizerModel,
+    maxTokens: Int
+  ) async throws -> SummarizerOutput
 }
 
 extension Summarizer {
@@ -91,5 +106,17 @@ extension Summarizer {
     maxTokens: Int
   ) async throws -> SummarizerOutput {
     try await summarize(context, model: model, maxTokens: maxTokens)
+  }
+
+  public func summarize(
+    _ context: PromptSafeContext,
+    question: PromptSafeQuestion,
+    escalated: EscalatedBodies,
+    model: SummarizerModel,
+    maxTokens: Int
+  ) async throws -> SummarizerOutput {
+    // Fail-safe default: drop the bodies, answer body-free. A backend that
+    // forgets to override degrades to a weaker-but-safe answer, never a leak.
+    try await summarize(context, question: question, model: model, maxTokens: maxTokens)
   }
 }

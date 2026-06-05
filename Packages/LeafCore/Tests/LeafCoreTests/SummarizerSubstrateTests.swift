@@ -52,4 +52,41 @@ final class SummarizerSubstrateTests: XCTestCase {
     XCTAssertEqual(out.text, "ok")
     XCTAssertEqual(out.modelUsed, "claude-sonnet-4-6")
   }
+
+  // P3 — the escalation overload's fail-safe default must forward to the base
+  // method WITHOUT exposing bodies to a backend that did not opt in (never a leak).
+  func testEscalationOverloadFailSafeDefaultDropsBodies() async throws {
+    struct BaseOnly: Summarizer {
+      func summarize(_ context: PromptSafeContext, model: SummarizerModel, maxTokens: Int)
+        async throws -> SummarizerOutput
+      {
+        SummarizerOutput(
+          text: "base", usage: TokenUsage(inputTokens: 1, outputTokens: 1),
+          modelUsed: model.apiModelID, stopReason: nil)
+      }
+    }
+    let ctx = LLMPolicy().makeContext(events: [])
+    let escalated = LLMPolicy().makeEscalation(selected: [
+      EgressEvent(
+        timestamp: Date(timeIntervalSince1970: 1), kind: "gh_pr_opened", bundleID: nil,
+        payload: ["body": "SENTINEL-BODY"])
+    ])
+    let q = LLMPolicy().makeQuestion("hi")
+    let out = try await BaseOnly().summarize(
+      ctx, question: q, escalated: escalated, model: .haiku, maxTokens: 64)
+    XCTAssertEqual(out.text, "base", "fail-safe default forwarded to base; bodies never reached the backend")
+  }
+
+  func testSubstrateEscalationThrowsMissingAPIKey() async {
+    let ctx = LLMPolicy().makeContext(events: [])
+    let escalated = LLMPolicy().makeEscalation(selected: [])
+    let q = LLMPolicy().makeQuestion("hi")
+    do {
+      _ = try await AISummarizerMoat.publicSubstrate.summarizer.summarize(
+        ctx, question: q, escalated: escalated, model: .haiku, maxTokens: 64)
+      XCTFail("no-op substrate must throw")
+    } catch {
+      XCTAssertEqual(error as? SummarizerError, .missingAPIKey)
+    }
+  }
 }
