@@ -139,3 +139,36 @@ dev-log:
 # the LS database, restarts lsd, re-registers /Applications. Idempotent.
 fix-launch:
     @./scripts/fix-launch.sh
+
+# AI Coworker P1 — provision the BYOK Anthropic key (no UI). Reads the key from
+# the ANTHROPIC_API_KEY env var (NOT a recipe arg — keeps it out of `ps` / shell
+# history; supply it inline with `! export ANTHROPIC_API_KEY=...`), writes it
+# 0600 to the keystore. `variant` = "Leaf" (prod ship build, default) or
+# "Leaf-Debug" (a `.debug` MCP build). The key is never echoed.
+set-byok-key variant="Leaf":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    umask 077
+    if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+        echo "✘ set ANTHROPIC_API_KEY first, e.g.:  ! export ANTHROPIC_API_KEY=sk-ant-..." >&2
+        exit 1
+    fi
+    dir="$HOME/Library/Application Support/{{variant}}/keystore"
+    mkdir -p "$dir"
+    printf '%s' "$ANTHROPIC_API_KEY" > "$dir/anthropic-byok.key"
+    chmod 600 "$dir/anthropic-byok.key"
+    echo "✓ BYOK key written 0600 to $dir/anthropic-byok.key (not echoed)"
+
+# AI Coworker P1 — toggle §4.3 strict mode (withhold the user's own authored
+# labels from the default Q&A path). Writes the shared cross-process suite key
+# the read-only MCP process reads (StrictModeReader).
+ai-strict-mode mode:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{mode}}" in
+      on)  defaults write tech.gundem.leaf leaf.ai.strict_mode -bool true
+           echo "✓ AI strict mode ON — self-authored labels withheld (escalation-only)";;
+      off) defaults write tech.gundem.leaf leaf.ai.strict_mode -bool false
+           echo "✓ AI strict mode OFF — self-authored labels go by default (§4.3)";;
+      *)   echo "usage: just ai-strict-mode on|off" >&2; exit 1;;
+    esac
