@@ -86,6 +86,12 @@ public enum EgressFactAllowlist {
     "linear_issue_ref", "github_pr_ref", "slack_thread_ts", "opened_at_ms",
     // where_stopped_fact — wip booleans + its own ms-timestamp
     "wip_commit", "wip_ci_failing", "wip_mid_edit", "generated_at_ms",
+    // P2 cluster 3a — denormalized cross-provider link. Phase 4.7.A's
+    // `LinearIDExtractor` writes the sanitized, regex-matched Linear ID
+    // (e.g. "LEAF-88") onto gh_pr_*/gh_commit_pushed payloads. It rides the
+    // self-authored gh_* events already gathered, pairing PR↔task inline next
+    // to `number` + `self_authored_title`. A work-namespace id, not free text.
+    "linked_linear_id",
   ]
 
   /// Truncation cap for a self-authored label (matches relay §6 budget).
@@ -137,5 +143,9 @@ public enum EgressFactAllowlist {
     "excerpt",  // where_stopped_log.excerpt
     "window_title",  // L3 window title (file/doc/customer names)
     "files_touched",  // L4 file paths — count only (files_touched_count) ever ships
+    // P2 — GitHub "owner/repo" slug (free-text org/repo identity, e.g. a customer
+    // or unannounced codename). Only safe-by-omission today; fenced so the
+    // unconditional bodies-fence test backstops it. Refs/counts only ever ship.
+    "repo",
   ]
 }

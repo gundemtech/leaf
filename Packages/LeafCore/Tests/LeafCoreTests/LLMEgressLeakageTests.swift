@@ -307,4 +307,40 @@ final class LLMEgressLeakageTests: XCTestCase {
       EgressFactAllowlist.derivedScalarFacts.isDisjoint(with: EgressFactAllowlist.scalarFacts),
       "no drift/dup between the raw and derived scalar sets")
   }
+
+  // MARK: - P2 cluster 3a — linked_linear_id rides self-authored events; repo fenced
+
+  // 20. The denormalized PR↔task link (linked_linear_id) ships on a self-authored
+  //     PR alongside number + self_authored_title; the `repo` slug ("owner/repo")
+  //     and the raw `title` never do. This is cluster 3a — zero producer code,
+  //     it rides the existing self-authored gh_* flow.
+  func testLinkedLinearIDShipsOnSelfAuthoredPR_repoAndTitleFenced() {
+    let ctx = policy.makeContext(events: [
+      event(
+        "gh_pr_opened",
+        [
+          "authored_by_viewer": "true",
+          "number": "42",
+          "title": "ALICE-PR-REFACTOR-AUTH",
+          "linked_linear_id": "LEAF-88",
+          "repo": "acme/secret-repo",
+        ])
+    ])
+    let r = rendered(ctx)
+    XCTAssertTrue(r.contains("linked_linear_id=LEAF-88"), "denormalized PR↔task link ships (cluster 3a)")
+    XCTAssertTrue(r.contains("number=42"), "PR number (the from-side ref) ships")
+    XCTAssertTrue(r.contains("self_authored_title=ALICE-PR-REFACTOR-AUTH"), "own title under distinct key")
+    XCTAssertFalse(r.contains("acme/secret-repo"), "repo slug (owner/repo) never reaches the LLM")
+    let outputKeys = Set(ctx.facts.flatMap { $0.fields.keys })
+    XCTAssertFalse(outputKeys.contains("repo"), "raw `repo` key never an output key")
+    XCTAssertFalse(outputKeys.contains("title"), "raw `title` key never an output key")
+  }
+
+  // 21. `repo` is fenced in bodyFields (defense-in-depth, CR-14) so the
+  //     unconditional bodies-fence test (11) backstops it.
+  func testRepoIsFenced() {
+    XCTAssertTrue(
+      EgressFactAllowlist.bodyFields.contains("repo"),
+      "repo (owner/repo slug) must be fenced — it is free text, not a dry fact")
+  }
 }
