@@ -98,7 +98,7 @@ Leaf — ambient memory layer для macOS (далее iOS) + Native UI + MCP-с
 
 ## Хранение (ADR-017)
 - **GRDB 7.10+ fork** + SQLCipher через SwiftPM (официальной интеграции нет — community fork).
-- SQLite в WAL mode, три процесса (Agent writer + MCPServer reader + MenuBarApp reader) → один файл, cross-process POSIX locks, `DatabasePool` в каждом процессе.
+- SQLite в WAL mode, три процесса (Agent writer + MCPServer reader + MenuBarApp reader) → один файл, cross-process POSIX locks, `DatabasePool` в каждом процессе. (AI Coworker P3: MCPServer `escalate_to_ai` дополнительно открывает кратковременный writer для append в `ai_escalation_audit` — обоснованное ADR-019-отступление «каждая эскалация залогирована».)
 - Обязательные pragma: `cipher_plaintext_header_size` (tuned value в moat) + external salt (iOS-ready), `busy_timeout` (tuned value в moat), `PRAGMA key = x'HEX'` с raw keyspec (без PBKDF2 на каждом open).
 - Ключ в Keychain: `kSecClassGenericPassword`, `kSecAttrAccessGroup=$(TeamID).tech.gundem.leaf`, `AccessibleAfterFirstUnlockThisDeviceOnly`, `Synchronizable=false`.
 - Writer запускает `PRAGMA wal_checkpoint(TRUNCATE)` раз в 15 мин / 4MB — без этого WAL распухает без границ.
@@ -136,8 +136,9 @@ SQLCipher таблицы:
 - `blockers` — BlockerPatternDetector + LinearStuckScanner hits (D3 M014): `(target_kind, target_ref, blocker_kind, blocker_excerpt, detected_by_event_id, started_at_ms, resolved_at_ms NULLABLE, resolved_by_event_id NULLABLE)` + partial unique `idx_blockers_open` WHERE resolved IS NULL (один OPEN blocker per target).
 - `where_stopped_log` — append-only WhereStoppedDeriver snapshots (D3 M014): `(generated_at_ms, anchor_event_id NULLABLE, excerpt, wip_signals_json)`. Заменяет планировавшийся sessions extension (substrate не имеет sessions table).
 - `detector_offsets` — per-detector cursor (D3 M014): `(detector_kind PK, cursor_event_id, last_run_at_ms)` pre-seeded `decision`/`open_question`/`blocker_pattern`. Scheduled detectors (linear_stuck, where_stopped) cursor не используют.
+- `ai_escalation_audit` — append-only reverse-audit AI-эскалаций (AI Coworker P3, M031): `(id PK, generated_at_ms, question_excerpt NULLABLE, model, event_ids_json, source_summary)` + index на `generated_at_ms`. Метаданные+refs (event ids) + свой вопрос, НЕ тела; пишется audit-first перед LLM-POST. Read-back — MCP `get_ai_escalation_log`.
 
-Миграции — через GRDB migrations framework. Текущий счёт: M001..M030 (unified trunk; счёт таблиц — см. git). **Migration-guard (Ph C, R7):** на open БД, чьи applied-миграции новее бинаря (`migrator.hasBeenSuperseded`), `Database.openForWrite`/`openForRead` бросают `LeafError.databaseSchemaFromFuture` → MenuBarApp показывает `DatabaseRecoveryView` (Backup&Reset/Reveal/Quit), Agent `exit(0)` (no launchd crash-loop), MCP — clean error; не «Couldn't load Home».
+Миграции — через GRDB migrations framework. Текущий счёт: M001..M031 (unified trunk; счёт таблиц — см. git). **Migration-guard (Ph C, R7):** на open БД, чьи applied-миграции новее бинаря (`migrator.hasBeenSuperseded`), `Database.openForWrite`/`openForRead` бросают `LeafError.databaseSchemaFromFuture` → MenuBarApp показывает `DatabaseRecoveryView` (Backup&Reset/Reveal/Quit), Agent `exit(0)` (no launchd crash-loop), MCP — clean error; не «Couldn't load Home».
 
 ## Share Controls (ADR-020)
 Юзер контролирует что именно видно команде. Default — пустой whitelist, ничего не шарится.
@@ -183,7 +184,7 @@ SQLCipher таблицы:
 - **Agent** — LaunchAgent, фоновый writer SQLCipher + derive presence snapshot + **apply Share Controls filter** + encrypt + WS send
 - **LeafCore** (Swift module) — shared library, содержит **Derived Insights Engine** (метрики on-demand) + DB access layer (GRDB models) + CryptoKit wrappers. Линкуется в MenuBarApp и MCPServer.
 - **MenuBarApp** — Native UI (Home / Team / Connections / Organization / Settings + Share Controls sub-screen + Privacy dashboard reverse view) + Invisible control + Sparkle update owner. Потребляет Derived Insights Engine для всех visualizations.
-- **MCPServer** — on-demand bonus channel для AI-клиентов. 12 tools: `get_timeline`, `find_last_activity`, `get_current_session`, `get_ai_activity`, `get_linear_activity`, `get_github_activity`, `get_slack_activity`, `get_uninterrupted_window` (Phase 4.6 baseline) + Phase 4.7.B presence-first additions: `get_current_presence`, `get_workload_pulse`, `get_review_activity`, `get_cross_provider_thread`. Отдаёт structured JSON через Derived Insights Engine.
+- **MCPServer** — on-demand bonus channel для AI-клиентов. 12 tools: `get_timeline`, `find_last_activity`, `get_current_session`, `get_ai_activity`, `get_linear_activity`, `get_github_activity`, `get_slack_activity`, `get_uninterrupted_window` (Phase 4.6 baseline) + Phase 4.7.B presence-first additions: `get_current_presence`, `get_workload_pulse`, `get_review_activity`, `get_cross_provider_thread`. + AI Coworker: `ask_about_my_work` (P1, structured Q&A) / `escalate_to_ai` + `get_ai_escalation_log` (P3, bodies-эскалация + reverse-audit). Live registry — 19 tools (см. `MCPServer.swift`). Отдаёт structured JSON через Derived Insights Engine.
 - **PresenceRelay** — Cloudflare DO + AES-GCM: broadcast encrypted blobs connected peers (фактически built — `oauth.gundem.tech/v1/invite/*` + `/v1/key-rotation/*` live на Workers; whitepaper v0.1-beta планирует миграцию на Supabase + XChaCha20-Poly1305 — substrate готов, миграция отдельным треком)
 - **Safety handle** — freeze/wipe устройство коллеги по запросу юзера. **Отложено в v1.1** (в MVP достаточно "Remove member" + self-wipe).
 

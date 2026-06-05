@@ -93,6 +93,8 @@ public final class Database: @unchecked Sendable {
         // occupied by InviteSystemRedesign on the integration trunk). Clean
         // append after M029 — Ph B trunk unification.
         migrator.registerMigration030GoogleCalendarTracker()
+        // M031 — Track AI Coworker P3 escalation reverse-audit (append-only).
+        migrator.registerMigration031AIEscalationAudit()
         return migrator
     }
 

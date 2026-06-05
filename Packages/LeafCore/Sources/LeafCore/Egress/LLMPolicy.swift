@@ -84,6 +84,41 @@ public struct LLMPolicy: EgressPolicy {
     event.payload["authored_by_viewer"] == "true"
   }
 
+  /// P3 escalation body cap. PUBLIC floor (cf. `questionCharCap`): what matters
+  /// is that it is *enforced*, not that the number is secret; a public constant
+  /// lets the SPM sentinel pin truncation without `@testable LeafCorePrivate`.
+  /// Production may thread a larger moat value the same way
+  /// `QueryEngine.bodyExcerptCharCap` does.
+  public static let escalationBodyCap = 2000
+
+  /// P3 — sole constructor of the opaque body-bearing escalation payload, on the
+  /// SAME policy object as `makeContext` (one egress core, two construction
+  /// methods — §13.2; NOT a second filter). Mirrors makeContext's discipline:
+  ///   (a) bucket-1 selected events are DROPPED via the SAME `isNeverToCloud`
+  ///       (defense in depth — a personal-app/Slack-DM body must never escalate
+  ///       even though the user named its event id; selection does not override
+  ///       bucket-1);
+  ///   (b) each body is capped (`escalationBodyCap`, reusing `BodyExcerpt`);
+  ///   (c) provenance is tagged (`authoredByViewer`) for prompt-injection labeling;
+  ///   (d) an event with no/empty body contributes nothing (no bare kind+time).
+  /// Only the events passed here (the explicitly-selected ids) are considered;
+  /// the caller's body-free context is built separately by `makeContext`.
+  public func makeEscalation(selected events: [EgressEvent]) -> EscalatedBodies {
+    let bodies = events.compactMap { event -> EscalatedBody? in
+      guard !isNeverToCloud(event) else { return nil }  // (a) SAME bucket-1 moat
+      guard let raw = event.payload[Schema.EventPayloadKeys.body], !raw.isEmpty else {
+        return nil  // (d) missing/empty body → omit
+      }
+      let (capped, _) = BodyExcerpt.capped(raw, charCap: Self.escalationBodyCap)  // (b)
+      return EscalatedBody(
+        kind: event.kind,
+        tsBucketMs: Int64(event.timestamp.timeIntervalSince1970 * 1000),
+        authoredByViewer: Self.authoredByViewer(event),  // (c)
+        text: capped)
+    }
+    return EscalatedBodies(bodies: bodies)
+  }
+
   /// P1 — the user's own question, normalized into a single segment. Collapses
   /// every whitespace/newline/control-character run to one space (so a crafted
   /// question can't forge a `Facts:` header in the rendered prompt — §8.3, N-4),

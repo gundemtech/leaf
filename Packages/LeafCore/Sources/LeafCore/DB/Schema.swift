@@ -783,6 +783,30 @@ public enum Schema {
         public static let chatStatus = "chat_status"
         public static let upsertedAtMs = "upserted_at_ms"
     }
+
+    /// Phase AI Coworker P3 — append-only reverse audit of cloud escalations
+    /// performed by the headless `escalate_to_ai` MCP tool (§8 п.4 "every
+    /// escalation is audited"; canon §13.4). Written audit-first, before the
+    /// outbound LLM POST — over-record, never under-record. PK `id` AUTOINCREMENT
+    /// (append-only by convention — the writer exposes INSERT only). ADR-010
+    /// privacy shape: `question_excerpt` = the user's OWN normalized question
+    /// (own words, already bound for the cloud as the prompt — safe at rest in
+    /// the same SQLCipher file; distinct from the body-fenced open_questions
+    /// detector excerpt — a different namespace, never re-projected to egress).
+    /// `event_ids_json` = a JSON array of `events.id` REFS (not bodies).
+    /// `source_summary` = a counts+kinds string (no bodies). `model` = resolved
+    /// SummarizerModel.rawValue.
+    public enum AIEscalationAudit {
+        public static let tableName = "ai_escalation_audit"
+        public static let id = "id"
+        public static let generatedAtMs = "generated_at_ms"
+        public static let questionExcerpt = "question_excerpt"
+        public static let model = "model"
+        public static let eventIDsJSON = "event_ids_json"
+        public static let sourceSummary = "source_summary"
+
+        public static let indexGeneratedAt = "idx_ai_escalation_audit_generated_at"
+    }
 }
 
 /// Canonical `collector_id` values. The literals are public so that tests
