@@ -112,6 +112,10 @@ struct SendDirectMessageSheet: View {
                 handoffReader.reset()
             }
         }
+        // The draft reader is an app-wide singleton; a swipe/Escape dismiss bypasses
+        // discardAndDismiss. Reset on appear so a freshly-opened sheet never shows a
+        // prior sheet's stale .drafting/.error/.drafted state (review MEDIUM).
+        .onAppear { handoffReader.reset() }
     }
 
     // MARK: - T4 UpgradeChip

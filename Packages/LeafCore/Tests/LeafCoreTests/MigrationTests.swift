@@ -498,7 +498,9 @@ final class MigrationTests: XCTestCase {
                 // dev M027; Ph B trunk unification — appended after M029).
                 Schema.GoogleCalendarTracker.tableName,
                 // M031 AI Coworker P3 — ai_escalation_audit (append-only reverse audit).
-                Schema.AIEscalationAudit.tableName
+                Schema.AIEscalationAudit.tableName,
+                // M032 AI Coworker P4 — handoff_audit (append-only team-handoff reverse audit).
+                Schema.HandoffAudit.tableName
             ]
             XCTAssertEqual(tables, expected)
         }
