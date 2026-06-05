@@ -67,6 +67,9 @@ struct LeafApp: App {
   @State private var directMessageSendReader: DirectMessageSendReader
   @State private var directMessageInboxReader: DirectMessageInboxReader
   @State private var apnsRegistrationReader: APNsRegistrationReader
+  /// Track AI Coworker P4 — in-app team-handoff "Draft with AI" reader (first
+  /// in-app AI surface). Self-resolves DB + prod AI moats (CR-2 parity).
+  @State private var handoffDraftReader = HandoffDraftReader()
   /// Track 5 / S5 — Share Controls per-source toggle reader.
   @State private var shareRulesReader: ShareRulesReader
   /// Track 5 / S5 — sender-side broadcast loop reader.
@@ -615,6 +618,7 @@ struct LeafApp: App {
         .environment(inviteTokensReader)  // M027 invite-redesign
         .environment(joinRequestsReader)  // M027 invite-redesign
         .environment(directMessageSendReader)  // Track 5 / S4
+        .environment(handoffDraftReader)  // AI Coworker P4 — Draft with AI
         .environment(directMessageInboxReader)  // Track 5 / S4
         .environment(apnsRegistrationReader)  // Track 5 / S4
         .environment(shareRulesReader)  // Track 5 / S5
