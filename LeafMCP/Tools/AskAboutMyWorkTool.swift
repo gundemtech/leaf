@@ -27,11 +27,13 @@ struct AskAboutMyWorkTool: ToolExecutor {
     name: "ask_about_my_work",
     description: """
       Answers a natural-language question about YOUR OWN work as a short written \
-      recap/answer (e.g. "what did I do this week", "where did I stop", "what's \
-      blocking me"), via a privacy-preserving on-device→LLM pipeline. Use this \
-      when the user wants a written summary; for raw structured data use the \
-      leaf_query_* / get_* tools instead. NB: this makes one outbound call to \
-      Anthropic with the user's own (BYOK) API key.
+      recap/answer, via a privacy-preserving on-device→LLM pipeline. Handles \
+      recap ("what did I do this week"), resume ("where did I stop", "what's \
+      blocking me"), cross-provider links ("which PR maps to which Linear task"), \
+      and patterns/trends ("how long do my PRs take to merge", "what are my \
+      streaks", "how's this week vs last"). Use this when the user wants a written \
+      summary; for raw structured data use the leaf_query_* / get_* tools instead. \
+      NB: this makes one outbound call to Anthropic with the user's own (BYOK) API key.
       """,
     inputSchema: AnyCodable(
       [

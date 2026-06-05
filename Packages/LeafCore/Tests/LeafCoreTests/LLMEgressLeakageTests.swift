@@ -307,4 +307,115 @@ final class LLMEgressLeakageTests: XCTestCase {
       EgressFactAllowlist.derivedScalarFacts.isDisjoint(with: EgressFactAllowlist.scalarFacts),
       "no drift/dup between the raw and derived scalar sets")
   }
+
+  // MARK: - P2 cluster 3a — linked_linear_id rides self-authored events; repo fenced
+
+  // 20. The denormalized PR↔task link (linked_linear_id) ships on a self-authored
+  //     PR alongside number + self_authored_title; the `repo` slug ("owner/repo")
+  //     and the raw `title` never do. This is cluster 3a — zero producer code,
+  //     it rides the existing self-authored gh_* flow.
+  func testLinkedLinearIDShipsOnSelfAuthoredPR_repoAndTitleFenced() {
+    let ctx = policy.makeContext(events: [
+      event(
+        "gh_pr_opened",
+        [
+          "authored_by_viewer": "true",
+          "number": "42",
+          "title": "ALICE-PR-REFACTOR-AUTH",
+          "linked_linear_id": "LEAF-88",
+          "repo": "acme/secret-repo",
+        ])
+    ])
+    let r = rendered(ctx)
+    XCTAssertTrue(r.contains("linked_linear_id=LEAF-88"), "denormalized PR↔task link ships (cluster 3a)")
+    XCTAssertTrue(r.contains("number=42"), "PR number (the from-side ref) ships")
+    XCTAssertTrue(r.contains("self_authored_title=ALICE-PR-REFACTOR-AUTH"), "own title under distinct key")
+    XCTAssertFalse(r.contains("acme/secret-repo"), "repo slug (owner/repo) never reaches the LLM")
+    let outputKeys = Set(ctx.facts.flatMap { $0.fields.keys })
+    XCTAssertFalse(outputKeys.contains("repo"), "raw `repo` key never an output key")
+    XCTAssertFalse(outputKeys.contains("title"), "raw `title` key never an output key")
+  }
+
+  // 21. `repo` is fenced in bodyFields (defense-in-depth, CR-14) so the
+  //     unconditional bodies-fence test (11) backstops it.
+  func testRepoIsFenced() {
+    XCTAssertTrue(
+      EgressFactAllowlist.bodyFields.contains("repo"),
+      "repo (owner/repo slug) must be fenced — it is free text, not a dry fact")
+  }
+
+  // MARK: - P2 cluster 3b — cross_link_fact (event_links) projects structural refs only
+
+  // 22. cross_link_fact: the structural link fields ship; a planted free-text key
+  //     (repo / branch) on the same event is fenced. The `owner/repo`-never-ships
+  //     guarantee for github_pr targets is enforced upstream (the gatherer's
+  //     target_kind='linear_issue' filter) and proven in WorkFactGathererTests —
+  //     `target_ref` is a trusted-value allow-listed key here.
+  func testCrossLinkFactStructuralFieldsShip_freeTextFenced() {
+    let ctx = policy.makeContext(events: [
+      event(
+        "cross_link_fact",
+        [
+          "from_kind": "gh_pr_review_comment_authored",
+          "from_ref": "57",
+          "link_kind": "linear_id_in_text",
+          "target_kind": "linear_issue",
+          "target_ref": "LEAF-88",
+          "repo": "acme/secret-repo",  // free text — must NOT ship
+          "branch": "feature/secret",  // free text — must NOT ship
+        ])
+    ])
+    let r = rendered(ctx)
+    XCTAssertTrue(r.contains("from_kind=gh_pr_review_comment_authored"), "source kind ships")
+    XCTAssertTrue(r.contains("from_ref=57"), "from-side ref ships")
+    XCTAssertTrue(r.contains("link_kind=linear_id_in_text"), "link kind ships")
+    XCTAssertTrue(r.contains("target_ref=LEAF-88"), "Linear-issue target ref ships")
+    XCTAssertFalse(r.contains("acme/secret-repo"), "repo slug fenced on cross_link_fact")
+    XCTAssertFalse(r.contains("feature/secret"), "branch fenced on cross_link_fact")
+    let outputKeys = Set(ctx.facts.flatMap { $0.fields.keys })
+    XCTAssertTrue(
+      outputKeys.isDisjoint(with: EgressFactAllowlist.bodyFields),
+      "no fenced key projects on cross_link_fact")
+  }
+
+  // MARK: - P2 cluster 4 — trend_metrics + latency_metrics (identity-free magnitudes)
+
+  // 23. ALL trend_metrics magnitudes survive the boundary; a planted source-NAME
+  //     list is dropped (only the COUNT of active sources ever ships — CR-5).
+  func testTrendMetricsMagnitudesSurvive_noSourceNames() {
+    let trendKeys = [
+      "wow_delta_pct", "linear_completion_rate_pct",
+      "uninterrupted_window_seconds", "uninterrupted_window_sources_count",
+      "commit_streak", "issue_close_streak", "huddle_streak", "focus_session_streak",
+      "heavy_pulse_streak", "deep_work_streak_days", "deep_work_streak_seconds",
+      "active_days_in_row",
+      "linear_started_count", "linear_completed_count", "linear_canceled_count",
+      "linear_reopened_count",
+    ]
+    var payload = Dictionary(uniqueKeysWithValues: trendKeys.map { ($0, "1") })
+    payload["uninterrupted_window_sources"] = "slack,linear"  // free-text names — must NOT ship
+    let ctx = policy.makeContext(events: [event("trend_metrics", payload)])
+    let outputKeys = Set(ctx.facts.flatMap { $0.fields.keys })
+    for key in trendKeys {
+      XCTAssertTrue(outputKeys.contains(key), "trend magnitude \(key) must survive the boundary")
+    }
+    XCTAssertFalse(
+      rendered(ctx).contains("slack,linear"), "source NAMES never ship — only the count (CR-5)")
+  }
+
+  // 24. ALL latency_metrics Int-second magnitudes survive the boundary.
+  func testLatencyMetricsMagnitudesSurvive() {
+    let latencyKeys = [
+      "pr_cycle_median_sec", "pr_cycle_max_sec", "pr_cycle_sample_count",
+      "review_delay_median_sec", "review_delay_max_sec", "review_delay_sample_count",
+      "linear_completion_median_sec", "linear_completion_max_sec", "linear_completion_sample_count",
+      "huddle_session_median_sec", "huddle_session_max_sec", "huddle_session_sample_count",
+    ]
+    let payload = Dictionary(uniqueKeysWithValues: latencyKeys.map { ($0, "60") })
+    let ctx = policy.makeContext(events: [event("latency_metrics", payload)])
+    let outputKeys = Set(ctx.facts.flatMap { $0.fields.keys })
+    for key in latencyKeys {
+      XCTAssertTrue(outputKeys.contains(key), "latency magnitude \(key) must survive the boundary")
+    }
+  }
 }
