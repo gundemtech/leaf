@@ -26,9 +26,10 @@
 2. **Синхронизируй изменения автоматически.** Принято содержательное решение уровня whitepaper — **не дожидаясь просьбы**:
    - найти нужный раздел в `~/Desktop/Leaf/leaf-docs/docs/` (структура в `leaf-docs/CLAUDE.md`),
    - обновить markdown + admonition `!!! note "Изменение vX.Y — YYYY-MM-DD"` (раньше / теперь / причина),
-   - дописать в `docs/05-reference/changelog.md` запись формата
-     `- **YYYY-MM-DD HH:MM · Alex** — описание` (HH:MM обязательно;
-     детальный спек — `leaf-docs/CLAUDE.md` раздел «Правила работы с контентом»),
+   - дописать в `docs/reference/changelog.md` запись формата
+     `- **YYYY-MM-DD HH:MM · <автор>** — описание` (HH:MM обязательно; автор —
+     метка по git identity сессии, список валидных меток — `leaf-docs/CLAUDE.md`;
+     детальный спек — там же, раздел «Правила работы с контентом»),
    - `git add` + коммит `docs: ...` + `git push origin main`,
    - отчитаться: "Засинкано в leaf-docs: файлы, коммит `<hash>`".
 3. **Что синкать в whitepaper (public-safe концепты):** философия, видение, ICP, сигналы (типы/слои), архитектурный каркас, opt-in transparency, share-controls как модель, конкуренты, дифференциаторы, pricing tiers, глоссарий, won't-list, high-level changelog.

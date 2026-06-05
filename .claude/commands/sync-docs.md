@@ -12,12 +12,15 @@ description: Синхронизировать изменение из текущ
 ## Алгоритм
 
 1. **Определи тему** изменения из `$ARGUMENTS` или последнего обмена в сессии.
-2. **Найди целевой файл** в `~/Desktop/Leaf/leaf-docs/docs/`:
-   - архитектура / storage / MCP / share controls / presence → `03-architecture/`
-   - ICP / сигналы / MVP / pricing → `02-product/`
-   - философия / won't-list / видение → `01-vision/`
-   - конкуренты / дифференциатор → `04-market/`
-   - глоссарий / open tensions / changelog → `05-reference/`
+2. **Найди целевой файл** в `~/Desktop/Leaf/leaf-docs/docs/` (структура Byterover-style с 2026-05-08, полная карта — `leaf-docs/CLAUDE.md`):
+   - capture / storage / summarization / query → `memory-architecture/`
+   - share controls / E2E / audit / revocation → `team-sharing/`
+   - MCP / Native UI / Slack-бот / CLI → `surfaces/`
+   - LLM-провайдеры (on-device / BYOK / cloud) → `llm-providers/`
+   - коннекторы: куда отдаём память → `ai-tool-connectors/`; откуда берём данные → `activity-connectors/`
+   - threat model / encryption / won't-list → `privacy-security/`
+   - onboarding / tiers / workflows → `getting-started/`
+   - глоссарий / decisions / open questions / changelog → `reference/`
 3. **Прочитай целевой файл**, пойми как лучше встроить изменение.
 4. **Обнови markdown**:
    - основной текст — как будто это теперь канон,
@@ -27,14 +30,14 @@ description: Синхронизировать изменение из текущ
          Раньше: <кратко>. Теперь: <кратко>. Причина: <1 строка>.
      ```
    - версию бери из `leaf-docs/CLAUDE.md` (текущая + 1, если ещё не бампали в этой волне правок).
-5. **Допиши `docs/05-reference/changelog.md`** — формат:
-   `- **YYYY-MM-DD HH:MM · Alex** — <тема>: <что поменялось>`.
+5. **Допиши `docs/reference/changelog.md`** — формат:
+   `- **YYYY-MM-DD HH:MM · <автор>** — <тема>: <что поменялось>`.
    - HH:MM обязательно (changelog-бот парсит строго `\d{4}-\d{2}-\d{2} \d{2}:\d{2}`).
    - Текущее время: `date +'%Y-%m-%d %H:%M'`.
-   - Автор — `Alex` (твоя Mac-сессия). Полные правила — `leaf-docs/CLAUDE.md`.
+   - Автор — метка по git identity сессии (список валидных меток — `leaf-docs/CLAUDE.md`; имена в этом публичном репо не пишем — leak-guard). Длинные phase-записи (≥500 симв.) — `??? note` admonition. Полные правила (+ bump vs patch, + site-changelog для правок сайта) — `leaf-docs/CLAUDE.md`.
 5.5. **Проверь что запись прошла регэкс** перед коммитом:
    ```bash
-   tail -1 docs/05-reference/changelog.md \
+   tail -1 docs/reference/changelog.md \
      | grep -E '^- \*\*[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2} · ' \
      || { echo "⚠️ формат сломан, не пушу"; exit 1; }
    ```

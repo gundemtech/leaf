@@ -30,7 +30,8 @@
   4. `current-state.md` обновить (≤50 строк, текущий срез — не история).
   5. `/audit-brain` (размеры `.claude/shared/*.md` ≤200; current-state ≤50; CLAUDE.md ≤100).
   6. Whitepaper sync если решение whitepaper-уровня (process/implementation moat — НЕ синкаем).
-  7. Запись «фаза closed» в прогресс-лог трека.
+  7. **Changelog-запись в `leaf-docs/docs/reference/changelog.md`** (формат/bump-vs-patch — `leaf-docs/CLAUDE.md`; автор = git identity сессии) + push. Кормит публичный журнал через changelog-бота (TG-draft → approve). Скип только для чисто внутреннего (moat, hygiene-tooling) — осознанно, не по умолчанию.
+  8. Запись «фаза closed» в прогресс-лог трека.
 
 ## Git — whitepaper (`gundemtech/leaf-docs`, ПУБЛИЧНЫЙ)
 - Клон: `~/Desktop/Leaf/leaf-docs` (рядом с `~/Desktop/Leaf/leaf`)
