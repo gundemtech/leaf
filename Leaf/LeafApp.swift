@@ -679,6 +679,11 @@ struct LeafApp: App {
           joinRequestsReader.wireRosterRefresh { [weak wsReader] in
             wsReader?.refresh()
           }
+          // Resume any invite approved while the invitee wasn't on the open
+          // waiting card (dismissed / app quit before approve) — otherwise the
+          // approved+sealed request is stranded forever. Runs AFTER
+          // wireRosterRefresh so materialisation's sidebar refresh hook is set.
+          Task { await joinRequestsReader.resumePendingMaterialisations() }
         }
                 .task {
                     // Track-10 T6 (Phase IV.B) — inject ActiveWorkspaceStore

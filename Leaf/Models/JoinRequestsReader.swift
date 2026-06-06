@@ -94,6 +94,10 @@ final class JoinRequestsReader {
   private let keystoreRoot: URL
   private let inviteKDF: any InviteKDF
   private let inviteBlobCodec: any InviteBlobCodec
+  /// Persists the invitee's own pending request IDs so an approved invite can be
+  /// materialised after the waiting card dies (dismiss / relaunch). See
+  /// `resumePendingMaterialisations`.
+  private let pendingStore: PendingJoinRequestStore
   private let logger = Logger(subsystem: "tech.gundem.leaf.app", category: "join-requests")
 
   init(
@@ -104,7 +108,8 @@ final class JoinRequestsReader {
     databaseEncryption: EncryptionOptions? = JoinRequestsReader.defaultEncryption(),
     keystoreRoot: URL = TeamKeystore.defaultRoot(),
     inviteKDF: any InviteKDF = JoinRequestsReader.defaultInviteKDF(),
-    inviteBlobCodec: any InviteBlobCodec = JoinRequestsReader.defaultInviteBlobCodec()
+    inviteBlobCodec: any InviteBlobCodec = JoinRequestsReader.defaultInviteBlobCodec(),
+    pendingStore: PendingJoinRequestStore = PendingJoinRequestStore()
   ) {
     self.supabase = supabase
     self.activeWorkspaceStore = activeWorkspaceStore
@@ -114,6 +119,7 @@ final class JoinRequestsReader {
     self.keystoreRoot = keystoreRoot
     self.inviteKDF = inviteKDF
     self.inviteBlobCodec = inviteBlobCodec
+    self.pendingStore = pendingStore
   }
 
   // MARK: - Admin queue API
@@ -253,6 +259,9 @@ final class JoinRequestsReader {
         let row = try await svc.submit(
           workspaceID: workspaceID, code: code, displayName: displayName
         )
+        // Persist so an approval that lands after the card is dismissed / the
+        // app relaunches can still be materialised (resumePendingMaterialisations).
+        self.pendingStore.add(row.requestID)
         self.inviteeState = .pending(row)
       } catch {
         self.logger.error("submit: \(String(describing: error), privacy: .public)")
@@ -299,6 +308,7 @@ final class JoinRequestsReader {
         // Row vanished — treat as cancelled (most likely path: invitee
         // cancelled from another device, OR admin hard-deleted token
         // and request cascades).
+        pendingStore.remove(requestID)
         inviteeState = .cancelled
         return
       }
@@ -312,9 +322,9 @@ final class JoinRequestsReader {
           inviteeState = .approved(row)
           await materialiseApproved(row: row, service: svc)
         }
-      case .declined: inviteeState = .declined
-      case .cancelled: inviteeState = .cancelled
-      case .expired: inviteeState = .expired
+      case .declined: pendingStore.remove(row.requestID); inviteeState = .declined
+      case .cancelled: pendingStore.remove(row.requestID); inviteeState = .cancelled
+      case .expired: pendingStore.remove(row.requestID); inviteeState = .expired
       }
     } catch {
       logger.error("pollOwn: \(String(describing: error), privacy: .public)")
@@ -331,14 +341,64 @@ final class JoinRequestsReader {
   private func materialiseApproved(row: JoinRequest, service svc: JoinRequestService) async {
     do {
       let accepted = try await svc.acceptApproved(request: row)
+      self.pendingStore.remove(row.requestID)
       self.inviteeState = .joined(
         workspaceID: accepted.orgID, workspaceName: accepted.orgName)
+      // Gap B — surface the freshly-materialised workspace in the sidebar
+      // WITHOUT requiring the user to tap «Open workspace» (which was the ONLY
+      // refresh trigger). Reuses the roster-refresh hook → WorkspaceReader.refresh().
+      self.onRosterChanged?()
     } catch {
       self.logger.error(
         "materialiseApproved: \(String(describing: error), privacy: .public)")
       // Allow a future retry — drop the dedup mark.
       self.materialisationInFlightRequestIDs.remove(row.requestID)
       self.inviteeState = .error(message: friendlyMessage(for: error))
+    }
+  }
+
+  /// Resume any approved-but-unmaterialised invites after the waiting card died
+  /// (dismissed, or the app was quit/relaunched). Called once on launch by the
+  /// composition root. For each persisted pending request, re-fetch its server
+  /// status and, if `.approved`, run the SAME materialisation pipeline the live
+  /// poll uses; drop terminal/vanished IDs. Without this, an invite approved
+  /// while the invitee wasn't sitting on the open card is stranded forever — the
+  /// approved+sealed `join_requests` row has no local mirror and nothing
+  /// re-fetches it (the live poll only runs inside the open `JoinRequestWaitingCard`).
+  func resumePendingMaterialisations() async {
+    let pending = pendingStore.all()
+    guard !pending.isEmpty else { return }
+    let svc: JoinRequestService
+    do {
+      svc = try ensureService()
+    } catch {
+      logger.error(
+        "resumePending: ensureService failed: \(String(describing: error), privacy: .public)")
+      return
+    }
+    for requestID in pending {
+      do {
+        guard let row = try await svc.fetchOwn(requestID: requestID) else {
+          // Row gone (cancelled elsewhere / token hard-deleted) — stop tracking.
+          pendingStore.remove(requestID)
+          continue
+        }
+        switch row.status {
+        case .approved:
+          // Dedup with the live card poll in case both run this session.
+          if materialisationInFlightRequestIDs.insert(row.requestID).inserted {
+            await materialiseApproved(row: row, service: svc)
+          }
+        case .declined, .cancelled, .expired:
+          pendingStore.remove(requestID)
+        case .pending:
+          break  // still waiting on the admin — keep tracking, retry next launch
+        }
+      } catch {
+        // Transient (network / auth) — keep the ID and retry on next launch.
+        logger.error(
+          "resumePending \(requestID, privacy: .public): \(String(describing: error), privacy: .public)")
+      }
     }
   }
 
