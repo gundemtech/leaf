@@ -10,7 +10,7 @@
 #     bash scripts/release.sh <version> --clean
 #     bash scripts/release.sh -h | --help
 #
-# Steps (in order): archive export verify dmg notary staple zip appcast upload
+# Steps (in order): archive export verify dmg notary staple zip appcast upload site
 
 set -euo pipefail
 
@@ -25,7 +25,10 @@ usage() {
     cat <<'EOF'
 Usage: release.sh <version> [--redo-from <step> | --clean]
 
-Steps in order: archive export verify dmg notary staple zip appcast upload
+Steps in order: archive export verify dmg notary staple zip appcast upload site
+
+site = редеплой leaf-web (sibling checkout или LEAF_WEB_DIR) — сайт берёт версию
+из appcast при сборке, шаг держит leaf.gundem.tech всегда на актуальной версии.
 
 Default: re-run skips completed steps (stamp-aware under build/releases/.stamps/).
 Flags:
@@ -75,7 +78,7 @@ ZIP="$RELEASES/Leaf-$VERSION.zip"
 SIGN_ID="${LEAF_SIGN_ID:-Developer ID Application: <YOUR NAME> (<TEAM_ID>)}"  # set LEAF_SIGN_ID in your env/Local config (kept out of the public repo)
 NOTARY_PROFILE="leaf-notary"
 
-STEPS=(archive export verify dmg notary staple zip appcast upload)
+STEPS=(archive export verify dmg notary staple zip appcast upload site)
 
 # --- pre-flight -----------------------------------------------------------
 require_tools() {
@@ -299,8 +302,11 @@ step_zip() {
     info "ditto → $ZIP (Sparkle update bundle)"
     rm -f "$ZIP"
     ditto -c -k --keepParent "$APP" "$ZIP"
+    # SHA-256 рядом с .dmg — публикуется на R2, сайт ссылается из dashboard
+    # checksums. Считаем ПОСЛЕ staple (stapler меняет байты .dmg).
+    (cd "$RELEASES" && shasum -a 256 "$(basename "$DMG")" > "$(basename "$DMG").sha256")
     mark_done zip
-    ok "zip done ($(du -h "$ZIP" | cut -f1))"
+    ok "zip done ($(du -h "$ZIP" | cut -f1)) + dmg sha256"
 }
 
 step_appcast() {
@@ -339,6 +345,41 @@ step_upload() {
     ok "upload done"
 }
 
+step_site() {
+    # Сайт берёт версию из appcast при сборке (leaf-web src/lib/version.ts) —
+    # редеплой сайта сразу после upload держит версию на leaf.gundem.tech
+    # всегда актуальной. Без leaf-web рядом — warn, релиз не блокируем.
+    is_done site && { info "skip site (stamp exists)"; return 0; }
+    local web_dir="${LEAF_WEB_DIR:-$REPO_ROOT/../leaf-web}"
+    if [[ ! -f "$web_dir/scripts/deploy.sh" ]]; then
+        warn "leaf-web checkout не найден ($web_dir) — сайт остался со старой версией."
+        warn "Клонируй gundemtech/leaf-web рядом (или LEAF_WEB_DIR=...) и запусти scripts/deploy.sh."
+        return 0
+    fi
+    info "site: жду пока CDN отдаст appcast с $VERSION (purge propagation)"
+    local i
+    for i in {1..12}; do
+        curl -fsS https://updates.gundem.tech/appcast.xml | grep -q ">$VERSION<" && break
+        if [[ $i -eq 12 ]]; then
+            err "CDN не отдаёт appcast $VERSION спустя 120s — сайт задеплоит старую версию. Проверь purge."
+            exit 1
+        fi
+        sleep 10
+    done
+    info "site: деплой leaf-web (билд подтянет $VERSION из appcast)"
+    bash "$web_dir/scripts/deploy.sh"
+    # Независимая пост-проверка (не доверяем exit code деплоя): живой сайт
+    # обязан показывать именно $VERSION, иначе step не stamp'ится и re-run повторит.
+    local live_ver
+    live_ver=$(curl -fsS https://leaf.gundem.tech/ | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?' | head -1 || true)
+    if [[ "$live_ver" != "v$VERSION" ]]; then
+        err "site verify failed: live=$live_ver, ожидалось v$VERSION — step не закрыт, re-run после фикса"
+        exit 1
+    fi
+    mark_done site
+    ok "site deployed — leaf.gundem.tech показывает v$VERSION"
+}
+
 # --- main -----------------------------------------------------------------
 require_tools
 assert_signing_identity
@@ -354,6 +395,7 @@ step_staple
 step_zip
 step_appcast
 step_upload
+step_site
 
 ok "release $VERSION done. Artifacts: $RELEASES/"
 echo "  Leaf-$VERSION.dmg  ($(du -h "$DMG" | cut -f1))"

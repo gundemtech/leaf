@@ -14,6 +14,7 @@ Usage: upload-release.sh [RELEASES_DIR]
 Загружает содержимое RELEASES_DIR/ в R2 bucket leaf-updates:
   RELEASES_DIR/appcast.xml      → s3://$R2_BUCKET/appcast.xml         (application/xml, max-age=300)
   RELEASES_DIR/<artifact>       → s3://$R2_BUCKET/releases/<artifact> (octet-stream)
+  RELEASES_DIR/*.sha256         → s3://$R2_BUCKET/releases/<name>     (text/plain)
 
 После загрузки — purge CF edge cache на appcast.xml.
 
@@ -65,6 +66,19 @@ aws s3 cp "$RELEASES_DIR/" "s3://$R2_BUCKET/releases/" \
     --include "*.zip" \
     --include "*.delta" \
     --content-type "application/octet-stream"
+
+echo "→ Uploading checksum files (*.sha256) to s3://$R2_BUCKET/releases/"
+# Отдельный блок: text/plain чтобы checksum открывался в браузере (сайт ссылается
+# на него из dashboard → Checksums & signatures).
+AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" \
+AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" \
+aws s3 cp "$RELEASES_DIR/" "s3://$R2_BUCKET/releases/" \
+    --recursive \
+    --endpoint-url "$R2_ENDPOINT" \
+    --region auto \
+    --exclude "*" \
+    --include "*.sha256" \
+    --content-type "text/plain"
 
 echo "→ Uploading appcast.xml to s3://$R2_BUCKET/appcast.xml"
 AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" \
