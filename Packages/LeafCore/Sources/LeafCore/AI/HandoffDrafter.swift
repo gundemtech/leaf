@@ -98,7 +98,7 @@ public struct HandoffDrafter: Sendable {
         periodStartMs: Int64(period.start.timeIntervalSince1970 * 1000),
         periodEndMs: Int64(period.end.timeIntervalSince1970 * 1000),
         model: model.rawValue,
-        path: path == .byok ? "byok" : "ai_included",
+        path: path.auditLabel,
         sourceSummary: Self.sourceSummary(context),
         factCount: context.facts.count,
         escalated: false,

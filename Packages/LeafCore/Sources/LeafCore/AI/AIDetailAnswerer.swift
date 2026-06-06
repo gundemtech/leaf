@@ -103,7 +103,7 @@ public struct AIDetailAnswerer: Sendable {
       droppedCount: dropped,
       question: question.text,
       model: model.rawValue,
-      path: path == .byok ? "byok" : "ai_included",
+      path: path.auditLabel,
       sourceSummary: Self.sourceSummary(escalated: escalated, dropped: dropped))
     do {
       try await audit.record(entry)

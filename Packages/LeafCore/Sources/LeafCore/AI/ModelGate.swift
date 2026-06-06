@@ -7,6 +7,18 @@ import Foundation
 public enum InferencePath: Sendable, Equatable {
   case byok        // user's own key — full model set
   case aiIncluded  // inference provided by us — no Opus
+  case attested    // P5 (v1.5, opt-in/experimental) — verifiable GPU-TEE, open-weight only
+
+  /// Stable audit/provenance label. Exhaustive on purpose: a new path must pick a
+  /// label here (replaces the `== .byok ? "byok" : "ai_included"` ternaries that
+  /// silently mislabelled any third path as `ai_included`).
+  public var auditLabel: String {
+    switch self {
+    case .byok: return "byok"
+    case .aiIncluded: return "ai_included"
+    case .attested: return "attested"
+    }
+  }
 }
 
 /// Selects the model for a request. The substrate impl is Haiku-only; the real
@@ -22,6 +34,9 @@ public protocol ModelGate: Sendable {
 public struct DefaultModelGate: ModelGate {
   public init() {}
   public func model(path: InferencePath, preferred: SummarizerModel?) -> SummarizerModel {
+    // The verifiable path serves only an open-weight model; Claude is not
+    // attestable, so any preference is ignored here.
+    if path == .attested { return .attestedOpenWeight }
     let m = preferred ?? .default
     return (path == .aiIncluded && m == .opus) ? .sonnet : m
   }

@@ -8,12 +8,19 @@ public enum SummarizerModel: String, Sendable, CaseIterable {
   case haiku
   case sonnet
   case opus
+  /// P5 (v1.5) — the open-weight model served on the verifiable attested path.
+  /// Claude is not attestable, so the verifiable tier runs open-weight instead.
+  case attestedOpenWeight
 
   public var apiModelID: String {
     switch self {
     case .haiku: return "claude-haiku-4-5"
     case .sonnet: return "claude-sonnet-4-6"
     case .opus: return "claude-opus-4-8"
+    // Placeholder — NEVER sent: the attested path posts `rawValue`, resolved to the
+    // served model server-side (mirrors RelayProxySummarizer). This arm exists only
+    // for switch exhaustiveness and is unreachable from the BYOK-direct path.
+    case .attestedOpenWeight: return "open-weight"
     }
   }
 
@@ -57,6 +64,9 @@ public enum SummarizerError: Error, Equatable, Sendable {
   case decode(String)
   case contextEmpty
   case budgetExhausted(retryAfter: Int?)  // 402 — hard stop (team overdraft disabled)
+  /// P5 — the verifiable (attested) path could not prove the inference enclave, so
+  /// the prompt was NOT sent (fail-closed). Opaque reason; never the report bytes.
+  case attestationFailed(String)
 }
 
 /// Produces a natural-language summary over an already-egress-filtered context.
