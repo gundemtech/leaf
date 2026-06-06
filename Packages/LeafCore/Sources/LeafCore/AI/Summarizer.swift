@@ -8,12 +8,19 @@ public enum SummarizerModel: String, Sendable, CaseIterable {
   case haiku
   case sonnet
   case opus
+  /// P5 (v1.5) — the open-weight model served on the verifiable attested path.
+  /// Claude is not attestable, so the verifiable tier runs open-weight instead.
+  case attestedOpenWeight
 
   public var apiModelID: String {
     switch self {
     case .haiku: return "claude-haiku-4-5"
     case .sonnet: return "claude-sonnet-4-6"
     case .opus: return "claude-opus-4-8"
+    // Placeholder — NEVER sent: the attested path posts `rawValue`, resolved to the
+    // served model server-side (mirrors RelayProxySummarizer). This arm exists only
+    // for switch exhaustiveness and is unreachable from the BYOK-direct path.
+    case .attestedOpenWeight: return "open-weight"
     }
   }
 

@@ -9,9 +9,20 @@ final class SummarizerSubstrateTests: XCTestCase {
     XCTAssertEqual(SummarizerModel.opus.apiModelID, "claude-opus-4-8")
   }
 
+  // P5 — open-weight model for the attested path. apiModelID is a placeholder:
+  // it is NEVER sent on the attested path (that path sends rawValue, resolved to
+  // the served model server-side — mirrors RelayProxySummarizer); the arm exists
+  // only for switch exhaustiveness and is unreachable from the BYOK-direct path.
+  func testAttestedOpenWeightModel() {
+    XCTAssertEqual(SummarizerModel.attestedOpenWeight.rawValue, "attestedOpenWeight")
+    XCTAssertEqual(SummarizerModel.attestedOpenWeight.apiModelID, "open-weight")
+    XCTAssertEqual(SummarizerModel(rawValue: "attestedOpenWeight"), .attestedOpenWeight)
+  }
+
   func testDefaultModelIsHaiku() {
     XCTAssertEqual(SummarizerModel.default, .haiku)
-    XCTAssertEqual(SummarizerModel.allCases.count, 3)
+    XCTAssertEqual(SummarizerModel.allCases.count, 4)
+    XCTAssertTrue(SummarizerModel.allCases.contains(.attestedOpenWeight))
   }
 
   func testPublicSubstrateThrowsMissingAPIKey() async {
