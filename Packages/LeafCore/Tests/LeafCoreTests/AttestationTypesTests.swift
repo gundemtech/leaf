@@ -30,8 +30,8 @@ final class AttestationTypesTests: XCTestCase {
   }
 
   func testAttestationErrorEquatable() {
-    XCTAssertEqual(AttestationError.measurementMismatch, .measurementMismatch)
-    XCTAssertNotEqual(AttestationError.signatureInvalid, .spkiBindingFailed)
+    XCTAssertEqual(AttestationError.malformedDocument, .malformedDocument)
+    XCTAssertNotEqual(AttestationError.malformedDocument, .unavailable)
     XCTAssertEqual(AttestationError.fetchFailed("transport"), .fetchFailed("transport"))
     XCTAssertNotEqual(AttestationError.fetchFailed("a"), .fetchFailed("b"))
   }

@@ -76,13 +76,14 @@ public struct AttestationVerdict: Sendable, Equatable {
 
 /// Typed errors for the attestation path (per-integration error type, cf.
 /// `SummarizerError`). Messages are opaque — never interpolate report bytes.
+///
+/// Only INFRA failures are thrown (no verdict can be formed). Per-check outcomes
+/// (signature/measurement/freshness/SPKI) are reported as booleans on
+/// `AttestationVerdict`, not thrown — so the summarizer can over-record the
+/// unverified verdict before refusing.
 public enum AttestationError: Error, Equatable, Sendable {
   case fetchFailed(String)
   case malformedDocument
-  case signatureInvalid
-  case measurementMismatch
-  case staleOrMissingNonce
-  case spkiBindingFailed
   case unavailable
 }
 
