@@ -266,6 +266,24 @@ final class WorkspaceReader {
           return
             "Couldn't sync workspace to server: \(userFacingMessage(for: error)). Try again."
         }
+
+        // Creator must ALSO be a `workspace_members` row — direct_messages /
+        // handoff RLS gates the SENDER on is_workspace_member(). insertWorkspace
+        // only writes the `workspaces` row; without this the admin 403s on their
+        // first DM/handoff in the freshly-created workspace. Mirror the joiner's
+        // self-insert (RLS allows self by pubkey); idempotent (409 = already a
+        // member). Best-effort: a transient failure leaves the workspace fully
+        // usable — invites key off `created_by_pubkey` (is_workspace_admin), not
+        // membership — and the row syncs on a later attempt / server backfill, so
+        // we do NOT roll back the create here.
+        do {
+          try await supabase.ensureWorkspaceMember(
+            workspaceID: workspace.id, pubkeyHex: pubkeyHex, displayName: trimmed)
+        } catch {
+          logger.warning(
+            "creator workspace_members insert failed (DM may 403 until synced): \(String(describing: error), privacy: .public)"
+          )
+        }
       }
 
       activeStore.setActive(workspace.id)

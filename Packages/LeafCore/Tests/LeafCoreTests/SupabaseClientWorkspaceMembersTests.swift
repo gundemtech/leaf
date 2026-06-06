@@ -81,4 +81,60 @@ final class SupabaseClientWorkspaceMembersTests: XCTestCase {
         XCTAssertEqual(json["pubkey"] as? String, inviteeHex)
         XCTAssertEqual(json["display_name"] as? String, "Bob")
     }
+
+    // MARK: - ensureWorkspaceMember (idempotent creator self-insert)
+
+    /// Drives ensureWorkspaceMember against a workspace_members POST that
+    /// returns `memberStatus`. Returns the thrown error (nil on success).
+    private func runEnsure(memberStatus: Int) async -> Error? {
+        let hex = String(repeating: "aa", count: 32)
+        MockURLProtocol.handler = { request, _ in
+            switch request.url?.path ?? "" {
+            case "/auth/v1/signup":
+                return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    #"{ "access_token": "t1", "refresh_token": "r1", "user": { "id": "00000000-0000-0000-0000-0000000000c1" }, "expires_at": 9999999999 }"#.data(using: .utf8)!)
+            case "/functions/v1/register_pubkey":
+                return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    #"{ "ok": true }"#.data(using: .utf8)!)
+            case "/auth/v1/token":
+                let jwt = self.makeJWT(pubkey: hex)
+                return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    "{ \"access_token\": \"\(jwt)\", \"refresh_token\": \"r2\", \"user\": { \"id\": \"00000000-0000-0000-0000-0000000000c1\" }, \"expires_at\": 9999999999 }".data(using: .utf8)!)
+            case "/rest/v1/workspace_members":
+                return (HTTPURLResponse(url: request.url!, statusCode: memberStatus, httpVersion: nil, headerFields: nil)!,
+                    Data())
+            default:
+                XCTFail("unexpected path \(request.url?.path ?? "")")
+                return (HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!, Data())
+            }
+        }
+        let client = SupabaseClient(
+            baseURL: baseURL, anonKey: "k", urlSession: makeSession(),
+            identity: { try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: Data(repeating: 0xAA, count: 32)) }
+        )
+        do {
+            try await client.ensureWorkspaceMember(
+                workspaceID: "00000000-0000-0000-0000-000000000ccc", pubkeyHex: hex, displayName: "Bob")
+            return nil
+        } catch {
+            return error
+        }
+    }
+
+    func testEnsureWorkspaceMember_201_succeeds() async throws {
+        let err = await runEnsure(memberStatus: 201)
+        XCTAssertNil(err, "201 Created → success")
+    }
+
+    /// 409 = the (workspace_id, pubkey) member already exists (backfill / re-create /
+    /// re-tick). An idempotent ensure must treat it as success, NOT throw.
+    func testEnsureWorkspaceMember_409Conflict_treatedAsSuccess() async throws {
+        let err = await runEnsure(memberStatus: 409)
+        XCTAssertNil(err, "409 conflict must be swallowed as idempotent success")
+    }
+
+    func testEnsureWorkspaceMember_500_throws() async throws {
+        let err = await runEnsure(memberStatus: 500)
+        XCTAssertNotNil(err, "5xx is a real failure and must propagate")
+    }
 }
