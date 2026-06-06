@@ -69,6 +69,8 @@ public struct AIWorkAnswerer: Sendable {
       return "Rate limited by the model provider. Try again shortly."
     case .contextEmpty:
       return "I don't have enough recorded work in that period to answer."
+    case .attestationFailed:
+      return "Couldn't verify the inference enclave, so nothing was sent. Try again."
     case .badRequest, .serverError, .network, .decode:
       return "Couldn't reach the model right now. Try again."
     }

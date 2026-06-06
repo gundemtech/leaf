@@ -64,6 +64,9 @@ public enum SummarizerError: Error, Equatable, Sendable {
   case decode(String)
   case contextEmpty
   case budgetExhausted(retryAfter: Int?)  // 402 — hard stop (team overdraft disabled)
+  /// P5 — the verifiable (attested) path could not prove the inference enclave, so
+  /// the prompt was NOT sent (fail-closed). Opaque reason; never the report bytes.
+  case attestationFailed(String)
 }
 
 /// Produces a natural-language summary over an already-egress-filtered context.

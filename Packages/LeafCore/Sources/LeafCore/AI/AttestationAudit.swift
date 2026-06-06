@@ -13,6 +13,14 @@ public protocol AttestationAuditSink: Sendable {
   func record(_ entry: AttestationAuditEntry) async throws
 }
 
+/// Substrate sink — records nothing (the concrete DB sink is deferred to the
+/// production-wiring phase). Safe because the attested path is not runtime-wired in
+/// P5; the production wiring MUST supply a persisting sink before the path goes live.
+public struct NoOpAttestationAuditSink: AttestationAuditSink {
+  public init() {}
+  public func record(_ entry: AttestationAuditEntry) async throws {}
+}
+
 /// One attestation audit row. STRUCTURALLY content-free + measurement-free — there
 /// is no field that can hold prompt text, event bodies, or the raw expected
 /// measurement (only the boolean `measurementMatched`).
