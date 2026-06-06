@@ -647,6 +647,46 @@ extension SupabaseClient {
       throw SupabaseError.fromStatus(http.statusCode, body: data)
     }
   }
+
+  /// Idempotent variant of `insertWorkspaceMember` — POSTs the row and treats a
+  /// 409 (PK conflict on `(workspace_id, pubkey)`, i.e. the member already
+  /// exists) as success. Used by the workspace-CREATE path to materialise the
+  /// creator's OWN membership row: `direct_messages` / handoff RLS gates the
+  /// sender on `is_workspace_member(workspace_id, jwt.pubkey)`, but
+  /// `insertWorkspace` only writes the `workspaces` row — so without this the
+  /// admin 403s on their first DM/handoff in a freshly-created workspace. RLS
+  /// permits the self-insert (JWT pubkey == the row's pubkey). 409-tolerant so
+  /// it's safe on a re-create or when a prior sync / server backfill already
+  /// added the row.
+  public func ensureWorkspaceMember(
+    workspaceID: String,
+    pubkeyHex: String,
+    displayName: String
+  ) async throws {
+    let session = try await ensureAuthenticated()
+    let url = SupabaseEndpoint.insertWorkspaceMember(baseURL: baseURL)
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    for (k, v) in SupabaseEndpoint.postgrestInsertHeaders(
+      anonKey: anonKey, accessToken: session.accessToken
+    ) {
+      request.setValue(v, forHTTPHeaderField: k)
+    }
+    let body: [String: Any] = [
+      "workspace_id": workspaceID,
+      "pubkey": pubkeyHex,
+      "display_name": displayName,
+    ]
+    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+    let (data, http) = try await performHTTP(
+      request, retryable: false, refreshable: true, label: "ensureWorkspaceMember")
+    // 201 Created, or 409 conflict (already a member) — both are success for an
+    // idempotent ensure. Anything else is a real error.
+    guard http.statusCode == 201 || http.statusCode == 409 else {
+      throw SupabaseError.fromStatus(http.statusCode, body: data)
+    }
+  }
 }
 
 // MARK: - SupabaseAuthSession JWT claim extraction
