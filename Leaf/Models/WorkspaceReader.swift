@@ -232,7 +232,13 @@ final class WorkspaceReader {
       }
 
       let svc = WorkspaceService(database: db, keystoreRoot: keystoreRoot)
-      let workspace = try svc.createWorkspace(displayName: trimmed)
+      // Creator's personal display name (distinct from the workspace name) so
+      // joiners see a person, not the team name, in the roster / DM sender.
+      let creatorName = NSFullUserName().trimmingCharacters(in: .whitespacesAndNewlines)
+      let workspace = try svc.createWorkspace(
+        displayName: trimmed,
+        creatorDisplayName: creatorName.isEmpty ? trimmed : creatorName
+      )
 
       // Item #3 — server-side workspaces row. Required so
       // `is_workspace_admin(workspace_id, jwt_pubkey)` returns true

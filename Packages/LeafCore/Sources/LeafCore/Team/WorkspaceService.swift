@@ -47,9 +47,19 @@ public struct WorkspaceService: Sendable {
     /// - `.invalidPayload` if `displayName` empty after trim
     /// - `.keyFileUnavailable` on keystore write failure
     /// - Propagates any `Database` error
-    public func createWorkspace(displayName: String) throws -> Workspace {
+    public func createWorkspace(displayName: String, creatorDisplayName: String? = nil) throws -> Workspace {
         let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw LeafError.invalidPayload }
+        // Creator's PERSONAL display name — distinct from the workspace name.
+        // Without this the creator's TeamMember.displayName was the workspace
+        // name, so on a joiner's device the admin showed up labelled as the
+        // team (e.g. "test-2") instead of a person. Legacy/test callers that
+        // omit it fall back to the workspace name (old behaviour); production
+        // passes NSFullUserName().
+        let creatorName: String = {
+            let t = (creatorDisplayName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            return t.isEmpty ? trimmed : t
+        }()
 
         let selfMemberID = randomUUID()
         let workspaceID = randomUUID()
@@ -75,7 +85,7 @@ public struct WorkspaceService: Sendable {
             workspaceID: workspaceID,
             role: .admin,
             pubkeyHex: pubkeyHex,
-            displayName: trimmed,
+            displayName: creatorName,
             addedAt: nowDate,
             removedAt: nil
         )

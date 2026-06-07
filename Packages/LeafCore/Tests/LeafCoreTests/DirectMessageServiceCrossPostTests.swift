@@ -197,12 +197,14 @@ final class DirectMessageServiceCrossPostTests: XCTestCase {
 
     private func makeService(supabase: SupabaseClient) -> DirectMessageService {
         let mid = messageID
+        let selfPub = selfPubkey
         return DirectMessageService(
             database: db,
             supabase: supabase,
             codec: TestCrossPostCodec(),
             keystoreRoot: tempDir.appendingPathComponent("keystore"),
-            generateMessageID: { mid }
+            generateMessageID: { mid },
+            selfPubkeyHex: { selfPub }
         )
     }
 

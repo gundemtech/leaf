@@ -71,6 +71,11 @@ public actor TeamEventBroadcastService {
     private let now: @Sendable () -> Date
     private let batchLimit: Int
     private let logger: Logger
+    /// Resolves THIS device's identity pubkey hex (lowercased). See
+    /// `DirectMessageService.selfPubkeyHex` — `members.first` is the workspace
+    /// creator on a joiner's device, so a joiner's broadcasts would be signed
+    /// with the admin's pubkey and silently dropped by the recipient C2 gate.
+    private let selfPubkeyHex: @Sendable () throws -> String
 
     public init(
         database: LeafCore.Database,
@@ -81,7 +86,8 @@ public actor TeamEventBroadcastService {
         denyList: DefaultDenyList = DefaultDenyList(),
         now: @escaping @Sendable () -> Date = { Date() },
         batchLimit: Int = defaultBatchLimit,
-        logger: Logger = Logger(subsystem: "tech.gundem.leaf.core", category: "team-event-broadcast")
+        logger: Logger = Logger(subsystem: "tech.gundem.leaf.core", category: "team-event-broadcast"),
+        selfPubkeyHex: (@Sendable () throws -> String)? = nil
     ) {
         self.database = database
         self.supabase = supabase
@@ -92,6 +98,12 @@ public actor TeamEventBroadcastService {
         self.now = now
         self.batchLimit = batchLimit
         self.logger = logger
+        let root = keystoreRoot
+        self.selfPubkeyHex = selfPubkeyHex ?? {
+            let priv = try IdentityService.ensureLocalIdentity(at: root)
+            return priv.publicKey.rawRepresentation
+                .map { String(format: "%02x", $0) }.joined()
+        }
     }
 
     /// One tick — read since cursor, filter, encrypt, POST batch. Returns
@@ -108,7 +120,11 @@ public actor TeamEventBroadcastService {
             throw LeafError.databaseUnavailable
         }
         let members = try database.readTeamMembers(workspaceID: workspace.id, includeRemoved: false)
-        guard let selfMember = members.first else { throw LeafError.databaseUnavailable }
+        // Self BY IDENTITY, not `members.first` (= creator on a joiner device).
+        let selfPub = try selfPubkeyHex().lowercased()
+        guard let selfMember = members.first(where: { $0.pubkeyHex.lowercased() == selfPub }) else {
+            throw LeafError.databaseUnavailable
+        }
         guard let activeKey = try database.readActiveTeamKey(workspaceID: workspace.id) else {
             throw LeafError.databaseUnavailable
         }
