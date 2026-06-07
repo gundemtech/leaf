@@ -430,6 +430,59 @@ final class DirectMessageServiceTests: XCTestCase {
         )
         XCTAssertEqual(row?.senderMemberID, selfMemberID)
     }
+
+    func testSend_MalformedActiveTeamKeyUUID_ThrowsInvalidPayload() async throws {
+        // H1 (security audit): a malformed active team-key UUID must hard-fail, not
+        // silently degrade to 16 zero bytes used as the crypto keyID.
+        let wsBad = "44444444-4444-4444-4444-444444444444"
+        let badKeyID = "not-a-valid-uuid"
+        let badMemberID = "55555555-5555-5555-5555-555555555555"
+        let badSelfPubkey = String(repeating: "c", count: 64)
+        let keystoreRoot = tempDir.appendingPathComponent("keystore")
+        try db.upsertWorkspace(Workspace(
+            id: wsBad, name: "BadKey",
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            createdByMemberID: badMemberID
+        ))
+        try db.insertTeamMember(TeamMember(
+            id: badMemberID, workspaceID: wsBad, role: .admin,
+            pubkeyHex: badSelfPubkey, displayName: "Sasha",
+            addedAt: Date(timeIntervalSince1970: 1_700_000_000), removedAt: nil
+        ))
+        try db.insertTeamKey(TeamKey(
+            id: badKeyID, workspaceID: wsBad,
+            generatedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            deprecatedAt: nil, generatedByMemberID: badMemberID
+        ))
+        try TeamKeystore.writeTeamKey(Data(repeating: 0xCC, count: 32),
+                                      workspaceID: wsBad,
+                                      keyID: badKeyID,
+                                      at: keystoreRoot)
+
+        let supabase = SupabaseClient(
+            baseURL: URL(string: "https://test.supabase.co")!, anonKey: "k",
+            urlSession: makeURLSession(),
+            identity: { try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: Data(repeating: 0x01, count: 32)) }
+        )
+        let svc = DirectMessageService(
+            database: db, supabase: supabase,
+            codec: UnimplementedDirectMessageBlobCodec(),
+            keystoreRoot: keystoreRoot,
+            selfPubkeyHex: { badSelfPubkey }
+        )
+        do {
+            _ = try await svc.send(
+                workspaceID: wsBad,
+                recipientPubkeyHex: recipientPubkey,
+                recipientMemberID: nil,
+                kind: .handoff,
+                body: "ok"
+            )
+            XCTFail("expected throw on malformed active team key UUID")
+        } catch LeafError.invalidPayload {
+            // pass — keyID derivation rejected the malformed UUID before encrypt
+        }
+    }
 }
 
 // MARK: - Test helper — thread-safe boolean box.

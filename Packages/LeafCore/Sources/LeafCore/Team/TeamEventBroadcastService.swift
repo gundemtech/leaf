@@ -190,7 +190,7 @@ public actor TeamEventBroadcastService {
                         payload: TeamEventPayloadBuilder.build(source: source, payload: candidate.payload),
                         eventTsMs: candidate.tsMs
                     )
-                    let keyIDData = Self.uuidStringToRawBytes(activeKey.id)
+                    let keyIDData = try Self.uuidStringToRawBytes(activeKey.id)
                     let envelope = try codec.encode(
                         plaintext, keyID: keyIDData, teamKey: teamKeyBytes
                     )
@@ -291,9 +291,9 @@ public actor TeamEventBroadcastService {
         return uuid.uuidString.lowercased()
     }
 
-    static func uuidStringToRawBytes(_ s: String) -> Data {
+    static func uuidStringToRawBytes(_ s: String) throws -> Data {
         guard let uuid = UUID(uuidString: s) else {
-            return Data(repeating: 0, count: 16)
+            throw LeafError.invalidPayload
         }
         return withUnsafeBytes(of: uuid.uuid) { Data($0) }
     }
