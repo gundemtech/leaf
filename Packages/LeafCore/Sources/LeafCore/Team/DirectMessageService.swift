@@ -25,6 +25,15 @@ public struct DirectMessageService: Sendable {
     private let keystoreRoot: URL
     private let now: @Sendable () -> Date
     private let generateMessageID: @Sendable () -> String
+    /// Resolves THIS device's identity pubkey hex (lowercased) — the same source
+    /// the JWT `pubkey` claim is derived from. Used to pick `selfMember` out of
+    /// the roster BY IDENTITY, not `members.first`: `readTeamMembers` is
+    /// `ORDER BY added_at_ms ASC`, so on a joiner's device the first row is the
+    /// workspace creator (earlier timestamp), not self. Baking the creator's
+    /// pubkey into the encrypted plaintext makes the recipient's C2 trust-gate
+    /// (`plaintext.sender == row.sender`) silently drop the message. Same
+    /// foot-gun already fixed in InviteTokensReader.
+    private let selfPubkeyHex: @Sendable () throws -> String
 
     public init(
         database: Database,
@@ -32,7 +41,8 @@ public struct DirectMessageService: Sendable {
         codec: any DirectMessageBlobCodec,
         keystoreRoot: URL = TeamKeystore.defaultRoot(),
         now: @escaping @Sendable () -> Date = { Date() },
-        generateMessageID: @escaping @Sendable () -> String = { UUID().uuidString.lowercased() }
+        generateMessageID: @escaping @Sendable () -> String = { UUID().uuidString.lowercased() },
+        selfPubkeyHex: (@Sendable () throws -> String)? = nil
     ) {
         self.database = database
         self.supabase = supabase
@@ -40,6 +50,12 @@ public struct DirectMessageService: Sendable {
         self.keystoreRoot = keystoreRoot
         self.now = now
         self.generateMessageID = generateMessageID
+        let root = keystoreRoot
+        self.selfPubkeyHex = selfPubkeyHex ?? {
+            let priv = try IdentityService.ensureLocalIdentity(at: root)
+            return priv.publicKey.rawRepresentation
+                .map { String(format: "%02x", $0) }.joined()
+        }
     }
 
     /// Sender path — full pipeline: validate → encode → POST → mirror INSERT →
@@ -74,7 +90,14 @@ public struct DirectMessageService: Sendable {
             throw LeafError.databaseUnavailable
         }
         let members = try database.readTeamMembers(workspaceID: workspace.id, includeRemoved: false)
-        guard let selfMember = members.first else { throw LeafError.databaseUnavailable }
+        // Resolve self BY IDENTITY, not `members.first` (= added_at_ms ASC = the
+        // workspace creator on a joiner's device). The sender baked into the
+        // encrypted plaintext must equal the JWT pubkey the recipient's C2
+        // trust-gate attests against, or every DM is silently dropped on receive.
+        let selfPub = try selfPubkeyHex().lowercased()
+        guard let selfMember = members.first(where: { $0.pubkeyHex.lowercased() == selfPub }) else {
+            throw LeafError.databaseUnavailable
+        }
         guard let activeKey = try database.readActiveTeamKey(workspaceID: workspace.id) else {
             throw LeafError.databaseUnavailable
         }

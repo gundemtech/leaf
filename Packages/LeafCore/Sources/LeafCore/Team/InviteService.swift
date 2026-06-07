@@ -61,16 +61,20 @@ public struct InviteService: Sendable {
             throw LeafError.databaseUnavailable
         }
         let members = try database.readTeamMembers(workspaceID: workspace.id, includeRemoved: false)
-        guard let selfMember = members.first else { throw LeafError.databaseUnavailable }
+        // 5. Identity — resolve self BY IDENTITY, not `members.first` (= the
+        // earliest-added member = workspace creator on a joiner device). Keeps
+        // the blob's admin* fields consistent with adminPubkey (both = identity).
+        let priv = try identity()
+        let selfPub = priv.publicKey.rawRepresentation.map { String(format: "%02x", $0) }.joined()
+        guard let selfMember = members.first(where: { $0.pubkeyHex.lowercased() == selfPub }) else {
+            throw LeafError.databaseUnavailable
+        }
         guard let activeKey = try database.readActiveTeamKey(workspaceID: workspace.id) else {
             throw LeafError.databaseUnavailable
         }
         let teamKeyBytes = try TeamKeystore.readTeamKey(
             workspaceID: workspace.id, keyID: activeKey.id, at: keystoreRoot
         )
-
-        // 5. Identity
-        let priv = try identity()
 
         // 6. OTP — only when requireOTP=true; KDF salt="" otherwise (per D6: ECDH provides primary 256-bit security)
         let otp: String? = requireOTP ? try randomOTP() : nil

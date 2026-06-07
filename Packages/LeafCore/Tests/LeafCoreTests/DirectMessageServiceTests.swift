@@ -239,12 +239,14 @@ final class DirectMessageServiceTests: XCTestCase {
             urlSession: makeURLSession(),
             identity: { try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: Data(repeating: 0x01, count: 32)) }
         )
+        let selfPub = selfPubkey
         let svc = DirectMessageService(
             database: db,
             supabase: supabase,
             codec: testCodec,
             keystoreRoot: tempDir.appendingPathComponent("keystore"),
-            generateMessageID: { messageID }
+            generateMessageID: { messageID },
+            selfPubkeyHex: { selfPub }
         )
 
         let result = try await svc.send(
@@ -322,11 +324,13 @@ final class DirectMessageServiceTests: XCTestCase {
             urlSession: makeURLSession(),
             identity: { try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: Data(repeating: 0x01, count: 32)) }
         )
+        let selfPub = selfPubkey
         let svc = DirectMessageService(
             database: db, supabase: supabase,
             codec: TestDirectMessageBlobCodec(),
             keystoreRoot: tempDir.appendingPathComponent("keystore"),
-            generateMessageID: { messageID }
+            generateMessageID: { messageID },
+            selfPubkeyHex: { selfPub }
         )
 
         let result = try await svc.send(
@@ -339,6 +343,92 @@ final class DirectMessageServiceTests: XCTestCase {
         )
         XCTAssertEqual(result.pushDispatchStatus, .skipped)
         XCTAssertFalse(apnsCalledBox.wasCalled, "apns_push should NOT have been called when notify=false")
+    }
+
+    /// Regression — joiner-device sender resolution. On an invitee's device the
+    /// roster is `ORDER BY added_at_ms ASC` = [admin(earlier), self(later)], so
+    /// `members.first` is the ADMIN, not self. The sender baked into the
+    /// encrypted plaintext / outbound mirror MUST be self (identity pubkey) —
+    /// otherwise the recipient's C2 trust-gate (`plaintext.sender == row.sender`)
+    /// silently drops every DM the joiner sends.
+    func testSend_JoinerDevice_UsesSelfNotFirstRosterMember() async throws {
+        let messageID = "00000000-0000-0000-0000-000000000ccc"
+        let adminMemberID = "44444444-4444-4444-4444-444444444444"
+        let adminPubkey = String(repeating: "c", count: 64)
+        // Admin row added BEFORE self → first in `added_at_ms ASC` order.
+        try db.insertTeamMember(TeamMember(
+            id: adminMemberID, workspaceID: workspaceID, role: .admin,
+            pubkeyHex: adminPubkey, displayName: "Acme",
+            addedAt: Date(timeIntervalSince1970: 1_600_000_000), removedAt: nil
+        ))
+
+        MockURLProtocol.handler = { request, _ in
+            let path = request.url?.path ?? ""
+            switch path {
+            case "/auth/v1/signup":
+                return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                        Data("""
+                        { "access_token": "t", "refresh_token": "r",
+                          "user": { "id": "00000000-0000-0000-0000-000000000000" },
+                          "expires_at": 9999999999 }
+                        """.utf8))
+            case "/functions/v1/register_pubkey":
+                return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                        Data(#"{"ok":true}"#.utf8))
+            case "/auth/v1/token":
+                let payload = #"{"pubkey":"\#(String(repeating: "a", count: 64))"}"#
+                func b64url(_ s: String) -> String {
+                    Data(s.utf8).base64EncodedString()
+                        .replacingOccurrences(of: "+", with: "-")
+                        .replacingOccurrences(of: "/", with: "_")
+                        .replacingOccurrences(of: "=", with: "")
+                }
+                let jwt = "\(b64url(#"{"alg":"HS256","typ":"JWT"}"#)).\(b64url(payload)).sig"
+                return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                        Data("""
+                        { "access_token": "\(jwt)", "refresh_token": "r2",
+                          "user": { "id": "00000000-0000-0000-0000-000000000000" },
+                          "expires_at": 9999999999 }
+                        """.utf8))
+            case "/rest/v1/direct_messages" where request.httpMethod == "POST":
+                return (HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!,
+                        Data("""
+                        [{ "message_id": "\(messageID)", "created_at": "2026-05-14T10:00:00Z" }]
+                        """.utf8))
+            default:
+                return (HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!, Data())
+            }
+        }
+
+        let supabase = SupabaseClient(
+            baseURL: URL(string: "https://test.supabase.co")!, anonKey: "k",
+            urlSession: makeURLSession(),
+            identity: { try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: Data(repeating: 0x01, count: 32)) }
+        )
+        let selfPub = selfPubkey
+        let svc = DirectMessageService(
+            database: db, supabase: supabase,
+            codec: TestDirectMessageBlobCodec(),
+            keystoreRoot: tempDir.appendingPathComponent("keystore"),
+            generateMessageID: { messageID },
+            selfPubkeyHex: { selfPub }
+        )
+
+        _ = try await svc.send(
+            workspaceID: workspaceID,
+            recipientPubkeyHex: recipientPubkey,
+            recipientMemberID: nil,
+            kind: .ping,
+            body: "reply from the joiner",
+            notify: false
+        )
+
+        let row = try db.readSQL { try MessagesMirrorStore.read(messageID: messageID, in: $0) }
+        XCTAssertEqual(
+            row?.senderPubkeyHex, selfPubkey,
+            "outbound DM must be authored by self (identity pubkey), not the first roster member (admin)"
+        )
+        XCTAssertEqual(row?.senderMemberID, selfMemberID)
     }
 }
 

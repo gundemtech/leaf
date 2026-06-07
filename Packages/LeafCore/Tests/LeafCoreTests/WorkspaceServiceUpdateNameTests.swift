@@ -34,6 +34,32 @@ final class WorkspaceServiceUpdateNameTests: XCTestCase {
         )
     }
 
+    // MARK: - Creator display name
+
+    /// Regression — the creator's TeamMember.displayName must be the creator's
+    /// PERSONAL name, not the workspace name. Otherwise a joiner sees the admin
+    /// labelled as the team (e.g. "test-2") instead of a person.
+    func testCreateWorkspace_CreatorDisplayName_DistinctFromWorkspaceName() throws {
+        let svc = makeService()
+        let ws = try svc.createWorkspace(displayName: "Acme Corp", creatorDisplayName: "Alex Rivera")
+        XCTAssertEqual(ws.name, "Acme Corp")
+        let members = try db.readTeamMembers(workspaceID: ws.id, includeRemoved: false)
+        XCTAssertEqual(members.count, 1)
+        XCTAssertEqual(
+            members.first?.displayName, "Alex Rivera",
+            "creator's member displayName must be their personal name, not the workspace name"
+        )
+    }
+
+    /// Omitting creatorDisplayName preserves the legacy fallback (workspace name)
+    /// so existing callers/tests are unaffected.
+    func testCreateWorkspace_NoCreatorName_FallsBackToWorkspaceName() throws {
+        let svc = makeService()
+        let ws = try svc.createWorkspace(displayName: "Solo Team")
+        let members = try db.readTeamMembers(workspaceID: ws.id, includeRemoved: false)
+        XCTAssertEqual(members.first?.displayName, "Solo Team")
+    }
+
     // MARK: - Validation
 
     func testUpdateName_Empty_ThrowsInvalidPayload() throws {
