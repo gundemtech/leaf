@@ -4,6 +4,11 @@ _Срез "где мы сейчас" за 30 секунд. Детали — git 
 
 ## Последнее обновление
 
+**✅ E2E team-messaging две стороны заработали (2026-06-07, two-Mac live verified).** Два разных бага под одним симптомом «сообщения не ходят», оба пофикшены:
+- **alpha.28 (`v1.0.0-alpha.28`, PR #38 `92c5c677`)** — приёмный путь. Джойнер подписывал DM/team-events чужим ключом (`members.first` = создатель воркспейса, не self, т.к. `readTeamMembers` ORDER BY added_at ASC), C2-гейт молча дропал. Фикс: резолв self по identity-pubkey в DirectMessageService/TeamEventBroadcastService/InviteService. + creator displayName ≠ workspace name. Нужен новый билд на обоих маках.
+- **Серверный hotfix в ПРОДЕ (leaf-relay `ffc4175`, локально)** — отправка джойнера. Инвайти не было в серверной `workspace_members` (RLS admin-only write, клиентский self-insert всегда 403), → `direct_messages_sender_write` резал. Фикс: `approve_join_request` Edge Function вписывает инвайти через service-role + backfill-миграция (`20260607120000`) вылечила существующих. Билд НЕ нужен — серверный.
+- 🔴 **leaf-relay: 70 локальных коммитов НЕ в origin/main** (весь Track 5 backend; bus-factor — известно). `ffc4175` записан локально, push backend'а → отдельная сессия с партнёром (Path B миграции). Хвосты: ротация R2/CF ключей; site-redeploy (`release.sh --redo-from site`).
+
 **🏁 AI Coworker трек ЗАКРЫТ — P5 Verifiable (v1.5) landed (2026-06-06, #35 `53c7d9d0`, moat `d661d0c`).** Client-side attestation seam + рабочий PoC-verifier: opt-in `InferencePath.attested` (open-weight, verify-before-send, fail-closed, assurance `.poc`); Claude-пути остаются default trust-based (frontier+attestable сегодня не совмещаются). Verify-core публичен+тестируем (freshness+signature-vs-injected-root+constant-time-measurement+TLS-SPKI-binding); pins/endpoint/`AttestedSummarizer`/transport — moat (placeholder, fail-closed до Tinfoil-аккаунта). Honest-claim: НЕ маркетим «verifiable» пока `.poc`. Audit-DB/MCP-tool/M033 + real-Tinfoil-формат/VCEK+Rekor → deferred прод-вайринг. **`.attested` built+tested+injectable, НЕ runtime-wired** (зеркалит AI-included).
 
 **Гигиена (Ph C, 2026-06-02) держится:** трунк объединён, enforced:
