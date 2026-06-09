@@ -728,3 +728,71 @@ extension SupabaseAuthSession {
     return json["pubkey"] as? String
   }
 }
+
+// MARK: - Native login — email/password + OAuth code exchange (Phase 1)
+
+extension SupabaseClient {
+  /// Native email+password login. POST /auth/v1/token?grant_type=password.
+  /// The body carries `gotrue_meta_security.captcha_token` because the shared
+  /// project has Turnstile CAPTCHA protection enabled globally (spec §5.A/§5.C);
+  /// without the token GoTrue rejects the request. Updates the actor's session
+  /// state + lastRefreshAt and persists the refresh_token if a store is wired,
+  /// so a subsequent app cold-start reuses it (no second prompt). Returns the
+  /// session (pubkey claim NOT yet present — caller drives registerPubkey via
+  /// `ensureAuthenticatedAndPubkeyRegistered`).
+  public func signInWithPassword(
+    email: String, password: String, captchaToken: String
+  ) async throws -> SupabaseAuthSession {
+    let url = SupabaseEndpoint.signInWithPassword(baseURL: baseURL)
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    for (k, v) in SupabaseEndpoint.anonHeaders(anonKey: anonKey) {
+      request.setValue(v, forHTTPHeaderField: k)
+    }
+    let body: [String: Any] = [
+      "email": email,
+      "password": password,
+      "gotrue_meta_security": ["captcha_token": captchaToken],
+    ]
+    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+    let session = try await decodeAuthResponse(request: request, label: "signInWithPassword")
+    installAuthenticatedSession(session)
+    return session
+  }
+
+  /// Exchange an OAuth authorization code (delivered to leaf://auth/callback
+  /// by ASWebAuthenticationSession) for a session. POST
+  /// /auth/v1/token?grant_type=pkce with `auth_code` + `code_verifier`.
+  /// OAuth (Google/GitHub) is exempt from CAPTCHA (spec §5.C) — no captcha
+  /// token in the body. Updates state + persists like signInWithPassword.
+  public func exchangeOAuthCode(
+    code: String, codeVerifier: String, redirectURI: String
+  ) async throws -> SupabaseAuthSession {
+    let url = SupabaseEndpoint.oauthToken(baseURL: baseURL)
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    for (k, v) in SupabaseEndpoint.anonHeaders(anonKey: anonKey) {
+      request.setValue(v, forHTTPHeaderField: k)
+    }
+    let body: [String: Any] = [
+      "auth_code": code,
+      "code_verifier": codeVerifier,
+      "redirect_uri": redirectURI,
+    ]
+    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+    let session = try await decodeAuthResponse(request: request, label: "exchangeOAuthCode")
+    installAuthenticatedSession(session)
+    return session
+  }
+
+  /// Shared post-login bookkeeping: set `.authenticated`, stamp lastRefreshAt,
+  /// best-effort persist. Private to this extension; mirrors the bootstrap's
+  /// tail in `ensureAuthenticated`.
+  private func installAuthenticatedSession(_ session: SupabaseAuthSession) {
+    state = .authenticated(session)
+    lastRefreshAt = now()
+    if let store = sessionStore {
+      persistSessionBestEffort(store: store, session: session)
+    }
+  }
+}
