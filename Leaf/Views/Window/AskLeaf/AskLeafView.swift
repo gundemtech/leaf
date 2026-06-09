@@ -83,7 +83,7 @@ struct AskLeafView: View {
             .font(LeafType.body.regular)
             .foregroundStyle(LeafColor.text.primary)
             .padding(LeafSpace.md)
-            .background(LeafColor.surface.inset, in: RoundedRectangle(cornerRadius: 10))
+            .background(LeafColor.surface.inset, in: RoundedRectangle(cornerRadius: LeafRadius.md))
             .textSelection(.enabled)
           Text(periodLabel(entry.period))
             .font(LeafType.body.small)
