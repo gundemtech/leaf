@@ -129,12 +129,24 @@ final class InviteTokenServiceTests: XCTestCase {
     }
   }
 
+  // Phase 1 (account-login) — anonymous bootstrap removed; seed a persisted
+  // refresh-token so ensureAuthenticated() takes the persisted-refresh path
+  // (served by the bootstrap helper's /auth/v1/token branch) instead of the
+  // deleted anon signup.
   private func makeSupabase() -> SupabaseClient {
-    SupabaseClient(
+    let dir = tempDir.appendingPathComponent("supa-\(UUID().uuidString)", isDirectory: true)
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    let store = SupabaseSessionStore(at: dir)
+    try? store.write(
+      PersistedSession(
+        refreshToken: "seed-rt",
+        userID: "00000000-0000-0000-0000-000000000222", savedAtMs: 1))
+    return SupabaseClient(
       baseURL: baseURL, anonKey: anonKey, urlSession: makeURLSession(),
       identity: {
         try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: Data(repeating: 0xAA, count: 32))
-      }
+      },
+      sessionStore: store
     )
   }
 
