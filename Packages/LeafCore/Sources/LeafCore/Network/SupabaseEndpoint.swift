@@ -25,6 +25,58 @@ public enum SupabaseEndpoint {
     return components.url!
   }
 
+  /// POST /auth/v1/token?grant_type=password — native email+password login.
+  /// Body carries email/password + gotrue_meta_security.captcha_token (global
+  /// CAPTCHA protection is on for the project — see spec §5.A/§5.C).
+  public static func signInWithPassword(baseURL: URL) -> URL {
+    var components = URLComponents(
+      url: baseURL.appendingPathComponent("auth/v1/token"),
+      resolvingAgainstBaseURL: false
+    )!
+    components.queryItems = [URLQueryItem(name: "grant_type", value: "password")]
+    return components.url!
+  }
+
+  /// POST /auth/v1/signup — email+password registration. The app does NOT
+  /// register (registration is web-only, spec §2.2); kept for completeness /
+  /// future use and to keep the auth-endpoint surface in one place.
+  public static func signUpWithPassword(baseURL: URL) -> URL {
+    baseURL.appendingPathComponent("auth/v1/signup")
+  }
+
+  /// POST /auth/v1/token?grant_type=pkce — exchange an OAuth authorization
+  /// code (returned to leaf://auth/callback) for a session, using the PKCE
+  /// code_verifier. Used by SupabaseOAuthService's Google/GitHub path.
+  public static func oauthToken(baseURL: URL) -> URL {
+    var components = URLComponents(
+      url: baseURL.appendingPathComponent("auth/v1/token"),
+      resolvingAgainstBaseURL: false
+    )!
+    components.queryItems = [URLQueryItem(name: "grant_type", value: "pkce")]
+    return components.url!
+  }
+
+  /// GET /auth/v1/authorize?provider=...&redirect_to=...&code_challenge=...
+  /// The URL opened in ASWebAuthenticationSession to start a Google/GitHub
+  /// OAuth flow. Supabase redirects to `redirect_to` with `?code=...` on
+  /// success. `code_challenge_method` is lowercase `s256` per GoTrue's
+  /// authorize endpoint convention.
+  public static func oauthAuthorize(
+    baseURL: URL, provider: String, redirectTo: String, codeChallenge: String
+  ) -> URL {
+    var components = URLComponents(
+      url: baseURL.appendingPathComponent("auth/v1/authorize"),
+      resolvingAgainstBaseURL: false
+    )!
+    components.queryItems = [
+      URLQueryItem(name: "provider", value: provider),
+      URLQueryItem(name: "redirect_to", value: redirectTo),
+      URLQueryItem(name: "code_challenge", value: codeChallenge),
+      URLQueryItem(name: "code_challenge_method", value: "s256"),
+    ]
+    return components.url!
+  }
+
   // MARK: - Edge Functions
 
   public static func registerPubkey(baseURL: URL) -> URL {
