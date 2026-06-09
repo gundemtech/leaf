@@ -13,6 +13,21 @@ the release history and summarised at a feature level.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.31] — 2026-06-10
+
+### Added
+
+- In-app "What's New" screen: after an update, Leaf shows what changed in the
+  installed version (also available any time from Settings). Sparkle's update
+  dialog now carries the same release notes instead of an empty pane.
+
+### Fixed
+
+- Incoming team messages could silently stop arriving in newly created teams:
+  one message with cross-post metadata aborted the whole inbound sync batch, so
+  newer pings, tasks and handoffs never appeared. Sync now tolerates all
+  metadata shapes, and a single message can no longer block the batch.
+
 ## [1.0.0-alpha.30] — 2026-06-09
 
 ### Fixed
@@ -127,7 +142,8 @@ deeper activity capture.
 - Earliest recorded alpha build: background work capture, the native menu-bar
   app, and the MCP server foundations.
 
-[Unreleased]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.30...HEAD
+[Unreleased]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.31...HEAD
+[1.0.0-alpha.31]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.30...v1.0.0-alpha.31
 [1.0.0-alpha.30]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.29...v1.0.0-alpha.30
 [1.0.0-alpha.29]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.28...v1.0.0-alpha.29
 [1.0.0-alpha.28]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.27...v1.0.0-alpha.28
