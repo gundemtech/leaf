@@ -4,8 +4,18 @@
 # Phase 3.3 — local-first signed/notarized/stapled distribution pipeline.
 # Idempotent через stamp-файлы под build/releases/.stamps/. Re-run пропускает completed steps.
 #
+# Phase 2 (release-pipeline) additions:
+#   • Secrets come from AWS SSM via `vault.sh run release` (live env) or, offline,
+#     a cached env-file (consulted only when the live env is empty). assert_secrets
+#     fails fast — before archive/notary — if neither is present.
+#   • --until <step> stops the pipeline after a step (the publish-gate: build to
+#     `appcast`, then resume `upload`/`site` after a human confirm in /release-leaf).
+#   • step_appcast embeds the CHANGELOG-derived "What's New" notes and is
+#     interrupt-safe (a kill mid-generation no longer strands the DMG).
+#
 # Usage:
-#     bash scripts/release.sh <version>                 # default: stamp-aware skip
+#     vault.sh run release -- bash scripts/release.sh <version>            # full ship
+#     vault.sh run release -- bash scripts/release.sh <version> --until appcast
 #     bash scripts/release.sh <version> --redo-from <step>
 #     bash scripts/release.sh <version> --clean
 #     bash scripts/release.sh -h | --help
@@ -23,12 +33,14 @@ warn() { echo "${C_WARN}!${C_OFF} $*" >&2; }
 
 usage() {
     cat <<'EOF'
-Usage: release.sh <version> [--redo-from <step> | --clean]
+Usage: release.sh <version> [--until <step> | --redo-from <step> | --clean]
 
 Steps in order: archive export verify dmg notary staple zip appcast upload site
 
-site = редеплой leaf-web (sibling checkout или LEAF_WEB_DIR) — сайт берёт версию
-из appcast при сборке, шаг держит leaf.gundem.tech всегда на актуальной версии.
+--until <step>  stop AFTER <step> (publish-gate: `--until appcast` builds +
+                notarizes but does NOT touch R2/site; resume with a plain re-run
+                once the human confirm in /release-leaf passes).
+site = редеплой leaf-web (sibling checkout или LEAF_WEB_DIR).
 
 Default: re-run skips completed steps (stamp-aware under build/releases/.stamps/).
 Flags:
@@ -37,14 +49,13 @@ Flags:
 
 Iteration на notary fail (entitlements/signing fix):
   bash scripts/release.sh 1.0.0-alpha.1 --clean
-  (entitlements изменения требуют re-archive — full clean)
-
 На notary success ретрай (network blip и т.п.):
   bash scripts/release.sh 1.0.0-alpha.1 --redo-from notary
 
-Required env vars (для step_upload):
-  R2_BUCKET R2_ENDPOINT R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY CF_ZONE_ID CF_API_TOKEN
-  Загрузить локально: gh secret list → export ... в shell
+Secrets (R2_* / CF_*) — НЕ экспортируются вручную. Канон:
+  vault.sh run release -- bash scripts/release.sh <version>      (live SSM)
+Offline-fallback кэш (если live-env пуст):
+  just secrets-refresh   # → ~/.config/leaf/release.env (0600, вне репо)
 
 Required tools: xcodebuild, codesign, jq, xmllint, create-dmg, ditto,
                 ~/bin/sparkle/generate_appcast, ~/bin/sparkle/sign_update
@@ -52,18 +63,97 @@ Required tools: xcodebuild, codesign, jq, xmllint, create-dmg, ditto,
 EOF
 }
 
+# --- constants (defined before the lib-only seam so the self-test can reach
+#     assert_secrets / maybe_load_cached_secrets / run_pipeline) --------------
+REQUIRED_UPLOAD_SECRETS=(R2_BUCKET R2_ENDPOINT R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY CF_ZONE_ID CF_API_TOKEN)
+STEPS=(archive export verify dmg notary staple zip appcast upload site)
+# Parsed args (init so functions / the self-test never trip `set -u`).
+VERSION=""; REDO_FROM=""; CLEAN_FIRST=""; UNTIL=""
+
+# --- secrets --------------------------------------------------------------
+# Offline fallback: load the cached env-file ONLY when the live env is empty, so
+# `vault.sh run release` (the primary live-SSM path) always wins and a stale cache
+# can never shadow fresh secrets.
+maybe_load_cached_secrets() {
+    [[ -n "${R2_BUCKET:-}" ]] && return 0
+    local cache="${LEAF_RELEASE_ENV_CACHE:-$HOME/.config/leaf/release.env}"
+    [[ -f "$cache" ]] || return 0   # no cache → assert_secrets fails loudly next
+    local when
+    if when="$(stat -f '%Sm' -t '%Y-%m-%d' "$cache" 2>/dev/null)"; then :
+    elif when="$(stat -c '%y' "$cache" 2>/dev/null)"; then when="${when%% *}"
+    else when="?"; fi
+    warn "using CACHED secrets from $cache (dated $when) — live SSM env is empty."
+    warn "  if keys were rotated, refresh with: just secrets-refresh"
+    # Parse KEY=VALUE safely with `export`, NOT `source`: a value with spaces (a
+    # signing identity) would execute as a command under `source`. IFS='=' read -r
+    # splits on the FIRST '=' only, so '=' inside a value survives.
+    local k v
+    while IFS='=' read -r k v; do
+        case "$k" in ''|'#'*) continue ;; esac
+        export "$k=$v"
+    done < "$cache"
+}
+
+# Fail fast — before archive/notary — if any upload secret is missing. Runs
+# unconditionally (even for --until appcast): the whole flow is meant to run under
+# `vault.sh run release`, so a missing secret means a misconfigured invocation, and
+# a no-secrets dry-run is exactly the Phase 2 fast-fail test.
+assert_secrets() {
+    local missing=() v
+    for v in "${REQUIRED_UPLOAD_SECRETS[@]}"; do
+        [[ -n "${!v:-}" ]] || missing+=("$v")
+    done
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        err "missing release secrets: ${missing[*]}"
+        err "Run under SSM secrets:  vault.sh run release -- bash scripts/release.sh ..."
+        err "or seed the offline cache:  just secrets-refresh"
+        exit 1
+    fi
+}
+
+# --- pipeline runner ------------------------------------------------------
+# Single loop over STEPS; --until exits AFTER the named step (publish-gate). An
+# empty UNTIL short-circuits the test, so a plain run does the full pipeline.
+# (The `==` here needs the spaces + quotes — `"$s"==$UNTIL` would be one truthy
+# [[ ]] arg and exit after the first step.)
+run_pipeline() {
+    local s
+    for s in "${STEPS[@]}"; do
+        "step_$s"
+        if [[ -n "${UNTIL:-}" && "$s" == "${UNTIL:-}" ]]; then
+            ok "--until ${UNTIL}: stopped after step '$s' (publish steps NOT run)"
+            return 0
+        fi
+    done
+}
+
+# --- test seam ------------------------------------------------------------
+# Source with LEAF_RELEASE_LIB_ONLY=1 to load the functions above WITHOUT running
+# the arg-parser or the pipeline — scripts/tests/test-release-flow.sh drives
+# run_pipeline / assert_secrets / maybe_load_cached_secrets in isolation.
+if [[ "${LEAF_RELEASE_LIB_ONLY:-0}" == "1" ]]; then
+    return 0 2>/dev/null || exit 0
+fi
+
 # --- arg parsing ----------------------------------------------------------
 [[ $# -eq 0 || "${1:-}" == "-h" || "${1:-}" == "--help" ]] && { usage; exit 0; }
 
 VERSION="$1"; shift
-REDO_FROM=""; CLEAN_FIRST=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --redo-from) REDO_FROM="${2:?--redo-from requires step name}"; shift 2 ;;
+        --until)     UNTIL="${2:?--until requires step name}"; shift 2 ;;
         --clean)     CLEAN_FIRST=1; shift ;;
         *)           err "unknown arg: $1"; usage; exit 1 ;;
     esac
 done
+
+# Validate --until against the known steps (same discipline as --redo-from).
+if [[ -n "$UNTIL" ]]; then
+    until_found=0
+    for s in "${STEPS[@]}"; do [[ "$s" == "$UNTIL" ]] && until_found=1; done
+    [[ $until_found -eq 1 ]] || { err "--until $UNTIL: not a known step (${STEPS[*]})"; exit 1; }
+fi
 
 # --- paths ----------------------------------------------------------------
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -77,8 +167,6 @@ ZIP="$RELEASES/Leaf-$VERSION.zip"
 
 SIGN_ID="${LEAF_SIGN_ID:-Developer ID Application: <YOUR NAME> (<TEAM_ID>)}"  # set LEAF_SIGN_ID in your env/Local config (kept out of the public repo)
 NOTARY_PROFILE="leaf-notary"
-
-STEPS=(archive export verify dmg notary staple zip appcast upload site)
 
 # --- pre-flight -----------------------------------------------------------
 require_tools() {
@@ -108,22 +196,10 @@ assert_version_matches_pbxproj() {
         | grep -m1 "MARKETING_VERSION = " | sed 's/.*= //' | tr -d ' ')
     if [[ "$pbx_version" != "$VERSION" ]]; then
         err "version mismatch: arg=$VERSION, pbxproj MARKETING_VERSION=$pbx_version"
-        err "Bump pbxproj first (git commit), then re-run."
+        err "Bump pbxproj first (scripts/bump-version.sh $VERSION), then re-run."
         exit 1
     fi
     ok "version $VERSION matches pbxproj"
-}
-
-require_env_for_upload() {
-    local missing=()
-    for v in R2_BUCKET R2_ENDPOINT R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY CF_ZONE_ID CF_API_TOKEN; do
-        [[ -n "${!v:-}" ]] || missing+=("$v")
-    done
-    if [[ ${#missing[@]} -gt 0 ]]; then
-        err "missing env vars for upload: ${missing[*]}"
-        err "See: bash scripts/upload-release.sh --help"
-        exit 1
-    fi
 }
 
 # --- stamp helpers --------------------------------------------------------
@@ -310,37 +386,74 @@ step_zip() {
 }
 
 step_appcast() {
-    # generate_appcast не любит .dmg + .zip с одинаковым CFBundleVersion (duplicate updates).
-    # Sparkle update path = .zip; .dmg = first install only. Прячем ВСЕ .dmg
-    # (current + prior ship-cycle artifacts) на время генерации, возвращаем после.
     is_done appcast && { info "skip appcast (stamp exists)"; return 0; }
+
+    # Interrupt-recovery: a prior run killed between the hide and restore below
+    # leaves *.dmg.appcast-hidden with the stamp unset. Un-hide on entry so the
+    # DMG is never permanently stranded (a stamped-but-missing DMG would otherwise
+    # upload to R2 without an installer).
+    local h
+    while IFS= read -r h; do
+        mv -f "$h" "${h%.appcast-hidden}"
+    done < <(find "$RELEASES" -maxdepth 1 -name "*.dmg.appcast-hidden" -type f)
+
+    # Embed the current version's "What's New" fragment into the signed appcast.
+    # gen-release-notes runs here (not earlier) because --clean/apply_flags in main
+    # would have rm-rf'd build/releases/ before this step; the stamp covers both
+    # the .html render and generate_appcast. (releases.json is the PREP step's job —
+    # the Ordering invariant — NOT regenerated here.)
+    info "release notes → $RELEASES/Leaf-$VERSION.html"
+    bash "$REPO_ROOT/scripts/gen-release-notes.sh" --html-only "$VERSION"
+    [[ -f "$RELEASES/Leaf-$VERSION.html" ]] || { err "gen-release-notes did not produce Leaf-$VERSION.html"; exit 1; }
+
     info "generate_appcast → $RELEASES/appcast.xml"
+    # generate_appcast не любит .dmg + .zip с одинаковым CFBundleVersion (duplicate
+    # updates). Sparkle update path = .zip; .dmg = first install only. Прячем ВСЕ
+    # .dmg на время генерации. A trap restores them even on Ctrl-C / SIGTERM so an
+    # interrupted run never strands the DMG as *.dmg.appcast-hidden.
     local hidden_list=()
+    restore_dmgs() {
+        local d
+        for d in "${hidden_list[@]}"; do
+            [[ -f "$d.appcast-hidden" ]] && mv -f "$d.appcast-hidden" "$d"
+        done
+    }
+    trap 'restore_dmgs' EXIT INT TERM
+    local dmg
     while IFS= read -r dmg; do
         mv "$dmg" "$dmg.appcast-hidden"
         hidden_list+=("$dmg")
     done < <(find "$RELEASES" -maxdepth 1 -name "*.dmg" -type f)
+
     local rc=0
     ~/bin/sparkle/generate_appcast \
+        --embed-release-notes \
         --download-url-prefix https://updates.gundem.tech/releases/ \
         "$RELEASES/" >/dev/null || rc=$?
-    for dmg in "${hidden_list[@]}"; do
-        [[ -f "$dmg.appcast-hidden" ]] && mv "$dmg.appcast-hidden" "$dmg"
-    done
+
+    restore_dmgs
+    trap - EXIT INT TERM
+
     [[ $rc -eq 0 ]] || { err "generate_appcast failed (rc=$rc)"; exit $rc; }
     xmllint --noout "$RELEASES/appcast.xml"
     local item_count
     item_count=$(xmllint --xpath 'count(//item)' "$RELEASES/appcast.xml" 2>/dev/null || echo 0)
     [[ "$item_count" -ge 1 ]] || { err "appcast.xml содержит 0 <item>"; exit 1; }
+    # Embed sanity: the generated item must carry <description> (the embedded notes).
+    # A silent embed failure would show an empty Sparkle update dialog — fail loud.
+    grep -q '<description>' "$RELEASES/appcast.xml" || { err "appcast.xml <item> has no <description> — release notes did not embed"; exit 1; }
+    # DMG must be back before the stamp: a stamped-but-missing DMG would make a
+    # resumed upload ship without an installer.
+    [[ -f "$DMG" ]] || { err "Leaf-$VERSION.dmg missing after appcast (interrupted hide/restore?) — re-run"; exit 1; }
     mark_done appcast
-    ok "appcast done ($item_count <item> entries)"
+    ok "appcast done ($item_count <item> entries, notes embedded)"
 }
 
 step_upload() {
     is_done upload && { info "skip upload (stamp exists)"; return 0; }
-    require_env_for_upload
+    assert_secrets
     info "upload → R2 + CF cache purge"
-    bash "$REPO_ROOT/scripts/upload-release.sh" "$RELEASES"
+    bash "$REPO_ROOT/scripts/upload-release.sh" "$RELEASES" "$VERSION"
     mark_done upload
     ok "upload done"
 }
@@ -381,23 +494,18 @@ step_site() {
 }
 
 # --- main -----------------------------------------------------------------
+maybe_load_cached_secrets
+assert_secrets
 require_tools
 assert_signing_identity
 assert_version_matches_pbxproj
 apply_flags
 
-step_archive
-step_export
-step_verify
-step_dmg
-step_notary
-step_staple
-step_zip
-step_appcast
-step_upload
-step_site
+run_pipeline
 
-ok "release $VERSION done. Artifacts: $RELEASES/"
-echo "  Leaf-$VERSION.dmg  ($(du -h "$DMG" | cut -f1))"
-echo "  Leaf-$VERSION.zip  ($(du -h "$ZIP" | cut -f1))"
-echo "  appcast.xml         (live: https://updates.gundem.tech/appcast.xml)"
+if [[ -z "$UNTIL" ]]; then
+    ok "release $VERSION done. Artifacts: $RELEASES/"
+    echo "  Leaf-$VERSION.dmg  ($(du -h "$DMG" | cut -f1))"
+    echo "  Leaf-$VERSION.zip  ($(du -h "$ZIP" | cut -f1))"
+    echo "  appcast.xml         (live: https://updates.gundem.tech/appcast.xml)"
+fi
