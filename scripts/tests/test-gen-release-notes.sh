@@ -184,6 +184,36 @@ check "empty (Unreleased-only) CHANGELOG exits 0" "$rc"
 printf '%s' "$EJSON" | jq -e '.schemaVersion == 1 and (.releases == [])' >/dev/null 2>&1
 check "empty CHANGELOG → {schemaVersion:1, releases:[]}" $?
 
+# --- CRLF line endings → parsed, no \r leakage (no silent category drop) --
+# A Windows-edited CHANGELOG must not silently lose every item (the category
+# header "### Added\r" would otherwise miss the case match and drop the section).
+CRLF="$WORK/CRLF.md"
+printf '# Changelog\r\n\r\n## [2.0.0-rc.1] — 2027-07-07\r\n\r\n### Added\r\n- a crlf item\r\n- a second crlf item\r\n' > "$CRLF"
+CRLFJSON="$(LEAF_CHANGELOG_FILE="$CRLF" "$SCRIPT" --json 2>/dev/null)"
+printf '%s' "$CRLFJSON" | jq -e '.releases[0].version == "2.0.0-rc.1"' >/dev/null 2>&1
+check "CRLF: version parsed clean (no trailing CR)" $?
+printf '%s' "$CRLFJSON" | jq -e '.releases[0].added == ["a crlf item", "a second crlf item"]' >/dev/null 2>&1
+check "CRLF: category + items survive (no silent drop, no \\r in text)" $?
+
+# --- malformed version header (no closing bracket) → fail loud -------------
+# Without validation, "## [1.0.0 — 2027-01-01" yields a garbage version with
+# spaces/em-dash that flows into dmgURL/zipURL filenames.
+MAL="$WORK/MAL.md"
+printf '# Changelog\n\n## [1.0.0 — 2027-01-01\n\n### Added\n- oops\n' > "$MAL"
+set +e
+LEAF_CHANGELOG_FILE="$MAL" "$SCRIPT" --json >/dev/null 2>&1
+rc=$?
+set -e
+[[ "$rc" -ne 0 ]]; check "malformed version header (no ']') fails loud" $?
+
+# --- HTML header escaping (defensive @html on version/date) ----------------
+# The version form-assert blocks HTML chars upstream, so the header can only ever
+# carry a clean version; assert the normal header still renders correctly through
+# @html (regression guard against the escaping change breaking ordinary output).
+LEAF_CHANGELOG_FILE="$CHANGELOG" LEAF_RELEASES_OUT="$OUT" "$SCRIPT" --html-only 1.0.0-alpha.1 >/dev/null 2>&1
+grep -q '<h2>1.0.0-alpha.1 — 2026-01-01</h2>' "$OUT/Leaf-1.0.0-alpha.1.html"
+check "header renders version+date intact through @html" $?
+
 # --- missing CHANGELOG → fail loud ----------------------------------------
 set +e
 LEAF_CHANGELOG_FILE="$WORK/does-not-exist.md" "$SCRIPT" --json >/dev/null 2>&1

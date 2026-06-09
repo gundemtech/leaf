@@ -100,6 +100,9 @@ build_json() {
 
     local line
     while IFS= read -r line || [[ -n "$line" ]]; do
+        # Tolerate a CRLF-edited CHANGELOG: a trailing \r would otherwise make
+        # "### Added\r" miss the category match and SILENTLY drop the section.
+        line="${line%$'\r'}"
         case "$line" in
             '## ['*)
                 # New version section: close the prior item + release, reset state.
@@ -109,6 +112,12 @@ build_json() {
                 inner="${line#'## ['}"
                 ver="${inner%%]*}"
                 rest="${inner#*]}"
+                # Fail loud on a malformed header (e.g. a missing ']' leaves the
+                # whole "1.0.0 — 2026-01-01" as the version) instead of silently
+                # emitting spaces/em-dashes into dmgURL/zipURL filenames. The
+                # char class is semver-friendly (digits, letters, . + -) so it
+                # never rejects a legitimate "1.0.0-alpha.30"/"Unreleased".
+                [[ "$ver" =~ ^[0-9A-Za-z.+-]+$ ]] || fail "malformed version header (expected a semver-like token inside '[]', got '$ver'): $line"
                 cur_version="$ver"
                 cur_cat=""; cur_added=""; cur_fixed=""; cur_changed=""
                 cur_date=""; cur_yanked="false"
@@ -184,7 +193,7 @@ render_html() {
                  + ["</ul>"]
             else [] end;
         (.releases[] | select(.version == $v)) as $r
-        | (["<h2>\($r.version) — \($r.date)</h2>"]
+        | (["<h2>\($r.version | @html) — \($r.date | @html)</h2>"]
            + section("Added";   $r.added)
            + section("Fixed";   $r.fixed)
            + section("Changed"; $r.changed))
