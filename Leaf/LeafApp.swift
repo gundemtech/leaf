@@ -1117,6 +1117,12 @@ final class LeafAppDelegate: NSObject, NSApplicationDelegate, UNUserNotification
     _ center: UNUserNotificationCenter,
     willPresent notification: UNNotification
   ) async -> UNNotificationPresentationOptions {
+    // The watchdog escalation fires once per broken episode (latched) — if
+    // the coalesce/focus gate swallowed it, there would be no retry. Always
+    // present it.
+    if notification.request.identifier == AgentWatchdogService.escalationNotificationID {
+      return [.banner, .sound]
+    }
     let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
     return await MainActor.run { Self.foregroundPresentationOptions(nowMs: nowMs) }
   }

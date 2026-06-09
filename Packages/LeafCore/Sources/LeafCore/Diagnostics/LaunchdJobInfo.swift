@@ -35,13 +35,14 @@ public enum LaunchdJobInfoParser {
     task.standardError = Pipe()
     do {
       try task.run()
-      task.waitUntilExit()
     } catch {
       return nil
     }
-    guard let data = try? pipe.fileHandleForReading.readToEnd(),
-      let output = String(data: data, encoding: .utf8)
-    else { return nil }
+    // Drain the pipe BEFORE waitUntilExit — reading after exit deadlocks
+    // once the output exceeds the 64KB pipe buffer.
+    let data = try? pipe.fileHandleForReading.readToEnd()
+    task.waitUntilExit()
+    guard let data, let output = String(data: data, encoding: .utf8) else { return nil }
     return parse(output)
   }
 

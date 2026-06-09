@@ -55,10 +55,15 @@ public struct WatchdogState: Codable, Sendable, Equatable {
   public var lastAttemptAt: Date?
   public var lastReregisterAt: Date?
   public var consecutiveFailures: Int
-  public var escalated: Bool
+  /// Separate latches: an approval episode that escalated must not swallow a
+  /// later "recovery attempts exhausted" escalation (and vice versa). Both
+  /// reset on the first healthy tick.
+  public var approvalEscalated: Bool
+  public var failureEscalated: Bool
 
   public static let initial = WatchdogState(
-    lastAttemptAt: nil, lastReregisterAt: nil, consecutiveFailures: 0, escalated: false)
+    lastAttemptAt: nil, lastReregisterAt: nil, consecutiveFailures: 0,
+    approvalEscalated: false, failureEscalated: false)
 
   public func recordingAttempt(at now: Date, wasReregister: Bool) -> WatchdogState {
     var next = self
@@ -70,9 +75,15 @@ public struct WatchdogState: Codable, Sendable, Equatable {
 
   public func recordingHealthy() -> WatchdogState { .initial }
 
-  public func recordingEscalation() -> WatchdogState {
+  public func recordingApprovalEscalation() -> WatchdogState {
     var next = self
-    next.escalated = true
+    next.approvalEscalated = true
+    return next
+  }
+
+  public func recordingFailureEscalation() -> WatchdogState {
+    var next = self
+    next.failureEscalated = true
     return next
   }
 }
@@ -112,12 +123,12 @@ public enum AgentWatchdogPolicy {
     }
 
     if input.status == .requiresApproval {
-      let shouldEscalate = input.heartbeatEverExisted && !state.escalated
+      let shouldEscalate = input.heartbeatEverExisted && !state.approvalEscalated
       return .awaitApproval(escalate: shouldEscalate)
     }
 
     if state.consecutiveFailures >= maxAttemptsBeforeEscalation {
-      return state.escalated ? .none : .escalate
+      return state.failureEscalated ? .none : .escalate
     }
 
     if let last = state.lastAttemptAt, input.now.timeIntervalSince(last) < attemptCooldownSec {

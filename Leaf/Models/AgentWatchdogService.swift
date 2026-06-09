@@ -37,6 +37,7 @@ final class AgentWatchdogService {
 
   static let stateDefaultsKey = "agentWatchdogState"
   static let disableEnvKey = "LEAF_DISABLE_WATCHDOG"
+  static let escalationNotificationID = "leaf.watchdog.escalation"
   static let tickIntervalSec: TimeInterval = 120
   static let firstTickDelaySec: TimeInterval = 60
 
@@ -44,6 +45,15 @@ final class AgentWatchdogService {
   private let logger = Logger(subsystem: "tech.gundem.leaf", category: "watchdog")
   private var loop: Task<Void, Never>?
   private var state: WatchdogState
+  /// MainActor-reentrancy guard: tick() and repairNow() interleave on
+  /// suspension points; only one recovery sequence may run at a time
+  /// (a tick mid-repair would kickstart-SIGKILL the agent the repair just
+  /// brought up and corrupt the repair verdict).
+  private var recoveryInFlight = false
+  /// Wall-clock of the previous tick — a gap far beyond the interval means
+  /// the Mac slept; the first post-wake tick is skipped so a heartbeat that
+  /// is merely "old because we slept" doesn't get a spurious kickstart.
+  private var lastTickAt: Date?
 
   init(launchAgent: LaunchAgentService) {
     self.launchAgent = launchAgent
@@ -58,8 +68,8 @@ final class AgentWatchdogService {
 
   func start() {
     guard loop == nil else { return }
-    // Dev scripts (just dev / dev-clean) deliberately kill agents mid-flow;
-    // the escape hatch keeps the watchdog from fighting them.
+    // Escape hatch for dev flows that deliberately kill/replace agents
+    // (set to any non-empty value).
     if let disabled = ProcessInfo.processInfo.environment[Self.disableEnvKey], !disabled.isEmpty {
       logger.info("watchdog disabled via \(Self.disableEnvKey, privacy: .public)")
       return
@@ -67,7 +77,8 @@ final class AgentWatchdogService {
     loop = Task { [weak self] in
       try? await Task.sleep(nanoseconds: UInt64(Self.firstTickDelaySec * 1_000_000_000))
       while !Task.isCancelled {
-        await self?.tick()
+        guard let self else { break }
+        await self.tick()
         try? await Task.sleep(nanoseconds: UInt64(Self.tickIntervalSec * 1_000_000_000))
       }
     }
@@ -81,6 +92,19 @@ final class AgentWatchdogService {
   // MARK: - Tick
 
   func tick() async {
+    guard !recoveryInFlight else { return }
+    // Post-wake detection: a tick gap far beyond the interval means the Mac
+    // slept and the heartbeat is stale only because nothing ran. Skip one
+    // tick to give the agent its 30s write window instead of SIGKILLing a
+    // healthy process.
+    let now = Date()
+    let previousTick = lastTickAt
+    lastTickAt = now
+    if let previousTick, now.timeIntervalSince(previousTick) > Self.tickIntervalSec * 2 {
+      logger.info("tick skipped after sleep gap of \(Int(now.timeIntervalSince(previousTick)), privacy: .public)s")
+      return
+    }
+
     launchAgent.refreshStatus()
     let input = await Self.gatherInput(
       intentEnabled: launchAgent.intentEnabled,
@@ -101,13 +125,21 @@ final class AgentWatchdogService {
       if isFresh {
         if state != .initial { persist(state.recordingHealthy()) }
         escalation = nil
+      } else if !input.intentEnabled {
+        // The user deliberately turned collection off — a leftover
+        // escalation banner is no longer actionable.
+        escalation = nil
       }
 
     case .kickstart:
+      recoveryInFlight = true
+      defer { recoveryInFlight = false }
       persist(state.recordingAttempt(at: input.now, wasReregister: false))
       await Self.kickstart(label: LaunchAgentService.agentLabel, logger: logger)
 
     case .reregisterThenKickstart:
+      recoveryInFlight = true
+      defer { recoveryInFlight = false }
       persist(state.recordingAttempt(at: input.now, wasReregister: true))
       // register() from the installed copy re-points a hijacked BTM parent
       // record back at this bundle. Success is judged by a fresh heartbeat
@@ -118,7 +150,7 @@ final class AgentWatchdogService {
 
     case .awaitApproval(let escalate):
       if escalate {
-        persist(state.recordingEscalation())
+        persist(state.recordingApprovalEscalation())
         surfaceEscalation(
           message:
             "Leaf needs approval in System Settings → General → Login Items to resume background collection.",
@@ -126,7 +158,7 @@ final class AgentWatchdogService {
       }
 
     case .escalate:
-      persist(state.recordingEscalation())
+      persist(state.recordingFailureEscalation())
       surfaceEscalation(
         message:
           "Background collection stopped and automatic recovery didn't help. Open Leaf Settings → Diagnostics and use Repair.",
@@ -139,26 +171,61 @@ final class AgentWatchdogService {
   /// revive the heartbeat, do a one-time unregister+register (the documented
   /// manual remedy for a disabled/hijacked BTM record — safe as a deliberate
   /// single action, harmful only as an automatic every-launch cycle).
+  /// Note: register() flips the intent flag ON — deliberate; clicking Repair
+  /// means "make collection work".
   func repairNow() async {
+    guard !recoveryInFlight else { return }
+    guard launchAgent.shouldAutoRegister else {
+      // Registering from a non-canonical copy would hijack the BTM record —
+      // the exact failure this track fixes. Don't offer a footgun.
+      logger.warning("manual repair refused: non-canonical bundle location")
+      surfaceEscalation(
+        message:
+          "Leaf is running from \(Bundle.main.bundleURL.path). Move it to /Applications and relaunch before repairing background collection.",
+        needsLoginItemsApproval: false)
+      return
+    }
+    recoveryInFlight = true
+    defer { recoveryInFlight = false }
     logger.info("manual repair requested")
     escalation = nil
     persist(WatchdogState.initial)
+    let repairStartMs = Int64(Date().timeIntervalSince1970 * 1000)
 
     launchAgent.register()
     await Self.kickstart(label: LaunchAgentService.agentLabel, logger: logger)
-    try? await Task.sleep(nanoseconds: 5_000_000_000)
-
-    if let hb = DebugHeartbeat.read(), !hb.isStale() {
-      logger.info("manual repair: heartbeat fresh after register+kickstart")
+    if await Self.awaitHeartbeat(newerThanMs: repairStartMs, timeoutSec: 25) {
+      logger.info("manual repair: fresh heartbeat after register+kickstart")
       return
     }
     logger.warning("manual repair: escalating to unregister+register")
-    let intent = launchAgent.intentEnabled
     launchAgent.unregister()
-    launchAgent.intentEnabled = intent  // unregister() clears it; restore user intent
     try? await Task.sleep(nanoseconds: 1_000_000_000)
     launchAgent.register()
     await Self.kickstart(label: LaunchAgentService.agentLabel, logger: logger)
+    if await Self.awaitHeartbeat(newerThanMs: repairStartMs, timeoutSec: 25) {
+      logger.info("manual repair: fresh heartbeat after unregister+register")
+    } else {
+      logger.error("manual repair: agent still silent — surfacing escalation")
+      surfaceEscalation(
+        message:
+          "Repair didn't bring the agent back. Open System Settings → General → Login Items and toggle Leaf OFF, wait 3 seconds, then ON.",
+        needsLoginItemsApproval: true)
+    }
+  }
+
+  /// Polls for a heartbeat written AFTER the repair started — absolute
+  /// staleness would call a pre-repair heartbeat a success and a slow cold
+  /// start (SQLCipher open + migrations precede the first write) a failure.
+  private nonisolated static func awaitHeartbeat(
+    newerThanMs: Int64, timeoutSec: TimeInterval
+  ) async -> Bool {
+    let deadline = Date().addingTimeInterval(timeoutSec)
+    while Date() < deadline {
+      if let hb = DebugHeartbeat.read(), hb.tsMs >= newerThanMs { return true }
+      try? await Task.sleep(nanoseconds: 1_000_000_000)
+    }
+    return false
   }
 
   // MARK: - Input gathering (blocking IO off the main actor)
@@ -220,7 +287,7 @@ final class AgentWatchdogService {
     content.title = title
     content.body = message
     let request = UNNotificationRequest(
-      identifier: "leaf.watchdog.escalation",
+      identifier: Self.escalationNotificationID,
       content: content,
       trigger: nil)
     UNUserNotificationCenter.current().add(request)

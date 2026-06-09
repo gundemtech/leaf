@@ -123,10 +123,25 @@ final class AgentWatchdogPolicyTests: XCTestCase {
       input(status: .requiresApproval), state: .initial)
     XCTAssertEqual(first, .awaitApproval(escalate: true))
 
-    let escalatedState = WatchdogState.initial.recordingEscalation()
+    let escalatedState = WatchdogState.initial.recordingApprovalEscalation()
     let second = AgentWatchdogPolicy.decide(
       input(status: .requiresApproval), state: escalatedState)
     XCTAssertEqual(second, .awaitApproval(escalate: false))
+  }
+
+  func testApprovalEscalationDoesNotSwallowFailureEscalation() {
+    // Episode starts as requiresApproval (escalated once), the user approves,
+    // the agent is still dead → after max failed attempts the SEPARATE
+    // failure escalation must still fire (shared latch would return .none
+    // forever and the "use Repair" notification would never arrive).
+    var state = WatchdogState.initial.recordingApprovalEscalation()
+    for i in 0..<AgentWatchdogPolicy.maxAttemptsBeforeEscalation {
+      state = state.recordingAttempt(
+        at: now.addingTimeInterval(TimeInterval(-3600 + i * 660)), wasReregister: false)
+    }
+    XCTAssertEqual(
+      AgentWatchdogPolicy.decide(input(jobInfo: healthyJob), state: state),
+      .escalate)
   }
 
   func testRequiresApprovalSilentOnFirstRun() {
@@ -159,7 +174,7 @@ final class AgentWatchdogPolicyTests: XCTestCase {
       state = state.recordingAttempt(
         at: now.addingTimeInterval(TimeInterval(-3600 + i * 660)), wasReregister: false)
     }
-    state = state.recordingEscalation()
+    state = state.recordingFailureEscalation()
     XCTAssertEqual(
       AgentWatchdogPolicy.decide(input(jobInfo: healthyJob), state: state),
       .none)
@@ -171,7 +186,8 @@ final class AgentWatchdogPolicyTests: XCTestCase {
     var state = WatchdogState.initial
       .recordingAttempt(at: now, wasReregister: true)
       .recordingAttempt(at: now, wasReregister: false)
-      .recordingEscalation()
+      .recordingApprovalEscalation()
+      .recordingFailureEscalation()
     state = state.recordingHealthy()
     XCTAssertEqual(state, .initial)
   }
@@ -191,7 +207,7 @@ final class AgentWatchdogPolicyTests: XCTestCase {
   func testStateCodableRoundTrip() throws {
     let state = WatchdogState.initial
       .recordingAttempt(at: now, wasReregister: true)
-      .recordingEscalation()
+      .recordingFailureEscalation()
     let data = try JSONEncoder().encode(state)
     let decoded = try JSONDecoder().decode(WatchdogState.self, from: data)
     XCTAssertEqual(decoded, state)
