@@ -112,6 +112,10 @@ struct RootView: View {
                 if Task.isCancelled { break }
                 await directMessageInboxReader.tick()
                 if Task.isCancelled { break }
+                // Roster read-back — reconcile server workspace_members into the
+                // local team_members so invitees see each other, not just admin+self.
+                await workspaceReader.syncRosterFromServer()
+                if Task.isCancelled { break }
                 // Track 5 / S5 — 24h-cooldown retention prune (mirror cleanup).
                 await teamEventMirrorReader.pruneIfDueDaily()
                 if Task.isCancelled { break }
