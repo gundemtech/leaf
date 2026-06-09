@@ -256,8 +256,7 @@ struct LeafApp: App {
     // first-poll-batch suppression are handled inside the reader (notifTracker).
     let localMessageNotifier = LocalMessageNotifier()
     inboxReader.onIncomingInbound = { [notifPrefs] row in
-      let masterEnabled =
-        (UserDefaults.standard.object(forKey: "leaf.notifications.masterEnabled") as? Bool) ?? true
+      let masterEnabled = NotificationLocalPrefs.masterEnabled
       guard let kind = NotificationKind(rawValue: row.kind.rawValue) else { return }
       guard
         let plan = IncomingMessageNotificationDecider.decide(

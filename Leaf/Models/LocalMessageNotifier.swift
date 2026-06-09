@@ -24,6 +24,22 @@ import Foundation
 import LeafCore
 import UserNotifications
 
+/// Single source of truth for the local incoming-message notification prefs that
+/// live outside `notification_prefs` (the per-kind server-mirrored store). The
+/// master switch is a plain UserDefaults bool read in two places — the
+/// `NotificationsSettingsSection` `@AppStorage` binding and `LeafApp`'s
+/// `onIncomingInbound` closure — so the key + default live here to keep them in sync.
+enum NotificationLocalPrefs {
+  static let masterEnabledKey = "leaf.notifications.masterEnabled"
+  static let masterEnabledDefault = true
+
+  /// Current master-switch value (defaults to ON when never written, matching the
+  /// `@AppStorage` default).
+  static var masterEnabled: Bool {
+    (UserDefaults.standard.object(forKey: masterEnabledKey) as? Bool) ?? masterEnabledDefault
+  }
+}
+
 @MainActor
 final class LocalMessageNotifier {
 

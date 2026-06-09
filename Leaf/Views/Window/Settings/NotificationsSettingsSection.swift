@@ -30,7 +30,8 @@ struct NotificationsSettingsSection: View {
   /// `LeafApp`'s `onIncomingInbound` closure via the same UserDefaults key).
   /// Off silences every kind EXCEPT handoff (contract §10.2 locked-ON); the
   /// `IncomingMessageNotificationDecider` enforces the handoff exception.
-  @AppStorage("leaf.notifications.masterEnabled") private var masterEnabled: Bool = true
+  @AppStorage(NotificationLocalPrefs.masterEnabledKey) private var masterEnabled: Bool =
+    NotificationLocalPrefs.masterEnabledDefault
 
   /// Surfaces the most recent dev-test notification attempt outcome
   /// (granted / not-granted / scheduled / error). Kept scoped to this
