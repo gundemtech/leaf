@@ -86,6 +86,61 @@ gen-notes-self-test:
 check-releases-fresh:
     @./scripts/check-releases-fresh.sh
 
+# Bump MARKETING_VERSION + CURRENT_PROJECT_VERSION across the whole pbxproj (×6
+# each) to <version> (X.Y.Z-alpha.N). Asserts a complete bump (no partial). PREP
+# step of /release-leaf — commit the result before archiving.
+bump-version version:
+    @./scripts/bump-version.sh {{version}}
+
+# Fixture-based self-test for bump-version (partial-bump caught, GA rejected,
+# idempotent, build number derived from alpha.N). Never touches the real project.
+bump-version-self-test:
+    @./scripts/tests/test-bump-version.sh
+
+# Build + notarize + appcast for <version> under SSM secrets, stopping BEFORE
+# publish (no R2 upload, no site deploy). Bump pbxproj + `just gen-notes` FIRST,
+# or use the /release-leaf command which does the full PREP + the publish gate.
+release version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    vault="../leaf-internal/scripts/vault.sh"
+    [ -f "$vault" ] || { echo "✘ vault.sh not found at $vault — clone gundemtech/leaf-internal as a sibling"; exit 1; }
+    echo "▶ Building {{version}} under /leaf/release secrets → stops at appcast (NOT published)…"
+    bash "$vault" run release -- bash scripts/release.sh "{{version}}" --until appcast
+    echo "✓ Built + notarized {{version}} (NOT published). Publish via /release-leaf (confirm gate)."
+
+# Refresh the OFFLINE secrets cache from AWS SSM /leaf/release/* (narrow prefix —
+# R2_*/CF_* + LEAF_SIGN_ID only; NOT blanket /leaf/prod/). Writes 0600 to
+# ~/.config/leaf/release.env (outside the repo). release.sh auto-sources it ONLY
+# when the live SSM env is empty. Re-run after a key rotation. Needs AWS creds
+# (export AWS_PROFILE=… first).
+secrets-refresh:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    umask 077
+    vault="../leaf-internal/scripts/vault.sh"
+    [ -f "$vault" ] || { echo "✘ vault.sh not found at $vault — clone gundemtech/leaf-internal as a sibling"; exit 1; }
+    dir="$HOME/.config/leaf"
+    mkdir -p "$dir"
+    out="$dir/release.env"
+    bash "$vault" sync release "$out"
+    miss=()
+    for k in R2_BUCKET R2_ENDPOINT R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY CF_ZONE_ID CF_API_TOKEN; do
+        grep -q "^$k=" "$out" || miss+=("$k")
+    done
+    if [ ${#miss[@]} -gt 0 ]; then
+        echo "✘ secrets-refresh: missing keys in $out: ${miss[*]}" >&2
+        echo "  Seed them in SSM /leaf/release/* (Prerequisites — see .claude/commands/release-leaf.md)." >&2
+        exit 1
+    fi
+    echo "✓ secrets-refresh: wrote $out (0600) with R2_*/CF_* — offline release fallback ready."
+
+# Self-test for the release.sh / upload-release.sh orchestration: assert_secrets
+# fast-fail, --until loop, cached-secrets parser, upload cp-ordering invariant.
+# Hermetic — no xcodebuild, no AWS.
+release-flow-self-test:
+    @./scripts/tests/test-release-flow.sh
+
 # Point git at the tracked .githooks/ dir (run once per clone). The pre-push hook
 # there runs leak-guard before every push to the public repo. This OVERWRITES any
 # existing core.hooksPath and means per-clone .git/hooks/* no longer fire (we ship

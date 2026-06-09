@@ -63,3 +63,10 @@ jobs:
 
       - name: releases.json freshness (committed copy ⟺ CHANGELOG.md)
         run: ./scripts/check-releases-fresh.sh
+
+      # Phase 2 release tooling (hermetic — no xcodebuild/AWS, fixture-driven).
+      - name: Version-bump self-test (partial-bump guard)
+        run: ./scripts/tests/test-bump-version.sh
+
+      - name: Release-flow self-test (assert_secrets / --until / cache / upload ordering)
+        run: ./scripts/tests/test-release-flow.sh

@@ -62,6 +62,10 @@ build/releases/
 *.eddsa
 .envrc
 .env
+# Offline secrets cache (vault.sh sync → ~/.config/leaf/release.env). Lives outside
+# the repo; this is belt-and-suspenders if one is ever copied in. Real protection
+# is umask 077 + 0600 + $HOME, not gitignore.
+*.env
 
 # Supabase CLI workspace cache (created when supabase CLI is run from leaf/)
 supabase/
