@@ -715,15 +715,18 @@ extension SupabaseAuthSession {
 
 extension SupabaseClient {
   /// Native email+password login. POST /auth/v1/token?grant_type=password.
-  /// The body carries `gotrue_meta_security.captcha_token` because the shared
-  /// project has Turnstile CAPTCHA protection enabled globally (spec §5.A/§5.C);
-  /// without the token GoTrue rejects the request. Updates the actor's session
-  /// state + lastRefreshAt and persists the refresh_token if a store is wired,
-  /// so a subsequent app cold-start reuses it (no second prompt). Returns the
-  /// session (pubkey claim NOT yet present — caller drives registerPubkey via
-  /// `ensureAuthenticatedAndPubkeyRegistered`).
+  /// `captchaToken` is OPTIONAL: the shared project's global CAPTCHA protection
+  /// is OFF, so the native app does NOT send a captcha token (the macOS app
+  /// renders no Turnstile widget). When `captchaToken` is empty (the default),
+  /// the `gotrue_meta_security` key is omitted from the body entirely; when a
+  /// non-empty token IS supplied (e.g. a future captcha-on configuration), it
+  /// is carried in `gotrue_meta_security.captcha_token`. Updates the actor's
+  /// session state + lastRefreshAt and persists the refresh_token if a store is
+  /// wired, so a subsequent app cold-start reuses it (no second prompt).
+  /// Returns the session (pubkey claim NOT yet present — caller drives
+  /// registerPubkey via `ensureAuthenticatedAndPubkeyRegistered`).
   public func signInWithPassword(
-    email: String, password: String, captchaToken: String
+    email: String, password: String, captchaToken: String = ""
   ) async throws -> SupabaseAuthSession {
     let url = SupabaseEndpoint.signInWithPassword(baseURL: baseURL)
     var request = URLRequest(url: url)
@@ -731,11 +734,13 @@ extension SupabaseClient {
     for (k, v) in SupabaseEndpoint.anonHeaders(anonKey: anonKey) {
       request.setValue(v, forHTTPHeaderField: k)
     }
-    let body: [String: Any] = [
+    var body: [String: Any] = [
       "email": email,
       "password": password,
-      "gotrue_meta_security": ["captcha_token": captchaToken],
     ]
+    if !captchaToken.isEmpty {
+      body["gotrue_meta_security"] = ["captcha_token": captchaToken]
+    }
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
     let session = try await decodeAuthResponse(request: request, label: "signInWithPassword")
     installAuthenticatedSession(session)
