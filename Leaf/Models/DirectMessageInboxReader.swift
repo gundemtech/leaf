@@ -37,6 +37,16 @@ final class DirectMessageInboxReader: RealtimeDirectMessageAbsorbing {
     /// on every refreshLocalState (filesystem I/O on every UI poll).
     private var cachedPubkeyHex: String?
 
+    /// Local-notification dedup + first-poll-batch suppression (Set-based; see
+    /// `IncomingMessageNotificationTracker`). In-memory → re-primes each launch.
+    private var notifTracker = IncomingMessageNotificationTracker()
+
+    /// Set by the composition root (`LeafApp.init`) to fire a local notification
+    /// for a new inbound DM. The closure applies master / per-kind prefs + content
+    /// (`IncomingMessageNotificationDecider`) and schedules via `LocalMessageNotifier`.
+    /// nil in tests / non-notifying contexts.
+    var onIncomingInbound: (@MainActor (DirectMessageMirrorRow) -> Void)?
+
     private var service: DirectMessageInboxService?
     private var database: LeafCore.Database?
     private let supabase: SupabaseClient
@@ -77,9 +87,19 @@ final class DirectMessageInboxReader: RealtimeDirectMessageAbsorbing {
             return
         }
         do {
-            _ = try await svc.tick(workspaceID: wid)
+            let newRows = try await svc.tickReturningNewRows(workspaceID: wid)
             refreshLocalState(workspaceID: wid)
             refreshUnreadCounts()
+            // Polling notifications: first batch per workspace is backlog (suppressed);
+            // subsequent new inbound-unread rows fire a local notification.
+            let notifiable = Set(
+                notifTracker.notifiablePolledMessageIDs(
+                    workspaceID: wid, messageIDs: newRows.map { $0.messageID }))
+            for row in newRows
+            where notifiable.contains(row.messageID)
+                && row.direction == .inbound && row.readAtMs == nil {
+                onIncomingInbound?(row)
+            }
             lastTickError = nil
         } catch {
             lastTickError = String(describing: error)
@@ -139,6 +159,12 @@ final class DirectMessageInboxReader: RealtimeDirectMessageAbsorbing {
                 refreshLocalState(workspaceID: row.workspaceID)
             }
             refreshUnreadCounts()
+            // Realtime delivery is always a live (post-subscription) event → notify
+            // a new inbound-unread row once (dedup by messageID across both paths).
+            if row.direction == .inbound, row.readAtMs == nil,
+               notifTracker.shouldNotifyRealtime(messageID: row.messageID) {
+                onIncomingInbound?(row)
+            }
             lastTickError = nil
         } catch {
             lastTickError = "Realtime push absorb failed: \(error)"
