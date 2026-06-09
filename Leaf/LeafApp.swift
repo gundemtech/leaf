@@ -243,8 +243,39 @@ struct LeafApp: App {
     // Track 5 / S8 / T9 — Notification prefs reader. Reads + writes
     // notification_prefs (M026); best-effort server mirror via Supabase
     // for apns_push to skip pushes for disabled kinds.
-    _notificationPrefsReader = State(
-      initialValue: NotificationPrefsReader(supabaseClient: supabase))
+    let notifPrefs = NotificationPrefsReader(supabaseClient: supabase)
+    // Load saved per-kind prefs at launch so a kind the user disabled in a prior
+    // session is honored before Settings is ever opened (refresh fails open to
+    // defaults — handoff/task/ping ON — if the DB is unreachable).
+    notifPrefs.refresh()
+    _notificationPrefsReader = State(initialValue: notifPrefs)
+
+    // Incoming-DM local notifications: when the inbox reader lands a new inbound
+    // message (realtime or polling), build a notification plan from the master
+    // toggle + per-kind prefs + content style, then schedule it. Dedup +
+    // first-poll-batch suppression are handled inside the reader (notifTracker).
+    let localMessageNotifier = LocalMessageNotifier()
+    inboxReader.onIncomingInbound = { [notifPrefs] row in
+      let masterEnabled =
+        (UserDefaults.standard.object(forKey: "leaf.notifications.masterEnabled") as? Bool) ?? true
+      guard let kind = NotificationKind(rawValue: row.kind.rawValue) else { return }
+      guard
+        let plan = IncomingMessageNotificationDecider.decide(
+          messageID: row.messageID,
+          workspaceID: row.workspaceID,
+          kind: row.kind,
+          direction: row.direction,
+          senderDisplayName: row.senderDisplayName,
+          body: row.body,
+          readAtMs: row.readAtMs,
+          masterEnabled: masterEnabled,
+          kindEnabled: notifPrefs.isEnabled(kind),
+          soundEnabled: notifPrefs.isEnabled(.sound),
+          bodyStyle: .bodyPreview,
+          masterCanSilenceHandoff: false)
+      else { return }
+      localMessageNotifier.schedule(plan)
+    }
 
     // Track 5 / S5 — broadcast + mirror readers + 30s tick scheduling
     // (driven by OrganizationView .task per S4 DM inbox precedent).
