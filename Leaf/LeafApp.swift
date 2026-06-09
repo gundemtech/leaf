@@ -47,6 +47,7 @@ struct LeafApp: App {
   @State private var permissions = PermissionsService()
   @State private var updater: UpdaterController
   @State private var lastSeenCursor = LastSeenCursor()
+  @State private var whatsNewTracker = WhatsNewTracker()  // Phase 3 — in-app What's New
   @State private var diagnostics = DebugDiagnosticsService()
   @State private var routeCoordinator = RouteCoordinator()
   @State private var reader = InsightsReader()
@@ -637,6 +638,7 @@ struct LeafApp: App {
         .environment(updater)
         .environment(reader)
         .environment(lastSeenCursor)  // Track-10 T5
+        .environment(whatsNewTracker)  // Phase 3 — in-app What's New auto-present
         .environment(diagnostics)  // dev-launch-reliability — Settings Diagnostics
         .environment(routeCoordinator)  // Track-10 — Home/ResumeHero routing
         .environment(workspaceReader)  // Track 5 S2 Task 10
@@ -771,6 +773,7 @@ struct LeafApp: App {
         .environment(updater)
         .environment(reader)
         .environment(lastSeenCursor)  // Track-10 T5
+        .environment(whatsNewTracker)  // Phase 3 — in-app What's New auto-present
         .environment(diagnostics)  // dev-launch-reliability — Settings Diagnostics
         .environment(routeCoordinator)  // Track-10 — Home/ResumeHero routing
         .environment(workspaceReader)  // Track 5 S2 Task 10
