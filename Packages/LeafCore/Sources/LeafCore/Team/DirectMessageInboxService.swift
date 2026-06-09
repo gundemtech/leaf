@@ -47,6 +47,16 @@ public struct DirectMessageInboxService: Sendable {
     /// returns 0 newly-written rows.
     @discardableResult
     public func tick(workspaceID: String) async throws -> Int {
+        try await tickReturningNewRows(workspaceID: workspaceID).count
+    }
+
+    /// Like `tick`, but returns the freshly fetched + upserted inbound mirror rows
+    /// so callers can fire local notifications for messages the Realtime path
+    /// missed (WS down). Same cursor + decrypt + UPSERT semantics; `tick`
+    /// delegates here and returns `.count`. Idempotent — the cursor
+    /// (`created_at=gt.<maxServerCreatedAtMs>`) excludes already-seen rows, so a
+    /// second call with no newer server rows returns `[]`.
+    public func tickReturningNewRows(workspaceID: String) async throws -> [DirectMessageMirrorRow] {
         let pubkey = try recipientPubkeyHex()
 
         // Cursor — max server_created_at_ms from inbound rows in this workspace.
@@ -64,7 +74,7 @@ public struct DirectMessageInboxService: Sendable {
             limit: 100
         )
 
-        var processedCount = 0
+        var processed: [DirectMessageMirrorRow] = []
         for serverRow in rows {
             guard let decoded = decryptRow(serverRow, workspaceID: workspaceID) else {
                 // Log + skip (tampered / unknown keyID / decode error).
@@ -74,9 +84,9 @@ public struct DirectMessageInboxService: Sendable {
             try database.writeSQL { db in
                 try MessagesMirrorStore.upsert(mirrorRow, in: db)
             }
-            processedCount += 1
+            processed.append(mirrorRow)
         }
-        return processedCount
+        return processed
     }
 
     /// Fetch + decrypt + upsert a single message by id (used by APNs wake path).
