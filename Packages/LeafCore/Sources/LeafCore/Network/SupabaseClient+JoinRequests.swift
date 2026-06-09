@@ -153,6 +153,11 @@ extension SupabaseClient {
     ) {
       request.setValue(v, forHTTPHeaderField: k)
     }
+    // The `approve_join_request` Edge Function requires an Idempotency-Key header
+    // (returns 400 `{"error":"missing_idempotency_key"}` without it) to make the
+    // approve write replay-safe. All join-request Edge Function POSTs are
+    // idempotent-safe single writes, so send a fresh key on each call.
+    request.setValue(UUID().uuidString.lowercased(), forHTTPHeaderField: "Idempotency-Key")
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
     let (data, http) = try await joinRequestsTransport(
       request, label: label, retryable: false, refreshable: true)
