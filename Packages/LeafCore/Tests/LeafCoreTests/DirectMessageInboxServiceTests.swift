@@ -180,6 +180,92 @@ final class DirectMessageInboxServiceTests: XCTestCase {
         XCTAssertEqual(row?.kind, .ping)
     }
 
+    // MARK: - tickReturningNewRows (notification substrate)
+
+    func testTickReturningNewRows_ReturnsDecodedInboundRows() async throws {
+        let plaintext = makePlaintext(messageID: "00000000-0000-0000-0000-000000000bbb", body: "notify me", kind: .handoff)
+        let envelope = try makeEnvelope(plaintext: plaintext)
+        let envelopeHex = "\\\\x" + envelope.map { String(format: "%02x", $0) }.joined()
+        let wsID = workspaceID
+        let sndKey = senderPubkey
+        let slfKey = selfPubkey
+        let mid = plaintext.messageID
+
+        MockURLProtocol.handler = wrapWithBootstrap(pubkey: selfPubkey) { request, _ in
+            guard request.url?.path == "/rest/v1/direct_messages" else {
+                return (HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!, Data())
+            }
+            return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data("""
+                    [{
+                      "message_id": "\(mid)",
+                      "workspace_id": "\(wsID)",
+                      "sender_pubkey": "\(sndKey)",
+                      "recipient_pubkey": "\(slfKey)",
+                      "kind": "handoff",
+                      "encrypted_payload": "\(envelopeHex)",
+                      "cross_post": null,
+                      "created_at": "2026-05-14T10:00:00.000Z",
+                      "read_at": null, "done_at": null, "done_by_pubkey": null, "reply_to": null
+                    }]
+                    """.utf8))
+        }
+
+        let svc = makeInboxService(supabase: makeSession())
+        let rows = try await svc.tickReturningNewRows(workspaceID: workspaceID)
+        XCTAssertEqual(rows.count, 1)
+        XCTAssertEqual(rows.first?.messageID, mid)
+        XCTAssertEqual(rows.first?.direction, .inbound)
+        XCTAssertEqual(rows.first?.body, "notify me")
+        XCTAssertEqual(rows.first?.kind, .handoff)
+
+        // Upserts too — same side effect as tick().
+        let persisted = try db.readSQL { try MessagesMirrorStore.read(messageID: mid, in: $0) }
+        XCTAssertNotNil(persisted)
+    }
+
+    func testTickReturningNewRows_IdempotentViaCursor_SecondCallEmpty() async throws {
+        let plaintext = makePlaintext(messageID: "00000000-0000-0000-0000-000000000ccc", body: "once", kind: .task)
+        let envelope = try makeEnvelope(plaintext: plaintext)
+        let envelopeHex = "\\\\x" + envelope.map { String(format: "%02x", $0) }.joined()
+        let wsID = workspaceID
+        let sndKey = senderPubkey
+        let slfKey = selfPubkey
+        let mid = plaintext.messageID
+
+        MockURLProtocol.handler = wrapWithBootstrap(pubkey: selfPubkey) { request, _ in
+            guard request.url?.path == "/rest/v1/direct_messages" else {
+                return (HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!, Data())
+            }
+            let q = request.url?.query ?? ""
+            // Cursor present (second call) → server has nothing newer → empty.
+            if q.contains("created_at=gt.") {
+                return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                        Data("[]".utf8))
+            }
+            return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data("""
+                    [{
+                      "message_id": "\(mid)",
+                      "workspace_id": "\(wsID)",
+                      "sender_pubkey": "\(sndKey)",
+                      "recipient_pubkey": "\(slfKey)",
+                      "kind": "task",
+                      "encrypted_payload": "\(envelopeHex)",
+                      "cross_post": null,
+                      "created_at": "2026-05-14T10:00:00.000Z",
+                      "read_at": null, "done_at": null, "done_by_pubkey": null, "reply_to": null
+                    }]
+                    """.utf8))
+        }
+
+        let svc = makeInboxService(supabase: makeSession())
+        let first = try await svc.tickReturningNewRows(workspaceID: workspaceID)
+        XCTAssertEqual(first.count, 1)
+        let second = try await svc.tickReturningNewRows(workspaceID: workspaceID)
+        XCTAssertEqual(second.count, 0, "cursor excludes already-seen rows → no re-notify")
+    }
+
     func testSecondTick_UsesMaxCursorFromMirror() async throws {
         // Pre-seed mirror with a row at server_created_at_ms = 5000.
         let seeded = DirectMessageMirrorRow(
