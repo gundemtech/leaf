@@ -10,6 +10,14 @@ import XCTest
 
 final class FeedFilterTests: XCTestCase {
 
+    // MARK: - displayLabel
+
+    func testDirectMessagesLabelIsMessages() {
+        // Team UI polish — chip row must not wrap; "Direct Messages" was the
+        // longest label and "Direct" adds nothing inside the Team context.
+        XCTAssertEqual(FeedFilter.directMessages.displayLabel, "Messages")
+    }
+
     // MARK: - isExclusive
 
     func testAllIsExclusive() {

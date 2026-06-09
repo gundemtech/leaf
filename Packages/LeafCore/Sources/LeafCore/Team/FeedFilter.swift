@@ -71,7 +71,7 @@ public extension FeedFilter {
     var displayLabel: String {
         switch self {
         case .all:              return "All"
-        case .directMessages:   return "Direct Messages"
+        case .directMessages:   return "Messages"
         case .openTasks:        return "Open Tasks"
         case .decisions:        return "My Decisions"
         case .blockers:         return "My Blockers"
