@@ -36,4 +36,14 @@ enum LeafMessageCardTokens {
 
     /// Max lines for the sender display name before truncation.
     static let senderNameLineLimit: Int = 1
+
+    /// Bubble corner radius (chat-style restyle).
+    static let bubbleRadius: CGFloat = LeafRadius.md
+
+    /// Header avatar (chat scale — smaller than the legacy 32 pt card avatar).
+    static let headerAvatarSize: CGFloat = 24
+
+    /// Hover action bar floats above the bubble's top edge by this offset so
+    /// it never covers the header timestamp (legacy overlap glitch).
+    static let actionBarYOffset: CGFloat = -28
 }

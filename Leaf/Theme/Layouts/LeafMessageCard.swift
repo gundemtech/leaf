@@ -1,31 +1,29 @@
 //
 //  LeafMessageCard.swift
 //  Track 5 / S7 B.8 — Atom for rendering a direct message row.
+//  Team UI polish — chat-style restyle.
 //
-//  Visual anatomy (spec §6.1):
-//    1. Container: LeafCard(.raised) with outbound/inbound alignment indent
-//    2. Header: avatar · sender name · kind icon · timestamp
-//    3. Body text (6-line cap)
-//    4. Attachment embed (LeafLinkedEventCard .full) — when row.attachment != nil
-//    5. Cross-post badges (LeafLinkedEventCard .compact) — when crossPosts non-empty
-//    6. Read receipt (outbound only, when readAtMs != nil)
-//    7. Hover-reveal action bar (overlay top-trailing)
-//    8. Right-click context menu (duplicates actions + copy text)
-//    9. Auto-mark-read: 1 500 ms timer via Task; cancelled on disappear
+//  Visual anatomy:
+//    1. Run header (when showsHeader): inbound "Sender · 23m ago" with avatar;
+//       outbound "→ Recipient · 23m ago" (the feed is multi-recipient — bubble
+//       position alone encodes only "from me", never "to whom").
+//    2. Bubble: body text (6-line cap) + optional kind badge (task/handoff;
+//       ping is the plain-message default) + attachment embed + cross-post
+//       badges. Inbound = raised surface, outbound = subtle accent tint.
+//    3. Read receipt "Read Nm ago" (outbound, newest read message of a run —
+//       flags computed by TeamFeedPresentation.dmRenderFlags).
+//    4. Hover-reveal action bar floats ABOVE the bubble edge (offset token) so
+//       it never covers the header timestamp.
+//    5. Right-click context menu (duplicates actions + copy text).
+//    6. Auto-mark-read: 1 500 ms timer via Task; cancelled on disappear.
 //
-//  API substitutions vs original spec:
-//    - `row.attachment` is `DirectMessageAttachment?` (not separate `attachment_kind`
-//      / `attachment_external_ref` fields — spec referenced wire-format column names;
-//      Swift model already unwraps them into a typed struct).
-//    - `LeafAvatar` takes `initials: String` (not a member type); size `.sm` (24 pt)
-//      is the closest to the 32 pt token — we wrap in a fixed frame to honour token.
-//    - `DirectionUI` enum defined here (spec public enum) — kept internal since
-//      `DirectMessageMirrorRow.Direction` already carries the value; consumers pass
-//      `row.direction` directly via the convenience `init(row:crossPosts:...)`.
+//  Run grouping (consecutive messages of one conversation) hides repeated
+//  headers; headerless bubbles stay aligned via a clear avatar-width spacer.
+//  Full date/time of every message is available via tooltip on the bubble.
 //
 
-import SwiftUI
 import LeafCore
+import SwiftUI
 
 // MARK: - Public types
 
@@ -53,6 +51,16 @@ public struct LeafMessageCard: View {
 
     public let row: DirectMessageMirrorRow
     public let direction: MessageDirectionUI
+    /// Run flags (TeamFeedPresentation.dmRenderFlags). Header = name + time on
+    /// the newest message of a run; receipt = "Read Nm ago" once per run.
+    public let showsHeader: Bool
+    public let showsReceipt: Bool
+    /// Resolved recipient name for the outbound header ("→ Anton").
+    public let recipientDisplayName: String?
+    /// Resolved sender name — raw pubkey hex never reaches this view.
+    public let senderDisplayName: String
+    /// .relative → "23m ago"; .clock → "14:32" (day lives in the separator).
+    public let timestampStyle: FeedTimestampStyle
     public let crossPosts: [CrossPostLogRow]
     public let attachmentMetadata: AttachmentMetadata?
     public let actions: [MessageAction]
@@ -71,6 +79,11 @@ public struct LeafMessageCard: View {
     public init(
         row: DirectMessageMirrorRow,
         direction: MessageDirectionUI,
+        showsHeader: Bool,
+        showsReceipt: Bool,
+        recipientDisplayName: String?,
+        senderDisplayName: String,
+        timestampStyle: FeedTimestampStyle,
         crossPosts: [CrossPostLogRow],
         attachmentMetadata: AttachmentMetadata?,
         actions: [MessageAction],
@@ -79,6 +92,11 @@ public struct LeafMessageCard: View {
     ) {
         self.row = row
         self.direction = direction
+        self.showsHeader = showsHeader
+        self.showsReceipt = showsReceipt
+        self.recipientDisplayName = recipientDisplayName
+        self.senderDisplayName = senderDisplayName
+        self.timestampStyle = timestampStyle
         self.crossPosts = crossPosts
         self.attachmentMetadata = attachmentMetadata
         self.actions = actions
@@ -89,104 +107,135 @@ public struct LeafMessageCard: View {
     // MARK: Body
 
     public var body: some View {
-        HStack(spacing: 0) {
-            // Outbound messages are right-aligned: push card to the right
+        HStack(alignment: .top, spacing: LeafSpace.sm) {
             if direction == .outbound {
                 Spacer(minLength: LeafMessageCardTokens.outboundAlignmentPad)
             }
 
-            cardContent
-                .overlay(alignment: .topTrailing) {
-                    if isHovering && !actions.isEmpty {
-                        actionBar
-                            .padding(LeafSpace.xs)
-                            .transition(.opacity)
-                    }
+            // Avatar column: inbound only. Headerless messages of a run get a
+            // clear spacer so their bubbles stay aligned with the run header's.
+            if direction == .inbound {
+                if showsHeader {
+                    LeafAvatar(initials: initials(from: senderDisplayName), size: .sm)
+                } else {
+                    Color.clear
+                        .frame(width: LeafMessageCardTokens.headerAvatarSize, height: 1)
                 }
-                .contextMenu {
-                    contextMenuItems
-                }
-                .onHover { hovering in
-                    withAnimation(LeafMessageCardTokens.actionsRevealAnimation) {
-                        isHovering = hovering
-                    }
-                }
-                .onAppear {
-                    scheduleAutoRead()
-                }
-                .onDisappear {
-                    cancelAutoRead()
-                }
+            }
 
-            // Inbound messages are left-aligned: push card to the left
+            VStack(
+                alignment: direction == .outbound ? .trailing : .leading,
+                spacing: LeafSpace.xxs
+            ) {
+                if showsHeader {
+                    headerLine
+                }
+                bubble
+                    .overlay(alignment: direction == .outbound ? .topTrailing : .topLeading) {
+                        if isHovering && !actions.isEmpty {
+                            actionBar
+                                .offset(y: LeafMessageCardTokens.actionBarYOffset)
+                                .transition(.opacity)
+                        }
+                    }
+                if showsReceipt, let readMs = row.readAtMs {
+                    receiptLine(readMs: readMs)
+                }
+            }
+            .contextMenu {
+                contextMenuItems
+            }
+            .onHover { hovering in
+                withAnimation(LeafMessageCardTokens.actionsRevealAnimation) {
+                    isHovering = hovering
+                }
+            }
+            .onAppear {
+                scheduleAutoRead()
+            }
+            .onDisappear {
+                cancelAutoRead()
+            }
+
             if direction == .inbound {
                 Spacer(minLength: LeafMessageCardTokens.outboundAlignmentPad)
             }
         }
     }
 
-    // MARK: Card content
+    // MARK: Run header
 
-    @ViewBuilder
-    private var cardContent: some View {
-        // Use .tight padding preset (= LeafSpace.md = 12 pt) to honour
-        // LeafMessageCardTokens.cardPadding. LeafCard's .regular is 16 pt.
-        LeafCard(variant: .raised, padding: .tight) {
-            VStack(alignment: .leading, spacing: LeafMessageCardTokens.bodySpacing) {
-                headerRow
-                bodyText
-                if let att = row.attachment {
-                    attachmentEmbed(att)
-                }
-                if !crossPosts.isEmpty {
-                    crossPostBadges
-                }
-                if direction == .outbound, let readMs = row.readAtMs {
-                    readReceipt(readMs: readMs)
-                }
-            }
-        }
-    }
-
-    // MARK: Header row
-
-    private var headerRow: some View {
+    /// "Anton Guntsev · 23m ago" (inbound) | "→ Anton · 23m ago" (outbound).
+    private var headerLine: some View {
         HStack(spacing: LeafSpace.xs) {
-            // Avatar — LeafAvatar uses initials; wrap in fixed frame to honour avatarSize token
-            LeafAvatar(initials: initials(from: row.senderDisplayName), size: .sm)
-                .frame(
-                    width: LeafMessageCardTokens.avatarSize,
-                    height: LeafMessageCardTokens.avatarSize
-                )
+            Text(
+                direction == .outbound
+                    ? "→ \(recipientDisplayName ?? "Teammate")"
+                    : senderDisplayName
+            )
+            .font(LeafType.body.small)
+            .fontWeight(.semibold)
+            .foregroundStyle(LeafColor.text.secondary)
+            .lineLimit(LeafMessageCardTokens.senderNameLineLimit)
 
-            // Sender display name
-            Text(row.senderDisplayName)
-                .font(LeafType.title.small)
-                .foregroundStyle(LeafColor.text.primary)
-                .lineLimit(LeafMessageCardTokens.senderNameLineLimit)
+            Text("·")
+                .font(LeafType.caption)
+                .foregroundStyle(LeafColor.text.tertiary)
 
-            // Kind icon
-            Image(systemName: kindSymbol(row.kind))
-                .font(.system(size: LeafMessageCardTokens.kindIconSize, weight: .regular))
-                .foregroundStyle(LeafColor.accent.primary)
-
-            Spacer(minLength: 0)
-
-            // Timestamp — relative
-            Text(relativeTimestamp(row.sentAtMs))
+            Text(timestampLabel(row.serverCreatedAtMs))
                 .font(LeafType.caption)
                 .foregroundStyle(LeafColor.text.tertiary)
         }
     }
 
-    // MARK: Body text
+    // MARK: Bubble
+
+    private var bubble: some View {
+        VStack(alignment: .leading, spacing: LeafSpace.xs) {
+            if row.kind != .ping {
+                kindBadge
+            }
+            bodyText
+            if let att = row.attachment {
+                attachmentEmbed(att)
+            }
+            if !crossPosts.isEmpty {
+                crossPostBadges
+            }
+        }
+        .padding(LeafMessageCardTokens.cardPadding)
+        .background(
+            RoundedRectangle(
+                cornerRadius: LeafMessageCardTokens.bubbleRadius, style: .continuous
+            )
+            .fill(direction == .outbound ? LeafColor.accent.subtle : LeafColor.surface.raised)
+        )
+        .frame(
+            maxWidth: LeafTeamFeedTokens.bubbleMaxWidth,
+            alignment: direction == .outbound ? .trailing : .leading
+        )
+        .help(fullDateLabel(row.serverCreatedAtMs))
+    }
+
+    /// Small labeled chip for task / handoff kinds — replaces the bare icon
+    /// whose meaning wasn't guessable. Ping = plain message, no badge.
+    private var kindBadge: some View {
+        HStack(spacing: LeafSpace.xxs) {
+            Image(systemName: kindSymbol(row.kind))
+                .font(.system(size: 11, weight: .medium))
+            Text(row.kind == .task ? "Task" : "Handoff")
+                .font(LeafType.label)
+        }
+        .foregroundStyle(LeafColor.accent.primary)
+        .accessibilityLabel(row.kind == .task ? "Task" : "Handoff")
+    }
 
     private var bodyText: some View {
         Text(row.body)
             .font(LeafType.body.regular)
             .foregroundStyle(LeafColor.text.primary)
             .lineLimit(LeafMessageCardTokens.bodyLineLimit)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     // MARK: Attachment embed
@@ -199,7 +248,6 @@ public struct LeafMessageCard: View {
             provider: attachmentProvider(from: att.kind),
             style: .full,
             onTap: {
-                // Parent can wire onAction(.viewOriginal) for deep-link navigation
                 onAction(.viewOriginal)
             }
         )
@@ -228,11 +276,12 @@ public struct LeafMessageCard: View {
 
     // MARK: Read receipt
 
-    private func readReceipt(readMs: Int64) -> some View {
+    private func receiptLine(readMs: Int64) -> some View {
         Text("Read \(relativeTimestamp(readMs))")
             .font(LeafType.caption)
             .foregroundStyle(LeafColor.text.tertiary)
-            .frame(maxWidth: .infinity, alignment: .trailing)
+            .help(fullDateLabel(readMs))
+            .accessibilityLabel("Read \(relativeTimestamp(readMs))")
     }
 
     // MARK: Hover-reveal action bar
@@ -246,6 +295,7 @@ public struct LeafMessageCard: View {
                     size: .sm,
                     action: { onAction(action) }
                 )
+                .help(actionLabel(action))
             }
         }
         .background(
@@ -326,7 +376,7 @@ public struct LeafMessageCard: View {
         }
     }
 
-    /// Human-readable label for each action (context menu).
+    /// Human-readable label for each action (context menu + hover tooltips).
     private func actionLabel(_ action: MessageAction) -> String {
         switch action {
         case .markRead:     return "Mark Read"
@@ -352,18 +402,46 @@ public struct LeafMessageCard: View {
 
     // MARK: Helpers — formatting
 
+    private func timestampLabel(_ ms: Int64) -> String {
+        switch timestampStyle {
+        case .relative:
+            return relativeTimestamp(ms)
+        case .clock:
+            return leafMessageCardClockFormatter.string(
+                from: Date(timeIntervalSince1970: TimeInterval(ms) / 1000))
+        }
+    }
+
+    private func fullDateLabel(_ ms: Int64) -> String {
+        leafMessageCardFullFormatter.string(
+            from: Date(timeIntervalSince1970: TimeInterval(ms) / 1000))
+    }
+
     private func relativeTimestamp(_ ms: Int64) -> String {
         let date = Date(timeIntervalSince1970: TimeInterval(ms) / 1000)
         return leafMessageCardRelativeFormatter.localizedString(for: date, relativeTo: Date())
     }
 }
 
-/// File-level cache so per-row `body` rebuilds don't allocate
-/// `RelativeDateTimeFormatter` (and the CFLocale inside) each invocation.
-/// Realtime DM bursts re-render the whole TeamView feed under @Observable
-/// invalidation; this turns one alloc-storm into a single shared instance.
+/// File-level caches so per-row `body` rebuilds don't allocate formatters
+/// (and the CFLocale inside) each invocation. Realtime DM bursts re-render
+/// the whole TeamView feed under @Observable invalidation; these turn an
+/// alloc-storm into shared instances.
 private let leafMessageCardRelativeFormatter: RelativeDateTimeFormatter = {
     let f = RelativeDateTimeFormatter()
     f.unitsStyle = .abbreviated
+    return f
+}()
+
+private let leafMessageCardClockFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "HH:mm"
+    return f
+}()
+
+private let leafMessageCardFullFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateStyle = .medium
+    f.timeStyle = .short
     return f
 }()
