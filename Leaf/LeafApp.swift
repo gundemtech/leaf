@@ -19,6 +19,7 @@ private let leafAppLogger = Logger(subsystem: "tech.gundem.leaf", category: "app
 struct LeafApp: App {
   @NSApplicationDelegateAdaptor(LeafAppDelegate.self) private var appDelegate
   @State private var launchAgent: LaunchAgentService
+  @State private var agentWatchdog: AgentWatchdogService
   @State private var watchedFolders = WatchedFoldersService()
   @State private var linearOAuth = LinearOAuthService()
   @State private var githubOAuth = GitHubOAuthService()
@@ -172,6 +173,12 @@ struct LeafApp: App {
 
     let agent = LaunchAgentService()
     _launchAgent = State(initialValue: agent)
+    // Agent watchdog — self-heal loop for the capture agent. Constructed
+    // here, started from applicationDidFinishLaunching via the static-ref
+    // bridge (process-lifetime; a window-scoped .task dies with the window).
+    let watchdog = AgentWatchdogService(launchAgent: agent)
+    _agentWatchdog = State(initialValue: watchdog)
+    LeafAppDelegate.agentWatchdog = watchdog
     _updater = State(initialValue: UpdaterController())
 
     // Track 5 S2 Task 10 — explicit init pair: ActiveWorkspaceStore owns
@@ -616,7 +623,15 @@ struct LeafApp: App {
     // SIGTERM the old agent (if a different binary path) and start the new agent — existing
     // SignalHandlers (Agent.swift:131) flush WAL gracefully. See the UpdaterController
     // doc-comment about the D14 deviation from master plan A2 D2.
-    if !agent.isEnabled {
+    //
+    // Gated twice (agent-watchdog track):
+    //  - intentEnabled: the user toggled collection OFF — don't resurrect it;
+    //  - shouldAutoRegister: SMAppService.register() re-points the BTM parent
+    //    record at THIS bundle's path. A prod-bundle-id copy running from
+    //    /tmp / a DMG / a translocated path would hijack the record away from
+    //    /Applications/Leaf.app and crash-loop the agent (EX_CONFIG), so only
+    //    a canonically-installed copy may auto-register.
+    if agent.intentEnabled, agent.shouldAutoRegister, !agent.isEnabled {
       agent.register()
     }
   }
@@ -628,6 +643,7 @@ struct LeafApp: App {
       } else {
         RootView()
         .environment(launchAgent)
+        .environment(agentWatchdog)
         .environment(watchedFolders)
         .environment(linearOAuth)
         .environment(githubOAuth)
@@ -768,6 +784,7 @@ struct LeafApp: App {
       } else {
         MenuBarContent()
         .environment(launchAgent)
+        .environment(agentWatchdog)
         .environment(watchedFolders)
         .environment(permissions)
         .environment(updater)
@@ -1004,6 +1021,11 @@ final class LeafAppDelegate: NSObject, NSApplicationDelegate, UNUserNotification
   /// Foreground-presentation timestamps for the coalesce window (WS2).
   @MainActor private static var recentPresentationsMs: [Int64] = []
 
+  /// Agent watchdog — strong: the self-heal loop must run for the whole app
+  /// lifetime regardless of window state. Populated by LeafApp.init, started
+  /// in applicationDidFinishLaunching.
+  @MainActor static var agentWatchdog: AgentWatchdogService?
+
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool
   {
     if !flag {
@@ -1018,6 +1040,10 @@ final class LeafAppDelegate: NSObject, NSApplicationDelegate, UNUserNotification
   }
 
   func applicationDidFinishLaunching(_ notification: Notification) {
+    // Agent watchdog — process-lifetime self-heal loop (first tick ~60s in,
+    // clear of the launch-time register/approval choreography).
+    Self.agentWatchdog?.start()
+
     // Track 5 / S4 — APNs registration. Requires aps-environment entitlement
     // (added separately for signed builds). In dev / unsigned builds, the
     // registration request silently no-ops on macOS.

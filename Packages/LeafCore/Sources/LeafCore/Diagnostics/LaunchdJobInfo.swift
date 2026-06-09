@@ -24,6 +24,27 @@ public struct AgentJobInfo: Sendable, Equatable {
 }
 
 public enum LaunchdJobInfoParser {
+  /// Runs `launchctl print gui/<uid>/<label>` and parses the result.
+  /// Blocking (Process + waitUntilExit) — call off the main actor.
+  public static func currentJobInfo(label: String) -> AgentJobInfo? {
+    let task = Process()
+    task.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+    task.arguments = ["print", "gui/\(getuid())/\(label)"]
+    let pipe = Pipe()
+    task.standardOutput = pipe
+    task.standardError = Pipe()
+    do {
+      try task.run()
+      task.waitUntilExit()
+    } catch {
+      return nil
+    }
+    guard let data = try? pipe.fileHandleForReading.readToEnd(),
+      let output = String(data: data, encoding: .utf8)
+    else { return nil }
+    return parse(output)
+  }
+
   /// Parses `launchctl print` output. Returns nil when the output doesn't
   /// describe a job (label not found, empty, garbage).
   public static func parse(_ output: String) -> AgentJobInfo? {

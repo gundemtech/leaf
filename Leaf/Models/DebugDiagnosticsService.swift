@@ -42,6 +42,10 @@ struct DebugDiagnosticsSnapshot: Sendable, Equatable {
 
     // launchd / BTM state
     let agentLaunchd: DebugDiagnostics.AgentLaunchdState
+    /// `launchctl print` snapshot — exposes the crash-loop signature
+    /// (non-zero last exit code + "spawn scheduled") that a stale heartbeat
+    /// alone can't show.
+    let agentJobInfo: AgentJobInfo?
 
     /// Recurring Sequoia bug: the BTM parent disposition drops to disabled
     /// after a sleep/wake/rebuild cycle. launchd shows the agent label loaded
@@ -120,7 +124,10 @@ final class DebugDiagnosticsService {
             }
         }
 
-        let launchdState = DebugDiagnostics.agentLaunchdState()
+        // Per-build label — a debug build must inspect tech.gundem.leaf.debug.agent,
+        // not the prod label.
+        let launchdState = DebugDiagnostics.agentLaunchdState(label: LaunchAgentService.agentLabel)
+        let jobInfo = LaunchdJobInfoParser.currentJobInfo(label: LaunchAgentService.agentLabel)
 
         snapshot = DebugDiagnosticsSnapshot(
             mainBundlePath: mainPath,
@@ -136,7 +143,8 @@ final class DebugDiagnosticsService {
             lastEventAgeSec: lastEventAge,
             eventsLastMinute: eventsLastMin,
             dbReadError: dbReadError,
-            agentLaunchd: launchdState
+            agentLaunchd: launchdState,
+            agentJobInfo: jobInfo
         )
     }
 
@@ -185,6 +193,9 @@ final class DebugDiagnosticsService {
         }
         if s.cdHashMismatch {
             lines.append("  ⚠ CDHash mismatch — main и agent подписаны разными identity")
+        }
+        if let job = s.agentJobInfo {
+            lines.append("  launchd     : state=\(job.state ?? "—") runs=\(job.runs.map(String.init) ?? "—") last exit=\(job.lastExitCode.map(String.init) ?? "—")\(job.isCrashLooping ? " (CRASH LOOP)" : "")")
         }
         lines.append("")
         lines.append("# Capture")
@@ -235,7 +246,8 @@ final class DebugDiagnosticsService {
             lastEventAgeSec: nil,
             eventsLastMinute: nil,
             dbReadError: nil,
-            agentLaunchd: DebugDiagnostics.AgentLaunchdState(loaded: false, runningPID: nil)
+            agentLaunchd: DebugDiagnostics.AgentLaunchdState(loaded: false, runningPID: nil),
+            agentJobInfo: nil
         )
     }
 

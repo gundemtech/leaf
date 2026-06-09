@@ -10,6 +10,7 @@
 //  state is actionable (.requiresApproval / lastErrorMessage).
 //
 
+import AppKit
 import SwiftUI
 import ServiceManagement
 import LeafCore
@@ -41,6 +42,18 @@ struct BackgroundCollectionSection: View {
                         .tint(LeafColor.accent.primary)
                     }
 
+                    if !launchAgent.isCanonicalLocation, launchAgent.shouldAutoRegister == false {
+                        LeafBanner(
+                            tone: .warning,
+                            title: "Leaf запущен не из /Applications",
+                            description:
+                                "Текущий путь: \(Bundle.main.bundleURL.path). Регистрация агента отсюда перепривяжет фоновый сбор к этой копии и сломается, когда она исчезнет. Перенеси Leaf в /Applications. Тоггл работает — на твой риск.",
+                            ctaTitle: "Reveal",
+                            onCTA: {
+                                NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL])
+                            }
+                        )
+                    }
                     if let error = launchAgent.lastErrorMessage {
                         LeafBanner(
                             tone: .danger,
