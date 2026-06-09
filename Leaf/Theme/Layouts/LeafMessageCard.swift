@@ -55,7 +55,7 @@ public struct LeafMessageCard: View {
     /// the newest message of a run; receipt = "Read Nm ago" once per run.
     public let showsHeader: Bool
     public let showsReceipt: Bool
-    /// Resolved recipient name for the outbound header ("→ Anton").
+    /// Resolved recipient name for the outbound header ("→ Alex").
     public let recipientDisplayName: String?
     /// Resolved sender name — raw pubkey hex never reaches this view.
     public let senderDisplayName: String
@@ -165,7 +165,7 @@ public struct LeafMessageCard: View {
 
     // MARK: Run header
 
-    /// "Anton Guntsev · 23m ago" (inbound) | "→ Anton · 23m ago" (outbound).
+    /// "Alex Doe · 23m ago" (inbound) | "→ Alex · 23m ago" (outbound).
     private var headerLine: some View {
         HStack(spacing: LeafSpace.xs) {
             Text(
