@@ -51,3 +51,6 @@ jobs:
 
       - name: Token-discipline (Track 2)
         run: ./scripts/check-tokens.sh
+
+      - name: Version-derivation self-test (release-pipeline base for N+1)
+        run: ./scripts/tests/test-derive-version.sh
