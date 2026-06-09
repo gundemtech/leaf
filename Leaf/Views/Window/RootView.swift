@@ -197,6 +197,7 @@ struct RootView: View {
         case .home:         HomeView()
         case .activity:     ActivityView()
         case .analytics:    AnalyticsView()
+        case .askLeaf:      AskLeafView()
         case .team:         TeamView()
         case .connections:  ConnectionsView()
         case .settings:     WindowSettingsView()

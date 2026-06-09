@@ -77,7 +77,7 @@ struct Sidebar: View {
   @State private var joinByCodePresented = false
 
   private var leafGroupItems: [WindowSection] {
-    showAnalyticsSection ? [.home, .activity, .analytics] : [.home, .activity]
+    showAnalyticsSection ? [.home, .activity, .analytics, .askLeaf] : [.home, .activity, .askLeaf]
   }
 
   var body: some View {

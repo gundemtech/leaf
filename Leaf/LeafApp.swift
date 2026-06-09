@@ -72,6 +72,7 @@ struct LeafApp: App {
   /// Track AI Coworker P4 — in-app team-handoff "Draft with AI" reader (first
   /// in-app AI surface). Self-resolves DB + prod AI moats (CR-2 parity).
   @State private var handoffDraftReader = HandoffDraftReader()
+  @State private var askLeafReader = AskLeafReader()
   /// Track 5 / S5 — Share Controls per-source toggle reader.
   @State private var shareRulesReader: ShareRulesReader
   /// Track 5 / S5 — sender-side broadcast loop reader.
@@ -667,6 +668,7 @@ struct LeafApp: App {
         .environment(joinRequestsReader)  // M027 invite-redesign
         .environment(directMessageSendReader)  // Track 5 / S4
         .environment(handoffDraftReader)  // AI Coworker P4 — Draft with AI
+        .environment(askLeafReader)  // AI-UI-1 — Ask Leaf Q&A tab
         .environment(directMessageInboxReader)  // Track 5 / S4
         .environment(apnsRegistrationReader)  // Track 5 / S4
         .environment(shareRulesReader)  // Track 5 / S5
