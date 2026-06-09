@@ -54,3 +54,12 @@ jobs:
 
       - name: Version-derivation self-test (release-pipeline base for N+1)
         run: ./scripts/tests/test-derive-version.sh
+
+      # Release-notes pipeline (cheap script jobs — jq is preinstalled on ubuntu).
+      # The freshness guard catches a CHANGELOG.md edit that forgot to regenerate
+      # the committed releases.json the bundle + R2 root serve.
+      - name: Release-notes generator self-test
+        run: ./scripts/tests/test-gen-release-notes.sh
+
+      - name: releases.json freshness (committed copy ⟺ CHANGELOG.md)
+        run: ./scripts/check-releases-fresh.sh

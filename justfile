@@ -9,14 +9,15 @@ default:
 preflight:
     #!/usr/bin/env bash
     set -euo pipefail
-    echo "▶ preflight 1/7 — leak-guard";              ./scripts/leak-guard.sh --report
-    echo "▶ preflight 2/7 — check-tokens";            ./scripts/check-tokens.sh
-    echo "▶ preflight 3/7 — check-migrations";        ./scripts/check-migrations.sh
-    echo "▶ preflight 4/7 — gitleaks";                ./scripts/gitleaks-scan.sh
-    echo "▶ preflight 5/7 — bundle-split guard";      ./scripts/check-bundle-split.sh
-    echo "▶ preflight 6/7 — build-all (5 schemes)";   just build-all
-    echo "▶ preflight 7/7 — SPM tests";               just test-core
-    echo "✅ preflight: all 7 checks green — phase may merge."
+    echo "▶ preflight 1/8 — leak-guard";              ./scripts/leak-guard.sh --report
+    echo "▶ preflight 2/8 — check-tokens";            ./scripts/check-tokens.sh
+    echo "▶ preflight 3/8 — check-migrations";        ./scripts/check-migrations.sh
+    echo "▶ preflight 4/8 — gitleaks";                ./scripts/gitleaks-scan.sh
+    echo "▶ preflight 5/8 — bundle-split guard";      ./scripts/check-bundle-split.sh
+    echo "▶ preflight 6/8 — releases.json freshness"; ./scripts/check-releases-fresh.sh
+    echo "▶ preflight 7/8 — build-all (5 schemes)";   just build-all
+    echo "▶ preflight 8/8 — SPM tests";               just test-core
+    echo "✅ preflight: all 8 checks green — phase may merge."
 
 # Token-discipline guard — Track 2 D1+. Fails if Leaf/Theme/ or
 # Leaf/Views/Tokens/ contain raw colours/spacing/radii.
@@ -68,6 +69,22 @@ derive-version:
 # highest tag fails loud; empty/junk sets rejected).
 derive-version-self-test:
     @./scripts/tests/test-derive-version.sh
+
+# Regenerate release notes from CHANGELOG.md: writes build/releases/releases.json
+# AND the committed Leaf/Resources/releases.json. Run after editing CHANGELOG.md,
+# then `git add Leaf/Resources/releases.json` (the freshness guard enforces this).
+gen-notes:
+    @./scripts/gen-release-notes.sh
+
+# Fixture-based self-test for gen-release-notes (releases.json shape, newest-first,
+# Unreleased skip, [YANKED], continuation join, HTML-escape, bare-fragment embed).
+gen-notes-self-test:
+    @./scripts/tests/test-gen-release-notes.sh
+
+# Freshness guard (R1): committed releases.json must match CHANGELOG.md. Part of
+# `just preflight`; fails with a diff + the regenerate-and-commit remediation.
+check-releases-fresh:
+    @./scripts/check-releases-fresh.sh
 
 # Point git at the tracked .githooks/ dir (run once per clone). The pre-push hook
 # there runs leak-guard before every push to the public repo. This OVERWRITES any
