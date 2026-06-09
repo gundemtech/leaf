@@ -81,27 +81,60 @@ public actor SupabaseClient {
 
   // MARK: - Public — ensureAuthenticated
 
-  /// Idempotent. Returns cached session if still valid; otherwise performs
-  /// 3-step bootstrap: signInAnonymously → registerPubkey → token refresh.
-  /// Concurrent callers share the in-flight bootstrap via .bootstrapping(task).
+  /// Phase 1 — NO anonymous fallback. Resolution order:
+  ///   1. valid in-memory session (expiresAt > now) → return;
+  ///   2. else persisted refresh_token → tokenRefresh → install + return;
+  ///   3. else throw `.unauthorized` (gate shows LoginView; agent exit(0)).
+  /// Concurrent callers share the in-flight refresh via `.bootstrapping`.
   public func ensureAuthenticated() async throws -> SupabaseAuthSession {
     if case .authenticated(let s) = state, s.expiresAt > now() { return s }
     if case .bootstrapping(let task) = state { return try await task.value }
 
-    let task = Task { try await self.performBootstrap() }
+    let task = Task { try await self.resolvePersistedOrThrow() }
     state = .bootstrapping(task)
     do {
       let session = try await task.value
       state = .authenticated(session)
-      // Bootstrap finishes with a token-refresh round-trip; stamp here so
-      // ensureFreshSession's NTP-skew margin starts ticking from a known
-      // wall-clock anchor instead of the JWT's iat (which we don't read).
       lastRefreshAt = now()
       return session
     } catch {
       state = .notAuthenticated
       throw error
     }
+  }
+
+  /// Step 2/3 of ensureAuthenticated: try persisted refresh, else throw.
+  private func resolvePersistedOrThrow() async throws -> SupabaseAuthSession {
+    if let store = sessionStore, let persisted = readPersistedBestEffort(store: store) {
+      let refreshed = try await performTokenRefresh(refreshToken: persisted.refreshToken)
+      persistSessionBestEffort(store: store, session: refreshed)
+      return refreshed
+    }
+    throw SupabaseError.unauthorized
+  }
+
+  /// Post-login device registration sequence (spec §4). Requires that a
+  /// login (signInWithPassword / exchangeOAuthCode) has already installed an
+  /// authenticated session, OR a persisted refresh exists. Then:
+  ///   1. registerPubkey(accessToken)  — row in pubkey_registry;
+  ///   2. tokenRefresh                 — new JWT with the pubkey claim (JWT hook);
+  ///   3. require pubkey claim present, else throw `.identityClaimMissing`.
+  /// Idempotent on the registerPubkey 409 path is the caller's concern
+  /// (TOFU collision surfaces as `.pubkeyAlreadyRegistered`).
+  public func ensureAuthenticatedAndPubkeyRegistered() async throws -> SupabaseAuthSession {
+    let current = try await ensureAuthenticated()
+    if let claim = current.pubkeyClaim, !claim.isEmpty { return current }
+    try await performRegisterPubkey(accessToken: current.accessToken)
+    let refreshed = try await performTokenRefresh(refreshToken: current.refreshToken)
+    state = .authenticated(refreshed)
+    lastRefreshAt = now()
+    if let store = sessionStore {
+      persistSessionBestEffort(store: store, session: refreshed)
+    }
+    guard let claim = refreshed.pubkeyClaim, !claim.isEmpty else {
+      throw SupabaseError.identityClaimMissing
+    }
+    return refreshed
   }
 
   // MARK: - ensureFreshSession (P1 hot-fix — JWT refresh for Realtime)
@@ -226,44 +259,6 @@ public actor SupabaseClient {
     public func lastRefreshAtForTesting() -> Date? { lastRefreshAt }
   #endif
 
-  private func performBootstrap() async throws -> SupabaseAuthSession {
-    // Track 5 / S4 — try persisted refresh_token first (closes S3 carry-over I3).
-    // If sessionStore present + has persisted session + refresh succeeds → reuse.
-    // Failure (no store / no persisted / 4xx on refresh) → fall through to fresh signup.
-    if let store = sessionStore, let persisted = readPersistedBestEffort(store: store) {
-      do {
-        let refreshed = try await performTokenRefresh(refreshToken: persisted.refreshToken)
-        persistSessionBestEffort(store: store, session: refreshed)
-        return refreshed
-      } catch {
-        // Persisted refresh failed; fall through to fresh signup below.
-        // (Don't clear yet — next successful auth will overwrite.)
-      }
-    }
-
-    let initial = try await performSignInAnonymously()
-    // Persist refresh_token from the initial signup BEFORE any further
-    // bootstrap step. If registerPubkey returns 409 (TOFU collision —
-    // most commonly: priv-file survived a partial local wipe while
-    // server-side `pubkey_registry` still holds the old auth_id), the
-    // next cold launch will refresh into THIS auth_id and either:
-    //  (a) hit register_pubkey's idempotent branch on retry (auth_id
-    //      PK already paired with the same pubkey → 200), or
-    //  (b) at minimum stay anchored to a single auth_id rather than
-    //      allocating a fresh one every cold launch that re-collides.
-    // Without this early persist, register failure leaves the user
-    // permanently stuck in a TOFU dead-end loop.
-    if let store = sessionStore {
-      persistSessionBestEffort(store: store, session: initial)
-    }
-    try await performRegisterPubkey(accessToken: initial.accessToken)
-    let refreshed = try await performTokenRefresh(refreshToken: initial.refreshToken)
-    if let store = sessionStore {
-      persistSessionBestEffort(store: store, session: refreshed)
-    }
-    return refreshed
-  }
-
   private func readPersistedBestEffort(store: SupabaseSessionStore) -> PersistedSession? {
     do {
       return try store.read()
@@ -280,22 +275,6 @@ public actor SupabaseClient {
       savedAtMs: Int64(now().timeIntervalSince1970 * 1000)
     )
     try? store.write(persisted)
-  }
-
-  // MARK: - Internal HTTP — signInAnonymously
-
-  /// Internal: signs in anonymously via Supabase Auth. Idempotent failure mode —
-  /// network error / 4xx / malformed body throw SupabaseError; state stays
-  /// .notAuthenticated for caller to retry.
-  private func performSignInAnonymously() async throws -> SupabaseAuthSession {
-    let url = SupabaseEndpoint.signupAnonymous(baseURL: baseURL)
-    var request = URLRequest(url: url)
-    request.httpMethod = "POST"
-    for (k, v) in SupabaseEndpoint.anonHeaders(anonKey: anonKey) {
-      request.setValue(v, forHTTPHeaderField: k)
-    }
-    request.httpBody = "{}".data(using: .utf8)
-    return try await decodeAuthResponse(request: request, label: "signupAnonymous")
   }
 
   private func decodeAuthResponse(request: URLRequest, label: String) async throws
@@ -370,14 +349,6 @@ public actor SupabaseClient {
     if http.statusCode == 200 { return }
     throw SupabaseError.fromRegisterPubkey(status: http.statusCode, body: data)
   }
-
-  // MARK: - Test-only DEBUG surface (Task 2 transient — Task 3 superseded by ensureAuthenticated)
-
-  #if DEBUG
-    public func performSignInAnonymouslyForTesting() async throws -> SupabaseAuthSession {
-      try await performSignInAnonymously()
-    }
-  #endif
 
   enum BootstrapState {
     case notAuthenticated
