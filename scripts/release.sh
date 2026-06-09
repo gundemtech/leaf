@@ -503,6 +503,17 @@ step_site() {
         fi
         sleep 10
     done
+    # Phase 4 contract — refresh leaf-web's committed last-known releases.json so the
+    # site's build-time version source (src/lib/version.ts) matches this ship. Source
+    # is the committed copy (build/releases/ may have been --clean'd). leaf-web reads a
+    # local file, not the network, so standalone site builds stay deterministic.
+    local committed_json="$REPO_ROOT/Leaf/Resources/releases.json"
+    if [[ -f "$committed_json" && -d "$web_dir/src/data" ]]; then
+        cp "$committed_json" "$web_dir/src/data/releases.json"
+        info "site: refreshed leaf-web/src/data/releases.json → $VERSION"
+    else
+        warn "site: leaf-web/src/data not found — version.ts will use its committed releases.json"
+    fi
     info "site: деплой leaf-web (билд подтянет $VERSION из appcast)"
     bash "$web_dir/scripts/deploy.sh"
     # Независимая пост-проверка (не доверяем exit code деплоя): живой сайт
