@@ -88,7 +88,10 @@ maybe_load_cached_secrets() {
     # signing identity) would execute as a command under `source`. IFS='=' read -r
     # splits on the FIRST '=' only, so '=' inside a value survives.
     local k v
-    while IFS='=' read -r k v; do
+    # `|| [[ -n "$k" ]]` processes a final line that lacks a trailing newline
+    # (read returns non-zero but still populated k/v) — else the last key (could be
+    # LEAF_SIGN_ID, which is not in REQUIRED_UPLOAD_SECRETS) would be silently dropped.
+    while IFS='=' read -r k v || [[ -n "$k" ]]; do
         case "$k" in ''|'#'*) continue ;; esac
         export "$k=$v"
     done < "$cache"
@@ -124,6 +127,37 @@ run_pipeline() {
             ok "--until ${UNTIL}: stopped after step '$s' (publish steps NOT run)"
             return 0
         fi
+    done
+}
+
+# Enforce the Ordering invariant (the critical Phase 2 property): the COMMITTED
+# releases.json must already carry the version being built BEFORE step_archive
+# bundles it as-is (PBXFileSystemSynchronizedRootGroup copies the file verbatim).
+# The /release-leaf PREP step regenerates it; this guard makes a skipped/out-of-order
+# PREP fail fast instead of silently shipping in-app "What's New" + the dashboard one
+# version behind. Test seam: LEAF_RESOURCES_JSON (mirrors gen-release-notes.sh).
+assert_releases_json_matches_version() {
+    local f="${LEAF_RESOURCES_JSON:-$REPO_ROOT/Leaf/Resources/releases.json}"
+    [[ -f "$f" ]] || { err "committed releases.json missing: $f — run: just gen-notes"; exit 1; }
+    local newest
+    newest="$(jq -r '.releases[0].version // ""' "$f" 2>/dev/null || true)"
+    if [[ "$newest" != "$VERSION" ]]; then
+        err "releases.json stale: newest entry is '$newest', building '$VERSION'."
+        err "Run PREP first: bump-version.sh $VERSION + CHANGELOG-cut + just gen-notes (see /release-leaf)."
+        exit 1
+    fi
+    ok "releases.json newest entry == $VERSION (Ordering invariant)"
+}
+
+# Move every *.dmg.appcast-hidden in $RELEASES back to *.dmg. Stateless +
+# idempotent (glob, NOT an in-memory array — sidesteps the Bash 3.2 empty-array
+# `set -u` crash), so it serves both the on-entry heal of a prior kill -9 AND the
+# step_appcast trap. $RELEASES is set in the paths section before any step runs.
+restore_hidden_dmgs() {
+    local h
+    for h in "$RELEASES"/*.dmg.appcast-hidden; do
+        [[ -f "$h" ]] || continue   # literal glob (no match) → skip cleanly
+        mv -f "$h" "${h%.appcast-hidden}"
     done
 }
 
@@ -388,14 +422,11 @@ step_zip() {
 step_appcast() {
     is_done appcast && { info "skip appcast (stamp exists)"; return 0; }
 
-    # Interrupt-recovery: a prior run killed between the hide and restore below
-    # leaves *.dmg.appcast-hidden with the stamp unset. Un-hide on entry so the
-    # DMG is never permanently stranded (a stamped-but-missing DMG would otherwise
-    # upload to R2 without an installer).
-    local h
-    while IFS= read -r h; do
-        mv -f "$h" "${h%.appcast-hidden}"
-    done < <(find "$RELEASES" -maxdepth 1 -name "*.dmg.appcast-hidden" -type f)
+    # Interrupt-recovery: a prior run killed (incl. kill -9, which can't be trapped)
+    # between hide and restore leaves *.dmg.appcast-hidden with the stamp unset.
+    # Un-hide on entry so the DMG is never permanently stranded (a stamped-but-missing
+    # DMG would otherwise upload to R2 without an installer).
+    restore_hidden_dmgs
 
     # Embed the current version's "What's New" fragment into the signed appcast.
     # gen-release-notes runs here (not earlier) because --clean/apply_flags in main
@@ -411,19 +442,12 @@ step_appcast() {
     # updates). Sparkle update path = .zip; .dmg = first install only. Прячем ВСЕ
     # .dmg на время генерации. A trap restores them even on Ctrl-C / SIGTERM so an
     # interrupted run never strands the DMG as *.dmg.appcast-hidden.
-    local hidden_list=()
-    restore_dmgs() {
-        local d
-        for d in "${hidden_list[@]}"; do
-            [[ -f "$d.appcast-hidden" ]] && mv -f "$d.appcast-hidden" "$d"
-        done
-    }
-    trap 'restore_dmgs' EXIT INT TERM
+    trap 'restore_hidden_dmgs' EXIT INT TERM
     local dmg
-    while IFS= read -r dmg; do
+    for dmg in "$RELEASES"/*.dmg; do
+        [[ -f "$dmg" ]] || continue   # literal glob (no .dmg) → nothing to hide
         mv "$dmg" "$dmg.appcast-hidden"
-        hidden_list+=("$dmg")
-    done < <(find "$RELEASES" -maxdepth 1 -name "*.dmg" -type f)
+    done
 
     local rc=0
     ~/bin/sparkle/generate_appcast \
@@ -431,7 +455,7 @@ step_appcast() {
         --download-url-prefix https://updates.gundem.tech/releases/ \
         "$RELEASES/" >/dev/null || rc=$?
 
-    restore_dmgs
+    restore_hidden_dmgs
     trap - EXIT INT TERM
 
     [[ $rc -eq 0 ]] || { err "generate_appcast failed (rc=$rc)"; exit $rc; }
@@ -499,6 +523,7 @@ assert_secrets
 require_tools
 assert_signing_identity
 assert_version_matches_pbxproj
+assert_releases_json_matches_version
 apply_flags
 
 run_pipeline
