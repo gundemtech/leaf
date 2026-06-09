@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 1,
+  "releases": [
+    {
+      "version": "1.0.0-alpha.30",
+      "date": "2026-06-09",
+      "added": [],
+      "fixed": [
+        "Approving a request to join a workspace now works reliably — the admin queue no longer shows a spurious \"bad request\" error on approval.",
+        "Team members now see the full roster: invitees see each other, not just the admin and themselves (previously the roster did not sync between members)."
+      ],
+      "changed": [],
+      "dmgURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.30.dmg",
+      "zipURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.30.zip"
+    },
+    {
+      "version": "1.0.0-alpha.29",
+      "date": "2026-06-09",
+      "added": [
+        "Local system banners for incoming team messages (handoff, task, ping) — you no longer have to open the app to learn a message arrived.",
+        "A master notifications toggle plus per-type settings in Settings (handoff notifications are always on); a text preview is shown by default."
+      ],
+      "fixed": [],
+      "changed": [],
+      "dmgURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.29.dmg",
+      "zipURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.29.zip"
+    },
+    {
+      "version": "1.0.0-alpha.28",
+      "date": "2026-06-07",
+      "added": [],
+      "fixed": [
+        "Team direct messages and handoffs now deliver symmetrically in both directions — a just-joined member's messages reach their counterpart, and the new member can send the first message. Verified live on two Macs.",
+        "The workspace creator now appears in the member list by personal name rather than by the workspace name.",
+        "Stranded invite approvals now resume, and the sidebar refreshes when a workspace join completes."
+      ],
+      "changed": [
+        "The release flow gained an automatic website-deploy step and publishes a download checksum alongside each build."
+      ],
+      "dmgURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.28.dmg",
+      "zipURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.28.zip"
+    },
+    {
+      "version": "1.0.0-alpha.27",
+      "date": "2026-06-06",
+      "added": [
+        "AI Coworker — an optional AI layer over your own work data, with a fail-closed boundary on what may ever leave the device and bring-your-own-key support (Anthropic). First capabilities: ask questions about your own work through the MCP tool, cross-provider synthesis and trends, on-demand escalation backed by an append-only audit log, and AI-drafted team handoffs sent over the existing end-to-end-encrypted transport. A client-side attestation seam (proof-of-concept) lays groundwork for a future verifiable open-weight path."
+      ],
+      "fixed": [],
+      "changed": [],
+      "dmgURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.27.dmg",
+      "zipURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.27.zip"
+    },
+    {
+      "version": "1.0.0-alpha.26",
+      "date": "2026-06-04",
+      "added": [],
+      "fixed": [
+        "Joining a workspace now reliably materialises the full member roster.",
+        "Settings toggles for IDE watchers, notification behaviour, and script-dependent features now take effect (previously some had no effect); script-dependent features gained an availability precheck."
+      ],
+      "changed": [
+        "Debug and release builds now use separate bundle identifiers, fixing app-launch breakage that could follow an update."
+      ],
+      "dmgURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.26.dmg",
+      "zipURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.26.zip"
+    },
+    {
+      "version": "1.0.0-alpha.25",
+      "date": "2026-06-03",
+      "added": [
+        "A recovery screen for when the on-disk database is newer than the installed app (for example after a downgrade): Backup & Reset / Reveal / Quit, instead of a failed load. The background agent now exits cleanly without a crash-loop."
+      ],
+      "fixed": [
+        "The pending-invites list now refreshes within bounded limits.",
+        "Resolved a data race in notification settings."
+      ],
+      "changed": [
+        "Hardened internal release and hygiene tooling (migration-linearity and secret-scan guards, build and test gates)."
+      ],
+      "dmgURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.25.dmg",
+      "zipURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.25.zip"
+    },
+    {
+      "version": "1.0.0-alpha.24",
+      "date": "2026-06-01",
+      "added": [],
+      "fixed": [
+        "The Diagnostics section in Settings is now always visible.",
+        "Release upload reliability fixes."
+      ],
+      "changed": [],
+      "dmgURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.24.dmg",
+      "zipURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.24.zip"
+    },
+    {
+      "version": "1.0.0-alpha.23",
+      "date": "2026-06-01",
+      "added": [
+        "Team collaboration: send direct messages (handoff, task, ping) to teammates over end-to-end encryption, across multiple workspaces with an invite-and-approve join flow. A team feed shows what teammates are working on, and messages can optionally be mirrored to Slack or Linear.",
+        "Share Controls: choose per source exactly what is shared with your team — nothing is shared by default.",
+        "Redesigned Home centred on what you're doing now — where you left off, who's around, and what needs your attention — with Analytics moved behind a Settings toggle.",
+        "Google Calendar connection — calendar data feeds the activity surface.",
+        "Deeper activity capture for coding tools, browsers, and meetings.",
+        "Settings reorganised into five category tabs, with a new Diagnostics panel for troubleshooting background capture."
+      ],
+      "fixed": [
+        "Security and privacy hardening across team encryption, sign-in, and network paths."
+      ],
+      "changed": [],
+      "dmgURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.23.dmg",
+      "zipURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.23.zip"
+    },
+    {
+      "version": "1.0.0-alpha.16",
+      "date": "2026-05-16",
+      "added": [
+        "IDE awareness: detection for the VS Code family (VS Code, Cursor, Insiders, VSCodium) and JetBrains projects, behind a settings gate.",
+        "Deeper capture for Xcode and Zoom activity."
+      ],
+      "fixed": [],
+      "changed": [],
+      "dmgURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.16.dmg",
+      "zipURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.16.zip"
+    },
+    {
+      "version": "1.0.0-alpha.6",
+      "date": "2026-04-29",
+      "added": [
+        "Earliest recorded alpha build: background work capture, the native menu-bar app, and the MCP server foundations."
+      ],
+      "fixed": [],
+      "changed": [],
+      "dmgURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.6.dmg",
+      "zipURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.6.zip"
+    }
+  ]
+}
