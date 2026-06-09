@@ -26,6 +26,12 @@ import UserNotifications
 struct NotificationsSettingsSection: View {
   @Environment(NotificationPrefsReader.self) private var reader
 
+  /// Master switch for the incoming-DM local notification path (read in
+  /// `LeafApp`'s `onIncomingInbound` closure via the same UserDefaults key).
+  /// Off silences every kind EXCEPT handoff (contract §10.2 locked-ON); the
+  /// `IncomingMessageNotificationDecider` enforces the handoff exception.
+  @AppStorage("leaf.notifications.masterEnabled") private var masterEnabled: Bool = true
+
   /// Surfaces the most recent dev-test notification attempt outcome
   /// (granted / not-granted / scheduled / error). Kept scoped to this
   /// section so the rest of Settings is unaffected.
@@ -38,6 +44,7 @@ struct NotificationsSettingsSection: View {
         "Per-kind notification controls. Handoff is always on — receiving a teammate's handoff is the primitive that makes async work feasible. Everything else is opt-in."
     ) {
       VStack(alignment: .leading, spacing: LeafSpace.lg) {
+        masterToggleRow
         subGroup(
           title: "Direct messages",
           description: "Pushes from teammates via the workspace direct-message channel.",
@@ -67,6 +74,41 @@ struct NotificationsSettingsSection: View {
       }
     }
     .onAppear { reader.refresh() }
+  }
+
+  /// Master on/off for the local incoming-message banner path. When off, a
+  /// caption clarifies that handoffs still notify (the decider's locked-handoff
+  /// policy) and the per-kind controls below resume on re-enable.
+  @ViewBuilder
+  private var masterToggleRow: some View {
+    VStack(alignment: .leading, spacing: LeafSpace.xs) {
+      LeafCard(variant: .raised, padding: .regular) {
+        HStack(alignment: .center, spacing: LeafSpace.md) {
+          VStack(alignment: .leading, spacing: LeafSpace.xxs) {
+            Text("Show message notifications")
+              .font(LeafType.body.regular)
+              .foregroundStyle(LeafColor.text.primary)
+            Text(
+              "Master switch for banners when a teammate messages you. Handoffs always notify."
+            )
+            .font(LeafType.body.small)
+            .foregroundStyle(LeafColor.text.secondary)
+          }
+          Spacer(minLength: 0)
+          Toggle("", isOn: $masterEnabled)
+            .labelsHidden()
+            .toggleStyle(.switch)
+            .tint(LeafColor.accent.primary)
+        }
+      }
+      if !masterEnabled {
+        Text(
+          "Banners paused — handoffs still come through. Per-kind settings below resume when you turn this back on."
+        )
+        .font(LeafType.caption)
+        .foregroundStyle(LeafColor.text.tertiary)
+      }
+    }
   }
 
   /// Dev-only — fires three local notifications (handoff DM + Task DM
