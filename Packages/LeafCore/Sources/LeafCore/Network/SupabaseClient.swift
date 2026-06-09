@@ -75,8 +75,19 @@ public actor SupabaseClient {
     return nil
   }
 
+  /// Phase 1 — full sign-out: drop in-memory auth state, cancel any pending
+  /// refresh, and delete the persisted refresh_token so the next cold start
+  /// (UI gate + agent) sees no session and shows LoginView / idles. Store
+  /// clear is best-effort: a clear failure must not strand the user in a
+  /// signed-in-looking state, so the in-memory drop always happens.
   public func signOut() {
     state = .notAuthenticated
+    lastRefreshAt = nil
+    inflightFreshSessionTask?.cancel()
+    inflightFreshSessionTask = nil
+    if let store = sessionStore {
+      try? store.clear()
+    }
   }
 
   // MARK: - Public — ensureAuthenticated
