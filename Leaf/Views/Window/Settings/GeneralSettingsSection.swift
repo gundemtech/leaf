@@ -67,6 +67,8 @@ struct BackgroundCollectionSection: View {
 struct UpdatesSection: View {
     let updater: UpdaterController
 
+    @State private var showWhatsNew = false
+
     var body: some View {
         LeafSection(
             title: "Updates",
@@ -84,6 +86,12 @@ struct UpdatesSection: View {
                     }
                     Spacer()
                     LeafButton(
+                        "What's New",
+                        variant: .ghost,
+                        size: .sm,
+                        action: { showWhatsNew = true }
+                    )
+                    LeafButton(
                         "Check for updates",
                         variant: .secondary,
                         size: .sm,
@@ -91,6 +99,9 @@ struct UpdatesSection: View {
                     )
                 }
             }
+        }
+        .sheet(isPresented: $showWhatsNew) {
+            WhatsNewView(catalog: .bundled(), currentVersion: versionShort)
         }
     }
 
