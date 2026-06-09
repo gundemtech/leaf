@@ -32,7 +32,7 @@ _Срез "где мы сейчас" за 30 секунд. Детали — git 
 
 ## Следующим
 
-- **Release-pipeline + changelog трек**: Ph0 landed (#42) — `scripts/derive-version.sh` (single-source latest-tag derive +self-test, в CI) + `CHANGELOG.md` бэкфилл (alpha.6/16/23–30) + site-drift reconcile (git=alpha.15 frozen / live=alpha.29 off-git / appcast=alpha.30 — фикс в Ph4). Ph1–4 ahead; план local `.claude/plans/release-pipeline-changelog.md`.
+- **Release-pipeline + changelog трек**: Ph0 (#42) + **Ph1 landed** — Ph0 `derive-version.sh` + `CHANGELOG.md` бэкфилл (alpha.6/16/23–30); Ph1 `gen-release-notes.sh` (CHANGELOG → committed `Leaf/Resources/releases.json` `{schemaVersion:1, releases[]}` + bare Sparkle `--html-only` fragment, URLs derived) + freshness-guard (preflight 8-step + ubuntu CI). Standalone — release-flow вайринг = Ph2. Site-drift (git=alpha.15 frozen / live=alpha.29 / appcast=alpha.30) — фикс в Ph4. Ph2–4 ahead; план local `.claude/plans/release-pipeline-changelog.md`.
 - **Tracks 1–5 + integration-T10 acceptance gate** (two-Mac signed-build smoke) → whitepaper sync + VPS deploy (Supabase Edge Functions + migrations — см. specs/plans).
 - **Track-7/9 detail-UI + GoogleCalendar-UI re-apply** на unified trunk — отдельный post-Ph-C трек. Источник: теги `dev-track7-source` + `archive/code-style-phase-2-3-C` (Track-7 P1–P5 detail screens).
 - **leaf-private follow-up**: `SlackD3SmokeInspector.testInspectLiveDB` + 2 stale handshake integration-теста → catch `databaseSchemaFromFuture`/skip + org→workspace API refresh. NB: локальная dev `events.sqlite` может быть pre-unification-несовместима с трунком (migration-guard на ней корректно срабатывает; recovery/wipe — решение владельца машины).
