@@ -59,6 +59,16 @@ check-migrations-self-test:
 leak-guard-self-test:
     @./scripts/tests/test-leak-guard.sh
 
+# Print the latest shipped release tag (v-prefixed semver, sort -V, form-asserted).
+# Single source of truth the release pipeline derives N+1 from.
+derive-version:
+    @./scripts/derive-version.sh
+
+# Fixture-based self-test for derive-version (filter is load-bearing; malformed
+# highest tag fails loud; empty/junk sets rejected).
+derive-version-self-test:
+    @./scripts/tests/test-derive-version.sh
+
 # Point git at the tracked .githooks/ dir (run once per clone). The pre-push hook
 # there runs leak-guard before every push to the public repo. This OVERWRITES any
 # existing core.hooksPath and means per-clone .git/hooks/* no longer fire (we ship
