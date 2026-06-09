@@ -33,6 +33,7 @@ struct LoginView: View {
 
   @State private var email = ""
   @State private var password = ""
+  @State private var showPassword = false
 
   private var isBusy: Bool {
     switch service.state {
@@ -53,10 +54,26 @@ struct LoginView: View {
         TextField("Email", text: $email)
           .textFieldStyle(.roundedBorder)
           .textContentType(.username)
-        SecureField("Password", text: $password)
+        HStack(spacing: 6) {
+          Group {
+            if showPassword {
+              TextField("Password", text: $password)
+            } else {
+              SecureField("Password", text: $password)
+            }
+          }
           .textFieldStyle(.roundedBorder)
           .textContentType(.password)
           .onSubmit { if canSubmitEmail { submitEmail() } }
+          Button {
+            showPassword.toggle()
+          } label: {
+            Image(systemName: showPassword ? "eye.slash" : "eye")
+              .foregroundStyle(.secondary)
+          }
+          .buttonStyle(.borderless)
+          .help(showPassword ? "Hide password" : "Show password")
+        }
       }
 
       Button(action: submitEmail) {
