@@ -45,6 +45,22 @@ public enum SupabaseEndpoint {
     baseURL.appendingPathComponent("rest/v1/workspace_members")
   }
 
+  /// GET /rest/v1/workspace_members?workspace_id=eq.<id>&select=* — full roster
+  /// read-back (RLS `workspace_members_peer_read` lets any member read the whole
+  /// workspace roster). Used by `WorkspaceRosterSyncService` so invitees learn
+  /// about each other (not just the admin).
+  public static func listWorkspaceMembers(baseURL: URL, workspaceID: String) -> URL {
+    var components = URLComponents(
+      url: baseURL.appendingPathComponent("rest/v1/workspace_members"),
+      resolvingAgainstBaseURL: false
+    )!
+    components.queryItems = [
+      URLQueryItem(name: "workspace_id", value: "eq.\(workspaceID)"),
+      URLQueryItem(name: "select", value: "*"),
+    ]
+    return components.url!
+  }
+
   // MARK: - PostgREST tables — Track 5 / S4 (direct_messages + apns_tokens)
 
   public static func directMessagesInsert(baseURL: URL) -> URL {
