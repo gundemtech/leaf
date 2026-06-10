@@ -264,7 +264,7 @@ struct TeamView: View {
       )
       switch hubTab {
       case .chats:
-        TeamFeedTab(
+        ChatsTab(
           active: active,
           members: members,
           selfPubkeyHex: { selfPubkeyHex() },
@@ -288,8 +288,12 @@ struct TeamView: View {
     .padding(LeafSpace.xxl)
     // Cap + center the whole column: on wide windows unconstrained rows pushed
     // timestamps far from their text and bubbles stretched unreadably.
+    // The two-pane chat manager gets a wider cap than the single-column
+    // Members/Settings tabs (list column + readable thread).
     .frame(
-      maxWidth: LeafTeamFeedTokens.maxContentWidth, maxHeight: .infinity,
+      maxWidth: hubTab == .chats
+        ? LeafChatTokens.pageMaxWidth : LeafTeamFeedTokens.maxContentWidth,
+      maxHeight: .infinity,
       alignment: .topLeading
     )
     .frame(maxWidth: .infinity, alignment: .top)
