@@ -20,8 +20,10 @@
 //  semantics, the attention dot is a bool urgency cue, orthogonal).
 //
 //  Track 5 / S7 G.12 — removed `.organization` from COLLABORATION group;
-//  replaced with LeafWorkspaceSwitcher anchored at the sidebar bottom.
+//  replaced with a workspace switcher anchored at the sidebar bottom.
 //  Layout: VStack { ScrollView (nav groups) + Spacer + switcher section }.
+//  The inline list (LeafWorkspaceSwitcher) was later collapsed into
+//  LeafWorkspacePicker — compact trigger row + popover — same callbacks.
 //
 
 import LeafCore
@@ -35,7 +37,7 @@ struct Sidebar: View {
   @Environment(WorkspaceReader.self) private var workspaceReader
   @Environment(ActiveWorkspaceStore.self) private var activeWorkspaceStore
   @Environment(DirectMessageInboxReader.self) private var inboxReader
-  /// T4 — tier gate. Free-tier swaps `LeafWorkspaceSwitcher` for an
+  /// T4 — tier gate. Free-tier swaps `LeafWorkspacePicker` for an
   /// «Upgrade to add workspaces» row at the sidebar bottom.
   @Environment(TierGateReader.self) private var tierGate
   @Environment(\.submitToWaitlist) private var submitToWaitlist
@@ -200,7 +202,7 @@ struct Sidebar: View {
 
   @ViewBuilder
   private var workspaceSwitcherSection: some View {
-    // T4 — Free-tier: replace LeafWorkspaceSwitcher with a single
+    // T4 — Free-tier: replace LeafWorkspacePicker with a single
     // «Upgrade to add workspaces» row. Free user has no workspaces, so
     // there's nothing to switch *to* anyway — the row serves both as
     // empty state AND the upgrade CTA in one strike.
@@ -223,7 +225,7 @@ struct Sidebar: View {
       .filter { $0.leftAt == nil }
       .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 
-    LeafWorkspaceSwitcher(
+    LeafWorkspacePicker(
       workspaces: sorted,
       activeWorkspaceID: activeWid,
       unreadCounts: inboxReader.unreadCountByWorkspace,
@@ -245,7 +247,7 @@ struct Sidebar: View {
     )
   }
 
-  /// T4 — Free-tier switcher row. Visually rhymes with LeafWorkspaceSwitcher
+  /// T4 — Free-tier switcher row. Visually rhymes with LeafWorkspacePicker
   /// internals (LeafColor.surface.inset background, similar padding/height)
   /// so the sidebar bottom feels continuous between tiers.
   @ViewBuilder
