@@ -92,6 +92,7 @@ struct WindowSettingsView: View {
             case .sharing:
                 ShareControlsSettingsSection()
                 PrivacySettingsSection()
+                AIPrivacySection()
             case .notifications:
                 NotificationsSettingsSection()
             case .data:
