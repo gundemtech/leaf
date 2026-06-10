@@ -10,11 +10,17 @@
 //  Tab labels are intentionally short — LeafTab lays them out in a non-scrolling
 //  HStack, so long strings ("Sharing & Privacy") would clip on a narrow window.
 //
+//  Team → Workspace Hub: `.workspace` removed — workspace-scoped sections
+//  (identity, members, invites, share rules, danger zone) live on the Team
+//  page now. `.sharing` keeps its rawValue (persisted selections survive)
+//  but is retitled "Privacy" — only the device-wide retention section
+//  remains. Stale persisted "workspace" strings decode to nil →
+//  @AppStorage falls back to the declared default.
+//
 
 import Foundation
 
 enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
-  case workspace
   case sharing
   case notifications
   case data
@@ -24,8 +30,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
 
   var title: String {
     switch self {
-    case .workspace:     "Workspace"
-    case .sharing:       "Sharing"
+    case .sharing:       "Privacy"
     case .notifications: "Notifications"
     case .data:          "Data"
     case .general:       "General"

@@ -300,6 +300,14 @@ struct TeamView: View {
     .onChange(of: windowState.pendingMessageID, initial: true) { _, id in
       if id != nil { hubTab = .feed }
     }
+    // Explicit tab deep-link (e.g. join-request push → Members). Consumed
+    // once: set the tab, clear the signal.
+    .onChange(of: windowState.pendingHubTab, initial: true) { _, tab in
+      if let tab {
+        hubTab = tab
+        windowState.pendingHubTab = nil
+      }
+    }
   }
 
   // MARK: - Empty / error states (workspace-level)

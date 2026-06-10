@@ -1,4 +1,5 @@
 import Foundation
+import LeafCore
 import Observation
 import SwiftUI
 
@@ -57,6 +58,11 @@ final class WindowState {
     /// (via ActiveWorkspaceStore.setActive), then sets this for the UI to
     /// confirm/observe (e.g., for transient debugging surfaces).
     var pendingWorkspaceID: String?
+
+    /// Team → Workspace Hub — deep-link tab target for the Team page.
+    /// LeafAppDelegate sets it (e.g. `.members` for the join-request push);
+    /// TeamView consumes via `.onChange(initial: true)` and clears to nil.
+    var pendingHubTab: TeamHubTab?
 
     /// Track 5 / S8 T6 — APNs `dm.reply` action toggles this `true` after the
     /// deep-link plumbing (workspace switch + section = .team + pendingMessageID)

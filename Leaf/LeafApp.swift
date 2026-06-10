@@ -1233,7 +1233,7 @@ final class LeafAppDelegate: NSObject, NSApplicationDelegate, UNUserNotification
       )
 
     case NotificationCategoryRegistry.inviteApproveActionID:
-      // M027 — Approve action. Opens app + scrolls to Settings → Workspace
+      // M027 — Approve action. Opens app + lands on Team → Members
       // → Pending requests. The actual approve flow runs in-app because
       // ECDH+seal requires the local keystore to be unlocked.
       await deepLinkToPendingQueue(workspaceID: workspaceID)
@@ -1305,16 +1305,18 @@ final class LeafAppDelegate: NSObject, NSApplicationDelegate, UNUserNotification
   }
 
   /// M027 invite-redesign — deep-link from `leaf.invite.request` push action
-  /// (Approve / Decline) to Settings → Workspace → Pending requests.
+  /// (Approve / Decline) to Team → Members → Pending requests (the queue
+  /// moved from Settings → Workspace in the workspace-hub redesign).
   @MainActor
   private func deepLinkToPendingQueue(workspaceID: String) async {
     if Self.activeWorkspaceStore?.activeWorkspaceID != workspaceID {
       Self.activeWorkspaceStore?.setActive(workspaceID)
     }
-    Self.windowState?.section = .settings
+    Self.windowState?.section = .team
+    Self.windowState?.pendingHubTab = .members
     Self.windowState?.pendingWorkspaceID = workspaceID
     // User reviews + approves/declines in PendingRequestsSection — the
-    // section's .onAppear refreshes the queue automatically.
+    // section's .task(id:) refreshes the queue on mount.
   }
 
   /// `leaf.invite.approved` invitee-side default tap — switch into the
