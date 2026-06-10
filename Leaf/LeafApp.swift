@@ -79,6 +79,9 @@ struct LeafApp: App {
   /// in-app AI surface). Self-resolves DB + prod AI moats (CR-2 parity).
   @State private var handoffDraftReader = HandoffDraftReader()
   @State private var askLeafReader = AskLeafReader()
+  /// Team chats — conversation list + selected 1:1 thread for the hub
+  /// Chats tab (local mirror reads only).
+  @State private var chatStore = ChatStore()
   /// Track 5 / S5 — Share Controls per-source toggle reader.
   @State private var shareRulesReader: ShareRulesReader
   /// Track 5 / S5 — sender-side broadcast loop reader.
@@ -707,6 +710,7 @@ struct LeafApp: App {
         .environment(feedFilterStore)  // Track 5 / S7 H.3
         .environment(realtimeService)  // Track 5 / S7 H.3
         .environment(liveUpdateSignals)  // live-tabs — invalidation counters
+        .environment(chatStore)  // Team chats — hub Chats tab
         // AttachmentMetadataResolver is an actor (not @Observable);
         // custom EnvironmentKey threads optional resolver to TeamView.
         .environment(\.attachmentMetadataResolver, attachmentMetadataResolver)
