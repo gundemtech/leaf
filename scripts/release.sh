@@ -530,6 +530,10 @@ step_site() {
 
 # --- main -----------------------------------------------------------------
 maybe_load_cached_secrets
+# SIGN_ID was captured at parse time, BEFORE the cache loader could export
+# LEAF_SIGN_ID — re-resolve so the offline-cache path signs with the real
+# identity instead of the placeholder (live-env path is unaffected).
+SIGN_ID="${LEAF_SIGN_ID:-$SIGN_ID}"
 assert_secrets
 require_tools
 assert_signing_identity
