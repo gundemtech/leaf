@@ -12,6 +12,7 @@ import LeafCore
 
 struct ActivityView: View {
     @Environment(InsightsReader.self) private var reader
+    @Environment(LiveUpdateSignals.self) private var liveSignals
     @State private var selectedFilter: ActivityFilter = .all
     @State private var mode: ActivityMode = .sessions
     @State private var feedReader = ActivityFeedReader()
@@ -41,6 +42,13 @@ struct ActivityView: View {
         }
         .sheet(item: $escalationSeed, onDismiss: { selectedEventIDs.removeAll() }) { seed in
             EscalationSheet(seed: seed, onDismiss: { escalationSeed = nil })
+        }
+        // Live-tabs — Agent wrote to the DB while this tab is open. Non-force:
+        // the reader's freshness window throttles bursts. Raw-events ленту по
+        // live-тику НЕ дёргаем — refresh сбрасывал бы выбор (escalation) посреди
+        // выделения; у неё свой refresh на входе в режим (.task(id: mode)).
+        .onChange(of: liveSignals.localDataVersion) {
+            reader.refresh()
         }
     }
 

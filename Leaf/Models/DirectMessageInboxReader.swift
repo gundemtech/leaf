@@ -47,6 +47,12 @@ final class DirectMessageInboxReader: RealtimeDirectMessageAbsorbing {
     /// nil in tests / non-notifying contexts.
     var onIncomingInbound: (@MainActor (DirectMessageMirrorRow) -> Void)?
 
+    /// Live-tabs — fired after any successful mirror write (new rows from
+    /// tick/realtime, read/done updates, optimistic mark-done) so the Team
+    /// feed can re-query without waiting for tab re-entry. Wired to
+    /// `LiveUpdateSignals.bumpTeamFeed()` by the composition root; nil in tests.
+    var onMirrorChanged: (@MainActor () -> Void)?
+
     private var service: DirectMessageInboxService?
     private var database: LeafCore.Database?
     private let supabase: SupabaseClient
@@ -90,6 +96,9 @@ final class DirectMessageInboxReader: RealtimeDirectMessageAbsorbing {
             let newRows = try await svc.tickReturningNewRows(workspaceID: wid)
             refreshLocalState(workspaceID: wid)
             refreshUnreadCounts()
+            if !newRows.isEmpty {
+                onMirrorChanged?()
+            }
             // Polling notifications: first batch per workspace is backlog (suppressed);
             // subsequent new inbound-unread rows fire a local notification.
             let notifiable = Set(
@@ -172,6 +181,7 @@ final class DirectMessageInboxReader: RealtimeDirectMessageAbsorbing {
                 refreshLocalState(workspaceID: row.workspaceID)
             }
             refreshUnreadCounts()
+            onMirrorChanged?()
             // New-to-mirror inbound-unread row → notify once (set dedups the
             // realtime/polling in-flight race; mirror check dedups updates/restart).
             if !alreadyInMirror, row.direction == .inbound, row.readAtMs == nil,
@@ -277,6 +287,7 @@ final class DirectMessageInboxReader: RealtimeDirectMessageAbsorbing {
                 doneByPubkeyHex: pubkey
             )
             refreshLocalStateIfActive(messageID: messageID)
+            onMirrorChanged?()
         } catch {
             logger.warning("optimistic markDone local UPDATE failed: \(String(describing: error), privacy: .public)")
         }

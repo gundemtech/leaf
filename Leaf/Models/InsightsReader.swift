@@ -125,7 +125,20 @@ final class InsightsReader {
             return
         }
 
-        state = .loading
+        // Live-tabs — warm refresh: keep the rendered state on screen for the
+        // query duration instead of flashing the loading scaffold on every
+        // ambient/live re-read. .loaded/.empty always hold (result lands
+        // atomically below); .error holds only for ambient bumps — an explicit
+        // Try Again (force) still shows .loading as feedback. Cold start and
+        // notConfigured re-checks still pass through .loading.
+        switch state {
+        case .loaded, .empty:
+            break
+        case .error where !force:
+            break
+        default:
+            state = .loading
+        }
         let url = databaseURL
         let cfg = databaseConfig
         let enc = databaseEncryption
