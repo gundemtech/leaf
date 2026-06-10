@@ -13,7 +13,23 @@ the release history and summarised at a feature level.
 
 ## [Unreleased]
 
-## [1.0.0-alpha.33] — 2026-06-10
+## [1.0.0-alpha.34] — 2026-06-10
+
+### Added
+
+- Team page is now a workspace hub with three tabs. Chats: a two-pane
+  messenger for real 1:1 conversations — live composer, reply quotes (click a
+  quote to jump to the original), read receipts, task bubbles with Open /
+  Mark Done, unread badges and search. Members: the full roster with roles,
+  pending join requests and active invite tokens in one place. Settings:
+  workspace rename, per-workspace share rules and the danger zone
+  (Leave / Delete / Wipe).
+
+### Changed
+
+- App Settings now covers device-level categories only (Sharing /
+  Notifications / Data / General) — workspace management lives on the Team
+  page. A join-request notification now deep-links straight to Team → Members.
 
 ### Added
 
@@ -195,6 +211,7 @@ deeper activity capture.
   app, and the MCP server foundations.
 
 [Unreleased]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.32...HEAD
+[1.0.0-alpha.34]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.33...v1.0.0-alpha.34
 [1.0.0-alpha.33]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.32...v1.0.0-alpha.33
 [1.0.0-alpha.32]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.31...v1.0.0-alpha.32
 [1.0.0-alpha.31]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.30...v1.0.0-alpha.31

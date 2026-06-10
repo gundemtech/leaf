@@ -2,9 +2,10 @@
   "schemaVersion": 1,
   "releases": [
     {
-      "version": "1.0.0-alpha.33",
+      "version": "1.0.0-alpha.34",
       "date": "2026-06-10",
       "added": [
+        "Team page is now a workspace hub with three tabs. Chats: a two-pane messenger for real 1:1 conversations — live composer, reply quotes (click a quote to jump to the original), read receipts, task bubbles with Open / Mark Done, unread badges and search. Members: the full roster with roles, pending join requests and active invite tokens in one place. Settings: workspace rename, per-workspace share rules and the danger zone (Leave / Delete / Wipe).",
         "Analyze with AI: ask the model to break down specific events in detail — select events in the Activity feed (\"Analyze with AI\") or press \"Dig deeper\" on an Ask Leaf answer. A consent dialog shows the exact text that will be sent before anything leaves your Mac; events from personal apps and DMs are marked \"never sent\" and are excluded even if selected.",
         "AI privacy log (Settings → Sharing): two append-only feeds — \"AI received\" (every text escalation you confirmed) and \"AI handoffs\" (AI-drafted messages sent to teammates).",
         "Workspace picker in the sidebar: compact trigger with a custom dropdown and profile row for switching between workspaces.",
@@ -17,11 +18,12 @@
         "Launching Leaf from a non-installed location (a DMG, Downloads, a temporary copy) can no longer break background collection for the installed app — agent registration is now guarded to the canonical install location."
       ],
       "changed": [
+        "App Settings now covers device-level categories only (Sharing / Notifications / Data / General) — workspace management lives on the Team page. A join-request notification now deep-links straight to Team → Members.",
         "Home, Team, Activity and Analytics now refresh in real time while open — new data appears without switching tabs or reopening the window.",
         "Team page redesigned as a chat-style feed: message bubbles grouped into conversation runs with explicit recipients, Today/Yesterday day separators, quieter activity rows, and member names resolved everywhere instead of raw key fingerprints."
       ],
-      "dmgURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.33.dmg",
-      "zipURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.33.zip"
+      "dmgURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.34.dmg",
+      "zipURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.34.zip"
     },
     {
       "version": "1.0.0-alpha.31",
