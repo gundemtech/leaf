@@ -15,7 +15,7 @@ _Срез "где мы сейчас" за 30 секунд. Детали — git 
 - **Один транк `dev`**; `main` = release-теги (сейчас `v1.0.0-alpha.24` @ `c54a6cef`). `git branch -a` = **3 уникальных имени** (`dev`, `main`, `feature/moat-leaf-private-bootstrap`). 13 local + 15 remote merged/folded веток снесены — контент сохранён (в `dev` либо в тегах `dev-track7-source` + `archive/*`).
 - **`just preflight`** = phase-done gate (R1): leak-guard + check-tokens + check-migrations + gitleaks + build-all (5 схем, exit-honest) + SPM-тесты.
 - **pre-push hook** (`.githooks/pre-push` → leak-guard, `core.hooksPath`; R2) + **gitleaks** (pinned binary + `.gitleaks.toml` allowlist) в CI+preflight (D-C3).
-- **check-migrations.sh** (R3, линейность Mxxx). **migration-guard** (R7): несовместимая БД → `DatabaseRecoveryView` (Backup&Reset/Reveal/Quit), Agent `exit(0)`, не «Couldn't load Home».
+- **check-migrations.sh** (R3, линейность Mxxx). **migration-guard** (R7): несовместимая БД → `DatabaseRecoveryView` (Backup&Reset/Reveal/Quit), Agent `exit(0)`, не «Couldn't load Home». **agent-watchdog (#49 `28511065`):** location-guard SMAppService-регистрации (BTM-hijack копией из /tmp/DMG невозможен) + self-heal loop в main app (kickstart → reregister → escalate, intent-флаг; Diagnostics: launchd-строка + Repair).
 - Правила гигиены **R1–R8** + phase-close чеклист в `conventions.md`.
 
 ## Где мы
