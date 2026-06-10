@@ -13,7 +13,30 @@ the release history and summarised at a feature level.
 
 ## [Unreleased]
 
-## [1.0.0-alpha.32] — 2026-06-10
+## [1.0.0-alpha.33] — 2026-06-10
+
+### Added
+
+- Analyze with AI: ask the model to break down specific events in detail —
+  select events in the Activity feed ("Analyze with AI") or press "Dig deeper"
+  on an Ask Leaf answer. A consent dialog shows the exact text that will be
+  sent before anything leaves your Mac; events from personal apps and DMs are
+  marked "never sent" and are excluded even if selected.
+- AI privacy log (Settings → Sharing): two append-only feeds — "AI received"
+  (every text escalation you confirmed) and "AI handoffs" (AI-drafted messages
+  sent to teammates).
+- Workspace picker in the sidebar: compact trigger with a custom dropdown and
+  profile row for switching between workspaces.
+
+### Fixed
+
+- Activity → Raw events shows captured events again (the feed had been left
+  permanently empty by an earlier cleanup).
+
+### Changed
+
+- Home, Team, Activity and Analytics now refresh in real time while open —
+  new data appears without switching tabs or reopening the window.
 
 ### Added
 
@@ -172,6 +195,7 @@ deeper activity capture.
   app, and the MCP server foundations.
 
 [Unreleased]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.32...HEAD
+[1.0.0-alpha.33]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.32...v1.0.0-alpha.33
 [1.0.0-alpha.32]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.31...v1.0.0-alpha.32
 [1.0.0-alpha.31]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.30...v1.0.0-alpha.31
 [1.0.0-alpha.30]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.29...v1.0.0-alpha.30

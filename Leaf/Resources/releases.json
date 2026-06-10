@@ -2,21 +2,26 @@
   "schemaVersion": 1,
   "releases": [
     {
-      "version": "1.0.0-alpha.32",
+      "version": "1.0.0-alpha.33",
       "date": "2026-06-10",
       "added": [
+        "Analyze with AI: ask the model to break down specific events in detail — select events in the Activity feed (\"Analyze with AI\") or press \"Dig deeper\" on an Ask Leaf answer. A consent dialog shows the exact text that will be sent before anything leaves your Mac; events from personal apps and DMs are marked \"never sent\" and are excluded even if selected.",
+        "AI privacy log (Settings → Sharing): two append-only feeds — \"AI received\" (every text escalation you confirmed) and \"AI handoffs\" (AI-drafted messages sent to teammates).",
+        "Workspace picker in the sidebar: compact trigger with a custom dropdown and profile row for switching between workspaces.",
         "\"Ask Leaf\" tab: ask questions about your work in plain language and get answers built from your own structured activity data. Uses your own Anthropic API key (managed in Settings → Data → AI Answers, shared with the MCP server), with period and model pickers.",
         "Diagnostics now shows the background agent's launchd state and a Repair button that restores collection in one click."
       ],
       "fixed": [
+        "Activity → Raw events shows captured events again (the feed had been left permanently empty by an earlier cleanup).",
         "Background collection now heals itself: the app monitors the agent's heartbeat and automatically restarts or re-registers it if capture silently stops — previously this required manually re-toggling settings. If automatic recovery fails, Leaf notifies you with a pointer to the fix. Collection you turned off yourself is never re-enabled automatically.",
         "Launching Leaf from a non-installed location (a DMG, Downloads, a temporary copy) can no longer break background collection for the installed app — agent registration is now guarded to the canonical install location."
       ],
       "changed": [
+        "Home, Team, Activity and Analytics now refresh in real time while open — new data appears without switching tabs or reopening the window.",
         "Team page redesigned as a chat-style feed: message bubbles grouped into conversation runs with explicit recipients, Today/Yesterday day separators, quieter activity rows, and member names resolved everywhere instead of raw key fingerprints."
       ],
-      "dmgURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.32.dmg",
-      "zipURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.32.zip"
+      "dmgURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.33.dmg",
+      "zipURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.33.zip"
     },
     {
       "version": "1.0.0-alpha.31",
