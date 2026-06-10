@@ -97,6 +97,98 @@ public struct MessagesMirrorStore: Sendable {
         return rows.compactMap(Self.mapRow)
     }
 
+    /// Team chats — both directions of the 1:1 conversation with `peer`:
+    /// inbound rows the peer sent (sender = peer) + outbound rows we sent
+    /// them (recipient = peer). Returns the LATEST `limit` rows in
+    /// ASCENDING order (chat renders oldest → newest).
+    public static func readConversation(
+        workspaceID: String,
+        peerPubkeyHex: String,
+        limit: Int = 200,
+        in db: GRDB.Database
+    ) throws -> [DirectMessageMirrorRow] {
+        let rows = try Row.fetchAll(
+            db,
+            sql: """
+                SELECT * FROM (
+                  \(selectAllSQL)
+                  WHERE \(Schema.MessagesMirror.workspaceID) = ?
+                    AND (
+                      (\(Schema.MessagesMirror.direction) = ?
+                        AND \(Schema.MessagesMirror.senderPubkeyHex) = ?)
+                      OR
+                      (\(Schema.MessagesMirror.direction) = ?
+                        AND \(Schema.MessagesMirror.recipientPubkeyHex) = ?)
+                    )
+                  ORDER BY \(Schema.MessagesMirror.serverCreatedAtMs) DESC
+                  LIMIT ?
+                )
+                ORDER BY \(Schema.MessagesMirror.serverCreatedAtMs) ASC
+                """,
+            arguments: [
+                workspaceID,
+                Schema.MessagesMirror.directionInbound, peerPubkeyHex,
+                Schema.MessagesMirror.directionOutbound, peerPubkeyHex,
+                limit,
+            ]
+        )
+        return rows.compactMap(Self.mapRow)
+    }
+
+    /// Team chats — one rollup row per conversation counterpart: the latest
+    /// message (bare columns ride SQLite's single-MAX() row guarantee) +
+    /// inbound-unread count. Peer identity = sender for inbound rows,
+    /// recipient for outbound.
+    public static func conversationSummaries(
+        workspaceID: String,
+        in db: GRDB.Database
+    ) throws -> [ChatPeerSummary] {
+        let peerExpr = """
+            CASE WHEN \(Schema.MessagesMirror.direction) = '\(Schema.MessagesMirror.directionOutbound)'
+                 THEN \(Schema.MessagesMirror.recipientPubkeyHex)
+                 ELSE \(Schema.MessagesMirror.senderPubkeyHex) END
+            """
+        let rows = try Row.fetchAll(
+            db,
+            sql: """
+                SELECT
+                  \(peerExpr) AS peer,
+                  \(Schema.MessagesMirror.body) AS last_body,
+                  \(Schema.MessagesMirror.kind) AS last_kind,
+                  \(Schema.MessagesMirror.direction) AS last_direction,
+                  MAX(\(Schema.MessagesMirror.serverCreatedAtMs)) AS last_ms,
+                  SUM(
+                    CASE WHEN \(Schema.MessagesMirror.direction) = ?
+                          AND \(Schema.MessagesMirror.readAtMs) IS NULL
+                         THEN 1 ELSE 0 END
+                  ) AS unread
+                FROM \(Schema.MessagesMirror.tableName)
+                WHERE \(Schema.MessagesMirror.workspaceID) = ?
+                GROUP BY peer
+                """,
+            arguments: [Schema.MessagesMirror.directionInbound, workspaceID]
+        )
+        return rows.compactMap { row in
+            guard
+                let peer: String = row["peer"],
+                let body: String = row["last_body"],
+                let kindRaw: String = row["last_kind"],
+                let kind = DirectMessageKind(rawValue: kindRaw),
+                let lastMs: Int64 = row["last_ms"],
+                let directionRaw: String = row["last_direction"],
+                let direction = DirectMessageMirrorRow.Direction(rawValue: directionRaw)
+            else { return nil }
+            return ChatPeerSummary(
+                peerPubkeyHex: peer,
+                lastBody: body,
+                lastKind: kind,
+                lastAtMs: lastMs,
+                lastIsOutbound: direction == .outbound,
+                unreadCount: row["unread"] ?? 0
+            )
+        }
+    }
+
     /// SELECT unread inbound rows for a workspace + recipient. Used by Inbox UI badge.
     public static func readUnreadInbound(
         workspaceID: String,

@@ -1,9 +1,11 @@
 //
 //  WorkspaceMembersAdminList.swift
-//  Track 5 / S7 — F.4. Member list card inside WorkspaceSettingsSection.
-//  Resolves viewer identity pubkey on appear (same pattern as TeamView) to
-//  determine viewerIsAdmin and hide the ellipsis on self-rows.
-//  Admin ellipsis → confirmationDialog → Phase H wires actual removal.
+//  Track 5 / S7 — F.4. Member list card; lives on the Team hub's Members
+//  tab (relocated from Settings → Workspace). Resolves viewer identity
+//  pubkey on appear (same pattern as TeamView) to determine viewerIsAdmin
+//  and hide the ellipsis on self-rows. Roster ordering + admin detection
+//  via WorkspaceHubPresentation (LeafCore). Tapping a non-self row opens
+//  the DM composer through `onTapMember`.
 //
 
 import CryptoKit
@@ -14,6 +16,9 @@ struct WorkspaceMembersAdminList: View {
     @Environment(WorkspaceReader.self) private var workspaceReader
     @State private var myPubHex: String = ""
 
+    /// Non-self row tap → DM composer (hub Members tab). Nil = rows inert.
+    var onTapMember: ((TeamMember) -> Void)? = nil
+
     var body: some View {
         if case .loaded(_, _, let members) = workspaceReader.state {
             LeafCard(variant: .raised, padding: .regular) {
@@ -22,18 +27,21 @@ struct WorkspaceMembersAdminList: View {
                         .leafSectionLabel()
                         .foregroundStyle(LeafColor.text.tertiary)
 
-                    let viewerIsAdmin = members.contains {
-                        $0.pubkeyHex == myPubHex && $0.role == .admin
-                    }
+                    let viewerIsAdmin = WorkspaceHubPresentation.isViewerAdmin(
+                        pubkeyHex: myPubHex, members: members)
+                    let roster = WorkspaceHubPresentation.sortedRoster(members)
 
-                    ForEach(members, id: \.id) { member in
+                    ForEach(roster, id: \.id) { member in
                         WorkspaceMemberAdminRow(
                             member: member,
                             isMe: member.pubkeyHex == myPubHex,
-                            viewerIsAdmin: viewerIsAdmin
+                            viewerIsAdmin: viewerIsAdmin,
+                            onTap: member.pubkeyHex == myPubHex
+                                ? nil
+                                : onTapMember.map { tap in { tap(member) } }
                         )
 
-                        if member.id != members.last?.id {
+                        if member.id != roster.last?.id {
                             LeafDivider(style: .soft)
                         }
                     }

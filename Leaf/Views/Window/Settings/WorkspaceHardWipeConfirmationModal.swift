@@ -1,10 +1,10 @@
 //
 //  WorkspaceHardWipeConfirmationModal.swift
 //  Track 5 / S8 / T8 — type-name friction modal for the manual «Wipe cache
-//  data» destructive action in Settings → Workspace.
+//  data» destructive action on the Team hub Settings tab.
 //
 //  Visible only when the workspace has `left_at_ms` OR `deleted_at_ms` set
-//  (gated upstream in WorkspaceSettingsSection). Pattern mirrors
+//  (gated upstream in WorkspaceSettingsTab). Pattern mirrors
 //  DeleteWorkspaceConfirmationModal (verbatim-name match) with two
 //  differences:
 //    1. Body copy reflects local-cache-only wipe + audit-metadata preserved.

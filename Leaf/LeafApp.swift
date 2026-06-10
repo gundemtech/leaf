@@ -79,6 +79,9 @@ struct LeafApp: App {
   /// in-app AI surface). Self-resolves DB + prod AI moats (CR-2 parity).
   @State private var handoffDraftReader = HandoffDraftReader()
   @State private var askLeafReader = AskLeafReader()
+  /// Team chats — conversation list + selected 1:1 thread for the hub
+  /// Chats tab (local mirror reads only).
+  @State private var chatStore = ChatStore()
   /// Track 5 / S5 — Share Controls per-source toggle reader.
   @State private var shareRulesReader: ShareRulesReader
   /// Track 5 / S5 — sender-side broadcast loop reader.
@@ -707,6 +710,7 @@ struct LeafApp: App {
         .environment(feedFilterStore)  // Track 5 / S7 H.3
         .environment(realtimeService)  // Track 5 / S7 H.3
         .environment(liveUpdateSignals)  // live-tabs — invalidation counters
+        .environment(chatStore)  // Team chats — hub Chats tab
         // AttachmentMetadataResolver is an actor (not @Observable);
         // custom EnvironmentKey threads optional resolver to TeamView.
         .environment(\.attachmentMetadataResolver, attachmentMetadataResolver)
@@ -1233,7 +1237,7 @@ final class LeafAppDelegate: NSObject, NSApplicationDelegate, UNUserNotification
       )
 
     case NotificationCategoryRegistry.inviteApproveActionID:
-      // M027 — Approve action. Opens app + scrolls to Settings → Workspace
+      // M027 — Approve action. Opens app + lands on Team → Members
       // → Pending requests. The actual approve flow runs in-app because
       // ECDH+seal requires the local keystore to be unlocked.
       await deepLinkToPendingQueue(workspaceID: workspaceID)
@@ -1305,16 +1309,18 @@ final class LeafAppDelegate: NSObject, NSApplicationDelegate, UNUserNotification
   }
 
   /// M027 invite-redesign — deep-link from `leaf.invite.request` push action
-  /// (Approve / Decline) to Settings → Workspace → Pending requests.
+  /// (Approve / Decline) to Team → Members → Pending requests (the queue
+  /// moved from Settings → Workspace in the workspace-hub redesign).
   @MainActor
   private func deepLinkToPendingQueue(workspaceID: String) async {
     if Self.activeWorkspaceStore?.activeWorkspaceID != workspaceID {
       Self.activeWorkspaceStore?.setActive(workspaceID)
     }
-    Self.windowState?.section = .settings
+    Self.windowState?.section = .team
+    Self.windowState?.pendingHubTab = .members
     Self.windowState?.pendingWorkspaceID = workspaceID
     // User reviews + approves/declines in PendingRequestsSection — the
-    // section's .onAppear refreshes the queue automatically.
+    // section's .task(id:) refreshes the queue on mount.
   }
 
   /// `leaf.invite.approved` invitee-side default tap — switch into the
