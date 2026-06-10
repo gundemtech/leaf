@@ -29,7 +29,7 @@ final class DirectMessageInboxReader: RealtimeDirectMessageAbsorbing {
     private(set) var unreadCount: Int = 0
     /// Per-workspace map of unread inbound DM counts.
     /// Populated on every successful `tick()` + every `absorbRealtimePush(_:)`.
-    /// Used by `LeafWorkspaceSwitcher` badge. Key = workspaceID.
+    /// Used by `LeafWorkspacePicker` badges. Key = workspaceID.
     private(set) var unreadCountByWorkspace: [String: Int] = [:]
     private(set) var lastTickError: String?
 
