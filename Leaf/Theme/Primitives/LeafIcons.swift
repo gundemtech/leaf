@@ -38,6 +38,7 @@ enum LeafIcon_Nav {
     // SF picks chosen for outline/light visual weight to match the custom
     // SVG aesthetic (avoid filled-circle variants that contrast heavily).
     static let searchSF:       String = "magnifyingglass"
+    static let askLeafSF:      String = "sparkles"
     static let filterSF:       String = "line.3.horizontal.decrease"
     static let organizationSF: String = "building.2"
 }

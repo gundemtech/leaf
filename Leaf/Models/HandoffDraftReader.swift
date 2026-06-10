@@ -9,12 +9,11 @@
 //  reader only produces the draft + carries body-free provenance for the
 //  SEND-time M032 audit (written by HandoffAuditWriter).
 //
-//  CR-2 (boundary parity): under LEAF_PROD this wires the SAME prod moat +
-//  strict-mode reader as MCPServer.swift — `prodLLMEgressMoat()` (the bucket-1
-//  personal-app list) + `StrictModeReader.read()`. The #if LEAF_PROD factory
-//  defaults are the structural guard: the only build that gets the empty
-//  substrate is dev, where there is no live LLM egress (mirrors
-//  DirectMessageSendReader.defaultCodec's fail-closed posture).
+//  CR-2 (boundary parity): default wiring comes from AIWiring (AI-UI-1) —
+//  under LEAF_PROD the SAME prod moat + strict-mode reader as MCPServer.swift;
+//  the only build that gets the empty substrate is dev, where there is no
+//  live LLM egress (mirrors DirectMessageSendReader.defaultCodec's
+//  fail-closed posture).
 //
 
 import Foundation
@@ -22,9 +21,6 @@ import Observation
 import OSLog
 import SwiftUI
 import LeafCore
-#if LEAF_PROD
-import LeafCorePrivate
-#endif
 
 @MainActor
 @Observable
@@ -52,11 +48,11 @@ final class HandoffDraftReader {
 
   init(
     databaseURL: URL = DatabasePath.defaultURL(),
-    databaseConfig: DatabaseConfig = HandoffDraftReader.defaultConfig(),
-    databaseEncryption: EncryptionOptions? = HandoffDraftReader.defaultEncryption(),
-    policy: LLMPolicy = HandoffDraftReader.defaultPolicy(),
-    summarizerMoat: AISummarizerMoat = HandoffDraftReader.defaultSummarizerMoat(),
-    modelGateMoat: ModelGateMoat = HandoffDraftReader.defaultModelGateMoat()
+    databaseConfig: DatabaseConfig = AIWiring.databaseConfig(),
+    databaseEncryption: EncryptionOptions? = AIWiring.databaseEncryption(),
+    policy: LLMPolicy = AIWiring.policy(),
+    summarizerMoat: AISummarizerMoat = AIWiring.summarizerMoat(),
+    modelGateMoat: ModelGateMoat = AIWiring.modelGateMoat()
   ) {
     self.policy = policy
     self.summarizerMoat = summarizerMoat
@@ -119,52 +115,9 @@ final class HandoffDraftReader {
     return d
   }
 
-  // MARK: - Composition-root defaults (CR-2 parity with MCPServer.swift)
-
-  private static func defaultPolicy() -> LLMPolicy {
-    #if LEAF_PROD
-    return LLMPolicy(
-      moat: prodLLMEgressMoat(), config: LLMPolicyConfig(strictMode: StrictModeReader.read()))
-    #else
-    return LLMPolicy(config: LLMPolicyConfig(strictMode: StrictModeReader.read()))
-    #endif
-  }
-
-  private static func defaultSummarizerMoat() -> AISummarizerMoat {
-    #if LEAF_PROD
-    return prodAISummarizerMoat(keyStore: FileAnthropicKeyStore())
-    #else
-    return .publicSubstrate
-    #endif
-  }
-
-  private static func defaultModelGateMoat() -> ModelGateMoat {
-    #if LEAF_PROD
-    return prodModelGateMoat()
-    #else
-    return .publicSubstrate
-    #endif
-  }
-
-  private static func defaultConfig() -> DatabaseConfig {
-    #if LEAF_PROD
-    return ProdConfigs.database
-    #else
-    return DatabaseConfig.weakDefaults
-    #endif
-  }
-
-  private static func defaultEncryption() -> EncryptionOptions? {
-    #if LEAF_PROD
-    return EncryptionOptions(
-      keyProvider: .callback { @Sendable in try FileKeyStore.fetchOrCreate() },
-      preKeyPragmas: ProdConfigs.sqlcipherPragmasPreKey,
-      postKeyPragmas: ProdConfigs.sqlcipherPragmasPostKey
-    )
-    #else
-    return nil
-    #endif
-  }
+  // MARK: - Defaults
+  // Composition-root AI/DB wiring lives in AIWiring (AI-UI-1) — shared with
+  // HandoffAuditWriter and AskLeafReader.
 
   static func defaultPeriod() -> DateInterval {
     let now = Date()
@@ -184,8 +137,8 @@ struct HandoffAuditWriter {
 
   init(
     databaseURL: URL = DatabasePath.defaultURL(),
-    databaseConfig: DatabaseConfig = HandoffAuditWriter.defaultConfig(),
-    databaseEncryption: EncryptionOptions? = HandoffAuditWriter.defaultEncryption()
+    databaseConfig: DatabaseConfig = AIWiring.databaseConfig(),
+    databaseEncryption: EncryptionOptions? = AIWiring.databaseEncryption()
   ) {
     self.databaseURL = databaseURL
     self.databaseConfig = databaseConfig
@@ -222,23 +175,4 @@ struct HandoffAuditWriter {
     }.value
   }
 
-  private static func defaultConfig() -> DatabaseConfig {
-    #if LEAF_PROD
-    return ProdConfigs.database
-    #else
-    return DatabaseConfig.weakDefaults
-    #endif
-  }
-
-  private static func defaultEncryption() -> EncryptionOptions? {
-    #if LEAF_PROD
-    return EncryptionOptions(
-      keyProvider: .callback { @Sendable in try FileKeyStore.fetchOrCreate() },
-      preKeyPragmas: ProdConfigs.sqlcipherPragmasPreKey,
-      postKeyPragmas: ProdConfigs.sqlcipherPragmasPostKey
-    )
-    #else
-    return nil
-    #endif
-  }
 }

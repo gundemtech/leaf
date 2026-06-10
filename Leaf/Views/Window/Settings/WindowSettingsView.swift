@@ -100,6 +100,7 @@ struct WindowSettingsView: View {
                 LocalAppsSettingsSection()
                 SystemObserversSettingsSection()
                 AIToolsSettingsSection()
+                AIAnswersSettingsSection()
                 BrowserAllowListSection(store: browserAllowListStore)
             case .general:
                 AdvancedSettingsSection()
