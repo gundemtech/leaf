@@ -25,11 +25,8 @@ import SwiftUI
             workspaces: [],
             activeWorkspaceID: nil,
             unreadCounts: [:],
-            onSelect: { _ in },
-            onAddNew: {},
-            onJoin: {},
-            onLeave: { _ in },
-            onMarkAllRead: { _ in }
+            isOpen: .constant(false),
+            triggerFrame: .constant(.zero)
           )
         )
 
@@ -40,11 +37,8 @@ import SwiftUI
             workspaces: [makeWS(id: "ws-1", name: "Leaf Backend")],
             activeWorkspaceID: "ws-1",
             unreadCounts: [:],
-            onSelect: { _ in },
-            onAddNew: {},
-            onJoin: {},
-            onLeave: { _ in },
-            onMarkAllRead: { _ in }
+            isOpen: .constant(false),
+            triggerFrame: .constant(.zero)
           )
         )
 
@@ -56,11 +50,8 @@ import SwiftUI
             workspaces: eightWorkspaces,
             activeWorkspaceID: "ws-4",
             unreadCounts: ["ws-2": 5],
-            onSelect: { _ in },
-            onAddNew: {},
-            onJoin: {},
-            onLeave: { _ in },
-            onMarkAllRead: { _ in }
+            isOpen: .constant(false),
+            triggerFrame: .constant(.zero)
           )
         )
 
@@ -89,7 +80,7 @@ import SwiftUI
           spec:
             "LeafWorkspacePicker · 38pt trigger (square LeafWorkspaceMark + name + count caption + aggregate non-active unread + chevron) · popover 260pt: 34pt rows, tinted marks, trailing checkmark on active, LeafBadge(count:), context menu (Mark all read + Leave), scroll cap 320pt · footer menu-rows: Add + Join",
           codeSnippet:
-            "LeafWorkspacePicker(workspaces: ws, activeWorkspaceID: id, unreadCounts: counts, onSelect: {}, onAddNew: {}, onJoin: {}, onLeave: {}, onMarkAllRead: {})"
+            "LeafWorkspacePicker(workspaces: ws, activeWorkspaceID: id, unreadCounts: counts, isOpen: $open, triggerFrame: $frame) + LeafWorkspacePickerDropdown(... onDismiss:) at Sidebar root"
         )
       }
       .padding(LeafSpace.lg)

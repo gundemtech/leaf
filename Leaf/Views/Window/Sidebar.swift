@@ -78,27 +78,48 @@ struct Sidebar: View {
   /// one sheet modifier via `joinByCodeBinding` below.
   @State private var joinByCodePresented = false
   @State private var profileHover = false
+  /// Workspace picker dropdown — open state + geometry are hoisted here
+  /// because the menu renders at the Sidebar root ZStack (an overlay on
+  /// the trigger composites below later card siblings — profile row drew
+  /// on top of the open menu).
+  @State private var pickerOpen = false
+  @State private var pickerTriggerFrame: CGRect = .zero
+  @State private var switcherSectionHeight: CGFloat = 0
 
   private var leafGroupItems: [WindowSection] {
     showAnalyticsSection ? [.home, .activity, .analytics, .askLeaf] : [.home, .activity, .askLeaf]
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      ScrollView(.vertical, showsIndicators: false) {
-        VStack(alignment: .leading, spacing: LeafSpace.lg) {
-          group(title: "LEAF", items: leafGroupItems)
-          group(title: "COLLABORATION", items: [.team, .connections])
-          // `.profile` left this group — it lives as a persistent row in
-          // the bottom card next to the workspace picker (same target).
-          group(title: "ACCOUNT", items: [.settings])
+    ZStack(alignment: .bottomLeading) {
+      VStack(alignment: .leading, spacing: 0) {
+        ScrollView(.vertical, showsIndicators: false) {
+          VStack(alignment: .leading, spacing: LeafSpace.lg) {
+            group(title: "LEAF", items: leafGroupItems)
+            group(title: "COLLABORATION", items: [.team, .connections])
+            // `.profile` left this group — it lives as a persistent row in
+            // the bottom card next to the workspace picker (same target).
+            group(title: "ACCOUNT", items: [.settings])
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(.vertical, LeafSpace.md)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, LeafSpace.md)
+        Spacer(minLength: 0)
+        workspaceSwitcherSection
       }
-      Spacer(minLength: 0)
-      workspaceSwitcherSection
+      if pickerOpen {
+        pickerDropdown
+          // Anchored just above the bottom card: measured section height
+          // already includes the card's own bottom inset, so adding the
+          // gap lands the menu `dropdownGap` over the card's top edge.
+          .padding(.bottom, switcherSectionHeight + LeafWorkspacePickerTokens.dropdownGap)
+          .padding(.horizontal, LeafSpace.sm)
+          .transition(
+            .opacity.combined(with: .scale(scale: 0.96, anchor: .bottom))
+          )
+      }
     }
+    .leafAnimation(LeafMotion.spring.snappy, value: pickerOpen)
     .sheet(isPresented: $leavePresented) {
       if let wid = leaveTargetWorkspaceID,
         let workspace = workspacesByID[wid]
@@ -232,24 +253,47 @@ struct Sidebar: View {
     )
     .padding(.horizontal, LeafSpace.sm)
     .padding(.bottom, LeafSpace.sm)
+    .background(
+      GeometryReader { geo in
+        Color.clear
+          .onAppear { switcherSectionHeight = geo.size.height }
+          .onChange(of: geo.size.height) { _, new in
+            switcherSectionHeight = new
+          }
+      }
+    )
   }
 
-  @ViewBuilder
-  private var teamStateSwitcher: some View {
+  /// Workspaces shown by both the trigger row and the dropdown list.
+  private var sortedWorkspaces: [Workspace] {
     let workspaces: [Workspace] = {
       if case .loaded(let ws, _, _) = workspaceReader.state { return ws }
       return []
     }()
-    let activeWid = activeWorkspaceStore.activeWorkspaceID
-    let sorted =
+    return
       workspaces
       .filter { $0.leftAt == nil }
       .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+  }
 
+  @ViewBuilder
+  private var teamStateSwitcher: some View {
     LeafWorkspacePicker(
-      workspaces: sorted,
-      activeWorkspaceID: activeWid,
+      workspaces: sortedWorkspaces,
+      activeWorkspaceID: activeWorkspaceStore.activeWorkspaceID,
       unreadCounts: inboxReader.unreadCountByWorkspace,
+      isOpen: $pickerOpen,
+      triggerFrame: $pickerTriggerFrame
+    )
+  }
+
+  /// Rendered at the body ZStack root — see `pickerOpen` declaration.
+  private var pickerDropdown: some View {
+    LeafWorkspacePickerDropdown(
+      workspaces: sortedWorkspaces,
+      activeWorkspaceID: activeWorkspaceStore.activeWorkspaceID,
+      unreadCounts: inboxReader.unreadCountByWorkspace,
+      triggerFrame: pickerTriggerFrame,
       // S7 Stage 6 fix C-C3 — route through switchActive(to:) so the
       // Reader's state.active is refreshed alongside the store; otherwise
       // TeamView renders the previous workspace's name and members
@@ -264,7 +308,8 @@ struct Sidebar: View {
       onMarkAllRead: { _ in
         // TODO: Phase v1.1 — bulk mark-read
         // Wire: inboxReader.markAllReadForWorkspace(wid)
-      }
+      },
+      onDismiss: { pickerOpen = false }
     )
   }
 

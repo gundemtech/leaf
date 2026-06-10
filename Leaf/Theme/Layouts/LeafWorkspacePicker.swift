@@ -1,15 +1,18 @@
 //
 //  LeafWorkspacePicker.swift
-//  Organism. Workspace picker trigger row for the sidebar bottom card:
-//  colored square workspace mark + active-workspace name + aggregate
-//  unread badge + chevron, opening a custom anchored dropdown with the
-//  full workspace list and Add / Join footer. The bottom card itself
-//  (picker row + divider + profile row) is composed in Sidebar — profile
-//  navigation is app-level concern, not a theme organism.
+//  Organism pair. `LeafWorkspacePicker` is the trigger row for the
+//  sidebar bottom card: colored square workspace mark + active-workspace
+//  name + aggregate unread badge + chevron. `LeafWorkspacePickerDropdown`
+//  is the custom anchored menu it opens — full workspace list and
+//  Add / Join footer, styled like the design system (no NSPopover chrome).
+//
+//  The dropdown is rendered by Sidebar at its root ZStack, NOT as an
+//  overlay on the trigger: an overlay attached to the trigger composites
+//  below later siblings of the same card (divider / profile row drew on
+//  top of the open menu). Open state + positioning live in Sidebar.
 //
 //  Replaces LeafWorkspaceSwitcher (Track 5 / S7) — the inline flat list
 //  ate half the sidebar once a user joined more than a few workspaces.
-//  Same callback API, so Sidebar wiring is unchanged.
 //
 //  Trigger badge counts unread in NON-active workspaces only — the active
 //  workspace's unread is already visible in Team; the trigger signals
@@ -24,170 +27,33 @@ import AppKit
 import LeafCore
 import SwiftUI
 
+// MARK: - Trigger row
+
 struct LeafWorkspacePicker: View {
   /// Caller sorts workspaces alphabetically before passing.
   let workspaces: [Workspace]
   let activeWorkspaceID: String?
   /// workspace_id → unread DM count (0 / absent = no badge).
   let unreadCounts: [String: Int]
-  let onSelect: (String) -> Void
-  let onAddNew: () -> Void
-  /// Opens JoinWorkspaceByCodeSheet so the user can paste an invite code.
-  let onJoin: () -> Void
-  /// Shown in row context menu — destructive.
-  let onLeave: (String) -> Void
-  let onMarkAllRead: (String) -> Void
+  @Binding var isOpen: Bool
+  /// Reports the trigger's frame in window (.global) coordinates so the
+  /// dropdown's outside-click monitor can exempt trigger clicks (the
+  /// Button toggle owns those — monitor-close + toggle would reopen).
+  @Binding var triggerFrame: CGRect
 
-  @State private var dropdownOpen = false
   @State private var hover = false
-  /// Trigger width drives dropdown width so the menu lines up with the
-  /// bottom card edge-to-edge.
-  @State private var triggerWidth: CGFloat = 0
-  /// Frames in the window's top-left coordinate space (SwiftUI .global),
-  /// hit-tested against clicks by the outside-click monitor below.
-  @State private var triggerFrame: CGRect = .zero
-  @State private var dropdownFrame: CGRect = .zero
-  @State private var clickMonitor: Any?
 
   var body: some View {
     Button {
-      toggleDropdown()
+      isOpen.toggle()
     } label: {
       triggerLabel
     }
     .buttonStyle(.plain)
     .onHover { hover = $0 }
     .leafAnimation(LeafMotion.spring.snappy, value: hover)
-    .background(frameTracker($triggerFrame, width: $triggerWidth))
-    // Custom dropdown instead of `.popover` — NSPopover's chrome (arrow,
-    // detached-window material) reads alien next to the design system.
-    // Anchored above the trigger: alignmentGuide pins the menu's bottom
-    // edge `dropdownGap` above the trigger's top.
-    .overlay(alignment: .topLeading) {
-      if dropdownOpen {
-        dropdown
-          .alignmentGuide(.top) { d in
-            d[.bottom] + LeafWorkspacePickerTokens.dropdownGap
-          }
-          .transition(
-            .opacity.combined(with: .scale(scale: 0.96, anchor: .bottom))
-          )
-      }
-    }
-    .leafAnimation(LeafMotion.spring.snappy, value: dropdownOpen)
-    .onDisappear { removeClickMonitor() }
+    .background(globalFrameTracker($triggerFrame))
   }
-
-  // MARK: - Dropdown
-
-  private var dropdown: some View {
-    LeafWorkspacePickerList(
-      workspaces: workspaces,
-      activeWorkspaceID: activeWorkspaceID,
-      unreadCounts: unreadCounts,
-      onSelect: { wid in
-        closeDropdown()
-        onSelect(wid)
-      },
-      onAddNew: {
-        closeDropdown()
-        onAddNew()
-      },
-      onJoin: {
-        closeDropdown()
-        onJoin()
-      },
-      onLeave: { wid in
-        closeDropdown()
-        onLeave(wid)
-      },
-      onMarkAllRead: onMarkAllRead
-    )
-    .frame(width: max(triggerWidth, LeafWorkspacePickerTokens.popoverWidth))
-    .background(
-      RoundedRectangle(
-        cornerRadius: LeafWorkspacePickerTokens.cardCornerRadius,
-        style: .continuous
-      )
-      .fill(LeafColor.surface.raised)
-    )
-    .overlay(
-      RoundedRectangle(
-        cornerRadius: LeafWorkspacePickerTokens.cardCornerRadius,
-        style: .continuous
-      )
-      .strokeBorder(LeafColor.border.subtle)
-    )
-    .leafElevation(LeafElevation.floating)
-    .background(frameTracker($dropdownFrame))
-    .onExitCommand { closeDropdown() }
-  }
-
-  private func toggleDropdown() {
-    if dropdownOpen {
-      closeDropdown()
-    } else {
-      dropdownOpen = true
-      installClickMonitor()
-    }
-  }
-
-  private func closeDropdown() {
-    dropdownOpen = false
-    removeClickMonitor()
-  }
-
-  /// Without NSPopover we lose its free light-dismiss; a local mouse-down
-  /// monitor closes the menu on any click that lands outside both the
-  /// dropdown and the trigger (trigger clicks toggle via the Button).
-  /// Local monitors see events before dispatch, so inside-clicks must
-  /// pass through untouched for rows to receive them.
-  private func installClickMonitor() {
-    guard clickMonitor == nil else { return }
-    clickMonitor = NSEvent.addLocalMonitorForEvents(
-      matching: [.leftMouseDown, .rightMouseDown]
-    ) { event in
-      guard let contentView = event.window?.contentView else {
-        closeDropdown()
-        return event
-      }
-      let p = contentView.convert(event.locationInWindow, from: nil)
-      let flipped =
-        contentView.isFlipped
-        ? p : CGPoint(x: p.x, y: contentView.bounds.height - p.y)
-      if !dropdownFrame.contains(flipped), !triggerFrame.contains(flipped) {
-        closeDropdown()
-      }
-      return event
-    }
-  }
-
-  private func removeClickMonitor() {
-    if let clickMonitor {
-      NSEvent.removeMonitor(clickMonitor)
-    }
-    clickMonitor = nil
-  }
-
-  /// Invisible geometry probe — records the host view's frame in window
-  /// (.global) coordinates, optionally its width.
-  private func frameTracker(
-    _ frame: Binding<CGRect>, width: Binding<CGFloat>? = nil
-  ) -> some View {
-    GeometryReader { geo in
-      Color.clear
-        .onAppear {
-          frame.wrappedValue = geo.frame(in: .global)
-          width?.wrappedValue = geo.size.width
-        }
-        .onChange(of: geo.frame(in: .global)) { _, new in
-          frame.wrappedValue = new
-          width?.wrappedValue = new.width
-        }
-    }
-  }
-
-  // MARK: - Trigger row
 
   private var triggerLabel: some View {
     HStack(spacing: LeafSpace.sm) {
@@ -234,7 +100,7 @@ struct LeafWorkspacePicker: View {
         cornerRadius: LeafWorkspacePickerTokens.rowCornerRadius,
         style: .continuous
       )
-      .fill(hover ? LeafColor.surface.raised : Color.clear)
+      .fill(hover || isOpen ? LeafColor.surface.raised : Color.clear)
     )
     .contentShape(Rectangle())
   }
@@ -250,10 +116,108 @@ struct LeafWorkspacePicker: View {
   }
 }
 
+// MARK: - Dropdown
+
+/// Styled anchored menu. Owns the outside-click monitor for its own
+/// lifetime (exists only while open) — without NSPopover we lose its
+/// free light-dismiss. Every action dismisses through `onDismiss`.
+struct LeafWorkspacePickerDropdown: View {
+  let workspaces: [Workspace]
+  let activeWorkspaceID: String?
+  let unreadCounts: [String: Int]
+  /// Trigger frame in window (.global) coordinates — clicks inside it are
+  /// left to the trigger Button's own toggle.
+  let triggerFrame: CGRect
+  let onSelect: (String) -> Void
+  let onAddNew: () -> Void
+  let onJoin: () -> Void
+  let onLeave: (String) -> Void
+  let onMarkAllRead: (String) -> Void
+  let onDismiss: () -> Void
+
+  @State private var dropdownFrame: CGRect = .zero
+  @State private var clickMonitor: Any?
+
+  var body: some View {
+    LeafWorkspacePickerList(
+      workspaces: workspaces,
+      activeWorkspaceID: activeWorkspaceID,
+      unreadCounts: unreadCounts,
+      onSelect: { wid in
+        onDismiss()
+        onSelect(wid)
+      },
+      onAddNew: {
+        onDismiss()
+        onAddNew()
+      },
+      onJoin: {
+        onDismiss()
+        onJoin()
+      },
+      onLeave: { wid in
+        onDismiss()
+        onLeave(wid)
+      },
+      onMarkAllRead: onMarkAllRead
+    )
+    .background(
+      RoundedRectangle(
+        cornerRadius: LeafWorkspacePickerTokens.cardCornerRadius,
+        style: .continuous
+      )
+      .fill(LeafColor.surface.raised)
+    )
+    .overlay(
+      RoundedRectangle(
+        cornerRadius: LeafWorkspacePickerTokens.cardCornerRadius,
+        style: .continuous
+      )
+      .strokeBorder(LeafColor.border.subtle)
+    )
+    .leafElevation(LeafElevation.floating)
+    .background(globalFrameTracker($dropdownFrame))
+    .onExitCommand { onDismiss() }
+    .onAppear { installClickMonitor() }
+    .onDisappear { removeClickMonitor() }
+  }
+
+  /// Local monitors see events before dispatch, so inside-clicks must
+  /// pass through untouched for rows to receive them; clicks anywhere
+  /// else (except the trigger — see `triggerFrame`) dismiss the menu.
+  private func installClickMonitor() {
+    guard clickMonitor == nil else { return }
+    clickMonitor = NSEvent.addLocalMonitorForEvents(
+      matching: [.leftMouseDown, .rightMouseDown]
+    ) { event in
+      guard let contentView = event.window?.contentView else {
+        onDismiss()
+        return event
+      }
+      let p = contentView.convert(event.locationInWindow, from: nil)
+      let flipped =
+        contentView.isFlipped
+        ? p : CGPoint(x: p.x, y: contentView.bounds.height - p.y)
+      if !dropdownFrame.contains(flipped), !triggerFrame.contains(flipped) {
+        onDismiss()
+      }
+      return event
+    }
+  }
+
+  private func removeClickMonitor() {
+    if let clickMonitor {
+      NSEvent.removeMonitor(clickMonitor)
+    }
+    clickMonitor = nil
+  }
+}
+
 // MARK: - Dropdown list
 
-/// Dropdown content — internal so LeafWorkspacePickerPreview can render it
-/// inline (a statically-open dropdown can't be captured in TokensPreview).
+/// Dropdown content — separate from the styled wrapper so
+/// LeafWorkspacePickerPreview can render it inline (a statically-open
+/// dropdown can't be captured in TokensPreview).
 struct LeafWorkspacePickerList: View {
   let workspaces: [Workspace]
   let activeWorkspaceID: String?
@@ -296,7 +260,6 @@ struct LeafWorkspacePickerList: View {
       FooterRow(icon: "link.circle", title: "Join workspace", action: onJoin)
     }
     .padding(LeafWorkspacePickerTokens.sectionPadding)
-    .frame(width: LeafWorkspacePickerTokens.popoverWidth)
   }
 
   /// Hug content below the cap — a bare `.frame(maxHeight:)` would make
@@ -310,7 +273,7 @@ struct LeafWorkspacePickerList: View {
   }
 }
 
-/// One workspace row inside the popover — own struct so each row carries
+/// One workspace row inside the dropdown — own struct so each row carries
 /// its own hover state. Active row gets accent.subtle fill + trailing
 /// checkmark (the colored mark stays the leading anchor on every row).
 private struct PickerRow: View {
@@ -377,7 +340,7 @@ private struct PickerRow: View {
 }
 
 /// Footer action row — menu-item style (icon + label + hover fill)
-/// instead of a boxed button, so the popover reads as one coherent menu.
+/// instead of a boxed button, so the dropdown reads as one coherent menu.
 private struct FooterRow: View {
   let icon: String
   let title: String
@@ -450,6 +413,20 @@ struct LeafWorkspaceMark: View {
     ]
     let idx = TeamNRowComposer.paletteIndex(memberID: seed, paletteCount: palette.count)
     return palette[idx]
+  }
+}
+
+// MARK: - Helpers
+
+/// Invisible geometry probe — records the host view's frame in window
+/// (.global) coordinates.
+func globalFrameTracker(_ frame: Binding<CGRect>) -> some View {
+  GeometryReader { geo in
+    Color.clear
+      .onAppear { frame.wrappedValue = geo.frame(in: .global) }
+      .onChange(of: geo.frame(in: .global)) { _, new in
+        frame.wrappedValue = new
+      }
   }
 }
 
