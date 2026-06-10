@@ -41,6 +41,7 @@ final class HandoffDraftReader {
   private let policy: LLMPolicy
   private let summarizerMoat: AISummarizerMoat
   private let modelGateMoat: ModelGateMoat
+  private let promptMoat: HandoffPromptMoat
   private let databaseURL: URL
   private let databaseConfig: DatabaseConfig
   private let databaseEncryption: EncryptionOptions?
@@ -52,11 +53,13 @@ final class HandoffDraftReader {
     databaseEncryption: EncryptionOptions? = AIWiring.databaseEncryption(),
     policy: LLMPolicy = AIWiring.policy(),
     summarizerMoat: AISummarizerMoat = AIWiring.summarizerMoat(),
-    modelGateMoat: ModelGateMoat = AIWiring.modelGateMoat()
+    modelGateMoat: ModelGateMoat = AIWiring.modelGateMoat(),
+    promptMoat: HandoffPromptMoat = AIWiring.handoffPromptMoat()
   ) {
     self.policy = policy
     self.summarizerMoat = summarizerMoat
     self.modelGateMoat = modelGateMoat
+    self.promptMoat = promptMoat
     self.databaseURL = databaseURL
     self.databaseConfig = databaseConfig
     self.databaseEncryption = databaseEncryption
@@ -105,12 +108,64 @@ final class HandoffDraftReader {
     }
   }
 
+  /// AI-UI-3 — escalated redraft: re-gathers body-free facts for the period,
+  /// fetches the CONSENTED selected bodies, and drafts again with them. The
+  /// audit-first M031 write happens inside HandoffDrafter. bodyText is filled
+  /// on .drafted only — a failed redraft never clears the user's prior draft.
+  func redraft(
+    recipientName: String,
+    topic: String,
+    period: DateInterval,
+    selectedEventIDs: [Int64]
+  ) async {
+    state = .drafting
+    let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+    let url = databaseURL
+    let cfg = databaseConfig
+    let enc = databaseEncryption
+    let capped = Array(selectedEventIDs.sorted().prefix(EscalationDraft.selectionCap))
+    let events: [EgressEvent]
+    let keyed: [(id: Int64, event: EgressEvent)]
+    do {
+      (events, keyed) = try await Task.detached(priority: .userInitiated) {
+        let gatherer = WorkFactGatherer(dbURL: url, dbConfig: cfg, dbEncryption: enc)
+        return (
+          try gatherer.gather(period: period, nowMs: nowMs),
+          try gatherer.gatherSelectedBodiesKeyed(eventIDs: capped)
+        )
+      }.value
+    } catch {
+      state = .error(message: "Couldn't read your activity right now. Try again.")
+      return
+    }
+
+    let escalated = policy.makeEscalation(selected: keyed.map(\.event))
+    let d = ensureDrafter()
+    switch await d.draft(
+      topic: topic, recipientName: recipientName, events: events, period: period,
+      path: .byok, escalated: escalated, escalatedEventIDs: keyed.map(\.id))
+    {
+    case .text(let text, let provenance):
+      state = .drafted(text: text, provenance: provenance)
+    case .notEnoughData:
+      state = .error(
+        message: "Not enough recorded work in this period to draft a handoff. Type one yourself.")
+    case .failure(let message):
+      state = .error(message: message)
+    }
+  }
+
   // MARK: - Internal lazy bootstrap
 
   private func ensureDrafter() -> HandoffDrafter {
     if let d = drafter { return d }
+    // AI-UI-3 — the prompt seam + M031 sink ride along; the sink is only used
+    // on the escalated redraft path (body-free drafts stay un-audited, parity).
+    let audit = DBEscalationAuditSink(
+      dbURL: databaseURL, dbConfig: databaseConfig, dbEncryption: databaseEncryption)
     let d = HandoffDrafter(
-      policy: policy, summarizer: summarizerMoat.summarizer, modelGate: modelGateMoat.gate)
+      policy: policy, summarizer: summarizerMoat.summarizer, modelGate: modelGateMoat.gate,
+      prompts: promptMoat.prompts, audit: audit)
     drafter = d
     return d
   }
