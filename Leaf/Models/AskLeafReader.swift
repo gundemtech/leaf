@@ -45,14 +45,61 @@ final class AskLeafReader {
 
   var isAsking: Bool { transcript.hasPending }
 
+  // AI-UI-3 — NL handoff-intent. Roster is scoped to the ACTIVE workspace
+  // (CTO F1 — the send flow operates in it; an all-workspaces roster would
+  // suggest cross-workspace recipients) and cached per workspace id. The
+  // parser is pure LeafCore; a hit appends a TERMINAL suggestion entry (no
+  // LLM call); bypassIntent re-runs the same question as plain Q&A.
+  private var roster: [TeamMember] = []
+  private var rosterWorkspaceID: String?
+
+  func member(named name: String) -> TeamMember? {
+    roster.first { $0.displayName == name }
+  }
+
+  private func ensureRoster(workspaceID: String?) async {
+    guard let workspaceID else {
+      roster = []
+      rosterWorkspaceID = nil
+      return
+    }
+    guard rosterWorkspaceID != workspaceID else { return }
+    let url = databaseURL
+    let cfg = databaseConfig
+    let enc = databaseEncryption
+    let members: [TeamMember] =
+      (try? await Task.detached(priority: .userInitiated) {
+        let db = try LeafCore.Database.openForRead(at: url, config: cfg, encryption: enc)
+        return try db.readTeamMembers(workspaceID: workspaceID, includeRemoved: false)
+      }.value) ?? []
+    roster = members
+    rosterWorkspaceID = workspaceID
+  }
+
   /// Ask one independent question over the period. No-op while a previous
   /// ask is pending (transcript enforces single-flight).
   func ask(
     question: String,
     period: ReviewActivityInsights.ReviewActivityPeriod,
-    model: SummarizerModel?
+    model: SummarizerModel?,
+    activeWorkspaceID: String? = nil,
+    bypassIntent: Bool = false
   ) async {
     let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+
+    if !bypassIntent {
+      await ensureRoster(workspaceID: activeWorkspaceID)
+      if let hit = HandoffIntentParser.parse(
+        question: question, rosterNames: roster.map(\.displayName)),
+        member(named: hit.recipientName) != nil
+      {
+        _ = transcript.suggestHandoff(
+          question: question, recipientName: hit.recipientName, topic: hit.topic,
+          period: period, askedAtMs: nowMs)
+        return
+      }
+    }
+
     guard
       let id = transcript.ask(
         question: question, period: period, model: model, askedAtMs: nowMs)
