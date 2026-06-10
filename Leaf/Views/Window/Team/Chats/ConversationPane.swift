@@ -35,6 +35,12 @@ struct ConversationPane: View {
   @State private var replyTarget: DirectMessageMirrorRow?
   @State private var isSending = false
   @State private var jumpTarget: String?
+  /// AI-UI-3 — "Context for me" sheet seed (inbound handoff bubbles).
+  private struct ContextSeed: Identifiable {
+    let id: String
+    let row: DirectMessageMirrorRow
+  }
+  @State private var contextSeed: ContextSeed? = nil
 
   private var byID: [String: DirectMessageMirrorRow] {
     Dictionary(uniqueKeysWithValues: messages.map { ($0.messageID, $0) })
@@ -51,6 +57,10 @@ struct ConversationPane: View {
     .task(id: "\(peerPubkeyHex)-\(messages.count)") {
       let unread = messages.filter { $0.direction == .inbound && $0.readAtMs == nil }
       if !unread.isEmpty { onMarkRead(unread) }
+    }
+    // AI-UI-3 — recipient-side AI expansion of an inbound handoff.
+    .sheet(item: $contextSeed) { seed in
+      InboundHandoffContextSheet(row: seed.row)
     }
   }
 
@@ -103,6 +113,8 @@ struct ConversationPane: View {
               isJumpHighlight: jumpTarget == row.messageID,
               onReply: { replyTarget = row },
               onMarkDone: { onMarkDone(row) },
+              onContextForMe: row.kind == .handoff && row.direction == .inbound
+                ? { contextSeed = ContextSeed(id: row.messageID, row: row) } : nil,
               onJumpToQuote: { quotedID in
                 withAnimation { proxy.scrollTo(quotedID, anchor: .center) }
                 jumpTarget = quotedID
@@ -265,6 +277,8 @@ private struct ChatBubble: View {
   let isJumpHighlight: Bool
   let onReply: () -> Void
   let onMarkDone: () -> Void
+  /// AI-UI-3 — non-nil only on inbound handoff bubbles: opens "Context for me".
+  let onContextForMe: (() -> Void)?
   let onJumpToQuote: (String) -> Void
 
   private var isOutbound: Bool { row.direction == .outbound }
@@ -300,6 +314,13 @@ private struct ChatBubble: View {
           if row.kind == .task {
             taskStateLabel
           }
+          if let onContextForMe {
+            Button("Context for me") { onContextForMe() }
+              .buttonStyle(.plain)
+              .font(LeafType.caption)
+              .foregroundStyle(LeafColor.accent.emphasis)
+              .help("Ask your AI what this handoff means for your own work")
+          }
         }
       }
       .padding(.horizontal, LeafChatTokens.bubblePaddingH)
@@ -330,6 +351,10 @@ private struct ChatBubble: View {
         if row.kind == .task, row.doneAtMs == nil, !isOutbound {
           Divider()
           Button("Mark Done") { onMarkDone() }
+        }
+        if let onContextForMe {
+          Divider()
+          Button("Context for me (AI)") { onContextForMe() }
         }
       }
       if !isOutbound { Spacer(minLength: 0) }
