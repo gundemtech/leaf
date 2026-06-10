@@ -48,7 +48,7 @@ final class WorkspaceHubPresentationTests: XCTestCase {
   }
 
   func testTabTitles() {
-    XCTAssertEqual(TeamHubTab.feed.title, "Feed")
+    XCTAssertEqual(TeamHubTab.chats.title, "Chats")
     XCTAssertEqual(TeamHubTab.members.title, "Members")
     XCTAssertEqual(TeamHubTab.settings.title, "Settings")
   }

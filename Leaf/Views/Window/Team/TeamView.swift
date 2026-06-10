@@ -87,7 +87,7 @@ struct TeamView: View {
   /// management detours. Persisting would resurrect a stale tab after
   /// relaunch and fight every deep link. Selection survives workspace
   /// switches within a session, resets to Feed per launch.
-  @State private var hubTab: TeamHubTab = .feed
+  @State private var hubTab: TeamHubTab = .chats
 
   // MARK: - Body
 
@@ -263,7 +263,7 @@ struct TeamView: View {
         label: { $0.title }
       )
       switch hubTab {
-      case .feed:
+      case .chats:
         TeamFeedTab(
           active: active,
           members: members,
@@ -298,7 +298,7 @@ struct TeamView: View {
     // set before this view (re)mounts; TeamFeedTab's own observer handles
     // the scroll-to + highlight once mounted.
     .onChange(of: windowState.pendingMessageID, initial: true) { _, id in
-      if id != nil { hubTab = .feed }
+      if id != nil { hubTab = .chats }
     }
     // Explicit tab deep-link (e.g. join-request push → Members). Consumed
     // once: set the tab, clear the signal.

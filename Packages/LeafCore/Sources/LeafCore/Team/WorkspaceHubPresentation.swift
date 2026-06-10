@@ -11,9 +11,9 @@ import Foundation
 
 /// Tabs of the Team workspace-hub page. Raw values are a persistence /
 /// deep-link contract: unknown raw strings must decode to nil so callers
-/// can fall back to `.feed`.
+/// can fall back to `.chats`.
 public enum TeamHubTab: String, CaseIterable, Identifiable, Hashable, Sendable {
-  case feed
+  case chats
   case members
   case settings
 
@@ -21,7 +21,7 @@ public enum TeamHubTab: String, CaseIterable, Identifiable, Hashable, Sendable {
 
   public var title: String {
     switch self {
-    case .feed: "Feed"
+    case .chats: "Chats"
     case .members: "Members"
     case .settings: "Settings"
     }
