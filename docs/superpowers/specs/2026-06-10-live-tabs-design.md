@@ -48,9 +48,15 @@ writes and emits a debounced "database changed" signal.
 - **Debounce:** burst of file events → one signal after a short quiet window
   (default 500 ms, injectable for tests). Debounce logic is a pure, clock-injectable
   component — unit-tested in LeafCore without touching the filesystem.
-- **Interface:** `start()` / `stop()`; consumers receive signals via an
-  `AsyncStream<Void>` (fits the SwiftUI `.task` for-await loop directly). No GRDB
-  types in the interface; the observer knows only a file URL.
+- **Interface:** `start()` / `stop()`; emits via an injected `@Sendable () -> Void`
+  callback. Fan-out to views goes through `LiveUpdateSignals` — a tiny `@MainActor
+  @Observable` class with two monotonic counters (`localDataVersion` for
+  agent-written insights data, `teamFeedVersion` for team-feed mirror changes).
+  Views react with `.onChange(of:)` on the counter they care about; SwiftUI
+  Observation is per-property, so Home churn never wakes the Team tab. (Chosen
+  over `AsyncStream`: environment injection is type-keyed and streams are
+  single-consumer; counters multicast for free.) No GRDB types in the interface;
+  the observer knows only a file URL.
 - **Concurrency isolation:** the DispatchSource runs on a private background queue.
   The observer itself is not MainActor-bound; consumers hop to `@MainActor`
   themselves (readers are `@Observable` MainActor types). No shared mutable state
@@ -60,21 +66,25 @@ writes and emits a debounced "database changed" signal.
 
 ### 2. Home / Activity / Analytics — subscribe in the tab views
 
-Each insights tab adds a `.task` (in the tab view itself, **not** RootView) that
-loops over the observer's stream while the tab is visible and calls
-`InsightsReader.refresh(force:)` on each signal. Tab not visible ⇒ its `.task` is
-cancelled by SwiftUI ⇒ no redundant queries. The existing short freshness guard in
-`InsightsReader` stays as a storm brake.
+Each insights tab adds `.onChange(of: signals.localDataVersion)` (in the tab view
+itself, **not** RootView) calling `InsightsReader.refresh()` (non-force). Tab not
+visible ⇒ view doesn't exist ⇒ no redundant queries. The existing short freshness
+guard in `InsightsReader` stays as a storm brake (non-force refreshes inside the
+window are dropped; the agent's steady write stream re-triggers shortly after).
 
 ### 3. Team feed — in-process trigger, no watcher needed
 
 New DMs and team events are written to the mirror tables by the app process
 (`DirectMessageInboxReader.absorbRealtimePush`, `TeamEventMirrorReader.absorbRealtimePush`,
-and the periodic polling ticks). Add an injectable `onNewRows` notification
-(closure) fired by those readers after a successful upsert of *new* rows; the Team
-tab wires it to `TeamFeedReader.refresh()` with the current workspace, filters and
-self pubkey. Refresh merges state in place (existing `isRefreshing` path) — scroll
-position is preserved; no full-screen loading flash.
+and the periodic polling ticks). Add an injectable `onMirrorChanged` closure on
+both readers, fired after a successful mirror write: every successful realtime
+absorb (INSERT and UPDATE — read receipts and done badges render in the feed),
+polling ticks only when they actually upserted rows, and the optimistic local
+mark-done update. The composition root wires both to
+`signals.bumpTeamFeed()`; `TeamView` reacts via `.onChange(of:
+signals.teamFeedVersion)` → `TeamFeedReader.refresh()` with the current workspace,
+filters and self pubkey. Refresh merges state in place (existing `isRefreshing`
+path) — scroll position is preserved; no full-screen loading flash.
 
 Net effect: a colleague's message appears in the open feed at Realtime-push speed;
 if Realtime is down, the polling tick catches up on its existing cadence.
@@ -95,16 +105,20 @@ if Realtime is down, the polling tick catches up on its existing cadence.
   app degrades to today's behavior (on-appear refresh). Never fatal.
 - Signal storm (e.g. WAL checkpoint rewrite) → absorbed by debounce + the reader's
   freshness guard.
-- `refresh(force:)` failures keep the existing per-reader error states; a failed
-  live refresh must not blank a previously loaded screen (readers already keep last
-  loaded snapshot — verify in tests).
+- `refresh()` failures keep the existing per-reader error semantics (a failed
+  refresh transitions to `.error` — pre-existing behavior, not changed by this
+  work; the trigger source is irrelevant to the state machine).
+- `InsightsReader` gains a warm-refresh path (from `.loaded`, keep the snapshot
+  rendered during the re-query instead of flashing the loading scaffold) — without
+  it every live refresh would blink the Home screen.
 
 ### 6. Testing
 
-- **LeafCore unit (TDD):** debounce component (burst → one signal; quiet → nothing;
-  clock injected). Observer start/stop idempotence. `onNewRows` fired exactly when
-  absorb/tick upserts new rows, not on no-op ticks.
-- **App target:** no test bundle (known) — view wiring is build-verified
+- **LeafCore unit (TDD):** `LiveUpdateSignals` counters; debounce component
+  (burst → one signal; quiet → nothing); `DatabaseChangeObserver` against a temp
+  dir (write → fires; stop → silent; wal created after start → attaches and fires).
+- **App target:** no test bundle (known) — the `onMirrorChanged` firing conditions
+  live in app-target readers and are trivial guards; build-verified
   (`xcodebuild -scheme Leaf`) + manual smoke.
 - **Manual smoke (golden path):** (1) open Home, work in another app, watch Home
   update without re-entering; (2) open Team feed on Mac A, send DM from Mac B,
