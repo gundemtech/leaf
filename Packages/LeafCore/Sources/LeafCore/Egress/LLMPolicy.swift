@@ -119,6 +119,21 @@ public struct LLMPolicy: EgressPolicy {
     return EscalatedBodies(bodies: bodies)
   }
 
+  /// AI-UI-3 — wraps an INBOUND teammate handoff note for the recipient-side
+  /// "Context for me" call. Same opaque payload type as escalation (sole
+  /// constructor discipline): one body, `authoredByViewer: false` — someone
+  /// else's text is HOSTILE data for injection purposes — capped by the same
+  /// escalation cap. The note arrived E2E and is already on this device; this
+  /// only shapes HOW it may enter a prompt (labeled data, never instructions).
+  public func makeInboundHandoff(text: String, tsMs: Int64) -> EscalatedBodies {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return EscalatedBodies(bodies: []) }
+    let (capped, _) = BodyExcerpt.capped(trimmed, charCap: Self.escalationBodyCap)
+    return EscalatedBodies(bodies: [
+      EscalatedBody(kind: "inbound_handoff", tsBucketMs: tsMs, authoredByViewer: false, text: capped)
+    ])
+  }
+
   /// P1 — the user's own question, normalized into a single segment. Collapses
   /// every whitespace/newline/control-character run to one space (so a crafted
   /// question can't forge a `Facts:` header in the rendered prompt — §8.3, N-4),
