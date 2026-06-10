@@ -4,6 +4,8 @@ _Срез "где мы сейчас" за 30 секунд. Детали — git 
 
 ## Последнее обновление
 
+**✅ Team page UI polish v1 (2026-06-10, #50 `a855ce7b`).** Чат-стиль ленты: баблы с сериями по (направление+собеседник), явный адресат на исходящих («→ имя» — лента мульти-адресатная), receipt раз на серию, date-разделители Today/Yesterday, события приглушены + резолв имён вместо raw pubkey-hex (fallback «Former teammate»), avatar-strip вместо пилюль, колонка ≤760pt. Логика — `TeamFeedPresentation` (LeafCore, TDD 27 тестов). Live-проверено в Debug против прод-бэкенда. **v2-итерация UX запланирована (визуал владельцу не до конца нравится)**; follow-ups: presence-точки в strip (нет reader'а), inline reply, FreePreview не трогали (намеренный «рекламный» мокап).
+
 **✅ E2E team-messaging две стороны заработали (2026-06-07, two-Mac live verified).** Два разных бага под одним симптомом «сообщения не ходят», оба пофикшены:
 - **alpha.28 (`v1.0.0-alpha.28`, PR #38 `92c5c677`)** — приёмный путь. Джойнер подписывал DM/team-events чужим ключом (`members.first` = создатель воркспейса, не self, т.к. `readTeamMembers` ORDER BY added_at ASC), C2-гейт молча дропал. Фикс: резолв self по identity-pubkey в DirectMessageService/TeamEventBroadcastService/InviteService. + creator displayName ≠ workspace name. Нужен новый билд на обоих маках.
 - **Серверный hotfix в ПРОДЕ (leaf-relay `ffc4175`, локально)** — отправка джойнера. Инвайти не было в серверной `workspace_members` (RLS admin-only write, клиентский self-insert всегда 403), → `direct_messages_sender_write` резал. Фикс: `approve_join_request` Edge Function вписывает инвайти через service-role + backfill-миграция (`20260607120000`) вылечила существующих. Билд НЕ нужен — серверный.
