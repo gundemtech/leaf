@@ -49,6 +49,9 @@ struct LoginView: View {
     return nil
   }
 
+  /// Waiting for the browser-based OAuth redirect — show the cancellable overlay.
+  private var isAuthorizing: Bool { service.state == .authorizing }
+
   var body: some View {
     VStack {
       Spacer(minLength: LeafSpace.xl)
@@ -57,6 +60,9 @@ struct LoginView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(LeafColor.surface.canvas)
+    .overlay {
+      if isAuthorizing { authorizingOverlay }
+    }
   }
 
   private var card: some View {
@@ -174,7 +180,7 @@ struct LoginView: View {
     VStack(spacing: LeafSpace.sm) {
       LeafButton(
         variant: .secondary, size: .lg,
-        action: { Task { await service.loginWithOAuth(provider: .google) } }
+        action: { service.startOAuth(provider: .google) }
       ) {
         oauthLabel("Continue with Google") {
           Image("leaf-brand-google")
@@ -188,13 +194,13 @@ struct LoginView: View {
 
       LeafButton(
         variant: .secondary, size: .lg,
-        action: { Task { await service.loginWithOAuth(provider: .github) } }
+        action: { service.startOAuth(provider: .github) }
       ) {
         oauthLabel("Continue with GitHub") {
           Image("leaf-brand-github")
             .renderingMode(.template)
             .resizable().aspectRatio(contentMode: .fit)
-            .frame(width: 16, height: 16)
+            .frame(width: 18, height: 18)
             .foregroundStyle(LeafColor.text.primary)
         }
       }
@@ -209,6 +215,47 @@ struct LoginView: View {
       Text(title)
     }
     .frame(maxWidth: .infinity)
+  }
+
+  /// Shown while the browser-based OAuth flow is in progress, so the user can
+  /// cancel (× or Cancel) instead of waiting out the loopback timeout.
+  private var authorizingOverlay: some View {
+    ZStack {
+      Color.black.opacity(0.25).ignoresSafeArea()
+      VStack(spacing: LeafSpace.md) {
+        HStack {
+          Spacer()
+          Button {
+            service.cancelOAuth()
+          } label: {
+            Image(systemName: "xmark").foregroundStyle(LeafColor.text.tertiary)
+          }
+          .buttonStyle(.plain)
+          .help("Cancel sign-in")
+        }
+        ProgressView()
+        Text("Finish signing in in your browser.")
+          .font(LeafType.body.regular)
+          .foregroundStyle(LeafColor.text.primary)
+          .multilineTextAlignment(.center)
+        Text("Pick your account, then come back to Leaf.")
+          .font(LeafType.body.small)
+          .foregroundStyle(LeafColor.text.secondary)
+          .multilineTextAlignment(.center)
+        LeafButton("Cancel", variant: .secondary, size: .md) { service.cancelOAuth() }
+          .padding(.top, LeafSpace.xs)
+      }
+      .padding(LeafSpace.xl)
+      .frame(width: 300)
+      .background(
+        RoundedRectangle(cornerRadius: LeafRadius.xl, style: .continuous)
+          .fill(LeafColor.surface.raised)
+          .overlay(
+            RoundedRectangle(cornerRadius: LeafRadius.xl, style: .continuous)
+              .strokeBorder(LeafColor.border.subtle, lineWidth: 1)
+          )
+      )
+    }
   }
 
   private var footer: some View {

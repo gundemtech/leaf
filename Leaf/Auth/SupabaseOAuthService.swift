@@ -11,10 +11,11 @@
 //     browser (NSWorkspace.open → Chrome/Safari/… with their already-signed-in
 //     accounts) and catches the redirect on a local loopback HTTP server
 //     (LoopbackCallbackListener, same pattern as the Linear/Slack/GitHub
-//     integrations). PKCE throughout. We deliberately do NOT use
+//     integrations). PKCE throughout. The flow runs in a cancellable Task so
+//     the LoginView "Cancel" affordance can abort it immediately instead of
+//     waiting out the loopback timeout. We deliberately do NOT use
 //     ASWebAuthenticationSession — it can only use Safari/WebKit, not the
 //     user's real default browser.
-//  State machine mirrors LinearOAuthService.
 //
 
 import AppKit
@@ -47,6 +48,9 @@ final class SupabaseOAuthService {
   private static let callbackPort: UInt16 = 47825
   static let redirectURI = "http://127.0.0.1:47825/callback"
 
+  /// In-flight OAuth flow, so the UI "Cancel" can abort it.
+  @ObservationIgnored private var oauthTask: Task<Void, Never>?
+
   init(client: SupabaseClient) {
     self.client = client
   }
@@ -66,9 +70,25 @@ final class SupabaseOAuthService {
     }
   }
 
-  // MARK: - OAuth path (default browser + loopback)
+  // MARK: - OAuth path (default browser + loopback, cancellable)
 
-  func loginWithOAuth(provider: OAuthProvider) async {
+  /// Start an OAuth flow. Cancellable via `cancelOAuth()`.
+  func startOAuth(provider: OAuthProvider) {
+    oauthTask?.cancel()
+    oauthTask = Task { await self.runOAuth(provider: provider) }
+  }
+
+  /// Abort an in-flight OAuth flow (the LoginView "×"/Cancel) without waiting
+  /// for the loopback timeout. Cancelling the task fires the listener's
+  /// cancellation handler, which frees the loopback port; state returns to the
+  /// form immediately.
+  func cancelOAuth() {
+    oauthTask?.cancel()
+    oauthTask = nil
+    state = .idle
+  }
+
+  private func runOAuth(provider: OAuthProvider) async {
     state = .authorizing
     let challenge = PKCE.makeChallenge()
     let authorizeURL = SupabaseEndpoint.oauthAuthorize(
@@ -83,6 +103,7 @@ final class SupabaseOAuthService {
       let callback = try await LoopbackCallbackListener.awaitCallback(
         port: Self.callbackPort,
         providerLabel: provider == .google ? "Google" : "GitHub")
+      if Task.isCancelled { return }
 
       if let oauthError = callback.queryItems?.first(where: { $0.name == "error" })?.value {
         // User denied at the provider, or the provider returned an error.
@@ -100,17 +121,18 @@ final class SupabaseOAuthService {
       state = .exchangingToken
       _ = try await client.exchangeOAuthCode(
         code: code, codeVerifier: challenge.verifier, redirectURI: Self.redirectURI)
+      if Task.isCancelled { return }
       try await finishWithDeviceRegistration()
     } catch let loopback as LoopbackCallbackError {
-      // Timed out (user abandoned the browser tab) → soft return to the form;
-      // bind/listener failures are surfaced.
+      if Task.isCancelled { return }
       switch loopback {
       case .timeout:
-        state = .idle
+        state = .idle  // user abandoned the browser tab
       default:
         state = .error(message: "Couldn't open the sign-in listener. Try again.")
       }
     } catch {
+      if Task.isCancelled { return }
       state = .error(message: friendlyMessage(error))
     }
   }
