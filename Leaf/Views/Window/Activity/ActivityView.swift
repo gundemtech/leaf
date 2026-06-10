@@ -14,6 +14,11 @@ struct ActivityView: View {
     @Environment(InsightsReader.self) private var reader
     @State private var selectedFilter: ActivityFilter = .all
     @State private var mode: ActivityMode = .sessions
+    @State private var feedReader = ActivityFeedReader()
+    @State private var selectedEventIDs: Set<Int64> = []
+
+    /// Кап выбора = consent-кап escalation send-пути.
+    private static let selectionCap = EscalationDraft.selectionCap
 
     var body: some View {
         ScrollView {
@@ -25,6 +30,9 @@ struct ActivityView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear { reader.refresh() }
+        .task(id: mode) {
+            if mode == .rawEvents { await feedReader.refresh() }
+        }
     }
 
     // MARK: - Header
@@ -130,9 +138,26 @@ struct ActivityView: View {
 
     @ViewBuilder
     private func rawEventsContent(for snapshot: InsightsSnapshot) -> some View {
-        // IV.A.2 — recentActivity protocol method dropped. Raw-events mode
-        // stays empty until a future cleanup wires the replacement source.
-        let entries: [ActivityFeedEntry] = []
+        // AI-UI-2 — живой источник: ActivityFeedReader → ActivityFeedQuery
+        // (LeafCore). Заменяет выпиленный в IV.A.2 protocol-метод.
+        switch feedReader.state {
+        case .loading:
+            loadingView
+        case .error(let msg):
+            LeafBanner(
+                tone: .danger,
+                title: "Couldn't load today's events",
+                description: msg,
+                ctaTitle: "Try again",
+                onCTA: { Task { await feedReader.refresh() } }
+            )
+        case .loaded(let entries):
+            rawEventsList(entries: entries)
+        }
+    }
+
+    @ViewBuilder
+    private func rawEventsList(entries: [ActivityFeedEntry]) -> some View {
         VStack(alignment: .leading, spacing: LeafSpace.md) {
             filterPicker(counts: providerCounts(in: entries))
 
@@ -153,12 +178,55 @@ struct ActivityView: View {
                         )
                     } else {
                         listColumn(rows: filtered, leadingIndent: LeafSpace.xxxxl) { entry in
-                            ActivityRow(entry: entry)
+                            selectableRow(entry)
                                 .padding(.horizontal, LeafSpace.md)
                                 .padding(.vertical, LeafSpace.sm)
                         }
                     }
                 }
+                analyzeBar(entries: entries)
+            }
+        }
+    }
+
+    // MARK: - Selection (escalation entry point)
+
+    private func selectableRow(_ entry: ActivityFeedEntry) -> some View {
+        HStack(spacing: LeafSpace.sm) {
+            Button {
+                toggleSelection(entry.id)
+            } label: {
+                Image(systemName: selectedEventIDs.contains(entry.id)
+                      ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(selectedEventIDs.contains(entry.id)
+                                     ? LeafColor.text.primary : LeafColor.text.tertiary)
+            }
+            .buttonStyle(.plain)
+            .help("Select for AI analysis (up to \(Self.selectionCap) events per request)")
+            ActivityRow(entry: entry)
+        }
+    }
+
+    private func toggleSelection(_ id: Int64) {
+        if selectedEventIDs.contains(id) {
+            selectedEventIDs.remove(id)
+        } else if selectedEventIDs.count < Self.selectionCap {
+            selectedEventIDs.insert(id)
+        }
+    }
+
+    @ViewBuilder
+    private func analyzeBar(entries: [ActivityFeedEntry]) -> some View {
+        if !selectedEventIDs.isEmpty {
+            HStack {
+                Button("Analyze with AI (\(selectedEventIDs.count))") {
+                    // Sheet wiring — Task 9 (EscalationSheet).
+                }
+                .disabled(true)
+                Button("Clear") { selectedEventIDs.removeAll() }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(LeafColor.text.tertiary)
+                Spacer()
             }
         }
     }
