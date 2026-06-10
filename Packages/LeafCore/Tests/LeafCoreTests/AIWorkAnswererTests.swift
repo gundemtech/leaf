@@ -65,4 +65,81 @@ final class AIWorkAnswererTests: XCTestCase {
     XCTAssertFalse(
       AIWorkAnswerer.message(for: .network("socket 1.2.3.4")).contains("1.2.3.4"))
   }
+
+  // MARK: - AI-UI-4 — path-aware messages
+
+  // Team pool exhausted → honest copy: the valve out is the user's own key.
+  func testBudgetExhaustedOnIncludedPathSuggestsOwnKey() {
+    let m = AIWorkAnswerer.message(for: .budgetExhausted(retryAfter: nil), path: .aiIncluded)
+    XCTAssertTrue(m.localizedCaseInsensitiveContains("your own Anthropic key"))
+    XCTAssertTrue(m.contains("Settings"))
+  }
+
+  // On the included path there is no user-owned Anthropic key to blame.
+  func testAuthFailedOnIncludedPathDoesNotBlameAnthropicKey() {
+    let m = AIWorkAnswerer.message(for: .authFailed("x"), path: .aiIncluded)
+    XCTAssertFalse(m.contains("Anthropic API key"))
+    XCTAssertTrue(m.contains("Leaf account"))
+  }
+
+  // BYOK copy is the pre-AI-UI-4 wording — no regression for key users.
+  func testByokMessagesUnchanged() {
+    XCTAssertEqual(
+      AIWorkAnswerer.message(for: .missingAPIKey, path: .byok),
+      "No Anthropic API key configured. Add your key to enable AI answers.")
+    XCTAssertEqual(
+      AIWorkAnswerer.message(for: .authFailed("x"), path: .byok),
+      "Your Anthropic API key was rejected (invalid or revoked). Update it and try again.")
+    XCTAssertEqual(
+      AIWorkAnswerer.message(for: .budgetExhausted(retryAfter: nil), path: .byok),
+      "AI inference budget exhausted. Try again later.")
+  }
+
+  // One-arg forward keeps every existing call-site on BYOK semantics.
+  func testOneArgMessageForwardsToByok() {
+    XCTAssertEqual(
+      AIWorkAnswerer.message(for: .authFailed("x")),
+      AIWorkAnswerer.message(for: .authFailed("x"), path: .byok))
+  }
+
+  func testPathAwareMessagesAreOpaque() {
+    XCTAssertFalse(
+      AIWorkAnswerer.message(for: .authFailed("jwt eyJ-secret"), path: .aiIncluded)
+        .contains("eyJ-secret"))
+  }
+
+  // MARK: - AI-UI-4 — AIFailure kinds + Settings CTA
+
+  func testFailureKindTotalMapping() {
+    XCTAssertEqual(AIWorkAnswerer.failureKind(for: .missingAPIKey), .missingKey)
+    XCTAssertEqual(AIWorkAnswerer.failureKind(for: .authFailed("x")), .auth)
+    XCTAssertEqual(AIWorkAnswerer.failureKind(for: .budgetExhausted(retryAfter: 30)), .budget)
+    XCTAssertEqual(AIWorkAnswerer.failureKind(for: .rateLimited(retryAfter: 5)), .rateLimited)
+    XCTAssertEqual(AIWorkAnswerer.failureKind(for: .attestationFailed("m")), .attestation)
+    XCTAssertEqual(AIWorkAnswerer.failureKind(for: .contextEmpty), .transient)
+    XCTAssertEqual(AIWorkAnswerer.failureKind(for: .badRequest("b")), .transient)
+    XCTAssertEqual(AIWorkAnswerer.failureKind(for: .serverError(503)), .transient)
+    XCTAssertEqual(AIWorkAnswerer.failureKind(for: .network("n")), .transient)
+    XCTAssertEqual(AIWorkAnswerer.failureKind(for: .decode("d")), .transient)
+  }
+
+  func testFailureBundlesKindAndPathAwareMessage() {
+    let f = AIWorkAnswerer.failure(for: .budgetExhausted(retryAfter: nil), path: .aiIncluded)
+    XCTAssertEqual(f.kind, .budget)
+    XCTAssertEqual(
+      f.message, AIWorkAnswerer.message(for: .budgetExhausted(retryAfter: nil), path: .aiIncluded))
+  }
+
+  // CTA truth table: only the two failures the user can fix in Settings →
+  // AI Answers earn the button.
+  func testShowsSettingsCTATruthTable() {
+    XCTAssertTrue(AIFailure(kind: .missingKey, message: "m").showsSettingsCTA)
+    XCTAssertTrue(AIFailure(kind: .budget, message: "m").showsSettingsCTA)
+    XCTAssertFalse(AIFailure(kind: .auth, message: "m").showsSettingsCTA)
+    XCTAssertFalse(AIFailure(kind: .rateLimited, message: "m").showsSettingsCTA)
+    XCTAssertFalse(AIFailure(kind: .attestation, message: "m").showsSettingsCTA)
+    XCTAssertFalse(AIFailure(kind: .auditWrite, message: "m").showsSettingsCTA)
+    XCTAssertFalse(AIFailure(kind: .localRead, message: "m").showsSettingsCTA)
+    XCTAssertFalse(AIFailure(kind: .transient, message: "m").showsSettingsCTA)
+  }
 }
