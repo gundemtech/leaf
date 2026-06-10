@@ -50,6 +50,10 @@ struct TeamView: View {
   @Environment(FeedFilterStore.self) private var feedFilterStore
   @Environment(CrossPostLogReader.self) private var crossPostLogReader
   @Environment(LiveUpdateSignals.self) private var liveSignals
+  /// Deep-link plumbing: APNs handlers set `pendingMessageID` /
+  /// `pendingHubTab`; the hub forces the matching tab before TeamFeedTab's
+  /// own scroll-to observer (initial: true) picks the message up.
+  @Environment(WindowState.self) private var windowState
 
   // MARK: - Local sheet state
 
@@ -76,6 +80,14 @@ struct TeamView: View {
 
   /// T4 — per-callsite UpgradeModal flag for the Free-tier preview branch.
   @State private var showUpgrade: Bool = false
+
+  /// Hub tab selection. Deliberately NOT persisted: Feed is the page's
+  /// identity (sidebar unread badges, APNs deep links and the "Team"
+  /// mental model all land there); Members/Settings are occasional
+  /// management detours. Persisting would resurrect a stale tab after
+  /// relaunch and fight every deep link. Selection survives workspace
+  /// switches within a session, resets to Feed per launch.
+  @State private var hubTab: TeamHubTab = .feed
 
   // MARK: - Body
 
@@ -239,27 +251,39 @@ struct TeamView: View {
   @ViewBuilder
   private func loadedContent(active: Workspace, members: [TeamMember]) -> some View {
     VStack(alignment: .leading, spacing: LeafSpace.md) {
-      // G.3 — Toolbar: workspace name + member count + [+ Send] button
-      toolbar(active: active, memberCount: members.count)
-      // G.4 — Compact avatar stack (tap opens SendDirectMessageSheet;
-      // hover tooltip shows the member name the legacy pills displayed).
-      LeafMemberStrip(members: members) { member in
-        sendSheetRecipient = SendRecipient(id: member.id, member: member)
-      }
-      // Feed surface — extracted verbatim into Tabs/TeamFeedTab.swift.
-      TeamFeedTab(
+      // Hub header: workspace mark + name + subtitle + Invite CTA (⌘N).
+      WorkspaceHubHeader(
         active: active,
-        members: members,
-        selfPubkeyHex: { selfPubkeyHex() },
-        onInvite: { generateInvitePresented = true },
-        onSendDM: { member in
-          if let member {
-            sendSheetRecipient = SendRecipient(id: member.id, member: member)
-          } else {
-            sendSheetRecipient = nil
-          }
-        }
+        memberCount: members.count,
+        onInvite: { generateInvitePresented = true }
       )
+      LeafTab(
+        selection: $hubTab,
+        tabs: TeamHubTab.allCases,
+        label: { $0.title }
+      )
+      switch hubTab {
+      case .feed:
+        TeamFeedTab(
+          active: active,
+          members: members,
+          selfPubkeyHex: { selfPubkeyHex() },
+          onInvite: { generateInvitePresented = true },
+          onSendDM: { member in
+            if let member {
+              sendSheetRecipient = SendRecipient(id: member.id, member: member)
+            } else {
+              sendSheetRecipient = nil
+            }
+          }
+        )
+      case .members:
+        MembersTab(onTapMember: { member in
+          sendSheetRecipient = SendRecipient(id: member.id, member: member)
+        })
+      case .settings:
+        WorkspaceSettingsTab(active: active, members: members)
+      }
     }
     .padding(LeafSpace.xxl)
     // Cap + center the whole column: on wide windows unconstrained rows pushed
@@ -269,31 +293,12 @@ struct TeamView: View {
       alignment: .topLeading
     )
     .frame(maxWidth: .infinity, alignment: .top)
-  }
-
-  // MARK: - G.3 Toolbar
-
-  @ViewBuilder
-  private func toolbar(active: Workspace, memberCount: Int) -> some View {
-    HStack(spacing: LeafSpace.md) {
-      VStack(alignment: .leading, spacing: 2) {
-        Text(active.name)
-          .font(LeafType.title.medium)
-          .foregroundStyle(LeafColor.text.primary)
-          .lineLimit(1)
-        Text("\(memberCount) member\(memberCount == 1 ? "" : "s")")
-          .font(LeafType.caption)
-          .foregroundStyle(LeafColor.text.tertiary)
-      }
-      Spacer(minLength: 0)
-      // G.3 — Invite CTA. Round 8 — user wants all create/new/generate/
-      // invite CTAs styled identically (primary .md) across the app for
-      // visual consistency; the round-4 secondary-when-populated variant
-      // was overruled.
-      LeafButton("+ Invite teammate", variant: .primary, size: .md) {
-        generateInvitePresented = true
-      }
-      .keyboardShortcut("n", modifiers: .command)
+    // APNs deep-link to a message must land on the Feed tab regardless of
+    // the currently-selected tab. `initial: true` covers the value being
+    // set before this view (re)mounts; TeamFeedTab's own observer handles
+    // the scroll-to + highlight once mounted.
+    .onChange(of: windowState.pendingMessageID, initial: true) { _, id in
+      if id != nil { hubTab = .feed }
     }
   }
 
