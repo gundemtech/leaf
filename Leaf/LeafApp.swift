@@ -52,6 +52,12 @@ struct LeafApp: App {
   @State private var diagnostics = DebugDiagnosticsService()
   @State private var routeCoordinator = RouteCoordinator()
   @State private var reader = InsightsReader()
+  /// Live-tabs — invalidation counters consumed by Home/Activity/Analytics
+  /// (.localDataVersion) and TeamView (.teamFeedVersion) via .onChange.
+  @State private var liveUpdateSignals: LiveUpdateSignals
+  /// Live-tabs — debounced WAL watcher for cross-process Agent writes.
+  /// Started/stopped with the main window (see .task below).
+  @State private var databaseChangeObserver: DatabaseChangeObserver
   // Track 5 S2 Task 12 — `OrgReader` deleted. `WorkspaceReader` +
   // `ActiveWorkspaceStore` — sole substrate for workspace surface.
   @State private var activeWorkspaceStore: ActiveWorkspaceStore
@@ -288,7 +294,8 @@ struct LeafApp: App {
     // Track 5 / S5 — broadcast + mirror readers + 30s tick scheduling
     // (driven by OrganizationView .task per S4 DM inbox precedent).
     _teamEventBroadcastReader = State(initialValue: TeamEventBroadcastReader(supabase: supabase))
-    _teamEventMirrorReader = State(initialValue: TeamEventMirrorReader(supabase: supabase))
+    let teamEventMirror = TeamEventMirrorReader(supabase: supabase)
+    _teamEventMirrorReader = State(initialValue: teamEventMirror)
 
     // Track 5 / S6 T13 — cross-post composition wiring.
     // Track 5 / S8 carry-over (M20) — Slack channel picker production wiring.
@@ -558,6 +565,21 @@ struct LeafApp: App {
     )
     _realtimeService = State(initialValue: realtime)
 
+    // Live-tabs — signals + WAL watcher. The watcher hops to MainActor to bump;
+    // mirror readers bump directly (already MainActor).
+    let liveSignals = LiveUpdateSignals()
+    _liveUpdateSignals = State(initialValue: liveSignals)
+    _databaseChangeObserver = State(
+      initialValue: DatabaseChangeObserver(
+        databaseURL: DatabasePath.defaultURL(),
+        onChange: {
+          Task { @MainActor in liveSignals.bumpLocalData() }
+        }
+      )
+    )
+    inboxReader.onMirrorChanged = { liveSignals.bumpTeamFeed() }
+    teamEventMirror.onMirrorChanged = { liveSignals.bumpTeamFeed() }
+
     // C1 fix — Track 5 / S4 Stage 6 review:
     // AppDelegate handles APNs callbacks and needs reader references. SwiftUI
     // doesn't propagate @Environment into AppDelegate callbacks; static weak
@@ -684,6 +706,7 @@ struct LeafApp: App {
         .environment(crossPostLogReader)  // Track 5 / S7 H.3
         .environment(feedFilterStore)  // Track 5 / S7 H.3
         .environment(realtimeService)  // Track 5 / S7 H.3
+        .environment(liveUpdateSignals)  // live-tabs — invalidation counters
         // AttachmentMetadataResolver is an actor (not @Observable);
         // custom EnvironmentKey threads optional resolver to TeamView.
         .environment(\.attachmentMetadataResolver, attachmentMetadataResolver)
@@ -745,6 +768,19 @@ struct LeafApp: App {
                     // (refresh()-triggers first SINCE feed population).
                     reader.configure(lastSeenCursor: lastSeenCursor)
                 }
+        // Live-tabs — watcher runs only while the main window exists. stop()
+        // fires synchronously at cancellation (onCancel), so a rapid window
+        // close→reopen can't interleave a stale stop() after the new start().
+        .task {
+          databaseChangeObserver.start()
+          await withTaskCancellationHandler {
+            while !Task.isCancelled {
+              try? await Task.sleep(nanoseconds: 3_600_000_000_000)
+            }
+          } onCancel: {
+            databaseChangeObserver.stop()
+          }
+        }
         .onOpenURL { url in
           inviteURLHandler.handle(url)
         }
