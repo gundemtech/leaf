@@ -122,7 +122,10 @@ final class SupabaseOAuthService: NSObject {
         }
       }
       session.presentationContextProvider = self
-      session.prefersEphemeralWebBrowserSession = true
+      // Share Safari's cookies (NOT ephemeral) so the user's already-signed-in
+      // Google/GitHub accounts appear for one-tap selection instead of a cold
+      // login each time. macOS shows a one-time "wants to sign in" consent.
+      session.prefersEphemeralWebBrowserSession = false
       self.webAuthSession = session
       if !session.start() {
         continuation.resume(throwing: URLError(.cannotConnectToHost))

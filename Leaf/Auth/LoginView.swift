@@ -15,7 +15,7 @@ import SwiftUI
 /// Public-facing site URLs (registration / password reset live on the web).
 private enum LoginLinks {
   static let register = URL(string: "https://leaf.gundem.tech/signup")!
-  static let forgotPassword = URL(string: "https://leaf.gundem.tech/signup#reset")!
+  static let forgotPassword = URL(string: "https://leaf.gundem.tech/signup?panel=forgot")!
 }
 
 struct LoginGateView: View {
