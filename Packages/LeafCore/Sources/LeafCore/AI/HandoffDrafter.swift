@@ -56,17 +56,20 @@ public struct HandoffDrafter: Sendable {
   private let policy: LLMPolicy
   private let summarizer: any Summarizer
   private let modelGate: any ModelGate
+  private let prompts: any HandoffPrompts
   private let maxDraftTokens: Int
 
   public init(
     policy: LLMPolicy,
     summarizer: any Summarizer,
     modelGate: any ModelGate,
+    prompts: any HandoffPrompts = HandoffPromptMoat.publicSubstrate.prompts,
     maxDraftTokens: Int = 1024
   ) {
     self.policy = policy
     self.summarizer = summarizer
     self.modelGate = modelGate
+    self.prompts = prompts
     self.maxDraftTokens = maxDraftTokens
   }
 
@@ -89,7 +92,10 @@ public struct HandoffDrafter: Sendable {
     guard !context.facts.isEmpty else { return .notEnoughData }
 
     // Prompt: topic + recipient name + framing, all normalized together (B/F5).
-    let question = policy.makeQuestion(Self.handoffInstruction(topic: topic, recipientName: recipientName))
+    // AI-UI-3 — the framing text comes from the prompt seam (moat under
+    // LEAF_PROD, public copy otherwise); discipline unchanged.
+    let question = policy.makeQuestion(
+      prompts.draftInstruction(topic: topic, recipientName: recipientName))
     let model = modelGate.model(path: path, preferred: preferred)
     do {
       let out = try await summarizer.summarize(
@@ -111,15 +117,6 @@ public struct HandoffDrafter: Sendable {
     } catch {
       return .failure("Couldn't draft right now. Try again.")
     }
-  }
-
-  /// PUBLIC framing — product copy, not a secret. Folds topic + recipient into a
-  /// single instruction that `makeQuestion` then normalizes. Reuses the QA system
-  /// prompt's "facts strictly as data" discipline via the QA overload.
-  static func handoffInstruction(topic: String, recipientName: String) -> String {
-    "Write a short, friendly work handoff note for my teammate \(recipientName) about: \(topic). "
-      + "Cover what I worked on, what is in progress, what is blocking me, and where I stopped, "
-      + "using ONLY the structured facts. Write in the first person, ready to send."
   }
 
   /// Counts + kinds of the projected (body-free) facts — never bodies. e.g.
