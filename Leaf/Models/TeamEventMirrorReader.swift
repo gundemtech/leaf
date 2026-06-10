@@ -34,6 +34,11 @@ final class TeamEventMirrorReader: RealtimeTeamEventAbsorbing {
     private(set) var lastPrunedAt: Date?
     private(set) var lastPruneRemoved: Int = 0
 
+    /// Live-tabs — fired after a successful mirror write (tick with upserts,
+    /// realtime absorb) so the Team feed can re-query. Wired to
+    /// `LiveUpdateSignals.bumpTeamFeed()` by the composition root; nil in tests.
+    var onMirrorChanged: (@MainActor () -> Void)?
+
     private var mirrorService: TeamEventMirrorService?
     private var retentionPruner: TeamEventMirrorRetentionPruner?
     private var database: LeafCore.Database?
@@ -71,6 +76,9 @@ final class TeamEventMirrorReader: RealtimeTeamEventAbsorbing {
                 decoded: result.decodedCount,
                 upserted: result.upsertedCount
             )
+            if result.upsertedCount > 0 {
+                onMirrorChanged?()
+            }
         } catch let err as LeafError {
             state = .error(message: String(describing: err))
         } catch let err as SupabaseError {
@@ -92,6 +100,7 @@ final class TeamEventMirrorReader: RealtimeTeamEventAbsorbing {
         do {
             let svc = try ensureMirror()
             try await svc.absorbRealtimePush(row)
+            onMirrorChanged?()
         } catch {
             logger.error("team event realtime push failed: \(String(describing: error), privacy: .public)")
         }
