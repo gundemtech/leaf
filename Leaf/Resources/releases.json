@@ -2,6 +2,23 @@
   "schemaVersion": 1,
   "releases": [
     {
+      "version": "1.0.0-alpha.32",
+      "date": "2026-06-10",
+      "added": [
+        "\"Ask Leaf\" tab: ask questions about your work in plain language and get answers built from your own structured activity data. Uses your own Anthropic API key (managed in Settings → Data → AI Answers, shared with the MCP server), with period and model pickers.",
+        "Diagnostics now shows the background agent's launchd state and a Repair button that restores collection in one click."
+      ],
+      "fixed": [
+        "Background collection now heals itself: the app monitors the agent's heartbeat and automatically restarts or re-registers it if capture silently stops — previously this required manually re-toggling settings. If automatic recovery fails, Leaf notifies you with a pointer to the fix. Collection you turned off yourself is never re-enabled automatically.",
+        "Launching Leaf from a non-installed location (a DMG, Downloads, a temporary copy) can no longer break background collection for the installed app — agent registration is now guarded to the canonical install location."
+      ],
+      "changed": [
+        "Team page redesigned as a chat-style feed: message bubbles grouped into conversation runs with explicit recipients, Today/Yesterday day separators, quieter activity rows, and member names resolved everywhere instead of raw key fingerprints."
+      ],
+      "dmgURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.32.dmg",
+      "zipURL": "https://updates.gundem.tech/releases/Leaf-1.0.0-alpha.32.zip"
+    },
+    {
       "version": "1.0.0-alpha.31",
       "date": "2026-06-10",
       "added": [

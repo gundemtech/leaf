@@ -13,6 +13,35 @@ the release history and summarised at a feature level.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.32] — 2026-06-10
+
+### Added
+
+- "Ask Leaf" tab: ask questions about your work in plain language and get
+  answers built from your own structured activity data. Uses your own
+  Anthropic API key (managed in Settings → Data → AI Answers, shared with the
+  MCP server), with period and model pickers.
+- Diagnostics now shows the background agent's launchd state and a Repair
+  button that restores collection in one click.
+
+### Fixed
+
+- Background collection now heals itself: the app monitors the agent's
+  heartbeat and automatically restarts or re-registers it if capture silently
+  stops — previously this required manually re-toggling settings. If automatic
+  recovery fails, Leaf notifies you with a pointer to the fix. Collection you
+  turned off yourself is never re-enabled automatically.
+- Launching Leaf from a non-installed location (a DMG, Downloads, a temporary
+  copy) can no longer break background collection for the installed app —
+  agent registration is now guarded to the canonical install location.
+
+### Changed
+
+- Team page redesigned as a chat-style feed: message bubbles grouped into
+  conversation runs with explicit recipients, Today/Yesterday day separators,
+  quieter activity rows, and member names resolved everywhere instead of raw
+  key fingerprints.
+
 ## [1.0.0-alpha.31] — 2026-06-10
 
 ### Added
@@ -142,7 +171,8 @@ deeper activity capture.
 - Earliest recorded alpha build: background work capture, the native menu-bar
   app, and the MCP server foundations.
 
-[Unreleased]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.31...HEAD
+[Unreleased]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.32...HEAD
+[1.0.0-alpha.32]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.31...v1.0.0-alpha.32
 [1.0.0-alpha.31]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.30...v1.0.0-alpha.31
 [1.0.0-alpha.30]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.29...v1.0.0-alpha.30
 [1.0.0-alpha.29]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.28...v1.0.0-alpha.29
