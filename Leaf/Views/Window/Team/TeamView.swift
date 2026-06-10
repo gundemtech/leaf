@@ -91,6 +91,7 @@ struct TeamView: View {
   // []`. Inject + read in directMessageCard so cross-post badges actually
   // render (OQ-S7-1).
   @Environment(CrossPostLogReader.self) private var crossPostLogReader
+  @Environment(LiveUpdateSignals.self) private var liveSignals
 
   // MARK: - Phase H.6: APNs deep-link target
   //
@@ -251,6 +252,24 @@ struct TeamView: View {
         await teamFeedReader.refresh(
           workspaceID: wid,
           filters: newFilters,
+          selfPubkeyHex: selfPubkeyHex()
+        )
+        await loadCrossPostsForVisibleDMs()
+      }
+    }
+    // Live-tabs — mirror tables changed (realtime absorb / polling tick /
+    // optimistic mark-done) while the feed is open. Warm refresh: TeamFeedReader
+    // keeps current items rendered (isRefreshing path), so no loading flash and
+    // no scroll jump. Overlapping refreshes self-correct: completion order wins
+    // and the next bump re-reads fresh state.
+    .onChange(of: liveSignals.teamFeedVersion) {
+      guard tierGate.canSendDM,
+        let wid = activeWorkspaceStore.activeWorkspaceID
+      else { return }
+      Task {
+        await teamFeedReader.refresh(
+          workspaceID: wid,
+          filters: feedFilterStore.selected,
           selfPubkeyHex: selfPubkeyHex()
         )
         await loadCrossPostsForVisibleDMs()

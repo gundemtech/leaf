@@ -12,6 +12,7 @@ import LeafCore
 
 struct ActivityView: View {
     @Environment(InsightsReader.self) private var reader
+    @Environment(LiveUpdateSignals.self) private var liveSignals
     @State private var selectedFilter: ActivityFilter = .all
     @State private var mode: ActivityMode = .sessions
 
@@ -25,6 +26,11 @@ struct ActivityView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear { reader.refresh() }
+        // Live-tabs — Agent wrote to the DB while this tab is open. Non-force:
+        // the reader's freshness window throttles bursts.
+        .onChange(of: liveSignals.localDataVersion) {
+            reader.refresh()
+        }
     }
 
     // MARK: - Header

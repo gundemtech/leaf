@@ -74,6 +74,7 @@ struct HomeView: View {
     // MARK: requires SlackScopesReader env injection (Phase Track-3 D3 / Task 18)
     @Environment(SlackScopesReader.self) private var slackScopes
     @Environment(SlackOAuthService.self) private var slackOAuth
+    @Environment(LiveUpdateSignals.self) private var liveSignals
 
     /// Session-local dismiss flag for the proactive GitHub re-auth banner.
     /// Persisted across the same launch via UserDefaults keyed by
@@ -127,6 +128,11 @@ struct HomeView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear { reader.refresh() }
+        // Live-tabs — Agent wrote to the DB while this tab is open. Non-force:
+        // the reader's freshness window throttles bursts.
+        .onChange(of: liveSignals.localDataVersion) {
+            reader.refresh()
+        }
     }
 
     // MARK: - Re-auth banner
