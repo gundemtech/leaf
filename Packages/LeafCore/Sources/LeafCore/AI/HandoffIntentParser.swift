@@ -54,7 +54,7 @@ public enum HandoffIntentParser {
   /// Unique FIRST-NAME match, case/diacritic-insensitive. A roster name matches
   /// when the typed token is exact, a ≥3-char prefix relation either way
   /// (Alex↔Alexandra), or a declension stem — common prefix covering all but
-  /// ≤2 trailing chars of the longer form (Алисе↔Алиса, Евы↔Ева; Anna↔Anton
+  /// ≤2 trailing chars of the longer form (Алисе↔Алиса, Евы↔Ева; Alex↔Alan
   /// misses). More than one DISTINCT roster hit → nil (ambiguous).
   static func matchRoster(_ token: String, rosterNames: [String]) -> String? {
     func fold(_ s: String) -> String {
