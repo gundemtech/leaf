@@ -15,6 +15,7 @@
 //  State machine mirrors LinearOAuthService.
 //
 
+import AppKit
 import AuthenticationServices
 import Foundation
 import LeafCore
@@ -49,6 +50,13 @@ final class SupabaseOAuthService: NSObject {
 
   /// Retained for the duration of one OAuth flow.
   private var webAuthSession: ASWebAuthenticationSession?
+
+  /// Captured on the main actor when a flow starts; read from the nonisolated
+  /// `presentationAnchor` callback, which AuthenticationServices may invoke off
+  /// the main thread (notably on cancel/dismiss). Reading a pre-captured window
+  /// avoids touching NSApplication off-main — which trips
+  /// `_dispatch_assert_queue_fail` (the crash on closing the OAuth window).
+  @ObservationIgnored nonisolated(unsafe) private var anchorWindow: NSWindow?
 
   init(client: SupabaseClient) {
     self.client = client
@@ -109,7 +117,8 @@ final class SupabaseOAuthService: NSObject {
   }
 
   private func startWebAuth(authorizeURL: URL) async throws -> URL {
-    try await withCheckedThrowingContinuation { continuation in
+    anchorWindow = NSApplication.shared.keyWindow  // capture on main for the nonisolated anchor callback
+    return try await withCheckedThrowingContinuation { continuation in
       let session = ASWebAuthenticationSession(
         url: authorizeURL, callbackURLScheme: Self.callbackScheme
       ) { callbackURL, error in
@@ -155,7 +164,12 @@ final class SupabaseOAuthService: NSObject {
 // MARK: - ASWebAuthenticationPresentationContextProviding
 
 extension SupabaseOAuthService: ASWebAuthenticationPresentationContextProviding {
-  func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-    NSApplication.shared.keyWindow ?? ASPresentationAnchor()
+  // nonisolated: AuthenticationServices may call this off the main thread
+  // (e.g. on cancel). Returns the window captured on-main in startWebAuth;
+  // never touches NSApplication off-main.
+  nonisolated func presentationAnchor(for session: ASWebAuthenticationSession)
+    -> ASPresentationAnchor
+  {
+    anchorWindow ?? ASPresentationAnchor()
   }
 }

@@ -173,24 +173,42 @@ struct LoginView: View {
   private var oauthButtons: some View {
     VStack(spacing: LeafSpace.sm) {
       LeafButton(
-        variant: .secondary, size: .lg, icon: .system("globe"),
+        variant: .secondary, size: .lg,
         action: { Task { await service.loginWithOAuth(provider: .google) } }
       ) {
-        Text("Continue with Google").frame(maxWidth: .infinity)
+        oauthLabel("Continue with Google") {
+          Image("leaf-brand-google")
+            .renderingMode(.original)
+            .resizable().aspectRatio(contentMode: .fit)
+            .frame(width: 18, height: 18)
+        }
       }
       .frame(maxWidth: .infinity)
       .disabled(isBusy)
 
       LeafButton(
         variant: .secondary, size: .lg,
-        icon: .system("chevron.left.forwardslash.chevron.right"),
         action: { Task { await service.loginWithOAuth(provider: .github) } }
       ) {
-        Text("Continue with GitHub").frame(maxWidth: .infinity)
+        oauthLabel("Continue with GitHub") {
+          Image("leaf-brand-github")
+            .renderingMode(.template)
+            .resizable().aspectRatio(contentMode: .fit)
+            .frame(width: 16, height: 16)
+            .foregroundStyle(LeafColor.text.primary)
+        }
       }
       .frame(maxWidth: .infinity)
       .disabled(isBusy)
     }
+  }
+
+  private func oauthLabel<Logo: View>(_ title: String, @ViewBuilder logo: () -> Logo) -> some View {
+    HStack(spacing: LeafSpace.sm) {
+      logo()
+      Text(title)
+    }
+    .frame(maxWidth: .infinity)
   }
 
   private var footer: some View {
