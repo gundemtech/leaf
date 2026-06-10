@@ -308,15 +308,24 @@ struct TeamView: View {
     VStack(alignment: .leading, spacing: LeafSpace.md) {
       // G.3 — Toolbar: workspace name + member count + [+ Send] button
       toolbar(active: active, memberCount: members.count)
-      // G.4 — Horizontal members pill-row (tap opens SendDirectMessageSheet)
-      membersPillRow(members: members)
-      // G.5 — Filter chips (All / DM / Open Tasks / Decisions / Blockers / More…)
+      // G.4 — Compact avatar stack (tap opens SendDirectMessageSheet;
+      // hover tooltip shows the member name the legacy pills displayed).
+      LeafMemberStrip(members: members) { member in
+        sendSheetRecipient = SendRecipient(id: member.id, member: member)
+      }
+      // G.5 — Filter chips (All / Messages / Open Tasks / Decisions / Blockers / More…)
       FeedFilterChipsBindable(store: feedFilterStore)
       // G.6-G.11 — Feed body: LazyVStack + card dispatch + empty states + pagination
       feedBody(workspaceID: active.id, members: members)
     }
     .padding(LeafSpace.xxl)
-    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    // Cap + center the whole column: on wide windows unconstrained rows pushed
+    // timestamps far from their text and bubbles stretched unreadably.
+    .frame(
+      maxWidth: LeafTeamFeedTokens.maxContentWidth, maxHeight: .infinity,
+      alignment: .topLeading
+    )
+    .frame(maxWidth: .infinity, alignment: .top)
   }
 
   // MARK: - G.3 Toolbar
@@ -343,39 +352,6 @@ struct TeamView: View {
       }
       .keyboardShortcut("n", modifiers: .command)
     }
-  }
-
-  // MARK: - G.4 Members pill-row
-
-  @ViewBuilder
-  private func membersPillRow(members: [TeamMember]) -> some View {
-    ScrollView(.horizontal, showsIndicators: false) {
-      HStack(spacing: LeafSpace.sm) {
-        ForEach(members, id: \.id) { member in
-          memberPill(member)
-        }
-      }
-    }
-  }
-
-  @ViewBuilder
-  private func memberPill(_ member: TeamMember) -> some View {
-    Button {
-      sendSheetRecipient = SendRecipient(id: member.id, member: member)
-    } label: {
-      HStack(spacing: LeafSpace.xs) {
-        LeafAvatar(initials: initials(for: member.displayName), size: .sm)
-        Text(member.displayName)
-          .font(LeafType.caption)
-          .foregroundStyle(LeafColor.text.primary)
-          .lineLimit(1)
-      }
-      .padding(.horizontal, LeafSpace.sm)
-      .padding(.vertical, LeafSpace.xs)
-      .background(LeafColor.surface.raised)
-      .clipShape(Capsule())
-    }
-    .buttonStyle(.plain)
   }
 
   // MARK: - G.6 Feed body: LazyVStack + card dispatch
@@ -411,10 +387,19 @@ struct TeamView: View {
         // is wired below via a binding to `windowState.pendingMessageID`.
         ScrollViewReader { proxy in
           ScrollView {
+            // Team UI polish — day sections (Today / Yesterday / "May 20") +
+            // per-section DM run flags. Flags are computed per section so a
+            // message run never visually crosses a date separator.
+            let sections = TeamFeedPresentation.daySections(
+              items: items, now: Date(), calendar: .current)
             LazyVStack(spacing: LeafSpace.sm) {
-              ForEach(items) { item in
-                cardView(for: item, members: members)
-                  .id(item.id)
+              ForEach(sections) { section in
+                let flags = TeamFeedPresentation.dmRenderFlags(items: section.items)
+                LeafDateSeparator(label: section.label)
+                ForEach(section.items) { item in
+                  cardView(for: item, members: members, flags: flags)
+                    .id(item.id)
+                }
               }
               if hasMore {
                 paginationSentinel(workspaceID: workspaceID)
@@ -480,12 +465,16 @@ struct TeamView: View {
   // MARK: - G.6 cardView dispatch
 
   @ViewBuilder
-  private func cardView(for item: FeedItem, members: [TeamMember]) -> some View {
+  private func cardView(
+    for item: FeedItem,
+    members: [TeamMember],
+    flags: [String: DMRenderFlags]
+  ) -> some View {
     switch item {
     case .directMessage(let row):
-      directMessageCard(row: row)
+      directMessageCard(row: row, members: members, flags: flags)
     case .teamEvent(let event):
-      teamEventRow(event: event)
+      teamEventRow(event: event, members: members)
     case .grouped(let kind, let sender, let count, let spanStart, let spanEnd, let expandedItems):
       groupedRow(
         kind: kind,
@@ -501,7 +490,11 @@ struct TeamView: View {
   // MARK: - G.7 directMessageCard
 
   @ViewBuilder
-  private func directMessageCard(row: DirectMessageMirrorRow) -> some View {
+  private func directMessageCard(
+    row: DirectMessageMirrorRow,
+    members: [TeamMember],
+    flags: [String: DMRenderFlags]
+  ) -> some View {
     let isOutbound = row.senderPubkeyHex == selfPubkeyHex()
     let direction: MessageDirectionUI = isOutbound ? .outbound : .inbound
     // S7 Stage 6 fix C-I4 — read CrossPostLogReader for the badges. The
@@ -512,10 +505,24 @@ struct TeamView: View {
     let crossPosts = crossPostLogReader.crossPosts(for: row.messageID)
     let cachedMeta = row.attachment.flatMap { attachmentMetadataCache[$0.externalRef] }
     let actions = computeActions(for: row, isOutbound: isOutbound)
+    // Run flags: missing entry degrades to a standalone message (header on,
+    // receipt off) — never silently hides information.
+    let f = flags[row.messageID] ?? DMRenderFlags(showsHeader: true, showsReceipt: false)
 
     LeafMessageCard(
       row: row,
       direction: direction,
+      showsHeader: f.showsHeader,
+      showsReceipt: f.showsReceipt,
+      recipientDisplayName: isOutbound
+        ? TeamMemberNameResolver.displayName(
+          pubkeyHex: row.recipientPubkeyHex, members: members)
+        : nil,
+      senderDisplayName: TeamMemberNameResolver.displayName(
+        pubkeyHex: row.senderPubkeyHex, members: members,
+        embeddedDisplayName: row.senderDisplayName),
+      timestampStyle: TeamFeedPresentation.timestampStyle(
+        forMs: row.serverCreatedAtMs, now: Date(), calendar: .current),
       crossPosts: crossPosts,
       attachmentMetadata: cachedMeta,
       actions: actions,
@@ -626,9 +633,12 @@ struct TeamView: View {
   // MARK: - G.8 teamEventRow + groupedRow
 
   @ViewBuilder
-  private func teamEventRow(event: RenderedTeamEvent) -> some View {
+  private func teamEventRow(event: RenderedTeamEvent, members: [TeamMember]) -> some View {
     LeafFeedRow(
-      event: event, attachmentMetadata: nil,
+      event: event,
+      senderDisplayName: TeamMemberNameResolver.displayName(
+        pubkeyHex: event.row.senderPubkeyHex, members: members),
+      attachmentMetadata: nil,
       onTap: {
         // Phase v1.1 — tap → open detail view or external URL.
       })
@@ -787,14 +797,6 @@ struct TeamView: View {
   }
 
   // MARK: - Helpers
-
-  private func initials(for name: String) -> String {
-    let parts = name.split(separator: " ").prefix(2)
-      .compactMap { $0.first.map(String.init) }
-      .joined()
-      .uppercased()
-    return parts.isEmpty ? "?" : parts
-  }
 
   /// Best-effort self pubkey for TeamFeedReader selfPubkeyHex parameter.
   /// Falls back to "" — TeamFeedReader treats "" as "no self-exclusion" (graceful).

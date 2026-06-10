@@ -1,6 +1,8 @@
 //
 //  LeafFeedRow.swift
 //  Track 5 / S7 B.4 — Atom for compact auto-shared team event rows.
+//  Team UI polish — resolved display names + muted typography so auto-shared
+//  events read as ambient context while DMs stay the visual primary.
 //
 //  Two variants:
 //    • Single — one TeamEventMirrorRow rendered as a 36pt compact row.
@@ -10,8 +12,8 @@
 //  Design decisions:
 //  - Source-kind SF Symbol mapping covers all 9 ShareSource cases; unknown
 //    source degrades to "circle" rather than crashing.
-//  - senderDisplayName derives from truncated pubkey prefix until Phase G
-//    member-lookup integration; see TODO below.
+//  - senderDisplayName is resolved by the caller (TeamMemberNameResolver) —
+//    raw pubkey hex never reaches this view.
 //  - actionText is a best-effort parser over payload JSON for the most common
 //    event kinds. ADR-010 discipline: only allow-listed payload keys are read.
 //  - attachmentMetadata is accepted but not rendered in this atom; reserved
@@ -24,15 +26,18 @@ import LeafCore
 struct LeafFeedRow: View {
 
     let event: RenderedTeamEvent
+    let senderDisplayName: String
     let attachmentMetadata: AttachmentMetadata?
     let onTap: () -> Void
 
     init(
         event: RenderedTeamEvent,
+        senderDisplayName: String,
         attachmentMetadata: AttachmentMetadata?,
         onTap: @escaping () -> Void
     ) {
         self.event = event
+        self.senderDisplayName = senderDisplayName
         self.attachmentMetadata = attachmentMetadata
         self.onTap = onTap
     }
@@ -44,17 +49,15 @@ struct LeafFeedRow: View {
                 .foregroundStyle(LeafColor.text.tertiary)
                 .frame(width: LeafFeedRowTokens.iconSize, height: LeafFeedRowTokens.iconSize)
 
-            // TODO: Replace truncated pubkey with real display name once Phase G
-            // member-lookup (WorkspaceMembersReader) is wired into the feed.
-            Text(senderDisplayName(event.row.senderPubkeyHex))
-                .font(LeafType.body.regular)
-                .foregroundStyle(LeafColor.text.primary)
+            Text(senderDisplayName)
+                .font(LeafType.body.small)
+                .foregroundStyle(LeafColor.text.secondary)
 
             // M-IX — precomputed in the feed mapping layer (RenderedTeamEvent);
             // no JSON parse during render.
             Text(event.actionText)
-                .font(LeafType.body.regular)
-                .foregroundStyle(LeafColor.text.secondary)
+                .font(LeafType.body.small)
+                .foregroundStyle(LeafColor.text.tertiary)
                 .lineLimit(1)
 
             Spacer()
@@ -89,12 +92,12 @@ struct LeafFeedRow: View {
                     .frame(width: LeafFeedRowTokens.iconSize, height: LeafFeedRowTokens.iconSize)
 
                 Text(senderDisplayName)
-                    .font(LeafType.body.regular)
-                    .foregroundStyle(LeafColor.text.primary)
+                    .font(LeafType.body.small)
+                    .foregroundStyle(LeafColor.text.secondary)
 
                 Text(groupedActionText(source: source, count: count))
-                    .font(LeafType.body.regular)
-                    .foregroundStyle(LeafColor.text.secondary)
+                    .font(LeafType.body.small)
+                    .foregroundStyle(LeafColor.text.tertiary)
                     .lineLimit(1)
 
                 Spacer()
@@ -119,8 +122,13 @@ struct LeafFeedRow: View {
             if isExpanded.wrappedValue {
                 VStack(alignment: .leading, spacing: LeafFeedRowTokens.groupedExpandedSpacing) {
                     ForEach(expandedItems) { item in
-                        LeafFeedRow(event: item, attachmentMetadata: nil, onTap: {})
-                            .padding(.leading, LeafSpace.lg)
+                        LeafFeedRow(
+                            event: item,
+                            senderDisplayName: senderDisplayName,
+                            attachmentMetadata: nil,
+                            onTap: {}
+                        )
+                        .padding(.leading, LeafSpace.lg)
                     }
                 }
                 .padding(.top, LeafSpace.xs)
@@ -146,12 +154,6 @@ private func sourceKindSymbol(_ source: ShareSource) -> String {
     case .detectedWhereStopped:  return "pause.circle"
     case .rawGitHubActivity:     return "doc.text"
     }
-}
-
-/// Truncated pubkey prefix as placeholder display name.
-/// TODO: Phase G — resolve real display name from WorkspaceMembersReader.
-private func senderDisplayName(_ pubkeyHex: String) -> String {
-    String(pubkeyHex.prefix(8))
 }
 
 /// Grouped aggregate action text with count.

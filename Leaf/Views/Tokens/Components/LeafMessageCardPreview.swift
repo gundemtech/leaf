@@ -253,6 +253,11 @@ struct LeafMessageCardPreview: View {
                 LeafMessageCard(
                     row: inboundHandoff,
                     direction: .inbound,
+                    showsHeader: true,
+                    showsReceipt: false,
+                    recipientDisplayName: nil,
+                    senderDisplayName: inboundHandoff.senderDisplayName,
+                    timestampStyle: .relative,
                     crossPosts: [],
                     attachmentMetadata: nil,
                     actions: inboundActions,
@@ -264,6 +269,11 @@ struct LeafMessageCardPreview: View {
                 LeafMessageCard(
                     row: outboundTask,
                     direction: .outbound,
+                    showsHeader: true,
+                    showsReceipt: true,
+                    recipientDisplayName: "Alex",
+                    senderDisplayName: outboundTask.senderDisplayName,
+                    timestampStyle: .relative,
                     crossPosts: [],
                     attachmentMetadata: nil,
                     actions: outboundActions,
@@ -275,6 +285,11 @@ struct LeafMessageCardPreview: View {
                 LeafMessageCard(
                     row: inboundPing,
                     direction: .inbound,
+                    showsHeader: true,
+                    showsReceipt: false,
+                    recipientDisplayName: nil,
+                    senderDisplayName: inboundPing.senderDisplayName,
+                    timestampStyle: .relative,
                     crossPosts: [],
                     attachmentMetadata: nil,
                     actions: inboundActions,
@@ -286,6 +301,11 @@ struct LeafMessageCardPreview: View {
                 LeafMessageCard(
                     row: inboundWithAttachmentLoading,
                     direction: .inbound,
+                    showsHeader: true,
+                    showsReceipt: false,
+                    recipientDisplayName: nil,
+                    senderDisplayName: inboundWithAttachmentLoading.senderDisplayName,
+                    timestampStyle: .relative,
                     crossPosts: [],
                     attachmentMetadata: nil,
                     actions: inboundActions,
@@ -297,6 +317,11 @@ struct LeafMessageCardPreview: View {
                 LeafMessageCard(
                     row: inboundWithAttachmentLoaded,
                     direction: .inbound,
+                    showsHeader: true,
+                    showsReceipt: false,
+                    recipientDisplayName: nil,
+                    senderDisplayName: inboundWithAttachmentLoaded.senderDisplayName,
+                    timestampStyle: .relative,
                     crossPosts: [],
                     attachmentMetadata: loadedAttachmentMetadata,
                     actions: inboundActions,
@@ -308,6 +333,11 @@ struct LeafMessageCardPreview: View {
                 LeafMessageCard(
                     row: outboundWithCrossPosts,
                     direction: .outbound,
+                    showsHeader: true,
+                    showsReceipt: true,
+                    recipientDisplayName: "Alex",
+                    senderDisplayName: outboundWithCrossPosts.senderDisplayName,
+                    timestampStyle: .relative,
                     crossPosts: successCrossPosts,
                     attachmentMetadata: nil,
                     actions: outboundActions,
@@ -319,6 +349,11 @@ struct LeafMessageCardPreview: View {
                 LeafMessageCard(
                     row: outboundWithFailedCrossPost,
                     direction: .outbound,
+                    showsHeader: true,
+                    showsReceipt: true,
+                    recipientDisplayName: "Alex",
+                    senderDisplayName: outboundWithFailedCrossPost.senderDisplayName,
+                    timestampStyle: .relative,
                     crossPosts: failedCrossPosts,
                     attachmentMetadata: nil,
                     actions: outboundActions,
@@ -330,6 +365,11 @@ struct LeafMessageCardPreview: View {
                 LeafMessageCard(
                     row: inboundReplyHint,
                     direction: .inbound,
+                    showsHeader: true,
+                    showsReceipt: false,
+                    recipientDisplayName: nil,
+                    senderDisplayName: inboundReplyHint.senderDisplayName,
+                    timestampStyle: .relative,
                     crossPosts: [],
                     attachmentMetadata: nil,
                     actions: inboundActions,
@@ -339,7 +379,7 @@ struct LeafMessageCardPreview: View {
 
                 TokensInlineSpec(
                     spec: "LeafMessageCard · inbound/outbound · 8 variants",
-                    codeSnippet: "LeafMessageCard(row:direction:crossPosts:attachmentMetadata:actions:onAction:onAppear:)"
+                    codeSnippet: "LeafMessageCard(row:direction:showsHeader:showsReceipt:recipientDisplayName:senderDisplayName:timestampStyle:crossPosts:attachmentMetadata:actions:onAction:onAppear:)"
                 )
             }
             .padding(LeafSpace.lg)
