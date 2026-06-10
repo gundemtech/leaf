@@ -2,10 +2,10 @@
 //  LeafWorkspacePicker.swift
 //  Organism. Workspace picker trigger row for the sidebar bottom card:
 //  colored square workspace mark + active-workspace name + aggregate
-//  unread badge + chevron, opening a popover with the full workspace
-//  list and Add / Join footer. The bottom card itself (picker row +
-//  divider + profile row) is composed in Sidebar — profile navigation
-//  is app-level concern, not a theme organism.
+//  unread badge + chevron, opening a custom anchored dropdown with the
+//  full workspace list and Add / Join footer. The bottom card itself
+//  (picker row + divider + profile row) is composed in Sidebar — profile
+//  navigation is app-level concern, not a theme organism.
 //
 //  Replaces LeafWorkspaceSwitcher (Track 5 / S7) — the inline flat list
 //  ate half the sidebar once a user joined more than a few workspaces.
@@ -20,6 +20,7 @@
 //  workspace id via the TeamNBlock avatar palette pattern.
 //
 
+import AppKit
 import LeafCore
 import SwiftUI
 
@@ -37,41 +38,152 @@ struct LeafWorkspacePicker: View {
   let onLeave: (String) -> Void
   let onMarkAllRead: (String) -> Void
 
-  @State private var popoverPresented = false
+  @State private var dropdownOpen = false
   @State private var hover = false
+  /// Trigger width drives dropdown width so the menu lines up with the
+  /// bottom card edge-to-edge.
+  @State private var triggerWidth: CGFloat = 0
+  /// Frames in the window's top-left coordinate space (SwiftUI .global),
+  /// hit-tested against clicks by the outside-click monitor below.
+  @State private var triggerFrame: CGRect = .zero
+  @State private var dropdownFrame: CGRect = .zero
+  @State private var clickMonitor: Any?
 
   var body: some View {
     Button {
-      popoverPresented.toggle()
+      toggleDropdown()
     } label: {
       triggerLabel
     }
     .buttonStyle(.plain)
     .onHover { hover = $0 }
     .leafAnimation(LeafMotion.spring.snappy, value: hover)
-    .popover(isPresented: $popoverPresented, arrowEdge: .top) {
-      LeafWorkspacePickerList(
-        workspaces: workspaces,
-        activeWorkspaceID: activeWorkspaceID,
-        unreadCounts: unreadCounts,
-        onSelect: { wid in
-          popoverPresented = false
-          onSelect(wid)
-        },
-        onAddNew: {
-          popoverPresented = false
-          onAddNew()
-        },
-        onJoin: {
-          popoverPresented = false
-          onJoin()
-        },
-        onLeave: { wid in
-          popoverPresented = false
-          onLeave(wid)
-        },
-        onMarkAllRead: onMarkAllRead
+    .background(frameTracker($triggerFrame, width: $triggerWidth))
+    // Custom dropdown instead of `.popover` — NSPopover's chrome (arrow,
+    // detached-window material) reads alien next to the design system.
+    // Anchored above the trigger: alignmentGuide pins the menu's bottom
+    // edge `dropdownGap` above the trigger's top.
+    .overlay(alignment: .topLeading) {
+      if dropdownOpen {
+        dropdown
+          .alignmentGuide(.top) { d in
+            d[.bottom] + LeafWorkspacePickerTokens.dropdownGap
+          }
+          .transition(
+            .opacity.combined(with: .scale(scale: 0.96, anchor: .bottom))
+          )
+      }
+    }
+    .leafAnimation(LeafMotion.spring.snappy, value: dropdownOpen)
+    .onDisappear { removeClickMonitor() }
+  }
+
+  // MARK: - Dropdown
+
+  private var dropdown: some View {
+    LeafWorkspacePickerList(
+      workspaces: workspaces,
+      activeWorkspaceID: activeWorkspaceID,
+      unreadCounts: unreadCounts,
+      onSelect: { wid in
+        closeDropdown()
+        onSelect(wid)
+      },
+      onAddNew: {
+        closeDropdown()
+        onAddNew()
+      },
+      onJoin: {
+        closeDropdown()
+        onJoin()
+      },
+      onLeave: { wid in
+        closeDropdown()
+        onLeave(wid)
+      },
+      onMarkAllRead: onMarkAllRead
+    )
+    .frame(width: max(triggerWidth, LeafWorkspacePickerTokens.popoverWidth))
+    .background(
+      RoundedRectangle(
+        cornerRadius: LeafWorkspacePickerTokens.cardCornerRadius,
+        style: .continuous
       )
+      .fill(LeafColor.surface.raised)
+    )
+    .overlay(
+      RoundedRectangle(
+        cornerRadius: LeafWorkspacePickerTokens.cardCornerRadius,
+        style: .continuous
+      )
+      .strokeBorder(LeafColor.border.subtle)
+    )
+    .leafElevation(LeafElevation.floating)
+    .background(frameTracker($dropdownFrame))
+    .onExitCommand { closeDropdown() }
+  }
+
+  private func toggleDropdown() {
+    if dropdownOpen {
+      closeDropdown()
+    } else {
+      dropdownOpen = true
+      installClickMonitor()
+    }
+  }
+
+  private func closeDropdown() {
+    dropdownOpen = false
+    removeClickMonitor()
+  }
+
+  /// Without NSPopover we lose its free light-dismiss; a local mouse-down
+  /// monitor closes the menu on any click that lands outside both the
+  /// dropdown and the trigger (trigger clicks toggle via the Button).
+  /// Local monitors see events before dispatch, so inside-clicks must
+  /// pass through untouched for rows to receive them.
+  private func installClickMonitor() {
+    guard clickMonitor == nil else { return }
+    clickMonitor = NSEvent.addLocalMonitorForEvents(
+      matching: [.leftMouseDown, .rightMouseDown]
+    ) { event in
+      guard let contentView = event.window?.contentView else {
+        closeDropdown()
+        return event
+      }
+      let p = contentView.convert(event.locationInWindow, from: nil)
+      let flipped =
+        contentView.isFlipped
+        ? p : CGPoint(x: p.x, y: contentView.bounds.height - p.y)
+      if !dropdownFrame.contains(flipped), !triggerFrame.contains(flipped) {
+        closeDropdown()
+      }
+      return event
+    }
+  }
+
+  private func removeClickMonitor() {
+    if let clickMonitor {
+      NSEvent.removeMonitor(clickMonitor)
+    }
+    clickMonitor = nil
+  }
+
+  /// Invisible geometry probe — records the host view's frame in window
+  /// (.global) coordinates, optionally its width.
+  private func frameTracker(
+    _ frame: Binding<CGRect>, width: Binding<CGFloat>? = nil
+  ) -> some View {
+    GeometryReader { geo in
+      Color.clear
+        .onAppear {
+          frame.wrappedValue = geo.frame(in: .global)
+          width?.wrappedValue = geo.size.width
+        }
+        .onChange(of: geo.frame(in: .global)) { _, new in
+          frame.wrappedValue = new
+          width?.wrappedValue = new.width
+        }
     }
   }
 
@@ -138,10 +250,10 @@ struct LeafWorkspacePicker: View {
   }
 }
 
-// MARK: - Popover list
+// MARK: - Dropdown list
 
-/// Popover content — internal so LeafWorkspacePickerPreview can render it
-/// inline (a statically-open popover can't be captured in TokensPreview).
+/// Dropdown content — internal so LeafWorkspacePickerPreview can render it
+/// inline (a statically-open dropdown can't be captured in TokensPreview).
 struct LeafWorkspacePickerList: View {
   let workspaces: [Workspace]
   let activeWorkspaceID: String?

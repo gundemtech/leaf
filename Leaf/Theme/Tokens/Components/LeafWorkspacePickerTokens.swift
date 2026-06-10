@@ -22,6 +22,8 @@ public enum LeafWorkspacePickerTokens {
   public static let dividerOpacity: Double = 0.3
   public static let sectionPadding: CGFloat = LeafSpace.sm
   public static let popoverWidth: CGFloat = 260
+  /// Vertical gap between the dropdown's bottom edge and the trigger top.
+  public static let dropdownGap: CGFloat = LeafSpace.sm
   /// Popover list scrolls past this height instead of growing unbounded.
   public static let maxListHeight: CGFloat = 320
 }

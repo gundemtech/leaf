@@ -319,9 +319,6 @@ struct Sidebar: View {
           .foregroundStyle(LeafColor.text.primary)
           .lineLimit(1)
         Spacer(minLength: 0)
-        Image(systemName: "chevron.right")
-          .font(.system(size: 9, weight: .semibold))
-          .foregroundStyle(LeafColor.text.quaternary)
       }
       .padding(.horizontal, LeafSpace.sm)
       .frame(maxWidth: .infinity, alignment: .leading)
