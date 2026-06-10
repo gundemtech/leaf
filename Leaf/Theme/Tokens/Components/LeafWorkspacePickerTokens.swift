@@ -1,23 +1,27 @@
 //
 //  LeafWorkspacePickerTokens.swift
-//  T3 tokens for LeafWorkspacePicker — sidebar bottom workspace picker:
-//  compact trigger row + popover list. Row metrics carried over from the
-//  retired LeafWorkspaceSwitcherTokens (Track 5 / S7) so the popover rows
-//  render identically to the old inline list.
+//  T3 tokens for LeafWorkspacePicker — sidebar bottom card: workspace
+//  picker trigger row + profile row, and the popover list the trigger
+//  opens. Replaces the retired LeafWorkspaceSwitcherTokens (Track 5 / S7).
 //
 
 import SwiftUI
 
 public enum LeafWorkspacePickerTokens {
-  public static let rowHeight: CGFloat = 32
-  public static let avatarSize: CGFloat = 16
-  public static let activeIconSize: CGFloat = 14
-  public static let interRowSpacing: CGFloat = LeafSpace.xs
+  /// Popover workspace rows.
+  public static let rowHeight: CGFloat = 34
+  /// Square workspace mark inside popover rows.
+  public static let markSize: CGFloat = 20
+  /// Square workspace mark / profile avatar on the bottom-card rows.
+  public static let triggerMarkSize: CGFloat = 22
+  public static let triggerHeight: CGFloat = 38
+  public static let markCornerRadius: CGFloat = LeafRadius.sm
+  public static let rowCornerRadius: CGFloat = LeafRadius.sm
+  public static let cardCornerRadius: CGFloat = LeafRadius.md
+  public static let interRowSpacing: CGFloat = LeafSpace.xxs
   public static let dividerOpacity: Double = 0.3
-  public static let sectionPadding: CGFloat = LeafSpace.md
-  public static let triggerHeight: CGFloat = 36
-  public static let triggerCornerRadius: CGFloat = LeafRadius.md
-  public static let popoverWidth: CGFloat = 240
+  public static let sectionPadding: CGFloat = LeafSpace.sm
+  public static let popoverWidth: CGFloat = 260
   /// Popover list scrolls past this height instead of growing unbounded.
-  public static let maxListHeight: CGFloat = 280
+  public static let maxListHeight: CGFloat = 320
 }

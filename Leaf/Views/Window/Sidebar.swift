@@ -77,6 +77,7 @@ struct Sidebar: View {
   /// `leaf://invite/<LEAF-XXXX-XXXX-XXXX>` link click — both paths share
   /// one sheet modifier via `joinByCodeBinding` below.
   @State private var joinByCodePresented = false
+  @State private var profileHover = false
 
   private var leafGroupItems: [WindowSection] {
     showAnalyticsSection ? [.home, .activity, .analytics, .askLeaf] : [.home, .activity, .askLeaf]
@@ -88,7 +89,9 @@ struct Sidebar: View {
         VStack(alignment: .leading, spacing: LeafSpace.lg) {
           group(title: "LEAF", items: leafGroupItems)
           group(title: "COLLABORATION", items: [.team, .connections])
-          group(title: "ACCOUNT", items: [.settings, .profile])
+          // `.profile` left this group — it lives as a persistent row in
+          // the bottom card next to the workspace picker (same target).
+          group(title: "ACCOUNT", items: [.settings])
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, LeafSpace.md)
@@ -200,17 +203,35 @@ struct Sidebar: View {
 
   // MARK: - Workspace Switcher
 
+  /// Bottom card: workspace picker row (or Free-tier upgrade row) +
+  /// divider + persistent profile row. Profile moved here from the
+  /// ACCOUNT nav group so "who am I" is always visible at the bottom.
   @ViewBuilder
   private var workspaceSwitcherSection: some View {
-    // T4 — Free-tier: replace LeafWorkspacePicker with a single
-    // «Upgrade to add workspaces» row. Free user has no workspaces, so
-    // there's nothing to switch *to* anyway — the row serves both as
-    // empty state AND the upgrade CTA in one strike.
-    if !tierGate.canCreateWorkspace {
-      freeStateSwitcherRow
-    } else {
-      teamStateSwitcher
+    VStack(alignment: .leading, spacing: LeafSpace.xxs) {
+      // T4 — Free-tier: replace LeafWorkspacePicker with a single
+      // «Upgrade to add workspaces» row. Free user has no workspaces, so
+      // there's nothing to switch *to* anyway — the row serves both as
+      // empty state AND the upgrade CTA in one strike.
+      if !tierGate.canCreateWorkspace {
+        freeStateSwitcherRow
+      } else {
+        teamStateSwitcher
+      }
+      Divider()
+        .opacity(LeafWorkspacePickerTokens.dividerOpacity)
+      profileRow
     }
+    .padding(LeafWorkspacePickerTokens.sectionPadding)
+    .background(
+      RoundedRectangle(
+        cornerRadius: LeafWorkspacePickerTokens.cardCornerRadius,
+        style: .continuous
+      )
+      .fill(LeafColor.surface.inset)
+    )
+    .padding(.horizontal, LeafSpace.sm)
+    .padding(.bottom, LeafSpace.sm)
   }
 
   @ViewBuilder
@@ -247,9 +268,9 @@ struct Sidebar: View {
     )
   }
 
-  /// T4 — Free-tier switcher row. Visually rhymes with LeafWorkspacePicker
-  /// internals (LeafColor.surface.inset background, similar padding/height)
-  /// so the sidebar bottom feels continuous between tiers.
+  /// T4 — Free-tier switcher row. Sits in the same bottom-card slot the
+  /// LeafWorkspacePicker trigger occupies on Team tier, matching its row
+  /// height so the card feels continuous between tiers.
   @ViewBuilder
   private var freeStateSwitcherRow: some View {
     Button {
@@ -264,11 +285,83 @@ struct Sidebar: View {
           .foregroundStyle(LeafColor.text.primary)
         Spacer(minLength: 0)
       }
-      .padding(LeafSpace.md)
+      .padding(.horizontal, LeafSpace.sm)
+      .frame(height: LeafWorkspacePickerTokens.triggerHeight)
       .contentShape(.rect)
     }
     .buttonStyle(.plain)
-    .background(LeafColor.surface.inset)
+  }
+
+  // MARK: - Profile row
+
+  /// Persistent "who am I" row at the card bottom. Same identity source
+  /// as ProfileView's header (`NSFullUserName()`); circle = person (the
+  /// picker's workspace marks are squares). Tap navigates to Profile.
+  private var profileRow: some View {
+    Button {
+      selection = .profile
+    } label: {
+      HStack(spacing: LeafSpace.sm) {
+        Circle()
+          .fill(profileTint.gradient)
+          .frame(
+            width: LeafWorkspacePickerTokens.triggerMarkSize,
+            height: LeafWorkspacePickerTokens.triggerMarkSize
+          )
+          .overlay(
+            Text(TeamNRowComposer.initials(profileName))
+              .font(.system(size: 10, weight: .semibold))
+              .foregroundStyle(.white)
+          )
+          .accessibilityHidden(true)
+        Text(profileName)
+          .font(LeafType.body.regular)
+          .foregroundStyle(LeafColor.text.primary)
+          .lineLimit(1)
+        Spacer(minLength: 0)
+        Image(systemName: "chevron.right")
+          .font(.system(size: 9, weight: .semibold))
+          .foregroundStyle(LeafColor.text.quaternary)
+      }
+      .padding(.horizontal, LeafSpace.sm)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .frame(height: LeafWorkspacePickerTokens.triggerHeight)
+      .background(
+        RoundedRectangle(
+          cornerRadius: LeafWorkspacePickerTokens.rowCornerRadius,
+          style: .continuous
+        )
+        .fill(profileRowFill)
+      )
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .onHover { profileHover = $0 }
+    .leafAnimation(LeafMotion.spring.snappy, value: profileHover)
+  }
+
+  private var profileName: String {
+    let n = NSFullUserName().trimmingCharacters(in: .whitespaces)
+    return n.isEmpty ? "Local user" : n
+  }
+
+  private var profileTint: Color {
+    // Same palette + index derivation as TeamNBlock avatars.
+    let palette: [Color] = [
+      LeafColor.accent.primary,
+      LeafColor.accent.emphasis,
+      LeafColor.status.info,
+      LeafColor.status.danger,
+      LeafColor.text.secondary,
+    ]
+    let idx = TeamNRowComposer.paletteIndex(memberID: profileName, paletteCount: palette.count)
+    return palette[idx]
+  }
+
+  private var profileRowFill: Color {
+    if selection == .profile { return LeafColor.accent.subtle }
+    if profileHover { return LeafColor.surface.raised }
+    return Color.clear
   }
 
   // MARK: - Helpers

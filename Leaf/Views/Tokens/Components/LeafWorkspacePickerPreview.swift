@@ -3,6 +3,8 @@
 //  TokensPreview entry for Organism LeafWorkspacePicker. The popover
 //  itself can't be captured statically, so the preview shows trigger-row
 //  variants plus the popover content (LeafWorkspacePickerList) inline.
+//  The sidebar bottom card (trigger + divider + profile row) is composed
+//  in Sidebar — trigger variants here get a bare card background only.
 //
 
 import LeafCore
@@ -18,48 +20,49 @@ import SwiftUI
 
         // Variant 1 — empty (no workspaces → Add workspace CTA trigger)
         label("Trigger — empty (0 workspaces)")
-        LeafWorkspacePicker(
-          workspaces: [],
-          activeWorkspaceID: nil,
-          unreadCounts: [:],
-          onSelect: { _ in },
-          onAddNew: {},
-          onJoin: {},
-          onLeave: { _ in },
-          onMarkAllRead: { _ in }
+        card(
+          LeafWorkspacePicker(
+            workspaces: [],
+            activeWorkspaceID: nil,
+            unreadCounts: [:],
+            onSelect: { _ in },
+            onAddNew: {},
+            onJoin: {},
+            onLeave: { _ in },
+            onMarkAllRead: { _ in }
+          )
         )
-        .frame(width: 260)
 
-        // Variant 2 — active workspace, no unread elsewhere
-        label("Trigger — active workspace, no unread")
-        LeafWorkspacePicker(
-          workspaces: [makeWS(id: "ws-1", name: "Leaf Backend")],
-          activeWorkspaceID: "ws-1",
-          unreadCounts: [:],
-          onSelect: { _ in },
-          onAddNew: {},
-          onJoin: {},
-          onLeave: { _ in },
-          onMarkAllRead: { _ in }
+        // Variant 2 — single active workspace (no count caption)
+        label("Trigger — single workspace")
+        card(
+          LeafWorkspacePicker(
+            workspaces: [makeWS(id: "ws-1", name: "Leaf Backend")],
+            activeWorkspaceID: "ws-1",
+            unreadCounts: [:],
+            onSelect: { _ in },
+            onAddNew: {},
+            onJoin: {},
+            onLeave: { _ in },
+            onMarkAllRead: { _ in }
+          )
         )
-        .frame(width: 260)
 
-        // Variant 3 — unread in a NON-active workspace → aggregate badge
-        label("Trigger — 5 unread in another workspace")
-        LeafWorkspacePicker(
-          workspaces: [
-            makeWS(id: "ws-a", name: "Alpha Team"),
-            makeWS(id: "ws-b", name: "Beta Crew"),
-          ],
-          activeWorkspaceID: "ws-b",
-          unreadCounts: ["ws-a": 5],
-          onSelect: { _ in },
-          onAddNew: {},
-          onJoin: {},
-          onLeave: { _ in },
-          onMarkAllRead: { _ in }
+        // Variant 3 — multi-workspace: count caption + aggregate badge
+        // for unread sitting in a NON-active workspace
+        label("Trigger — 8 workspaces, 5 unread elsewhere")
+        card(
+          LeafWorkspacePicker(
+            workspaces: eightWorkspaces,
+            activeWorkspaceID: "ws-4",
+            unreadCounts: ["ws-2": 5],
+            onSelect: { _ in },
+            onAddNew: {},
+            onJoin: {},
+            onLeave: { _ in },
+            onMarkAllRead: { _ in }
+          )
         )
-        .frame(width: 260)
 
         // Variant 4 — popover content rendered inline, 8 workspaces
         // (scroll cap), one soft-left dimmed, 99+ badge overflow
@@ -75,11 +78,16 @@ import SwiftUI
           onMarkAllRead: { _ in }
         )
         .background(LeafColor.surface.inset)
-        .clipShape(RoundedRectangle(cornerRadius: LeafRadius.md, style: .continuous))
+        .clipShape(
+          RoundedRectangle(
+            cornerRadius: LeafWorkspacePickerTokens.cardCornerRadius,
+            style: .continuous
+          )
+        )
 
         TokensInlineSpec(
           spec:
-            "LeafWorkspacePicker · 36pt trigger (avatar + name + aggregate non-active unread + chevron) · popover 240pt: 32pt rows, checkmark indicator, LeafAvatar initials, LeafBadge(count:), context menu (Mark all read + Leave), scroll cap 280pt · footer: Add workspace + Join workspace",
+            "LeafWorkspacePicker · 38pt trigger (square LeafWorkspaceMark + name + count caption + aggregate non-active unread + chevron) · popover 260pt: 34pt rows, tinted marks, trailing checkmark on active, LeafBadge(count:), context menu (Mark all read + Leave), scroll cap 320pt · footer menu-rows: Add + Join",
           codeSnippet:
             "LeafWorkspacePicker(workspaces: ws, activeWorkspaceID: id, unreadCounts: counts, onSelect: {}, onAddNew: {}, onJoin: {}, onLeave: {}, onMarkAllRead: {})"
         )
@@ -90,6 +98,19 @@ import SwiftUI
     }
 
     // MARK: - Helpers
+
+    private func card(_ content: some View) -> some View {
+      content
+        .padding(LeafWorkspacePickerTokens.sectionPadding)
+        .background(
+          RoundedRectangle(
+            cornerRadius: LeafWorkspacePickerTokens.cardCornerRadius,
+            style: .continuous
+          )
+          .fill(LeafColor.surface.inset)
+        )
+        .frame(width: 260)
+    }
 
     private func label(_ text: String) -> some View {
       Text(text)

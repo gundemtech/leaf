@@ -1,18 +1,23 @@
 //
 //  LeafWorkspacePicker.swift
-//  Organism. Sidebar bottom workspace picker: one compact trigger row
-//  (active-workspace avatar + name + aggregate unread badge + chevron)
-//  opening a popover with the full workspace list and Add / Join footer.
+//  Organism. Workspace picker trigger row for the sidebar bottom card:
+//  colored square workspace mark + active-workspace name + aggregate
+//  unread badge + chevron, opening a popover with the full workspace
+//  list and Add / Join footer. The bottom card itself (picker row +
+//  divider + profile row) is composed in Sidebar — profile navigation
+//  is app-level concern, not a theme organism.
 //
 //  Replaces LeafWorkspaceSwitcher (Track 5 / S7) — the inline flat list
 //  ate half the sidebar once a user joined more than a few workspaces.
-//  Same callback API, so Sidebar wiring is unchanged. Popover row visuals
-//  (checkmark indicator + initials avatar + unread badge + context menu
-//  Mark all read / Leave) carry over from the switcher rows.
+//  Same callback API, so Sidebar wiring is unchanged.
 //
 //  Trigger badge counts unread in NON-active workspaces only — the active
 //  workspace's unread is already visible in Team; the trigger signals
 //  "something waits elsewhere".
+//
+//  Workspace marks are rounded SQUARES (vs circles for people — same
+//  team-vs-person distinction Slack draws), tinted deterministically per
+//  workspace id via the TeamNBlock avatar palette pattern.
 //
 
 import LeafCore
@@ -68,8 +73,6 @@ struct LeafWorkspacePicker: View {
         onMarkAllRead: onMarkAllRead
       )
     }
-    .padding(LeafWorkspacePickerTokens.sectionPadding)
-    .background(LeafColor.surface.inset)
   }
 
   // MARK: - Trigger row
@@ -82,16 +85,22 @@ struct LeafWorkspacePicker: View {
           .font(LeafType.body.regular)
           .foregroundStyle(LeafColor.text.primary)
       } else if let active = activeWorkspace {
-        LeafAvatar(initials: workspaceInitials(for: active.name), size: .sm)
-          .frame(
-            width: LeafWorkspacePickerTokens.avatarSize,
-            height: LeafWorkspacePickerTokens.avatarSize
-          )
-          .clipShape(Circle())
-        Text(active.name)
-          .font(LeafType.title.small)
-          .foregroundStyle(LeafColor.text.primary)
-          .lineLimit(1)
+        LeafWorkspaceMark(
+          name: active.name,
+          seed: active.id,
+          size: LeafWorkspacePickerTokens.triggerMarkSize
+        )
+        VStack(alignment: .leading, spacing: 0) {
+          Text(active.name)
+            .font(LeafType.body.regular)
+            .foregroundStyle(LeafColor.text.primary)
+            .lineLimit(1)
+          if workspaces.count > 1 {
+            Text("\(workspaces.count) workspaces")
+              .font(LeafType.caption)
+              .foregroundStyle(LeafColor.text.tertiary)
+          }
+        }
       } else {
         Text("Select workspace")
           .font(LeafType.body.regular)
@@ -102,15 +111,15 @@ struct LeafWorkspacePicker: View {
         LeafBadge(count: inactiveUnread)
       }
       Image(systemName: "chevron.up.chevron.down")
-        .font(.system(size: 11, weight: .medium))
+        .font(.system(size: 10, weight: .semibold))
         .foregroundStyle(LeafColor.text.tertiary)
     }
-    .padding(.horizontal, LeafSpace.md)
+    .padding(.horizontal, LeafSpace.sm)
     .frame(maxWidth: .infinity, alignment: .leading)
     .frame(height: LeafWorkspacePickerTokens.triggerHeight)
     .background(
       RoundedRectangle(
-        cornerRadius: LeafWorkspacePickerTokens.triggerCornerRadius,
+        cornerRadius: LeafWorkspacePickerTokens.rowCornerRadius,
         style: .continuous
       )
       .fill(hover ? LeafColor.surface.raised : Color.clear)
@@ -146,9 +155,12 @@ struct LeafWorkspacePickerList: View {
   var body: some View {
     VStack(alignment: .leading, spacing: LeafWorkspacePickerTokens.interRowSpacing) {
       if !workspaces.isEmpty {
-        Text("WORKSPACES")
+        Text("Workspaces")
           .leafSectionLabel()
           .foregroundStyle(LeafColor.text.tertiary)
+          .padding(.horizontal, LeafSpace.sm)
+          .padding(.top, LeafSpace.xs)
+          .padding(.bottom, LeafSpace.xxs)
         ScrollView(.vertical, showsIndicators: false) {
           VStack(alignment: .leading, spacing: LeafWorkspacePickerTokens.interRowSpacing) {
             ForEach(workspaces, id: \.id) { ws in
@@ -164,10 +176,12 @@ struct LeafWorkspacePickerList: View {
           }
         }
         .frame(maxHeight: listHeight)
-        Divider().opacity(LeafWorkspacePickerTokens.dividerOpacity)
+        Divider()
+          .opacity(LeafWorkspacePickerTokens.dividerOpacity)
+          .padding(.vertical, LeafSpace.xxs)
       }
-      addNewRow
-      joinRow
+      FooterRow(icon: "plus.circle", title: "Add workspace", action: onAddNew)
+      FooterRow(icon: "link.circle", title: "Join workspace", action: onJoin)
     }
     .padding(LeafWorkspacePickerTokens.sectionPadding)
     .frame(width: LeafWorkspacePickerTokens.popoverWidth)
@@ -182,40 +196,11 @@ struct LeafWorkspacePickerList: View {
       + max(rows - 1, 0) * LeafWorkspacePickerTokens.interRowSpacing
     return min(content, LeafWorkspacePickerTokens.maxListHeight)
   }
-
-  private var addNewRow: some View {
-    LeafButton(
-      variant: .secondary,
-      size: .sm,
-      icon: .system("plus.circle"),
-      action: onAddNew
-    ) {
-      HStack {
-        Text("Add workspace")
-        Spacer(minLength: 0)
-      }
-    }
-    .frame(maxWidth: .infinity)
-  }
-
-  private var joinRow: some View {
-    LeafButton(
-      variant: .secondary,
-      size: .sm,
-      icon: .system("link.circle"),
-      action: onJoin
-    ) {
-      HStack {
-        Text("Join workspace")
-        Spacer(minLength: 0)
-      }
-    }
-    .frame(maxWidth: .infinity)
-  }
 }
 
 /// One workspace row inside the popover — own struct so each row carries
-/// its own hover state.
+/// its own hover state. Active row gets accent.subtle fill + trailing
+/// checkmark (the colored mark stays the leading anchor on every row).
 private struct PickerRow: View {
   let workspace: Workspace
   let isActive: Bool
@@ -229,23 +214,14 @@ private struct PickerRow: View {
   var body: some View {
     let isSoftLeft = workspace.leftAt != nil
     HStack(spacing: LeafSpace.sm) {
-      Image(systemName: isActive ? "checkmark.circle.fill" : "circle")
-        .font(.system(size: LeafWorkspacePickerTokens.activeIconSize))
-        .foregroundStyle(
-          isActive ? LeafColor.accent.primary : LeafColor.text.tertiary
-        )
-        .frame(
-          width: LeafWorkspacePickerTokens.activeIconSize,
-          height: LeafWorkspacePickerTokens.activeIconSize
-        )
-      LeafAvatar(initials: workspaceInitials(for: workspace.name), size: .sm)
-        .frame(
-          width: LeafWorkspacePickerTokens.avatarSize,
-          height: LeafWorkspacePickerTokens.avatarSize
-        )
-        .clipShape(Circle())
+      LeafWorkspaceMark(
+        name: workspace.name,
+        seed: workspace.id,
+        size: LeafWorkspacePickerTokens.markSize
+      )
+      .opacity(isSoftLeft ? 0.5 : 1)
       Text(workspace.name)
-        .font(isActive ? LeafType.title.small : LeafType.body.regular)
+        .font(LeafType.body.regular)
         .foregroundStyle(
           isSoftLeft ? LeafColor.text.tertiary : LeafColor.text.primary
         )
@@ -254,12 +230,20 @@ private struct PickerRow: View {
       if unread > 0 {
         LeafBadge(count: unread)
       }
+      if isActive {
+        Image(systemName: "checkmark")
+          .font(.system(size: 11, weight: .semibold))
+          .foregroundStyle(LeafColor.accent.primary)
+      }
     }
-    .padding(.horizontal, LeafSpace.xs)
+    .padding(.horizontal, LeafSpace.sm)
     .frame(height: LeafWorkspacePickerTokens.rowHeight)
     .background(
-      RoundedRectangle(cornerRadius: LeafRadius.sm, style: .continuous)
-        .fill(hover ? LeafColor.surface.raised : Color.clear)
+      RoundedRectangle(
+        cornerRadius: LeafWorkspacePickerTokens.rowCornerRadius,
+        style: .continuous
+      )
+      .fill(rowFill)
     )
     .contentShape(.rect)
     .onTapGesture { onSelect(workspace.id) }
@@ -272,12 +256,95 @@ private struct PickerRow: View {
       Button("Leave Workspace", role: .destructive) { onLeave(workspace.id) }
     }
   }
+
+  private var rowFill: Color {
+    if isActive { return LeafColor.accent.subtle }
+    if hover { return LeafColor.surface.raised }
+    return Color.clear
+  }
+}
+
+/// Footer action row — menu-item style (icon + label + hover fill)
+/// instead of a boxed button, so the popover reads as one coherent menu.
+private struct FooterRow: View {
+  let icon: String
+  let title: String
+  let action: () -> Void
+
+  @State private var hover = false
+
+  var body: some View {
+    Button(action: action) {
+      HStack(spacing: LeafSpace.sm) {
+        LeafIcon(
+          systemName: icon,
+          size: .sm,
+          tint: hover ? LeafColor.text.primary : LeafColor.text.secondary
+        )
+        Text(title)
+          .font(LeafType.body.regular)
+          .foregroundStyle(hover ? LeafColor.text.primary : LeafColor.text.secondary)
+        Spacer(minLength: 0)
+      }
+      .padding(.horizontal, LeafSpace.sm)
+      .frame(height: LeafWorkspacePickerTokens.rowHeight)
+      .background(
+        RoundedRectangle(
+          cornerRadius: LeafWorkspacePickerTokens.rowCornerRadius,
+          style: .continuous
+        )
+        .fill(hover ? LeafColor.surface.raised : Color.clear)
+      )
+      .contentShape(.rect)
+    }
+    .buttonStyle(.plain)
+    .onHover { hover = $0 }
+  }
+}
+
+// MARK: - Workspace mark
+
+/// Rounded-square workspace identity mark: deterministic tint per `seed`
+/// (workspace id) over the TeamNBlock avatar palette, initials on top.
+/// Square = team, circle = person — keeps the two distinguishable at a
+/// glance anywhere both appear.
+struct LeafWorkspaceMark: View {
+  let name: String
+  let seed: String
+  let size: CGFloat
+
+  var body: some View {
+    RoundedRectangle(
+      cornerRadius: LeafWorkspacePickerTokens.markCornerRadius,
+      style: .continuous
+    )
+    .fill(tint.gradient)
+    .frame(width: size, height: size)
+    .overlay(
+      Text(workspaceInitials(for: name))
+        .font(.system(size: size * 0.45, weight: .semibold))
+        .foregroundStyle(.white)
+    )
+    .accessibilityHidden(true)
+  }
+
+  private var tint: Color {
+    let palette: [Color] = [
+      LeafColor.accent.primary,
+      LeafColor.accent.emphasis,
+      LeafColor.status.info,
+      LeafColor.status.danger,
+      LeafColor.status.warning,
+    ]
+    let idx = TeamNRowComposer.paletteIndex(memberID: seed, paletteCount: palette.count)
+    return palette[idx]
+  }
 }
 
 /// Derives initials from a workspace name. Multi-word names get the
 /// first letter of each of the first two words ("Leaf Backend" → "LB").
 /// Single-word names get only the FIRST letter ("test" → "T") — a 2-char
-/// rule produced redundant-looking rows like "TE test" when the avatar
+/// rule produced redundant-looking rows like "TE test" when the mark
 /// and the inline label sit on the same line.
 private func workspaceInitials(for name: String) -> String {
   let parts = name.split(separator: " ").map(String.init)
