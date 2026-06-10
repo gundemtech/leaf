@@ -21,6 +21,7 @@ public final class TrailingDebouncer: @unchecked Sendable {
 
   public init(
     interval: TimeInterval,
+    /// Must be a SERIAL queue — confinement (and `@unchecked Sendable`) is unsound on a concurrent queue.
     queue: DispatchQueue = DispatchQueue(label: "tech.gundem.leaf.debounce"),
     action: @escaping @Sendable () -> Void
   ) {
@@ -40,6 +41,7 @@ public final class TrailingDebouncer: @unchecked Sendable {
   }
 
   /// Drop any pending fire.
+  /// Owners must call this on teardown — a pending fire does not retain the debouncer but WILL still execute up to `interval` after release otherwise.
   public func cancel() {
     queue.async { [self] in
       pending?.cancel()
