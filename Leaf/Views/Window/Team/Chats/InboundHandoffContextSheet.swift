@@ -98,9 +98,7 @@ struct InboundHandoffContextSheet: View {
       case .idle, .error:
         Button("Get context") {
           Task {
-            await reader.explain(
-              handoffText: row.body, senderName: row.senderDisplayName,
-              sentAtMs: row.serverCreatedAtMs)
+            await reader.explain(handoffText: row.body, sentAtMs: row.serverCreatedAtMs)
           }
         }
       case .loading, .answered:

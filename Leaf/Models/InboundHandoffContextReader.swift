@@ -56,7 +56,9 @@ final class InboundHandoffContextReader {
     state = .idle
   }
 
-  func explain(handoffText: String, senderName: String, sentAtMs: Int64) async {
+  /// No sender name (review HIGH-1): the display name is sender-supplied
+  /// plaintext and must never reach the instruction slot.
+  func explain(handoffText: String, sentAtMs: Int64) async {
     state = .loading
     let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
     let url = databaseURL
@@ -76,7 +78,7 @@ final class InboundHandoffContextReader {
 
     let e = ensureExplainer()
     switch await e.explain(
-      handoffText: handoffText, senderName: senderName, events: events,
+      handoffText: handoffText, events: events,
       sentAtMs: sentAtMs, nowMs: nowMs, path: .byok)
     {
     case .text(let text):

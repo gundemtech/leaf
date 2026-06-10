@@ -15,11 +15,17 @@ import SwiftUI
 
 struct HandoffRedraftConsentSheet: View {
   let recipientName: String
+  /// Frozen at draft time (review MEDIUM-3): the details are added to THIS
+  /// draft — the live picker/topic field may have moved on since.
   let topic: String
-  let period: ReviewActivityInsights.ReviewActivityPeriod
+  let period: DateInterval
 
   @Environment(HandoffDraftReader.self) private var handoffReader
+  @Environment(WindowState.self) private var windowState
   @Environment(\.dismiss) private var dismiss
+
+  /// Exact-match CTA for the missing-key failure (pattern: AskLeafView).
+  private static let missingKeyMessage = AIWorkAnswerer.message(for: .missingAPIKey)
 
   enum LoadState {
     case loading
@@ -179,6 +185,12 @@ struct HandoffRedraftConsentSheet: View {
         Text(redraftError)
           .font(LeafType.body.small)
           .foregroundStyle(LeafColor.status.warning)
+        if redraftError == Self.missingKeyMessage {
+          Button("Open Settings") {
+            windowState.section = .settings
+            dismiss()
+          }
+        }
       }
       HStack {
         Button("Cancel") { dismiss() }
@@ -211,7 +223,7 @@ struct HandoffRedraftConsentSheet: View {
     let cfg = databaseConfig
     let enc = databaseEncryption
     let pol = policy
-    let interval = period.interval()
+    let interval = period
     do {
       let candidates = try await Task.detached(priority: .userInitiated) {
         try ActivityFeedQuery(dbURL: url, dbConfig: cfg, dbEncryption: enc)
@@ -237,7 +249,7 @@ struct HandoffRedraftConsentSheet: View {
     redraftError = nil
     isRedrafting = true
     await handoffReader.redraft(
-      recipientName: recipientName, topic: topic, period: period.interval(),
+      recipientName: recipientName, topic: topic, period: period,
       selectedEventIDs: Array(d.selected))
     // Success path dismisses via onChange(.drafted); if state settled before
     // the observer fired, mirror it here.

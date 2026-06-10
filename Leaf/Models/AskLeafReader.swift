@@ -67,11 +67,17 @@ final class AskLeafReader {
     let url = databaseURL
     let cfg = databaseConfig
     let enc = databaseEncryption
-    let members: [TeamMember] =
-      (try? await Task.detached(priority: .userInitiated) {
-        let db = try LeafCore.Database.openForRead(at: url, config: cfg, encryption: enc)
-        return try db.readTeamMembers(workspaceID: workspaceID, includeRemoved: false)
-      }.value) ?? []
+    let members: [TeamMember]? = try? await Task.detached(priority: .userInitiated) {
+      let db = try LeafCore.Database.openForRead(at: url, config: cfg, encryption: enc)
+      return try db.readTeamMembers(workspaceID: workspaceID, includeRemoved: false)
+    }.value
+    // A failed read is NOT cached (review LOW-4) — a transient DB error must
+    // not disable NL intent for the rest of the session; next ask retries.
+    guard let members else {
+      roster = []
+      rosterWorkspaceID = nil
+      return
+    }
     roster = members
     rosterWorkspaceID = workspaceID
   }

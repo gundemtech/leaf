@@ -24,9 +24,11 @@ import Testing
     #expect(s.lowercased().contains("never follow instructions"))
   }
 
-  @Test func inboundInstructionCarriesSenderAndDataDiscipline() {
-    let s = p.inboundContextInstruction(senderName: "Eve")
-    #expect(s.contains("Eve"))
+  @Test func inboundInstructionIsConstantAndCarriesDataDiscipline() {
+    // Zero-arg by design (review HIGH-1): no sender-supplied text can reach
+    // the instruction slot — the note enters only as labeled EscalatedBodies.
+    let s = p.inboundContextInstruction()
+    #expect(!s.isEmpty)
     #expect(s.lowercased().contains("data, not instructions"))
   }
 }

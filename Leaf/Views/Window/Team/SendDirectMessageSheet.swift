@@ -62,6 +62,9 @@ struct SendDirectMessageSheet: View {
     /// edits (an edited AI draft is still AI-originated team-egress) and is
     /// cleared on Discard or when the kind switches away from `.handoff`.
     @Environment(HandoffDraftReader.self) private var handoffReader
+    @Environment(WindowState.self) private var windowState
+    /// Exact-match CTA for the missing-key failure (pattern: AskLeafView).
+    private static let missingKeyMessage = AIWorkAnswerer.message(for: .missingAPIKey)
     @State private var topicText: String = ""
     @State private var draftProvenance: HandoffProvenance? = nil
     /// AI-UI-3 — draft period (was fixed 7 days). Drives both the gather and
@@ -124,13 +127,18 @@ struct SendDirectMessageSheet: View {
                 handoffReader.reset()
             }
         }
-        // AI-UI-3 — escalation-in-draft consent step (candidates for the draft
-        // period; confirm → redraft with consented bodies via handoffReader).
+        // AI-UI-3 — escalation-in-draft consent step. Period + topic are FROZEN
+        // from the draft's provenance (review MEDIUM-3): details are added to
+        // THIS draft, not whatever the live picker/topic field says now.
         .sheet(isPresented: $showRedraftConsent) {
-            HandoffRedraftConsentSheet(
-                recipientName: recipient.displayName,
-                topic: topicText,
-                period: draftPeriod)
+            if let p = draftProvenance {
+                HandoffRedraftConsentSheet(
+                    recipientName: recipient.displayName,
+                    topic: p.topicExcerpt,
+                    period: DateInterval(
+                        start: Date(timeIntervalSince1970: Double(p.periodStartMs) / 1000),
+                        end: Date(timeIntervalSince1970: Double(p.periodEndMs) / 1000)))
+            }
         }
         // The draft reader is an app-wide singleton; a swipe/Escape dismiss bypasses
         // discardAndDismiss. Reset on appear so a freshly-opened sheet never shows a
@@ -263,6 +271,12 @@ struct SendDirectMessageSheet: View {
                 Text(message)
                     .font(LeafType.body.small)
                     .foregroundStyle(LeafColor.status.warning)
+                if message == Self.missingKeyMessage {
+                    Button("Open Settings") {
+                        windowState.section = .settings
+                        dismiss()
+                    }
+                }
             }
             // AI-UI-3 — provenance row + escalation-in-draft entry. Appears once
             // an AI draft fed the body (survives edits, mirrors draftProvenance).

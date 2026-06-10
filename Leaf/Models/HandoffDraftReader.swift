@@ -36,6 +36,14 @@ final class HandoffDraftReader {
 
   private(set) var state: State = .idle
 
+  /// Review MEDIUM-2 — generation guard against late-completion contamination:
+  /// reset() / every new request bumps the epoch; an in-flight draft that
+  /// finishes after a reset (kind switched away, sheet dismissed, another
+  /// recipient's sheet opened) publishes nothing. Without this, a stale
+  /// .drafted could refill bodyText + provenance under a Task/Ping kind or a
+  /// different recipient — and the M032 row would lie.
+  private var epoch = 0
+
   private var drafter: HandoffDrafter?
 
   private let policy: LLMPolicy
@@ -66,6 +74,7 @@ final class HandoffDraftReader {
   }
 
   func reset() {
+    epoch += 1
     state = .idle
   }
 
@@ -77,6 +86,8 @@ final class HandoffDraftReader {
     topic: String,
     period: DateInterval = HandoffDraftReader.defaultPeriod()
   ) async {
+    epoch += 1
+    let myEpoch = epoch
     state = .drafting
 
     let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
@@ -90,14 +101,17 @@ final class HandoffDraftReader {
           .gather(period: period, nowMs: nowMs)
       }.value
     } catch {
-      state = .error(message: "Couldn't read your activity right now. Try again.")
+      if epoch == myEpoch {
+        state = .error(message: "Couldn't read your activity right now. Try again.")
+      }
       return
     }
 
     let d = ensureDrafter()
-    switch await d.draft(
+    let outcome = await d.draft(
       topic: topic, recipientName: recipientName, events: events, period: period, path: .byok)
-    {
+    guard epoch == myEpoch else { return }  // superseded — publish nothing
+    switch outcome {
     case .text(let text, let provenance):
       state = .drafted(text: text, provenance: provenance)
     case .notEnoughData:
@@ -118,6 +132,8 @@ final class HandoffDraftReader {
     period: DateInterval,
     selectedEventIDs: [Int64]
   ) async {
+    epoch += 1
+    let myEpoch = epoch
     state = .drafting
     let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
     let url = databaseURL
@@ -135,16 +151,21 @@ final class HandoffDraftReader {
         )
       }.value
     } catch {
-      state = .error(message: "Couldn't read your activity right now. Try again.")
+      if epoch == myEpoch {
+        state = .error(message: "Couldn't read your activity right now. Try again.")
+      }
       return
     }
 
     let escalated = policy.makeEscalation(selected: keyed.map(\.event))
     let d = ensureDrafter()
-    switch await d.draft(
+    // Audit records the CONSENTED ids (`capped`), not the rows found at redraft
+    // time — P3 precedent: the consent act is what's audited (review LOW-5).
+    let outcome = await d.draft(
       topic: topic, recipientName: recipientName, events: events, period: period,
-      path: .byok, escalated: escalated, escalatedEventIDs: keyed.map(\.id))
-    {
+      path: .byok, escalated: escalated, escalatedEventIDs: capped)
+    guard epoch == myEpoch else { return }  // superseded — publish nothing
+    switch outcome {
     case .text(let text, let provenance):
       state = .drafted(text: text, provenance: provenance)
     case .notEnoughData:

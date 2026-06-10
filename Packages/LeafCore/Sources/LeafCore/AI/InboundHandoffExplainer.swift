@@ -40,9 +40,11 @@ public struct InboundHandoffExplainer: Sendable {
     self.maxAnswerTokens = maxAnswerTokens
   }
 
+  /// The sender's name is deliberately NOT a parameter (review HIGH-1): the
+  /// display name is sender-supplied plaintext, and foreign text enters the
+  /// prompt only inside the labeled `EscalatedBodies` data slot.
   public func explain(
     handoffText: String,
-    senderName: String,
     events: [EgressEvent],
     sentAtMs: Int64,
     nowMs: Int64,
@@ -54,7 +56,7 @@ public struct InboundHandoffExplainer: Sendable {
     let escalated = policy.makeInboundHandoff(text: handoffText, tsMs: sentAtMs)
     guard !escalated.bodies.isEmpty else { return .notEnoughData }
 
-    let question = policy.makeQuestion(prompts.inboundContextInstruction(senderName: senderName))
+    let question = policy.makeQuestion(prompts.inboundContextInstruction())
     let model = modelGate.model(path: path, preferred: preferred)
 
     // AUDIT FIRST (§8 п.4 — over-record, never under-record); a failed write

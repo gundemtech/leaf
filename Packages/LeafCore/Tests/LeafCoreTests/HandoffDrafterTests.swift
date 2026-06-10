@@ -323,6 +323,46 @@ final class HandoffDrafterTests: XCTestCase {
     XCTAssertFalse(s.called, "no POST without a recordable audit")
   }
 
+  // D5 (review #7a) — the drafter uses the INJECTED prompts, and picks the
+  // redraft instruction exactly when bodies are present (a swap would pass
+  // every other test — both paths call makeQuestion the same way).
+  private struct MarkerPrompts: HandoffPrompts {
+    func draftInstruction(topic: String, recipientName: String) -> String {
+      "MARKER-BODYFREE \(topic) \(recipientName)"
+    }
+    func redraftInstruction(topic: String, recipientName: String) -> String {
+      "MARKER-ESCALATED \(topic) \(recipientName)"
+    }
+    func inboundContextInstruction() -> String { "INBOUND-MARKER" }
+  }
+
+  func testInjectedPromptsSelectRedraftInstructionOnlyWithBodies() async {
+    let policy = LLMPolicy()
+    // Body-free path → draft instruction.
+    let rec1 = DraftRecorder()
+    let d1 = HandoffDrafter(
+      policy: policy, summarizer: RecordingSummarizer(rec: rec1, text: "draft"),
+      modelGate: DefaultModelGate(), prompts: MarkerPrompts())
+    _ = await d1.draft(
+      topic: "auth", recipientName: "Alex",
+      events: [event("issue_updated", ["additions": "1"])], period: period)
+    let s1 = await rec1.snapshot()
+    XCTAssertTrue(s1.q.contains("MARKER-BODYFREE"))
+    XCTAssertFalse(s1.q.contains("MARKER-ESCALATED"))
+    // Escalated path → redraft instruction.
+    let rec2 = DraftRecorder()
+    let d2 = HandoffDrafter(
+      policy: policy, summarizer: RecordingSummarizer(rec: rec2, text: "redraft"),
+      modelGate: DefaultModelGate(), prompts: MarkerPrompts(), audit: AuditSpy())
+    _ = await d2.draft(
+      topic: "auth", recipientName: "Alex",
+      events: [event("issue_updated", ["additions": "1"])], period: period,
+      escalated: policy.makeEscalation(selected: [bodyEvent("a body")]), escalatedEventIDs: [1])
+    let s2 = await rec2.snapshot()
+    XCTAssertTrue(s2.q.contains("MARKER-ESCALATED"))
+    XCTAssertFalse(s2.q.contains("MARKER-BODYFREE"))
+  }
+
   // D4 — a degenerate escalation (everything dropped / empty selection) behaves
   // exactly like the body-free path: no audit row, provenance.escalated == false.
   func testEmptyEscalationBehavesBodyFree() async {
