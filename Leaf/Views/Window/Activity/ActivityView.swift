@@ -16,6 +16,7 @@ struct ActivityView: View {
     @State private var mode: ActivityMode = .sessions
     @State private var feedReader = ActivityFeedReader()
     @State private var selectedEventIDs: Set<Int64> = []
+    @State private var escalationSeed: EscalationSeed? = nil
 
     /// Кап выбора = consent-кап escalation send-пути.
     private static let selectionCap = EscalationDraft.selectionCap
@@ -32,6 +33,9 @@ struct ActivityView: View {
         .onAppear { reader.refresh() }
         .task(id: mode) {
             if mode == .rawEvents { await feedReader.refresh() }
+        }
+        .sheet(item: $escalationSeed, onDismiss: { selectedEventIDs.removeAll() }) { seed in
+            EscalationSheet(seed: seed, onDismiss: { escalationSeed = nil })
         }
     }
 
@@ -220,9 +224,8 @@ struct ActivityView: View {
         if !selectedEventIDs.isEmpty {
             HStack {
                 Button("Analyze with AI (\(selectedEventIDs.count))") {
-                    // Sheet wiring — Task 9 (EscalationSheet).
+                    escalationSeed = .ids(entries.filter { selectedEventIDs.contains($0.id) })
                 }
-                .disabled(true)
                 Button("Clear") { selectedEventIDs.removeAll() }
                     .buttonStyle(.plain)
                     .foregroundStyle(LeafColor.text.tertiary)

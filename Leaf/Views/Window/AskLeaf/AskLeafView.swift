@@ -18,6 +18,7 @@ struct AskLeafView: View {
   @State private var questionText: String = ""
   @State private var period: ReviewActivityInsights.ReviewActivityPeriod = .last7Days
   @State private var model: SummarizerModel = .haiku
+  @State private var escalationSeed: EscalationSeed? = nil
 
   /// Точное сравнение с opaque-сообщением missingAPIKey — единственный
   /// failure, который получает CTA «Open Settings». Источник строки тот же
@@ -42,6 +43,9 @@ struct AskLeafView: View {
       }
       Divider()
       inputBar
+    }
+    .sheet(item: $escalationSeed) { seed in
+      EscalationSheet(seed: seed, onDismiss: { escalationSeed = nil })
     }
   }
 
@@ -107,11 +111,14 @@ struct AskLeafView: View {
           .foregroundStyle(LeafColor.text.secondary)
       }
     case .answered(let text):
-      Text(text)
-        .font(LeafType.body.regular)
-        .foregroundStyle(LeafColor.text.primary)
-        .textSelection(.enabled)
-        .frame(maxWidth: .infinity, alignment: .leading)
+      VStack(alignment: .leading, spacing: LeafSpace.sm) {
+        Text(text)
+          .font(LeafType.body.regular)
+          .foregroundStyle(LeafColor.text.primary)
+          .textSelection(.enabled)
+          .frame(maxWidth: .infinity, alignment: .leading)
+        digDeeperButton(entry)
+      }
     case .notEnoughData:
       Text("I don't have enough recorded work in that period to answer.")
         .font(LeafType.body.regular)
@@ -128,6 +135,23 @@ struct AskLeafView: View {
         }
       }
     }
+  }
+
+  /// AI-UI-2 — вход в bodies-эскалацию из ответа: модалка в period-режиме
+  /// (кандидаты грузятся сами; consent = активный выбор, ничего не pre-checked).
+  private func digDeeperButton(_ entry: AskLeafTranscript.Entry) -> some View {
+    Button {
+      escalationSeed = .period(entry.period, prefillQuestion: entry.question)
+    } label: {
+      Text("Dig deeper")
+        .font(LeafType.body.small)
+        .foregroundStyle(LeafColor.text.secondary)
+        .padding(.horizontal, LeafSpace.md)
+        .padding(.vertical, LeafSpace.xs)
+        .background(LeafColor.surface.inset, in: Capsule())
+    }
+    .buttonStyle(.plain)
+    .help("Send selected event texts to the AI for a detailed answer")
   }
 
   // MARK: - Empty state
