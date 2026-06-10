@@ -7,27 +7,24 @@
 //   * email/password — the native app sends NO captcha token (global Supabase
 //     CAPTCHA protection is OFF). Calls SupabaseClient.signInWithPassword then
 //     ensureAuthenticatedAndPubkeyRegistered.
-//   * OAuth (Google/GitHub) — PKCE + ASWebAuthenticationSession with the
-//     fixed custom-scheme callback leaf://auth/callback (Supabase redirect
-//     allow-list requires an exact URL; ephemeral loopback ports don't fit).
-//     PKCE.swift is reused. InviteURLHandler is NOT touched — ASWebAuth
-//     delivers the redirect to its own completion handler.
+//   * OAuth (Google/GitHub) — opens the authorize URL in the user's DEFAULT
+//     browser (NSWorkspace.open → Chrome/Safari/… with their already-signed-in
+//     accounts) and catches the redirect on a local loopback HTTP server
+//     (LoopbackCallbackListener, same pattern as the Linear/Slack/GitHub
+//     integrations). PKCE throughout. We deliberately do NOT use
+//     ASWebAuthenticationSession — it can only use Safari/WebKit, not the
+//     user's real default browser.
 //  State machine mirrors LinearOAuthService.
 //
 
 import AppKit
-import AuthenticationServices
 import Foundation
 import LeafCore
 import SwiftUI
-import os
-
-private let supabaseOAuthLogger = Logger(
-  subsystem: "tech.gundem.leaf.app", category: "supabase-oauth")
 
 @MainActor
 @Observable
-final class SupabaseOAuthService: NSObject {
+final class SupabaseOAuthService {
   enum LoginState: Equatable {
     case idle
     case authorizing
@@ -44,23 +41,14 @@ final class SupabaseOAuthService: NSObject {
   /// LeafApp can register the launch agent and flip the gate. Set by LeafApp.
   var onAuthenticated: (() -> Void)?
 
-  /// Fixed OAuth callback — must be on Supabase's redirect allow-list.
-  static let redirectURI = "leaf://auth/callback"
-  private static let callbackScheme = "leaf"
-
-  /// Retained for the duration of one OAuth flow.
-  private var webAuthSession: ASWebAuthenticationSession?
-
-  /// Captured on the main actor when a flow starts; read from the nonisolated
-  /// `presentationAnchor` callback, which AuthenticationServices may invoke off
-  /// the main thread (notably on cancel/dismiss). Reading a pre-captured window
-  /// avoids touching NSApplication off-main — which trips
-  /// `_dispatch_assert_queue_fail` (the crash on closing the OAuth window).
-  @ObservationIgnored nonisolated(unsafe) private var anchorWindow: NSWindow?
+  /// OAuth redirect — a loopback URL so the flow can run in the user's DEFAULT
+  /// browser. Fixed port (Linear uses 47823, Slack-relay 47824) so it can be
+  /// added to Supabase's redirect allow-list. Must match the allow-list entry.
+  private static let callbackPort: UInt16 = 47825
+  static let redirectURI = "http://127.0.0.1:47825/callback"
 
   init(client: SupabaseClient) {
     self.client = client
-    super.init()
   }
 
   // MARK: - Email path
@@ -78,7 +66,7 @@ final class SupabaseOAuthService: NSObject {
     }
   }
 
-  // MARK: - OAuth path
+  // MARK: - OAuth path (default browser + loopback)
 
   func loginWithOAuth(provider: OAuthProvider) async {
     state = .authorizing
@@ -89,17 +77,39 @@ final class SupabaseOAuthService: NSObject {
       redirectTo: Self.redirectURI,
       codeChallenge: challenge.challenge)
     do {
-      let callbackURL = try await startWebAuth(authorizeURL: authorizeURL)
-      guard let code = Self.extractCode(from: callbackURL) else {
+      // Open the user's DEFAULT browser (their real session / signed-in
+      // accounts), then wait for the redirect on the loopback server.
+      NSWorkspace.shared.open(authorizeURL)
+      let callback = try await LoopbackCallbackListener.awaitCallback(
+        port: Self.callbackPort,
+        providerLabel: provider == .google ? "Google" : "GitHub")
+
+      if let oauthError = callback.queryItems?.first(where: { $0.name == "error" })?.value {
+        // User denied at the provider, or the provider returned an error.
+        state =
+          oauthError == "access_denied"
+          ? .idle
+          : .error(message: "Sign-in was cancelled or failed. Try again.")
+        return
+      }
+      guard let code = callback.queryItems?.first(where: { $0.name == "code" })?.value else {
         state = .error(message: "Login callback was missing an authorization code.")
         return
       }
+
       state = .exchangingToken
       _ = try await client.exchangeOAuthCode(
         code: code, codeVerifier: challenge.verifier, redirectURI: Self.redirectURI)
       try await finishWithDeviceRegistration()
-    } catch let asError as ASWebAuthenticationSessionError where asError.code == .canceledLogin {
-      state = .idle  // user dismissed the sheet — silent return to the form
+    } catch let loopback as LoopbackCallbackError {
+      // Timed out (user abandoned the browser tab) → soft return to the form;
+      // bind/listener failures are surfaced.
+      switch loopback {
+      case .timeout:
+        state = .idle
+      default:
+        state = .error(message: "Couldn't open the sign-in listener. Try again.")
+      }
     } catch {
       state = .error(message: friendlyMessage(error))
     }
@@ -116,37 +126,6 @@ final class SupabaseOAuthService: NSObject {
     onAuthenticated?()
   }
 
-  private func startWebAuth(authorizeURL: URL) async throws -> URL {
-    anchorWindow = NSApplication.shared.keyWindow  // capture on main for the nonisolated anchor callback
-    return try await withCheckedThrowingContinuation { continuation in
-      let session = ASWebAuthenticationSession(
-        url: authorizeURL, callbackURLScheme: Self.callbackScheme
-      ) { callbackURL, error in
-        if let error {
-          continuation.resume(throwing: error)
-        } else if let callbackURL {
-          continuation.resume(returning: callbackURL)
-        } else {
-          continuation.resume(throwing: URLError(.badServerResponse))
-        }
-      }
-      session.presentationContextProvider = self
-      // Share Safari's cookies (NOT ephemeral) so the user's already-signed-in
-      // Google/GitHub accounts appear for one-tap selection instead of a cold
-      // login each time. macOS shows a one-time "wants to sign in" consent.
-      session.prefersEphemeralWebBrowserSession = false
-      self.webAuthSession = session
-      if !session.start() {
-        continuation.resume(throwing: URLError(.cannotConnectToHost))
-      }
-    }
-  }
-
-  private static func extractCode(from url: URL) -> String? {
-    let comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
-    return comps?.queryItems?.first(where: { $0.name == "code" })?.value
-  }
-
   private func friendlyMessage(_ error: Error) -> String {
     if let supa = error as? SupabaseError {
       switch supa {
@@ -158,18 +137,5 @@ final class SupabaseOAuthService: NSObject {
       }
     }
     return error.localizedDescription
-  }
-}
-
-// MARK: - ASWebAuthenticationPresentationContextProviding
-
-extension SupabaseOAuthService: ASWebAuthenticationPresentationContextProviding {
-  // nonisolated: AuthenticationServices may call this off the main thread
-  // (e.g. on cancel). Returns the window captured on-main in startWebAuth;
-  // never touches NSApplication off-main.
-  nonisolated func presentationAnchor(for session: ASWebAuthenticationSession)
-    -> ASPresentationAnchor
-  {
-    anchorWindow ?? ASPresentationAnchor()
   }
 }
