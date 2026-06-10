@@ -41,9 +41,14 @@ struct EscalationSheet: View {
               .foregroundStyle(LeafColor.text.tertiary)
           }
         case .failed(let msg):
-          Text(msg)
-            .font(LeafType.body.regular)
-            .foregroundStyle(LeafColor.status.warning)
+          VStack(alignment: .leading, spacing: LeafSpace.sm) {
+            Text(msg)
+              .font(LeafType.body.regular)
+              .foregroundStyle(LeafColor.status.warning)
+            Button("Try again") {
+              Task { await reader.load(seed: seed) }
+            }
+          }
         case .ready:
           if let draft = reader.draft {
             content(draft)
@@ -76,9 +81,11 @@ struct EscalationSheet: View {
   private func composeView(_ draft: EscalationDraft) -> some View {
     VStack(alignment: .leading, spacing: LeafSpace.lg) {
       VStack(alignment: .leading, spacing: LeafSpace.xxs) {
-        Text("AI asks for the text of \(draft.selectedCount) of \(draft.candidates.count) events")
-          .font(LeafType.body.regular)
-          .foregroundStyle(LeafColor.text.primary)
+        Text(
+          "AI asks for the text of \(draft.selectedCount) of \(draft.candidates.count) event\(draft.candidates.count == 1 ? "" : "s")"
+        )
+        .font(LeafType.body.regular)
+        .foregroundStyle(LeafColor.text.primary)
         Text("Bodies leave this Mac only when you confirm. Every send is logged to AI privacy (Settings → Sharing).")
           .font(LeafType.body.small)
           .foregroundStyle(LeafColor.text.tertiary)
@@ -89,6 +96,11 @@ struct EscalationSheet: View {
           .font(LeafType.body.small)
           .foregroundStyle(LeafColor.text.tertiary)
       } else {
+        if draft.sendableCount == 0 {
+          Text("These events have no text that can be sent.")
+            .font(LeafType.body.small)
+            .foregroundStyle(LeafColor.text.secondary)
+        }
         candidateList(draft)
       }
 
@@ -115,7 +127,7 @@ struct EscalationSheet: View {
               .foregroundStyle(LeafColor.text.tertiary)
           }
         } else {
-          Button("Send \(draft.selectedCount) bodies") {
+          Button("Send \(draft.selectedCount) \(draft.selectedCount == 1 ? "body" : "bodies")") {
             let q = question
             let m = model
             Task { await reader.confirm(question: q, model: m) }
@@ -162,7 +174,7 @@ struct EscalationSheet: View {
 
       VStack(alignment: .leading, spacing: LeafSpace.xxs) {
         HStack(spacing: LeafSpace.sm) {
-          Text(entry.primaryText)
+          Text(entry.mergedCount > 1 ? "\(entry.primaryText) × \(entry.mergedCount)" : entry.primaryText)
             .font(LeafType.body.regular)
             .foregroundStyle(sendable ? LeafColor.text.primary : LeafColor.text.tertiary)
             .lineLimit(1)

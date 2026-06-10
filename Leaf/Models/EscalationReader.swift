@@ -121,6 +121,7 @@ final class EscalationReader {
     draft = d
     let ids = Array(d.selected).sorted()
     let events = keyed.filter { d.selected.contains($0.id) }.map(\.event)
+    assert(events.count <= EscalationDraft.selectionCap, "consent cap must hold on the send path")
     let a = ensureAnswerer()
     let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
     let answer = await a.answer(

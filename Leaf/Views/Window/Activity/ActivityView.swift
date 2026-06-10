@@ -32,7 +32,12 @@ struct ActivityView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear { reader.refresh() }
         .task(id: mode) {
-            if mode == .rawEvents { await feedReader.refresh() }
+            if mode == .rawEvents {
+                await feedReader.refresh()
+                // Коалесцирование может сменить leading-ids между refresh'ами —
+                // выбор сбрасывается, чтобы счётчик кнопки не расходился с шитом.
+                selectedEventIDs.removeAll()
+            }
         }
         .sheet(item: $escalationSeed, onDismiss: { selectedEventIDs.removeAll() }) { seed in
             EscalationSheet(seed: seed, onDismiss: { escalationSeed = nil })
@@ -222,13 +227,18 @@ struct ActivityView: View {
     @ViewBuilder
     private func analyzeBar(entries: [ActivityFeedEntry]) -> some View {
         if !selectedEventIDs.isEmpty {
-            HStack {
+            HStack(spacing: LeafSpace.md) {
                 Button("Analyze with AI (\(selectedEventIDs.count))") {
                     escalationSeed = .ids(entries.filter { selectedEventIDs.contains($0.id) })
                 }
                 Button("Clear") { selectedEventIDs.removeAll() }
                     .buttonStyle(.plain)
                     .foregroundStyle(LeafColor.text.tertiary)
+                if selectedEventIDs.count >= Self.selectionCap {
+                    Text("\(Self.selectionCap) of \(Self.selectionCap) — selection limit reached")
+                        .font(LeafType.body.small)
+                        .foregroundStyle(LeafColor.text.tertiary)
+                }
                 Spacer()
             }
         }

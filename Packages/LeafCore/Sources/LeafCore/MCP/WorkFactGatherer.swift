@@ -149,6 +149,10 @@ public struct WorkFactGatherer: Sendable {
   /// Кап — preview-кап (rowCap кандидатов), НЕ escalationEventIDCap: preview
   /// локальный (без egress); consent-кап остаётся на send-пути выше
   /// (`gatherSelectedBodies` + `EscalationDraft.selectionCap`).
+  ///
+  /// ВНИМАНИЕ (egress-дисциплина): результат этого метода НЕ должен уходить в
+  /// `AIDetailAnswerer`/Summarizer напрямую — это preview-API. Send-путь обязан
+  /// идти через consent-кап (≤ escalationEventIDCap отобранных ids).
   public func gatherSelectedBodiesKeyed(eventIDs: [Int64]) throws -> [(id: Int64, event: EgressEvent)] {
     guard !eventIDs.isEmpty else { return [] }
     let capped = Array(eventIDs.prefix(ActivityFeedQuery.rowCap))
