@@ -476,4 +476,36 @@ final class WorkFactGathererTests: XCTestCase {
     XCTAssertEqual(trend.payload["commit_streak"], "0", "default streaks are 0, not a crash (tiny/empty period)")
     XCTAssertNil(trend.payload["wow_delta_pct"], "nil WoW → omitted")
   }
+
+  // MARK: - gatherSelectedBodiesKeyed (AI-UI-2)
+
+  func testKeyed_returnsIDsPairedWithEvents() throws {
+    let db = try openWriter()
+    try writeEvent(db, tsMs: 1_000, payload: ["event_kind": "gh_pr_comment", "body": "alpha"])
+    try writeEvent(db, tsMs: 2_000, payload: ["event_kind": "gh_pr_comment", "body": "beta"])
+    let ids = try allEventIDs()
+    let keyed = try makeGatherer().gatherSelectedBodiesKeyed(eventIDs: ids)
+    XCTAssertEqual(keyed.count, 2)
+    XCTAssertEqual(Set(keyed.map(\.id)), Set(ids))
+    XCTAssertEqual(keyed.compactMap { $0.event.payload["body"] }.sorted(), ["alpha", "beta"])
+  }
+
+  func testKeyed_unkeyedDelegatesBitForBit() throws {
+    let db = try openWriter()
+    try writeEvent(
+      db, tsMs: 1_000, bundleID: "com.example.app",
+      payload: ["event_kind": "gh_pr_comment", "body": "alpha"])
+    let ids = try allEventIDs()
+    let old = try makeGatherer().gatherSelectedBodies(eventIDs: ids)
+    let new = try makeGatherer().gatherSelectedBodiesKeyed(eventIDs: ids).map(\.event)
+    XCTAssertEqual(old, new)
+  }
+
+  private func allEventIDs() throws -> [Int64] {
+    let db = try LeafCore.Database.openForRead(
+      at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+    return try db.readSQL { rawDB in
+      try Int64.fetchAll(rawDB, sql: "SELECT id FROM events ORDER BY id")
+    }
+  }
 }
