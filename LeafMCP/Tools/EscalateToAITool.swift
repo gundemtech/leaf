@@ -114,22 +114,5 @@ struct EscalateToAITool: ToolExecutor {
   }
 }
 
-/// Prod escalation audit sink: opens a brief `openForWrite` handle and appends
-/// ONE row (ADR-019 departure — MCPServer is otherwise a reader; supported by WAL
-/// + cross-process POSIX locks). Audit-first ordering is enforced by
-/// `AIDetailAnswerer` (the writer fails → the send aborts).
-struct DBEscalationAuditSink: AuditSink {
-  let dbURL: URL
-  let dbConfig: DatabaseConfig
-  let dbEncryption: EncryptionOptions?
-
-  func record(_ entry: EscalationAuditEntry) async throws {
-    let db = try Database.openForWrite(at: dbURL, config: dbConfig, encryption: dbEncryption)
-    try db.appendAIEscalationAudit(
-      generatedAtMs: entry.occurredAtMs,
-      questionExcerpt: entry.question,
-      model: entry.model,
-      eventIDs: entry.eventIDs,
-      sourceSummary: entry.sourceSummary)
-  }
-}
+// DBEscalationAuditSink — promoted to LeafCore (AI-UI-2): shared by this tool
+// and the in-app EscalationReader.

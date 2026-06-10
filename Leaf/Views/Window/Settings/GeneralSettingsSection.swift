@@ -10,6 +10,7 @@
 //  state is actionable (.requiresApproval / lastErrorMessage).
 //
 
+import AppKit
 import SwiftUI
 import ServiceManagement
 import LeafCore
@@ -41,6 +42,18 @@ struct BackgroundCollectionSection: View {
                         .tint(LeafColor.accent.primary)
                     }
 
+                    if !launchAgent.isCanonicalLocation, launchAgent.shouldAutoRegister == false {
+                        LeafBanner(
+                            tone: .warning,
+                            title: "Leaf запущен не из /Applications",
+                            description:
+                                "Текущий путь: \(Bundle.main.bundleURL.path). Регистрация агента отсюда перепривяжет фоновый сбор к этой копии и сломается, когда она исчезнет. Перенеси Leaf в /Applications. Тоггл работает — на твой риск.",
+                            ctaTitle: "Reveal",
+                            onCTA: {
+                                NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL])
+                            }
+                        )
+                    }
                     if let error = launchAgent.lastErrorMessage {
                         LeafBanner(
                             tone: .danger,
@@ -67,6 +80,8 @@ struct BackgroundCollectionSection: View {
 struct UpdatesSection: View {
     let updater: UpdaterController
 
+    @State private var showWhatsNew = false
+
     var body: some View {
         LeafSection(
             title: "Updates",
@@ -84,6 +99,12 @@ struct UpdatesSection: View {
                     }
                     Spacer()
                     LeafButton(
+                        "What's New",
+                        variant: .ghost,
+                        size: .sm,
+                        action: { showWhatsNew = true }
+                    )
+                    LeafButton(
                         "Check for updates",
                         variant: .secondary,
                         size: .sm,
@@ -91,6 +112,9 @@ struct UpdatesSection: View {
                     )
                 }
             }
+        }
+        .sheet(isPresented: $showWhatsNew) {
+            WhatsNewView(catalog: .bundled(), currentVersion: versionShort)
         }
     }
 

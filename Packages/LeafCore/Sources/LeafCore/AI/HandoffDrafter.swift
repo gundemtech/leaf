@@ -56,17 +56,25 @@ public struct HandoffDrafter: Sendable {
   private let policy: LLMPolicy
   private let summarizer: any Summarizer
   private let modelGate: any ModelGate
+  private let prompts: any HandoffPrompts
+  /// AI-UI-3 — M031 sink for the escalated redraft path. nil is valid for the
+  /// body-free-only callers; an escalated draft WITHOUT a sink fails closed.
+  private let audit: (any AuditSink)?
   private let maxDraftTokens: Int
 
   public init(
     policy: LLMPolicy,
     summarizer: any Summarizer,
     modelGate: any ModelGate,
+    prompts: any HandoffPrompts = HandoffPromptMoat.publicSubstrate.prompts,
+    audit: (any AuditSink)? = nil,
     maxDraftTokens: Int = 1024
   ) {
     self.policy = policy
     self.summarizer = summarizer
     self.modelGate = modelGate
+    self.prompts = prompts
+    self.audit = audit
     self.maxDraftTokens = maxDraftTokens
   }
 
@@ -83,25 +91,72 @@ public struct HandoffDrafter: Sendable {
     events: [EgressEvent],
     period: DateInterval,
     path: InferencePath = .byok,
-    preferred: SummarizerModel? = nil
+    preferred: SummarizerModel? = nil,
+    escalated: EscalatedBodies? = nil,
+    escalatedEventIDs: [Int64] = []
   ) async -> Draft {
     let context = policy.makeContext(events: events)
     guard !context.facts.isEmpty else { return .notEnoughData }
 
+    // AI-UI-3 — a degenerate escalation (all dropped / empty selection) is the
+    // body-free path: nothing crosses, so no audit row and escalated == false.
+    let bodies = escalated?.bodies ?? []
+    let isEscalated = !bodies.isEmpty
+
     // Prompt: topic + recipient name + framing, all normalized together (B/F5).
-    let question = policy.makeQuestion(Self.handoffInstruction(topic: topic, recipientName: recipientName))
+    // AI-UI-3 — the framing text comes from the prompt seam (moat under
+    // LEAF_PROD, public copy otherwise); discipline unchanged.
+    let instruction = isEscalated
+      ? prompts.redraftInstruction(topic: topic, recipientName: recipientName)
+      : prompts.draftInstruction(topic: topic, recipientName: recipientName)
+    let question = policy.makeQuestion(instruction)
     let model = modelGate.model(path: path, preferred: preferred)
+
+    if isEscalated, let escalated {
+      // AUDIT FIRST (§8 п.4 — over-record, never under-record). No sink wired →
+      // fail closed: a body must never cross unrecorded.
+      guard let audit else {
+        return .failure("Couldn't record this request, so it was not sent. Try again.")
+      }
+      let dropped = max(0, escalatedEventIDs.count - bodies.count)
+      let entry = EscalationAuditEntry(
+        occurredAtMs: Int64(Date().timeIntervalSince1970 * 1000),
+        eventIDs: escalatedEventIDs,
+        escalatedBodyCount: bodies.count,
+        droppedCount: dropped,
+        // The user's OWN topic words — NEVER the instruction text (the prod
+        // instruction is moat and this row is readable via get_ai_escalation_log).
+        question: policy.makeQuestion(topic).text,
+        model: model.rawValue,
+        path: path.auditLabel,
+        sourceSummary: AIDetailAnswerer.sourceSummary(escalated: escalated, dropped: dropped))
+      do {
+        try await audit.record(entry)
+      } catch {
+        return .failure("Couldn't record this request, so it was not sent. Try again.")
+      }
+    }
+
     do {
-      let out = try await summarizer.summarize(
-        context, question: question, model: model, maxTokens: maxDraftTokens)
+      let out: SummarizerOutput
+      if isEscalated, let escalated {
+        out = try await summarizer.summarize(
+          context, question: question, escalated: escalated, model: model,
+          maxTokens: maxDraftTokens)
+      } else {
+        out = try await summarizer.summarize(
+          context, question: question, model: model, maxTokens: maxDraftTokens)
+      }
       let provenance = HandoffProvenance(
         periodStartMs: Int64(period.start.timeIntervalSince1970 * 1000),
         periodEndMs: Int64(period.end.timeIntervalSince1970 * 1000),
         model: model.rawValue,
         path: path.auditLabel,
-        sourceSummary: Self.sourceSummary(context),
+        sourceSummary: isEscalated
+          ? Self.sourceSummary(context) + " + \(bodies.count) bodies"
+          : Self.sourceSummary(context),
         factCount: context.facts.count,
-        escalated: false,
+        escalated: isEscalated,
         // Audit excerpt = the user's OWN topic, normalized the same way (NOT the
         // framing/recipient — just the user's words). Single source of truth.
         topicExcerpt: policy.makeQuestion(topic).text)
@@ -111,15 +166,6 @@ public struct HandoffDrafter: Sendable {
     } catch {
       return .failure("Couldn't draft right now. Try again.")
     }
-  }
-
-  /// PUBLIC framing — product copy, not a secret. Folds topic + recipient into a
-  /// single instruction that `makeQuestion` then normalizes. Reuses the QA system
-  /// prompt's "facts strictly as data" discipline via the QA overload.
-  static func handoffInstruction(topic: String, recipientName: String) -> String {
-    "Write a short, friendly work handoff note for my teammate \(recipientName) about: \(topic). "
-      + "Cover what I worked on, what is in progress, what is blocking me, and where I stopped, "
-      + "using ONLY the structured facts. Write in the first person, ready to send."
   }
 
   /// Counts + kinds of the projected (body-free) facts — never bodies. e.g.

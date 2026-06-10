@@ -15,11 +15,15 @@ struct WorkspaceMemberAdminRow: View {
     let member: TeamMember
     let isMe: Bool
     let viewerIsAdmin: Bool
+    /// Hub Members tab — non-self row tap opens the DM composer. Nil
+    /// (self rows / legacy callsites) renders an inert row.
+    var onTap: (() -> Void)? = nil
 
     @Environment(MemberRemovalReader.self) private var removalReader
     @Environment(ActiveWorkspaceStore.self) private var activeWorkspaceStore
 
     @State private var removeConfirmPresented = false
+    @State private var hover = false
 
     private static let joinedFormatter: RelativeDateTimeFormatter = {
         let f = RelativeDateTimeFormatter()
@@ -74,6 +78,14 @@ struct WorkspaceMemberAdminRow: View {
             }
         }
         .frame(minHeight: 44)
+        .contentShape(Rectangle())
+        .background(
+            RoundedRectangle(cornerRadius: LeafRadius.sm, style: .continuous)
+                .fill(hover && onTap != nil ? LeafColor.surface.raised : Color.clear)
+        )
+        .onHover { hover = $0 }
+        .onTapGesture { onTap?() }
+        .leafAnimation(LeafMotion.spring.snappy, value: hover)
         .confirmationDialog(
             "Remove \(member.displayName)?",
             isPresented: $removeConfirmPresented,

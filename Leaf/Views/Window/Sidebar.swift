@@ -20,8 +20,10 @@
 //  semantics, the attention dot is a bool urgency cue, orthogonal).
 //
 //  Track 5 / S7 G.12 — removed `.organization` from COLLABORATION group;
-//  replaced with LeafWorkspaceSwitcher anchored at the sidebar bottom.
+//  replaced with a workspace switcher anchored at the sidebar bottom.
 //  Layout: VStack { ScrollView (nav groups) + Spacer + switcher section }.
+//  The inline list (LeafWorkspaceSwitcher) was later collapsed into
+//  LeafWorkspacePicker — compact trigger row + popover — same callbacks.
 //
 
 import LeafCore
@@ -35,7 +37,7 @@ struct Sidebar: View {
   @Environment(WorkspaceReader.self) private var workspaceReader
   @Environment(ActiveWorkspaceStore.self) private var activeWorkspaceStore
   @Environment(DirectMessageInboxReader.self) private var inboxReader
-  /// T4 — tier gate. Free-tier swaps `LeafWorkspaceSwitcher` for an
+  /// T4 — tier gate. Free-tier swaps `LeafWorkspacePicker` for an
   /// «Upgrade to add workspaces» row at the sidebar bottom.
   @Environment(TierGateReader.self) private var tierGate
   @Environment(\.submitToWaitlist) private var submitToWaitlist
@@ -75,25 +77,49 @@ struct Sidebar: View {
   /// `leaf://invite/<LEAF-XXXX-XXXX-XXXX>` link click — both paths share
   /// one sheet modifier via `joinByCodeBinding` below.
   @State private var joinByCodePresented = false
+  @State private var profileHover = false
+  /// Workspace picker dropdown — open state + geometry are hoisted here
+  /// because the menu renders at the Sidebar root ZStack (an overlay on
+  /// the trigger composites below later card siblings — profile row drew
+  /// on top of the open menu).
+  @State private var pickerOpen = false
+  @State private var pickerTriggerFrame: CGRect = .zero
+  @State private var switcherSectionHeight: CGFloat = 0
 
   private var leafGroupItems: [WindowSection] {
-    showAnalyticsSection ? [.home, .activity, .analytics] : [.home, .activity]
+    showAnalyticsSection ? [.home, .activity, .analytics, .askLeaf] : [.home, .activity, .askLeaf]
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      ScrollView(.vertical, showsIndicators: false) {
-        VStack(alignment: .leading, spacing: LeafSpace.lg) {
-          group(title: "LEAF", items: leafGroupItems)
-          group(title: "COLLABORATION", items: [.team, .connections])
-          group(title: "ACCOUNT", items: [.settings, .profile])
+    ZStack(alignment: .bottomLeading) {
+      VStack(alignment: .leading, spacing: 0) {
+        ScrollView(.vertical, showsIndicators: false) {
+          VStack(alignment: .leading, spacing: LeafSpace.lg) {
+            group(title: "LEAF", items: leafGroupItems)
+            group(title: "COLLABORATION", items: [.team, .connections])
+            // `.profile` left this group — it lives as a persistent row in
+            // the bottom card next to the workspace picker (same target).
+            group(title: "ACCOUNT", items: [.settings])
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(.vertical, LeafSpace.md)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, LeafSpace.md)
+        Spacer(minLength: 0)
+        workspaceSwitcherSection
       }
-      Spacer(minLength: 0)
-      workspaceSwitcherSection
+      if pickerOpen {
+        pickerDropdown
+          // Anchored just above the bottom card: measured section height
+          // already includes the card's own bottom inset, so adding the
+          // gap lands the menu `dropdownGap` over the card's top edge.
+          .padding(.bottom, switcherSectionHeight + LeafWorkspacePickerTokens.dropdownGap)
+          .padding(.horizontal, LeafSpace.sm)
+          .transition(
+            .opacity.combined(with: .scale(scale: 0.96, anchor: .bottom))
+          )
+      }
     }
+    .leafAnimation(LeafMotion.spring.snappy, value: pickerOpen)
     .sheet(isPresented: $leavePresented) {
       if let wid = leaveTargetWorkspaceID,
         let workspace = workspacesByID[wid]
@@ -198,35 +224,76 @@ struct Sidebar: View {
 
   // MARK: - Workspace Switcher
 
+  /// Bottom card: workspace picker row (or Free-tier upgrade row) +
+  /// divider + persistent profile row. Profile moved here from the
+  /// ACCOUNT nav group so "who am I" is always visible at the bottom.
   @ViewBuilder
   private var workspaceSwitcherSection: some View {
-    // T4 — Free-tier: replace LeafWorkspaceSwitcher with a single
-    // «Upgrade to add workspaces» row. Free user has no workspaces, so
-    // there's nothing to switch *to* anyway — the row serves both as
-    // empty state AND the upgrade CTA in one strike.
-    if !tierGate.canCreateWorkspace {
-      freeStateSwitcherRow
-    } else {
-      teamStateSwitcher
+    VStack(alignment: .leading, spacing: LeafSpace.xxs) {
+      // T4 — Free-tier: replace LeafWorkspacePicker with a single
+      // «Upgrade to add workspaces» row. Free user has no workspaces, so
+      // there's nothing to switch *to* anyway — the row serves both as
+      // empty state AND the upgrade CTA in one strike.
+      if !tierGate.canCreateWorkspace {
+        freeStateSwitcherRow
+      } else {
+        teamStateSwitcher
+      }
+      Divider()
+        .opacity(LeafWorkspacePickerTokens.dividerOpacity)
+      profileRow
     }
+    .padding(LeafWorkspacePickerTokens.sectionPadding)
+    .background(
+      RoundedRectangle(
+        cornerRadius: LeafWorkspacePickerTokens.cardCornerRadius,
+        style: .continuous
+      )
+      .fill(LeafColor.surface.inset)
+    )
+    .padding(.horizontal, LeafSpace.sm)
+    .padding(.bottom, LeafSpace.sm)
+    .background(
+      GeometryReader { geo in
+        Color.clear
+          .onAppear { switcherSectionHeight = geo.size.height }
+          .onChange(of: geo.size.height) { _, new in
+            switcherSectionHeight = new
+          }
+      }
+    )
   }
 
-  @ViewBuilder
-  private var teamStateSwitcher: some View {
+  /// Workspaces shown by both the trigger row and the dropdown list.
+  private var sortedWorkspaces: [Workspace] {
     let workspaces: [Workspace] = {
       if case .loaded(let ws, _, _) = workspaceReader.state { return ws }
       return []
     }()
-    let activeWid = activeWorkspaceStore.activeWorkspaceID
-    let sorted =
+    return
       workspaces
       .filter { $0.leftAt == nil }
       .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+  }
 
-    LeafWorkspaceSwitcher(
-      workspaces: sorted,
-      activeWorkspaceID: activeWid,
+  @ViewBuilder
+  private var teamStateSwitcher: some View {
+    LeafWorkspacePicker(
+      workspaces: sortedWorkspaces,
+      activeWorkspaceID: activeWorkspaceStore.activeWorkspaceID,
       unreadCounts: inboxReader.unreadCountByWorkspace,
+      isOpen: $pickerOpen,
+      triggerFrame: $pickerTriggerFrame
+    )
+  }
+
+  /// Rendered at the body ZStack root — see `pickerOpen` declaration.
+  private var pickerDropdown: some View {
+    LeafWorkspacePickerDropdown(
+      workspaces: sortedWorkspaces,
+      activeWorkspaceID: activeWorkspaceStore.activeWorkspaceID,
+      unreadCounts: inboxReader.unreadCountByWorkspace,
+      triggerFrame: pickerTriggerFrame,
       // S7 Stage 6 fix C-C3 — route through switchActive(to:) so the
       // Reader's state.active is refreshed alongside the store; otherwise
       // TeamView renders the previous workspace's name and members
@@ -241,13 +308,14 @@ struct Sidebar: View {
       onMarkAllRead: { _ in
         // TODO: Phase v1.1 — bulk mark-read
         // Wire: inboxReader.markAllReadForWorkspace(wid)
-      }
+      },
+      onDismiss: { pickerOpen = false }
     )
   }
 
-  /// T4 — Free-tier switcher row. Visually rhymes with LeafWorkspaceSwitcher
-  /// internals (LeafColor.surface.inset background, similar padding/height)
-  /// so the sidebar bottom feels continuous between tiers.
+  /// T4 — Free-tier switcher row. Sits in the same bottom-card slot the
+  /// LeafWorkspacePicker trigger occupies on Team tier, matching its row
+  /// height so the card feels continuous between tiers.
   @ViewBuilder
   private var freeStateSwitcherRow: some View {
     Button {
@@ -262,11 +330,80 @@ struct Sidebar: View {
           .foregroundStyle(LeafColor.text.primary)
         Spacer(minLength: 0)
       }
-      .padding(LeafSpace.md)
+      .padding(.horizontal, LeafSpace.sm)
+      .frame(height: LeafWorkspacePickerTokens.triggerHeight)
       .contentShape(.rect)
     }
     .buttonStyle(.plain)
-    .background(LeafColor.surface.inset)
+  }
+
+  // MARK: - Profile row
+
+  /// Persistent "who am I" row at the card bottom. Same identity source
+  /// as ProfileView's header (`NSFullUserName()`); circle = person (the
+  /// picker's workspace marks are squares). Tap navigates to Profile.
+  private var profileRow: some View {
+    Button {
+      selection = .profile
+    } label: {
+      HStack(spacing: LeafSpace.sm) {
+        Circle()
+          .fill(profileTint.gradient)
+          .frame(
+            width: LeafWorkspacePickerTokens.triggerMarkSize,
+            height: LeafWorkspacePickerTokens.triggerMarkSize
+          )
+          .overlay(
+            Text(TeamNRowComposer.initials(profileName))
+              .font(.system(size: 10, weight: .semibold))
+              .foregroundStyle(.white)
+          )
+          .accessibilityHidden(true)
+        Text(profileName)
+          .font(LeafType.body.regular)
+          .foregroundStyle(LeafColor.text.primary)
+          .lineLimit(1)
+        Spacer(minLength: 0)
+      }
+      .padding(.horizontal, LeafSpace.sm)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .frame(height: LeafWorkspacePickerTokens.triggerHeight)
+      .background(
+        RoundedRectangle(
+          cornerRadius: LeafWorkspacePickerTokens.rowCornerRadius,
+          style: .continuous
+        )
+        .fill(profileRowFill)
+      )
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .onHover { profileHover = $0 }
+    .leafAnimation(LeafMotion.spring.snappy, value: profileHover)
+  }
+
+  private var profileName: String {
+    let n = NSFullUserName().trimmingCharacters(in: .whitespaces)
+    return n.isEmpty ? "Local user" : n
+  }
+
+  private var profileTint: Color {
+    // Same palette + index derivation as TeamNBlock avatars.
+    let palette: [Color] = [
+      LeafColor.accent.primary,
+      LeafColor.accent.emphasis,
+      LeafColor.status.info,
+      LeafColor.status.danger,
+      LeafColor.text.secondary,
+    ]
+    let idx = TeamNRowComposer.paletteIndex(memberID: profileName, paletteCount: palette.count)
+    return palette[idx]
+  }
+
+  private var profileRowFill: Color {
+    if selection == .profile { return LeafColor.accent.subtle }
+    if profileHover { return LeafColor.surface.raised }
+    return Color.clear
   }
 
   // MARK: - Helpers

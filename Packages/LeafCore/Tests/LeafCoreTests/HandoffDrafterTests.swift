@@ -14,6 +14,10 @@ private actor DraftRecorder {
   var contextFlat: String = ""
   var questionText: String = ""
   var called = false
+  /// AI-UI-3 Suite D (CTO F3) — every EscalatedBodies the summarizer received.
+  /// The protocol's DEFAULT escalated overload silently drops bodies, so tests
+  /// must pin that the drafter reached the body-bearing path.
+  var escalatedPayloads: [EscalatedBodies] = []
 
   func capture(context: PromptSafeContext, question: PromptSafeQuestion) {
     called = true
@@ -22,7 +26,9 @@ private actor DraftRecorder {
     }.joined(separator: "\u{1F}")
     questionText = question.text
   }
+  func captureEscalated(_ e: EscalatedBodies) { escalatedPayloads.append(e) }
   func snapshot() -> (flat: String, q: String, called: Bool) { (contextFlat, questionText, called) }
+  func escalatedSeen() -> [EscalatedBodies] { escalatedPayloads }
 }
 
 private struct RecordingSummarizer: Summarizer {
@@ -45,6 +51,30 @@ private struct RecordingSummarizer: Summarizer {
       text: text, usage: TokenUsage(inputTokens: 1, outputTokens: 1),
       modelUsed: model.apiModelID, stopReason: nil)
   }
+  func summarize(
+    _ context: PromptSafeContext, question: PromptSafeQuestion, escalated: EscalatedBodies,
+    model: SummarizerModel, maxTokens: Int
+  ) async throws -> SummarizerOutput {
+    await rec.capture(context: context, question: question)
+    await rec.captureEscalated(escalated)
+    return SummarizerOutput(
+      text: text, usage: TokenUsage(inputTokens: 1, outputTokens: 1),
+      modelUsed: model.apiModelID, stopReason: nil)
+  }
+}
+
+/// AI-UI-3 Suite D — audit spy: records M031 entries or fails on demand
+/// (audit-first: a failed write must abort the POST).
+private actor AuditSpy: AuditSink {
+  private struct SpyError: Error {}
+  private(set) var entries: [EscalationAuditEntry] = []
+  private var failNext = false
+  func setFailNext(_ v: Bool) { failNext = v }
+  func record(_ entry: EscalationAuditEntry) async throws {
+    if failNext { throw SpyError() }
+    entries.append(entry)
+  }
+  func rows() -> [EscalationAuditEntry] { entries }
 }
 
 /// Fails the test if `summarize` is ever called (for the empty-facts shortcut).
@@ -217,5 +247,140 @@ final class HandoffDrafterTests: XCTestCase {
       events: [event("issue_updated", ["additions": "5"])], period: period)
     guard case .failure(let m) = d else { return XCTFail("expected .failure") }
     XCTAssertTrue(m.contains("API key"))
+  }
+
+  // MARK: - Suite D — escalated redraft path (AI-UI-3)
+
+  private func bodyEvent(_ body: String, kind: String = "gh_pr_review_comment_authored")
+    -> EgressEvent
+  {
+    EgressEvent(
+      timestamp: Date(timeIntervalSince1970: 5000), kind: kind, bundleID: nil,
+      payload: ["body": body, "authored_by_viewer": "true", "number": "7"])
+  }
+
+  // D1 — audit row lands BEFORE the POST; provenance flips escalated; the bodies
+  // actually REACH the escalated overload (CTO F3 — the default protocol impl
+  // silently drops them, so this pins the body-bearing path was used).
+  func testEscalatedDraftWritesAuditBeforePost() async {
+    let rec = DraftRecorder()
+    let audit = AuditSpy()
+    let policy = LLMPolicy()
+    let drafter = HandoffDrafter(
+      policy: policy, summarizer: RecordingSummarizer(rec: rec, text: "redraft"),
+      modelGate: DefaultModelGate(), audit: audit)
+    let escalated = policy.makeEscalation(selected: [bodyEvent("fixed the auth bug")])
+    let d = await drafter.draft(
+      topic: "auth", recipientName: "Alex",
+      events: [event("issue_updated", ["additions": "5"])], period: period,
+      escalated: escalated, escalatedEventIDs: [42])
+    guard case .text(_, let prov) = d else { return XCTFail("expected .text, got \(d)") }
+    XCTAssertTrue(prov.escalated)
+    XCTAssertTrue(prov.sourceSummary.contains("1 bodies"))
+    let rows = await audit.rows()
+    XCTAssertEqual(rows.count, 1)
+    XCTAssertEqual(rows.first?.eventIDs, [42])
+    XCTAssertEqual(rows.first?.escalatedBodyCount, 1)
+    // Audit question = the user's OWN topic words — NEVER the (moat) instruction.
+    XCTAssertEqual(rows.first?.question, "auth")
+    let seen = await rec.escalatedSeen()
+    XCTAssertEqual(seen.first?.bodies.first?.text, "fixed the auth bug")
+  }
+
+  // D2 — a failed audit write ABORTS the send: no summarize call of any kind.
+  func testEscalatedDraftFailedAuditAbortsPost() async {
+    let rec = DraftRecorder()
+    let audit = AuditSpy()
+    await audit.setFailNext(true)
+    let policy = LLMPolicy()
+    let drafter = HandoffDrafter(
+      policy: policy, summarizer: RecordingSummarizer(rec: rec, text: "redraft"),
+      modelGate: DefaultModelGate(), audit: audit)
+    let escalated = policy.makeEscalation(selected: [bodyEvent("secret body")])
+    let d = await drafter.draft(
+      topic: "auth", recipientName: "Alex",
+      events: [event("issue_updated", ["additions": "5"])], period: period,
+      escalated: escalated, escalatedEventIDs: [1])
+    guard case .failure = d else { return XCTFail("expected .failure, got \(d)") }
+    let s = await rec.snapshot()
+    XCTAssertFalse(s.called, "no POST may happen after a failed audit write")
+  }
+
+  // D3 — escalated bodies without a wired audit sink → fail closed, no POST.
+  func testEscalatedWithoutSinkFailsClosed() async {
+    let rec = DraftRecorder()
+    let policy = LLMPolicy()
+    let drafter = HandoffDrafter(
+      policy: policy, summarizer: RecordingSummarizer(rec: rec, text: "redraft"),
+      modelGate: DefaultModelGate())  // audit == nil
+    let escalated = policy.makeEscalation(selected: [bodyEvent("body")])
+    let d = await drafter.draft(
+      topic: "t", recipientName: "Alex",
+      events: [event("issue_updated", ["additions": "5"])], period: period,
+      escalated: escalated, escalatedEventIDs: [1])
+    guard case .failure = d else { return XCTFail("expected fail-closed .failure, got \(d)") }
+    let s = await rec.snapshot()
+    XCTAssertFalse(s.called, "no POST without a recordable audit")
+  }
+
+  // D5 (review #7a) — the drafter uses the INJECTED prompts, and picks the
+  // redraft instruction exactly when bodies are present (a swap would pass
+  // every other test — both paths call makeQuestion the same way).
+  private struct MarkerPrompts: HandoffPrompts {
+    func draftInstruction(topic: String, recipientName: String) -> String {
+      "MARKER-BODYFREE \(topic) \(recipientName)"
+    }
+    func redraftInstruction(topic: String, recipientName: String) -> String {
+      "MARKER-ESCALATED \(topic) \(recipientName)"
+    }
+    func inboundContextInstruction() -> String { "INBOUND-MARKER" }
+  }
+
+  func testInjectedPromptsSelectRedraftInstructionOnlyWithBodies() async {
+    let policy = LLMPolicy()
+    // Body-free path → draft instruction.
+    let rec1 = DraftRecorder()
+    let d1 = HandoffDrafter(
+      policy: policy, summarizer: RecordingSummarizer(rec: rec1, text: "draft"),
+      modelGate: DefaultModelGate(), prompts: MarkerPrompts())
+    _ = await d1.draft(
+      topic: "auth", recipientName: "Alex",
+      events: [event("issue_updated", ["additions": "1"])], period: period)
+    let s1 = await rec1.snapshot()
+    XCTAssertTrue(s1.q.contains("MARKER-BODYFREE"))
+    XCTAssertFalse(s1.q.contains("MARKER-ESCALATED"))
+    // Escalated path → redraft instruction.
+    let rec2 = DraftRecorder()
+    let d2 = HandoffDrafter(
+      policy: policy, summarizer: RecordingSummarizer(rec: rec2, text: "redraft"),
+      modelGate: DefaultModelGate(), prompts: MarkerPrompts(), audit: AuditSpy())
+    _ = await d2.draft(
+      topic: "auth", recipientName: "Alex",
+      events: [event("issue_updated", ["additions": "1"])], period: period,
+      escalated: policy.makeEscalation(selected: [bodyEvent("a body")]), escalatedEventIDs: [1])
+    let s2 = await rec2.snapshot()
+    XCTAssertTrue(s2.q.contains("MARKER-ESCALATED"))
+    XCTAssertFalse(s2.q.contains("MARKER-BODYFREE"))
+  }
+
+  // D4 — a degenerate escalation (everything dropped / empty selection) behaves
+  // exactly like the body-free path: no audit row, provenance.escalated == false.
+  func testEmptyEscalationBehavesBodyFree() async {
+    let rec = DraftRecorder()
+    let audit = AuditSpy()
+    let policy = LLMPolicy()
+    let drafter = HandoffDrafter(
+      policy: policy, summarizer: RecordingSummarizer(rec: rec, text: "draft"),
+      modelGate: DefaultModelGate(), audit: audit)
+    let d = await drafter.draft(
+      topic: "t", recipientName: "Alex",
+      events: [event("issue_updated", ["additions": "5"])], period: period,
+      escalated: policy.makeEscalation(selected: []), escalatedEventIDs: [])
+    guard case .text(_, let prov) = d else { return XCTFail("expected .text, got \(d)") }
+    XCTAssertFalse(prov.escalated)
+    let rows = await audit.rows()
+    XCTAssertTrue(rows.isEmpty, "no bodies crossed → no audit row (body-free parity)")
+    let seen = await rec.escalatedSeen()
+    XCTAssertTrue(seen.isEmpty, "QA overload, not the escalated one")
   }
 }

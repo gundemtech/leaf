@@ -4,7 +4,7 @@
 //
 //  Phase 5.3.E — @Observable wrapper for KeyRotationService.removeMember.
 //  Lazy-init Database + RelayClient + service. State machine drives
-//  destructive admin flows (S7 Settings → Workspace Member admin row).
+//  destructive admin flows (S7; member admin row — now Team → Members).
 //  Mirror InviteOutboxReader (5.2.D) lazy-init pattern + composition root
 //  #if LEAF_PROD.
 //
@@ -58,7 +58,7 @@ final class MemberRemovalReader {
 
     /// S7 Stage 6 fix C-C4 + closes S2 NIT-3 ISSUE-1 — explicit workspaceID
     /// removes the "first workspace in DB" guess that was wrong on multi-
-    /// workspace devices. Callers (Sidebar / Settings → Workspace) pass the
+    /// workspace devices. Callers (Sidebar / Team → Members) pass the
     /// workspaceID resolved from ActiveWorkspaceStore.
     func removeMember(workspaceID: String, memberID: String, displayName: String) {
         state = .removing(displayName: displayName)

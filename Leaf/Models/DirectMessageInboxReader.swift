@@ -29,13 +29,29 @@ final class DirectMessageInboxReader: RealtimeDirectMessageAbsorbing {
     private(set) var unreadCount: Int = 0
     /// Per-workspace map of unread inbound DM counts.
     /// Populated on every successful `tick()` + every `absorbRealtimePush(_:)`.
-    /// Used by `LeafWorkspaceSwitcher` badge. Key = workspaceID.
+    /// Used by `LeafWorkspacePicker` badges. Key = workspaceID.
     private(set) var unreadCountByWorkspace: [String: Int] = [:]
     private(set) var lastTickError: String?
 
     /// I10 fix — cache pubkey hex once instead of re-reading IdentityService
     /// on every refreshLocalState (filesystem I/O on every UI poll).
     private var cachedPubkeyHex: String?
+
+    /// Local-notification dedup + first-poll-batch suppression (Set-based; see
+    /// `IncomingMessageNotificationTracker`). In-memory → re-primes each launch.
+    private var notifTracker = IncomingMessageNotificationTracker()
+
+    /// Set by the composition root (`LeafApp.init`) to fire a local notification
+    /// for a new inbound DM. The closure applies master / per-kind prefs + content
+    /// (`IncomingMessageNotificationDecider`) and schedules via `LocalMessageNotifier`.
+    /// nil in tests / non-notifying contexts.
+    var onIncomingInbound: (@MainActor (DirectMessageMirrorRow) -> Void)?
+
+    /// Live-tabs — fired after any successful mirror write (new rows from
+    /// tick/realtime, read/done updates, optimistic mark-done) so the Team
+    /// feed can re-query without waiting for tab re-entry. Wired to
+    /// `LiveUpdateSignals.bumpTeamFeed()` by the composition root; nil in tests.
+    var onMirrorChanged: (@MainActor () -> Void)?
 
     private var service: DirectMessageInboxService?
     private var database: LeafCore.Database?
@@ -77,9 +93,22 @@ final class DirectMessageInboxReader: RealtimeDirectMessageAbsorbing {
             return
         }
         do {
-            _ = try await svc.tick(workspaceID: wid)
+            let newRows = try await svc.tickReturningNewRows(workspaceID: wid)
             refreshLocalState(workspaceID: wid)
             refreshUnreadCounts()
+            if !newRows.isEmpty {
+                onMirrorChanged?()
+            }
+            // Polling notifications: first batch per workspace is backlog (suppressed);
+            // subsequent new inbound-unread rows fire a local notification.
+            let notifiable = Set(
+                notifTracker.notifiablePolledMessageIDs(
+                    workspaceID: wid, messageIDs: newRows.map { $0.messageID }))
+            for row in newRows
+            where notifiable.contains(row.messageID)
+                && row.direction == .inbound && row.readAtMs == nil {
+                onIncomingInbound?(row)
+            }
             lastTickError = nil
         } catch {
             lastTickError = String(describing: error)
@@ -133,12 +162,32 @@ final class DirectMessageInboxReader: RealtimeDirectMessageAbsorbing {
             lastTickError = "DB open failed (realtime push): \(error)"
             return
         }
+        // Pre-upsert: was this message already in this device's mirror? Realtime
+        // delivers both INSERT and UPDATE events (read_at / done_at / cross_post),
+        // and LeafRealtimeService routes UPDATEs through this same path. Notify
+        // only for messages NEW to the mirror, so a column UPDATE — or a
+        // post-restart re-delivery of a message we already hold — never fires a
+        // banner. This is restart-safe (the mirror persists) where the in-memory
+        // dedup set is not; the set still guards the realtime/polling race below.
+        let alreadyInMirror: Bool = {
+            let existing = try? database?.readSQL {
+                try MessagesMirrorStore.read(messageID: row.messageID, in: $0)
+            }
+            return (existing ?? nil) != nil
+        }()
         do {
             try svc.absorbRealtimePush(row)
             if row.workspaceID == activeWorkspaceStore.activeWorkspaceID {
                 refreshLocalState(workspaceID: row.workspaceID)
             }
             refreshUnreadCounts()
+            onMirrorChanged?()
+            // New-to-mirror inbound-unread row → notify once (set dedups the
+            // realtime/polling in-flight race; mirror check dedups updates/restart).
+            if !alreadyInMirror, row.direction == .inbound, row.readAtMs == nil,
+               notifTracker.shouldNotifyRealtime(messageID: row.messageID) {
+                onIncomingInbound?(row)
+            }
             lastTickError = nil
         } catch {
             lastTickError = "Realtime push absorb failed: \(error)"
@@ -238,6 +287,7 @@ final class DirectMessageInboxReader: RealtimeDirectMessageAbsorbing {
                 doneByPubkeyHex: pubkey
             )
             refreshLocalStateIfActive(messageID: messageID)
+            onMirrorChanged?()
         } catch {
             logger.warning("optimistic markDone local UPDATE failed: \(String(describing: error), privacy: .public)")
         }

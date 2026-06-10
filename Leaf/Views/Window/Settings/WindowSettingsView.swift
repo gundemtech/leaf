@@ -7,12 +7,15 @@
 //  instead of one mile-long dump.
 //
 //  Categories (see SettingsCategory):
-//    • Workspace      — WorkspaceSettingsSection
-//    • Sharing        — ShareControls + Privacy
+//    • Privacy        — PrivacySettingsSection (device-wide retention)
 //    • Notifications  — NotificationsSettingsSection
 //    • Data           — Background / Folders / LocalApps / SystemObservers /
 //                       AITools / BrowserAllowList
 //    • General        — Advanced / Updates / DebugDiagnostics
+//
+//  Workspace-scoped sections (identity / members / invites / share rules /
+//  danger zone) moved to the Team workspace hub — Settings is device-level
+//  only now.
 //
 //  The sub-section views are unchanged — they each wrap themselves in
 //  LeafSection + LeafCard and pull their own @Environment. Gating them behind a
@@ -35,7 +38,10 @@ struct WindowSettingsView: View {
     /// Persisted selected category. `@AppStorage` binds RawRepresentable<String>
     /// directly, so the choice survives leaving/returning to Settings and app
     /// relaunch. Namespace mirrors `leaf.ui.showAnalyticsSection` (Sidebar).
-    @AppStorage("leaf.ui.settingsCategory") private var category: SettingsCategory = .workspace
+    // Default .sharing ("Privacy") — also the fallback for stale persisted
+    // "workspace" raw values after the hub migration (decode to nil →
+    // declared default; no crash).
+    @AppStorage("leaf.ui.settingsCategory") private var category: SettingsCategory = .sharing
 
     var body: some View {
         ScrollView {
@@ -68,10 +74,8 @@ struct WindowSettingsView: View {
 
     private func description(for category: SettingsCategory) -> String {
         switch category {
-        case .workspace:
-            "Your team workspace identity, members, and invites."
         case .sharing:
-            "What leaves this device for teammates, and how long shared events are kept."
+            "How long shared events are kept on this device. Per-workspace sharing lives on the Team page."
         case .notifications:
             "Which teammate pushes reach you, and how they're delivered."
         case .data:
@@ -87,11 +91,9 @@ struct WindowSettingsView: View {
     private func content(for category: SettingsCategory) -> some View {
         VStack(alignment: .leading, spacing: LeafSpace.xxl) {
             switch category {
-            case .workspace:
-                WorkspaceSettingsSection()
             case .sharing:
-                ShareControlsSettingsSection()
                 PrivacySettingsSection()
+                AIPrivacySection()
             case .notifications:
                 NotificationsSettingsSection()
             case .data:
@@ -100,6 +102,7 @@ struct WindowSettingsView: View {
                 LocalAppsSettingsSection()
                 SystemObserversSettingsSection()
                 AIToolsSettingsSection()
+                AIAnswersSettingsSection()
                 BrowserAllowListSection(store: browserAllowListStore)
             case .general:
                 AdvancedSettingsSection()
