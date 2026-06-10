@@ -11,6 +11,9 @@ public struct AskLeafTranscript: Equatable, Sendable {
       case answered(String)
       case notEnoughData
       case failed(String)
+      /// AI-UI-3 — terminal NL-intent suggestion: no LLM ran; the UI renders
+      /// [Create handoff for <name>] / [Ask anyway] actions instead of an answer.
+      case handoffSuggestion(recipientName: String, topic: String)
     }
 
     public let id: Int
@@ -44,6 +47,28 @@ public struct AskLeafTranscript: Equatable, Sendable {
       Entry(
         id: id, question: question, period: period, model: model,
         askedAtMs: askedAtMs, phase: .pending))
+    return id
+  }
+
+  /// AI-UI-3 — append a TERMINAL handoff suggestion (the question matched the
+  /// local intent parser; no LLM call happened). Mirrors ask()'s guards so a
+  /// pending answer still blocks new input.
+  public mutating func suggestHandoff(
+    question raw: String,
+    recipientName: String,
+    topic: String,
+    period: ReviewActivityInsights.ReviewActivityPeriod,
+    askedAtMs: Int64
+  ) -> Int? {
+    let question = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !question.isEmpty, !hasPending else { return nil }
+    let id = nextID
+    nextID += 1
+    entries.append(
+      Entry(
+        id: id, question: question, period: period, model: nil,
+        askedAtMs: askedAtMs,
+        phase: .handoffSuggestion(recipientName: recipientName, topic: topic)))
     return id
   }
 
