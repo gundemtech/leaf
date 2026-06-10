@@ -65,3 +65,44 @@ struct AskLeafTranscriptTests {
     #expect(b > a)
   }
 }
+
+// AI-UI-3 — terminal NL-intent suggestion entries.
+extension AskLeafTranscriptTests {
+  @Test func suggestHandoffAppendsTerminalEntry() {
+    var t = AskLeafTranscript()
+    let id = t.suggestHandoff(
+      question: "передай Алисе про auth", recipientName: "Alice", topic: "auth",
+      period: .last7Days, askedAtMs: 1)
+    #expect(id != nil)
+    #expect(t.entries.count == 1)
+    #expect(t.hasPending == false)  // suggestion is terminal — input stays usable
+    guard case .handoffSuggestion(let name, let topic) = t.entries[0].phase else {
+      Issue.record("expected .handoffSuggestion")
+      return
+    }
+    #expect(name == "Alice")
+    #expect(topic == "auth")
+  }
+
+  @Test func suggestHandoffRespectsPendingSingleFlight() {
+    var t = AskLeafTranscript()
+    _ = t.ask(question: "q", period: .today, model: nil, askedAtMs: 1)
+    let id = t.suggestHandoff(
+      question: "tell Alice about x", recipientName: "Alice", topic: "x",
+      period: .today, askedAtMs: 2)
+    #expect(id == nil)
+    #expect(t.entries.count == 1)
+  }
+
+  @Test func resolveIgnoresSuggestionEntries() {
+    var t = AskLeafTranscript()
+    let id = t.suggestHandoff(
+      question: "tell Alice about x", recipientName: "Alice", topic: "x",
+      period: .today, askedAtMs: 1)!
+    t.resolve(id: id, with: .text("nope"))
+    guard case .handoffSuggestion = t.entries[0].phase else {
+      Issue.record("suggestion must stay terminal")
+      return
+    }
+  }
+}

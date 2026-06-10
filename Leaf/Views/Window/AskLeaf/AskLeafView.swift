@@ -14,11 +14,21 @@ import SwiftUI
 struct AskLeafView: View {
   @Environment(AskLeafReader.self) private var reader
   @Environment(WindowState.self) private var windowState
+  /// AI-UI-3 (CTO F1) — NL handoff-intent roster is scoped to the active workspace.
+  @Environment(ActiveWorkspaceStore.self) private var activeWorkspaceStore
 
   @State private var questionText: String = ""
   @State private var period: ReviewActivityInsights.ReviewActivityPeriod = .last7Days
   @State private var model: SummarizerModel = .haiku
   @State private var escalationSeed: EscalationSeed? = nil
+
+  /// AI-UI-3 — NL-intent suggestion → prefilled handoff sheet.
+  private struct HandoffSeed: Identifiable {
+    let id: String
+    let member: TeamMember
+    let topic: String
+  }
+  @State private var handoffSeed: HandoffSeed? = nil
 
   /// Точное сравнение с opaque-сообщением missingAPIKey — единственный
   /// failure, который получает CTA «Open Settings». Источник строки тот же
@@ -46,6 +56,14 @@ struct AskLeafView: View {
     }
     .sheet(item: $escalationSeed) { seed in
       EscalationSheet(seed: seed, onDismiss: { escalationSeed = nil })
+    }
+    // AI-UI-3 — NL-intent suggestion → the same handoff sheet the Team tab
+    // uses, prefilled. Slack/Linear reauth closures are no-ops from this entry
+    // point — deliberate trade-off (the send itself works; cross-post reauth
+    // lives in the Team tab flow).
+    .sheet(item: $handoffSeed) { seed in
+      SendDirectMessageSheet(
+        recipient: seed.member, initialKind: .handoff, initialTopic: seed.topic)
     }
   }
 
@@ -132,6 +150,28 @@ struct AskLeafView: View {
           Button("Open Settings") {
             windowState.section = .settings
           }
+        }
+      }
+    case .handoffSuggestion(let recipientName, let topic):
+      // AI-UI-3 — terminal NL-intent suggestion (no LLM ran).
+      VStack(alignment: .leading, spacing: LeafSpace.sm) {
+        Text("Looks like you want to hand this off to \(recipientName).")
+          .font(LeafType.body.regular)
+          .foregroundStyle(LeafColor.text.primary)
+        HStack(spacing: LeafSpace.sm) {
+          Button("Create handoff for \(recipientName)") {
+            if let member = reader.member(named: recipientName) {
+              handoffSeed = HandoffSeed(id: "\(entry.id)", member: member, topic: topic)
+            }
+          }
+          Button("Ask anyway") {
+            let q = entry.question
+            let p = entry.period
+            let m = model
+            Task { await reader.ask(question: q, period: p, model: m, bypassIntent: true) }
+          }
+          .buttonStyle(.plain)
+          .foregroundStyle(LeafColor.text.secondary)
         }
       }
     }
@@ -238,7 +278,8 @@ struct AskLeafView: View {
     questionText = ""
     let p = period
     let m = model
-    Task { await reader.ask(question: q, period: p, model: m) }
+    let wid = activeWorkspaceStore.activeWorkspaceID
+    Task { await reader.ask(question: q, period: p, model: m, activeWorkspaceID: wid) }
   }
 
   // MARK: - Labels

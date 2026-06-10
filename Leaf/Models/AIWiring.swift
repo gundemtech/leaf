@@ -42,6 +42,17 @@ enum AIWiring {
     #endif
   }
 
+  /// AI-UI-3 — dedicated handoff prompts. Prod text is moat quality
+  /// (LeafCorePrivate); the public copy works (a prompt is not a secret
+  /// dependency, so dev builds draft fine).
+  static func handoffPromptMoat() -> HandoffPromptMoat {
+    #if LEAF_PROD
+      return prodHandoffPromptMoat()
+    #else
+      return .publicSubstrate
+    #endif
+  }
+
   static func databaseConfig() -> DatabaseConfig {
     #if LEAF_PROD
       return ProdConfigs.database
