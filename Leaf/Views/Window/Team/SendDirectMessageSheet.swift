@@ -64,15 +64,26 @@ struct SendDirectMessageSheet: View {
     @Environment(HandoffDraftReader.self) private var handoffReader
     @State private var topicText: String = ""
     @State private var draftProvenance: HandoffProvenance? = nil
+    /// AI-UI-3 — draft period (was fixed 7 days). Drives both the gather and
+    /// the provenance period stamped into the M032 audit.
+    @State private var draftPeriod: ReviewActivityInsights.ReviewActivityPeriod = .last7Days
+    /// AI-UI-3 — escalation-in-draft consent step.
+    @State private var showRedraftConsent: Bool = false
 
     init(
         recipient: TeamMember,
+        initialKind: DirectMessageKind = .ping,
+        initialTopic: String = "",
         onReauthorizeSlack: @escaping @MainActor () async -> Void = {},
         resolveLinearAssignee: @escaping @MainActor (String) async -> String? = { _ in nil }
     ) {
         self.recipient = recipient
         self.onReauthorizeSlack = onReauthorizeSlack
         self.resolveLinearAssignee = resolveLinearAssignee
+        // AI-UI-3 — entry points pick the kind (chat [+] menu, Ask Leaf NL
+        // suggestion) so the sheet no longer always opens on .ping.
+        _kind = State(initialValue: initialKind)
+        _topicText = State(initialValue: initialTopic)
     }
 
     var body: some View {
@@ -109,8 +120,17 @@ struct SendDirectMessageSheet: View {
             if newKind != .handoff {
                 topicText = ""
                 draftProvenance = nil
+                showRedraftConsent = false
                 handoffReader.reset()
             }
+        }
+        // AI-UI-3 — escalation-in-draft consent step (candidates for the draft
+        // period; confirm → redraft with consented bodies via handoffReader).
+        .sheet(isPresented: $showRedraftConsent) {
+            HandoffRedraftConsentSheet(
+                recipientName: recipient.displayName,
+                topic: topicText,
+                period: draftPeriod)
         }
         // The draft reader is an app-wide singleton; a swipe/Escape dismiss bypasses
         // discardAndDismiss. Reset on appear so a freshly-opened sheet never shows a
@@ -229,6 +249,14 @@ struct SendDirectMessageSheet: View {
                     .overlay(
                         RoundedRectangle(cornerRadius: LeafRadius.sm)
                             .stroke(LeafColor.border.subtle, lineWidth: 1))
+                // AI-UI-3 — draft period picker (was fixed 7 days).
+                Picker("Period", selection: $draftPeriod) {
+                    Text("Today").tag(ReviewActivityInsights.ReviewActivityPeriod.today)
+                    Text("Yesterday").tag(ReviewActivityInsights.ReviewActivityPeriod.yesterday)
+                    Text("Last 7 days").tag(ReviewActivityInsights.ReviewActivityPeriod.last7Days)
+                }
+                .labelsHidden()
+                .fixedSize()
                 draftButton
             }
             if case .error(let message) = handoffReader.state {
@@ -236,7 +264,20 @@ struct SendDirectMessageSheet: View {
                     .font(LeafType.body.small)
                     .foregroundStyle(LeafColor.status.warning)
             }
-            Text("Drafts from your own recent activity (last 7 days). Review before sending.")
+            // AI-UI-3 — provenance row + escalation-in-draft entry. Appears once
+            // an AI draft fed the body (survives edits, mirrors draftProvenance).
+            if let p = draftProvenance {
+                HStack(spacing: LeafSpace.sm) {
+                    Text("✨ Drafted from \(p.factCount) facts\(p.escalated ? " + details" : "")")
+                        .font(LeafType.body.small)
+                        .foregroundStyle(LeafColor.text.tertiary)
+                    LeafButton("Add details (AI)…", variant: .secondary, size: .sm) {
+                        showRedraftConsent = true
+                    }
+                    .disabled(handoffReader.state == .drafting)
+                }
+            }
+            Text("Drafts from your own recent activity. Review before sending.")
                 .font(LeafType.body.small)
                 .foregroundStyle(LeafColor.text.tertiary)
         }
@@ -250,7 +291,8 @@ struct SendDirectMessageSheet: View {
             LeafButton("Draft with AI", variant: .secondary, size: .sm) {
                 Task {
                     await handoffReader.draft(
-                        recipientName: recipient.displayName, topic: topicText)
+                        recipientName: recipient.displayName, topic: topicText,
+                        period: draftPeriod.interval())
                 }
             }
             .disabled(topicText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

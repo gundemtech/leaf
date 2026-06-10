@@ -68,6 +68,8 @@ struct TeamView: View {
   private struct SendRecipient: Identifiable {
     let id: String  // matches TeamMember.id
     let member: TeamMember
+    /// AI-UI-3 — pre-selected sheet kind (chat [+] menu picks Task/Handoff).
+    var kind: DirectMessageKind = .ping
   }
 
   /// S7 Stage 6 fix C-I6 — cached self-pubkey hex. Loaded once via
@@ -129,6 +131,7 @@ struct TeamView: View {
     .sheet(item: $sendSheetRecipient) { r in
       SendDirectMessageSheet(
         recipient: r.member,
+        initialKind: r.kind,
         onReauthorizeSlack: { @MainActor in
           await slackOAuth.connect()
         },
@@ -275,6 +278,9 @@ struct TeamView: View {
             } else {
               sendSheetRecipient = nil
             }
+          },
+          onComposeStructured: { member, kind in
+            sendSheetRecipient = SendRecipient(id: member.id, member: member, kind: kind)
           }
         )
       case .members:

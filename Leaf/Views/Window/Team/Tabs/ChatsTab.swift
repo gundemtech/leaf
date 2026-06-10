@@ -24,6 +24,9 @@ struct ChatsTab: View {
   /// Routes to SendDirectMessageSheet (structured Task / Handoff sends +
   /// the feed empty-state CTA semantics).
   let onSendDM: (TeamMember?) -> Void
+  /// AI-UI-3 — structured compose from the conversation [+] menu: carries the
+  /// picked kind so the sheet opens on Task/Handoff (not always .ping).
+  let onComposeStructured: (TeamMember, DirectMessageKind) -> Void
 
   @Environment(ChatStore.self) private var chatStore
   @Environment(DirectMessageInboxReader.self) private var inboxReader
@@ -64,7 +67,7 @@ struct ChatsTab: View {
         displayName: TeamMemberNameResolver.displayName(pubkeyHex: peer, members: members),
         messages: chatStore.messages,
         onSend: { body, replyTo in await send(to: peer, body: body, replyTo: replyTo) },
-        onComposeStructured: { member in onSendDM(member) },
+        onComposeStructured: { member, kind in onComposeStructured(member, kind) },
         onMarkRead: { rows in
           Task {
             for row in rows {

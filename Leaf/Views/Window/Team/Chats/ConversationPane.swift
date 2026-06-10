@@ -25,8 +25,9 @@ struct ConversationPane: View {
   let displayName: String
   let messages: [DirectMessageMirrorRow]
   let onSend: (_ body: String, _ replyTo: String?) async -> Bool
-  /// Opens SendDirectMessageSheet for the structured kinds.
-  let onComposeStructured: (TeamMember) -> Void
+  /// Opens SendDirectMessageSheet for the structured kinds — the chosen kind
+  /// pre-selects the sheet's type picker (AI-UI-3; was always .ping).
+  let onComposeStructured: (TeamMember, DirectMessageKind) -> Void
   let onMarkRead: ([DirectMessageMirrorRow]) -> Void
   let onMarkDone: (DirectMessageMirrorRow) -> Void
 
@@ -151,8 +152,8 @@ struct ConversationPane: View {
       HStack(alignment: .bottom, spacing: LeafSpace.sm) {
         if let peer {
           Menu {
-            Button("Task…") { onComposeStructured(peer) }
-            Button("Handoff…") { onComposeStructured(peer) }
+            Button("Task…") { onComposeStructured(peer, .task) }
+            Button("Handoff…") { onComposeStructured(peer, .handoff) }
           } label: {
             LeafIcon(systemName: "plus.circle", size: .md, tint: LeafColor.text.secondary)
           }
