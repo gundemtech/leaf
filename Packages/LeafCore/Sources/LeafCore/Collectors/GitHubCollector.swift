@@ -53,6 +53,11 @@ public actor GitHubCollector {
     /// if today's day rolls over but the fetch fails, the previous value stays in
     /// `presence_state` — a non-zero false-positive is less bad than a silent drop.
     private var lastContributionsToday: Int = 0
+    /// Depth pass — refs already title-backfilled this agent run (a ref with
+    /// a genuinely deleted PR would otherwise re-fetch 404 every tick).
+    private var titleBackfilledRefs: Set<String> = []
+    static let titleBackfillPerTickCap = 10
+    static let titleBackfillLookbackDays = 14
 
     public init(
         database: Database,
@@ -200,6 +205,35 @@ public actor GitHubCollector {
             myOpenPRsSummary = .empty(nowMs: nowMs)
         }
         events.append(Self.makeMyOpenPRCountEvent(summary: myOpenPRsSummary, nowMs: nowMs))
+
+        // 5b'. Depth pass (2026-06-11) — PR title backfill. The stripped events
+        // feed never carries titles, and merged PRs leave the `is:open` search
+        // pulses — historical rows would stay bare "PR#64" forever. Point-fetch
+        // titles for recent PR events still missing one (bounded per tick;
+        // once-per-ref per agent run via `titleBackfilledRefs`). Emitted as a
+        // `gh_pr_titles_backfill` context event the title-map readers join.
+        let missingRefs: [(repo: String, number: Int)]
+        do {
+            missingRefs = try database
+                .queryGitHubPRRefsMissingTitle(
+                    sinceMs: nowMs - Int64(Self.titleBackfillLookbackDays) * 24 * 3600 * 1000,
+                    limit: Self.titleBackfillPerTickCap
+                )
+                .filter { !titleBackfilledRefs.contains("\($0.repo)#\($0.number)") }
+        } catch {
+            logger.error("title-backfill ref query failed: \(String(describing: error), privacy: .public)")
+            missingRefs = []
+        }
+        if !missingRefs.isEmpty {
+            let titles = (try? await provider.fetchPRTitles(
+                accessToken: refreshed.accessToken, refs: missingRefs)) ?? []
+            for ref in missingRefs {
+                titleBackfilledRefs.insert("\(ref.repo)#\(ref.number)")
+            }
+            if !titles.isEmpty {
+                events.append(Self.makePRTitlesBackfillEvent(refs: titles, nowMs: nowMs))
+            }
+        }
 
         // 5c. Phase 4.7.B-3 — actions/runs feed for top-N most-recently-pushed repos.
         // Derive active repos from the existing `events` table — bounded fan-out N HTTP
@@ -503,6 +537,27 @@ public actor GitHubCollector {
             "observed_at_ms": String(nowMs),
         ]
         if let refsJSON = Self.encodePRRefs(summary.refs) {
+            payload["pr_refs_json"] = refsJSON
+        }
+        return RawEvent(
+            timestamp: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0),
+            signalType: .context,
+            bundleID: nil,
+            payload: payload
+        )
+    }
+
+    /// Depth pass — `gh_pr_titles_backfill` context event: point-fetched titles
+    /// for PRs whose captured events carried none. Same `pr_refs_json` shape as
+    /// the search pulses → one reader join path.
+    static func makePRTitlesBackfillEvent(refs: [GitHubPRRef], nowMs: Int64) -> RawEvent {
+        var payload: [String: String] = [
+            "source": "github",
+            "event_kind": "gh_pr_titles_backfill",
+            "count": String(refs.count),
+            "observed_at_ms": String(nowMs),
+        ]
+        if let refsJSON = Self.encodePRRefs(refs) {
             payload["pr_refs_json"] = refsJSON
         }
         return RawEvent(

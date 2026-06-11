@@ -41,6 +41,16 @@ public protocol GitHubAPIProvider: Sendable {
     /// we take only the count. The provider returns `.empty(nowMs:)` on failure.
     func fetchMyOpenPRs(accessToken: String, login: String) async throws -> GitHubMyOpenPRsSummary
 
+    /// Depth pass (2026-06-11) — point title backfill `GET /repos/{repo}/pulls/{n}`
+    /// for PRs whose captured events carry no title (the stripped events feed
+    /// never does, and merged PRs leave the `is:open` search pulses forever).
+    /// Reads ONLY the title field (ADR-010-allowlisted); bodies never.
+    /// Per-ref failures skip silently; default impl returns `[]` so existing
+    /// conformers (mocks, fixtures) stay source-compatible.
+    func fetchPRTitles(
+        accessToken: String, refs: [(repo: String, number: Int)]
+    ) async throws -> [GitHubPRRef]
+
     /// Phase 4.7.B-3 — `GET /repos/{owner}/{repo}/actions/runs?actor=<login>&per_page=10&created=>=<sinceISO>`.
     /// Returns Actions runs triggered by the user across all `repos` starting from `since`.
     /// `repos` — pre-computed top-N most-recently-pushed repos (the collector derives them itself
@@ -99,6 +109,14 @@ public protocol GitHubAPIProvider: Sendable {
     func fetchDependabotAlerts(accessToken: String, owner: String, repo: String) async throws -> [GitHubSecurityAlertSnapshot]
     func fetchOrganizations(accessToken: String) async throws -> [GitHubOrgSnapshot]
     func fetchOrgAuditLog(accessToken: String, org: String, since: Int64?) async throws -> GitHubOrgAuditLogBatch
+}
+
+extension GitHubAPIProvider {
+    /// Default no-op — keeps existing conformers (mocks, fixtures, stubs)
+    /// source-compatible; the production moat provider overrides.
+    public func fetchPRTitles(
+        accessToken: String, refs: [(repo: String, number: Int)]
+    ) async throws -> [GitHubPRRef] { [] }
 }
 
 /// The result of a single REST fetch. `cursorMs` — `max(createdAt)` across `events`

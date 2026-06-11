@@ -79,6 +79,18 @@ final class GitHubCollectorTests: XCTestCase {
             )
         }
 
+        // Depth pass — title backfill stub. Returns titles for refs the test
+        // staged; default [] keeps existing tests untouched.
+        private var prTitlesToReturn: [GitHubPRRef] = []
+        func setPRTitles(_ titles: [GitHubPRRef]) { prTitlesToReturn = titles }
+        func fetchPRTitles(
+            accessToken: String, refs: [(repo: String, number: Int)]
+        ) async throws -> [GitHubPRRef] {
+            prTitlesToReturn.filter { title in
+                refs.contains { $0.repo == title.repo && $0.number == title.number }
+            }
+        }
+
         // Phase 4.7.B-3 — defaults to `[]` for backwards compat. setActionsRuns(_:)
         // overrides the result for tests that exercise action runs explicitly.
         // Existing tests use the signalType=.action filter assuming only batch
@@ -649,6 +661,55 @@ final class GitHubCollectorTests: XCTestCase {
             summary: GitHubMyOpenPRsSummary(count: 0, observedAtMs: 1),
             nowMs: 1)
         XCTAssertNil(emptyPulse.payload["pr_refs_json"], "empty refs → key omitted")
+    }
+
+    /// Depth pass — title backfill: a PR event captured without a title
+    /// triggers a point-fetch on the next tick; titles land in a
+    /// `gh_pr_titles_backfill` event with `pr_refs_json`.
+    func testTick_backfillsMissingPRTitles() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        // Seed a title-less merged-PR event (stripped feed shape).
+        try db.write(
+            RawEvent(
+                timestamp: Date(),
+                signalType: .action,
+                bundleID: nil,
+                payload: [
+                    "source": "github", "event_kind": "gh_pr_merged",
+                    "repo": "gundemtech/leaf", "number": "64", "title": "",
+                ]))
+
+        let provider = MockGitHubAPIProvider()
+        await provider.setBatch(.empty)
+        await provider.setPRTitles([
+            GitHubPRRef(repo: "gundemtech/leaf", number: 64, title: "Home depth pass")
+        ])
+
+        let refresher = GitHubTokenRefresher(database: db, clientID: "test-client")
+        let collector = GitHubCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7, logger: logger
+        )
+        _ = await collector.performTick()
+
+        let stored = try db.events(in: DateInterval(
+            start: Date(timeIntervalSince1970: 0),
+            end: Date(timeIntervalSince1970: TimeInterval(Date().timeIntervalSince1970 + 60))
+        ))
+        let backfill = try XCTUnwrap(
+            stored.first { $0.payload["event_kind"] == "gh_pr_titles_backfill" })
+        XCTAssertTrue(backfill.payload["pr_refs_json"]?.contains("Home depth pass") == true)
+
+        // Second tick — ref already backfilled this run → no second event.
+        _ = await collector.performTick()
+        let stored2 = try db.events(in: DateInterval(
+            start: Date(timeIntervalSince1970: 0),
+            end: Date(timeIntervalSince1970: TimeInterval(Date().timeIntervalSince1970 + 60))
+        ))
+        let backfills = stored2.filter { $0.payload["event_kind"] == "gh_pr_titles_backfill" }
+        XCTAssertEqual(backfills.count, 1, "once-per-ref per agent run")
     }
 
     // MARK: - Phase 4.7.B-3 — actions runs

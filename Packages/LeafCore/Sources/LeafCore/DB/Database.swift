@@ -1721,6 +1721,44 @@ public final class Database: @unchecked Sendable {
         }
     }
 
+    /// Depth pass (2026-06-11) — distinct (repo, number) of PR action events
+    /// captured WITHOUT a title (stripped events feed). Feeds the
+    /// `GitHubCollector` title backfill — bounded point-fetches per tick.
+    /// Oldest-first so historical rows fill before fresh ones (fresh PRs get
+    /// titles from the open-PR search pulses anyway). Reader-mode safe.
+    public func queryGitHubPRRefsMissingTitle(
+        sinceMs: Int64, limit: Int
+    ) throws -> [(repo: String, number: Int)] {
+        guard limit > 0 else { return [] }
+        return try pool.read { db in
+            try Row.fetchAll(db, sql: """
+                SELECT
+                    COALESCE(json_extract(\(Schema.Events.payloadJSON), '$.repo_full_name'),
+                             json_extract(\(Schema.Events.payloadJSON), '$.repo')) AS repo,
+                    CAST(json_extract(\(Schema.Events.payloadJSON), '$.number') AS INTEGER) AS num,
+                    MIN(\(Schema.Events.ts)) AS first_ts
+                FROM \(Schema.Events.tableName)
+                WHERE json_extract(\(Schema.Events.payloadJSON), '$.source') = 'github'
+                  AND json_extract(\(Schema.Events.payloadJSON), '$.event_kind') IN
+                      ('gh_pr_opened', 'gh_pr_merged', 'gh_pr_review_requested',
+                       'gh_pr_review_authored')
+                  AND (json_extract(\(Schema.Events.payloadJSON), '$.title') IS NULL
+                       OR json_extract(\(Schema.Events.payloadJSON), '$.title') = '')
+                  AND \(Schema.Events.ts) >= ?
+                GROUP BY repo, num
+                ORDER BY first_ts ASC
+                LIMIT ?
+                """,
+                arguments: [sinceMs, limit]
+            ).compactMap { row -> (repo: String, number: Int)? in
+                guard let repo = row["repo"] as String?, !repo.isEmpty,
+                      let num = row["num"] as Int?, num > 0
+                else { return nil }
+                return (repo, num)
+            }
+        }
+    }
+
     /// Phase Track-3 D2 — viewer-authored issue refs (`owner/repo#NN`) within
     /// `sinceMs` lookback, deduped by ref, ordered by `events.ts` DESC, limited
     /// to `limit`. Used by `GitHubWarmCollector` for bounded fan-out
