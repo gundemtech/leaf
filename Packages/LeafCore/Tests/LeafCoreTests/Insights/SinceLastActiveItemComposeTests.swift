@@ -116,7 +116,31 @@ final class SinceLastActiveItemComposeTests: XCTestCase {
         XCTAssertEqual(item?.verb, "commented on")
         XCTAssertEqual(item?.actorPrefix, "@teammate")
         XCTAssertEqual(item?.severity, .warn)
-        XCTAssertEqual(item?.sourceMeta, "LEAF-200")
+        // Home redesign — ref repeating the title is dropped from the meta line.
+        XCTAssertEqual(item?.sourceMeta, "")
+    }
+
+    // Home redesign — meta-line noise fixes.
+
+    func test_compose_ghMeta_dropsTargetRefWhenItDuplicatesTitle() {
+        let feed = ActivityFeedItem(
+            ts: 1, source: .github, eventKind: "gh_commit_pushed",
+            actorDisplay: nil, actorIsMe: true,
+            targetTitle: "feature/v1-ai", targetRef: "feature/v1-ai",
+            repoHint: "leaf-relay", sourceURL: nil
+        )
+        let item = SinceLastActiveItem.compose(from: feed)
+        XCTAssertEqual(item?.sourceMeta, "leaf-relay")
+    }
+
+    func test_compose_detectionMeta_humanLabel_noInternalTrackName() {
+        let feed = ActivityFeedItem(
+            ts: 1, source: .detection, eventKind: "open_question",
+            actorDisplay: nil, actorIsMe: false,
+            targetTitle: "Which KDF do we pick?", targetRef: nil, sourceURL: nil
+        )
+        let item = SinceLastActiveItem.compose(from: feed)
+        XCTAssertEqual(item?.sourceMeta, "Detected by Leaf")
     }
 
     func test_compose_slackMention_actorFallback() {
