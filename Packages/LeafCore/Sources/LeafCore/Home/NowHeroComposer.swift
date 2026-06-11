@@ -48,16 +48,28 @@ public enum NowHeroComposer {
   ) -> NowHeroPresentation {
     NowHeroPresentation(
       taskLine: composeTaskLine(taskIdentity),
-      sessionLine: session.flatMap {
-        YoureOnRowComposer.composeSessionLine(
-          sessionStartMs: $0.sessionStartMs, focusedMin: $0.focusedMinSoFar,
-          now: now, calendar: calendar)
-      },
+      sessionLine: session.flatMap { composeSessionLine($0, now: now, calendar: calendar) },
       anchorLine: composeAnchorLine(whereStopped),
       commitLine: (whereStopped?.recentLastCommit).map(composeCommitLine),
       wipLine: composeWipLine(branch: taskIdentity?.branch, delta: gitDelta),
       filesLine: YoureOnRowComposer.composeFilesLine(session?.openFiles ?? [])
     )
+  }
+
+  /// Session line with a fallback guard: when the substrate resolved no real
+  /// IDE/AI session (`sessionSource == .fallback`), the start time is a
+  /// synthetic today-00:00 — showing "Started 00:00" reads as a fact and is
+  /// noise. Suppress the start clause; keep real focused minutes if any.
+  static func composeSessionLine(
+    _ session: CurrentTaskSession, now: Date, calendar: Calendar
+  ) -> String? {
+    guard session.sessionSource == .fallback else {
+      return YoureOnRowComposer.composeSessionLine(
+        sessionStartMs: session.sessionStartMs, focusedMin: session.focusedMinSoFar,
+        now: now, calendar: calendar)
+    }
+    guard session.focusedMinSoFar > 0 else { return nil }
+    return "\(YoureOnRowComposer.formatFocusedMin(session.focusedMinSoFar)) focused so far"
   }
 
   /// "GUN-56 · feature/relay · leaf". Repo is dropped when it duplicates the

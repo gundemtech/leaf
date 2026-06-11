@@ -138,7 +138,8 @@ final class NowHeroComposerTests: XCTestCase {
       taskIdentity: identity,
       sessionStartMs: 1_765_372_680_000,  // some HH:mm in the calendar TZ
       focusedMinSoFar: 92,
-      openFiles: ["A.swift", "B.swift"])
+      openFiles: ["A.swift", "B.swift"],
+      sessionSource: .ide)
     let hero = NowHeroComposer.compose(
       taskIdentity: identity, gitDelta: nil, session: session, whereStopped: nil,
       now: now, calendar: calendar)
@@ -147,6 +148,32 @@ final class NowHeroComposerTests: XCTestCase {
       YoureOnRowComposer.composeSessionLine(
         sessionStartMs: 1_765_372_680_000, focusedMin: 92, now: now, calendar: calendar))
     XCTAssertEqual(hero.filesLine, "Open files: A.swift · B.swift")
+  }
+
+  func testSessionLine_fallbackSourceZeroFocus_suppressed() {
+    // Fresh DB: CurrentTaskSession falls back to today 00:00 with no focused
+    // minutes — "Started 00:00" is synthetic, not a fact. Hide the line.
+    let identity = TaskIdentity(branch: "dev")
+    let session = CurrentTaskSession(
+      taskIdentity: identity, sessionStartMs: 1_765_372_680_000,
+      focusedMinSoFar: 0, openFiles: [], sessionSource: .fallback)
+    let hero = NowHeroComposer.compose(
+      taskIdentity: identity, gitDelta: nil, session: session, whereStopped: nil,
+      now: now, calendar: calendar)
+    XCTAssertNil(hero.sessionLine)
+  }
+
+  func testSessionLine_fallbackSourceWithFocus_showsFocusOnly() {
+    // Fallback start time is synthetic, but real focused minutes are worth
+    // showing — without the misleading "Started 00:00" prefix.
+    let identity = TaskIdentity(branch: "dev")
+    let session = CurrentTaskSession(
+      taskIdentity: identity, sessionStartMs: 1_765_372_680_000,
+      focusedMinSoFar: 45, openFiles: [], sessionSource: .fallback)
+    let hero = NowHeroComposer.compose(
+      taskIdentity: identity, gitDelta: nil, session: session, whereStopped: nil,
+      now: now, calendar: calendar)
+    XCTAssertEqual(hero.sessionLine, "45m focused so far")
   }
 
   func testCommitLine_truncatedAt60() {
