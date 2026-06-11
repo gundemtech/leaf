@@ -26,14 +26,6 @@ enum AIWiring {
     #endif
   }
 
-  static func summarizerMoat() -> AISummarizerMoat {
-    #if LEAF_PROD
-      return prodAISummarizerMoat(keyStore: FileAnthropicKeyStore())
-    #else
-      return .publicSubstrate
-    #endif
-  }
-
   /// AI-UI-4 — per-call BYOK-valve router for all in-app AI surfaces: key
   /// present → BYOK Anthropic; otherwise the team pool via the relay proxy
   /// (`prodAIProxySummarizerMoat`, bearer = the app's Supabase session). The

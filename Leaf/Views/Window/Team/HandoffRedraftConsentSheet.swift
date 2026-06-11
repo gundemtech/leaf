@@ -24,8 +24,6 @@ struct HandoffRedraftConsentSheet: View {
   @Environment(WindowState.self) private var windowState
   @Environment(\.dismiss) private var dismiss
 
-  /// Exact-match CTA for the missing-key failure (pattern: AskLeafView).
-
   enum LoadState {
     case loading
     case ready
