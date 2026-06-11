@@ -8,6 +8,7 @@
 //      in the period (detector tables; same engine the MCP tools use).
 //
 
+import CryptoKit
 import Foundation
 import LeafCore
 import Observation
@@ -28,6 +29,8 @@ final class BriefReader {
   }
 
   private(set) var state: State = .idle
+  /// Track B3 — composition material for the "read full brief" detail sheet.
+  private(set) var detail: BriefDetail = BriefDetail(sections: [])
 
   nonisolated static let periodDays = 5
 
@@ -38,7 +41,7 @@ final class BriefReader {
     self.dbURL = databaseURL
   }
 
-  func refresh() async {
+  func refresh(workspaceID: String? = nil) async {
     guard FileManager.default.fileExists(atPath: dbURL.path) else {
       state = .empty
       return
@@ -48,7 +51,7 @@ final class BriefReader {
     if state == .idle { state = .loading }
 
     let url = dbURL
-    let result: Result<BriefSnapshot, Error> = await Task.detached(priority: .utility) {
+    let result: Result<(BriefSnapshot, BriefDetail), Error> = await Task.detached(priority: .utility) {
       do {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         let periodStartMs = nowMs - Int64(Self.periodDays) * 86_400_000
@@ -58,6 +61,21 @@ final class BriefReader {
         let insights = DerivedInsightsFactory.make(database: db)
         let feed = (try? insights.recentActivityFeed(since: periodStartMs, limit: 200)) ?? []
 
+        // Track B3 — teammates' shared events from the mirror ("what did the
+        // TEAM ship"). Self-mirror rows are deduped by identity pubkey.
+        var teamEvents: [TeamBriefEvent] = []
+        var selfPubkeyHex: String? = nil
+        if let workspaceID {
+          let mirrorRows = (try? db.readSQL { rawDB in
+            try TeamEventMirrorStore.readRecent(workspaceID: workspaceID, limit: 300, in: rawDB)
+          }) ?? []
+          teamEvents = mirrorRows
+            .filter { $0.eventTsMs >= periodStartMs }
+            .compactMap(TeamBriefEvent.from)
+          selfPubkeyHex = (try? IdentityService.ensureLocalIdentity())
+            .map { $0.publicKey.rawRepresentation.map { String(format: "%02x", $0) }.joined() }
+        }
+
         let engine = QueryEngine(
           dbURL: url,
           dbConfig: Self.dbConfig(),
@@ -66,19 +84,23 @@ final class BriefReader {
         )
         let activity = try? engine.queryActivity(
           period: PeriodSpec(startMs: periodStartMs, endMs: nowMs), filter: nil)
-        let decisions = activity?.decisionsInPeriod.count ?? 0
-        let blockersResolved =
-          activity?.blockers.count {
-            ($0.resolvedAtMs ?? 0) >= periodStartMs && $0.resolvedAtMs != nil
-          } ?? 0
+        let decisions = activity?.decisionsInPeriod ?? []
+        let resolvedBlockers = (activity?.blockers ?? []).filter {
+          $0.resolvedAtMs != nil && ($0.resolvedAtMs ?? 0) >= periodStartMs
+        }
 
-        return .success(
-          BriefComposer.compose(
-            feed: feed,
-            decisionsSurfaced: decisions,
-            blockersResolved: blockersResolved,
-            periodDays: Self.periodDays
-          ))
+        let snapshot = BriefComposer.compose(
+          feed: feed,
+          teamEvents: teamEvents,
+          selfPubkeyHex: selfPubkeyHex,
+          decisionsSurfaced: decisions.count,
+          blockersResolved: resolvedBlockers.count,
+          blockerResolvedAtMs: resolvedBlockers.compactMap(\.resolvedAtMs),
+          periodDays: Self.periodDays
+        )
+        let detail = BriefDetailComposer.compose(
+          snapshot: snapshot, decisions: decisions, blockers: resolvedBlockers)
+        return .success((snapshot, detail))
       } catch {
         return .failure(error)
       }
@@ -86,7 +108,8 @@ final class BriefReader {
 
     guard myGeneration == generation else { return }
     switch result {
-    case .success(let brief):
+    case .success(let (brief, briefDetail)):
+      detail = briefDetail
       state = brief.isEmpty ? .empty : .loaded(brief)
     case .failure:
       state = .error
