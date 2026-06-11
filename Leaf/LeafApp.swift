@@ -81,8 +81,12 @@ struct LeafApp: App {
   @State private var apnsRegistrationReader: APNsRegistrationReader
   /// Track AI Coworker P4 — in-app team-handoff "Draft with AI" reader (first
   /// in-app AI surface). Self-resolves DB + prod AI moats (CR-2 parity).
-  @State private var handoffDraftReader = HandoffDraftReader()
-  @State private var askLeafReader = AskLeafReader()
+  @State private var handoffDraftReader: HandoffDraftReader
+  @State private var askLeafReader: AskLeafReader
+  /// AI-UI-4 — per-call BYOK-valve router (key → Anthropic, else team pool
+  /// via the relay proxy with the app's Supabase session as bearer). One
+  /// instance feeds the app-scope AI readers and the environment (sheets).
+  @State private var aiBackendRouter: AIBackendRouter
   /// Team chats — conversation list + selected 1:1 thread for the hub
   /// Chats tab (local mirror reads only).
   @State private var chatStore = ChatStore()
@@ -234,6 +238,14 @@ struct LeafApp: App {
     // below in body's .onAppear once `launchAgent` is available on self.
     let login = SupabaseOAuthService(client: supabase)
     _loginService = State(initialValue: login)
+
+    // AI-UI-4 — BYOK-valve router over the SAME SupabaseClient (the session
+    // is the relay-proxy bearer on the included path).
+    let aiRouter = AIWiring.backendRouter(
+      tokenProvider: SupabaseSessionTokenProvider(client: supabase))
+    _aiBackendRouter = State(initialValue: aiRouter)
+    _handoffDraftReader = State(initialValue: HandoffDraftReader(router: aiRouter))
+    _askLeafReader = State(initialValue: AskLeafReader(router: aiRouter))
 
     _workspaceReader = State(
       initialValue: WorkspaceReader(
@@ -681,6 +693,7 @@ struct LeafApp: App {
         .environment(agentWatchdog)
         .environment(loginService)  // Phase 1 — account-login gate
         .environment(\.supabaseClientForGate, supabaseClient)  // Phase 1 — gate validity probe
+        .environment(\.aiBackendRouter, aiBackendRouter)  // AI-UI-4 — BYOK-valve router
         .environment(watchedFolders)
         .environment(linearOAuth)
         .environment(githubOAuth)

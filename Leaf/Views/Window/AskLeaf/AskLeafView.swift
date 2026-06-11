@@ -14,6 +14,7 @@ import SwiftUI
 struct AskLeafView: View {
   @Environment(AskLeafReader.self) private var reader
   @Environment(WindowState.self) private var windowState
+  @Environment(\.aiBackendRouter) private var aiBackendRouter  // AI-UI-4
   /// AI-UI-3 (CTO F1) — NL handoff-intent roster is scoped to the active workspace.
   @Environment(ActiveWorkspaceStore.self) private var activeWorkspaceStore
 
@@ -50,7 +51,7 @@ struct AskLeafView: View {
       inputBar
     }
     .sheet(item: $escalationSeed) { seed in
-      EscalationSheet(seed: seed, onDismiss: { escalationSeed = nil })
+      EscalationSheet(seed: seed, router: aiBackendRouter, onDismiss: { escalationSeed = nil })
     }
     // AI-UI-3 — NL-intent suggestion → the same handoff sheet the Team tab
     // uses, prefilled. Slack/Linear reauth closures are no-ops from this entry

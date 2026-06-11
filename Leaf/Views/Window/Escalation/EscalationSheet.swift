@@ -18,9 +18,18 @@ struct EscalationSheet: View {
 
   @Environment(WindowState.self) private var windowState
 
-  @State private var reader = EscalationReader()
+  @State private var reader: EscalationReader
   @State private var question: String = ""
   @State private var model: SummarizerModel = .haiku
+
+  /// AI-UI-4 — the reader is seeded with the composition-root router (an
+  /// @Environment value isn't readable inside a @State initializer, so the
+  /// parent reads `\.aiBackendRouter` and passes it here).
+  init(seed: EscalationSeed, router: AIBackendRouter, onDismiss: @escaping () -> Void) {
+    self.seed = seed
+    self.onDismiss = onDismiss
+    _reader = State(initialValue: EscalationReader(router: router))
+  }
 
   private static let pickerModels: [SummarizerModel] = [.haiku, .sonnet, .opus]
 
