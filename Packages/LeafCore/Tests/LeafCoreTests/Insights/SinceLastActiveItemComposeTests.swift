@@ -116,7 +116,48 @@ final class SinceLastActiveItemComposeTests: XCTestCase {
         XCTAssertEqual(item?.verb, "commented on")
         XCTAssertEqual(item?.actorPrefix, "@teammate")
         XCTAssertEqual(item?.severity, .warn)
-        XCTAssertEqual(item?.sourceMeta, "LEAF-200")
+        // Home redesign — ref repeating the title is dropped from the meta line.
+        XCTAssertEqual(item?.sourceMeta, "")
+    }
+
+    // Home redesign — meta-line noise fixes.
+
+    func test_compose_ghMeta_dropsTargetRefWhenItDuplicatesTitle() {
+        let feed = ActivityFeedItem(
+            ts: 1, source: .github, eventKind: "gh_commit_pushed",
+            actorDisplay: nil, actorIsMe: true,
+            targetTitle: "feature/v1-ai", targetRef: "feature/v1-ai",
+            repoHint: "leaf-relay", sourceURL: nil
+        )
+        let item = SinceLastActiveItem.compose(from: feed)
+        XCTAssertEqual(item?.sourceMeta, "leaf-relay")
+    }
+
+    func test_uniqueKey_distinctTitles_sameTsVerbEmptyMeta_noCollision() {
+        // Meta-dedup leaves sourceMeta empty for linear/slack rows whose ref
+        // repeats the title — uniqueKey must still discriminate by title for
+        // same-millisecond bulk events (ForEach identity).
+        func makeItem(_ key: String) -> SinceLastActiveItem? {
+            SinceLastActiveItem.compose(
+                from: ActivityFeedItem(
+                    ts: 777, source: .linear,
+                    eventKind: LinearActivityKinds.statusTransitionCompletedKind,
+                    actorDisplay: nil, actorIsMe: true,
+                    targetTitle: key, targetRef: key, repoHint: nil, sourceURL: nil))
+        }
+        let a = makeItem("LEA-1")
+        let b = makeItem("LEA-2")
+        XCTAssertNotEqual(a?.uniqueKey, b?.uniqueKey)
+    }
+
+    func test_compose_detectionMeta_humanLabel_noInternalTrackName() {
+        let feed = ActivityFeedItem(
+            ts: 1, source: .detection, eventKind: "open_question",
+            actorDisplay: nil, actorIsMe: false,
+            targetTitle: "Which KDF do we pick?", targetRef: nil, sourceURL: nil
+        )
+        let item = SinceLastActiveItem.compose(from: feed)
+        XCTAssertEqual(item?.sourceMeta, "Detected by Leaf")
     }
 
     func test_compose_slackMention_actorFallback() {

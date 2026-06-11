@@ -361,6 +361,10 @@ final class InsightsReader {
                         try Task.checkCancellation()
                         let standupBlockers = (try? insights.openBlockers()) ?? []
                         try Task.checkCancellation()
+                        // UC-2 — "am I quietly stuck" nudges. Fail-soft: a
+                        // nudges read error never sinks the whole snapshot.
+                        let nudges = (try? insights.nudges(now: Date())) ?? []
+                        try Task.checkCancellation()
                         let standupSnapshot = StandupComposer.compose(
                             yesterdayActivity: standupYesterdayFeed,
                             todayActivity: standupTodayFeed,
@@ -451,7 +455,8 @@ final class InsightsReader {
                             activeTeammates: activeTeammates,
                             memberCount: memberCount,
                             currentSession: currentSession,
-                            standupRecap: standupSnapshot
+                            standupRecap: standupSnapshot,
+                            nudges: nudges
                         )
                         return .success((db, snapshot))
                     } catch {

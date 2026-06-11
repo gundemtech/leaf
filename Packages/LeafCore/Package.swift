@@ -43,7 +43,10 @@ let package = Package(
         ),
         .testTarget(
             name: "LeafCoreTests",
-            dependencies: ["LeafCore"],
+            // LeafCorePrivate is a real dependency (RelayBodyLeakageTests
+            // @testable-imports it); without the edge the build only succeeded
+            // when LeafCorePrivateTests happened to schedule the module first.
+            dependencies: ["LeafCore", "LeafCorePrivate"],
             path: "Tests/LeafCoreTests"
         ),
         .testTarget(

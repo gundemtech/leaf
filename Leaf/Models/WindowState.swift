@@ -4,7 +4,7 @@ import Observation
 import SwiftUI
 
 enum WindowSection: String, CaseIterable, Hashable, Codable, Identifiable {
-    case home, activity, analytics, askLeaf, team, connections, settings, profile
+    case home, activity, analytics, askLeaf, search, team, connections, settings, profile
 
     var id: String { rawValue }
 
@@ -14,6 +14,7 @@ enum WindowSection: String, CaseIterable, Hashable, Codable, Identifiable {
         case .activity:     "Activity"
         case .analytics:    "Analytics"
         case .askLeaf:      "Ask Leaf"
+        case .search:       "Search"
         case .team:         "Team"
         case .connections:  "Connections"
         case .settings:     "Settings"
@@ -29,6 +30,7 @@ enum WindowSection: String, CaseIterable, Hashable, Codable, Identifiable {
         case .activity:     LeafIcons.nav.activity
         case .analytics:    LeafIcons.nav.activity
         case .askLeaf:      LeafIcons.nav.askLeafSF
+        case .search:       LeafIcons.nav.searchSF
         case .team:         LeafIcons.nav.team
         case .connections:  LeafIcons.nav.connections
         case .settings:     LeafIcons.nav.settings
@@ -39,7 +41,7 @@ enum WindowSection: String, CaseIterable, Hashable, Codable, Identifiable {
     /// True when `icon` is an SF Symbol (system rendering); false when it
     /// is an Asset Catalog name (template-rendered). askLeaf uses an SF
     /// Symbol (sparkles) — matches the searchSF precedent in LeafIcon_Nav.
-    var iconIsSystem: Bool { self == .askLeaf }
+    var iconIsSystem: Bool { self == .askLeaf || self == .search }
 }
 
 @MainActor

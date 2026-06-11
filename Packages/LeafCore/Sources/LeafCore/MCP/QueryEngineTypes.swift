@@ -128,6 +128,14 @@ public struct ActivityEvent: Codable, Sendable, Equatable {
     public let eventKind: String?
     public let bodyExcerpt: String?
     public let bodyTruncated: Bool
+    /// Additive (2026-06-11) — human handle of the event's target when the
+    /// allowlisted payload carries one: Linear issue key ("GUN-12") or
+    /// GitHub "repo#number". `nil` for events without a structured target.
+    public let targetRef: String?
+    /// Additive (2026-06-11) — issue / PR title from the allowlisted payload
+    /// `title` key. Lets consumers render "GUN-12 · Fix relay reconnect"
+    /// instead of dumping the body as a headline.
+    public let targetTitle: String?
 
     public init(
         eventID: Int64,
@@ -136,7 +144,9 @@ public struct ActivityEvent: Codable, Sendable, Equatable {
         bundleID: String?,
         eventKind: String?,
         bodyExcerpt: String?,
-        bodyTruncated: Bool
+        bodyTruncated: Bool,
+        targetRef: String? = nil,
+        targetTitle: String? = nil
     ) {
         self.eventID = eventID
         self.tsMs = tsMs
@@ -145,6 +155,8 @@ public struct ActivityEvent: Codable, Sendable, Equatable {
         self.eventKind = eventKind
         self.bodyExcerpt = bodyExcerpt
         self.bodyTruncated = bodyTruncated
+        self.targetRef = targetRef
+        self.targetTitle = targetTitle
     }
 }
 
