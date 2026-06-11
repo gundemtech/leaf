@@ -792,6 +792,31 @@ extension SupabaseClient {
     return session
   }
 
+  /// GET /auth/v1/user — fetch the account identity (email / provider /
+  /// full_name / created_at) for the Profile surface. Ensures an authenticated,
+  /// reasonably-fresh session before calling; works from both a cold start
+  /// (persisted refresh token) and an already-live in-memory session.
+  public func fetchUserProfile() async throws -> SupabaseUserProfile {
+    let session = try await ensureAuthenticated()
+    let url = SupabaseEndpoint.userInfo(baseURL: baseURL)
+    var request = URLRequest(url: url)
+    request.httpMethod = "GET"
+    for (k, v) in SupabaseEndpoint.authenticatedHeaders(
+      anonKey: anonKey, accessToken: session.accessToken)
+    {
+      request.setValue(v, forHTTPHeaderField: k)
+    }
+    let (data, http) = try await performHTTP(request, retryable: false, label: "fetchUserProfile")
+    guard http.statusCode == 200 else {
+      throw SupabaseError.fromStatus(http.statusCode, body: data)
+    }
+    do {
+      return try JSONDecoder().decode(SupabaseUserProfile.self, from: data)
+    } catch {
+      throw SupabaseError.decoding(reason: "fetchUserProfile: \(error)")
+    }
+  }
+
   /// Shared post-login bookkeeping: set `.authenticated`, stamp lastRefreshAt,
   /// best-effort persist. Private to this extension; mirrors the bootstrap's
   /// tail in `ensureAuthenticated`.
