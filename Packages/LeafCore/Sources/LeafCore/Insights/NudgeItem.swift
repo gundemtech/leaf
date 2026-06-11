@@ -34,10 +34,13 @@ public struct NudgeItem: Equatable, Hashable, Sendable, Identifiable {
   /// When the stuck condition started (ms epoch) — drives "for N days" copy
   /// and recency sort.
   public let sinceMs: Int64
+  /// Depth pass — secondary breakdown rows under the detail line (e.g. the
+  /// top app pairs with round-trip counts for the switch-rate nudge).
+  public let extraLines: [String]
 
   public init(
     id: String, kind: Kind, title: String, detail: String?,
-    sourceURL: URL?, sinceMs: Int64
+    sourceURL: URL?, sinceMs: Int64, extraLines: [String] = []
   ) {
     self.id = id
     self.kind = kind
@@ -45,5 +48,6 @@ public struct NudgeItem: Equatable, Hashable, Sendable, Identifiable {
     self.detail = detail
     self.sourceURL = sourceURL
     self.sinceMs = sinceMs
+    self.extraLines = extraLines
   }
 }
