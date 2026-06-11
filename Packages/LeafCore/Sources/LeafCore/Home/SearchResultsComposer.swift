@@ -9,6 +9,49 @@
 
 import Foundation
 
+/// Track B1 — one labeled detail line of a result card (the landing mockup's
+/// AUTHOR / CHANNEL / COMMIT / OUTCOME grid).
+public struct SearchResultDetailRow: Equatable, Sendable, Identifiable {
+  public enum Label: String, Sendable, CaseIterable {
+    case author = "AUTHOR"
+    case channel = "CHANNEL"
+    case commit = "COMMIT"
+    case outcome = "OUTCOME"
+    case ticket = "TICKET"
+    case pr = "PR"
+    case thread = "THREAD"
+  }
+
+  public let label: Label
+  public let value: String
+  public let url: URL?
+
+  public var id: String { "\(label.rawValue):\(value)" }
+
+  public init(label: Label, value: String, url: URL? = nil) {
+    self.label = label
+    self.value = value
+    self.url = url
+  }
+}
+
+/// Track B1 — composed result set: rows + count copy + MATCH attribution.
+public struct SearchResultsPresentation: Equatable, Sendable {
+  public let rows: [SearchResultRow]
+  public let totalCount: Int
+  /// "1 result" / "N results" — the input-field counter of the mockup.
+  public let countLabel: String
+  /// Row carrying the MATCH badge (top-ranked result), nil when empty.
+  public let topMatchID: String?
+
+  public init(rows: [SearchResultRow]) {
+    self.rows = rows
+    self.totalCount = rows.count
+    self.countLabel = rows.count == 1 ? "1 result" : "\(rows.count) results"
+    self.topMatchID = rows.first?.id
+  }
+}
+
 public struct SearchResultRow: Equatable, Sendable, Identifiable {
   public enum Kind: String, Sendable {
     case decision
@@ -36,11 +79,15 @@ public struct SearchResultRow: Equatable, Sendable, Identifiable {
   /// Collapsed duplicates behind this row (capture-side re-emission of the
   /// same target). 1 = unique.
   public let occurrenceCount: Int
+  /// Track B1 — labeled detail grid (decision rows: AUTHOR / CHANNEL /
+  /// COMMIT / TICKET / PR). Empty for rows without composition material.
+  public let detailRows: [SearchResultDetailRow]
 
   public init(
     id: String, kind: Kind, title: String, excerpt: String? = nil,
     sourceLabel: String, tsMs: Int64, links: [LinkView] = [],
-    confidence: Double? = nil, occurrenceCount: Int = 1
+    confidence: Double? = nil, occurrenceCount: Int = 1,
+    detailRows: [SearchResultDetailRow] = []
   ) {
     self.id = id
     self.kind = kind
@@ -51,10 +98,18 @@ public struct SearchResultRow: Equatable, Sendable, Identifiable {
     self.links = links
     self.confidence = confidence
     self.occurrenceCount = occurrenceCount
+    self.detailRows = detailRows
   }
 }
 
 public enum SearchResultsComposer {
+
+  /// Track B1 — full presentation: composed rows + count copy + MATCH id.
+  public static func composePresentation(
+    from response: QueryActivityResponse
+  ) -> SearchResultsPresentation {
+    SearchResultsPresentation(rows: compose(from: response))
+  }
 
   /// Group order: decisions (confidence desc, then recency) → open questions →
   /// blockers → events (newest first). Links are attached to decision rows by
@@ -67,6 +122,8 @@ public enum SearchResultsComposer {
       return $0.detectedAtMs > $1.detectedAtMs
     }
     for d in decisions {
+      let links = response.links.filter { $0.fromEventID == d.eventID }
+      let origin = response.events.first { $0.eventID == d.eventID }
       rows.append(
         SearchResultRow(
           id: "decision:\(d.id)",
@@ -74,8 +131,9 @@ public enum SearchResultsComposer {
           title: d.reasoningExcerpt,
           sourceLabel: "Decision",
           tsMs: d.detectedAtMs,
-          links: response.links.filter { $0.fromEventID == d.eventID },
-          confidence: d.confidence
+          links: links,
+          confidence: d.confidence,
+          detailRows: detailRows(originatingEvent: origin, links: links)
         ))
     }
 
@@ -106,7 +164,11 @@ public enum SearchResultsComposer {
     // by (eventKind, target-or-text) keeping the newest, count the rest.
     var seen: [String: Int] = [:]  // dedup key → index in eventRows
     var eventRows: [SearchResultRow] = []
-    for e in response.events.sorted(by: { $0.tsMs > $1.tsMs }) {
+    let substanceEvents = response.events.filter {
+      // Track B1 — pulse/diagnostic kinds never render as search results.
+      EventKindTaxonomy.feedClass(eventKind: $0.eventKind, signalType: $0.signalType) == .substance
+    }
+    for e in substanceEvents.sorted(by: { $0.tsMs > $1.tsMs }) {
       let headline = composeEventHeadline(e)
       let dedupKey = "\(e.eventKind ?? "")|\(e.targetRef ?? headline)"
       if let idx = seen[dedupKey] {
@@ -156,6 +218,55 @@ public enum SearchResultsComposer {
       .replacingOccurrences(of: "\n", with: " ")
     guard !headline.hasPrefix(String(flattened.prefix(40))) else { return nil }
     return String(flattened.prefix(200))
+  }
+
+  /// Track B1 — labeled detail grid for a decision row. Built from the link
+  /// graph + the originating event's projection. Every line is optional —
+  /// the card renders whatever composition material actually exists (no
+  /// fabricated OUTCOME: it appears only when the data can carry it later).
+  static func detailRows(
+    originatingEvent origin: ActivityEvent?,
+    links: [LinkView]
+  ) -> [SearchResultDetailRow] {
+    var rows: [SearchResultDetailRow] = []
+
+    // AUTHOR — reviewer/user attributions from the link graph.
+    if let author = links.first(where: { $0.targetKind == Schema.TargetKinds.githubUser }) {
+      rows.append(SearchResultDetailRow(
+        label: .author, value: author.targetRef,
+        url: URL(string: "https://github.com/\(author.targetRef)")))
+    }
+
+    // CHANNEL — Slack origin.
+    if let channel = origin?.channelName, !channel.isEmpty {
+      rows.append(SearchResultDetailRow(label: .channel, value: "#\(channel)"))
+    }
+
+    // COMMIT — commit-flavored origin: subject (+ repo handle).
+    if let origin, origin.eventKind == "git_commit_authored"
+        || origin.eventKind == GitHubEventKindKey.commitPushed.rawValue,
+       let body = origin.bodyExcerpt, !body.isEmpty {
+      let subject = String(body.split(separator: "\n", maxSplits: 1)[0].prefix(80))
+      let value = origin.targetRef.map { "\(subject) · \($0)" } ?? subject
+      rows.append(SearchResultDetailRow(label: .commit, value: value))
+    }
+
+    // TICKET / PR — outbound refs from the link graph.
+    if let ticket = links.first(where: { $0.targetKind == Schema.TargetKinds.linearIssue }) {
+      rows.append(SearchResultDetailRow(label: .ticket, value: ticket.targetRef))
+    }
+    if let pr = links.first(where: { $0.targetKind == Schema.TargetKinds.githubPR }) {
+      rows.append(SearchResultDetailRow(
+        label: .pr, value: pr.targetRef, url: prURL(fromRef: pr.targetRef)))
+    }
+    return rows
+  }
+
+  /// "owner/repo#142" → canonical PR URL; other shapes → nil.
+  static func prURL(fromRef ref: String) -> URL? {
+    let parts = ref.split(separator: "#")
+    guard parts.count == 2, parts[0].contains("/"), Int(parts[1]) != nil else { return nil }
+    return URL(string: "https://github.com/\(parts[0])/pull/\(parts[1])")
   }
 
   /// Human source label from the event_kind prefix. `issue_updated` is the

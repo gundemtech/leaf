@@ -5,6 +5,10 @@
 //  MCP tools use; this is the native surface for "find the thread that
 //  explains why" without an AI client.
 //
+//  Track B-UI: result cards follow the landing-page terminal-card pattern —
+//  "● decision · 2 weeks ago" header + MATCH badge on the top result +
+//  AUTHOR / CHANNEL / COMMIT / TICKET / PR label-value grid.
+//
 
 import LeafCore
 import SwiftUI
@@ -22,11 +26,19 @@ struct SearchView: View {
             .foregroundStyle(LeafColor.text.tertiary)
             .accessibilityAddTraits(.isHeader)
 
-          LeafInput(
-            text: $query,
-            placeholder: "Search decisions, commits, threads…",
-            prefixIcon: .system(LeafIcons.nav.searchSF)
-          )
+          HStack(spacing: LeafSpace.md) {
+            LeafInput(
+              text: $query,
+              placeholder: "Search decisions, commits, threads…",
+              prefixIcon: .system(LeafIcons.nav.searchSF)
+            )
+            if case .results(let presentation) = reader.state {
+              Text(presentation.countLabel)
+                .font(LeafType.mono.small)
+                .foregroundStyle(LeafColor.text.tertiary)
+                .fixedSize()
+            }
+          }
         }
 
         content
@@ -79,37 +91,37 @@ struct SearchView: View {
         title: "Search unavailable",
         description: message
       )
-    case .results(let rows):
-      resultsList(rows)
+    case .results(let presentation):
+      resultsList(presentation)
     }
   }
 
   @ViewBuilder
-  private func resultsList(_ rows: [SearchResultRow]) -> some View {
-    LeafCard(padding: .regular) {
-      LazyVStack(alignment: .leading, spacing: LeafSpace.md) {
-        ForEach(rows) { row in
-          resultRow(row)
-          if row.id != rows.last?.id {
-            LeafDivider()
-          }
-        }
+  private func resultsList(_ presentation: SearchResultsPresentation) -> some View {
+    LazyVStack(alignment: .leading, spacing: LeafSpace.md) {
+      ForEach(presentation.rows) { row in
+        resultCard(row, isTopMatch: row.id == presentation.topMatchID)
       }
     }
   }
 
   @ViewBuilder
-  private func resultRow(_ row: SearchResultRow) -> some View {
-    HStack(alignment: .top, spacing: LeafSpace.sm) {
-      LeafDot(tone: dotTone(row.kind), size: .md)
-        .padding(.top, LeafSpace.xs)
-        .accessibilityHidden(true)
+  private func resultCard(_ row: SearchResultRow, isTopMatch: Bool) -> some View {
+    LeafCard(padding: .regular) {
+      VStack(alignment: .leading, spacing: LeafSpace.md) {
+        LeafTerminalCardHeader(
+          dotTone: dotTone(row.kind),
+          title: headerTitle(row)
+        ) {
+          if isTopMatch {
+            LeafStatusBadge(text: "MATCH")
+          }
+        }
 
-      VStack(alignment: .leading, spacing: LeafSpace.xxs) {
         Text(row.title)
           .font(LeafType.title.small)
           .foregroundStyle(LeafColor.text.primary)
-          .lineLimit(2)
+          .lineLimit(3)
           .truncationMode(.tail)
 
         if let excerpt = row.excerpt {
@@ -120,34 +132,73 @@ struct SearchView: View {
             .truncationMode(.tail)
         }
 
-        HStack(spacing: LeafSpace.xs) {
-          Text(row.sourceLabel)
-            .font(LeafType.body.small)
-            .foregroundStyle(LeafColor.text.tertiary)
-          Text(Self.formatRelative(row.tsMs))
-            .font(LeafType.body.small)
-            .foregroundStyle(LeafColor.text.quaternary)
-          if row.occurrenceCount > 1 {
-            Text("×\(row.occurrenceCount)")
-              .font(LeafType.body.small)
-              .foregroundStyle(LeafColor.text.quaternary)
+        if !row.detailRows.isEmpty {
+          VStack(alignment: .leading, spacing: LeafSpace.sm) {
+            ForEach(row.detailRows) { detail in
+              LeafLabelValueRow(
+                label: detail.label.rawValue,
+                value: detail.value,
+                accentPrefix: accentPrefix(for: detail),
+                url: detail.url
+              )
+            }
           }
+          .padding(.top, LeafSpace.xs)
         }
 
-        if !row.links.isEmpty {
-          // Outbound links of the originating event — the "where it landed"
-          // trail (PR / issue / thread refs).
+        if row.detailRows.isEmpty, !row.links.isEmpty {
+          // Fallback trail for rows without composed detail lines.
           HStack(spacing: LeafSpace.xs) {
             ForEach(Array(row.links.prefix(4).enumerated()), id: \.offset) { _, link in
               LeafPill(title: link.targetRef, tone: .accent)
             }
           }
-          .padding(.top, LeafSpace.xxs)
+        }
+
+        HStack(spacing: LeafSpace.xs) {
+          Text(row.sourceLabel)
+            .font(LeafType.mono.small)
+            .foregroundStyle(LeafColor.text.tertiary)
+          Text(Self.formatRelative(row.tsMs))
+            .font(LeafType.mono.small)
+            .foregroundStyle(LeafColor.text.quaternary)
+          if row.occurrenceCount > 1 {
+            Text("×\(row.occurrenceCount)")
+              .font(LeafType.mono.small)
+              .foregroundStyle(LeafColor.text.quaternary)
+          }
         }
       }
-      Spacer(minLength: 0)
     }
     .accessibilityElement(children: .combine)
+  }
+
+  /// "decision · 2 weeks ago" — mono lowercase header per the mockup.
+  private func headerTitle(_ row: SearchResultRow) -> String {
+    let kindLabel: String
+    switch row.kind {
+    case .decision: kindLabel = "decision"
+    case .openQuestion: kindLabel = "open question"
+    case .blocker: kindLabel = "blocker"
+    case .event: kindLabel = row.sourceLabel.lowercased()
+    }
+    let relative = Self.formatRelative(row.tsMs)
+    return relative.isEmpty ? kindLabel : "\(kindLabel) · \(relative)"
+  }
+
+  /// Green accent segments: ticket/PR refs and conventional-commit prefixes.
+  private func accentPrefix(for detail: SearchResultDetailRow) -> String? {
+    switch detail.label {
+    case .commit:
+      if let colon = detail.value.firstIndex(of: ":") {
+        return String(detail.value[detail.value.startIndex...colon])
+      }
+      return nil
+    case .ticket, .pr:
+      return detail.value
+    case .author, .channel, .outcome, .thread:
+      return nil
+    }
   }
 
   private func dotTone(_ kind: SearchResultRow.Kind) -> LeafDotTone {

@@ -144,6 +144,9 @@ public struct ActivityEvent: Codable, Sendable, Equatable {
     /// `title` key. Lets consumers render "GUN-12 · Fix relay reconnect"
     /// instead of dumping the body as a headline.
     public let targetTitle: String?
+    /// Additive (Track B1) — Slack channel name when the allowlisted payload
+    /// carries one. Drives the CHANNEL detail row of Search result cards.
+    public let channelName: String?
 
     public init(
         eventID: Int64,
@@ -154,7 +157,8 @@ public struct ActivityEvent: Codable, Sendable, Equatable {
         bodyExcerpt: String?,
         bodyTruncated: Bool,
         targetRef: String? = nil,
-        targetTitle: String? = nil
+        targetTitle: String? = nil,
+        channelName: String? = nil
     ) {
         self.eventID = eventID
         self.tsMs = tsMs
@@ -165,6 +169,7 @@ public struct ActivityEvent: Codable, Sendable, Equatable {
         self.bodyTruncated = bodyTruncated
         self.targetRef = targetRef
         self.targetTitle = targetTitle
+        self.channelName = channelName
     }
 }
 

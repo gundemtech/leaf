@@ -117,8 +117,10 @@ public struct QueryEngine: Sendable {
             //    fallback to recent-events SELECT otherwise.
             let eventIDs: [Int64]
             if let filter, !filter.trimmingCharacters(in: .whitespaces).isEmpty {
+                // Track B1 — user text must never reach MATCH raw (FTS5
+                // syntax injection: hyphens parse as column filters).
                 eventIDs = try EventsFullTextStore.search(
-                    query: filter,
+                    query: FTSQuerySanitizer.sanitize(filter),
                     period: period.startMs ... period.endMs,
                     limit: Self.sqlEventLimit,
                     in: rawDB
@@ -191,7 +193,8 @@ public struct QueryEngine: Sendable {
             // match → candidate event ids → join to `decisions` table to find
             // the highest-confidence decision pinned to one of those events.
             let candidateIDs = try EventsFullTextStore.search(
-                query: topic, period: range, limit: Self.decisionTopicCandidateLimit, in: rawDB
+                query: FTSQuerySanitizer.sanitize(topic),
+                period: range, limit: Self.decisionTopicCandidateLimit, in: rawDB
             )
             guard !candidateIDs.isEmpty else {
                 return GetDecisionResponse(decision: nil, relatedEvents: [], truncationNote: nil)
@@ -439,6 +442,7 @@ public struct QueryEngine: Sendable {
             var bodyTruncated = false
             var targetRef: String?
             var targetTitle: String?
+            var channelName: String?
             if let data = payloadJSON.data(using: .utf8),
                let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 eventKind = dict["event_kind"] as? String
@@ -461,6 +465,9 @@ public struct QueryEngine: Sendable {
                 if let title = dict["title"] as? String, !title.isEmpty {
                     targetTitle = title
                 }
+                if let channel = dict["channel_name"] as? String, !channel.isEmpty {
+                    channelName = channel
+                }
             }
             return ActivityEvent(
                 eventID: id,
@@ -471,7 +478,8 @@ public struct QueryEngine: Sendable {
                 bodyExcerpt: bodyExcerpt,
                 bodyTruncated: bodyTruncated,
                 targetRef: targetRef,
-                targetTitle: targetTitle
+                targetTitle: targetTitle,
+                channelName: channelName
             )
         }
         // Capture-side duplicate collapse (2026-06-11): the Linear boundary

@@ -20,7 +20,7 @@ final class SearchReader {
   enum State: Equatable {
     case idle
     case searching
-    case results([SearchResultRow])
+    case results(SearchResultsPresentation)
     case empty
     case error(String)
   }
@@ -54,7 +54,7 @@ final class SearchReader {
     state = .searching
 
     let url = dbURL
-    let result: Result<[SearchResultRow], Error> = await Task.detached(priority: .userInitiated) {
+    let result: Result<SearchResultsPresentation, Error> = await Task.detached(priority: .userInitiated) {
       do {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         let engine = QueryEngine(
@@ -68,7 +68,7 @@ final class SearchReader {
             startMs: nowMs - Int64(Self.searchWindowDays) * 86_400_000, endMs: nowMs),
           filter: trimmed
         )
-        return .success(SearchResultsComposer.compose(from: response))
+        return .success(SearchResultsComposer.composePresentation(from: response))
       } catch {
         return .failure(error)
       }
@@ -78,8 +78,8 @@ final class SearchReader {
     guard myGeneration == generation else { return }
 
     switch result {
-    case .success(let rows):
-      state = rows.isEmpty ? .empty : .results(rows)
+    case .success(let presentation):
+      state = presentation.rows.isEmpty ? .empty : .results(presentation)
     case .failure:
       state = .error("Couldn't search your memory. Try again.")
     }
