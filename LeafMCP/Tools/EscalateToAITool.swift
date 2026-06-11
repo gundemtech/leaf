@@ -104,8 +104,8 @@ struct EscalateToAITool: ToolExecutor {
       return Self.result(
         "None of those events have text I can analyze (they may be personal-app / DM events, which are never sent).",
         isError: false)
-    case .failure(let message):
-      return Self.result(message, isError: true)
+    case .failure(let failure):
+      return Self.result(failure.message, isError: true)
     }
   }
 

@@ -30,11 +30,6 @@ struct AskLeafView: View {
   }
   @State private var handoffSeed: HandoffSeed? = nil
 
-  /// Точное сравнение с opaque-сообщением missingAPIKey — единственный
-  /// failure, который получает CTA «Open Settings». Источник строки тот же
-  /// модуль (AIWorkAnswerer.message(for:)), текст не дублируем.
-  private static let missingKeyMessage = AIWorkAnswerer.message(for: .missingAPIKey)
-
   private static let suggestions = [
     "What did I work on this week?",
     "Where did I stop yesterday?",
@@ -141,12 +136,13 @@ struct AskLeafView: View {
       Text("I don't have enough recorded work in that period to answer.")
         .font(LeafType.body.regular)
         .foregroundStyle(LeafColor.text.secondary)
-    case .failed(let message):
+    case .failed(let failure):
       VStack(alignment: .leading, spacing: LeafSpace.sm) {
-        Text(message)
+        Text(failure.message)
           .font(LeafType.body.regular)
           .foregroundStyle(LeafColor.status.warning)
-        if message == Self.missingKeyMessage {
+        // AI-UI-4 — CTA по kind, не по exact-string match (missingKey / budget).
+        if failure.showsSettingsCTA {
           Button("Open Settings") {
             windowState.section = .settings
           }

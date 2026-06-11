@@ -131,9 +131,10 @@ final class EscalationReader {
     case .text(let text):
       draft?.resolve(answer: text)
     case .notEnoughData:
-      draft?.fail("None of those events have text that can be sent.")
-    case .failure(let message):
-      draft?.fail(message)
+      draft?.fail(
+        AIFailure(kind: .localRead, message: "None of those events have text that can be sent."))
+    case .failure(let failure):
+      draft?.fail(failure)
     }
   }
 

@@ -10,7 +10,7 @@ public struct InboundHandoffExplainer: Sendable {
   public enum Answer: Sendable, Equatable {
     case text(String)
     case notEnoughData
-    case failure(String)
+    case failure(AIFailure)
   }
 
   /// Fixed audit label — the instruction text is moat and must not leak into
@@ -73,7 +73,10 @@ public struct InboundHandoffExplainer: Sendable {
     do {
       try await audit.record(entry)
     } catch {
-      return .failure("Couldn't record this request, so it was not sent. Try again.")
+      return .failure(
+        AIFailure(
+          kind: .auditWrite,
+          message: "Couldn't record this request, so it was not sent. Try again."))
     }
 
     do {
@@ -82,9 +85,10 @@ public struct InboundHandoffExplainer: Sendable {
         maxTokens: maxAnswerTokens)
       return .text(out.text)
     } catch let error as SummarizerError {
-      return .failure(AIWorkAnswerer.message(for: error))
+      return .failure(AIWorkAnswerer.failure(for: error, path: path))
     } catch {
-      return .failure("Couldn't reach the model right now. Try again.")
+      return .failure(
+        AIFailure(kind: .transient, message: "Couldn't reach the model right now. Try again."))
     }
   }
 }

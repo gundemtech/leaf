@@ -10,7 +10,7 @@ public struct AskLeafTranscript: Equatable, Sendable {
       case pending
       case answered(String)
       case notEnoughData
-      case failed(String)
+      case failed(AIFailure)
       /// AI-UI-3 — terminal NL-intent suggestion: no LLM ran; the UI renders
       /// [Create handoff for <name>] / [Ask anyway] actions instead of an answer.
       case handoffSuggestion(recipientName: String, topic: String)
@@ -80,7 +80,7 @@ public struct AskLeafTranscript: Equatable, Sendable {
     switch answer {
     case .text(let text): entries[idx].phase = .answered(text)
     case .notEnoughData: entries[idx].phase = .notEnoughData
-    case .failure(let msg): entries[idx].phase = .failed(msg)
+    case .failure(let failure): entries[idx].phase = .failed(failure)
     }
   }
 }

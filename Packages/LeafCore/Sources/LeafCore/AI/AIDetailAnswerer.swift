@@ -51,8 +51,8 @@ public struct AIDetailAnswerer: Sendable {
     /// Nothing escalatable in the selection (all bucket-1 / empty) and no
     /// projectable fact — answered locally, no audit, no LLM call.
     case notEnoughData
-    /// A user-facing, opaque failure message (never echoes key/body/response).
-    case failure(String)
+    /// A user-facing, opaque failure (kind + message; never echoes key/body/response).
+    case failure(AIFailure)
   }
 
   private let policy: LLMPolicy
@@ -108,7 +108,10 @@ public struct AIDetailAnswerer: Sendable {
     do {
       try await audit.record(entry)
     } catch {
-      return .failure("Couldn't record this request, so it was not sent. Try again.")
+      return .failure(
+        AIFailure(
+          kind: .auditWrite,
+          message: "Couldn't record this request, so it was not sent. Try again."))
     }
 
     do {
@@ -116,9 +119,10 @@ public struct AIDetailAnswerer: Sendable {
         context, question: question, escalated: escalated, model: model, maxTokens: maxAnswerTokens)
       return .text(out.text)
     } catch let error as SummarizerError {
-      return .failure(AIWorkAnswerer.message(for: error))  // reuse opaque mapping
+      return .failure(AIWorkAnswerer.failure(for: error, path: path))  // reuse opaque mapping
     } catch {
-      return .failure("Couldn't reach the model right now. Try again.")
+      return .failure(
+        AIFailure(kind: .transient, message: "Couldn't reach the model right now. Try again."))
     }
   }
 
