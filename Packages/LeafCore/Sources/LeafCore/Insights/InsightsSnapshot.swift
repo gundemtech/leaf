@@ -198,6 +198,10 @@ public struct InsightsSnapshot: Sendable, Hashable {
     /// path. 14th iteration of defaulted-init blast-radius; tail position
     /// preserves T2..T7 callsite back-compat.
     public let standupRecap: StandupSnapshot?
+    /// UC-2 — "am I quietly stuck" nudges (stalled PRs / stuck tickets / open
+    /// blockers / fragmented attention). Local-only; Home renders the card
+    /// only when non-empty. Empty default keeps existing callsites compiling.
+    public let nudges: [NudgeItem]
 
     public init(
         topApps: [AppTimeEntry],
@@ -244,7 +248,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         activeTeammates: [TeammateSnapshot] = [],
         memberCount: Int = 1,
         currentSession: CurrentTaskSession? = nil,
-        standupRecap: StandupSnapshot? = nil
+        standupRecap: StandupSnapshot? = nil,
+        nudges: [NudgeItem] = []
     ) {
         self.topApps = topApps
         self.sessions = sessions
@@ -291,6 +296,7 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.memberCount = memberCount
         self.currentSession = currentSession
         self.standupRecap = standupRecap
+        self.nudges = nudges
     }
 
     /// Convenience init — computes `deepSessionsCount` from the threshold.
@@ -343,7 +349,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         activeTeammates: [TeammateSnapshot] = [],
         memberCount: Int = 1,
         currentSession: CurrentTaskSession? = nil,
-        standupRecap: StandupSnapshot? = nil
+        standupRecap: StandupSnapshot? = nil,
+        nudges: [NudgeItem] = []
     ) {
         self.init(
             topApps: topApps,
@@ -390,7 +397,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
             activeTeammates: activeTeammates,
             memberCount: memberCount,
             currentSession: currentSession,
-            standupRecap: standupRecap
+            standupRecap: standupRecap,
+            nudges: nudges
         )
     }
 

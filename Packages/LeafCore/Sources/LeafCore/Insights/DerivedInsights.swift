@@ -172,6 +172,12 @@ public protocol DerivedInsights: Sendable {
     /// integration cleanup wires D3 `BlockerPatternHit` as the canonical
     /// source. Default returns `[]` so StubInsights stays no-op.
     func openBlockers() throws -> [Blocker]
+
+    /// UC-2 nudges — "am I quietly stuck" rows (stalled PRs / stuck tickets /
+    /// open blockers / fragmented-attention day). Local-only surface; never
+    /// enters the team broadcast chain. Default `[]` for stubs / iOS-future;
+    /// SQL + thresholds in the moat.
+    func nudges(now: Date) throws -> [NudgeItem]
 }
 
 /// Default implementations — conformers may override, but without an explicit
@@ -233,6 +239,11 @@ public extension DerivedInsights {
 
     /// Track-10 T5 stub default — returns `[]`; ProdInsights SQL impl in LeafCorePrivate moat.
     func recentActivityFeed(since: Int64, limit: Int) throws -> [ActivityFeedItem] { [] }
+
+    // MARK: - UC-2 default
+
+    /// UC-2 nudges stub default — returns `[]`; ProdInsights SQL impl in LeafCorePrivate moat.
+    func nudges(now: Date) throws -> [NudgeItem] { [] }
 }
 
 /// Phase 1.1 / CI fallback. All methods throw .notImplemented.

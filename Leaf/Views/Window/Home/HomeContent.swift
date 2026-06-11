@@ -35,6 +35,11 @@ struct HomeContent: View {
                     weekly: snapshot.weeklyMetrics
                 )
 
+                // UC-2 — "am I quietly stuck" card; renders only when the
+                // deriver found something. Sits above NEEDS YOU: a stuck PR
+                // of mine outranks somebody else's review ping.
+                NudgesBlock(nudges: snapshot.nudges)
+
                 // Solo Mac (no org or 1-member personal org) → NEEDS YOU stays
                 // full-width. Team install → 2-col ViewThatFits side-by-side;
                 // narrow window collapses to stacked.
