@@ -422,7 +422,11 @@ final class SupabaseClientIdempotencyTests: XCTestCase {
 
   func test_14_tokenRefresh_noKey() async throws {
     let client = makeClient()
-    let pubkey = String(repeating: "a", count: 64)
+    // The refreshed-JWT claim must be the REAL public key of makeClient's
+    // fixed identity — the client now verifies claim == local key.
+    let pubkey = try Curve25519.KeyAgreement.PrivateKey(
+      rawRepresentation: Data(repeating: 0xAA, count: 32)
+    ).publicKey.rawRepresentation.map { String(format: "%02x", $0) }.joined()
     let captured = IdempotencyKeyCapture()
     let paths = PathCapture()
 

@@ -141,7 +141,10 @@ public actor SupabaseClient {
   /// live in the private register_pubkey edge function (see spec §4).
   public func ensureAuthenticatedAndPubkeyRegistered() async throws -> SupabaseAuthSession {
     let current = try await ensureAuthenticated()
-    if let claim = current.pubkeyClaim, !claim.isEmpty { return current }
+    if let claim = current.pubkeyClaim, !claim.isEmpty {
+      try requireClaimMatchesLocalKey(claim)
+      return current
+    }
     var pubkeyAlreadyClaimed = false
     do {
       try await performRegisterPubkey(accessToken: current.accessToken)
@@ -165,7 +168,21 @@ public actor SupabaseClient {
         ? SupabaseError.deviceKeyOwnedByAnotherAccount
         : SupabaseError.identityClaimMissing
     }
+    try requireClaimMatchesLocalKey(claim)
     return refreshed
+  }
+
+  /// A non-empty claim that mismatches the LOCAL device key means the account
+  /// is bound to a different key (second Mac / wiped keystore — the registry
+  /// is one-key-per-account, no re-key path yet). Admitting such a session
+  /// passes the auth gate but strands every creator-op on RLS 403s
+  /// (claim ≠ payload pubkey), so fail loud at login instead.
+  private func requireClaimMatchesLocalKey(_ claim: String) throws {
+    let localPubkey = try identity().publicKey.rawRepresentation
+      .map { String(format: "%02x", $0) }.joined()
+    guard claim.lowercased() == localPubkey else {
+      throw SupabaseError.accountBoundToDifferentDeviceKey
+    }
   }
 
   // MARK: - ensureFreshSession (P1 hot-fix — JWT refresh for Realtime)

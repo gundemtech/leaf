@@ -321,6 +321,8 @@ final class InviteTokensReader {
       case .pubkeyAlreadyRegistered: return "Pubkey already registered to another auth_id."
       case .deviceKeyOwnedByAnotherAccount:
         return "This device is registered to another account."
+      case .accountBoundToDifferentDeviceKey:
+        return "This account is bound to a different device key. Sign in from that Mac."
       case .inviteNotResolvable: return "Invite no longer valid."
       case .gone(let code): return "Invite no longer available (\(code))."
       }
