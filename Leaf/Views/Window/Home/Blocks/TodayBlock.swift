@@ -2,19 +2,17 @@
 //  TodayBlock.swift
 //  Home redesign — glanceable TODAY snapshot with a visual hierarchy:
 //  focused time is the headline number, the remaining metrics (AI ratio /
-//  sessions / switches / commits) read as a secondary strip, and a 7-day
-//  focus sparkline (Swift Charts BarMark over `weeklyMetrics.dailySeries`,
-//  today highlighted) gives the day a trend context. The YOU·NOW badge
-//  moved to the NOW hero (current state belongs next to current work).
+//  sessions / switches / commits) read as a secondary strip. The YOU·NOW
+//  badge moved to the NOW hero (current state belongs next to current work).
+//  The 7-day sparkline was dropped (2026-06-11): on sparse weeks it rendered
+//  as a single bar with dashes — trend charts live in the Analytics tab.
 //
 
-import Charts
 import LeafCore
 import SwiftUI
 
 struct TodayBlock: View {
     let metrics: TodayMetrics
-    let weekly: WeeklyMetrics
 
     /// Cached locale-aware "EEE d MMM" formatter so the "TODAY · <date>"
     /// label doesn't allocate a `DateFormatter` per body re-eval.
@@ -53,26 +51,11 @@ struct TodayBlock: View {
     // MARK: - Content
 
     private var content: some View {
-        ViewThatFits(in: .horizontal) {
-            // Wide branch — headline + secondary strip left, sparkline right.
-            HStack(alignment: .top, spacing: LeafSpace.xl) {
-                VStack(alignment: .leading, spacing: LeafSpace.md) {
-                    headlineCell
-                    secondaryStrip
-                }
-                Spacer(minLength: 0)
-                sparkline
-                    .frame(width: 180, height: 64)
-            }
-            // Narrow branch — stacked.
-            VStack(alignment: .leading, spacing: LeafSpace.md) {
-                headlineCell
-                secondaryStrip
-                sparkline
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 64)
-            }
+        VStack(alignment: .leading, spacing: LeafSpace.md) {
+            headlineCell
+            secondaryStrip
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var headlineCell: some View {
@@ -108,45 +91,6 @@ struct TodayBlock: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(value) \(label)")
-    }
-
-    // MARK: - Sparkline
-
-    /// 7-day focus bars, today emphasized. Axes hidden — a trend glance,
-    /// not an analytics surface (the Analytics tab owns the full chart).
-    @ViewBuilder
-    private var sparkline: some View {
-        let days = weekly.dailySeries
-        if days.contains(where: { $0.focusedMin > 0 }) {
-            VStack(alignment: .trailing, spacing: LeafSpace.xxs) {
-                Chart {
-                    ForEach(Array(days.enumerated()), id: \.offset) { index, day in
-                        BarMark(
-                            x: .value("Day", index),
-                            y: .value("Focused", max(day.focusedMin, 1))
-                        )
-                        .foregroundStyle(
-                            index == days.count - 1
-                                ? LeafColor.accent.primary
-                                : LeafColor.accent.primary.opacity(0.3)
-                        )
-                        .cornerRadius(LeafRadius.sm / 2)
-                    }
-                }
-                .chartXAxis(.hidden)
-                .chartYAxis(.hidden)
-                Text("last 7 days")
-                    .font(LeafType.label)
-                    .foregroundStyle(LeafColor.text.quaternary)
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(sparklineA11yLabel)
-        }
-    }
-
-    private var sparklineA11yLabel: String {
-        let total = weekly.dailySeries.reduce(0) { $0 + $1.focusedMin }
-        return "Focus trend, last 7 days, \(total) minutes total."
     }
 
     // MARK: - Formatting
