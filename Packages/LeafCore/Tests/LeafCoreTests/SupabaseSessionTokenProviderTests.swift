@@ -6,8 +6,11 @@ import XCTest
 /// AI-UI-4 — the concrete `AIInferenceAuthTokenProvider`: Supabase session →
 /// fresh JWT for the relay proxy. Contract (protocol doc): MUST refresh a
 /// near-expiry session (`ensureFreshSession`, never the cached
-/// `currentSession()`), MUST throw when no session exists — an empty bearer
-/// is never acceptable.
+/// `currentSession()`), MUST throw when no session can be established — an
+/// empty bearer is never acceptable. On pre-login dev the client bootstraps
+/// the anonymous session (same trust model as every other Supabase call);
+/// the account-login track later turns the no-session case into a hard
+/// `.unauthorized` throw without changing this provider.
 final class SupabaseSessionTokenProviderTests: XCTestCase {
   private var tempDir: URL!
 
@@ -92,16 +95,21 @@ final class SupabaseSessionTokenProviderTests: XCTestCase {
     }
   }
 
-  // No persisted session, nothing in memory → throw, never an empty bearer.
-  func testNoSessionThrowsUnauthorized() async {
+  // No persisted session + bootstrap (anonymous signup) failing → throw,
+  // never an empty bearer.
+  func testFailedBootstrapThrowsNeverEmptyBearer() async {
+    MockURLProtocol.handler = { request, _ in
+      (
+        HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!,
+        Data()
+      )
+    }
     let provider = SupabaseSessionTokenProvider(client: makeClient(seedRefreshToken: false))
     do {
       _ = try await provider.currentAccessToken()
-      XCTFail("expected unauthorized throw")
-    } catch let error as SupabaseError {
-      XCTAssertEqual(error, .unauthorized)
+      XCTFail("expected throw when no session can be established")
     } catch {
-      XCTFail("expected SupabaseError.unauthorized, got \(error)")
+      // Any thrown error is acceptable — the contract is "no empty bearer".
     }
   }
 
