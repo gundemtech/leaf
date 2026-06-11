@@ -26,8 +26,9 @@ public enum SupabaseEndpoint {
   }
 
   /// POST /auth/v1/token?grant_type=password — native email+password login.
-  /// Body carries email/password + gotrue_meta_security.captcha_token (global
-  /// CAPTCHA protection is on for the project — see spec §5.A/§5.C).
+  /// Body carries email/password; the native app sends NO captcha token — the
+  /// shared project runs with global CAPTCHA disabled (SupabaseClient
+  /// .signInWithPassword omits gotrue_meta_security when no token is supplied).
   public static func signInWithPassword(baseURL: URL) -> URL {
     var components = URLComponents(
       url: baseURL.appendingPathComponent("auth/v1/token"),
@@ -45,8 +46,9 @@ public enum SupabaseEndpoint {
   }
 
   /// POST /auth/v1/token?grant_type=pkce — exchange an OAuth authorization
-  /// code (returned to leaf://auth/callback) for a session, using the PKCE
-  /// code_verifier. Used by SupabaseOAuthService's Google/GitHub path.
+  /// code (caught on the loopback redirect http://127.0.0.1:47825/callback) for
+  /// a session, using the PKCE code_verifier. Used by SupabaseOAuthService's
+  /// Google/GitHub path.
   public static func oauthToken(baseURL: URL) -> URL {
     var components = URLComponents(
       url: baseURL.appendingPathComponent("auth/v1/token"),
@@ -57,10 +59,13 @@ public enum SupabaseEndpoint {
   }
 
   /// GET /auth/v1/authorize?provider=...&redirect_to=...&code_challenge=...
-  /// The URL opened in ASWebAuthenticationSession to start a Google/GitHub
-  /// OAuth flow. Supabase redirects to `redirect_to` with `?code=...` on
-  /// success. `code_challenge_method` is lowercase `s256` per GoTrue's
-  /// authorize endpoint convention.
+  /// Builds the authorize URL opened in the user's DEFAULT browser to start a
+  /// Google/GitHub OAuth flow (loopback redirect — see SupabaseOAuthService).
+  /// Supabase redirects to `redirect_to` with `?code=...` on success.
+  /// `code_challenge_method` is lowercase `s256` per GoTrue's authorize
+  /// endpoint convention. NB: we do NOT send a caller `state` — GoTrue brokers
+  /// the OAuth flow and owns its own provider-leg state; a caller state breaks
+  /// it with `bad_oauth_state`. CSRF/injection protection is PKCE.
   public static func oauthAuthorize(
     baseURL: URL, provider: String, redirectTo: String, codeChallenge: String
   ) -> URL {
