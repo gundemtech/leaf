@@ -27,7 +27,8 @@ struct HomeContent: View {
                     gitDelta: snapshot.gitDelta,
                     taskIdentity: snapshot.currentTaskIdentity,
                     session: snapshot.currentSession,
-                    youNowState: snapshot.youNowState
+                    youNowState: snapshot.youNowState,
+                    lastCommit: snapshot.recentCommit
                 )
 
                 TodayBlock(

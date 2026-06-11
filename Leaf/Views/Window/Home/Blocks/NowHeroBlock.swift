@@ -25,6 +25,7 @@ struct NowHeroBlock: View {
     let taskIdentity: TaskIdentity?
     let session: CurrentTaskSession?
     let youNowState: YouNowState
+    var lastCommit: RecentCommitSnapshot? = nil
 
     @Environment(RouteCoordinator.self) private var coordinator
     @Environment(\.calendar) private var calendar
@@ -33,7 +34,7 @@ struct NowHeroBlock: View {
     private var hero: NowHeroPresentation {
         NowHeroComposer.compose(
             taskIdentity: taskIdentity, gitDelta: gitDelta, session: session,
-            whereStopped: snapshot, now: Date(), calendar: calendar)
+            whereStopped: snapshot, lastCommit: lastCommit, now: Date(), calendar: calendar)
     }
 
     var body: some View {
