@@ -623,6 +623,34 @@ final class GitHubCollectorTests: XCTestCase {
         XCTAssertNil(reviewPulse.payload["top_repo"], "topRepo=nil → key omitted entirely")
     }
 
+    /// Depth pass (2026-06-11) — pulse events carry `pr_refs_json` (repo +
+    /// number + title; titles ADR-010-allowlisted) so readers can join human
+    /// PR titles. Empty refs → key omitted.
+    func testMakePulseEvents_carryPRRefsJSON() throws {
+        let refs = [
+            GitHubPRRef(repo: "gundemtech/leaf", number: 64, title: "Home depth pass"),
+            GitHubPRRef(repo: "gundemtech/leaf-relay", number: 2, title: "AI proxy"),
+        ]
+        let openPulse = GitHubCollector.makeMyOpenPRCountEvent(
+            summary: GitHubMyOpenPRsSummary(count: 2, observedAtMs: 1, refs: refs),
+            nowMs: 1)
+        let json = try XCTUnwrap(openPulse.payload["pr_refs_json"])
+        XCTAssertTrue(json.contains("Home depth pass"))
+        XCTAssertTrue(json.contains("\"number\":64"))
+
+        let reviewPulse = GitHubCollector.makePRAwaitingReviewCountEvent(
+            summary: GitHubReviewQueueSummary(
+                count: 1, topRepo: "gundemtech/leaf", observedAtMs: 1,
+                refs: [refs[0]]),
+            nowMs: 1)
+        XCTAssertNotNil(reviewPulse.payload["pr_refs_json"])
+
+        let emptyPulse = GitHubCollector.makeMyOpenPRCountEvent(
+            summary: GitHubMyOpenPRsSummary(count: 0, observedAtMs: 1),
+            nowMs: 1)
+        XCTAssertNil(emptyPulse.payload["pr_refs_json"], "empty refs → key omitted")
+    }
+
     // MARK: - Phase 4.7.B-3 — actions runs
 
     /// Provider stub returns 2 runs → 2 `actions_run_initiated` action events emitted.

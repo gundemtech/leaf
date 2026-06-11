@@ -416,6 +416,9 @@ public actor GitHubCollector {
         if let topRepo = summary.topRepo {
             payload["top_repo"] = topRepo
         }
+        if let refsJSON = Self.encodePRRefs(summary.refs) {
+            payload["pr_refs_json"] = refsJSON
+        }
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0),
             signalType: .context,
@@ -493,18 +496,33 @@ public actor GitHubCollector {
     static func makeMyOpenPRCountEvent(
         summary: GitHubMyOpenPRsSummary, nowMs: Int64
     ) -> RawEvent {
-        let payload: [String: String] = [
+        var payload: [String: String] = [
             "source": "github",
             "event_kind": GitHubEventKindKey.myOpenPRCount.rawValue,
             "count": String(summary.count),
             "observed_at_ms": String(nowMs),
         ]
+        if let refsJSON = Self.encodePRRefs(summary.refs) {
+            payload["pr_refs_json"] = refsJSON
+        }
         return RawEvent(
             timestamp: Date(timeIntervalSince1970: TimeInterval(nowMs) / 1000.0),
             signalType: .context,
             bundleID: nil,
             payload: payload
         )
+    }
+
+    /// Depth pass (2026-06-11) — per-PR refs (repo + number + title; titles are
+    /// ADR-010 allowlisted) serialized into the pulse payload. Readers join
+    /// them into the repo#number → title map so PR handles render human
+    /// ("PR#64 · Home depth pass") everywhere. Empty refs → key omitted.
+    static func encodePRRefs(_ refs: [GitHubPRRef]) -> String? {
+        guard !refs.isEmpty else { return nil }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        guard let data = try? encoder.encode(refs) else { return nil }
+        return String(data: data, encoding: .utf8)
     }
 
     /// §4.3 — event kinds in the viewer's own events feed that are provably
