@@ -28,26 +28,48 @@ import SwiftUI
 struct AccountSettingsSection: View {
   @Environment(TierGateReader.self) private var tierGate
   @Environment(WorkspaceReader.self) private var workspaceReader
+  @Environment(SupabaseOAuthService.self) private var loginService
   @Environment(\.submitToWaitlist) private var submitToWaitlist
 
   @State private var selfPubHex: String = ""
   @State private var showUpgrade = false
+  @State private var showSignOutConfirm = false
 
   var body: some View {
     LeafSection(
       title: "Account",
       description: "Your local identity in this workspace."
     ) {
-      LeafCard(variant: .raised, padding: .regular) {
-        HStack(alignment: .center, spacing: LeafSpace.md) {
-          avatar
-          Text(displayName)
-            .font(LeafType.title.small)
-            .foregroundStyle(LeafColor.text.primary)
+      VStack(alignment: .leading, spacing: LeafSpace.sm) {
+        LeafCard(variant: .raised, padding: .regular) {
+          HStack(alignment: .center, spacing: LeafSpace.md) {
+            avatar
+            Text(displayName)
+              .font(LeafType.title.small)
+              .foregroundStyle(LeafColor.text.primary)
+            Spacer(minLength: 0)
+            tierChip
+          }
+        }
+        HStack(spacing: 0) {
           Spacer(minLength: 0)
-          tierChip
+          LeafButton("Sign Out", variant: .secondary, size: .sm) {
+            showSignOutConfirm = true
+          }
         }
       }
+    }
+    .confirmationDialog(
+      "Sign out of Leaf?",
+      isPresented: $showSignOutConfirm,
+      titleVisibility: .visible
+    ) {
+      Button("Sign Out", role: .destructive) {
+        Task { await loginService.signOut() }
+      }
+      Button("Cancel", role: .cancel) {}
+    } message: {
+      Text("Background capture stops and you'll need to sign in again to use Leaf.")
     }
     .sheet(isPresented: $showUpgrade) {
       UpgradeModal(

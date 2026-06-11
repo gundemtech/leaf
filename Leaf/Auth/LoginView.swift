@@ -33,6 +33,7 @@ struct LoginView: View {
   @State private var email = ""
   @State private var password = ""
   @State private var showPassword = false
+  @State private var showDeviceConflict = false
   @FocusState private var pwFocused: Bool
 
   private var isBusy: Bool {
@@ -62,6 +63,23 @@ struct LoginView: View {
     .background(LeafColor.surface.canvas)
     .overlay {
       if isAuthorizing { authorizingOverlay }
+    }
+    .onChange(of: service.state) { _, newState in
+      if newState == .deviceConflict { showDeviceConflict = true }
+    }
+    .confirmationDialog(
+      "This Mac is set up for another account",
+      isPresented: $showDeviceConflict,
+      titleVisibility: .visible
+    ) {
+      Button("Reset & Continue", role: .destructive) {
+        Task { await service.resetIdentityAndRetry() }
+      }
+      Button("Cancel", role: .cancel) { service.cancelDeviceConflict() }
+    } message: {
+      Text(
+        "This device's Leaf identity belongs to a different account. Reset it to sign in here — the previous account's local team data on this Mac will be removed."
+      )
     }
   }
 
@@ -95,9 +113,13 @@ struct LoginView: View {
 
   private var brand: some View {
     VStack(spacing: LeafSpace.sm) {
-      Image(nsImage: NSApplication.shared.applicationIconImage)
+      // The real Leaf product mark (same art as the app icon and the website),
+      // sourced from Logo/ and bundled as a per-appearance imageset: white on
+      // dark, ink on light. Pre-coloured, so render as-is — no template tint.
+      Image(LeafIcons.brand.logoMark)
         .resizable()
-        .frame(width: 52, height: 52)
+        .aspectRatio(contentMode: .fit)
+        .frame(width: 48, height: 48)
       Text("Sign in to Leaf")
         .font(LeafType.title.medium)
         .foregroundStyle(LeafColor.text.primary)

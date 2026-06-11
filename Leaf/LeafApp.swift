@@ -696,13 +696,15 @@ struct LeafApp: App {
             // wireRosterRefresh so materialisation's sidebar refresh hook is set.
             Task { await joinRequestsReader.resumePendingMaterialisations() }
             // Phase 1 (account-login) — after a successful login, start the
-            // agent (capture begins only post-login). The gate's .task(id:)
-            // recompute flips RootView to the shell. Sign-out (Settings →
-            // Account, future task) calls supabaseClient.signOut() +
-            // launchAgent.unregister(); the client-side signOut already clears
-            // the persisted refresh-token file.
+            // agent (capture begins only post-login); after sign-out, stop it.
+            // The gate's .task(id:) recompute flips RootView between the shell
+            // and LoginGateView. The client-side signOut() clears the persisted
+            // refresh-token file, so the next cold start sees no session.
             loginService.onAuthenticated = {
               launchAgent.register()
+            }
+            loginService.onSignedOut = {
+              launchAgent.unregister()
             }
           }
           .task {

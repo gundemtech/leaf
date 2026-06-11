@@ -322,9 +322,15 @@ final class JoinRequestsReader {
           inviteeState = .approved(row)
           await materialiseApproved(row: row, service: svc)
         }
-      case .declined: pendingStore.remove(row.requestID); inviteeState = .declined
-      case .cancelled: pendingStore.remove(row.requestID); inviteeState = .cancelled
-      case .expired: pendingStore.remove(row.requestID); inviteeState = .expired
+      case .declined:
+        pendingStore.remove(row.requestID)
+        inviteeState = .declined
+      case .cancelled:
+        pendingStore.remove(row.requestID)
+        inviteeState = .cancelled
+      case .expired:
+        pendingStore.remove(row.requestID)
+        inviteeState = .expired
       }
     } catch {
       logger.error("pollOwn: \(String(describing: error), privacy: .public)")
@@ -397,7 +403,8 @@ final class JoinRequestsReader {
       } catch {
         // Transient (network / auth) — keep the ID and retry on next launch.
         logger.error(
-          "resumePending \(requestID, privacy: .public): \(String(describing: error), privacy: .public)")
+          "resumePending \(requestID, privacy: .public): \(String(describing: error), privacy: .public)"
+        )
       }
     }
   }
@@ -495,6 +502,8 @@ final class JoinRequestsReader {
       case .rateLimited: return "Rate limited. Wait and try again."
       case .serverError: return "Server error (5xx)."
       case .pubkeyAlreadyRegistered: return "Pubkey collision."
+      case .deviceKeyOwnedByAnotherAccount:
+        return "This device is registered to another account."
       case .inviteNotResolvable: return "Invite expired or claimed."
       case .gone(let code): return friendlyInviteGoneMessage(for: code)
       }

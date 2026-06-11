@@ -32,6 +32,14 @@ final class SupabaseOAuthService {
     case exchangingToken
     case registeringDevice
     case authenticated
+    /// User explicitly signed out. Distinct from `.idle` (the initial / never-
+    /// touched value) so the gate's `.task(id: state)` re-fires even when the
+    /// shell was reached via a persisted token (state stayed `.idle`). Renders
+    /// the login form exactly like `.idle`.
+    case signedOut
+    /// Device-identity collision — this Mac's key is registered to a different
+    /// account. The gate shows a reset-confirmation prompt (LoginView).
+    case deviceConflict
     case error(message: String)
   }
 
@@ -41,6 +49,10 @@ final class SupabaseOAuthService {
   /// Called after a fully-successful login (session + pubkey registered) so
   /// LeafApp can register the launch agent and flip the gate. Set by LeafApp.
   var onAuthenticated: (() -> Void)?
+
+  /// Called after a sign-out (session cleared) so LeafApp can unregister the
+  /// launch agent and stop background capture. Set by LeafApp.
+  var onSignedOut: (() -> Void)?
 
   /// OAuth redirect — a loopback URL so the flow can run in the user's DEFAULT
   /// browser. Fixed port (Linear uses 47823, Slack-relay 47824) so it can be
@@ -66,7 +78,7 @@ final class SupabaseOAuthService {
       _ = try await client.signInWithPassword(email: email, password: password)
       try await finishWithDeviceRegistration()
     } catch {
-      state = .error(message: friendlyMessage(error))
+      setFailureState(error)
     }
   }
 
@@ -88,6 +100,21 @@ final class SupabaseOAuthService {
     state = .idle
   }
 
+  // MARK: - Sign-out
+
+  /// Sign out — clears the session (in-memory state + persisted refresh token
+  /// via the client) and returns the app to the login gate. Cancels any
+  /// in-flight OAuth flow first. `onSignedOut` lets LeafApp unregister the
+  /// launch agent so background capture stops; RootView's `.task(id:)` observes
+  /// the state flip back to `.idle` and re-arms LoginGateView.
+  func signOut() async {
+    oauthTask?.cancel()
+    oauthTask = nil
+    await client.signOut()
+    state = .signedOut
+    onSignedOut?()
+  }
+
   private func runOAuth(provider: OAuthProvider) async {
     state = .authorizing
     let challenge = PKCE.makeChallenge()
@@ -105,24 +132,28 @@ final class SupabaseOAuthService {
         providerLabel: provider == .google ? "Google" : "GitHub")
       if Task.isCancelled { return }
 
-      if let oauthError = callback.queryItems?.first(where: { $0.name == "error" })?.value {
-        // User denied at the provider, or the provider returned an error.
-        state =
-          oauthError == "access_denied"
-          ? .idle
-          : .error(message: "Sign-in was cancelled or failed. Try again.")
+      // Decision is a pure, unit-tested helper (OAuthCallback). Security rests
+      // on PKCE — the code is bound to our code_verifier. No `state` check:
+      // GoTrue brokers the flow and owns the provider-leg state itself.
+      let outcome = OAuthCallback.evaluate(
+        items: (callback.queryItems ?? []).map { ($0.name, $0.value) })
+      switch outcome {
+      case .cancelled:
+        state = .idle  // user declined at the provider
         return
-      }
-      guard let code = callback.queryItems?.first(where: { $0.name == "code" })?.value else {
+      case .providerError:
+        state = .error(message: "Sign-in was cancelled or failed. Try again.")
+        return
+      case .missingCode:
         state = .error(message: "Login callback was missing an authorization code.")
         return
+      case .proceed(let code):
+        state = .exchangingToken
+        _ = try await client.exchangeOAuthCode(
+          code: code, codeVerifier: challenge.verifier, redirectURI: Self.redirectURI)
+        if Task.isCancelled { return }
+        try await finishWithDeviceRegistration()
       }
-
-      state = .exchangingToken
-      _ = try await client.exchangeOAuthCode(
-        code: code, codeVerifier: challenge.verifier, redirectURI: Self.redirectURI)
-      if Task.isCancelled { return }
-      try await finishWithDeviceRegistration()
     } catch let loopback as LoopbackCallbackError {
       if Task.isCancelled { return }
       switch loopback {
@@ -133,7 +164,7 @@ final class SupabaseOAuthService {
       }
     } catch {
       if Task.isCancelled { return }
-      state = .error(message: friendlyMessage(error))
+      setFailureState(error)
     }
   }
 
@@ -148,11 +179,41 @@ final class SupabaseOAuthService {
     onAuthenticated?()
   }
 
+  // MARK: - Device-identity conflict recovery
+
+  /// The device key is owned by another account (account switch on this Mac).
+  /// Reset this device's identity and re-run registration so the CURRENT
+  /// account claims a fresh key. Destructive — the previous account's local
+  /// team data tied to the old key is orphaned (caller confirms first).
+  func resetIdentityAndRetry() async {
+    do {
+      try IdentityService.deleteLocalIdentity()
+      try await finishWithDeviceRegistration()
+    } catch {
+      setFailureState(error)
+    }
+  }
+
+  /// Dismiss the device-conflict prompt back to the login form.
+  func cancelDeviceConflict() {
+    state = .idle
+  }
+
+  /// Route a login/registration failure: a device-key collision drives the
+  /// reset-confirmation state; everything else shows an inline error.
+  private func setFailureState(_ error: Error) {
+    if let supa = error as? SupabaseError, supa == .deviceKeyOwnedByAnotherAccount {
+      state = .deviceConflict
+    } else {
+      state = .error(message: friendlyMessage(error))
+    }
+  }
+
   private func friendlyMessage(_ error: Error) -> String {
     if let supa = error as? SupabaseError {
       switch supa {
       case .badRequest, .unauthorized: return "Wrong email or password — try again."
-      case .identityClaimMissing, .pubkeyAlreadyRegistered:
+      case .identityClaimMissing, .pubkeyAlreadyRegistered, .deviceKeyOwnedByAnotherAccount:
         return "Couldn't register this device. Try again in a moment."
       case .transport: return "Network problem — check your connection and retry."
       default: return "Login failed (\(supa)). Try again."

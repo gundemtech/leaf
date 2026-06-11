@@ -92,9 +92,18 @@ struct RootView: View {
       await recomputeSessionValidity()
     }
     .task(id: loginService.state) {
-      // Flip the gate the instant a login completes.
-      if case .authenticated = loginService.state {
+      // Re-probe the gate when auth state changes materially: a completed login
+      // moves to the shell; an explicit sign-out re-arms LoginGateView. NB:
+      // sign-out is its own state (.signedOut), NOT .idle — a cold start that
+      // reached the shell via a persisted token has state == .idle, so setting
+      // .idle on sign-out wouldn't change the id and .task(id:) wouldn't
+      // re-fire. Transient mid-login states (.authorizing / .exchangingToken /
+      // .registeringDevice) don't re-probe.
+      switch loginService.state {
+      case .authenticated, .signedOut:
         await recomputeSessionValidity()
+      default:
+        break
       }
     }
     .onAppear {
@@ -182,18 +191,24 @@ struct RootView: View {
     }
   }
 
-  /// Phase 1 — "valid" = currentSession() != nil && expiresAt > now().
-  /// Tries ensureAuthenticated() first so a persisted refresh token is
-  /// honoured (offline-grace already handled inside the client). A throw
-  /// (no session / refresh rejected) → not valid → LoginGateView.
+  /// Phase 1 — gate validity. ensureAuthenticated() honours a persisted refresh
+  /// token; a genuine throw (no session / refresh rejected) → LoginGateView.
+  /// Offline-grace (spec §5.D): a TRANSIENT failure (network down / 5xx / rate
+  /// limit) keeps the user in the shell instead of bouncing them to login —
+  /// ensureAuthenticated only reaches the network AFTER reading a persisted
+  /// token, so a transient throw means the user did log in before. On success
+  /// ensureAuthenticated already returns a non-expired (refreshed) session, so
+  /// no redundant expiry re-check here.
   private func recomputeSessionValidity() async {
     guard let client = supabaseClientForGate else {
       hasValidSession = false
       return
     }
     do {
-      let session = try await client.ensureAuthenticated()
-      hasValidSession = session.expiresAt > Date()
+      _ = try await client.ensureAuthenticated()
+      hasValidSession = true
+    } catch let error as SupabaseError where error.isTransientNetworkFailure {
+      hasValidSession = true
     } catch {
       hasValidSession = false
     }
