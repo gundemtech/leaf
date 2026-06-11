@@ -75,6 +75,14 @@ enum AgentMain {
     do {
       _ = try Self.requireSession(supabase)
       agentLogger.info("Auth gate passed — valid session present")
+    } catch let error as SupabaseError where error.isTransientNetworkFailure {
+      // Offline-grace (spec §5.D): a persisted session exists but the auth
+      // server is unreachable. Don't exit(0) — keep capturing locally; the
+      // session refreshes when the network returns. exit(0) here would kill
+      // capture every time the user happens to launch while offline.
+      agentLogger.notice(
+        "Auth gate: transient network failure — proceeding under offline grace: \(error.localizedDescription, privacy: .public)"
+      )
     } catch {
       agentLogger.info(
         "Auth gate FAILED (no valid session) — agent idling via exit(0): \(error.localizedDescription, privacy: .public)"

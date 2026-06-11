@@ -20,6 +20,12 @@ public enum SupabaseError: Error, Sendable, Equatable {
   case identityClaimMissing  // I1 — session has no pubkey claim (Auth Hook race / JWT decode glitch)
   case inviteNotResolvable  // 404 from invite_resolve — token claimed/expired/missing
   case pubkeyAlreadyRegistered  // 409 from register_pubkey — TOFU collision
+  /// 409 from register_pubkey AND the refreshed JWT still lacks our pubkey
+  /// claim → this device's key is owned by a DIFFERENT account (e.g. account
+  /// switch on a shared Mac). Actionable: the UI offers a device-identity
+  /// reset. Distinct from `.identityClaimMissing` (a transient JWT-hook race
+  /// where registration succeeded but the claim hasn't propagated yet).
+  case deviceKeyOwnedByAnotherAccount
   case decoding(reason: String)
   case transport(reason: String)
   case unexpected(status: Int)
@@ -80,5 +86,19 @@ public enum SupabaseError: Error, Sendable, Equatable {
   public static func fromRegisterPubkey(status: Int, body: Data?) -> SupabaseError {
     if status == 409 { return .pubkeyAlreadyRegistered }
     return fromStatus(status, body: body)
+  }
+
+  /// True for transient/infrastructure failures (network down, 5xx, rate-limit)
+  /// as opposed to a credential rejection. The auth gate (RootView + Agent)
+  /// uses this for offline-grace: a previously-logged-in user with a persisted
+  /// session stays in the app and the agent keeps capturing on a transient
+  /// blip, instead of being bounced to the login screen / `exit(0)`. A genuine
+  /// auth rejection (`.unauthorized` / `.badRequest`) is NOT transient and
+  /// still forces re-login.
+  public var isTransientNetworkFailure: Bool {
+    switch self {
+    case .transport, .serverError, .rateLimited: return true
+    default: return false
+    }
   }
 }

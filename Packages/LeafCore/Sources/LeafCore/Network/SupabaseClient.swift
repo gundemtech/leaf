@@ -130,12 +130,27 @@ public actor SupabaseClient {
   ///   1. registerPubkey(accessToken)  — row in pubkey_registry;
   ///   2. tokenRefresh                 — new JWT with the pubkey claim (JWT hook);
   ///   3. require pubkey claim present, else throw `.identityClaimMissing`.
-  /// Idempotent on the registerPubkey 409 path is the caller's concern
-  /// (TOFU collision surfaces as `.pubkeyAlreadyRegistered`).
+  /// A 409 from registerPubkey (pubkey already in the registry — idempotent
+  /// re-login, or a partial-wipe collision where the priv-key file survived)
+  /// is treated as success and falls through to the refresh; if the key is
+  /// owned by a DIFFERENT account the refreshed JWT won't carry our claim and
+  /// we throw `.deviceKeyOwnedByAnotherAccount` (the UI offers a reset),
+  /// distinct from `.identityClaimMissing` (transient JWT-hook race).
+  /// NB: the 409 path relies on the backend `pubkey_registry` being UNIQUE on
+  /// `pubkey` and the JWT hook scoping the claim to the CALLING auth_id — both
+  /// live in the private register_pubkey edge function (see spec §4).
   public func ensureAuthenticatedAndPubkeyRegistered() async throws -> SupabaseAuthSession {
     let current = try await ensureAuthenticated()
     if let claim = current.pubkeyClaim, !claim.isEmpty { return current }
-    try await performRegisterPubkey(accessToken: current.accessToken)
+    var pubkeyAlreadyClaimed = false
+    do {
+      try await performRegisterPubkey(accessToken: current.accessToken)
+    } catch SupabaseError.pubkeyAlreadyRegistered {
+      // 409: the pubkey is already in the registry. If it's OUR row (same
+      // device re-login) the refresh below carries the claim → success. If it
+      // belongs to another account, the refresh won't → see the guard below.
+      pubkeyAlreadyClaimed = true
+    }
     let refreshed = try await performTokenRefresh(refreshToken: current.refreshToken)
     state = .authenticated(refreshed)
     lastRefreshAt = now()
@@ -143,7 +158,12 @@ public actor SupabaseClient {
       persistSessionBestEffort(store: store, session: refreshed)
     }
     guard let claim = refreshed.pubkeyClaim, !claim.isEmpty else {
-      throw SupabaseError.identityClaimMissing
+      // No claim after refresh. A 409 means the device key is owned by a
+      // DIFFERENT account (actionable: reset device identity); no 409 means the
+      // JWT hook hasn't propagated yet (transient claim race).
+      throw pubkeyAlreadyClaimed
+        ? SupabaseError.deviceKeyOwnedByAnotherAccount
+        : SupabaseError.identityClaimMissing
     }
     return refreshed
   }
@@ -747,11 +767,11 @@ extension SupabaseClient {
     return session
   }
 
-  /// Exchange an OAuth authorization code (delivered to leaf://auth/callback
-  /// by ASWebAuthenticationSession) for a session. POST
-  /// /auth/v1/token?grant_type=pkce with `auth_code` + `code_verifier`.
-  /// OAuth (Google/GitHub) is exempt from CAPTCHA (spec §5.C) — no captcha
-  /// token in the body. Updates state + persists like signInWithPassword.
+  /// Exchange an OAuth authorization code (caught on the loopback redirect
+  /// http://127.0.0.1:47825/callback, opened in the user's default browser) for
+  /// a session. POST /auth/v1/token?grant_type=pkce with `auth_code` +
+  /// `code_verifier`. OAuth (Google/GitHub) sends no captcha token. Updates
+  /// state + persists like signInWithPassword.
   public func exchangeOAuthCode(
     code: String, codeVerifier: String, redirectURI: String
   ) async throws -> SupabaseAuthSession {
