@@ -1,15 +1,12 @@
 //
 //  HomeContent.swift
-//  Track-10 T7 — extracted from HomeView.swift to defend the HomeView LOC
-//  budget (master spec §7.2 gate 6 ≤ 310) before the Zone-4 ViewThatFits
-//  2-col rewire lands in C5. Zero behavior change in this commit.
-//
-//  Track-8 5-block composition (post Track-10 T2/T3/T4/T5/T6/T7/T8):
-//    1. RESUME HERO                              (T2)
-//    2. TODAY (with inline YOU·NOW state badge)  (T3)
-//    3. NEEDS YOU ‖ TEAM·N  (ViewThatFits 2-col) (T4, T6)
-//    4. SINCE ‖ YOU'RE ON   (ViewThatFits 2-col) (T5, T7)
-//    5. RECAP + EOD standup helpers              (T8)
+//  Home redesign — 4-zone composition. The screen answers four questions in
+//  ten seconds, top to bottom:
+//    1. NOW          — what am I on (merged former RESUME hero + YOU'RE ON)
+//    2. TODAY        — how is the day going (+7-day focus sparkline)
+//    3. NEEDS YOU ‖ TEAM·N — what waits on me / who's around
+//    4. WHILE YOU WERE AWAY — what happened without me (8-row cap)
+//    (+ RECAP / EOD standup helpers, hour-gated as before)
 //
 
 import LeafCore
@@ -25,26 +22,22 @@ struct HomeContent: View {
         @Bindable var coord = coordinator
         NavigationStack(path: $coord.homePath) {
             VStack(alignment: .leading, spacing: LeafSpace.xl) {
-                // Track-10 T2 — RESUME hero promoted to top of Home. Replaces
-                // the Track-9 T7 bottom WhereStoppedBlock (deleted in T2).
-                ResumeHeroBlock(
+                NowHeroBlock(
                     snapshot: snapshot.whereStopped,
                     gitDelta: snapshot.gitDelta,
-                    taskIdentity: snapshot.currentTaskIdentity
+                    taskIdentity: snapshot.currentTaskIdentity,
+                    session: snapshot.currentSession,
+                    youNowState: snapshot.youNowState
                 )
 
                 TodayBlock(
                     metrics: snapshot.todayMetrics,
-                    youNowState: snapshot.youNowState
+                    weekly: snapshot.weeklyMetrics
                 )
 
-                // Track-10 T6 — Zone-3 solo-vs-team gate. Solo Mac (no org or
-                // 1-member personal org) → NEEDS YOU stays full-width and the
-                // narrow Phase 8.5 WithYouOnThisBlock disappears. Team install
-                // (memberCount > 1) → 2-col ViewThatFits side-by-side; narrow
-                // window collapses to stacked NEEDS YOU above TEAM·N. Reader
-                // stub returns []; TeamNBlock renders empty CTA until
-                // Phase 5.4 lights up DBTeammatePresenceReader.
+                // Solo Mac (no org or 1-member personal org) → NEEDS YOU stays
+                // full-width. Team install → 2-col ViewThatFits side-by-side;
+                // narrow window collapses to stacked.
                 if snapshot.memberCount > 1 {
                     ViewThatFits(in: .horizontal) {
                         HStack(alignment: .top, spacing: LeafSpace.md) {
@@ -62,56 +55,17 @@ struct HomeContent: View {
                     NeedsYouBlock(items: snapshot.inboxItems)
                 }
 
-                // Track-10 T7 — Zone-4 ViewThatFits 2-col `SINCE ‖ YOU'RE ON`
-                // per master spec §2 scope lock #5. T6 ViewThatFits Zone-3
-                // precedent reuse: wide window → HStack 2-col; narrow →
-                // VStack stacked, SINCE above YOU'RE ON (priority order
-                // baked into the VStack child sequence).
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .top, spacing: LeafSpace.md) {
-                        SinceLastActiveBlock(
-                            items: snapshot.sinceLastActiveItems,
-                            onMarkAllAsSeen: {
-                                lastSeenCursor.markAllAsSeen(now: Date())
-                                reader.refresh()
-                            }
-                        )
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
-
-                        YoureOnBlock(
-                            session: snapshot.currentSession,
-                            gitDelta: snapshot.gitDelta
-                        )
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                SinceLastActiveBlock(
+                    items: snapshot.sinceLastActiveItems,
+                    onMarkAllAsSeen: {
+                        lastSeenCursor.markAllAsSeen(now: Date())
+                        reader.refresh()
                     }
-                    VStack(alignment: .leading, spacing: LeafSpace.xl) {
-                        SinceLastActiveBlock(
-                            items: snapshot.sinceLastActiveItems,
-                            onMarkAllAsSeen: {
-                                lastSeenCursor.markAllAsSeen(now: Date())
-                                reader.refresh()
-                            }
-                        )
-                        YoureOnBlock(
-                            session: snapshot.currentSession,
-                            gitDelta: snapshot.gitDelta
-                        )
-                    }
-                }
+                )
 
-                // Track-10 T8 — Zone-5 standup helper. Always-visible chevron
-                // headers; body auto-reveals by hour bucket (RECAP 06–11,
-                // EOD 17–23). Manual tap toggles regardless of hour; @State
-                // only, resets on view rebuild (no UserDefaults — Brainstorm
-                // Q3 rejected).
                 RecapBlock(snapshot: snapshot.standupRecap?.recap)
                 EodBlock(snapshot: snapshot.standupRecap?.eod)
             }
-            // IV.A.2 — Track-7 P1 (HomeSurface) / P3 (WorkStateRoute +
-            // WorkStateDetailScreen) / P4 (LayerBProvider) substrate was
-            // skipped on integration per Phase III decision. NavigationStack
-            // destinations + per-surface detail screens deferred until
-            // Track-7 lands or post-integration cleanup wires alternatives.
         }
     }
 }

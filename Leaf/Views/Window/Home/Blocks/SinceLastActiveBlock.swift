@@ -21,11 +21,13 @@ struct SinceLastActiveBlock: View {
     @State private var selectedFilter: SinceFilter = .all
     @State private var isExpanded: Bool = false
 
-    private static let visibleCap = 20
+    // Home redesign — 8 rows keep the block a glance surface; the full
+    // stream lives in the Activity tab. "+N older changes" expands inline.
+    private static let visibleCap = 8
 
     var body: some View {
         VStack(alignment: .leading, spacing: LeafSpace.md) {
-            Text("SINCE YOU WERE LAST ACTIVE")
+            Text("WHILE YOU WERE AWAY")
                 .leafSectionLabel()
                 .foregroundStyle(LeafColor.text.tertiary)
                 .accessibilityAddTraits(.isHeader)

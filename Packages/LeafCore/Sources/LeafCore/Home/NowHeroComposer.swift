@@ -87,7 +87,7 @@ public enum NowHeroComposer {
     return clauses.isEmpty ? nil : clauses.joined(separator: " · ")
   }
 
-  static func isTrunk(branch: String?, mergeBaseBasename: String) -> Bool {
+  public static func isTrunk(branch: String?, mergeBaseBasename: String) -> Bool {
     guard let branch, !branch.isEmpty else { return false }
     return trunkBranchNames.contains(branch.lowercased()) || branch == mergeBaseBasename
   }
