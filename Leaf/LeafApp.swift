@@ -103,6 +103,8 @@ struct LeafApp: App {
   /// write tech.gundem.leaf tier free` from Terminal flips UI live during
   /// QA — no app relaunch required.
   @State private var tierGateReader = TierGateReader()
+  @State private var accountProfileReader: AccountProfileReader
+  @State private var accountDeletion: AccountDeletionService
   /// Track 5 / S8 / T9 — @Observable wrapper around NotificationPrefsStore
   /// (M026). Bound by NotificationsSettingsSection (4 sub-groups × 11
   /// prefs). Opens its own writer DB handle lazily on first refresh;
@@ -216,6 +218,13 @@ struct LeafApp: App {
     // below in body's .onAppear once `launchAgent` is available on self.
     let login = SupabaseOAuthService(client: supabase)
     _loginService = State(initialValue: login)
+
+    _accountProfileReader = State(initialValue: AccountProfileReader(supabase: supabase))
+    _accountDeletion = State(
+      initialValue: AccountDeletionService(
+        deleteAccount: { try await supabase.deleteSelfAccount() },
+        signOut: { await login.signOut() },
+        deleteIdentity: { try IdentityService.deleteLocalIdentity() }))
 
     _workspaceReader = State(
       initialValue: WorkspaceReader(
@@ -653,6 +662,8 @@ struct LeafApp: App {
           .environment(inviteURLHandler)  // Phase 5.5.B
           .environment(tierGateReader)  // Track 5 / S8 / T3
           .environment(notificationPrefsReader)  // Track 5 / S8 / T9
+          .environment(accountProfileReader)  // Track 5 profile parity
+          .environment(\.accountDeletion, accountDeletion)  // Track 5 profile parity
           // T4 — UpgradeModal callsites (Sheet/TeamView Free branch/Sidebar
           // Free state) invoke `submitToWaitlist(email:)` via this env closure.
           // SupabaseClient is an actor (not @Observable), so we wrap it in a
