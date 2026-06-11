@@ -75,6 +75,7 @@ struct HomeView: View {
     @Environment(SlackScopesReader.self) private var slackScopes
     @Environment(SlackOAuthService.self) private var slackOAuth
     @Environment(LiveUpdateSignals.self) private var liveSignals
+    @Environment(AgentWatchdogService.self) private var watchdog
 
     /// Session-local dismiss flag for the proactive GitHub re-auth banner.
     /// Persisted across the same launch via UserDefaults keyed by
@@ -102,6 +103,15 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: LeafSpace.xl) {
+                // Agent-down banner — without it a dead capture agent reads
+                // as "Idle · 1h" on the NOW card (the UI silently lying about
+                // the user's own state). Watchdog escalation is the signal;
+                // not session-dismissable: stale data invalidates every block
+                // on this screen until repaired.
+                if let escalation = watchdog.escalation {
+                    agentDownBanner(escalation)
+                }
+
                 if case let .connectedScopeOutdated(missing) = scopesReader.state, shouldShowReauthBanner {
                     reauthBanner(missingCount: missing.count)
                 }
@@ -145,6 +155,20 @@ struct HomeView: View {
     /// the banner stays gone for the rest of this launch but re-appears on the
     /// next (fresh UUID).
     @ViewBuilder
+    private func agentDownBanner(_ escalation: AgentWatchdogService.Escalation) -> some View {
+        LeafBanner(
+            tone: .danger,
+            title: "Collection paused — \(escalation.title)",
+            description: escalation.needsLoginItemsApproval
+                ? "\(escalation.message) Open System Settings → Login Items, toggle both Leaf entries off, wait 3 seconds, toggle back on."
+                : escalation.message,
+            ctaTitle: "Repair",
+            onCTA: {
+                Task { await watchdog.repairNow() }
+            }
+        )
+    }
+
     private func reauthBanner(missingCount: Int) -> some View {
         LeafBanner(
             tone: .warning,
