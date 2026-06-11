@@ -31,7 +31,7 @@ final class AccountProfileReader {
   /// Fetch the account identity. Non-fatal on failure (identity is not
   /// gate-critical) — keeps the last loaded value if any, else records `.failed`.
   func load() async {
-    if case .loaded = state {} else { state = .loading }
+    if case .loaded = state {} else { state = .loading }  // refresh: keep prior data visible, don't flash to loading
     do {
       state = .loaded(try await supabase.fetchUserProfile())
     } catch {

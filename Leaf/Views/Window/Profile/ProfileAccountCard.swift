@@ -8,7 +8,6 @@
 //  AccountSettingsSection (which was only used by ProfileView).
 //
 
-import AppKit
 import CryptoKit
 import LeafCore
 import SwiftUI
@@ -129,7 +128,10 @@ struct ProfileAccountCard: View {
     return nil
   }
   private var emailValue: String { loadedProfile?.email ?? "—" }
-  private var providerValue: String { AccountProfileFormat.providerLabel(loadedProfile?.provider) }
+  private var providerValue: String {
+    guard let p = loadedProfile else { return "—" }
+    return AccountProfileFormat.providerLabel(p.provider)
+  }
   private var memberSinceValue: String {
     AccountProfileFormat.memberSince(isoString: loadedProfile?.createdAt) ?? "—"
   }
