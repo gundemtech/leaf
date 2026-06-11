@@ -194,8 +194,13 @@ final class SupabaseOAuthService {
     }
   }
 
-  /// Dismiss the device-conflict prompt back to the login form.
-  func cancelDeviceConflict() {
+  /// Dismiss the device-conflict prompt back to the login form. The conflict
+  /// path already installed + persisted a session WITHOUT our pubkey claim
+  /// (before the throw), and the gate is claim-blind — a plain state reset
+  /// would strand that claimless session for the next cold launch to admit.
+  /// Sign out to clear the in-memory state + the persisted store.
+  func cancelDeviceConflict() async {
+    await client.signOut()
     state = .idle
   }
 

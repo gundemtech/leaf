@@ -705,6 +705,11 @@ struct LeafApp: App {
             }
             loginService.onSignedOut = {
               launchAgent.unregister()
+              // Tear down the Realtime WebSocket + its JWT-refresh timer — the
+              // session is cleared, so leaving them running churns reconnects
+              // against an invalid token until app quit. suspend() (not
+              // unsubscribe) cancels the dispatch loop + refresh timer.
+              Task { await realtimeService.suspend() }
             }
           }
           .task {

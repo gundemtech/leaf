@@ -75,10 +75,10 @@ struct LoginView: View {
       Button("Reset & Continue", role: .destructive) {
         Task { await service.resetIdentityAndRetry() }
       }
-      Button("Cancel", role: .cancel) { service.cancelDeviceConflict() }
+      Button("Cancel", role: .cancel) { Task { await service.cancelDeviceConflict() } }
     } message: {
       Text(
-        "This device's Leaf identity belongs to a different account. Reset it to sign in here — the previous account's local team data on this Mac will be removed."
+        "This device's Leaf identity belongs to a different account. Reset it to sign in here — this Mac's Leaf identity will be replaced with a fresh one for your account."
       )
     }
   }
