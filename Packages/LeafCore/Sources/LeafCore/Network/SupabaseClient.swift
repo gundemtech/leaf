@@ -806,7 +806,8 @@ extension SupabaseClient {
     {
       request.setValue(v, forHTTPHeaderField: k)
     }
-    let (data, http) = try await performHTTP(request, retryable: false, label: "fetchUserProfile")
+    let (data, http) = try await performHTTP(
+      request, retryable: false, refreshable: true, label: "fetchUserProfile")
     guard http.statusCode == 200 else {
       throw SupabaseError.fromStatus(http.statusCode, body: data)
     }
@@ -831,7 +832,8 @@ extension SupabaseClient {
       request.setValue(v, forHTTPHeaderField: k)
     }
     request.httpBody = Data("{}".utf8)
-    let (data, http) = try await performHTTP(request, retryable: false, label: "deleteSelfAccount")
+    let (data, http) = try await performHTTP(
+      request, retryable: false, refreshable: true, label: "deleteSelfAccount")
     guard (200...299).contains(http.statusCode) else {
       throw SupabaseError.fromStatus(http.statusCode, body: data)
     }
