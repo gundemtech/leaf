@@ -49,8 +49,9 @@ public enum EventLinksStore {
             }
         }
 
-        // 2) Branch name → Linear (gh_commit_pushed only). Moat extractor via derivers.
-        if eventKind == GitHubEventKindKey.commitPushed.rawValue,
+        // 2) Branch name → Linear (commit events only). Moat extractor via derivers.
+        if eventKind == GitHubEventKindKey.commitPushed.rawValue
+            || eventKind == "git_commit_authored",
            let branch = payload["branch"],
            !knownLinearPrefixes.isEmpty,
            let id = derivers.extractBranchLinearID(branch, knownLinearPrefixes) {
@@ -224,6 +225,8 @@ public enum EventLinksStore {
         if eventKind == "issue_updated" { return Schema.BodyKinds.linearDesc }
         if eventKind == "linear_notification_received" { return Schema.BodyKinds.linearNotificationTitle }
         if eventKind == GitHubEventKindKey.commitPushed.rawValue { return Schema.BodyKinds.commitMsg }
+        // Track A1 — local git log collector (mirrors FTS dispatch).
+        if eventKind == "git_commit_authored" { return Schema.BodyKinds.commitMsg }
         if eventKind == GitHubEventKindKey.issueCommentAuthored.rawValue { return Schema.BodyKinds.ghIssueComment }
         if eventKind == GitHubEventKindKey.prReviewCommentAuthored.rawValue { return Schema.BodyKinds.ghPRReviewComment }
         if eventKind == "slack_thread_reply_aggregate" { return Schema.BodyKinds.slackThreadParent }

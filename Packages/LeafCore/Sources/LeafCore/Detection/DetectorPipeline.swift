@@ -292,6 +292,8 @@ public enum DetectorPipeline {
         // blocker), notifications are surface-only.
         if eventKind == "issue_updated" { return .linearDesc }
         if eventKind == GitHubEventKindKey.commitPushed.rawValue { return .commitMsg }
+        // Track A1 — local git log collector (mirrors FTS dispatch).
+        if eventKind == "git_commit_authored" { return .commitMsg }
         if eventKind == GitHubEventKindKey.issueCommentAuthored.rawValue { return .ghIssueComment }
         if eventKind == GitHubEventKindKey.prReviewCommentAuthored.rawValue { return .ghPRReviewComment }
         if eventKind == "slack_thread_reply_aggregate" { return .slackThreadParent }

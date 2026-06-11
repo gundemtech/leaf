@@ -7,7 +7,7 @@ final class ShareEventTypeRegistryD3SlackTests: XCTestCase {
     // Track-6 P5 grew it 182 → 185 (+3 Zoom Deep).
     // Track-6 P6 grew it 185 → 189 (+4 IDEs Surface Cap).
     func testRegistrySize116AfterD3Slack() {
-        XCTAssertEqual(ShareEventTypeKey.allCases.count, 198,
+        XCTAssertEqual(ShareEventTypeKey.allCases.count, 199,
                        "97 (post-D2) + 19 (D3 Slack) + 9 (S1) + 14 (S2) + 13 (S3) + 16 (Track-6 P1) + 6 (Track-6 P2 Xcode) + 8 (Track-6 P3 Browsers) + 3 (Track-6 P5 Zoom) + 4 (Track-6 P6 IDEs) = 189")
     }
 

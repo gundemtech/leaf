@@ -114,6 +114,10 @@ public enum EventsFullTextStore {
         if eventKind == "issue_updated" { return (canonical, Schema.BodyKinds.linearDesc) }
         if eventKind == "linear_notification_received" { return (canonical, Schema.BodyKinds.linearNotificationTitle) }
         if eventKind == GitHubEventKindKey.commitPushed.rawValue { return (canonical, Schema.BodyKinds.commitMsg) }
+        // Track A1 — local git log collector. Self-authored commit subject+body
+        // (ADR-010 commit-message precedent); same body_kind as the GitHub feed
+        // variant so D3 query paths treat both sources uniformly.
+        if eventKind == "git_commit_authored" { return (canonical, Schema.BodyKinds.commitMsg) }
         if eventKind == GitHubEventKindKey.issueCommentAuthored.rawValue { return (canonical, Schema.BodyKinds.ghIssueComment) }
         if eventKind == GitHubEventKindKey.prReviewCommentAuthored.rawValue { return (canonical, Schema.BodyKinds.ghPRReviewComment) }
         if eventKind == "slack_thread_reply_aggregate" { return (canonical, Schema.BodyKinds.slackThreadParent) }

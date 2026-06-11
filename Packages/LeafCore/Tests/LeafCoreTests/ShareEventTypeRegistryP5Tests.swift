@@ -12,9 +12,9 @@ import XCTest
 final class ShareEventTypeRegistryP5Tests: XCTestCase {
 
     func testRegistrySize155AfterP5() {
-        XCTAssertEqual(ShareEventTypeKey.allCases.count, 198,
+        XCTAssertEqual(ShareEventTypeKey.allCases.count, 199,
                        "integration-T10 baseline 182 (post-P3) + 3 (P5 Zoom) + 4 (P6 IDEs) = 189")
-        XCTAssertEqual(ShareEventTypeDefaults.all.count, 198,
+        XCTAssertEqual(ShareEventTypeDefaults.all.count, 199,
                        "defaults table must enumerate every ShareEventTypeKey case")
     }
 

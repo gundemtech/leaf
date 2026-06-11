@@ -167,6 +167,10 @@ public struct AgentThresholds: Sendable, Hashable {
     /// read from `com.apple.screencapture` defaults / fallback `~/Desktop`.
     /// Non-empty = absolute path (for test fixtures).
     public let screenshotDirectoryOverridePath: String
+    /// Track A1: how often `GitLogCollector` polls local repos in watched
+    /// folders for new self-authored commits. Default 900s — commit cadence is
+    /// minutes-scale and the read is N subprocess invocations per repo.
+    public let gitLogPollIntervalSec: TimeInterval
 
     public init(
         idlePollIntervalSec: TimeInterval,
@@ -214,7 +218,8 @@ public struct AgentThresholds: Sendable, Hashable {
         clipboardPollIntervalSec: TimeInterval = 60,
         wifiPollIntervalSec: TimeInterval = 60,
         localFilesCoalesceWindowSec: TimeInterval = 2,
-        screenshotDirectoryOverridePath: String = ""
+        screenshotDirectoryOverridePath: String = "",
+        gitLogPollIntervalSec: TimeInterval = 900
     ) {
         self.idlePollIntervalSec = idlePollIntervalSec
         self.idleThresholdSec = idleThresholdSec
@@ -262,6 +267,7 @@ public struct AgentThresholds: Sendable, Hashable {
         self.wifiPollIntervalSec = wifiPollIntervalSec
         self.localFilesCoalesceWindowSec = localFilesCoalesceWindowSec
         self.screenshotDirectoryOverridePath = screenshotDirectoryOverridePath
+        self.gitLogPollIntervalSec = gitLogPollIntervalSec
     }
 
     public static let weakDefaults = AgentThresholds(
