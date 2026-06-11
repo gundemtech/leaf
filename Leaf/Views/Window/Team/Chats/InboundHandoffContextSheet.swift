@@ -15,10 +15,14 @@ struct InboundHandoffContextSheet: View {
 
   @Environment(WindowState.self) private var windowState
   @Environment(\.dismiss) private var dismiss
-  @State private var reader = InboundHandoffContextReader()
+  @State private var reader: InboundHandoffContextReader
 
-  /// Exact-match CTA for the missing-key failure (pattern: AskLeafView).
-  private static let missingKeyMessage = AIWorkAnswerer.message(for: .missingAPIKey)
+  /// AI-UI-4 — reader seeded with the composition-root router (env values
+  /// aren't readable inside a @State initializer; the parent passes it).
+  init(row: DirectMessageMirrorRow, router: AIBackendRouter) {
+    self.row = row
+    _reader = State(initialValue: InboundHandoffContextReader(router: router))
+  }
 
   var body: some View {
     LeafSheetLayout(title: "Context for me", onDismiss: { dismiss() }) {
@@ -73,12 +77,13 @@ struct InboundHandoffContextSheet: View {
           .frame(maxWidth: .infinity, alignment: .leading)
       }
       .frame(maxHeight: 280)
-    case .error(let message):
+    case .error(let failure):
       VStack(alignment: .leading, spacing: LeafSpace.sm) {
-        Text(message)
+        Text(failure.message)
           .font(LeafType.body.small)
           .foregroundStyle(LeafColor.status.warning)
-        if message == Self.missingKeyMessage {
+        // AI-UI-4 — CTA по kind, не по exact-string match.
+        if failure.showsSettingsCTA {
           Button("Open Settings") {
             windowState.section = .settings
             dismiss()

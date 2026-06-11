@@ -2,11 +2,14 @@
 //  AIAnswersSettingsSection.swift
 //  Leaf
 //
-//  AI-UI-1 — Settings → Data → AI Answers. Первый UI для BYOK Anthropic-ключа
-//  (до этого ключ клали в файл руками). Пишет через FileAnthropicKeyStore —
+//  AI-UI-1 — Settings → Data → AI Answers. Пишет через FileAnthropicKeyStore —
 //  ОДИН источник ключа для in-app Ask Leaf И MCP ask_about_my_work (MCPServer
 //  Keychain читать не может — P1-решение). Ключ never displayed / never logged:
 //  loadKey() используется только как boolean-присутствие.
+//
+//  AI-UI-4 — keyless больше не «выключено»: in-app поверхности едут на
+//  командном пуле, ключ = optional override. Все state→copy строки — из
+//  AIAnswersSettingsPresentation (LeafCore, SPM-tested).
 //
 
 import LeafCore
@@ -26,11 +29,14 @@ struct AIAnswersSettingsSection: View {
 
   private let store = FileAnthropicKeyStore()
 
+  private var presentation: AIAnswersSettingsPresentation.Model {
+    AIAnswersSettingsPresentation.model(hasKey: hasKey)
+  }
+
   var body: some View {
     LeafSection(
       title: "AI Answers",
-      description:
-        "Bring your own Anthropic API key to enable AI answers — in the Ask Leaf tab and the MCP ask_about_my_work tool. The key is stored locally in a permission-restricted file and never leaves this Mac except to call Anthropic."
+      description: presentation.sectionDescription
     ) {
       VStack(alignment: .leading, spacing: LeafSpace.sm) {
         statusRow
@@ -54,8 +60,8 @@ struct AIAnswersSettingsSection: View {
 
   private var statusRow: some View {
     HStack(spacing: LeafSpace.sm) {
-      LeafDot(tone: hasKey ? .success : .muted, size: .sm)
-      Text(hasKey ? "Key configured" : "No key configured")
+      LeafDot(tone: presentation.statusIsActive ? .success : .muted, size: .sm)
+      Text(presentation.statusLabel)
         .font(LeafType.body.small)
         .foregroundStyle(LeafColor.text.secondary)
     }
@@ -75,9 +81,9 @@ struct AIAnswersSettingsSection: View {
   private func feedbackText(_ f: Feedback) -> String {
     switch f {
     case .saved:
-      "Key saved. AI answers are live in Ask Leaf and MCP."
+      presentation.savedFeedback
     case .removed:
-      "Key removed. AI answers are disabled until you add a key."
+      presentation.removedFeedback
     case .warningFormat:
       "Doesn't look like an Anthropic key (sk-ant-…). Press Save again to store anyway."
     case .error(let message):

@@ -49,8 +49,8 @@ public struct HandoffDrafter: Sendable {
     /// Nothing in the period projected to a shareable fact — answered locally,
     /// no LLM call (saves a guaranteed `.contextEmpty`).
     case notEnoughData
-    /// A user-facing, opaque failure message (never echoes key/body/response).
-    case failure(String)
+    /// A user-facing, opaque failure (kind + message; never echoes key/body/response).
+    case failure(AIFailure)
   }
 
   private let policy: LLMPolicy
@@ -116,7 +116,10 @@ public struct HandoffDrafter: Sendable {
       // AUDIT FIRST (§8 п.4 — over-record, never under-record). No sink wired →
       // fail closed: a body must never cross unrecorded.
       guard let audit else {
-        return .failure("Couldn't record this request, so it was not sent. Try again.")
+        return .failure(
+          AIFailure(
+            kind: .auditWrite,
+            message: "Couldn't record this request, so it was not sent. Try again."))
       }
       let dropped = max(0, escalatedEventIDs.count - bodies.count)
       let entry = EscalationAuditEntry(
@@ -133,7 +136,10 @@ public struct HandoffDrafter: Sendable {
       do {
         try await audit.record(entry)
       } catch {
-        return .failure("Couldn't record this request, so it was not sent. Try again.")
+        return .failure(
+          AIFailure(
+            kind: .auditWrite,
+            message: "Couldn't record this request, so it was not sent. Try again."))
       }
     }
 
@@ -162,9 +168,9 @@ public struct HandoffDrafter: Sendable {
         topicExcerpt: policy.makeQuestion(topic).text)
       return .text(out.text, provenance: provenance)
     } catch let error as SummarizerError {
-      return .failure(AIWorkAnswerer.message(for: error))  // reuse opaque mapping
+      return .failure(AIWorkAnswerer.failure(for: error, path: path))  // reuse opaque mapping
     } catch {
-      return .failure("Couldn't draft right now. Try again.")
+      return .failure(AIFailure(kind: .transient, message: "Couldn't draft right now. Try again."))
     }
   }
 

@@ -18,6 +18,7 @@ import LeafCore
 import SwiftUI
 
 struct ConversationPane: View {
+  @Environment(\.aiBackendRouter) private var aiBackendRouter  // AI-UI-4
   let peer: TeamMember?
   /// Peer pubkey — non-nil even when the member left the roster (history
   /// stays readable; composer disabled in that case).
@@ -60,7 +61,7 @@ struct ConversationPane: View {
     }
     // AI-UI-3 — recipient-side AI expansion of an inbound handoff.
     .sheet(item: $contextSeed) { seed in
-      InboundHandoffContextSheet(row: seed.row)
+      InboundHandoffContextSheet(row: seed.row, router: aiBackendRouter)
     }
   }
 

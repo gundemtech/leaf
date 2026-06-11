@@ -3,7 +3,8 @@
 //  Leaf
 //
 //  AI-UI-2 — @Observable клей escalation-модалки. Зеркало AskLeafReader:
-//  AIWiring-дефолты, lazy AIDetailAnswerer bootstrap, fetch off-main, BYOK-only.
+//  AIWiring-дефолты, fetch off-main, per-confirm path routing (AI-UI-4 —
+//  BYOK-клапан: ключ → Anthropic, иначе командный пул через relay-прокси).
 //  Логика выбора/фаз — LeafCore (EscalationDraft, SPM-tested); audit-first и
 //  bucket-1 — внутри AIDetailAnswerer/LLMPolicy (неизменны, паритет с MCP-путём).
 //
@@ -48,25 +49,24 @@ final class EscalationReader {
   private(set) var draft: EscalationDraft?
 
   private var keyed: [(id: Int64, event: EgressEvent)] = []
-  private var answerer: AIDetailAnswerer?
 
   private let policy: LLMPolicy
-  private let summarizerMoat: AISummarizerMoat
+  private let router: AIBackendRouter
   private let modelGateMoat: ModelGateMoat
   private let databaseURL: URL
   private let databaseConfig: DatabaseConfig
   private let databaseEncryption: EncryptionOptions?
 
   init(
+    router: AIBackendRouter,
     databaseURL: URL = DatabasePath.defaultURL(),
     databaseConfig: DatabaseConfig = AIWiring.databaseConfig(),
     databaseEncryption: EncryptionOptions? = AIWiring.databaseEncryption(),
     policy: LLMPolicy = AIWiring.policy(),
-    summarizerMoat: AISummarizerMoat = AIWiring.summarizerMoat(),
     modelGateMoat: ModelGateMoat = AIWiring.modelGateMoat()
   ) {
     self.policy = policy
-    self.summarizerMoat = summarizerMoat
+    self.router = router
     self.modelGateMoat = modelGateMoat
     self.databaseURL = databaseURL
     self.databaseConfig = databaseConfig
@@ -122,29 +122,29 @@ final class EscalationReader {
     let ids = Array(d.selected).sorted()
     let events = keyed.filter { d.selected.contains($0.id) }.map(\.event)
     assert(events.count <= EscalationDraft.selectionCap, "consent cap must hold on the send path")
-    let a = ensureAnswerer()
+    // AI-UI-4 — resolve the backend per confirm (BYOK valve).
+    let r = router.resolve()
+    let a = makeAnswerer(summarizer: r.summarizer)
     let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
     let answer = await a.answer(
       question: question, eventIDs: ids, selectedEvents: events, nowMs: nowMs,
-      path: .byok, preferred: model)
+      path: r.path, preferred: model)
     switch answer {
     case .text(let text):
       draft?.resolve(answer: text)
     case .notEnoughData:
-      draft?.fail("None of those events have text that can be sent.")
-    case .failure(let message):
-      draft?.fail(message)
+      draft?.fail(
+        AIFailure(kind: .localRead, message: "None of those events have text that can be sent."))
+    case .failure(let failure):
+      draft?.fail(failure)
     }
   }
 
-  private func ensureAnswerer() -> AIDetailAnswerer {
-    if let a = answerer { return a }
+  private func makeAnswerer(summarizer: any Summarizer) -> AIDetailAnswerer {
     let audit = DBEscalationAuditSink(
       dbURL: databaseURL, dbConfig: databaseConfig, dbEncryption: databaseEncryption)
-    let a = AIDetailAnswerer(
-      policy: policy, summarizer: summarizerMoat.summarizer, modelGate: modelGateMoat.gate,
+    return AIDetailAnswerer(
+      policy: policy, summarizer: summarizer, modelGate: modelGateMoat.gate,
       audit: audit, maxAnswerTokens: Self.maxAnswerTokens)
-    answerer = a
-    return a
   }
 }

@@ -19,15 +19,13 @@ final class InboundHandoffContextReader {
     case idle
     case loading
     case answered(String)
-    case error(message: String)
+    case error(AIFailure)
   }
 
   private(set) var state: State = .idle
 
-  private var explainer: InboundHandoffExplainer?
-
   private let policy: LLMPolicy
-  private let summarizerMoat: AISummarizerMoat
+  private let router: AIBackendRouter
   private let modelGateMoat: ModelGateMoat
   private let promptMoat: HandoffPromptMoat
   private let databaseURL: URL
@@ -35,16 +33,16 @@ final class InboundHandoffContextReader {
   private let databaseEncryption: EncryptionOptions?
 
   init(
+    router: AIBackendRouter,
     databaseURL: URL = DatabasePath.defaultURL(),
     databaseConfig: DatabaseConfig = AIWiring.databaseConfig(),
     databaseEncryption: EncryptionOptions? = AIWiring.databaseEncryption(),
     policy: LLMPolicy = AIWiring.policy(),
-    summarizerMoat: AISummarizerMoat = AIWiring.summarizerMoat(),
     modelGateMoat: ModelGateMoat = AIWiring.modelGateMoat(),
     promptMoat: HandoffPromptMoat = AIWiring.handoffPromptMoat()
   ) {
     self.policy = policy
-    self.summarizerMoat = summarizerMoat
+    self.router = router
     self.modelGateMoat = modelGateMoat
     self.promptMoat = promptMoat
     self.databaseURL = databaseURL
@@ -72,33 +70,36 @@ final class InboundHandoffContextReader {
           .gather(period: period, nowMs: nowMs)
       }.value
     } catch {
-      state = .error(message: "Couldn't read your activity right now. Try again.")
+      state = .error(
+        AIFailure(
+          kind: .localRead, message: "Couldn't read your activity right now. Try again."))
       return
     }
 
-    let e = ensureExplainer()
+    // AI-UI-4 — resolve the backend per explain (BYOK valve).
+    let r = router.resolve()
+    let e = makeExplainer(summarizer: r.summarizer)
     switch await e.explain(
       handoffText: handoffText, events: events,
-      sentAtMs: sentAtMs, nowMs: nowMs, path: .byok)
+      sentAtMs: sentAtMs, nowMs: nowMs, path: r.path)
     {
     case .text(let text):
       state = .answered(text)
     case .notEnoughData:
       state = .error(
-        message: "Not enough of your own activity recorded — read the handoff as is.")
-    case .failure(let message):
-      state = .error(message: message)
+        AIFailure(
+          kind: .localRead,
+          message: "Not enough of your own activity recorded — read the handoff as is."))
+    case .failure(let failure):
+      state = .error(failure)
     }
   }
 
-  private func ensureExplainer() -> InboundHandoffExplainer {
-    if let e = explainer { return e }
+  private func makeExplainer(summarizer: any Summarizer) -> InboundHandoffExplainer {
     let audit = DBEscalationAuditSink(
       dbURL: databaseURL, dbConfig: databaseConfig, dbEncryption: databaseEncryption)
-    let e = InboundHandoffExplainer(
-      policy: policy, summarizer: summarizerMoat.summarizer, modelGate: modelGateMoat.gate,
+    return InboundHandoffExplainer(
+      policy: policy, summarizer: summarizer, modelGate: modelGateMoat.gate,
       prompts: promptMoat.prompts, audit: audit)
-    explainer = e
-    return e
   }
 }

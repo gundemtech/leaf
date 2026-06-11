@@ -31,7 +31,7 @@ final class HandoffDraftReader {
     /// Carries the drafted text + provenance so the sheet can fill the editable
     /// body AND stash the provenance for the SEND-time audit.
     case drafted(text: String, provenance: HandoffProvenance)
-    case error(message: String)
+    case error(AIFailure)
   }
 
   private(set) var state: State = .idle
@@ -44,10 +44,8 @@ final class HandoffDraftReader {
   /// different recipient — and the M032 row would lie.
   private var epoch = 0
 
-  private var drafter: HandoffDrafter?
-
   private let policy: LLMPolicy
-  private let summarizerMoat: AISummarizerMoat
+  private let router: AIBackendRouter
   private let modelGateMoat: ModelGateMoat
   private let promptMoat: HandoffPromptMoat
   private let databaseURL: URL
@@ -56,16 +54,16 @@ final class HandoffDraftReader {
   private let logger = Logger(subsystem: "tech.gundem.leaf.app", category: "handoff-draft")
 
   init(
+    router: AIBackendRouter,
     databaseURL: URL = DatabasePath.defaultURL(),
     databaseConfig: DatabaseConfig = AIWiring.databaseConfig(),
     databaseEncryption: EncryptionOptions? = AIWiring.databaseEncryption(),
     policy: LLMPolicy = AIWiring.policy(),
-    summarizerMoat: AISummarizerMoat = AIWiring.summarizerMoat(),
     modelGateMoat: ModelGateMoat = AIWiring.modelGateMoat(),
     promptMoat: HandoffPromptMoat = AIWiring.handoffPromptMoat()
   ) {
     self.policy = policy
-    self.summarizerMoat = summarizerMoat
+    self.router = router
     self.modelGateMoat = modelGateMoat
     self.promptMoat = promptMoat
     self.databaseURL = databaseURL
@@ -102,23 +100,29 @@ final class HandoffDraftReader {
       }.value
     } catch {
       if epoch == myEpoch {
-        state = .error(message: "Couldn't read your activity right now. Try again.")
+        state = .error(
+          AIFailure(
+            kind: .localRead, message: "Couldn't read your activity right now. Try again."))
       }
       return
     }
 
-    let d = ensureDrafter()
+    // AI-UI-4 — resolve the backend per draft (BYOK valve).
+    let r = router.resolve()
+    let d = makeDrafter(summarizer: r.summarizer)
     let outcome = await d.draft(
-      topic: topic, recipientName: recipientName, events: events, period: period, path: .byok)
+      topic: topic, recipientName: recipientName, events: events, period: period, path: r.path)
     guard epoch == myEpoch else { return }  // superseded — publish nothing
     switch outcome {
     case .text(let text, let provenance):
       state = .drafted(text: text, provenance: provenance)
     case .notEnoughData:
       state = .error(
-        message: "Not enough recorded work in this period to draft a handoff. Type one yourself.")
-    case .failure(let message):
-      state = .error(message: message)
+        AIFailure(
+          kind: .localRead,
+          message: "Not enough recorded work in this period to draft a handoff. Type one yourself."))
+    case .failure(let failure):
+      state = .error(failure)
     }
   }
 
@@ -152,43 +156,46 @@ final class HandoffDraftReader {
       }.value
     } catch {
       if epoch == myEpoch {
-        state = .error(message: "Couldn't read your activity right now. Try again.")
+        state = .error(
+          AIFailure(
+            kind: .localRead, message: "Couldn't read your activity right now. Try again."))
       }
       return
     }
 
     let escalated = policy.makeEscalation(selected: keyed.map(\.event))
-    let d = ensureDrafter()
+    // AI-UI-4 — resolve the backend per redraft (BYOK valve).
+    let r = router.resolve()
+    let d = makeDrafter(summarizer: r.summarizer)
     // Audit records the CONSENTED ids (`capped`), not the rows found at redraft
     // time — P3 precedent: the consent act is what's audited (review LOW-5).
     let outcome = await d.draft(
       topic: topic, recipientName: recipientName, events: events, period: period,
-      path: .byok, escalated: escalated, escalatedEventIDs: capped)
+      path: r.path, escalated: escalated, escalatedEventIDs: capped)
     guard epoch == myEpoch else { return }  // superseded — publish nothing
     switch outcome {
     case .text(let text, let provenance):
       state = .drafted(text: text, provenance: provenance)
     case .notEnoughData:
       state = .error(
-        message: "Not enough recorded work in this period to draft a handoff. Type one yourself.")
-    case .failure(let message):
-      state = .error(message: message)
+        AIFailure(
+          kind: .localRead,
+          message: "Not enough recorded work in this period to draft a handoff. Type one yourself."))
+    case .failure(let failure):
+      state = .error(failure)
     }
   }
 
   // MARK: - Internal lazy bootstrap
 
-  private func ensureDrafter() -> HandoffDrafter {
-    if let d = drafter { return d }
+  private func makeDrafter(summarizer: any Summarizer) -> HandoffDrafter {
     // AI-UI-3 — the prompt seam + M031 sink ride along; the sink is only used
     // on the escalated redraft path (body-free drafts stay un-audited, parity).
     let audit = DBEscalationAuditSink(
       dbURL: databaseURL, dbConfig: databaseConfig, dbEncryption: databaseEncryption)
-    let d = HandoffDrafter(
-      policy: policy, summarizer: summarizerMoat.summarizer, modelGate: modelGateMoat.gate,
+    return HandoffDrafter(
+      policy: policy, summarizer: summarizer, modelGate: modelGateMoat.gate,
       prompts: promptMoat.prompts, audit: audit)
-    drafter = d
-    return d
   }
 
   // MARK: - Defaults

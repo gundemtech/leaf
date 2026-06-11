@@ -3,7 +3,8 @@
 //  Leaf
 //
 //  AI-UI-1 — @Observable wrapper for the in-app "Ask Leaf" Q&A tab. Mirrors
-//  HandoffDraftReader: lazy AIWorkAnswerer bootstrap, gather off-main, BYOK-only.
+//  HandoffDraftReader: gather off-main, per-ask path routing (AI-UI-4 — BYOK
+//  key → Anthropic, otherwise team pool via the relay proxy).
 //  Transcript model (ordering / single-flight / phase transitions) is pure
 //  LeafCore (AskLeafTranscript) and SPM-tested; this class is glue.
 //
@@ -18,25 +19,23 @@ import SwiftUI
 final class AskLeafReader {
   private(set) var transcript = AskLeafTranscript()
 
-  private var answerer: AIWorkAnswerer?
-
   private let policy: LLMPolicy
-  private let summarizerMoat: AISummarizerMoat
+  private let router: AIBackendRouter
   private let modelGateMoat: ModelGateMoat
   private let databaseURL: URL
   private let databaseConfig: DatabaseConfig
   private let databaseEncryption: EncryptionOptions?
 
   init(
+    router: AIBackendRouter,
     databaseURL: URL = DatabasePath.defaultURL(),
     databaseConfig: DatabaseConfig = AIWiring.databaseConfig(),
     databaseEncryption: EncryptionOptions? = AIWiring.databaseEncryption(),
     policy: LLMPolicy = AIWiring.policy(),
-    summarizerMoat: AISummarizerMoat = AIWiring.summarizerMoat(),
     modelGateMoat: ModelGateMoat = AIWiring.modelGateMoat()
   ) {
     self.policy = policy
-    self.summarizerMoat = summarizerMoat
+    self.router = router
     self.modelGateMoat = modelGateMoat
     self.databaseURL = databaseURL
     self.databaseConfig = databaseConfig
@@ -123,21 +122,19 @@ final class AskLeafReader {
       }.value
     } catch {
       transcript.resolve(
-        id: id, with: .failure("Couldn't read your activity right now. Try again."))
+        id: id,
+        with: .failure(
+          AIFailure(
+            kind: .localRead, message: "Couldn't read your activity right now. Try again.")))
       return
     }
 
-    let a = ensureAnswerer()
+    // AI-UI-4 — resolve the backend per ask (BYOK valve: a key added/removed
+    // in Settings flips the very next question).
+    let r = router.resolve()
+    let a = AIWorkAnswerer(policy: policy, summarizer: r.summarizer, modelGate: modelGateMoat.gate)
     let answer = await a.answer(
-      question: question, events: events, path: .byok, preferred: model)
+      question: question, events: events, path: r.path, preferred: model)
     transcript.resolve(id: id, with: answer)
-  }
-
-  private func ensureAnswerer() -> AIWorkAnswerer {
-    if let a = answerer { return a }
-    let a = AIWorkAnswerer(
-      policy: policy, summarizer: summarizerMoat.summarizer, modelGate: modelGateMoat.gate)
-    answerer = a
-    return a
   }
 }

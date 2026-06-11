@@ -18,14 +18,18 @@ struct EscalationSheet: View {
 
   @Environment(WindowState.self) private var windowState
 
-  @State private var reader = EscalationReader()
+  @State private var reader: EscalationReader
   @State private var question: String = ""
   @State private var model: SummarizerModel = .haiku
 
-  /// Точное сравнение с opaque-сообщением missingAPIKey — единственный failure
-  /// с CTA «Open Settings» (паттерн AskLeafView; AIDetailAnswerer использует
-  /// тот же AIWorkAnswerer.message(for:) маппинг).
-  private static let missingKeyMessage = AIWorkAnswerer.message(for: .missingAPIKey)
+  /// AI-UI-4 — the reader is seeded with the composition-root router (an
+  /// @Environment value isn't readable inside a @State initializer, so the
+  /// parent reads `\.aiBackendRouter` and passes it here).
+  init(seed: EscalationSeed, router: AIBackendRouter, onDismiss: @escaping () -> Void) {
+    self.seed = seed
+    self.onDismiss = onDismiss
+    _reader = State(initialValue: EscalationReader(router: router))
+  }
 
   private static let pickerModels: [SummarizerModel] = [.haiku, .sonnet, .opus]
 
@@ -72,8 +76,8 @@ struct EscalationSheet: View {
       composeView(draft)
     case .answered(let text):
       answeredView(text)
-    case .failed(let message):
-      failedView(message)
+    case .failed(let failure):
+      failedView(failure)
     }
   }
 
@@ -227,13 +231,14 @@ struct EscalationSheet: View {
     }
   }
 
-  private func failedView(_ message: String) -> some View {
+  private func failedView(_ failure: AIFailure) -> some View {
     VStack(alignment: .leading, spacing: LeafSpace.lg) {
-      Text(message)
+      Text(failure.message)
         .font(LeafType.body.regular)
         .foregroundStyle(LeafColor.status.warning)
       HStack(spacing: LeafSpace.md) {
-        if message == Self.missingKeyMessage {
+        // AI-UI-4 — CTA по kind, не по exact-string match (missingKey / budget).
+        if failure.showsSettingsCTA {
           Button("Open Settings") {
             windowState.section = .settings
             onDismiss()
