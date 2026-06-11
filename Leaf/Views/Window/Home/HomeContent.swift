@@ -68,6 +68,10 @@ struct HomeContent: View {
                     }
                 )
 
+                // UC-3 — "what shipped while I was out" counters (self-loading
+                // block; refreshes on each Home appearance).
+                BriefBlock()
+
                 RecapBlock(snapshot: snapshot.standupRecap?.recap)
                 EodBlock(snapshot: snapshot.standupRecap?.eod)
             }
