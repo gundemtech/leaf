@@ -82,6 +82,13 @@ public enum SupabaseEndpoint {
     return components.url!
   }
 
+  /// GET /auth/v1/user — the current user object (email, app_metadata.provider,
+  /// user_metadata, created_at). Same data the web dashboard reads from
+  /// session.user. Requires a Bearer access token (authenticatedHeaders).
+  public static func userInfo(baseURL: URL) -> URL {
+    baseURL.appendingPathComponent("auth/v1/user")
+  }
+
   // MARK: - Edge Functions
 
   public static func registerPubkey(baseURL: URL) -> URL {
@@ -100,6 +107,13 @@ public enum SupabaseEndpoint {
 
   public static func insertWorkspaceMember(baseURL: URL) -> URL {
     baseURL.appendingPathComponent("rest/v1/workspace_members")
+  }
+
+  /// POST /rest/v1/rpc/delete_self_account — invoke the server-side
+  /// security-definer function that deletes the calling user's account + data.
+  /// Same RPC the web dashboard calls (`sb.rpc('delete_self_account')`).
+  public static func rpcDeleteSelfAccount(baseURL: URL) -> URL {
+    baseURL.appendingPathComponent("rest/v1/rpc/delete_self_account")
   }
 
   // MARK: - PostgREST tables — Track 5 / S4 (direct_messages + apns_tokens)
