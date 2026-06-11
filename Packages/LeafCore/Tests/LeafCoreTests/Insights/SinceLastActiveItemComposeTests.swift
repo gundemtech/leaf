@@ -133,6 +133,23 @@ final class SinceLastActiveItemComposeTests: XCTestCase {
         XCTAssertEqual(item?.sourceMeta, "leaf-relay")
     }
 
+    func test_uniqueKey_distinctTitles_sameTsVerbEmptyMeta_noCollision() {
+        // Meta-dedup leaves sourceMeta empty for linear/slack rows whose ref
+        // repeats the title — uniqueKey must still discriminate by title for
+        // same-millisecond bulk events (ForEach identity).
+        func makeItem(_ key: String) -> SinceLastActiveItem? {
+            SinceLastActiveItem.compose(
+                from: ActivityFeedItem(
+                    ts: 777, source: .linear,
+                    eventKind: LinearActivityKinds.statusTransitionCompletedKind,
+                    actorDisplay: nil, actorIsMe: true,
+                    targetTitle: key, targetRef: key, repoHint: nil, sourceURL: nil))
+        }
+        let a = makeItem("LEA-1")
+        let b = makeItem("LEA-2")
+        XCTAssertNotEqual(a?.uniqueKey, b?.uniqueKey)
+    }
+
     func test_compose_detectionMeta_humanLabel_noInternalTrackName() {
         let feed = ActivityFeedItem(
             ts: 1, source: .detection, eventKind: "open_question",

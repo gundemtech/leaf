@@ -104,6 +104,22 @@ final class NowHeroComposerTests: XCTestCase {
     XCTAssertEqual(hero.wipLine, "6 behind main")
   }
 
+  func testWipLine_nilBranch_failsQuiet_uncommittedOnly() {
+    // Unknown branch must not regress into structural "+87 ahead" noise.
+    let delta = GitDeltaSnapshot(
+      commitsAhead: 87, commitsBehind: 0, uncommittedCount: 1, mergeBase: "origin/main")
+    let hero = NowHeroComposer.compose(
+      taskIdentity: TaskIdentity(repo: "leaf"), gitDelta: delta, session: nil,
+      whereStopped: nil, now: now, calendar: calendar)
+    XCTAssertEqual(hero.wipLine, "1 uncommitted")
+  }
+
+  func testIsTrunk_caseInsensitiveOnMergeBaseMatch() {
+    XCTAssertTrue(NowHeroComposer.isTrunk(branch: "Release-2", mergeBaseBasename: "release-2"))
+    XCTAssertTrue(NowHeroComposer.isTrunk(branch: "Main", mergeBaseBasename: "other"))
+    XCTAssertFalse(NowHeroComposer.isTrunk(branch: nil, mergeBaseBasename: "main"))
+  }
+
   func testWipLine_zeroEverything_nil() {
     let identity = TaskIdentity(branch: "feature/relay")
     let delta = GitDeltaSnapshot(

@@ -20,7 +20,11 @@ public struct SinceLastActiveItem: Sendable, Hashable {
     public let sourceURL: URL?
 
     public var uniqueKey: String {
-        "\(source.rawValue)-\(verb)-\(tsMs)-\(sourceMeta)"
+        // `targetTitle` is part of the key: sourceMeta is frequently empty
+        // after the meta-dedup (ref repeating the title is dropped), so
+        // same-millisecond events with the same verb (Linear bulk status
+        // changes, Slack aggregates) would otherwise collide in ForEach.
+        "\(source.rawValue)-\(verb)-\(tsMs)-\(targetTitle)-\(sourceMeta)"
     }
 
     public init(

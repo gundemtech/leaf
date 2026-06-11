@@ -71,8 +71,11 @@ public enum NowHeroComposer {
     return parts.isEmpty ? nil : parts.joined(separator: " · ")
   }
 
-  /// Uncommitted count always surfaces; ahead/behind only on non-trunk
-  /// branches (and only when the branch isn't itself the merge-base ref).
+  /// Uncommitted count always surfaces; ahead/behind only on a KNOWN
+  /// non-trunk branch (and only when the branch isn't itself the merge-base
+  /// ref). Unknown branch fails quiet — a trunk checkout with an unresolved
+  /// branch must not regress into the "+87 ahead of main" structural noise
+  /// this rule exists to suppress.
   static func composeWipLine(branch: String?, delta: GitDeltaSnapshot?) -> String? {
     guard let delta else { return nil }
     var clauses: [String] = []
@@ -80,16 +83,21 @@ public enum NowHeroComposer {
       clauses.append("\(delta.uncommittedCount) uncommitted")
     }
     let baseRef = delta.mergeBase.map(YoureOnRowComposer.refBasename)
-    if let baseRef, !isTrunk(branch: branch, mergeBaseBasename: baseRef) {
+    if let baseRef, let branch, !branch.isEmpty,
+      !isTrunk(branch: branch, mergeBaseBasename: baseRef)
+    {
       if delta.commitsAhead > 0 { clauses.append("\(delta.commitsAhead) ahead of \(baseRef)") }
       if delta.commitsBehind > 0 { clauses.append("\(delta.commitsBehind) behind \(baseRef)") }
     }
     return clauses.isEmpty ? nil : clauses.joined(separator: " · ")
   }
 
+  /// Case-insensitive on both arms — git refs are case-sensitive in
+  /// principle, but macOS checkouts live on a case-insensitive FS.
   public static func isTrunk(branch: String?, mergeBaseBasename: String) -> Bool {
     guard let branch, !branch.isEmpty else { return false }
-    return trunkBranchNames.contains(branch.lowercased()) || branch == mergeBaseBasename
+    return trunkBranchNames.contains(branch.lowercased())
+      || branch.lowercased() == mergeBaseBasename.lowercased()
   }
 
   static func composeAnchorLine(_ snap: WhereStoppedSnapshot?) -> String? {

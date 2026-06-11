@@ -83,8 +83,9 @@ struct SinceLastActiveRow: View {
     private var a11yLabel: String {
         let prefix = item.actorPrefix.isEmpty ? "" : "\(item.actorPrefix) "
         let action = item.sourceURL == nil ? "" : ", tap to open"
+        let meta = item.sourceMeta.isEmpty ? "" : "\(item.sourceMeta), "
         return
-            "\(prefix)\(item.verb) \(item.targetTitle), \(item.sourceMeta), \(Self.formatRelative(item.tsMs))\(action)"
+            "\(prefix)\(item.verb) \(item.targetTitle), \(meta)\(Self.formatRelative(item.tsMs))\(action)"
     }
 
     // T1 carry — "<1m" renders as "now" (T1 line-249 master spec rule).

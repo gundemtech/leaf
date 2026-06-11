@@ -69,21 +69,24 @@ struct NowHeroBlock: View {
             if hero.isEmpty {
                 emptyState
             } else {
-                if let sessionLine = hero.sessionLine {
-                    secondaryLine(sessionLine)
+                VStack(alignment: .leading, spacing: LeafSpace.xs) {
+                    if let sessionLine = hero.sessionLine {
+                        secondaryLine(sessionLine)
+                    }
+                    if let anchorLine = hero.anchorLine {
+                        secondaryLine(anchorLine)
+                    }
+                    if let commitLine = hero.commitLine {
+                        secondaryLine(commitLine)
+                    }
+                    if let filesLine = hero.filesLine {
+                        secondaryLine(filesLine)
+                    }
+                    if let wipLine = hero.wipLine {
+                        secondaryLine(wipLine)
+                    }
                 }
-                if let anchorLine = hero.anchorLine {
-                    secondaryLine(anchorLine)
-                }
-                if let commitLine = hero.commitLine {
-                    secondaryLine(commitLine)
-                }
-                if let filesLine = hero.filesLine {
-                    secondaryLine(filesLine)
-                }
-                if let wipLine = hero.wipLine {
-                    secondaryLine(wipLine)
-                }
+                .accessibilityElement(children: .combine)
             }
             if hasAnyCTA {
                 ctaRow
