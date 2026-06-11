@@ -9,12 +9,11 @@
 //  reader only produces the draft + carries body-free provenance for the
 //  SEND-time M032 audit (written by HandoffAuditWriter).
 //
-//  CR-2 (boundary parity): under LEAF_PROD this wires the SAME prod moat +
-//  strict-mode reader as MCPServer.swift — `prodLLMEgressMoat()` (the bucket-1
-//  personal-app list) + `StrictModeReader.read()`. The #if LEAF_PROD factory
-//  defaults are the structural guard: the only build that gets the empty
-//  substrate is dev, where there is no live LLM egress (mirrors
-//  DirectMessageSendReader.defaultCodec's fail-closed posture).
+//  CR-2 (boundary parity): default wiring comes from AIWiring (AI-UI-1) —
+//  under LEAF_PROD the SAME prod moat + strict-mode reader as MCPServer.swift;
+//  the only build that gets the empty substrate is dev, where there is no
+//  live LLM egress (mirrors DirectMessageSendReader.defaultCodec's
+//  fail-closed posture).
 //
 
 import Foundation
@@ -22,9 +21,6 @@ import Observation
 import OSLog
 import SwiftUI
 import LeafCore
-#if LEAF_PROD
-import LeafCorePrivate
-#endif
 
 @MainActor
 @Observable
@@ -35,38 +31,48 @@ final class HandoffDraftReader {
     /// Carries the drafted text + provenance so the sheet can fill the editable
     /// body AND stash the provenance for the SEND-time audit.
     case drafted(text: String, provenance: HandoffProvenance)
-    case error(message: String)
+    case error(AIFailure)
   }
 
   private(set) var state: State = .idle
 
-  private var drafter: HandoffDrafter?
+  /// Review MEDIUM-2 — generation guard against late-completion contamination:
+  /// reset() / every new request bumps the epoch; an in-flight draft that
+  /// finishes after a reset (kind switched away, sheet dismissed, another
+  /// recipient's sheet opened) publishes nothing. Without this, a stale
+  /// .drafted could refill bodyText + provenance under a Task/Ping kind or a
+  /// different recipient — and the M032 row would lie.
+  private var epoch = 0
 
   private let policy: LLMPolicy
-  private let summarizerMoat: AISummarizerMoat
+  private let router: AIBackendRouter
   private let modelGateMoat: ModelGateMoat
+  private let promptMoat: HandoffPromptMoat
   private let databaseURL: URL
   private let databaseConfig: DatabaseConfig
   private let databaseEncryption: EncryptionOptions?
   private let logger = Logger(subsystem: "tech.gundem.leaf.app", category: "handoff-draft")
 
   init(
+    router: AIBackendRouter,
     databaseURL: URL = DatabasePath.defaultURL(),
-    databaseConfig: DatabaseConfig = HandoffDraftReader.defaultConfig(),
-    databaseEncryption: EncryptionOptions? = HandoffDraftReader.defaultEncryption(),
-    policy: LLMPolicy = HandoffDraftReader.defaultPolicy(),
-    summarizerMoat: AISummarizerMoat = HandoffDraftReader.defaultSummarizerMoat(),
-    modelGateMoat: ModelGateMoat = HandoffDraftReader.defaultModelGateMoat()
+    databaseConfig: DatabaseConfig = AIWiring.databaseConfig(),
+    databaseEncryption: EncryptionOptions? = AIWiring.databaseEncryption(),
+    policy: LLMPolicy = AIWiring.policy(),
+    modelGateMoat: ModelGateMoat = AIWiring.modelGateMoat(),
+    promptMoat: HandoffPromptMoat = AIWiring.handoffPromptMoat()
   ) {
     self.policy = policy
-    self.summarizerMoat = summarizerMoat
+    self.router = router
     self.modelGateMoat = modelGateMoat
+    self.promptMoat = promptMoat
     self.databaseURL = databaseURL
     self.databaseConfig = databaseConfig
     self.databaseEncryption = databaseEncryption
   }
 
   func reset() {
+    epoch += 1
     state = .idle
   }
 
@@ -78,6 +84,8 @@ final class HandoffDraftReader {
     topic: String,
     period: DateInterval = HandoffDraftReader.defaultPeriod()
   ) async {
+    epoch += 1
+    let myEpoch = epoch
     state = .drafting
 
     let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
@@ -91,80 +99,108 @@ final class HandoffDraftReader {
           .gather(period: period, nowMs: nowMs)
       }.value
     } catch {
-      state = .error(message: "Couldn't read your activity right now. Try again.")
+      if epoch == myEpoch {
+        state = .error(
+          AIFailure(
+            kind: .localRead, message: "Couldn't read your activity right now. Try again."))
+      }
       return
     }
 
-    let d = ensureDrafter()
-    switch await d.draft(
-      topic: topic, recipientName: recipientName, events: events, period: period, path: .byok)
-    {
+    // AI-UI-4 — resolve the backend per draft (BYOK valve).
+    let r = router.resolve()
+    let d = makeDrafter(summarizer: r.summarizer)
+    let outcome = await d.draft(
+      topic: topic, recipientName: recipientName, events: events, period: period, path: r.path)
+    guard epoch == myEpoch else { return }  // superseded — publish nothing
+    switch outcome {
     case .text(let text, let provenance):
       state = .drafted(text: text, provenance: provenance)
     case .notEnoughData:
       state = .error(
-        message: "Not enough recorded work in this period to draft a handoff. Type one yourself.")
-    case .failure(let message):
-      state = .error(message: message)
+        AIFailure(
+          kind: .localRead,
+          message: "Not enough recorded work in this period to draft a handoff. Type one yourself."))
+    case .failure(let failure):
+      state = .error(failure)
+    }
+  }
+
+  /// AI-UI-3 — escalated redraft: re-gathers body-free facts for the period,
+  /// fetches the CONSENTED selected bodies, and drafts again with them. The
+  /// audit-first M031 write happens inside HandoffDrafter. bodyText is filled
+  /// on .drafted only — a failed redraft never clears the user's prior draft.
+  func redraft(
+    recipientName: String,
+    topic: String,
+    period: DateInterval,
+    selectedEventIDs: [Int64]
+  ) async {
+    epoch += 1
+    let myEpoch = epoch
+    state = .drafting
+    let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+    let url = databaseURL
+    let cfg = databaseConfig
+    let enc = databaseEncryption
+    let capped = Array(selectedEventIDs.sorted().prefix(EscalationDraft.selectionCap))
+    let events: [EgressEvent]
+    let keyed: [(id: Int64, event: EgressEvent)]
+    do {
+      (events, keyed) = try await Task.detached(priority: .userInitiated) {
+        let gatherer = WorkFactGatherer(dbURL: url, dbConfig: cfg, dbEncryption: enc)
+        return (
+          try gatherer.gather(period: period, nowMs: nowMs),
+          try gatherer.gatherSelectedBodiesKeyed(eventIDs: capped)
+        )
+      }.value
+    } catch {
+      if epoch == myEpoch {
+        state = .error(
+          AIFailure(
+            kind: .localRead, message: "Couldn't read your activity right now. Try again."))
+      }
+      return
+    }
+
+    let escalated = policy.makeEscalation(selected: keyed.map(\.event))
+    // AI-UI-4 — resolve the backend per redraft (BYOK valve).
+    let r = router.resolve()
+    let d = makeDrafter(summarizer: r.summarizer)
+    // Audit records the CONSENTED ids (`capped`), not the rows found at redraft
+    // time — P3 precedent: the consent act is what's audited (review LOW-5).
+    let outcome = await d.draft(
+      topic: topic, recipientName: recipientName, events: events, period: period,
+      path: r.path, escalated: escalated, escalatedEventIDs: capped)
+    guard epoch == myEpoch else { return }  // superseded — publish nothing
+    switch outcome {
+    case .text(let text, let provenance):
+      state = .drafted(text: text, provenance: provenance)
+    case .notEnoughData:
+      state = .error(
+        AIFailure(
+          kind: .localRead,
+          message: "Not enough recorded work in this period to draft a handoff. Type one yourself."))
+    case .failure(let failure):
+      state = .error(failure)
     }
   }
 
   // MARK: - Internal lazy bootstrap
 
-  private func ensureDrafter() -> HandoffDrafter {
-    if let d = drafter { return d }
-    let d = HandoffDrafter(
-      policy: policy, summarizer: summarizerMoat.summarizer, modelGate: modelGateMoat.gate)
-    drafter = d
-    return d
+  private func makeDrafter(summarizer: any Summarizer) -> HandoffDrafter {
+    // AI-UI-3 — the prompt seam + M031 sink ride along; the sink is only used
+    // on the escalated redraft path (body-free drafts stay un-audited, parity).
+    let audit = DBEscalationAuditSink(
+      dbURL: databaseURL, dbConfig: databaseConfig, dbEncryption: databaseEncryption)
+    return HandoffDrafter(
+      policy: policy, summarizer: summarizer, modelGate: modelGateMoat.gate,
+      prompts: promptMoat.prompts, audit: audit)
   }
 
-  // MARK: - Composition-root defaults (CR-2 parity with MCPServer.swift)
-
-  private static func defaultPolicy() -> LLMPolicy {
-    #if LEAF_PROD
-    return LLMPolicy(
-      moat: prodLLMEgressMoat(), config: LLMPolicyConfig(strictMode: StrictModeReader.read()))
-    #else
-    return LLMPolicy(config: LLMPolicyConfig(strictMode: StrictModeReader.read()))
-    #endif
-  }
-
-  private static func defaultSummarizerMoat() -> AISummarizerMoat {
-    #if LEAF_PROD
-    return prodAISummarizerMoat(keyStore: FileAnthropicKeyStore())
-    #else
-    return .publicSubstrate
-    #endif
-  }
-
-  private static func defaultModelGateMoat() -> ModelGateMoat {
-    #if LEAF_PROD
-    return prodModelGateMoat()
-    #else
-    return .publicSubstrate
-    #endif
-  }
-
-  private static func defaultConfig() -> DatabaseConfig {
-    #if LEAF_PROD
-    return ProdConfigs.database
-    #else
-    return DatabaseConfig.weakDefaults
-    #endif
-  }
-
-  private static func defaultEncryption() -> EncryptionOptions? {
-    #if LEAF_PROD
-    return EncryptionOptions(
-      keyProvider: .callback { @Sendable in try FileKeyStore.fetchOrCreate() },
-      preKeyPragmas: ProdConfigs.sqlcipherPragmasPreKey,
-      postKeyPragmas: ProdConfigs.sqlcipherPragmasPostKey
-    )
-    #else
-    return nil
-    #endif
-  }
+  // MARK: - Defaults
+  // Composition-root AI/DB wiring lives in AIWiring (AI-UI-1) — shared with
+  // HandoffAuditWriter and AskLeafReader.
 
   static func defaultPeriod() -> DateInterval {
     let now = Date()
@@ -184,8 +220,8 @@ struct HandoffAuditWriter {
 
   init(
     databaseURL: URL = DatabasePath.defaultURL(),
-    databaseConfig: DatabaseConfig = HandoffAuditWriter.defaultConfig(),
-    databaseEncryption: EncryptionOptions? = HandoffAuditWriter.defaultEncryption()
+    databaseConfig: DatabaseConfig = AIWiring.databaseConfig(),
+    databaseEncryption: EncryptionOptions? = AIWiring.databaseEncryption()
   ) {
     self.databaseURL = databaseURL
     self.databaseConfig = databaseConfig
@@ -222,23 +258,4 @@ struct HandoffAuditWriter {
     }.value
   }
 
-  private static func defaultConfig() -> DatabaseConfig {
-    #if LEAF_PROD
-    return ProdConfigs.database
-    #else
-    return DatabaseConfig.weakDefaults
-    #endif
-  }
-
-  private static func defaultEncryption() -> EncryptionOptions? {
-    #if LEAF_PROD
-    return EncryptionOptions(
-      keyProvider: .callback { @Sendable in try FileKeyStore.fetchOrCreate() },
-      preKeyPragmas: ProdConfigs.sqlcipherPragmasPreKey,
-      postKeyPragmas: ProdConfigs.sqlcipherPragmasPostKey
-    )
-    #else
-    return nil
-    #endif
-  }
 }

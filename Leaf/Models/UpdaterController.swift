@@ -27,7 +27,23 @@
 //
 
 import Foundation
+import LeafCore
 import Sparkle
+
+/// Phase 3 — suppresses the in-app "What's New" sheet after a Sparkle-driven update.
+/// Sparkle's native update dialog already shows this version's release notes (the
+/// embedded appcast `<description>`); recording the installed version as seen here
+/// means the in-app sheet won't double-present the same notes after the relaunch.
+/// A narrow What's New hook — NOT the install/relaunch choreography the header
+/// comment above discusses (still deferred).
+private final class WhatsNewSuppressionDelegate: NSObject, SPUUpdaterDelegate {
+    func updater(_ updater: SPUUpdater, willInstallUpdate item: SUAppcastItem) {
+        UserDefaults.standard.set(
+            item.displayVersionString,
+            forKey: WhatsNewTracker.userDefaultsKey
+        )
+    }
+}
 
 @MainActor
 @Observable
@@ -35,6 +51,10 @@ final class UpdaterController {
     /// Sparkle controller. @ObservationIgnored — Sparkle manages its own state.
     @ObservationIgnored
     private let controller: SPUStandardUpdaterController
+
+    /// Strong ref to the delegate — Sparkle holds `updaterDelegate` weakly.
+    @ObservationIgnored
+    private let suppressionDelegate = WhatsNewSuppressionDelegate()
 
     init() {
         // Phase 3.5 (alpha.4) fix — `startingUpdater: false` + deferred explicit start.
@@ -46,7 +66,7 @@ final class UpdaterController {
         // after App.init returns when NSApplication is already activated.
         self.controller = SPUStandardUpdaterController(
             startingUpdater: false,
-            updaterDelegate: nil,
+            updaterDelegate: suppressionDelegate,
             userDriverDelegate: nil
         )
         let controller = self.controller

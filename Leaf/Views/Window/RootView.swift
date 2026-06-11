@@ -74,6 +74,20 @@ struct RootView: View {
   @Environment(\.supabaseClientForGate) private var supabaseClientForGate
   @State private var hasValidSession: Bool? = nil
 
+  // Phase 3 — in-app "What's New". Auto-present once per window appearance when the
+  // running build is newer than the last release the user saw (onboarding-gated).
+  // The tracker is NOT advanced here — `markSeen` runs on sheet dismiss — so a
+  // window that's closed at relaunch (RootView never appears) keeps the present
+  // pending until the next time the window opens.
+  @Environment(WhatsNewTracker.self) private var whatsNewTracker
+  @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+  @State private var showWhatsNew = false
+  @State private var didEvaluateWhatsNew = false
+
+  private var appVersion: String {
+    (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? ""
+  }
+
   var body: some View {
     Group {
       if hasValidSession == false {
@@ -109,6 +123,13 @@ struct RootView: View {
     .onAppear {
       reader.refresh()
       workspaceReader.refresh()
+      evaluateWhatsNew()
+    }
+    // Phase 3 — present the bundled What's New for the just-installed version.
+    // markSeen runs on dismiss (not in shouldPresent) so a closed window doesn't
+    // silently consume the present.
+    .sheet(isPresented: $showWhatsNew, onDismiss: { whatsNewTracker.markSeen(appVersion) }) {
+      WhatsNewView(catalog: .bundled(), currentVersion: appVersion)
     }
     // Track 5 / S7 H.4 — Subscribe Realtime to the active workspace channel.
     // Triggered on active workspace change AND on initial appearance.
@@ -157,6 +178,10 @@ struct RootView: View {
         await teamEventMirrorReader.tick(workspaceID: wid)
         if Task.isCancelled { break }
         await directMessageInboxReader.tick()
+        if Task.isCancelled { break }
+        // Roster read-back — reconcile server workspace_members into the
+        // local team_members so invitees see each other, not just admin+self.
+        await workspaceReader.syncRosterFromServer()
         if Task.isCancelled { break }
         // Track 5 / S5 — 24h-cooldown retention prune (mirror cleanup).
         await teamEventMirrorReader.pruneIfDueDaily()
@@ -241,11 +266,27 @@ struct RootView: View {
     case .home: HomeView()
     case .activity: ActivityView()
     case .analytics: AnalyticsView()
+    case .askLeaf: AskLeafView()
     case .team: TeamView()
     case .connections: ConnectionsView()
     case .settings: WindowSettingsView()
     case .profile: ProfileView()
     }
+  }
+
+  /// Evaluate the What's New present decision once per RootView appearance.
+  /// Guarded by `didEvaluateWhatsNew` so navigating sections (which keeps RootView
+  /// alive) doesn't re-trigger; a fresh window open re-creates RootView and re-evaluates.
+  private func evaluateWhatsNew() {
+    guard !didEvaluateWhatsNew else { return }
+    didEvaluateWhatsNew = true
+    guard
+      whatsNewTracker.shouldPresent(
+        current: appVersion,
+        hasCompletedOnboarding: hasCompletedOnboarding
+      )
+    else { return }
+    showWhatsNew = true
   }
 
   /// Derive status pill state from InsightsReader.

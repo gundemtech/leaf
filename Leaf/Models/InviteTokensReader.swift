@@ -73,7 +73,7 @@ final class InviteTokensReader {
   // MARK: - Lifecycle
 
   /// Loads active tokens for the currently-active workspace. Called on
-  /// Settings → Workspace open + after every generate/delete to refresh.
+  /// Team → Members open + after every generate/delete to refresh.
   func refresh() {
     Task { @MainActor [weak self] in
       guard let self else { return }
@@ -188,7 +188,7 @@ final class InviteTokensReader {
       )
       throw LeafError.workspaceSyncFailed(
         reason:
-          "Couldn't sync workspace to server: \(String(describing: error)). Try Settings → Workspace → Delete Permanently and recreate."
+          "Couldn't sync workspace to server: \(String(describing: error)). Try Team → Settings → Delete Permanently and recreate."
       )
     }
   }

@@ -13,8 +13,8 @@ public struct AIWorkAnswerer: Sendable {
     /// Nothing recorded in the period projected to a shareable fact — answered
     /// locally, no LLM call (saves a guaranteed `.contextEmpty`).
     case notEnoughData
-    /// A user-facing, opaque failure message (never echoes key/body).
-    case failure(String)
+    /// A user-facing, opaque failure (kind + message; never echoes key/body).
+    case failure(AIFailure)
   }
 
   private let policy: LLMPolicy
@@ -50,20 +50,31 @@ public struct AIWorkAnswerer: Sendable {
         context, question: question, model: model, maxTokens: maxAnswerTokens)
       return .text(out.text)
     } catch let error as SummarizerError {
-      return .failure(Self.message(for: error))
+      return .failure(Self.failure(for: error, path: path))
     } catch {
-      return .failure("Couldn't reach the model right now. Try again.")
+      return .failure(
+        AIFailure(kind: .transient, message: "Couldn't reach the model right now. Try again."))
     }
   }
 
   /// Opaque, user-facing messages — never interpolate key/body/response (§8.1).
-  public static func message(for error: SummarizerError) -> String {
+  /// AI-UI-4 — path-aware copy. On `.aiIncluded` there is no user-owned
+  /// Anthropic key: auth failures point at the Leaf account, and a drained
+  /// team pool points at the BYOK valve in Settings.
+  public static func message(for error: SummarizerError, path: InferencePath) -> String {
     switch error {
     case .missingAPIKey:
       return "No Anthropic API key configured. Add your key to enable AI answers."
     case .authFailed:
+      if path == .aiIncluded {
+        return "Couldn't authorize AI answers with your Leaf account. Try again, or sign out and back in."
+      }
       return "Your Anthropic API key was rejected (invalid or revoked). Update it and try again."
     case .budgetExhausted:
+      if path == .aiIncluded {
+        return
+          "Your team's included AI budget is used up for now. Add your own Anthropic key in Settings to keep going, or try again later."
+      }
       return "AI inference budget exhausted. Try again later."
     case .rateLimited:
       return "Rate limited by the model provider. Try again shortly."
@@ -74,5 +85,22 @@ public struct AIWorkAnswerer: Sendable {
     case .badRequest, .serverError, .network, .decode:
       return "Couldn't reach the model right now. Try again."
     }
+  }
+
+  /// AI-UI-4 — total kind mapping for `AIFailure` (CTA decisions in views).
+  public static func failureKind(for error: SummarizerError) -> AIFailure.Kind {
+    switch error {
+    case .missingAPIKey: return .missingKey
+    case .authFailed: return .auth
+    case .budgetExhausted: return .budget
+    case .rateLimited: return .rateLimited
+    case .attestationFailed: return .attestation
+    case .contextEmpty, .badRequest, .serverError, .network, .decode: return .transient
+    }
+  }
+
+  /// Bundles the kind + path-aware message in one step.
+  public static func failure(for error: SummarizerError, path: InferencePath) -> AIFailure {
+    AIFailure(kind: failureKind(for: error), message: message(for: error, path: path))
   }
 }

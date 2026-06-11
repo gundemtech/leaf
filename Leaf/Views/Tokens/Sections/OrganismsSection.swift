@@ -20,7 +20,7 @@ struct OrganismsSection: View {
             LeafToolbarPreview()
             LeafTabPreview()
             LeafProgressPreview()
-            LeafWorkspaceSwitcherPreview()
+            LeafWorkspacePickerPreview()
             LeafLinkedEventCardPreview()
             LeafMessageCardPreview()
             LeafFeedRowPreview()

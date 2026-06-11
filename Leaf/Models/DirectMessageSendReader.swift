@@ -84,6 +84,7 @@ final class DirectMessageSendReader {
         kind: DirectMessageKind,
         body: String,
         notify: Bool,
+        replyTo: String? = nil,
         crossPostSlack: SlackCrossPostRequest? = nil,
         crossPostLinear: LinearCrossPostRequest? = nil
     ) async {
@@ -110,6 +111,7 @@ final class DirectMessageSendReader {
                 kind: kind,
                 body: body,
                 notify: notify,
+                replyTo: replyTo,
                 crossPostSlack: crossPostSlack,
                 crossPostLinear: crossPostLinear
             )

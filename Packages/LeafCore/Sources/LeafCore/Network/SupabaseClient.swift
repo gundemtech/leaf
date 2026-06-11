@@ -689,6 +689,43 @@ extension SupabaseClient {
       throw SupabaseError.fromStatus(http.statusCode, body: data)
     }
   }
+
+  /// Full workspace roster read-back. RLS `workspace_members_peer_read` permits
+  /// any member to SELECT the whole roster; `WorkspaceRosterSyncService`
+  /// reconciles these into the local `team_members` so invitees see each other.
+  public func fetchWorkspaceMembers(workspaceID: String) async throws -> [WorkspaceMemberRow] {
+    let session = try await ensureAuthenticated()
+    let url = SupabaseEndpoint.listWorkspaceMembers(baseURL: baseURL, workspaceID: workspaceID)
+    var request = URLRequest(url: url)
+    request.httpMethod = "GET"
+    for (k, v) in SupabaseEndpoint.authenticatedHeaders(
+      anonKey: anonKey, accessToken: session.accessToken
+    ) {
+      request.setValue(v, forHTTPHeaderField: k)
+    }
+    let (data, http) = try await performHTTP(
+      request, retryable: true, refreshable: true, label: "fetchWorkspaceMembers")
+    guard http.statusCode == 200 else {
+      throw SupabaseError.fromStatus(http.statusCode, body: data)
+    }
+    struct Row: Decodable {
+      let pubkey: String
+      let display_name: String
+    }
+    let rows = try JSONDecoder().decode([Row].self, from: data)
+    return rows.map { WorkspaceMemberRow(pubkeyHex: $0.pubkey, displayName: $0.display_name) }
+  }
+}
+
+/// One row of the server `workspace_members` roster (pubkey + display name).
+public struct WorkspaceMemberRow: Sendable, Equatable {
+  public let pubkeyHex: String
+  public let displayName: String
+
+  public init(pubkeyHex: String, displayName: String) {
+    self.pubkeyHex = pubkeyHex
+    self.displayName = displayName
+  }
 }
 
 // MARK: - SupabaseAuthSession JWT claim extraction

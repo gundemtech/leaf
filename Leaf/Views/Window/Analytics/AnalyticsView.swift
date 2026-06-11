@@ -20,6 +20,7 @@ import SwiftUI
 
 struct AnalyticsView: View {
     @Environment(InsightsReader.self) private var reader
+    @Environment(LiveUpdateSignals.self) private var liveSignals
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -32,6 +33,11 @@ struct AnalyticsView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear { reader.refresh() }
+        // Live-tabs — Agent wrote to the DB while this tab is open. Non-force:
+        // the reader's freshness window throttles bursts.
+        .onChange(of: liveSignals.localDataVersion) {
+            reader.refresh()
+        }
     }
 
     private var header: some View {

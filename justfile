@@ -9,14 +9,15 @@ default:
 preflight:
     #!/usr/bin/env bash
     set -euo pipefail
-    echo "▶ preflight 1/7 — leak-guard";              ./scripts/leak-guard.sh --report
-    echo "▶ preflight 2/7 — check-tokens";            ./scripts/check-tokens.sh
-    echo "▶ preflight 3/7 — check-migrations";        ./scripts/check-migrations.sh
-    echo "▶ preflight 4/7 — gitleaks";                ./scripts/gitleaks-scan.sh
-    echo "▶ preflight 5/7 — bundle-split guard";      ./scripts/check-bundle-split.sh
-    echo "▶ preflight 6/7 — build-all (5 schemes)";   just build-all
-    echo "▶ preflight 7/7 — SPM tests";               just test-core
-    echo "✅ preflight: all 7 checks green — phase may merge."
+    echo "▶ preflight 1/8 — leak-guard";              ./scripts/leak-guard.sh --report
+    echo "▶ preflight 2/8 — check-tokens";            ./scripts/check-tokens.sh
+    echo "▶ preflight 3/8 — check-migrations";        ./scripts/check-migrations.sh
+    echo "▶ preflight 4/8 — gitleaks";                ./scripts/gitleaks-scan.sh
+    echo "▶ preflight 5/8 — bundle-split guard";      ./scripts/check-bundle-split.sh
+    echo "▶ preflight 6/8 — releases.json freshness"; ./scripts/check-releases-fresh.sh
+    echo "▶ preflight 7/8 — build-all (5 schemes)";   just build-all
+    echo "▶ preflight 8/8 — SPM tests";               just test-core
+    echo "✅ preflight: all 8 checks green — phase may merge."
 
 # Token-discipline guard — Track 2 D1+. Fails if Leaf/Theme/ or
 # Leaf/Views/Tokens/ contain raw colours/spacing/radii.
@@ -58,6 +59,87 @@ check-migrations-self-test:
 # Run the fixture-based self-test for leak-guard.
 leak-guard-self-test:
     @./scripts/tests/test-leak-guard.sh
+
+# Print the latest shipped release tag (v-prefixed semver, sort -V, form-asserted).
+# Single source of truth the release pipeline derives N+1 from.
+derive-version:
+    @./scripts/derive-version.sh
+
+# Fixture-based self-test for derive-version (filter is load-bearing; malformed
+# highest tag fails loud; empty/junk sets rejected).
+derive-version-self-test:
+    @./scripts/tests/test-derive-version.sh
+
+# Regenerate release notes from CHANGELOG.md: writes build/releases/releases.json
+# AND the committed Leaf/Resources/releases.json. Run after editing CHANGELOG.md,
+# then `git add Leaf/Resources/releases.json` (the freshness guard enforces this).
+gen-notes:
+    @./scripts/gen-release-notes.sh
+
+# Fixture-based self-test for gen-release-notes (releases.json shape, newest-first,
+# Unreleased skip, [YANKED], continuation join, HTML-escape, bare-fragment embed).
+gen-notes-self-test:
+    @./scripts/tests/test-gen-release-notes.sh
+
+# Freshness guard (R1): committed releases.json must match CHANGELOG.md. Part of
+# `just preflight`; fails with a diff + the regenerate-and-commit remediation.
+check-releases-fresh:
+    @./scripts/check-releases-fresh.sh
+
+# Bump MARKETING_VERSION + CURRENT_PROJECT_VERSION across the whole pbxproj (×6
+# each) to <version> (X.Y.Z-alpha.N). Asserts a complete bump (no partial). PREP
+# step of /release-leaf — commit the result before archiving.
+bump-version version:
+    @./scripts/bump-version.sh {{version}}
+
+# Fixture-based self-test for bump-version (partial-bump caught, GA rejected,
+# idempotent, build number derived from alpha.N). Never touches the real project.
+bump-version-self-test:
+    @./scripts/tests/test-bump-version.sh
+
+# Build + notarize + appcast for <version> under SSM secrets, stopping BEFORE
+# publish (no R2 upload, no site deploy). Bump pbxproj + `just gen-notes` FIRST,
+# or use the /release-leaf command which does the full PREP + the publish gate.
+release version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    vault="../leaf-internal/scripts/vault.sh"
+    [ -f "$vault" ] || { echo "✘ vault.sh not found at $vault — clone gundemtech/leaf-internal as a sibling"; exit 1; }
+    echo "▶ Building {{version}} under /leaf/release secrets → stops at appcast (NOT published)…"
+    bash "$vault" run release -- bash scripts/release.sh "{{version}}" --until appcast
+    echo "✓ Built + notarized {{version}} (NOT published). Publish via /release-leaf (confirm gate)."
+
+# Refresh the OFFLINE secrets cache from AWS SSM /leaf/release/* (narrow prefix —
+# R2_*/CF_* + LEAF_SIGN_ID only; NOT blanket /leaf/prod/). Writes 0600 to
+# ~/.config/leaf/release.env (outside the repo). release.sh auto-sources it ONLY
+# when the live SSM env is empty. Re-run after a key rotation. Needs AWS creds
+# (export AWS_PROFILE=… first).
+secrets-refresh:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    umask 077
+    vault="../leaf-internal/scripts/vault.sh"
+    [ -f "$vault" ] || { echo "✘ vault.sh not found at $vault — clone gundemtech/leaf-internal as a sibling"; exit 1; }
+    dir="$HOME/.config/leaf"
+    mkdir -p "$dir"
+    out="$dir/release.env"
+    bash "$vault" sync release "$out"
+    miss=()
+    for k in R2_BUCKET R2_ENDPOINT R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY CF_ZONE_ID CF_API_TOKEN; do
+        grep -q "^$k=" "$out" || miss+=("$k")
+    done
+    if [ ${#miss[@]} -gt 0 ]; then
+        echo "✘ secrets-refresh: missing keys in $out: ${miss[*]}" >&2
+        echo "  Seed them in SSM /leaf/release/* (Prerequisites — see .claude/commands/release-leaf.md)." >&2
+        exit 1
+    fi
+    echo "✓ secrets-refresh: wrote $out (0600) with R2_*/CF_* — offline release fallback ready."
+
+# Self-test for the release.sh / upload-release.sh orchestration: assert_secrets
+# fast-fail, --until loop, cached-secrets parser, upload cp-ordering invariant.
+# Hermetic — no xcodebuild, no AWS.
+release-flow-self-test:
+    @./scripts/tests/test-release-flow.sh
 
 # Point git at the tracked .githooks/ dir (run once per clone). The pre-push hook
 # there runs leak-guard before every push to the public repo. This OVERWRITES any

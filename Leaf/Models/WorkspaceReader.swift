@@ -32,6 +32,9 @@ final class WorkspaceReader {
   private(set) var state: State = .loading
 
   private var database: LeafCore.Database?
+  /// Separate writer handle for the periodic roster read-back (kept apart from
+  /// `refresh()`'s detached snapshot-load DB to avoid racing on `self.database`).
+  private var rosterSyncDatabase: LeafCore.Database?
 
   private let databaseURL: URL
   private let databaseConfig: DatabaseConfig
@@ -85,6 +88,31 @@ final class WorkspaceReader {
     self.activeStore = activeStore
     self.supabase = supabase
     self.cascadeDeleter = cascadeDeleter
+  }
+
+  /// Roster read-back — fetch the server `workspace_members` list for the active
+  /// workspace and reconcile it into local `team_members` so invitees see each
+  /// other (not just {admin, self}; the local roster was previously built only
+  /// from direct observation). Driven from the `RootView.task` 30s tick.
+  /// Best-effort: failures are logged, never surfaced. Refreshes the UI only
+  /// when a member was actually added.
+  func syncRosterFromServer() async {
+    guard let supabase, let wid = activeStore.activeWorkspaceID, !wid.isEmpty else { return }
+    do {
+      let dbHandle: LeafCore.Database
+      if let cached = rosterSyncDatabase {
+        dbHandle = cached
+      } else {
+        dbHandle = try LeafCore.Database.openForWrite(
+          at: databaseURL, config: databaseConfig, encryption: databaseEncryption)
+        rosterSyncDatabase = dbHandle
+      }
+      let added = try await WorkspaceRosterSyncService(database: dbHandle, supabase: supabase)
+        .sync(workspaceID: wid)
+      if added > 0 { refresh() }
+    } catch {
+      logger.warning("syncRosterFromServer failed: \(String(describing: error), privacy: .public)")
+    }
   }
 
   /// Reads workspaces + active members from DB into state. Idempotent.

@@ -13,7 +13,9 @@ import SwiftUI
 struct DebugDiagnosticsSection: View {
     @Environment(DebugDiagnosticsService.self) private var service
     @Environment(PermissionsService.self) private var permissions
+    @Environment(AgentWatchdogService.self) private var watchdog
     @State private var didCopy = false
+    @State private var isRepairing = false
 
     var body: some View {
         LeafSection(
@@ -22,6 +24,33 @@ struct DebugDiagnosticsSection: View {
                 "Что-то не детектится? Эта панель показывает кто запущен, какой CDHash, есть ли AX trust, и пишутся ли события в БД. Используется при отладке."
         ) {
             VStack(alignment: .leading, spacing: LeafSpace.md) {
+                if service.snapshot.agentJobInfo?.isCrashLooping == true {
+                    LeafBanner(
+                        tone: .danger,
+                        title: "Agent crash-loops в launchd",
+                        description:
+                            "launchd рестартует агента по кругу (non-zero exit). Типичная причина — BTM-запись указывает на старую/переехавшую копию приложения. Repair перерегистрирует агента от этой копии и перезапустит его.",
+                        ctaTitle: isRepairing ? "Repairing…" : "Repair",
+                        onCTA: { runRepair() }
+                    )
+                }
+                if let escalation = watchdog.escalation {
+                    LeafBanner(
+                        tone: .danger,
+                        title: escalation.title,
+                        description: escalation.message,
+                        ctaTitle: escalation.needsLoginItemsApproval
+                            ? "Open Login Items"
+                            : (isRepairing ? "Repairing…" : "Repair"),
+                        onCTA: {
+                            if escalation.needsLoginItemsApproval {
+                                service.openLoginItems()
+                            } else {
+                                runRepair()
+                            }
+                        }
+                    )
+                }
                 if service.snapshot.btmLikelyDisabled {
                     LeafBanner(
                         tone: .warning,
@@ -128,7 +157,36 @@ struct DebugDiagnosticsSection: View {
                         .font(LeafType.mono.small)
                         .foregroundStyle(LeafColor.text.tertiary)
                 }
+                if let job = service.snapshot.agentJobInfo {
+                    LabeledRow(
+                        label: "launchd",
+                        value: launchdSummary(job),
+                        monospaced: true,
+                        valueColor: job.isCrashLooping
+                            ? LeafColor.status.danger : LeafColor.text.secondary,
+                        actionLabel: nil,
+                        action: nil
+                    )
+                }
             }
+        }
+    }
+
+    private func launchdSummary(_ job: AgentJobInfo) -> String {
+        let state = job.state ?? "—"
+        let runs = job.runs.map(String.init) ?? "—"
+        let exit = job.lastExitCode.map(String.init) ?? "—"
+        let loop = job.isCrashLooping ? " (CRASH LOOP)" : ""
+        return "state=\(state) · runs=\(runs) · last exit=\(exit)\(loop)"
+    }
+
+    private func runRepair() {
+        guard !isRepairing else { return }
+        isRepairing = true
+        Task {
+            await watchdog.repairNow()
+            service.refresh()
+            isRepairing = false
         }
     }
 
@@ -230,6 +288,12 @@ struct DebugDiagnosticsSection: View {
                 variant: .secondary,
                 size: .sm,
                 action: { service.openConsoleApp() }
+            )
+            LeafButton(
+                isRepairing ? "Repairing…" : "Repair agent",
+                variant: .secondary,
+                size: .sm,
+                action: { runRepair() }
             )
             Spacer()
         }

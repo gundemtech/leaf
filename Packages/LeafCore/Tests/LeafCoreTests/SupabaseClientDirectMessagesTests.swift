@@ -188,6 +188,62 @@ final class SupabaseClientDirectMessagesTests: XCTestCase {
     XCTAssertEqual(rows[0].encryptedPayload, Data([0xAB, 0xCD]))
   }
 
+  // Migrated backend regression — `cross_post` arrives as a JSONB OBJECT
+  // (new rows default to `{}`), not a TEXT string. A strict String decode
+  // aborted the WHOLE inbound batch -> message receive permanently broken.
+  func testFetchInboundMessages_CrossPostAsObject_DecodesTolerantly() async throws {
+    MockURLProtocol.handler = wrapWithBootstrap { request, _ in
+      return (
+        HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+        Data(
+          """
+          [
+            {
+              "message_id": "33333333-3333-3333-3333-333333333333",
+              "workspace_id": "ws-1",
+              "sender_pubkey": "shex",
+              "recipient_pubkey": "rhex",
+              "kind": "ping",
+              "encrypted_payload": "\\\\xabcd",
+              "cross_post": {},
+              "created_at": "2026-05-14T10:00:00Z",
+              "read_at": null, "done_at": null, "done_by_pubkey": null, "reply_to": null
+            },
+            {
+              "message_id": "44444444-4444-4444-4444-444444444444",
+              "workspace_id": "ws-1",
+              "sender_pubkey": "shex",
+              "recipient_pubkey": "rhex",
+              "kind": "task",
+              "encrypted_payload": "\\\\xabcd",
+              "cross_post": {"slack": {"channel": "C123"}},
+              "created_at": "2026-05-14T10:01:00Z",
+              "read_at": null, "done_at": null, "done_by_pubkey": null, "reply_to": null
+            },
+            {
+              "message_id": "55555555-5555-5555-5555-555555555555",
+              "workspace_id": "ws-1",
+              "sender_pubkey": "shex",
+              "recipient_pubkey": "rhex",
+              "kind": "ping",
+              "encrypted_payload": "\\\\xabcd",
+              "cross_post": "{\\"legacy\\":true}",
+              "created_at": "2026-05-14T10:02:00Z",
+              "read_at": null, "done_at": null, "done_by_pubkey": null, "reply_to": null
+            }
+          ]
+          """.utf8)
+      )
+    }
+    let client = makeClient()
+    let rows = try await client.fetchInboundMessages(
+      workspaceID: "ws-1", recipientPubkeyHex: "rhex", sinceCreatedAtISO: nil, limit: 100)
+    XCTAssertEqual(rows.count, 3, "object-typed cross_post must not abort the batch")
+    XCTAssertEqual(rows[0].crossPostJSON, "{}")
+    XCTAssertTrue(rows[1].crossPostJSON?.contains("C123") ?? false)
+    XCTAssertEqual(rows[2].crossPostJSON, "{\"legacy\":true}")
+  }
+
   func testFetchInboundMessages_SinceISOAppended() async throws {
     MockURLProtocol.handler = wrapWithBootstrap { request, _ in
       let queryString = request.url?.query ?? ""

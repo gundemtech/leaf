@@ -11,6 +11,7 @@
 //
 
 import Foundation
+import LeafCore
 import ServiceManagement
 import SwiftUI
 
@@ -28,6 +29,46 @@ final class LaunchAgentService {
             : "tech.gundem.leaf.agent.plist"
     }
 
+    /// launchd job label in the gui domain — plist name minus extension.
+    /// Used by the watchdog for `launchctl print` / `launchctl kickstart`.
+    static var agentLabel: String {
+        String(plistName.dropLast(".plist".count))
+    }
+
+    /// Persisted user intent: "I want background collection". Distinct from
+    /// SMAppService.status — the watchdog and the launch-time auto-register
+    /// act only while this is true, and never resurrect the agent after the
+    /// user toggled it off. Absent key = true (pre-flag installs behaved as
+    /// always-on).
+    static let intentDefaultsKey = "backgroundCollectionIntent"
+
+    var intentEnabled: Bool {
+        get {
+            UserDefaults.standard.object(forKey: Self.intentDefaultsKey) as? Bool ?? true
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: Self.intentDefaultsKey)
+        }
+    }
+
+    /// SMAppService.register() re-points the BTM parent record at the bundle
+    /// path of the registering copy. Registering from /tmp, a DMG or a
+    /// translocated path hijacks the record away from the installed app and
+    /// launchd crash-loops the agent — so auto-register is gated on this.
+    var isCanonicalLocation: Bool {
+        BundleLocationPolicy.isCanonical(
+            bundlePath: Bundle.main.bundleURL.path,
+            homePath: NSHomeDirectory())
+    }
+
+    var shouldAutoRegister: Bool {
+        BundleLocationPolicy.shouldAutoRegister(
+            bundleID: Bundle.main.bundleIdentifier ?? "tech.gundem.leaf",
+            bundlePath: Bundle.main.bundleURL.path,
+            homePath: NSHomeDirectory(),
+            environment: ProcessInfo.processInfo.environment)
+    }
+
     private(set) var status: SMAppService.Status = .notRegistered
     private(set) var lastErrorMessage: String?
 
@@ -42,6 +83,7 @@ final class LaunchAgentService {
     var isEnabled: Bool { status == .enabled }
 
     func register() {
+        intentEnabled = true
         do {
             try service.register()
             lastErrorMessage = nil
@@ -61,6 +103,7 @@ final class LaunchAgentService {
     }
 
     func unregister() {
+        intentEnabled = false
         do {
             try service.unregister()
             lastErrorMessage = nil
