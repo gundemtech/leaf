@@ -57,6 +57,25 @@ enum AgentMain {
       exit(1)
     }
 
+    // Track A0 — wire link-derivation for ALL collector writes. Before this,
+    // every write path fell back to empty Linear prefixes + substrate no-op
+    // derivers, so event_links stayed empty in production forever. Prefixes
+    // come from observed Linear payloads (TTL-cached); the moat extractors are
+    // wired only in LEAF_PROD builds (substrate builds still derive the
+    // LeafCore-public linear_id_in_text path).
+    let linearPrefixSource = LinearPrefixSource(database: database)
+    #if LEAF_PROD
+      let linkDerivers = prodLinkDerivers()
+    #else
+      let linkDerivers = LinkDerivers.publicSubstrate
+    #endif
+    database.configureDerivation(
+      EventDerivationConfig(
+        derivers: linkDerivers,
+        linearPrefixes: { linearPrefixSource.prefixes() }
+      )
+    )
+
     // Phase 1 (account-login) — HARD GATE. The agent must not capture
     // anything without a valid Supabase session. Construct the same
     // client the UI uses (Info.plist baseURL/anonKey + shared session
@@ -778,6 +797,7 @@ enum AgentMain {
       moat: detectorMoat,
       incrementalIntervalSec: agentThresholds.detectorIncrementalIntervalSec,
       scheduledIntervalSec: agentThresholds.detectorScheduledIntervalSec,
+      linearPrefixes: { linearPrefixSource.prefixes() },
       logger: detectorLogger
     )
     AgentLifetime.detectorScheduler = detectorScheduler

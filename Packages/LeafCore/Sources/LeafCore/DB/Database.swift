@@ -15,10 +15,36 @@ public final class Database: @unchecked Sendable {
     private let config: DatabaseConfig
     public let mode: Mode
 
+    /// Track A0 — instance-level derivation wiring (see `EventDerivationConfig`).
+    /// Lock-protected because collectors write from multiple actors while the
+    /// Agent configures once at startup.
+    private let derivationConfig = OSAllocatedUnfairLock<EventDerivationConfig?>(initialState: nil)
+
     private init(pool: DatabasePool, config: DatabaseConfig, mode: Mode) {
         self.pool = pool
         self.config = config
         self.mode = mode
+    }
+
+    /// Wires link-derivation extractors + Linear prefixes for all subsequent
+    /// `write*` calls that do not pass explicit derivation parameters.
+    /// Composition-root API (Agent startup); safe to call again (last wins).
+    public func configureDerivation(_ config: EventDerivationConfig) {
+        derivationConfig.withLock { $0 = config }
+    }
+
+    /// Explicit call-site arguments win; otherwise fall back to the configured
+    /// derivation; otherwise the historical defaults (no prefixes, substrate
+    /// no-op derivers).
+    private func resolvedDerivation(
+        _ prefixes: Set<String>?,
+        _ derivers: LinkDerivers?
+    ) -> (prefixes: Set<String>, derivers: LinkDerivers) {
+        let cfg = derivationConfig.withLock { $0 }
+        return (
+            prefixes ?? cfg?.linearPrefixes() ?? [],
+            derivers ?? cfg?.derivers ?? .publicSubstrate
+        )
     }
 
     // MARK: - Opening
@@ -170,30 +196,32 @@ public final class Database: @unchecked Sendable {
 
     public func write(
         _ event: RawEvent,
-        knownLinearPrefixes: Set<String> = [],
-        derivers: LinkDerivers = .publicSubstrate
+        knownLinearPrefixes: Set<String>? = nil,
+        derivers: LinkDerivers? = nil
     ) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
+        let derivation = resolvedDerivation(knownLinearPrefixes, derivers)
 
         try pool.write { db in
             _ = try Self.writeEventAndDerived(
-                event, knownLinearPrefixes: knownLinearPrefixes, derivers: derivers, in: db
+                event, knownLinearPrefixes: derivation.prefixes, derivers: derivation.derivers, in: db
             )
         }
     }
 
     public func write(
         _ events: [RawEvent],
-        knownLinearPrefixes: Set<String> = [],
-        derivers: LinkDerivers = .publicSubstrate
+        knownLinearPrefixes: Set<String>? = nil,
+        derivers: LinkDerivers? = nil
     ) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         guard !events.isEmpty else { return }
+        let derivation = resolvedDerivation(knownLinearPrefixes, derivers)
 
         try pool.write { db in
             for event in events {
                 _ = try Self.writeEventAndDerived(
-                    event, knownLinearPrefixes: knownLinearPrefixes, derivers: derivers, in: db
+                    event, knownLinearPrefixes: derivation.prefixes, derivers: derivation.derivers, in: db
                 )
             }
         }
@@ -568,12 +596,17 @@ public final class Database: @unchecked Sendable {
     public func writeEventsAndOffset(_ events: [RawEvent], offset: CollectorOffset?) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         guard !events.isEmpty || offset != nil else { return }
-
-        let records = try events.map(EventRecord.make(from:))
+        // Track A0 regression fix: this path used to bare-insert EventRecords,
+        // silently skipping FTS indexing + link derivation for everything the
+        // ClaudeCodeCollector (and friends) wrote. Route through the single
+        // derived-write path like every other entry point.
+        let derivation = resolvedDerivation(nil, nil)
 
         try pool.write { db in
-            for var record in records {
-                try record.insert(db)
+            for event in events {
+                _ = try Self.writeEventAndDerived(
+                    event, knownLinearPrefixes: derivation.prefixes, derivers: derivation.derivers, in: db
+                )
             }
             if let offset {
                 try Self.upsertOffset(offset, in: db)
@@ -593,16 +626,17 @@ public final class Database: @unchecked Sendable {
         presence: (provider: PresenceStateWriter.Provider,
                    state: [String: Any],
                    derivedMode: String?)?,
-        knownLinearPrefixes: Set<String> = [],
-        derivers: LinkDerivers = .publicSubstrate,
+        knownLinearPrefixes: Set<String>? = nil,
+        derivers: LinkDerivers? = nil,
         nowMs: Int64
     ) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
+        let derivation = resolvedDerivation(knownLinearPrefixes, derivers)
 
         try pool.write { db in
             for event in events {
                 _ = try Self.writeEventAndDerived(
-                    event, knownLinearPrefixes: knownLinearPrefixes, derivers: derivers, in: db
+                    event, knownLinearPrefixes: derivation.prefixes, derivers: derivation.derivers, in: db
                 )
             }
             try Self.upsertOffset(offset, in: db)
@@ -630,16 +664,17 @@ public final class Database: @unchecked Sendable {
         events: [RawEvent],
         offsets: [CollectorOffset],
         snapshots: [ProviderSnapshot],
-        knownLinearPrefixes: Set<String> = [],
-        derivers: LinkDerivers = .publicSubstrate
+        knownLinearPrefixes: Set<String>? = nil,
+        derivers: LinkDerivers? = nil
     ) throws {
         guard mode == .writer else { throw LeafError.databaseUnavailable }
         guard !events.isEmpty || !offsets.isEmpty || !snapshots.isEmpty else { return }
+        let derivation = resolvedDerivation(knownLinearPrefixes, derivers)
 
         try pool.write { db in
             for event in events {
                 _ = try Self.writeEventAndDerived(
-                    event, knownLinearPrefixes: knownLinearPrefixes, derivers: derivers, in: db
+                    event, knownLinearPrefixes: derivation.prefixes, derivers: derivation.derivers, in: db
                 )
             }
             for offset in offsets {

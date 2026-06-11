@@ -232,6 +232,36 @@ final class DetectorPipelineIncrementalTests: XCTestCase {
         XCTAssertEqual(rows.first?["linear_issue_ref"] as String?, "LEAF-42")
     }
 
+    func testOpenQuestionWriteResolvesLinearRefFromBodyViaPrefixes() throws {
+        let db = try openDB()
+        // Track A0 — no explicit linked_linear_id; the ref must be extracted
+        // from the body using the threaded prefix whitelist (was hardcoded
+        // empty before A0, so this path never fired in production).
+        try writeEvent(db, tsMs: 5_500, payload: [
+            "event_kind": "issue_updated",
+            "body": "Open QUESTION: do we keep GUN-12 on the relay path?"
+        ])
+
+        try DetectorPipeline.runIncremental(
+            moat: sentinelMoat(), nowMs: 9_999, linearPrefixes: ["GUN"], in: db)
+
+        let rows = try openQuestionRows(db)
+        XCTAssertEqual(rows.count, 1)
+        XCTAssertEqual(rows.first?["linear_issue_ref"] as String?, "GUN-12")
+    }
+
+    func testOpenQuestionWrite_NoPrefixes_LeavesLinearRefNil() throws {
+        let db = try openDB()
+        try writeEvent(db, tsMs: 5_600, payload: [
+            "event_kind": "issue_updated",
+            "body": "Open QUESTION: do we keep GUN-12 on the relay path?"
+        ])
+
+        try DetectorPipeline.runIncremental(moat: sentinelMoat(), nowMs: 9_999, in: db)
+
+        XCTAssertNil(try openQuestionRows(db).first?["linear_issue_ref"] as String?)
+    }
+
     func testBlockerPatternWritePopulatesDetectedByEventID() throws {
         let db = try openDB()
         try writeEvent(db, tsMs: 6_000, payload: [

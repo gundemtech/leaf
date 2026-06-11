@@ -26,9 +26,10 @@ public protocol BrowserBookmarksFeatureGate: Sendable {
 
 extension Database: BookmarkEventBatchWriter {
     // Satisfy protocol by forwarding to the existing `write(_:knownLinearPrefixes:derivers:)`
-    // overload that carries default parameters (protocol witness requires exact signature).
+    // overload (protocol witness requires exact signature). `nil` defers to the
+    // instance-level `EventDerivationConfig` (Track A0).
     public func write(_ events: [RawEvent]) throws {
-        try write(events, knownLinearPrefixes: [], derivers: .publicSubstrate)
+        try write(events, knownLinearPrefixes: nil, derivers: nil)
     }
 }
 

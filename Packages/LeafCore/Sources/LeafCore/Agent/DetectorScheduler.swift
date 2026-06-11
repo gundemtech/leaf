@@ -28,6 +28,7 @@ public actor DetectorScheduler {
     private let moat: DetectorMoat
     private let incrementalIntervalSec: TimeInterval
     private let scheduledIntervalSec: TimeInterval
+    private let linearPrefixes: @Sendable () -> Set<String>
     private let logger: Logger
 
     private var incrementalTask: Task<Void, Never>?
@@ -38,12 +39,14 @@ public actor DetectorScheduler {
         moat: DetectorMoat,
         incrementalIntervalSec: TimeInterval,
         scheduledIntervalSec: TimeInterval,
+        linearPrefixes: @escaping @Sendable () -> Set<String> = { [] },
         logger: Logger
     ) {
         self.database = database
         self.moat = moat
         self.incrementalIntervalSec = incrementalIntervalSec
         self.scheduledIntervalSec = scheduledIntervalSec
+        self.linearPrefixes = linearPrefixes
         self.logger = logger
     }
 
@@ -74,7 +77,8 @@ public actor DetectorScheduler {
     /// One incremental pass — exposed for tests + opportunistic invocation.
     public func performIncrementalTick() {
         do {
-            try DetectorPipeline.runIncremental(moat: moat, in: database)
+            try DetectorPipeline.runIncremental(
+                moat: moat, linearPrefixes: linearPrefixes(), in: database)
         } catch {
             // Detector failure must NOT stall the Agent. Log + move on; the
             // cursor still advances inside the pipeline so a transient failure
