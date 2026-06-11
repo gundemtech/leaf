@@ -252,6 +252,50 @@ final class LinearCollectorTests: XCTestCase {
         XCTAssertEqual(calls[1], cursorMs, "second tick — stored cursor")
     }
 
+    /// Boundary re-fetch guard (2026-06-11) — Linear's `$since` comparison is
+    /// coarser than ms server-side, so the issue sitting exactly on the cursor
+    /// re-returns every tick. The collector must NOT re-write an issue whose
+    /// updatedAt <= stored cursor (observed in prod: 57 identical copies of
+    /// one issue, one per 5-min tick).
+    func testSecondTick_boundaryIssueReturnedAgain_notRewritten() async throws {
+        let db = try Database.openForWrite(at: dbURL, config: .weakDefaults, encryption: .deterministicTest)
+        try insertFreshIntegration(db: db)
+
+        let provider = MockLinearGraphQLProvider()
+        let cursorMs: Int64 = 1_700_000_000_000
+        let boundaryBatch = LinearIssueBatch(
+            issues: [LinearIssueSnapshot(
+                issueKey: "LEA-1", title: "Boundary", status: "Done",
+                project: "", teamKey: "LEA", updatedAtMs: cursorMs
+            )],
+            cursorMs: cursorMs
+        )
+        await provider.setBatch(boundaryBatch)
+
+        let refresher = LinearTokenRefresher(database: db, clientID: "test-client")
+        let collector = LinearCollector(
+            database: db, provider: provider, refresher: refresher,
+            intervalSec: 999, backfillWindowDays: 7,
+            logger: logger
+        )
+        // Tick 1 — bootstrap (since=nil): the issue IS written.
+        _ = await collector.performTick()
+        // Tick 2 — server re-returns the same boundary issue (updatedAt == cursor).
+        await provider.setBatch(boundaryBatch)
+        _ = await collector.performTick()
+
+        let issueUpdatedCount = try db.readSQL { conn in
+            try Int.fetchOne(
+                conn,
+                sql: """
+                    SELECT COUNT(*) FROM events
+                    WHERE json_extract(payload_json, '$.event_kind') = 'issue_updated'
+                      AND json_extract(payload_json, '$.issue_key') = 'LEA-1'
+                    """) ?? -1
+        }
+        XCTAssertEqual(issueUpdatedCount, 1, "boundary issue must be written exactly once")
+    }
+
     // MARK: - Phase 4.5 — attribution_v2 migration
 
     private func makeLinearActionEvent(issueKey: String, updatedAtMs: Int64) -> RawEvent {

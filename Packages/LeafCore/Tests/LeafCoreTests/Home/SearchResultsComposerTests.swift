@@ -13,10 +13,14 @@ import XCTest
 
 final class SearchResultsComposerTests: XCTestCase {
 
-  private func event(_ id: Int64, ts: Int64, kind: String?, body: String?) -> ActivityEvent {
+  private func event(
+    _ id: Int64, ts: Int64, kind: String?, body: String?,
+    ref: String? = nil, title: String? = nil
+  ) -> ActivityEvent {
     ActivityEvent(
       eventID: id, tsMs: ts, signalType: "action", bundleID: nil,
-      eventKind: kind, bodyExcerpt: body, bodyTruncated: false)
+      eventKind: kind, bodyExcerpt: body, bodyTruncated: false,
+      targetRef: ref, targetTitle: title)
   }
 
   private func response(
@@ -69,6 +73,37 @@ final class SearchResultsComposerTests: XCTestCase {
     XCTAssertEqual(rows.count, 2)
     XCTAssertEqual(rows[0].title, "gh_pr_opened")
     XCTAssertEqual(rows[1].title, "Fix relay reconnect")
+  }
+
+  func testEventRow_structuredTarget_headlineAndExcerpt() {
+    let rows = SearchResultsComposer.compose(
+      from: response(events: [
+        event(
+          1, ts: 1_000, kind: "issue_updated",
+          body: "Что: внедрить дисциплину — каждая phase начинается с Linear issue.\n\nЗачем: substrate…",
+          ref: "GUN-12", title: "Внедрить naming-дисциплину")
+      ]))
+    XCTAssertEqual(rows[0].title, "GUN-12 · Внедрить naming-дисциплину")
+    XCTAssertTrue(rows[0].excerpt?.hasPrefix("Что: внедрить дисциплину") == true)
+    XCTAssertFalse(rows[0].excerpt?.contains("\n") ?? true)
+  }
+
+  func testEventDedup_sameTargetCollapses_keepsNewest_counts() {
+    // Capture-side re-emission: 5 identical issue_updated rows for one issue.
+    let dupes = (1...5).map { i in
+      event(
+        Int64(i), ts: Int64(i * 100), kind: "issue_updated",
+        body: "same body", ref: "GUN-12", title: "Same issue")
+    }
+    let rows = SearchResultsComposer.compose(
+      from: response(events: dupes + [
+        event(99, ts: 50, kind: "issue_updated", body: "other", ref: "GUN-13", title: "Other")
+      ]))
+    XCTAssertEqual(rows.count, 2)
+    XCTAssertEqual(rows[0].title, "GUN-12 · Same issue")
+    XCTAssertEqual(rows[0].tsMs, 500)  // newest kept
+    XCTAssertEqual(rows[0].occurrenceCount, 5)
+    XCTAssertEqual(rows[1].occurrenceCount, 1)
   }
 
   func testOrdering_decisions_thenDetectors_thenEvents_newestFirstWithinGroup() {
