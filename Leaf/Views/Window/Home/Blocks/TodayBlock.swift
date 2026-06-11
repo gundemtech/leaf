@@ -130,7 +130,7 @@ struct TodayBlock: View {
                                 ? LeafColor.accent.primary
                                 : LeafColor.accent.primary.opacity(0.3)
                         )
-                        .cornerRadius(2)
+                        .cornerRadius(LeafRadius.sm / 2)
                     }
                 }
                 .chartXAxis(.hidden)
