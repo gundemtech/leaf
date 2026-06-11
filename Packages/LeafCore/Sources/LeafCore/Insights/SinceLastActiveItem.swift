@@ -90,6 +90,26 @@ extension SinceLastActiveItem {
         "slack_mention_received_aggregate": ("mentioned you in", .warn),
         "open_question": ("open question:", .warn),
         "blocker": ("blocker:", .danger),
+        // Feed spectrum (2026-06-11) — the substrate captures ~195 kinds and
+        // the feed showed 9 of them. High-signal additions:
+        "gh_issue_opened": ("opened issue", .muted),
+        "gh_issue_closed": ("closed issue", .muted),
+        "gh_release_published": ("published release", .muted),
+        "gh_branch_created": ("created branch", .muted),
+        "gh_tag_created": ("tagged", .muted),
+        "gh_pr_review_comment_authored": ("commented on", .muted),
+        "gh_issue_comment_authored": ("commented on", .muted),
+        "gh_discussion_authored": ("started discussion", .muted),
+        "linear_comment_authored": ("commented on", .muted),
+        "linear_project_update_authored": ("posted project update", .muted),
+        // Synthetic sub-discriminators (mirror linear_status_transition.*):
+        // the mapper picks direction from from/to priority ints.
+        "linear_priority_changed.raised": ("raised priority of", .muted),
+        "linear_priority_changed.lowered": ("lowered priority of", .muted),
+        // Assignee buckets — only self-relevant moves surface; third-party
+        // shuffles are noise in MY feed.
+        "linear_assignee_changed.picked_up": ("picked up", .muted),
+        "linear_assignee_changed.handed_off": ("handed off", .muted),
     ]
 
     private static func makeSourceMeta(feed: ActivityFeedItem, targetTitle: String) -> String {
