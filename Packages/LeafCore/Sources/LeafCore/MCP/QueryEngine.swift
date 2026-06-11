@@ -48,19 +48,63 @@ public struct QueryEngine: Sendable {
     public let dbEncryption: EncryptionOptions?
     public let detectorMoat: DetectorMoat
     public let bodyExcerptCharCap: Int
+    /// Track B0 — work-app classification for currentWork projections.
+    public let workAppHeuristic: WorkAppHeuristic
 
     public init(
         dbURL: URL,
         dbConfig: DatabaseConfig,
         dbEncryption: EncryptionOptions?,
         detectorMoat: DetectorMoat,
-        bodyExcerptCharCap: Int = 500
+        bodyExcerptCharCap: Int = 500,
+        workAppHeuristic: WorkAppHeuristic = .standard
     ) {
         self.dbURL = dbURL
         self.dbConfig = dbConfig
         self.dbEncryption = dbEncryption
         self.detectorMoat = detectorMoat
         self.bodyExcerptCharCap = bodyExcerptCharCap
+        self.workAppHeuristic = workAppHeuristic
+    }
+
+    /// Track B0 — newest own PR with no later merged/closed event for the same
+    /// repo#number. Local memory has no live PR state; absence of a terminal
+    /// event among captured history is the best honest signal.
+    static func latestOpenPR(in db: GRDB.Database) throws -> OpenPRRef? {
+        let candidates = try Row.fetchAll(db, sql: """
+            SELECT ts,
+                   json_extract(payload_json, '$.repo')           AS repo,
+                   json_extract(payload_json, '$.number')         AS number,
+                   json_extract(payload_json, '$.title')          AS title,
+                   json_extract(payload_json, '$.comments_count') AS comments_count
+              FROM events
+             WHERE json_extract(payload_json, '$.event_kind') = 'gh_pr_opened'
+               AND json_extract(payload_json, '$.number') IS NOT NULL
+               AND json_extract(payload_json, '$.number') != ''
+             ORDER BY ts DESC LIMIT 10
+        """)
+        for row in candidates {
+            guard let repo: String = row["repo"], !repo.isEmpty,
+                  let number: String = row["number"] else { continue }
+            let terminal = try Bool.fetchOne(db, sql: """
+                SELECT EXISTS(
+                    SELECT 1 FROM events
+                     WHERE json_extract(payload_json, '$.event_kind')
+                           IN ('gh_pr_merged', 'gh_pr_closed')
+                       AND json_extract(payload_json, '$.repo') = ?
+                       AND json_extract(payload_json, '$.number') = ?
+                )
+            """, arguments: [repo, number]) ?? false
+            if terminal { continue }
+            return OpenPRRef(
+                ref: "\(repo)#\(number)",
+                title: row["title"] as String?,
+                commentCount: (row["comments_count"] as String?).flatMap(Int.init),
+                url: "https://github.com/\(repo)/pull/\(number)",
+                openedAtMs: row["ts"] as Int64?
+            )
+        }
+        return nil
     }
 
     // MARK: - queryActivity
@@ -212,32 +256,33 @@ public struct QueryEngine: Sendable {
     public func currentWork(nowMs: Int64) throws -> CurrentWorkResponse {
         let db = try Database.openForRead(at: dbURL, config: dbConfig, encryption: dbEncryption)
         return try db.readSQL { rawDB -> CurrentWorkResponse in
-            // current_app: latest attention-signal event.
-            let currentApp: String? = try String.fetchOne(rawDB, sql: """
-                SELECT bundle_id FROM events
+            // Track B0 — current app/file must describe WORK. The literal
+            // latest attention event reported messengers/music as "current
+            // work" (live finding 2026-06-11). Scan the recent attention
+            // window for the first dev-relevant bundle; fail closed (nil)
+            // when there is none. App + file come from the SAME row so they
+            // can never describe two different apps.
+            let attentionRows = try Row.fetchAll(rawDB, sql: """
+                SELECT bundle_id, json_extract(payload_json, '$.window_title') AS window_title
+                  FROM events
                  WHERE signal_type = 'attention' AND bundle_id IS NOT NULL
-                 ORDER BY ts DESC LIMIT 1
+                 ORDER BY ts DESC LIMIT 50
             """)
-
-            // current_branch: latest gh_commit_pushed payload.branch.
-            let currentBranch: String? = try String.fetchOne(rawDB, sql: """
-                SELECT json_extract(payload_json, '$.branch') FROM events
-                 WHERE json_extract(payload_json, '$.event_kind') = 'gh_commit_pushed'
-                   AND json_extract(payload_json, '$.branch') IS NOT NULL
-                 ORDER BY ts DESC LIMIT 1
-            """)
-
-            // current_file: latest attention event with non-empty window_title
-            // (collectors emit window_title onto attention payloads — see
-            // `AttentionEmissionPlanner`; there is no separate `ax_window`
-            // signal type in substrate).
-            let currentFile: String? = try String.fetchOne(rawDB, sql: """
-                SELECT json_extract(payload_json, '$.window_title') FROM events
-                 WHERE signal_type = 'attention'
-                   AND json_extract(payload_json, '$.window_title') IS NOT NULL
-                   AND json_extract(payload_json, '$.window_title') != ''
-                 ORDER BY ts DESC LIMIT 1
-            """)
+            var currentApp: String?
+            var currentFile: String?
+            for row in attentionRows {
+                guard let bundle: String = row["bundle_id"],
+                      workAppHeuristic.isDevRelevant(bundle) else { continue }
+                if currentApp == nil { currentApp = bundle }
+                if currentFile == nil,
+                   let title: String = row["window_title"], !title.isEmpty,
+                   bundle == currentApp {
+                    currentFile = title
+                }
+                if currentApp != nil, currentFile != nil { break }
+                // Keep scanning only for a title of the SAME app.
+                if currentApp != nil, bundle != currentApp { break }
+            }
 
             // in_progress_linear_ticket: latest issue_updated whose status != 'Done'.
             // Linear collector emits payload.event_kind = "issue_updated" + payload.status.
@@ -259,21 +304,58 @@ public struct QueryEngine: Sendable {
                 )
             }
 
-            // last_commit: latest gh_commit_pushed projection.
-            let lastCommit: CommitRef? = try Row.fetchOne(rawDB, sql: """
+            // last_commit: latest commit event across BOTH sources — the
+            // GitHub feed (push facts, often message-less) and the local git
+            // collector (full subjects). One row feeds sha/message/branch/repo
+            // AND currentBranch below — branch and commit can never disagree
+            // by construction (Track B0; they used to come from separate
+            // queries and routinely described different repos).
+            let lastCommitRow = try Row.fetchOne(rawDB, sql: """
                 SELECT ts,
                        json_extract(payload_json, '$.sha')     AS sha,
                        json_extract(payload_json, '$.body')    AS message,
-                       json_extract(payload_json, '$.branch')  AS branch
+                       json_extract(payload_json, '$.branch')  AS branch,
+                       json_extract(payload_json, '$.repo')    AS repo
                   FROM events
-                 WHERE json_extract(payload_json, '$.event_kind') = 'gh_commit_pushed'
+                 WHERE json_extract(payload_json, '$.event_kind')
+                       IN ('gh_commit_pushed', 'git_commit_authored')
                  ORDER BY ts DESC LIMIT 1
-            """).map { row in
-                CommitRef(
+            """)
+            let lastCommit: CommitRef? = lastCommitRow.map { row in
+                let message: String? = row["message"]
+                return CommitRef(
                     sha: row["sha"] as String?,
-                    message: row["message"] as String?,
+                    message: message,
                     branch: row["branch"] as String?,
-                    pushedAtMs: row["ts"] as Int64?
+                    pushedAtMs: row["ts"] as Int64?,
+                    subject: message.flatMap {
+                        $0.split(separator: "\n", maxSplits: 1).first.map(String.init)
+                    },
+                    repoFullName: row["repo"] as String?
+                )
+            }
+
+            // Track B0 — newest still-open own PR (no later merged/closed
+            // event for the same repo#number among the recent candidates).
+            let openPR: OpenPRRef? = try Self.latestOpenPR(in: rawDB)
+
+            // Track B0 — latest Slack thread/channel activity (aggregates
+            // carry channel_name + count; bodies never surface here).
+            let lastThread: ThreadRef? = try Row.fetchOne(rawDB, sql: """
+                SELECT ts,
+                       json_extract(payload_json, '$.channel_name') AS channel_name,
+                       json_extract(payload_json, '$.count')        AS msg_count
+                  FROM events
+                 WHERE json_extract(payload_json, '$.event_kind')
+                       IN ('slack_thread_reply_aggregate', 'slack_message_authored_aggregate')
+                   AND json_extract(payload_json, '$.channel_name') IS NOT NULL
+                 ORDER BY ts DESC LIMIT 1
+            """).flatMap { row -> ThreadRef? in
+                guard let channel: String = row["channel_name"], !channel.isEmpty else { return nil }
+                return ThreadRef(
+                    channelName: channel,
+                    messageCount: (row["msg_count"] as String?).flatMap(Int.init),
+                    tsMs: row["ts"] as Int64?
                 )
             }
 
@@ -319,10 +401,12 @@ public struct QueryEngine: Sendable {
 
             return CurrentWorkResponse(
                 currentApp: currentApp,
-                currentBranch: currentBranch,
+                currentBranch: lastCommit?.branch,
                 currentFile: currentFile,
                 inProgressLinearTicket: linearTicket,
                 lastCommit: lastCommit,
+                openPR: openPR,
+                lastThread: lastThread,
                 currentOpenQuestions: openQs,
                 currentBlockers: blockers,
                 whereStopped: whereStopped

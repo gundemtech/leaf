@@ -51,37 +51,58 @@ final class QueryEngineCurrentWorkTests: XCTestCase {
         try db.write(event)
     }
 
-    // MARK: - 1. current_app from latest attention event
+    // MARK: - 1. current_app — latest WORK app (Track B0)
 
-    func testCurrentApp_FromLatestNSWorkspaceEvent() throws {
+    func testCurrentApp_LatestWorkAppWins_MessengersSkipped() throws {
         let db = try openWriter()
         try writeEvent(db, tsMs: 1_000, signalType: .attention,
                        bundleID: "com.apple.dt.Xcode",
                        payload: ["event_kind": "app_focused"])
+        // Newer but NOT a work app — must be skipped, not reported.
         try writeEvent(db, tsMs: 2_000, signalType: .attention,
-                       bundleID: "com.tinyspeck.slackmacgap",
+                       bundleID: "ru.keepcoder.Telegram",
+                       payload: ["event_kind": "app_focused"])
+        try writeEvent(db, tsMs: 3_000, signalType: .attention,
+                       bundleID: "com.spotify.client",
                        payload: ["event_kind": "app_focused"])
         let r = try makeEngine().currentWork(nowMs: nowMs)
-        XCTAssertEqual(r.currentApp, "com.tinyspeck.slackmacgap")
+        XCTAssertEqual(r.currentApp, "com.apple.dt.Xcode")
         XCTAssertEqual(r.schemaVersion, "1.0")
     }
 
-    // MARK: - 2. current_branch from latest commit_pushed
+    func testCurrentApp_NoWorkAppInWindow_FailsClosed() throws {
+        let db = try openWriter()
+        try writeEvent(db, tsMs: 1_000, signalType: .attention,
+                       bundleID: "ru.keepcoder.Telegram",
+                       payload: ["event_kind": "app_focused",
+                                 "window_title": "Telegram @ demoff"])
+        let r = try makeEngine().currentWork(nowMs: nowMs)
+        XCTAssertNil(r.currentApp, "messenger must never surface as current work app")
+        XCTAssertNil(r.currentFile, "messenger window title must never surface as current file")
+    }
 
-    func testCurrentBranch_FromLatestCommitPushed() throws {
+    // MARK: - 2. current_branch — same row as last_commit (Track B0)
+
+    func testCurrentBranch_ComesFromLastCommitRow() throws {
         let db = try openWriter()
         try writeEvent(db, tsMs: 1_000, payload: [
             "event_kind": "gh_commit_pushed",
             "branch": "main",
+            "repo": "acme/other",
             Schema.EventPayloadKeys.body: "old commit"
         ])
         try writeEvent(db, tsMs: 5_000, payload: [
-            "event_kind": "gh_commit_pushed",
+            "event_kind": "git_commit_authored",
             "branch": "feature/track-1-D3",
+            "repo": "acme/widget",
+            "sha": "abc",
             Schema.EventPayloadKeys.body: "newer commit"
         ])
         let r = try makeEngine().currentWork(nowMs: nowMs)
         XCTAssertEqual(r.currentBranch, "feature/track-1-D3")
+        XCTAssertEqual(r.currentBranch, r.lastCommit?.branch,
+                       "branch and lastCommit must come from the same row")
+        XCTAssertEqual(r.lastCommit?.repoFullName, "acme/widget")
     }
 
     // MARK: - 3. current_file from latest attention with window_title
@@ -156,6 +177,67 @@ final class QueryEngineCurrentWorkTests: XCTestCase {
         XCTAssertEqual(r.lastCommit?.branch, "feature/x")
         XCTAssertEqual(r.lastCommit?.message, "latest commit message")
         XCTAssertEqual(r.lastCommit?.pushedAtMs, 7_000)
+    }
+
+    // MARK: - 5b. last_commit subject = first line (Track B0)
+
+    func testLastCommit_SubjectIsFirstLineOfMultilineMessage() throws {
+        let db = try openWriter()
+        try writeEvent(db, tsMs: 7_000, payload: [
+            "event_kind": "git_commit_authored",
+            "sha": "abc",
+            "branch": "dev",
+            Schema.EventPayloadKeys.body: "feat: token rotation\n\nLonger body paragraph."
+        ])
+        let r = try makeEngine().currentWork(nowMs: nowMs)
+        XCTAssertEqual(r.lastCommit?.subject, "feat: token rotation")
+    }
+
+    // MARK: - 5c. openPR — newest still-open own PR (Track B0)
+
+    func testOpenPR_SkipsMergedAndPicksStillOpen() throws {
+        let db = try openWriter()
+        try writeEvent(db, tsMs: 1_000, payload: [
+            "event_kind": "gh_pr_opened", "repo": "acme/widget", "number": "141",
+            "title": "Still open PR",
+        ])
+        try writeEvent(db, tsMs: 2_000, payload: [
+            "event_kind": "gh_pr_opened", "repo": "acme/widget", "number": "142",
+            "title": "Merged PR",
+        ])
+        try writeEvent(db, tsMs: 3_000, payload: [
+            "event_kind": "gh_pr_merged", "repo": "acme/widget", "number": "142",
+        ])
+        let r = try makeEngine().currentWork(nowMs: nowMs)
+        XCTAssertEqual(r.openPR?.ref, "acme/widget#141")
+        XCTAssertEqual(r.openPR?.title, "Still open PR")
+        XCTAssertEqual(r.openPR?.url, "https://github.com/acme/widget/pull/141")
+    }
+
+    func testOpenPR_AllTerminal_ReturnsNil() throws {
+        let db = try openWriter()
+        try writeEvent(db, tsMs: 1_000, payload: [
+            "event_kind": "gh_pr_opened", "repo": "acme/widget", "number": "7",
+        ])
+        try writeEvent(db, tsMs: 2_000, payload: [
+            "event_kind": "gh_pr_closed", "repo": "acme/widget", "number": "7",
+        ])
+        XCTAssertNil(try makeEngine().currentWork(nowMs: nowMs).openPR)
+    }
+
+    // MARK: - 5d. lastThread — latest Slack aggregate (Track B0)
+
+    func testLastThread_FromLatestSlackAggregate() throws {
+        let db = try openWriter()
+        try writeEvent(db, tsMs: 4_000, payload: [
+            "event_kind": "slack_thread_reply_aggregate",
+            "channel_name": "engineering", "count": "8",
+            Schema.EventPayloadKeys.body: "parent",
+        ])
+        let r = try makeEngine().currentWork(nowMs: nowMs)
+        XCTAssertEqual(r.lastThread?.channelName, "engineering")
+        XCTAssertEqual(r.lastThread?.messageCount, 8)
+        XCTAssertEqual(r.lastThread?.tsMs, 4_000)
     }
 
     // MARK: - 6. currentOpenQuestions filters resolved

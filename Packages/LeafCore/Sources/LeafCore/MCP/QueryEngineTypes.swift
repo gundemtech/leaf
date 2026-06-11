@@ -90,6 +90,10 @@ public struct CurrentWorkResponse: Codable, Sendable {
     public let currentFile: String?
     public let inProgressLinearTicket: LinearTicketRef?
     public let lastCommit: CommitRef?
+    /// Additive (Track B0) — newest still-open own PR.
+    public let openPR: OpenPRRef?
+    /// Additive (Track B0) — latest Slack thread/channel activity.
+    public let lastThread: ThreadRef?
     public let currentOpenQuestions: [OpenQuestionView]
     public let currentBlockers: [BlockerView]
     public let whereStopped: WhereStoppedOutput?
@@ -101,6 +105,8 @@ public struct CurrentWorkResponse: Codable, Sendable {
         currentFile: String?,
         inProgressLinearTicket: LinearTicketRef?,
         lastCommit: CommitRef?,
+        openPR: OpenPRRef? = nil,
+        lastThread: ThreadRef? = nil,
         currentOpenQuestions: [OpenQuestionView],
         currentBlockers: [BlockerView],
         whereStopped: WhereStoppedOutput?
@@ -111,6 +117,8 @@ public struct CurrentWorkResponse: Codable, Sendable {
         self.currentFile = currentFile
         self.inProgressLinearTicket = inProgressLinearTicket
         self.lastCommit = lastCommit
+        self.openPR = openPR
+        self.lastThread = lastThread
         self.currentOpenQuestions = currentOpenQuestions
         self.currentBlockers = currentBlockers
         self.whereStopped = whereStopped
@@ -322,12 +330,56 @@ public struct CommitRef: Codable, Sendable, Equatable {
     public let message: String?
     public let branch: String?
     public let pushedAtMs: Int64?
+    /// Additive (Track B0) — first line of the commit message; the full
+    /// `message` may carry body paragraphs once local git capture is on.
+    public let subject: String?
+    /// Additive (Track B0) — "owner/repo" of the commit's repository.
+    public let repoFullName: String?
 
-    public init(sha: String?, message: String?, branch: String?, pushedAtMs: Int64?) {
+    public init(
+        sha: String?, message: String?, branch: String?, pushedAtMs: Int64?,
+        subject: String? = nil, repoFullName: String? = nil
+    ) {
         self.sha = sha
         self.message = message
         self.branch = branch
         self.pushedAtMs = pushedAtMs
+        self.subject = subject
+        self.repoFullName = repoFullName
+    }
+}
+
+/// Track B0 — the user's newest still-open PR ("OPEN REVIEW" line of the
+/// handoff card). All fields nil-degrade.
+public struct OpenPRRef: Codable, Sendable, Equatable {
+    /// "owner/repo#142"
+    public let ref: String
+    public let title: String?
+    public let commentCount: Int?
+    public let url: String?
+    public let openedAtMs: Int64?
+
+    public init(ref: String, title: String?, commentCount: Int?, url: String?, openedAtMs: Int64?) {
+        self.ref = ref
+        self.title = title
+        self.commentCount = commentCount
+        self.url = url
+        self.openedAtMs = openedAtMs
+    }
+}
+
+/// Track B0 — the user's latest Slack thread/channel activity ("LAST THREAD"
+/// line of the handoff card). Channel names are self-visible metadata
+/// (ADR-010: message bodies never surface here).
+public struct ThreadRef: Codable, Sendable, Equatable {
+    public let channelName: String
+    public let messageCount: Int?
+    public let tsMs: Int64?
+
+    public init(channelName: String, messageCount: Int?, tsMs: Int64?) {
+        self.channelName = channelName
+        self.messageCount = messageCount
+        self.tsMs = tsMs
     }
 }
 
