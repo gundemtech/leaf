@@ -33,7 +33,7 @@ final class ShareEventTypeRegistryTests: XCTestCase {
     /// Track-6 P2 grew it 168 → 174 (+6 Xcode Deep lifecycle). Track-6 P3 grew it 174 → 182 (+8 Browsers Deep).
     /// Track-6 P5 grew it 182 → 185 (+3 Zoom Deep).
     func testCount116() {
-        XCTAssertEqual(ShareEventTypeKey.allCases.count, 198)
+        XCTAssertEqual(ShareEventTypeKey.allCases.count, 199)
     }
 
     /// Track 3 D2 — all GitHub keys must use the canonical `gh_*` rawValue

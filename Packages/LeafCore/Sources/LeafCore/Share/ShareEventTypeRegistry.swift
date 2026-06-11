@@ -291,6 +291,14 @@ public enum ShareEventTypeKey: String, CaseIterable, Sendable, Hashable {
     case googleCalendarOOOStarted             = "google_calendar_ooo_started"
     case googleCalendarOOOEnded               = "google_calendar_ooo_ended"
     case googleCalendarWorkingLocationChanged = "google_calendar_working_location_changed"
+
+    // MARK: - Use-case rebuild Track A1 — local git log collector
+    // Self-authored commit subject+body from local repos in watched folders.
+    // Default OFF and deliberately NOT in ShareSourceClassifier (local-only in
+    // v1): the initial 90-day capture window writes fresh event ids above the
+    // team-broadcast cursor — classifying it shareable would blast months of
+    // history to teammates in one tick. The team keeps seeing gh_commit_pushed.
+    case gitCommitAuthored                    = "git_commit_authored"
 }
 
 /// Phase 4.7.A — onboarding default enabled-state per event_kind.
@@ -571,6 +579,9 @@ public enum ShareEventTypeDefaults {
         .init(key: .googleCalendarFocusBlockEnded, defaultEnabled: false),
         .init(key: .googleCalendarOOOStarted, defaultEnabled: false),
         .init(key: .googleCalendarOOOEnded, defaultEnabled: false),
-        .init(key: .googleCalendarWorkingLocationChanged, defaultEnabled: false)
+        .init(key: .googleCalendarWorkingLocationChanged, defaultEnabled: false),
+
+        // Track A1 — local git commits. Default OFF + local-only (see enum case).
+        .init(key: .gitCommitAuthored, defaultEnabled: false)
     ]
 }

@@ -28,19 +28,23 @@ public enum DetectorPipeline {
     public static func runIncremental(
         moat: DetectorMoat,
         nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000),
+        linearPrefixes: Set<String> = [],
         in db: Database
     ) throws {
         try db.writeSQL { rawDB in
             try processDetector(kind: Schema.DetectorKinds.decision,
-                                moat: moat, nowMs: nowMs, in: rawDB)
+                                moat: moat, nowMs: nowMs,
+                                linearPrefixes: linearPrefixes, in: rawDB)
         }
         try db.writeSQL { rawDB in
             try processDetector(kind: Schema.DetectorKinds.openQuestion,
-                                moat: moat, nowMs: nowMs, in: rawDB)
+                                moat: moat, nowMs: nowMs,
+                                linearPrefixes: linearPrefixes, in: rawDB)
         }
         try db.writeSQL { rawDB in
             try processDetector(kind: Schema.DetectorKinds.blockerPattern,
-                                moat: moat, nowMs: nowMs, in: rawDB)
+                                moat: moat, nowMs: nowMs,
+                                linearPrefixes: linearPrefixes, in: rawDB)
         }
     }
 
@@ -135,14 +139,64 @@ public enum DetectorPipeline {
     private static func processDetector(kind: String,
                                         moat: DetectorMoat,
                                         nowMs: Int64,
+                                        linearPrefixes: Set<String>,
                                         in db: GRDB.Database) throws {
         let cursor = try DetectorOffsetsStore.cursor(detectorKind: kind, in: db)
-        let rows = try Row.fetchAll(db, sql: """
-            SELECT id, ts, signal_type, payload_json
-              FROM events WHERE id > ? ORDER BY id ASC
-            """, arguments: [cursor])
+        let lastID = try scanRange(kind: kind, moat: moat, nowMs: nowMs,
+                                   linearPrefixes: linearPrefixes,
+                                   afterID: cursor, throughID: nil, in: db)
+        try DetectorOffsetsStore.advance(detectorKind: kind,
+                                         toEventID: lastID,
+                                         nowMs: nowMs,
+                                         in: db)
+    }
 
-        var lastID: Int64 = cursor
+    /// Track A3 — bounded replay over an id range WITHOUT touching the live
+    /// `detector_offsets` cursor. Used by `MemoryBackfillJob` to re-scan
+    /// history after detector trigger catalogues / dispatch tables grow.
+    /// Never rewind the live cursor instead: that races the periodic
+    /// incremental pass and (for blockers) can resurrect resolved rows.
+    /// Idempotency comes from UNIQUE(event_id) + INSERT OR IGNORE in the
+    /// detector stores. Returns the last processed event id.
+    ///
+    /// NB broadcast hygiene: detector hits live ONLY in detector tables —
+    /// nothing here emits `events` rows, so replayed history can never reach
+    /// the team-events broadcast cursor.
+    @discardableResult
+    public static func runRange(kind: String,
+                                moat: DetectorMoat,
+                                nowMs: Int64,
+                                linearPrefixes: Set<String> = [],
+                                fromID: Int64,
+                                toID: Int64,
+                                in db: GRDB.Database) throws -> Int64 {
+        try scanRange(kind: kind, moat: moat, nowMs: nowMs,
+                      linearPrefixes: linearPrefixes,
+                      afterID: fromID, throughID: toID, in: db)
+    }
+
+    /// Shared scan loop. `throughID == nil` → unbounded (live incremental pass).
+    private static func scanRange(kind: String,
+                                  moat: DetectorMoat,
+                                  nowMs: Int64,
+                                  linearPrefixes: Set<String>,
+                                  afterID: Int64,
+                                  throughID: Int64?,
+                                  in db: GRDB.Database) throws -> Int64 {
+        let rows: [Row]
+        if let throughID {
+            rows = try Row.fetchAll(db, sql: """
+                SELECT id, ts, signal_type, payload_json
+                  FROM events WHERE id > ? AND id <= ? ORDER BY id ASC
+                """, arguments: [afterID, throughID])
+        } else {
+            rows = try Row.fetchAll(db, sql: """
+                SELECT id, ts, signal_type, payload_json
+                  FROM events WHERE id > ? ORDER BY id ASC
+                """, arguments: [afterID])
+        }
+
+        var lastID: Int64 = afterID
         for row in rows {
             let eventID: Int64 = row["id"]
             let tsMs: Int64 = row["ts"]
@@ -155,6 +209,7 @@ public enum DetectorPipeline {
                              payloadJSON: payloadJSON,
                              detectorKind: kind,
                              moat: moat,
+                             linearPrefixes: linearPrefixes,
                              in: db)
             } catch {
                 // Detector failure must not break the write path — moat-impl bugs
@@ -163,11 +218,7 @@ public enum DetectorPipeline {
             }
             lastID = eventID
         }
-
-        try DetectorOffsetsStore.advance(detectorKind: kind,
-                                         toEventID: lastID,
-                                         nowMs: nowMs,
-                                         in: db)
+        return lastID
     }
 
     // MARK: - Body dispatch
@@ -178,6 +229,7 @@ public enum DetectorPipeline {
                                  payloadJSON: String,
                                  detectorKind: String,
                                  moat: DetectorMoat,
+                                 linearPrefixes: Set<String>,
                                  in db: GRDB.Database) throws {
         guard let data = payloadJSON.data(using: .utf8),
               let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -212,7 +264,8 @@ public enum DetectorPipeline {
                         eventID: eventID,
                         hit: hit,
                         slackThreadTS: dict["thread_ts"] as? String,
-                        linearIssueRef: derivedLinearRef(payload: dict, body: body),
+                        linearIssueRef: derivedLinearRef(payload: dict, body: body,
+                                                         knownPrefixes: linearPrefixes),
                         githubPRRef: dict["linked_github_pr"] as? String,
                         openedAtMs: tsMs
                     )
@@ -221,7 +274,8 @@ public enum DetectorPipeline {
                 }
             case Schema.DetectorKinds.blockerPattern:
                 if let hit = moat.blockerPattern.detect(body: body, kind: bodyKind) {
-                    guard let (tk, tr) = blockerTarget(eventKind: eventKind, payload: dict, body: body)
+                    guard let (tk, tr) = blockerTarget(eventKind: eventKind, payload: dict, body: body,
+                                                       linearPrefixes: linearPrefixes)
                     else { continue }
                     let inserted = try BlockersStore.insertOpenIfAbsent(
                         targetKind: tk,
@@ -283,6 +337,8 @@ public enum DetectorPipeline {
         // blocker), notifications are surface-only.
         if eventKind == "issue_updated" { return .linearDesc }
         if eventKind == GitHubEventKindKey.commitPushed.rawValue { return .commitMsg }
+        // Track A1 — local git log collector (mirrors FTS dispatch).
+        if eventKind == "git_commit_authored" { return .commitMsg }
         if eventKind == GitHubEventKindKey.issueCommentAuthored.rawValue { return .ghIssueComment }
         if eventKind == GitHubEventKindKey.prReviewCommentAuthored.rawValue { return .ghPRReviewComment }
         if eventKind == "slack_thread_reply_aggregate" { return .slackThreadParent }
@@ -354,13 +410,15 @@ public enum DetectorPipeline {
     /// Prefers the explicit `linked_linear_id` payload key (Phase 4.7.A) so
     /// that issues already attributed by the collector are not re-extracted
     /// from body text. Falls back to first match from `LinearIDExtractor`
-    /// over the body — `knownPrefixes` is empty here; production wiring
-    /// (Agent integration commit) threads the prefix set through.
-    private static func derivedLinearRef(payload: [String: Any], body: String) -> String? {
+    /// over the body using the threaded prefix whitelist (Track A0 — the
+    /// Agent supplies it via `LinearPrefixSource`).
+    private static func derivedLinearRef(payload: [String: Any],
+                                         body: String,
+                                         knownPrefixes: Set<String>) -> String? {
         if let explicit = payload["linked_linear_id"] as? String, !explicit.isEmpty {
             return explicit
         }
-        let matches = LinearIDExtractor.extractAll(text: body, knownPrefixes: Set<String>())
+        let matches = LinearIDExtractor.extractAll(text: body, knownPrefixes: knownPrefixes)
         return matches.first
     }
 
@@ -406,8 +464,10 @@ public enum DetectorPipeline {
     /// No target → caller skips the insert (we do not fabricate one).
     private static func blockerTarget(eventKind: String,
                                       payload: [String: Any],
-                                      body: String) -> (String, String)? {
-        if let linRef = derivedLinearRef(payload: payload, body: body) {
+                                      body: String,
+                                      linearPrefixes: Set<String>) -> (String, String)? {
+        if let linRef = derivedLinearRef(payload: payload, body: body,
+                                         knownPrefixes: linearPrefixes) {
             return (Schema.TargetKinds.linearIssue, linRef)
         }
         if let prRef = payload["linked_github_pr"] as? String, !prRef.isEmpty {

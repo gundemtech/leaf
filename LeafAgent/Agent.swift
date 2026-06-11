@@ -57,6 +57,25 @@ enum AgentMain {
       exit(1)
     }
 
+    // Track A0 — wire link-derivation for ALL collector writes. Before this,
+    // every write path fell back to empty Linear prefixes + substrate no-op
+    // derivers, so event_links stayed empty in production forever. Prefixes
+    // come from observed Linear payloads (TTL-cached); the moat extractors are
+    // wired only in LEAF_PROD builds (substrate builds still derive the
+    // LeafCore-public linear_id_in_text path).
+    let linearPrefixSource = LinearPrefixSource(database: database)
+    #if LEAF_PROD
+      let linkDerivers = prodLinkDerivers()
+    #else
+      let linkDerivers = LinkDerivers.publicSubstrate
+    #endif
+    database.configureDerivation(
+      EventDerivationConfig(
+        derivers: linkDerivers,
+        linearPrefixes: { linearPrefixSource.prefixes() }
+      )
+    )
+
     // Phase 1 (account-login) — HARD GATE. The agent must not capture
     // anything without a valid Supabase session. Construct the same
     // client the UI uses (Info.plist baseURL/anonKey + shared session
@@ -778,9 +797,25 @@ enum AgentMain {
       moat: detectorMoat,
       incrementalIntervalSec: agentThresholds.detectorIncrementalIntervalSec,
       scheduledIntervalSec: agentThresholds.detectorScheduledIntervalSec,
+      linearPrefixes: { linearPrefixSource.prefixes() },
       logger: detectorLogger
     )
     AgentLifetime.detectorScheduler = detectorScheduler
+
+    // Track A1 — local git log polling in watched folders. Commit messages are
+    // the densest self-authored decision corpus; the GitHub feed's stripped
+    // PushEvents never carried them. Prod reader (subprocess git log, moat) is
+    // registered under LEAF_PROD; substrate builds run the stub (wiring still
+    // exercised, no commits emitted).
+    #if LEAF_PROD
+      GitCommitLogReaderFactory.register { ProdGitCommitLogReader() }
+    #endif
+    let gitLogCollector = GitLogCollector(
+      database: database,
+      reader: GitCommitLogReaderFactory.make(),
+      pollIntervalSec: agentThresholds.gitLogPollIntervalSec
+    )
+    AgentLifetime.gitLogCollector = gitLogCollector
 
     // Kick off writer + collectors + scheduler.
     // `start()` on writer/idle — fire-and-forget Task inside; activeApp — we launch it
@@ -845,6 +880,22 @@ enum AgentMain {
     Task { await jetbrainsRecentProjectsWatcher.start() }
     Task { await rotationFetchScheduler.start() }
     Task { await detectorScheduler.start() }
+    Task { await gitLogCollector.start() }
+    // Track A2/A3 — one-shot resumable repair sweep: FTS + links over
+    // historical events, then detector replay over already-scanned history.
+    // Finished sweeps are cursor-read no-ops, so firing on every launch is
+    // cheap. Background priority + batched writes keep the live writer
+    // responsive (precedent: KeyRotationService.resumePendingPosts).
+    let memoryBackfillJob = MemoryBackfillJob(
+      database: database,
+      linearPrefixes: { linearPrefixSource.prefixes() },
+      derivers: linkDerivers,
+      detectorMoat: detectorMoat
+    )
+    AgentLifetime.memoryBackfillJob = memoryBackfillJob
+    Task.detached(priority: .background) {
+      await memoryBackfillJob.runToCompletion()
+    }
 
     // fix/dev-launch-reliability — heartbeat writer for the cross-process
     // status pipe. Atomic write every 30s with PID + ax_trusted + CDHash +
@@ -869,6 +920,7 @@ enum AgentMain {
       // Phase Track-1 D3 — stop detectorScheduler first (purely read-side from
       // collectors' POV; safe to drain immediately, blocks no further writes).
       if let d = AgentLifetime.detectorScheduler { await d.stop() }
+      if let g = AgentLifetime.gitLogCollector { await g.stop() }
       // Phase 5.3.E — stop rotationFetchScheduler next (independent from writer
       // chain; safe to drain while collectors still emit).
       if let r = AgentLifetime.rotationFetchScheduler { await r.stop() }
@@ -1004,6 +1056,10 @@ enum AgentLifetime {
   nonisolated(unsafe) static var rotationFetchScheduler: RotationFetchScheduler?
   // Phase Track-1 D3 — periodic detector pipeline (incremental + scheduled passes).
   nonisolated(unsafe) static var detectorScheduler: DetectorScheduler?
+  // Track A1 — local git log polling collector (watched-folder repos).
+  nonisolated(unsafe) static var gitLogCollector: GitLogCollector?
+  // Track A2/A3 — one-shot memory repair sweep (FTS/links + detector replay).
+  nonisolated(unsafe) static var memoryBackfillJob: MemoryBackfillJob?
   // Phase Track-3 D1 — Linear warm/cold collectors + their schedulers.
   nonisolated(unsafe) static var linearWarmCollector: LinearWarmCollector?
   nonisolated(unsafe) static var linearWarmScheduler: LinearWarmScheduler?

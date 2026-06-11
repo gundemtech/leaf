@@ -21,6 +21,7 @@ public enum EventsFullTextStore {
     /// extra JSON keys are ignored.
     private struct BodyOnly: Decodable { let body: String }
     private struct TextOnly: Decodable { let text: String }
+    private struct TitleOnly: Decodable { let title: String }
 
     /// Body extraction + FTS5 row insertion for a single event. Called inside the
     /// same `pool.write {}` transaction as the event insert (see
@@ -68,6 +69,30 @@ public enum EventsFullTextStore {
                 try insertRow(eventID: eventID, bodyKind: Schema.BodyKinds.slackMsg, body: text, in: db)
             }
         }
+
+        // 5) Track A2 — PR titles fan-out, gh_pr_titles_backfill carrier ONLY.
+        // Titles are ADR-010 allowlisted; the dedicated backfill carrier is
+        // emitted once per point-fetch, so indexing here stays bounded (the
+        // recurring *_count pulses also carry pr_refs_json and are deliberately
+        // NOT indexed — every poll tick would re-index the same titles).
+        if eventKind == "gh_pr_titles_backfill",
+           let raw = payload["pr_refs_json"] {
+            for title in decodeStringArray(raw, type: TitleOnly.self, key: \TitleOnly.title) {
+                try insertRow(eventID: eventID, bodyKind: Schema.BodyKinds.ghPR, body: title, in: db)
+            }
+        }
+    }
+
+    /// Track A2 — whether ANY FTS row exists for the event. The backfill sweep
+    /// keys idempotency off this (contentless FTS5 cannot be re-indexed or
+    /// deduplicated after the fact; "indexed at most once per event" is the
+    /// invariant).
+    public static func hasIndexedRows(eventID: Int64, in db: GRDB.Database) throws -> Bool {
+        try Bool.fetchOne(
+            db,
+            sql: "SELECT EXISTS(SELECT 1 FROM events_fts_meta WHERE event_id = ?)",
+            arguments: [eventID]
+        ) ?? false
     }
 
     /// FTS5 keyword search returning DISTINCT event IDs ranked by BM25,
@@ -114,6 +139,10 @@ public enum EventsFullTextStore {
         if eventKind == "issue_updated" { return (canonical, Schema.BodyKinds.linearDesc) }
         if eventKind == "linear_notification_received" { return (canonical, Schema.BodyKinds.linearNotificationTitle) }
         if eventKind == GitHubEventKindKey.commitPushed.rawValue { return (canonical, Schema.BodyKinds.commitMsg) }
+        // Track A1 — local git log collector. Self-authored commit subject+body
+        // (ADR-010 commit-message precedent); same body_kind as the GitHub feed
+        // variant so D3 query paths treat both sources uniformly.
+        if eventKind == "git_commit_authored" { return (canonical, Schema.BodyKinds.commitMsg) }
         if eventKind == GitHubEventKindKey.issueCommentAuthored.rawValue { return (canonical, Schema.BodyKinds.ghIssueComment) }
         if eventKind == GitHubEventKindKey.prReviewCommentAuthored.rawValue { return (canonical, Schema.BodyKinds.ghPRReviewComment) }
         if eventKind == "slack_thread_reply_aggregate" { return (canonical, Schema.BodyKinds.slackThreadParent) }

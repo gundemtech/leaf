@@ -80,9 +80,13 @@ public struct QueryEngine: Sendable {
                     in: rawDB
                 )
             } else {
+                // Track A4 — unfiltered feed shows substance only: provider
+                // pulses / token accounting / bare attention pings drowned the
+                // actual work output (live finding 2026-06-11).
                 eventIDs = try Int64.fetchAll(rawDB, sql: """
                     SELECT id FROM events
                      WHERE ts BETWEEN ? AND ?
+                       AND \(EventKindTaxonomy.substanceSQLPredicate())
                      ORDER BY ts DESC LIMIT ?
                 """, arguments: [period.startMs, period.endMs, Self.sqlEventLimit])
             }
