@@ -43,8 +43,9 @@ struct AskLeafTranscriptTests {
     #expect(t.entries[1].phase == .notEnoughData)
 
     let id3 = t.ask(question: "c", period: .today, model: nil, askedAtMs: 3)!
-    t.resolve(id: id3, with: .failure("oops"))
-    #expect(t.entries[2].phase == .failed("oops"))
+    let oops = AIFailure(kind: .transient, message: "oops")
+    t.resolve(id: id3, with: .failure(oops))
+    #expect(t.entries[2].phase == .failed(oops))
   }
 
   @Test func resolveUnknownOrSettledIdIsNoOp() {

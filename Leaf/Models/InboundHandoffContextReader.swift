@@ -19,7 +19,7 @@ final class InboundHandoffContextReader {
     case idle
     case loading
     case answered(String)
-    case error(message: String)
+    case error(AIFailure)
   }
 
   private(set) var state: State = .idle
@@ -72,7 +72,9 @@ final class InboundHandoffContextReader {
           .gather(period: period, nowMs: nowMs)
       }.value
     } catch {
-      state = .error(message: "Couldn't read your activity right now. Try again.")
+      state = .error(
+        AIFailure(
+          kind: .localRead, message: "Couldn't read your activity right now. Try again."))
       return
     }
 
@@ -85,9 +87,11 @@ final class InboundHandoffContextReader {
       state = .answered(text)
     case .notEnoughData:
       state = .error(
-        message: "Not enough of your own activity recorded — read the handoff as is.")
-    case .failure(let message):
-      state = .error(message: message)
+        AIFailure(
+          kind: .localRead,
+          message: "Not enough of your own activity recorded — read the handoff as is."))
+    case .failure(let failure):
+      state = .error(failure)
     }
   }
 

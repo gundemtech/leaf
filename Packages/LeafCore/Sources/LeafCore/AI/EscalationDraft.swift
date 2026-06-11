@@ -9,7 +9,7 @@ public struct EscalationDraft: Equatable, Sendable {
     case composing
     case sending
     case answered(String)
-    case failed(String)
+    case failed(AIFailure)
   }
 
   public static let selectionCap = WorkFactGatherer.escalationEventIDCap
@@ -61,9 +61,9 @@ public struct EscalationDraft: Equatable, Sendable {
     phase = .answered(answer)
   }
 
-  public mutating func fail(_ message: String) {
+  public mutating func fail(_ failure: AIFailure) {
     guard case .sending = phase else { return }
-    phase = .failed(message)
+    phase = .failed(failure)
   }
 
   /// Retry после failed — обратно в composing (выбор сохранён).

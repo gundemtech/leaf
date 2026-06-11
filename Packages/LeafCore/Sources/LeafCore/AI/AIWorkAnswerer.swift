@@ -13,8 +13,8 @@ public struct AIWorkAnswerer: Sendable {
     /// Nothing recorded in the period projected to a shareable fact — answered
     /// locally, no LLM call (saves a guaranteed `.contextEmpty`).
     case notEnoughData
-    /// A user-facing, opaque failure message (never echoes key/body).
-    case failure(String)
+    /// A user-facing, opaque failure (kind + message; never echoes key/body).
+    case failure(AIFailure)
   }
 
   private let policy: LLMPolicy
@@ -50,19 +50,14 @@ public struct AIWorkAnswerer: Sendable {
         context, question: question, model: model, maxTokens: maxAnswerTokens)
       return .text(out.text)
     } catch let error as SummarizerError {
-      return .failure(Self.message(for: error))
+      return .failure(Self.failure(for: error, path: path))
     } catch {
-      return .failure("Couldn't reach the model right now. Try again.")
+      return .failure(
+        AIFailure(kind: .transient, message: "Couldn't reach the model right now. Try again."))
     }
   }
 
   /// Opaque, user-facing messages — never interpolate key/body/response (§8.1).
-  /// One-arg forward: existing call-sites keep BYOK semantics until they pass
-  /// their resolved path (AI-UI-4).
-  public static func message(for error: SummarizerError) -> String {
-    message(for: error, path: .byok)
-  }
-
   /// AI-UI-4 — path-aware copy. On `.aiIncluded` there is no user-owned
   /// Anthropic key: auth failures point at the Leaf account, and a drained
   /// team pool points at the BYOK valve in Settings.

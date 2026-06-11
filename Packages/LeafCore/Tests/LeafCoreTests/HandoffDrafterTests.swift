@@ -245,8 +245,9 @@ final class HandoffDrafterTests: XCTestCase {
     let d = await drafter.draft(
       topic: "auth", recipientName: "Alex",
       events: [event("issue_updated", ["additions": "5"])], period: period)
-    guard case .failure(let m) = d else { return XCTFail("expected .failure") }
-    XCTAssertTrue(m.contains("API key"))
+    guard case .failure(let f) = d else { return XCTFail("expected .failure") }
+    XCTAssertEqual(f.kind, .missingKey)
+    XCTAssertTrue(f.message.contains("API key"))
   }
 
   // MARK: - Suite D — escalated redraft path (AI-UI-3)

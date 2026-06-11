@@ -73,8 +73,9 @@ final class EscalationDraftTests: XCTestCase {
   func testFail_thenReset_retainsSelection() {
     var d = draft(ids: [1, 2], sendable: [1, 2], preselected: [1, 2])
     d.beginSending()
-    d.fail("err")
-    XCTAssertEqual(d.phase, .failed("err"))
+    let err = AIFailure(kind: .transient, message: "err")
+    d.fail(err)
+    XCTAssertEqual(d.phase, .failed(err))
     d.reset()
     XCTAssertEqual(d.phase, .composing)
     XCTAssertEqual(d.selected, [1, 2])

@@ -53,17 +53,21 @@ final class AIWorkAnswererTests: XCTestCase {
       policy: policy, summarizer: StubSummarizer(result: .failure(.missingAPIKey)),
       modelGate: DefaultModelGate())
     let a = await answerer.answer(question: "q", events: events(["additions": "5"]))
-    guard case .failure(let m) = a else { return XCTFail("expected failure") }
-    XCTAssertTrue(m.contains("API key"))
+    guard case .failure(let f) = a else { return XCTFail("expected failure") }
+    XCTAssertEqual(f.kind, .missingKey)
+    XCTAssertTrue(f.message.contains("API key"))
+    XCTAssertTrue(f.showsSettingsCTA)
   }
 
   // Error messages are opaque — never echo provider/key/body detail (§8.1).
   func testErrorMessagesAreOpaque() {
-    XCTAssertFalse(AIWorkAnswerer.message(for: .decode("decode-failed")).contains("decode-failed"))
     XCTAssertFalse(
-      AIWorkAnswerer.message(for: .authFailed("invalid key sk-secret")).contains("sk-secret"))
+      AIWorkAnswerer.message(for: .decode("decode-failed"), path: .byok).contains("decode-failed"))
     XCTAssertFalse(
-      AIWorkAnswerer.message(for: .network("socket 1.2.3.4")).contains("1.2.3.4"))
+      AIWorkAnswerer.message(for: .authFailed("invalid key sk-secret"), path: .byok)
+        .contains("sk-secret"))
+    XCTAssertFalse(
+      AIWorkAnswerer.message(for: .network("socket 1.2.3.4"), path: .byok).contains("1.2.3.4"))
   }
 
   // MARK: - AI-UI-4 — path-aware messages
@@ -93,13 +97,6 @@ final class AIWorkAnswererTests: XCTestCase {
     XCTAssertEqual(
       AIWorkAnswerer.message(for: .budgetExhausted(retryAfter: nil), path: .byok),
       "AI inference budget exhausted. Try again later.")
-  }
-
-  // One-arg forward keeps every existing call-site on BYOK semantics.
-  func testOneArgMessageForwardsToByok() {
-    XCTAssertEqual(
-      AIWorkAnswerer.message(for: .authFailed("x")),
-      AIWorkAnswerer.message(for: .authFailed("x"), path: .byok))
   }
 
   func testPathAwareMessagesAreOpaque() {

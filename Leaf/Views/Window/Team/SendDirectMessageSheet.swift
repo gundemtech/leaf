@@ -63,8 +63,6 @@ struct SendDirectMessageSheet: View {
     /// cleared on Discard or when the kind switches away from `.handoff`.
     @Environment(HandoffDraftReader.self) private var handoffReader
     @Environment(WindowState.self) private var windowState
-    /// Exact-match CTA for the missing-key failure (pattern: AskLeafView).
-    private static let missingKeyMessage = AIWorkAnswerer.message(for: .missingAPIKey)
     @State private var topicText: String = ""
     @State private var draftProvenance: HandoffProvenance? = nil
     /// AI-UI-3 — draft period (was fixed 7 days). Drives both the gather and
@@ -267,11 +265,12 @@ struct SendDirectMessageSheet: View {
                 .fixedSize()
                 draftButton
             }
-            if case .error(let message) = handoffReader.state {
-                Text(message)
+            if case .error(let failure) = handoffReader.state {
+                Text(failure.message)
                     .font(LeafType.body.small)
                     .foregroundStyle(LeafColor.status.warning)
-                if message == Self.missingKeyMessage {
+                // AI-UI-4 — CTA по kind, не по exact-string match.
+                if failure.showsSettingsCTA {
                     Button("Open Settings") {
                         windowState.section = .settings
                         dismiss()

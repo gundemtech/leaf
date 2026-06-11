@@ -90,8 +90,8 @@ struct AskAboutMyWorkTool: ToolExecutor {
     case .notEnoughData:
       return Self.result(
         "I don't have enough recorded work in that period to answer.", isError: false)
-    case .failure(let message):
-      return Self.result(message, isError: true)
+    case .failure(let failure):
+      return Self.result(failure.message, isError: true)
     }
   }
 

@@ -25,7 +25,6 @@ struct HandoffRedraftConsentSheet: View {
   @Environment(\.dismiss) private var dismiss
 
   /// Exact-match CTA for the missing-key failure (pattern: AskLeafView).
-  private static let missingKeyMessage = AIWorkAnswerer.message(for: .missingAPIKey)
 
   enum LoadState {
     case loading
@@ -38,7 +37,7 @@ struct HandoffRedraftConsentSheet: View {
   @State private var isRedrafting = false
   /// CTO F4 — redraft failure must be visible IN this sheet (the parent's
   /// error row is underneath the presented sheet).
-  @State private var redraftError: String? = nil
+  @State private var redraftError: AIFailure? = nil
 
   private let databaseURL = DatabasePath.defaultURL()
   private let databaseConfig = AIWiring.databaseConfig()
@@ -65,9 +64,9 @@ struct HandoffRedraftConsentSheet: View {
     .onChange(of: handoffReader.state) { _, newState in
       guard isRedrafting else { return }
       if case .drafted = newState { dismiss() }
-      if case .error(let message) = newState {
+      if case .error(let failure) = newState {
         isRedrafting = false
-        redraftError = message  // CTO F4 — surface in THIS sheet
+        redraftError = failure  // CTO F4 — surface in THIS sheet
       }
     }
   }
@@ -182,10 +181,11 @@ struct HandoffRedraftConsentSheet: View {
   private var footer: some View {
     VStack(alignment: .leading, spacing: LeafSpace.xs) {
       if let redraftError {
-        Text(redraftError)
+        Text(redraftError.message)
           .font(LeafType.body.small)
           .foregroundStyle(LeafColor.status.warning)
-        if redraftError == Self.missingKeyMessage {
+        // AI-UI-4 — CTA по kind, не по exact-string match.
+        if redraftError.showsSettingsCTA {
           Button("Open Settings") {
             windowState.section = .settings
             dismiss()

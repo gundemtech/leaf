@@ -18,7 +18,6 @@ struct InboundHandoffContextSheet: View {
   @State private var reader = InboundHandoffContextReader()
 
   /// Exact-match CTA for the missing-key failure (pattern: AskLeafView).
-  private static let missingKeyMessage = AIWorkAnswerer.message(for: .missingAPIKey)
 
   var body: some View {
     LeafSheetLayout(title: "Context for me", onDismiss: { dismiss() }) {
@@ -73,12 +72,13 @@ struct InboundHandoffContextSheet: View {
           .frame(maxWidth: .infinity, alignment: .leading)
       }
       .frame(maxHeight: 280)
-    case .error(let message):
+    case .error(let failure):
       VStack(alignment: .leading, spacing: LeafSpace.sm) {
-        Text(message)
+        Text(failure.message)
           .font(LeafType.body.small)
           .foregroundStyle(LeafColor.status.warning)
-        if message == Self.missingKeyMessage {
+        // AI-UI-4 — CTA по kind, не по exact-string match.
+        if failure.showsSettingsCTA {
           Button("Open Settings") {
             windowState.section = .settings
             dismiss()

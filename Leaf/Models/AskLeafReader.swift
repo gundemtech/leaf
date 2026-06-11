@@ -123,7 +123,10 @@ final class AskLeafReader {
       }.value
     } catch {
       transcript.resolve(
-        id: id, with: .failure("Couldn't read your activity right now. Try again."))
+        id: id,
+        with: .failure(
+          AIFailure(
+            kind: .localRead, message: "Couldn't read your activity right now. Try again.")))
       return
     }
 
