@@ -92,4 +92,44 @@ final class SupabaseClientAccountTests: XCTestCase {
       XCTFail("expected throw")
     } catch is SupabaseError { /* expected */  }
   }
+
+  func testDeleteSelfAccount_postsRPCWithBearer_succeedsOn204() async throws {
+    let lock = NSLock()
+    var sawPath: String?
+    var sawAuth: String?
+    MockURLProtocol.handler = { request, _ in
+      if request.url?.path == "/rest/v1/rpc/delete_self_account" {
+        lock.lock()
+        sawPath = request.url?.path
+        sawAuth = request.value(forHTTPHeaderField: "Authorization")
+        lock.unlock()
+        return (
+          HTTPURLResponse(url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!,
+          Data()
+        )
+      }
+      return self.okRefresh(request)
+    }
+    let client = try makeClient()
+    try await client.deleteSelfAccount()
+    XCTAssertEqual(sawPath, "/rest/v1/rpc/delete_self_account")
+    XCTAssertEqual(sawAuth, "Bearer fresh-tok")
+  }
+
+  func testDeleteSelfAccount_non2xx_throws() async throws {
+    MockURLProtocol.handler = { request, _ in
+      if request.url?.path == "/rest/v1/rpc/delete_self_account" {
+        return (
+          HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!,
+          Data(#"{"message":"function not found"}"#.utf8)
+        )
+      }
+      return self.okRefresh(request)
+    }
+    let client = try makeClient()
+    do {
+      try await client.deleteSelfAccount()
+      XCTFail("expected throw")
+    } catch is SupabaseError { /* expected */  }
+  }
 }

@@ -817,6 +817,26 @@ extension SupabaseClient {
     }
   }
 
+  /// POST /rest/v1/rpc/delete_self_account — invoke the server-side
+  /// security-definer delete function (same RPC the web dashboard calls).
+  /// Caller runs the local teardown after this resolves (AccountDeletionService).
+  public func deleteSelfAccount() async throws {
+    let session = try await ensureAuthenticated()
+    let url = SupabaseEndpoint.rpcDeleteSelfAccount(baseURL: baseURL)
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    for (k, v) in SupabaseEndpoint.authenticatedHeaders(
+      anonKey: anonKey, accessToken: session.accessToken)
+    {
+      request.setValue(v, forHTTPHeaderField: k)
+    }
+    request.httpBody = Data("{}".utf8)
+    let (data, http) = try await performHTTP(request, retryable: false, label: "deleteSelfAccount")
+    guard (200...299).contains(http.statusCode) else {
+      throw SupabaseError.fromStatus(http.statusCode, body: data)
+    }
+  }
+
   /// Shared post-login bookkeeping: set `.authenticated`, stamp lastRefreshAt,
   /// best-effort persist. Private to this extension; mirrors the bootstrap's
   /// tail in `ensureAuthenticated`.
