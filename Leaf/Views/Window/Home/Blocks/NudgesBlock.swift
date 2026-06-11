@@ -66,6 +66,17 @@ struct NudgesBlock: View {
                             .foregroundStyle(LeafColor.text.tertiary)
                             .lineLimit(1)
                     }
+                    if !nudge.extraLines.isEmpty {
+                        VStack(alignment: .leading, spacing: LeafSpace.xxs) {
+                            ForEach(nudge.extraLines, id: \.self) { line in
+                                Text(line)
+                                    .font(LeafType.body.small)
+                                    .foregroundStyle(LeafColor.text.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .padding(.top, LeafSpace.xxs)
+                    }
                 }
                 Spacer(minLength: 0)
             }
