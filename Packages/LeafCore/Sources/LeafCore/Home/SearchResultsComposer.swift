@@ -19,8 +19,12 @@ public struct SearchResultRow: Equatable, Sendable, Identifiable {
 
   public let id: String
   public let kind: Kind
-  /// Primary display text — decision quote / question excerpt / event body.
+  /// Headline — "GUN-12 · Fix relay reconnect" for events with a structured
+  /// target; decision quote / question excerpt for detector rows.
   public let title: String
+  /// Secondary body excerpt (event rows) — first line(s) of the matched
+  /// text, view clamps to two lines.
+  public let excerpt: String?
   /// "GitHub" / "Linear" / "Slack" / "AI" / "Local" — for event rows;
   /// kind-based label for detector rows.
   public let sourceLabel: String
@@ -29,18 +33,24 @@ public struct SearchResultRow: Equatable, Sendable, Identifiable {
   /// AUTHOR / COMMIT / OUTCOME composition material.
   public let links: [LinkView]
   public let confidence: Double?
+  /// Collapsed duplicates behind this row (capture-side re-emission of the
+  /// same target). 1 = unique.
+  public let occurrenceCount: Int
 
   public init(
-    id: String, kind: Kind, title: String, sourceLabel: String,
-    tsMs: Int64, links: [LinkView] = [], confidence: Double? = nil
+    id: String, kind: Kind, title: String, excerpt: String? = nil,
+    sourceLabel: String, tsMs: Int64, links: [LinkView] = [],
+    confidence: Double? = nil, occurrenceCount: Int = 1
   ) {
     self.id = id
     self.kind = kind
     self.title = title
+    self.excerpt = excerpt
     self.sourceLabel = sourceLabel
     self.tsMs = tsMs
     self.links = links
     self.confidence = confidence
+    self.occurrenceCount = occurrenceCount
   }
 }
 
@@ -91,19 +101,61 @@ public enum SearchResultsComposer {
         ))
     }
 
+    // Events — dedup first: capture-side re-emission can leave dozens of
+    // identical rows for one target (same issue body per poll tick). Collapse
+    // by (eventKind, target-or-text) keeping the newest, count the rest.
+    var seen: [String: Int] = [:]  // dedup key → index in eventRows
+    var eventRows: [SearchResultRow] = []
     for e in response.events.sorted(by: { $0.tsMs > $1.tsMs }) {
-      let title = (e.bodyExcerpt?.isEmpty == false) ? e.bodyExcerpt! : (e.eventKind ?? "event")
-      rows.append(
+      let headline = composeEventHeadline(e)
+      let dedupKey = "\(e.eventKind ?? "")|\(e.targetRef ?? headline)"
+      if let idx = seen[dedupKey] {
+        let kept = eventRows[idx]
+        eventRows[idx] = SearchResultRow(
+          id: kept.id, kind: kept.kind, title: kept.title, excerpt: kept.excerpt,
+          sourceLabel: kept.sourceLabel, tsMs: kept.tsMs, links: kept.links,
+          confidence: kept.confidence, occurrenceCount: kept.occurrenceCount + 1
+        )
+        continue
+      }
+      seen[dedupKey] = eventRows.count
+      eventRows.append(
         SearchResultRow(
           id: "event:\(e.eventID)",
           kind: .event,
-          title: title,
+          title: headline,
+          excerpt: composeEventExcerpt(e, headline: headline),
           sourceLabel: sourceLabel(eventKind: e.eventKind),
           tsMs: e.tsMs
         ))
     }
+    rows.append(contentsOf: eventRows)
 
     return rows
+  }
+
+  /// "GUN-12 · Fix relay reconnect" when the payload carries a structured
+  /// target; first line of the body otherwise; event_kind as the last resort.
+  static func composeEventHeadline(_ e: ActivityEvent) -> String {
+    var parts: [String] = []
+    if let ref = e.targetRef, !ref.isEmpty { parts.append(ref) }
+    if let title = e.targetTitle, !title.isEmpty { parts.append(title) }
+    if !parts.isEmpty { return parts.joined(separator: " · ") }
+    if let body = e.bodyExcerpt, !body.isEmpty {
+      let firstLine = body.split(separator: "\n", maxSplits: 1)[0]
+      return String(firstLine.prefix(120))
+    }
+    return e.eventKind ?? "event"
+  }
+
+  /// Body excerpt for the secondary line — only when the headline didn't
+  /// already consume it (structured-target rows show body context below).
+  static func composeEventExcerpt(_ e: ActivityEvent, headline: String) -> String? {
+    guard let body = e.bodyExcerpt, !body.isEmpty else { return nil }
+    let flattened = body.replacingOccurrences(of: "\n\n", with: " ")
+      .replacingOccurrences(of: "\n", with: " ")
+    guard !headline.hasPrefix(String(flattened.prefix(40))) else { return nil }
+    return String(flattened.prefix(200))
   }
 
   /// Human source label from the event_kind prefix. `issue_updated` is the

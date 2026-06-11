@@ -107,10 +107,18 @@ struct SearchView: View {
 
       VStack(alignment: .leading, spacing: LeafSpace.xxs) {
         Text(row.title)
-          .font(row.kind == .decision ? LeafType.title.small : LeafType.body.regular)
+          .font(LeafType.title.small)
           .foregroundStyle(LeafColor.text.primary)
-          .lineLimit(3)
+          .lineLimit(2)
           .truncationMode(.tail)
+
+        if let excerpt = row.excerpt {
+          Text(excerpt)
+            .font(LeafType.body.small)
+            .foregroundStyle(LeafColor.text.secondary)
+            .lineLimit(2)
+            .truncationMode(.tail)
+        }
 
         HStack(spacing: LeafSpace.xs) {
           Text(row.sourceLabel)
@@ -119,6 +127,11 @@ struct SearchView: View {
           Text(Self.formatRelative(row.tsMs))
             .font(LeafType.body.small)
             .foregroundStyle(LeafColor.text.quaternary)
+          if row.occurrenceCount > 1 {
+            Text("×\(row.occurrenceCount)")
+              .font(LeafType.body.small)
+              .foregroundStyle(LeafColor.text.quaternary)
+          }
         }
 
         if !row.links.isEmpty {

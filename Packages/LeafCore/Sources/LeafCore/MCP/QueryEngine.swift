@@ -339,7 +339,7 @@ public struct QueryEngine: Sendable {
               FROM events WHERE id IN (\(placeholders))
               ORDER BY ts DESC
         """, arguments: StatementArguments(eventIDs))
-        return rows.map { row -> ActivityEvent in
+        let projected = rows.map { row -> ActivityEvent in
             let id: Int64 = row["id"]
             let ts: Int64 = row["ts"]
             let signalType: String = row["signal_type"]
@@ -349,6 +349,8 @@ public struct QueryEngine: Sendable {
             var eventKind: String?
             var bodyExcerpt: String?
             var bodyTruncated = false
+            var targetRef: String?
+            var targetTitle: String?
             if let data = payloadJSON.data(using: .utf8),
                let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 eventKind = dict["event_kind"] as? String
@@ -356,6 +358,20 @@ public struct QueryEngine: Sendable {
                     let (excerpt, truncated) = BodyExcerpt.capped(body, charCap: bodyExcerptCharCap)
                     bodyExcerpt = excerpt
                     bodyTruncated = truncated
+                }
+                // Structured target handle — all allowlisted payload keys.
+                if let issueKey = dict["issue_key"] as? String, !issueKey.isEmpty {
+                    targetRef = issueKey
+                } else if let repo = (dict["repo_full_name"] as? String) ?? (dict["repo"] as? String),
+                          !repo.isEmpty {
+                    if let number = dict["number"] as? String, !number.isEmpty {
+                        targetRef = "\(repo)#\(number)"
+                    } else {
+                        targetRef = repo
+                    }
+                }
+                if let title = dict["title"] as? String, !title.isEmpty {
+                    targetTitle = title
                 }
             }
             return ActivityEvent(
@@ -365,8 +381,24 @@ public struct QueryEngine: Sendable {
                 bundleID: bundleID,
                 eventKind: eventKind,
                 bodyExcerpt: bodyExcerpt,
-                bodyTruncated: bodyTruncated
+                bodyTruncated: bodyTruncated,
+                targetRef: targetRef,
+                targetTitle: targetTitle
             )
+        }
+        // Capture-side duplicate collapse (2026-06-11): the Linear boundary
+        // re-fetch bug wrote dozens of identical rows per issue (same kind /
+        // target / ts, different ids). New writes are guarded in the
+        // collector; this protects responses over already-polluted DBs —
+        // without it duplicates eat the entire 200-event projection budget.
+        // Identical (event_kind, targetRef, ts) = the same logical update;
+        // first row (newest id) wins. Events without a structured target
+        // pass through untouched.
+        var seenKeys = Set<String>()
+        return projected.filter { e in
+            guard let ref = e.targetRef, let kind = e.eventKind else { return true }
+            let key = "\(kind)|\(ref)|\(e.tsMs)"
+            return seenKeys.insert(key).inserted
         }
     }
 

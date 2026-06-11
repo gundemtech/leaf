@@ -218,7 +218,17 @@ public actor LinearCollector {
         // (`batch.cycles.teams` is already filtered in the provider). If no team
         // is in-cycle → 0 events (silent).
         let nowMs = Int64(now.timeIntervalSince1970 * 1000)
-        var events = batch.issues.map { Self.makeEvent(issue: $0) }
+        // Boundary re-fetch guard (2026-06-11): Linear evaluates the `$since`
+        // DateTime comparison with coarser-than-ms precision server-side, so
+        // the issue sitting exactly on the cursor re-returns on EVERY tick.
+        // Without this guard each tick re-wrote an identical `issue_updated`
+        // row forever (observed: 57 copies of one issue, one per 5-min tick),
+        // polluting FTS search, brief counters and the activity feed. An issue
+        // whose updatedAt <= cursor has by definition already been captured —
+        // drop it before emission. Bootstrap (since == nil) passes everything.
+        let freshIssues = since.map { s in batch.issues.filter { $0.updatedAtMs > s } }
+            ?? batch.issues
+        var events = freshIssues.map { Self.makeEvent(issue: $0) }
         events.append(contentsOf: batch.transitions.map { Self.makeTransitionEvent($0) })
         // Phase 4.7.C — priority transitions per qualified history entry. Mirror
         // status-transition emission shape: signal_type=.action, payload event_kind
