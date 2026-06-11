@@ -13,6 +13,54 @@ the release history and summarised at a feature level.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.35] — 2026-06-11
+
+### Added
+
+- Account login. The app now signs in with your Leaf account — email and
+  password or Google / GitHub — and everything (the app and background
+  collection) runs under your session. Anonymous mode is gone; signing out
+  stops collection until you sign back in.
+- Search tab. Full-text search over everything Leaf remembers on this Mac:
+  decisions surface first (with linked PR / issue references), then open
+  questions, blockers and matching commit / comment / thread text. Same
+  engine the AI tools use, now without an AI client.
+- Nudges card on Home — "am I quietly stuck?": stalled PRs with no movement
+  for days, tickets sitting in the same status, unresolved blockers, and
+  fragmented-attention days with the total switch count and your top
+  app-switching pairs. Visible only to you — there is no manager dashboard.
+- Brief on Home — "what shipped in the last 5 days": PRs merged across
+  repos, tickets done, decisions surfaced, blockers resolved. The PR and
+  ticket counters expand into the actual list, each row opening its source.
+- Collection-paused banner. If the background agent stops running, Home says
+  so in red with a Repair button — instead of silently showing stale data
+  and counting the outage as your "idle" time.
+
+### Changed
+
+- Home was redesigned around four questions: what am I on (NOW — branch,
+  repo, session, last commit, uncommitted work), how is the day going
+  (TODAY), what needs me (NEEDS YOU — filters now actually filter, items
+  carry real issue titles and timestamps), and what happened without me
+  (WHILE YOU WERE AWAY).
+- The activity feed grew from 9 to 21 event types: issues opened / closed,
+  releases, branches and tags, review and issue comments, discussions,
+  Linear priority moves ("raised priority of …"), assignment pickups and
+  handoffs, and project updates.
+- PRs and issues are now referred to by their titles everywhere (feed,
+  inbox, brief) instead of bare "PR#64" handles — including PRs that were
+  already merged.
+- The "needs you" CI alert now reflects the latest pipeline state per
+  repository and links to the commit — a green re-run quietly retires a
+  stale failure instead of pinning it for a day.
+
+### Fixed
+
+- A Linear polling edge case re-captured the same issue every 5 minutes
+  (dozens of identical copies polluting search and counters). New
+  duplicates are no longer written and existing ones are collapsed
+  everywhere they could show.
+
 ## [1.0.0-alpha.34] — 2026-06-10
 
 ### Added
@@ -210,7 +258,8 @@ deeper activity capture.
 - Earliest recorded alpha build: background work capture, the native menu-bar
   app, and the MCP server foundations.
 
-[Unreleased]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.32...HEAD
+[Unreleased]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.35...HEAD
+[1.0.0-alpha.35]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.34...v1.0.0-alpha.35
 [1.0.0-alpha.34]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.33...v1.0.0-alpha.34
 [1.0.0-alpha.33]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.32...v1.0.0-alpha.33
 [1.0.0-alpha.32]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.31...v1.0.0-alpha.32
