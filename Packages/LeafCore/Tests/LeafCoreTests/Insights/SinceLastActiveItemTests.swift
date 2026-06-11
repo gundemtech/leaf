@@ -27,9 +27,11 @@ final class SinceLastActiveItemTests: XCTestCase {
             tsMs: 1_700_000_000_000, source: .github,
             sourceURL: nil
         )
+        // Home redesign — targetTitle joined the composite (sourceMeta is
+        // frequently empty after the meta-dedup; title keeps keys unique).
         XCTAssertEqual(
             item.uniqueKey,
-            "github-requested your review on-1700000000000-PR #143 · leaf"
+            "github-requested your review on-1700000000000-Refactor Sparkle gating-PR #143 · leaf"
         )
     }
 
