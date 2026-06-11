@@ -20,7 +20,11 @@ public struct SinceLastActiveItem: Sendable, Hashable {
     public let sourceURL: URL?
 
     public var uniqueKey: String {
-        "\(source.rawValue)-\(verb)-\(tsMs)-\(sourceMeta)"
+        // `targetTitle` is part of the key: sourceMeta is frequently empty
+        // after the meta-dedup (ref repeating the title is dropped), so
+        // same-millisecond events with the same verb (Linear bulk status
+        // changes, Slack aggregates) would otherwise collide in ForEach.
+        "\(source.rawValue)-\(verb)-\(tsMs)-\(targetTitle)-\(sourceMeta)"
     }
 
     public init(
@@ -55,7 +59,7 @@ extension SinceLastActiveItem {
             return feed.actorDisplay ?? "@teammate"
         }()
         let targetTitle = feed.targetTitle ?? feed.targetRef ?? "—"
-        let sourceMeta = makeSourceMeta(feed: feed)
+        let sourceMeta = makeSourceMeta(feed: feed, targetTitle: targetTitle)
         return SinceLastActiveItem(
             severity: mapping.severity,
             verb: mapping.verb,
@@ -88,21 +92,24 @@ extension SinceLastActiveItem {
         "blocker": ("blocker:", .danger),
     ]
 
-    private static func makeSourceMeta(feed: ActivityFeedItem) -> String {
+    private static func makeSourceMeta(feed: ActivityFeedItem, targetTitle: String) -> String {
+        // A ref that merely repeats the row title ("you pushed feature/x ·
+        // feature/x · leaf") is dropped — the meta line carries only context
+        // the title doesn't already show.
+        let ref = feed.targetRef.flatMap { ($0.isEmpty || $0 == targetTitle) ? nil : $0 }
         switch feed.source {
         case .github:
-            let parts = [feed.targetRef, feed.repoHint]
+            let parts = [ref, feed.repoHint]
                 .compactMap { ($0?.isEmpty == false) ? $0 : nil }
             return parts.joined(separator: " · ")
         case .linear:
-            return feed.targetRef ?? ""
+            return ref ?? ""
         case .slack:
-            return feed.targetRef ?? ""
+            return ref ?? ""
         case .detection:
-            // Both `blocker` (`blockers` table M014) and `open_question`
-            // (`open_questions` table M014) live in the Track-1 D3 detection
-            // substrate. Single shared label.
-            return "Track-1 D3"
+            // Both `blocker` and `open_question` rows come from the local
+            // detection pipeline (M014 tables).
+            return "Detected by Leaf"
         }
     }
 }

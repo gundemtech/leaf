@@ -57,15 +57,20 @@ struct TeamNBlock: View {
 
     // MARK: - Empty state
 
+    // Home redesign — compact single-row empty state. The former full-height
+    // LeafEmptyState card dominated half the screen with "coming soon" text.
     @ViewBuilder
     private var emptyState: some View {
-        LeafEmptyState(
-            icon: LeafIcons.brand.leaf,
-            title: "Team presence sync coming soon.",
-            description: nil,
-            ctaTitle: nil,
-            onCTA: nil
-        )
+        HStack(spacing: LeafSpace.sm) {
+            Image(systemName: "person.2")
+                .font(LeafType.body.small)
+                .foregroundStyle(LeafColor.text.tertiary)
+                .accessibilityHidden(true)
+            Text("No teammates active in the last 15 minutes.")
+                .font(LeafType.body.small)
+                .foregroundStyle(LeafColor.text.tertiary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Populated body
