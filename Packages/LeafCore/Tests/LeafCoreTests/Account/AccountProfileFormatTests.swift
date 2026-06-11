@@ -19,9 +19,9 @@ final class AccountProfileFormatTests: XCTestCase {
   }
 
   func testAccountName_prefersFullNameThenEmailLocalPart() {
-    XCTAssertEqual(AccountProfileFormat.accountName(profile(fullName: "Anton Y")), "Anton Y")
+    XCTAssertEqual(AccountProfileFormat.accountName(profile(fullName: "Sam Rivera")), "Sam Rivera")
     XCTAssertEqual(
-      AccountProfileFormat.accountName(profile(email: "anton@x.co", fullName: "")), "anton")
+      AccountProfileFormat.accountName(profile(email: "sam@x.co", fullName: "")), "sam")
     XCTAssertNil(AccountProfileFormat.accountName(profile()))
   }
 

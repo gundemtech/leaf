@@ -11,15 +11,15 @@ final class SupabaseUserProfileDecodeTests: XCTestCase {
     let p = try decode(
       """
       { "id": "00000000-0000-0000-0000-0000000000aa",
-        "email": "anton@example.com",
+        "email": "sam@example.com",
         "created_at": "2024-06-10T12:34:56.000Z",
         "app_metadata": { "provider": "google" },
-        "user_metadata": { "full_name": "Anton Yeresel", "name": "AY" } }
+        "user_metadata": { "full_name": "Sam Rivera", "name": "SR" } }
       """)
     XCTAssertEqual(p.id, UUID(uuidString: "00000000-0000-0000-0000-0000000000aa"))
-    XCTAssertEqual(p.email, "anton@example.com")
+    XCTAssertEqual(p.email, "sam@example.com")
     XCTAssertEqual(p.provider, "google")
-    XCTAssertEqual(p.fullName, "Anton Yeresel")
+    XCTAssertEqual(p.fullName, "Sam Rivera")
     XCTAssertEqual(p.createdAt, "2024-06-10T12:34:56.000Z")
   }
 
