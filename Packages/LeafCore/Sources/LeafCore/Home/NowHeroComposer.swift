@@ -43,14 +43,17 @@ public enum NowHeroComposer {
     gitDelta: GitDeltaSnapshot?,
     session: CurrentTaskSession?,
     whereStopped: WhereStoppedSnapshot?,
+    lastCommit: RecentCommitSnapshot? = nil,
     now: Date,
     calendar: Calendar
   ) -> NowHeroPresentation {
     NowHeroPresentation(
-      taskLine: composeTaskLine(taskIdentity),
+      taskLine: composeTaskLine(taskIdentity, delta: gitDelta),
       sessionLine: session.flatMap { composeSessionLine($0, now: now, calendar: calendar) },
       anchorLine: composeAnchorLine(whereStopped),
-      commitLine: (whereStopped?.recentLastCommit).map(composeCommitLine),
+      // Where-stopped's anchored commit wins; the freestanding recent-commit
+      // read covers the (current) reality where whereStopped is stubbed nil.
+      commitLine: (whereStopped?.recentLastCommit ?? lastCommit).map(composeCommitLine),
       wipLine: composeWipLine(branch: taskIdentity?.branch, delta: gitDelta),
       filesLine: YoureOnRowComposer.composeFilesLine(session?.openFiles ?? [])
     )
@@ -72,14 +75,18 @@ public enum NowHeroComposer {
     return "\(YoureOnRowComposer.formatFocusedMin(session.focusedMinSoFar)) focused so far"
   }
 
-  /// "GUN-56 · feature/relay · leaf". Repo is dropped when it duplicates the
-  /// branch text (degenerate single-segment checkouts).
-  static func composeTaskLine(_ identity: TaskIdentity?) -> String? {
-    guard let identity else { return nil }
+  /// "GUN-56 · feature/relay · gundemtech/leaf". Repo falls back to the git
+  /// remote (owner/name) when the task identity didn't resolve one; dropped
+  /// when it duplicates the branch text (degenerate single-segment checkouts).
+  static func composeTaskLine(
+    _ identity: TaskIdentity?, delta: GitDeltaSnapshot? = nil
+  ) -> String? {
     var parts: [String] = []
-    if let linearID = identity.linearID, !linearID.isEmpty { parts.append(linearID) }
-    if let branch = identity.branch, !branch.isEmpty { parts.append(branch) }
-    if let repo = identity.repo, !repo.isEmpty, !parts.contains(repo) { parts.append(repo) }
+    if let linearID = identity?.linearID, !linearID.isEmpty { parts.append(linearID) }
+    if let branch = identity?.branch, !branch.isEmpty { parts.append(branch) }
+    let repo = identity?.repo.flatMap { $0.isEmpty ? nil : $0 }
+      ?? delta?.remote.map { "\($0.owner)/\($0.repo)" }
+    if let repo, !parts.contains(repo) { parts.append(repo) }
     return parts.isEmpty ? nil : parts.joined(separator: " · ")
   }
 

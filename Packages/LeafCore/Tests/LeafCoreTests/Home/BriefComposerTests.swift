@@ -38,6 +38,30 @@ final class BriefComposerTests: XCTestCase {
     XCTAssertFalse(brief.isEmpty)
   }
 
+  func testItems_dedupedByRef_titleDropsRefEcho() {
+    let feed = [
+      ActivityFeedItem(
+        ts: 3, source: .github, eventKind: "gh_pr_merged", actorIsMe: true,
+        targetTitle: "Use-case coverage", targetRef: "PR#61", repoHint: "leaf",
+        sourceURL: URL(string: "https://github.com/x/leaf/pull/61")),
+      ActivityFeedItem(
+        ts: 2, source: .github, eventKind: "gh_pr_merged", actorIsMe: true,
+        targetTitle: "Use-case coverage", targetRef: "PR#61", repoHint: "leaf"),
+      ActivityFeedItem(
+        ts: 1, source: .linear,
+        eventKind: LinearActivityKinds.statusTransitionCompletedKind, actorIsMe: true,
+        targetTitle: "GUN-31", targetRef: "GUN-31"),
+    ]
+    let brief = BriefComposer.compose(
+      feed: feed, decisionsSurfaced: 0, blockersResolved: 0, periodDays: 5)
+    XCTAssertEqual(brief.prItems.count, 1)
+    XCTAssertEqual(brief.prItems[0].ref, "PR#61")
+    XCTAssertEqual(brief.prItems[0].title, "Use-case coverage")
+    XCTAssertNotNil(brief.prItems[0].sourceURL)
+    XCTAssertEqual(brief.ticketItems.count, 1)
+    XCTAssertNil(brief.ticketItems[0].title, "title echoing the ref must drop to nil")
+  }
+
   func testEmpty_allZero() {
     let brief = BriefComposer.compose(
       feed: [], decisionsSurfaced: 0, blockersResolved: 0, periodDays: 5)

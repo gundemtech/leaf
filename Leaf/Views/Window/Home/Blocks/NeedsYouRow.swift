@@ -26,10 +26,15 @@ struct NeedsYouRow: View {
 
                 VStack(alignment: .leading, spacing: LeafSpace.xxs) {
                     titleLine
-                    Text(item.sourceMeta)
-                        .font(LeafType.body.small)
-                        .foregroundStyle(LeafColor.text.tertiary)
-                        .lineLimit(1)
+                    HStack(spacing: LeafSpace.xs) {
+                        Text(item.sourceMeta)
+                            .font(LeafType.body.small)
+                            .foregroundStyle(LeafColor.text.tertiary)
+                            .lineLimit(1)
+                        Text(Self.formatRelative(item.createdAtMs))
+                            .font(LeafType.body.small)
+                            .foregroundStyle(LeafColor.text.quaternary)
+                    }
                 }
 
                 Spacer(minLength: 0)
@@ -88,4 +93,18 @@ struct NeedsYouRow: View {
         case .muted: return "Informational"
         }
     }
+
+    private static func formatRelative(_ tsMs: Int64) -> String {
+        guard tsMs > 0 else { return "" }
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        if nowMs - tsMs < 60_000 { return "now" }
+        let date = Date(timeIntervalSince1970: TimeInterval(tsMs) / 1000)
+        return relativeFormatter.localizedString(for: date, relativeTo: Date())
+    }
+
+    private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .abbreviated
+        return f
+    }()
 }

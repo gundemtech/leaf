@@ -202,6 +202,10 @@ public struct InsightsSnapshot: Sendable, Hashable {
     /// blockers / fragmented attention). Local-only; Home renders the card
     /// only when non-empty. Empty default keeps existing callsites compiling.
     public let nudges: [NudgeItem]
+    /// Depth pass (2026-06-11) — freestanding latest-commit read
+    /// (`DerivedInsights.recentLastCommit`) for the NOW hero commit line while
+    /// `whereStopped` remains stubbed nil. Default nil keeps callsites compiling.
+    public let recentCommit: RecentCommitSnapshot?
 
     public init(
         topApps: [AppTimeEntry],
@@ -249,7 +253,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         memberCount: Int = 1,
         currentSession: CurrentTaskSession? = nil,
         standupRecap: StandupSnapshot? = nil,
-        nudges: [NudgeItem] = []
+        nudges: [NudgeItem] = [],
+        recentCommit: RecentCommitSnapshot? = nil
     ) {
         self.topApps = topApps
         self.sessions = sessions
@@ -297,6 +302,7 @@ public struct InsightsSnapshot: Sendable, Hashable {
         self.currentSession = currentSession
         self.standupRecap = standupRecap
         self.nudges = nudges
+        self.recentCommit = recentCommit
     }
 
     /// Convenience init — computes `deepSessionsCount` from the threshold.
@@ -350,7 +356,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
         memberCount: Int = 1,
         currentSession: CurrentTaskSession? = nil,
         standupRecap: StandupSnapshot? = nil,
-        nudges: [NudgeItem] = []
+        nudges: [NudgeItem] = [],
+        recentCommit: RecentCommitSnapshot? = nil
     ) {
         self.init(
             topApps: topApps,
@@ -398,7 +405,8 @@ public struct InsightsSnapshot: Sendable, Hashable {
             memberCount: memberCount,
             currentSession: currentSession,
             standupRecap: standupRecap,
-            nudges: nudges
+            nudges: nudges,
+            recentCommit: recentCommit
         )
     }
 

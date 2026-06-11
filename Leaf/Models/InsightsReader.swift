@@ -365,6 +365,13 @@ final class InsightsReader {
                         // nudges read error never sinks the whole snapshot.
                         let nudges = (try? insights.nudges(now: Date())) ?? []
                         try Task.checkCancellation()
+                        // Depth pass — freestanding latest-commit for the NOW
+                        // hero (whereStopped is stubbed nil; this read keeps
+                        // the commit line alive). 24h window.
+                        let recentCommit =
+                            (try? insights.recentLastCommit(maxAgeMs: 24 * 3600 * 1000))
+                            ?? nil
+                        try Task.checkCancellation()
                         let standupSnapshot = StandupComposer.compose(
                             yesterdayActivity: standupYesterdayFeed,
                             todayActivity: standupTodayFeed,
@@ -456,7 +463,8 @@ final class InsightsReader {
                             memberCount: memberCount,
                             currentSession: currentSession,
                             standupRecap: standupSnapshot,
-                            nudges: nudges
+                            nudges: nudges,
+                            recentCommit: recentCommit
                         )
                         return .success((db, snapshot))
                     } catch {
