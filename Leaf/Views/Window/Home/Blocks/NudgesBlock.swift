@@ -52,7 +52,7 @@ struct NudgesBlock: View {
                 Image(systemName: "exclamationmark")
                     .font(LeafType.body.small.bold())
                     .foregroundStyle(LeafColor.status.warning)
-                    .padding(.top, 1)
+                    .padding(.top, LeafSpace.xxs)
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: LeafSpace.xxs) {
