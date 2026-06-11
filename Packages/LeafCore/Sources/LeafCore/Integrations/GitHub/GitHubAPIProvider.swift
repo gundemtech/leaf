@@ -270,10 +270,29 @@ public struct GitHubNotificationsSummary: Sendable, Hashable {
     }
 }
 
+/// Depth pass (2026-06-11) — per-PR reference carried by the 4.7.B search
+/// summaries. PR titles are ADR-010 allowlisted (Action signal: "commit
+/// message, issue title, branch name"); the original count-only shape was
+/// over-conservative and left every UI surface with bare "PR#64" handles
+/// because the stripped events feed never carries a title.
+public struct GitHubPRRef: Sendable, Hashable, Codable {
+    /// "owner/repo".
+    public let repo: String
+    public let number: Int
+    public let title: String
+
+    public init(repo: String, number: Int, title: String) {
+        self.repo = repo
+        self.number = number
+        self.title = title
+    }
+}
+
 /// Phase 4.7.B-2 — summary `/search/issues?q=review-requested:@me+is:open+is:pr`.
 /// State snapshot: the number of PRs awaiting my review + top repo (most pending PRs)
-/// for the self-UI. ADR-010: we read neither title nor body of items — only `repository_url`.
-/// Emitted as a `gh_pr_awaiting_review_count` event with `signal_type=.context`.
+/// for the self-UI. Emitted as a `gh_pr_awaiting_review_count` event with
+/// `signal_type=.context`. Bodies are never read (ADR-010); titles are
+/// allowlisted and ride in `refs` (depth pass).
 public struct GitHubReviewQueueSummary: Sendable, Hashable {
     /// Sum of PRs awaiting my review (search.issues `total_count` or len(items[])).
     public let count: Int
@@ -282,11 +301,15 @@ public struct GitHubReviewQueueSummary: Sendable, Hashable {
     public let topRepo: String?
     /// `now` from the Agent at fetch time. Used as `observed_at_ms` in the payload.
     public let observedAtMs: Int64
+    /// Per-PR refs (repo + number + title), capped at the provider. Default
+    /// `[]` keeps pre-depth-pass callsites compiling.
+    public let refs: [GitHubPRRef]
 
-    public init(count: Int, topRepo: String?, observedAtMs: Int64) {
+    public init(count: Int, topRepo: String?, observedAtMs: Int64, refs: [GitHubPRRef] = []) {
         self.count = count
         self.topRepo = topRepo
         self.observedAtMs = observedAtMs
+        self.refs = refs
     }
 
     /// Used on non-200 / parse failure / graceful degradation. `count=0` +
@@ -297,17 +320,22 @@ public struct GitHubReviewQueueSummary: Sendable, Hashable {
 }
 
 /// Phase 4.7.B-2 — summary `/search/issues?q=author:@me+is:open+is:pr`.
-/// State snapshot: the number of my open PRs across orgs. ADR-010: we read neither title nor body
-/// — only the count. Emitted as a `gh_my_open_pr_count` event, `signal_type=.context`.
+/// State snapshot: the number of my open PRs across orgs. Emitted as a
+/// `gh_my_open_pr_count` event, `signal_type=.context`. Bodies are never read
+/// (ADR-010); titles are allowlisted and ride in `refs` (depth pass).
 public struct GitHubMyOpenPRsSummary: Sendable, Hashable {
     /// Sum of my open PRs.
     public let count: Int
     /// `now` from the Agent at fetch time. Used as `observed_at_ms` in the payload.
     public let observedAtMs: Int64
+    /// Per-PR refs (repo + number + title), capped at the provider. Default
+    /// `[]` keeps pre-depth-pass callsites compiling.
+    public let refs: [GitHubPRRef]
 
-    public init(count: Int, observedAtMs: Int64) {
+    public init(count: Int, observedAtMs: Int64, refs: [GitHubPRRef] = []) {
         self.count = count
         self.observedAtMs = observedAtMs
+        self.refs = refs
     }
 
     /// Used on non-200 / parse failure / graceful degradation.
