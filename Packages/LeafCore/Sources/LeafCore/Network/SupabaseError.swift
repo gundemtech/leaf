@@ -26,6 +26,13 @@ public enum SupabaseError: Error, Sendable, Equatable {
   /// reset. Distinct from `.identityClaimMissing` (a transient JWT-hook race
   /// where registration succeeded but the claim hasn't propagated yet).
   case deviceKeyOwnedByAnotherAccount
+  /// register_pubkey 409 AND the refreshed JWT carries a DIFFERENT pubkey —
+  /// this ACCOUNT is already bound to another device key (second Mac / wiped
+  /// keystore). The registry is one-key-per-account with no re-key path yet,
+  /// so a local identity reset can NOT recover; surface an honest error
+  /// instead of silently admitting a session whose claim mismatches the local
+  /// key (every creator-op would 403 with «only the workspace creator…»).
+  case accountBoundToDifferentDeviceKey
   case decoding(reason: String)
   case transport(reason: String)
   case unexpected(status: Int)

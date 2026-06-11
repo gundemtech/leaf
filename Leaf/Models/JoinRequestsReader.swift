@@ -504,6 +504,8 @@ final class JoinRequestsReader {
       case .pubkeyAlreadyRegistered: return "Pubkey collision."
       case .deviceKeyOwnedByAnotherAccount:
         return "This device is registered to another account."
+      case .accountBoundToDifferentDeviceKey:
+        return "This account is bound to a different device key. Sign in from that Mac."
       case .inviteNotResolvable: return "Invite expired or claimed."
       case .gone(let code): return friendlyInviteGoneMessage(for: code)
       }

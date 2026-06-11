@@ -27,6 +27,13 @@ final class SupabaseClientNoAnonBootstrapTests: XCTestCase {
     let bytes = Data(repeating: 0x42, count: 32)
     return { try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: bytes) }
   }
+  /// The REAL public key of `fixedIdentity()` — claim fixtures must use this
+  /// (not an arbitrary hex string) now that the client verifies the claim
+  /// against the local key.
+  private func fixedIdentityPubkeyHex() throws -> String {
+    try fixedIdentity()().publicKey.rawRepresentation
+      .map { String(format: "%02x", $0) }.joined()
+  }
   private func makeJWT(pubkey: String, userID: String) -> String {
     let header = #"{"alg":"HS256","typ":"JWT"}"#
     let payload = #"{"pubkey":"\#(pubkey)","sub":"\#(userID)"}"#
@@ -99,7 +106,7 @@ final class SupabaseClientNoAnonBootstrapTests: XCTestCase {
   //     runs registerPubkey → tokenRefresh, and the refreshed JWT carries pubkey claim.
   func testEnsureAuthenticatedAndPubkeyRegistered_postLogin_registerThenRefresh() async throws {
     let userID = "00000000-0000-0000-0000-0000000000d4"
-    let expectedPubkey = String(repeating: "42", count: 32)
+    let expectedPubkey = try fixedIdentityPubkeyHex()
     let refreshedJWT = makeJWT(pubkey: expectedPubkey, userID: userID)
     let lock = NSLock()
     var paths: [String] = []
@@ -158,7 +165,7 @@ final class SupabaseClientNoAnonBootstrapTests: XCTestCase {
   //     carries the pubkey claim (the pubkey IS registered).
   func testEnsureAuthenticatedAndPubkeyRegistered_register409_idempotentSuccess() async throws {
     let userID = "00000000-0000-0000-0000-0000000000e5"
-    let expectedPubkey = String(repeating: "42", count: 32)
+    let expectedPubkey = try fixedIdentityPubkeyHex()
     let refreshedJWT = makeJWT(pubkey: expectedPubkey, userID: userID)
     let lock = NSLock()
     var paths: [String] = []
@@ -254,6 +261,63 @@ final class SupabaseClientNoAnonBootstrapTests: XCTestCase {
     try await runPubkeyRegistration(
       userID: userID, registerStatus: 200, refreshedJWT: claimlessJWT,
       expect: .identityClaimMissing)
+  }
+
+  // (h) register_pubkey 409 AND the refreshed JWT carries a DIFFERENT pubkey —
+  //     the ACCOUNT is bound to another device key (second Mac / wiped keystore;
+  //     registry is one-key-per-account). Must throw, NOT silently admit a
+  //     session whose claim mismatches the local key — that session passes the
+  //     gate but every creator-op (insertWorkspace etc.) then 403s forever.
+  func testEnsureAuthenticatedAndPubkeyRegistered_register409_foreignClaim_throwsAccountBound()
+    async throws
+  {
+    let userID = "00000000-0000-0000-0000-0000000000c9"
+    let foreignJWT = makeJWT(pubkey: String(repeating: "ab", count: 32), userID: userID)
+    try await runPubkeyRegistration(
+      userID: userID, registerStatus: 409, refreshedJWT: foreignJWT,
+      expect: .accountBoundToDifferentDeviceKey)
+  }
+
+  // (i) Persisted-session cold start: the bootstrap refresh returns a JWT that
+  //     already carries a FOREIGN pubkey claim (the JWT hook stamps the
+  //     account's registered key — second Mac / wiped keystore). The non-empty
+  //     claim hits the EARLY RETURN in ensureAuthenticatedAndPubkeyRegistered,
+  //     which must verify the claim against the local key too, not just
+  //     non-emptiness — otherwise the gate admits a session whose creator-ops
+  //     all 403.
+  func testEnsureAuthenticatedAndPubkeyRegistered_persistedForeignClaim_throwsAccountBound()
+    async throws
+  {
+    let userID = "00000000-0000-0000-0000-0000000000da"
+    let foreignJWT = makeJWT(pubkey: String(repeating: "ab", count: 32), userID: userID)
+    MockURLProtocol.handler = { request, _ in
+      switch request.url?.path {
+      case "/auth/v1/token":  // bootstrap refresh — foreign-claim JWT
+        return (
+          HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+          """
+          { "access_token": "\(foreignJWT)", "refresh_token": "ref-final",
+            "user": { "id": "\(userID)" }, "expires_at": 9999999999 }
+          """.data(using: .utf8)!
+        )
+      default:
+        return (
+          HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!,
+          Data()
+        )
+      }
+    }
+    let store = SupabaseSessionStore(at: tempDir)
+    try store.write(PersistedSession(refreshToken: "persisted-rt", userID: userID, savedAtMs: 1))
+    let client = SupabaseClient(
+      baseURL: baseURL, anonKey: anonKey, urlSession: makeSession(),
+      identity: fixedIdentity(), sessionStore: store)
+    do {
+      _ = try await client.ensureAuthenticatedAndPubkeyRegistered()
+      XCTFail("expected throw")
+    } catch let error as SupabaseError {
+      XCTAssertEqual(error, .accountBoundToDifferentDeviceKey)
+    }
   }
 
   /// Drives signInWithPassword → ensureAuthenticatedAndPubkeyRegistered with a

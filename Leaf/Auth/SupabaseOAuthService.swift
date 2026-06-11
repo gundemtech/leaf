@@ -220,6 +220,11 @@ final class SupabaseOAuthService {
       case .badRequest, .unauthorized: return "Wrong email or password — try again."
       case .identityClaimMissing, .pubkeyAlreadyRegistered, .deviceKeyOwnedByAnotherAccount:
         return "Couldn't register this device. Try again in a moment."
+      case .accountBoundToDifferentDeviceKey:
+        // One-key-per-account registry with no re-key path yet — a local
+        // identity reset can NOT recover, so no deviceConflict reset offer.
+        return
+          "This account is already set up on a different Mac. Multi-device sign-in isn't supported yet — sign in from the Mac where you first set up Leaf."
       case .transport: return "Network problem — check your connection and retry."
       default: return "Login failed (\(supa)). Try again."
       }
