@@ -11,8 +11,8 @@ import Foundation
 
 /// Track B1 — one labeled detail line of a result card (the landing mockup's
 /// AUTHOR / CHANNEL / COMMIT / OUTCOME grid).
-public struct SearchResultDetailRow: Equatable, Sendable, Identifiable {
-  public enum Label: String, Sendable, CaseIterable {
+public struct SearchResultDetailRow: Equatable, Sendable, Identifiable, Codable {
+  public enum Label: String, Sendable, CaseIterable, Codable {
     case author = "AUTHOR"
     case channel = "CHANNEL"
     case commit = "COMMIT"
@@ -36,7 +36,7 @@ public struct SearchResultDetailRow: Equatable, Sendable, Identifiable {
 }
 
 /// Track B1 — composed result set: rows + count copy + MATCH attribution.
-public struct SearchResultsPresentation: Equatable, Sendable {
+public struct SearchResultsPresentation: Equatable, Sendable, Codable {
   public let rows: [SearchResultRow]
   public let totalCount: Int
   /// "1 result" / "N results" — the input-field counter of the mockup.
@@ -52,8 +52,8 @@ public struct SearchResultsPresentation: Equatable, Sendable {
   }
 }
 
-public struct SearchResultRow: Equatable, Sendable, Identifiable {
-  public enum Kind: String, Sendable {
+public struct SearchResultRow: Equatable, Sendable, Identifiable, Codable {
+  public enum Kind: String, Sendable, Codable {
     case decision
     case openQuestion
     case blocker
@@ -164,9 +164,12 @@ public enum SearchResultsComposer {
     // by (eventKind, target-or-text) keeping the newest, count the rest.
     var seen: [String: Int] = [:]  // dedup key → index in eventRows
     var eventRows: [SearchResultRow] = []
+    let decisionEventIDs = Set(response.decisionsInPeriod.map(\.eventID))
     let substanceEvents = response.events.filter {
-      // Track B1 — pulse/diagnostic kinds never render as search results.
+      // Track B1 — pulse/diagnostic kinds never render as search results, and
+      // a decision's originating event must not duplicate its decision card.
       EventKindTaxonomy.feedClass(eventKind: $0.eventKind, signalType: $0.signalType) == .substance
+        && !decisionEventIDs.contains($0.eventID)
     }
     for e in substanceEvents.sorted(by: { $0.tsMs > $1.tsMs }) {
       let headline = composeEventHeadline(e)

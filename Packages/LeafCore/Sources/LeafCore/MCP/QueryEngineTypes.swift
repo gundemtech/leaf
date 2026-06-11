@@ -63,20 +63,94 @@ public struct QueryActivityResponse: Codable, Sendable {
 /// `leaf_get_decision` response. `decision == nil` when no FTS match.
 public struct GetDecisionResponse: Codable, Sendable {
     public let schemaVersion: String
+    /// Back-compat: always `decisions.first`.
     public let decision: DecisionDetail?
+    /// Track B2 — top-N decisions (confidence desc, then recency) when the
+    /// caller passes `limit > 1` (new-hire "how does X work" batch answers).
+    public let decisions: [DecisionDetail]
     public let relatedEvents: [ActivityEvent]
     public let truncationNote: TruncationNote?
 
+    public init(
+        schemaVersion: String = QueryEngineSchema.currentVersion,
+        decisions: [DecisionDetail],
+        relatedEvents: [ActivityEvent],
+        truncationNote: TruncationNote?
+    ) {
+        self.schemaVersion = schemaVersion
+        self.decision = decisions.first
+        self.decisions = decisions
+        self.relatedEvents = relatedEvents
+        self.truncationNote = truncationNote
+    }
+
+    /// Back-compat single-decision shape (existing call sites + tests).
     public init(
         schemaVersion: String = QueryEngineSchema.currentVersion,
         decision: DecisionDetail?,
         relatedEvents: [ActivityEvent],
         truncationNote: TruncationNote?
     ) {
+        self.init(
+            schemaVersion: schemaVersion,
+            decisions: decision.map { [$0] } ?? [],
+            relatedEvents: relatedEvents,
+            truncationNote: truncationNote
+        )
+    }
+}
+
+/// Track B2 — context line of the decision card: "Picked Apr 12 in #arch ·
+/// 47 msgs · commit a3f2". Every field nil-degrades; enrichment failures
+/// never block the tool response.
+public struct DecisionContext: Codable, Sendable, Equatable {
+    public let channelName: String?
+    public let threadMessageCount: Int?
+    public let contributorCount: Int?
+    public let commitShaShort: String?
+    /// Originating event ts ("Picked Apr 12") — decision detection may run
+    /// much later than the conversation it describes.
+    public let decidedAtMs: Int64?
+
+    public init(
+        channelName: String?,
+        threadMessageCount: Int?,
+        contributorCount: Int?,
+        commitShaShort: String?,
+        decidedAtMs: Int64?
+    ) {
+        self.channelName = channelName
+        self.threadMessageCount = threadMessageCount
+        self.contributorCount = contributorCount
+        self.commitShaShort = commitShaShort
+        self.decidedAtMs = decidedAtMs
+    }
+}
+
+/// Track B2 — `leaf_search` response: composed result rows (the same shape
+/// the in-app Search tab renders).
+public struct SearchResponse: Codable, Sendable {
+    public let schemaVersion: String
+    public let query: String
+    public let totalCount: Int
+    public let countLabel: String
+    public let topMatchID: String?
+    public let results: [SearchResultRow]
+
+    public init(
+        schemaVersion: String = QueryEngineSchema.currentVersion,
+        query: String,
+        totalCount: Int,
+        countLabel: String,
+        topMatchID: String?,
+        results: [SearchResultRow]
+    ) {
         self.schemaVersion = schemaVersion
-        self.decision = decision
-        self.relatedEvents = relatedEvents
-        self.truncationNote = truncationNote
+        self.query = query
+        self.totalCount = totalCount
+        self.countLabel = countLabel
+        self.topMatchID = topMatchID
+        self.results = results
     }
 }
 
@@ -205,15 +279,19 @@ public struct DecisionDetail: Codable, Sendable {
     public let decision: DecisionView
     public let originatingEvent: ActivityEvent
     public let linksToImplementation: [LinkView]
+    /// Track B2 — additive enrichment (channel / thread stats / commit sha).
+    public let context: DecisionContext?
 
     public init(
         decision: DecisionView,
         originatingEvent: ActivityEvent,
-        linksToImplementation: [LinkView]
+        linksToImplementation: [LinkView],
+        context: DecisionContext? = nil
     ) {
         self.decision = decision
         self.originatingEvent = originatingEvent
         self.linksToImplementation = linksToImplementation
+        self.context = context
     }
 }
 

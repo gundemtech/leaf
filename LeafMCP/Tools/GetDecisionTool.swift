@@ -16,7 +16,7 @@ struct GetDecisionTool: ToolExecutor {
     static let definition = ToolDefinition(
         name: D3ToolSchemas.ToolName.getDecision,
         description: """
-            Returns the highest-confidence decision matching the topic — \
+            Returns the highest-confidence decision(s) matching the topic — \
             originating event projection plus outbound links \
             (Linear ticket / GitHub PR / Slack thread). \
             Returns null `decision` when no FTS candidate matches. \
@@ -29,7 +29,7 @@ struct GetDecisionTool: ToolExecutor {
         switch D3ToolParams.decodeGetDecision(arguments: arguments?.value) {
         case .error(let msg):
             throw MCPProtocolError.invalidParams(msg)
-        case .ok(let (topic, period)):
+        case .ok(let (topic, period, limit)):
             guard FileManager.default.fileExists(atPath: dbURL.path) else {
                 return ToolCallResult(
                     content: [.text(TextContent(
@@ -44,7 +44,7 @@ struct GetDecisionTool: ToolExecutor {
                 dbEncryption: dbEncryption,
                 detectorMoat: detectorMoat
             )
-            let response = try engine.getDecision(topic: topic, period: period)
+            let response = try engine.getDecision(topic: topic, period: period, limit: limit)
             return try ToolResponseBuilder.versionedJSONResult(
                 D3ResponseEncoder.toDict(response)
             )

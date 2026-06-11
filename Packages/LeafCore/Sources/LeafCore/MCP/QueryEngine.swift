@@ -176,7 +176,8 @@ public struct QueryEngine: Sendable {
 
     // MARK: - getDecision
 
-    public func getDecision(topic: String, period: PeriodSpec?) throws -> GetDecisionResponse {
+    public func getDecision(topic: String, period: PeriodSpec?, limit: Int = 1) throws -> GetDecisionResponse {
+        let clampedLimit = max(1, min(limit, 10))
         let db = try Database.openForRead(at: dbURL, config: dbConfig, encryption: dbEncryption)
         return try db.readSQL { rawDB -> GetDecisionResponse in
             // Period defaults to the widest representable range when caller
@@ -201,57 +202,112 @@ public struct QueryEngine: Sendable {
             }
 
             let placeholders = Array(repeating: "?", count: candidateIDs.count).joined(separator: ",")
-            let row = try Row.fetchOne(rawDB, sql: """
+            let rows = try Row.fetchAll(rawDB, sql: """
                 SELECT id, event_id, topic_keywords_json, reasoning_excerpt, confidence, detected_at_ms
                   FROM decisions
                  WHERE event_id IN (\(placeholders))
                  ORDER BY confidence DESC, detected_at_ms DESC
-                 LIMIT 1
-            """, arguments: StatementArguments(candidateIDs))
+                 LIMIT ?
+            """, arguments: StatementArguments(candidateIDs) + [clampedLimit])
 
-            guard let row else {
+            guard !rows.isEmpty else {
                 return GetDecisionResponse(decision: nil, relatedEvents: [], truncationNote: nil)
             }
 
-            let decisionView = decisionView(from: row)
-            let originatingEventID = decisionView.eventID
-            let originatingEvent = try projectEvents(
-                eventIDs: [originatingEventID], in: rawDB
-            ).first ?? Self.placeholderEvent(eventID: originatingEventID)
+            var details: [DecisionDetail] = []
+            var relatedEvents: [ActivityEvent] = []
+            for (index, row) in rows.enumerated() {
+                let decisionView = decisionView(from: row)
+                let originatingEventID = decisionView.eventID
+                let originatingEvent = try projectEvents(
+                    eventIDs: [originatingEventID], in: rawDB
+                ).first ?? Self.placeholderEvent(eventID: originatingEventID)
 
-            // Outbound links from the originating event = pointers to
-            // implementation (Linear ticket / GitHub PR / Slack thread).
-            let linksFromOrigin = try EventLinksStore.linksFrom(eventID: originatingEventID, in: rawDB)
-            let linkViews = linksFromOrigin.map(LinkView.init(from:))
+                // Outbound links from the originating event = pointers to
+                // implementation (Linear ticket / GitHub PR / Slack thread).
+                let linksFromOrigin = try EventLinksStore.linksFrom(eventID: originatingEventID, in: rawDB)
+                let linkViews = linksFromOrigin.map(LinkView.init(from:))
 
-            // Related events: every event that the originating event links TO
-            // (forward) AND every event that shares those targets (siblings).
-            // We approximate as "events linking to any of those targets" via
-            // EventLinksStore.eventsLinkingTo.
-            var relatedSet = Set<Int64>()
-            for link in linksFromOrigin {
-                let ids = try EventLinksStore.eventsLinkingTo(
-                    targetKind: link.targetKind,
-                    targetRef: link.targetRef,
-                    period: nil,
-                    in: rawDB
-                )
-                for id in ids where id != originatingEventID {
-                    relatedSet.insert(id)
-                }
-            }
-            let relatedEvents = try projectEvents(eventIDs: Array(relatedSet), in: rawDB)
-
-            return GetDecisionResponse(
-                decision: DecisionDetail(
+                details.append(DecisionDetail(
                     decision: decisionView,
                     originatingEvent: originatingEvent,
-                    linksToImplementation: linkViews
-                ),
+                    linksToImplementation: linkViews,
+                    context: try Self.decisionContext(
+                        originEventID: originatingEventID, in: rawDB)
+                ))
+
+                // Related events stay a top-1 affordance — the byte budget is
+                // better spent on alternates when limit > 1.
+                if index == 0 {
+                    var relatedSet = Set<Int64>()
+                    for link in linksFromOrigin {
+                        let ids = try EventLinksStore.eventsLinkingTo(
+                            targetKind: link.targetKind,
+                            targetRef: link.targetRef,
+                            period: nil,
+                            in: rawDB
+                        )
+                        for id in ids where id != originatingEventID {
+                            relatedSet.insert(id)
+                        }
+                    }
+                    relatedEvents = try projectEvents(eventIDs: Array(relatedSet), in: rawDB)
+                }
+            }
+
+            return GetDecisionResponse(
+                decisions: details,
                 relatedEvents: relatedEvents,
                 truncationNote: nil
             )
         }
+    }
+
+    /// Track B2 — the "Picked Apr 12 in #arch · 47 msgs · commit a3f2" line.
+    /// Reads the originating events row directly (channel/count/sha payload
+    /// keys are not part of the slim ActivityEvent projection). Everything
+    /// nil-degrades; a missing origin row yields nil context, never an error.
+    static func decisionContext(
+        originEventID: Int64, in db: GRDB.Database
+    ) throws -> DecisionContext? {
+        guard let row = try Row.fetchOne(db, sql: """
+            SELECT ts,
+                   json_extract(payload_json, '$.event_kind')   AS event_kind,
+                   json_extract(payload_json, '$.channel_name') AS channel_name,
+                   json_extract(payload_json, '$.count')        AS msg_count,
+                   json_extract(payload_json, '$.sha')          AS sha
+              FROM events WHERE id = ?
+        """, arguments: [originEventID]) else { return nil }
+
+        let sha: String? = row["sha"]
+        return DecisionContext(
+            channelName: row["channel_name"] as String?,
+            threadMessageCount: (row["msg_count"] as String?).flatMap(Int.init),
+            contributorCount: nil,
+            commitShaShort: sha.map { String($0.prefix(7)) },
+            decidedAtMs: row["ts"] as Int64?
+        )
+    }
+
+    // MARK: - search (Track B2 — leaf_search)
+
+    /// The landing-page `leaf.search(...)` promise, literal: one call returning
+    /// the same composed result rows the in-app Search tab renders (decisions
+    /// first with the AUTHOR/CHANNEL/COMMIT detail grid, then open questions /
+    /// blockers, then substance event matches).
+    public func search(
+        query: String, period: PeriodSpec, limit: Int = 20
+    ) throws -> SearchResponse {
+        let response = try queryActivity(period: period, filter: query)
+        let presentation = SearchResultsComposer.composePresentation(from: response)
+        let clamped = max(1, min(limit, 50))
+        return SearchResponse(
+            query: query,
+            totalCount: presentation.totalCount,
+            countLabel: presentation.countLabel,
+            topMatchID: presentation.topMatchID,
+            results: Array(presentation.rows.prefix(clamped))
+        )
     }
 
     // MARK: - currentWork
