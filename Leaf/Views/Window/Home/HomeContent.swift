@@ -31,10 +31,7 @@ struct HomeContent: View {
                     lastCommit: snapshot.recentCommit
                 )
 
-                TodayBlock(
-                    metrics: snapshot.todayMetrics,
-                    weekly: snapshot.weeklyMetrics
-                )
+                TodayBlock(metrics: snapshot.todayMetrics)
 
                 // UC-2 — "am I quietly stuck" card; renders only when the
                 // deriver found something. Sits above NEEDS YOU: a stuck PR
