@@ -15,6 +15,10 @@ struct NeedsYouBlock: View {
     let items: [InboxItem]
 
     @State private var selectedFilter: InboxFilter = .actionable
+    /// Auto-fallthrough runs once per appearance: an empty default filter
+    /// must not render a giant empty card while "All" silently holds items.
+    /// After the first correction the user's explicit chip taps win.
+    @State private var didAutoSelect = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: LeafSpace.md) {
@@ -29,14 +33,25 @@ struct NeedsYouBlock: View {
                         selected: $selectedFilter, counts: InboxFiltering.counts(items))
                     LeafDivider()
                     if items.isEmpty {
-                        emptyDataState
+                        compactAllClear("Nothing waiting on you right now.")
                     } else if filteredItems.isEmpty {
-                        noMatchState
+                        compactAllClear(
+                            selectedFilter == .actionable
+                                ? "Nothing needs your response — informational items are under All."
+                                : "Nothing in this filter — check the counts above.")
                     } else {
                         populatedBody
                     }
                 }
                 .animation(.easeInOut(duration: 0.25), value: filteredItems)
+            }
+        }
+        .onChange(of: items, initial: true) { _, newItems in
+            guard !didAutoSelect, selectedFilter == .actionable else { return }
+            let counts = InboxFiltering.counts(newItems)
+            if counts[.actionable] == 0, (counts[.all] ?? 0) > 0 {
+                selectedFilter = .all
+                didAutoSelect = true
             }
         }
     }
@@ -45,21 +60,20 @@ struct NeedsYouBlock: View {
         InboxFiltering.filtered(items, filter: selectedFilter, query: "")
     }
 
-    private var emptyDataState: some View {
-        LeafEmptyState(
-            icon: LeafIcons.brand.leaf,
-            title: "Nothing waiting on you right now."
-        )
-    }
-
-    private var noMatchState: some View {
-        LeafEmptyState(
-            icon: LeafIcons.brand.leaf,
-            title: "Nothing in this filter.",
-            description: "Other filters have items — check the counts above.",
-            ctaTitle: "Show all",
-            onCTA: { selectedFilter = .all }
-        )
+    /// Single-row all-clear (the former full-height LeafEmptyState dominated
+    /// half the screen for the happy path).
+    private func compactAllClear(_ text: String) -> some View {
+        HStack(spacing: LeafSpace.sm) {
+            Image(systemName: "checkmark.circle")
+                .font(LeafType.body.small)
+                .foregroundStyle(LeafColor.status.success)
+                .accessibilityHidden(true)
+            Text(text)
+                .font(LeafType.body.small)
+                .foregroundStyle(LeafColor.text.tertiary)
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, LeafSpace.xs)
     }
 
     private var populatedBody: some View {
