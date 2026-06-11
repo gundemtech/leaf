@@ -110,14 +110,18 @@ final class TeamEventBroadcastServiceTests: XCTestCase {
         // Booleans either coerce to "true"/"false" or are skipped — both acceptable.
     }
 
-    func testUuidStringToRawBytes_StableLength() {
-        let data = TeamEventBroadcastService.uuidStringToRawBytes("11111111-1111-1111-1111-111111111111")
+    func testUuidStringToRawBytes_StableLength() throws {
+        let data = try TeamEventBroadcastService.uuidStringToRawBytes("11111111-1111-1111-1111-111111111111")
         XCTAssertEqual(data.count, 16)
     }
 
-    func testUuidStringToRawBytes_FallbackOnGarbage() {
-        let data = TeamEventBroadcastService.uuidStringToRawBytes("not-a-uuid")
-        XCTAssertEqual(data.count, 16)
-        XCTAssertEqual(data, Data(repeating: 0, count: 16))
+    func testUuidStringToRawBytes_ThrowsOnGarbage() {
+        // H1 (security audit): a malformed UUID must throw, not silently degrade to
+        // 16 zero bytes used as the crypto keyID.
+        XCTAssertThrowsError(try TeamEventBroadcastService.uuidStringToRawBytes("not-a-uuid")) { error in
+            guard case LeafError.invalidPayload = error else {
+                return XCTFail("expected LeafError.invalidPayload, got \(error)")
+            }
+        }
     }
 }

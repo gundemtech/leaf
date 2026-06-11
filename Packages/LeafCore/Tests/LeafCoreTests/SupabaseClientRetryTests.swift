@@ -150,6 +150,22 @@ final class SupabaseClientRetryTests: XCTestCase {
     return "\(b64url(header)).\(b64url(payload)).fake-sig"
   }
 
+  /// Phase 1 (account-login) — anonymous bootstrap removed; ensureAuthenticated()
+  /// no longer self-establishes a session. Seed a persisted refresh-token so it
+  /// takes the persisted-refresh path (served by the bootstrap helper's
+  /// /auth/v1/token branch) instead of the deleted anon signup.
+  private func seedStore() -> SupabaseSessionStore {
+    let dir = FileManager.default.temporaryDirectory
+      .appendingPathComponent("leaf-retry-\(UUID().uuidString)", isDirectory: true)
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    let store = SupabaseSessionStore(at: dir)
+    try? store.write(
+      PersistedSession(
+        refreshToken: "seed-rt",
+        userID: "00000000-0000-0000-0000-000000000222", savedAtMs: 1))
+    return store
+  }
+
   /// Make a SupabaseClient with no-op sleep (skip wall-clock waits in retry loop).
   private func makeClient() -> SupabaseClient {
     SupabaseClient(
@@ -159,6 +175,7 @@ final class SupabaseClientRetryTests: XCTestCase {
       identity: {
         try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: Data(repeating: 0xAA, count: 32))
       },
+      sessionStore: seedStore(),
       sleep: { _ in /* skip wall-clock */ }
     )
   }
@@ -260,6 +277,7 @@ final class SupabaseClientRetryTests: XCTestCase {
       identity: {
         try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: Data(repeating: 0xAA, count: 32))
       },
+      sessionStore: seedStore(),
       sleep: { duration in captured.append(duration) }
     )
     let calls = RetryCallCounter()
@@ -298,6 +316,7 @@ final class SupabaseClientRetryTests: XCTestCase {
       identity: {
         try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: Data(repeating: 0xAA, count: 32))
       },
+      sessionStore: seedStore(),
       sleep: { duration in captured.append(duration) }
     )
     let calls = RetryCallCounter()
@@ -389,6 +408,7 @@ final class SupabaseClientRetryTests: XCTestCase {
       identity: {
         try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: Data(repeating: 0xAA, count: 32))
       },
+      sessionStore: seedStore(),
       sleep: { _ in throw CancellationError() }
     )
     let calls = RetryCallCounter()

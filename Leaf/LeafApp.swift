@@ -65,6 +65,10 @@ struct LeafApp: App {
   /// Track 5 / S3 — Leaf's first network primitive. Constructed once at LeafApp.init
   /// time and injected into all invite readers + future S4+ readers.
   @State private var supabaseClient: SupabaseClient
+  /// Phase 1 (account-login) — login controller for the gate. Constructed in
+  /// init after `supabaseClient`; its onAuthenticated callback registers the
+  /// launch agent so background capture starts only after a real login.
+  @State private var loginService: SupabaseOAuthService
   @State private var inviteOutboxReader: InviteOutboxReader
   @State private var inviteAcceptReader: InviteAcceptReader
   /// M027 invite-redesign — admin's local mirror of own-workspace invite tokens.
@@ -115,6 +119,8 @@ struct LeafApp: App {
   /// write tech.gundem.leaf tier free` from Terminal flips UI live during
   /// QA — no app relaunch required.
   @State private var tierGateReader = TierGateReader()
+  @State private var accountProfileReader: AccountProfileReader
+  @State private var accountDeletion: AccountDeletionService
   /// Track 5 / S8 / T9 — @Observable wrapper around NotificationPrefsStore
   /// (M026). Bound by NotificationsSettingsSection (4 sub-groups × 11
   /// prefs). Opens its own writer DB handle lazily on first refresh;
@@ -230,10 +236,20 @@ struct LeafApp: App {
     )
     _supabaseClient = State(initialValue: supabase)
 
-    // AI-UI-4 — BYOK-valve router over the SAME SupabaseClient (the session
-    // is the relay-proxy bearer on the included path; on pre-login dev the
-    // client bootstraps the anonymous session — same trust model as the rest
-    // of the app's Supabase calls).
+    // Phase 1 (account-login) — login controller. onAuthenticated is wired
+    // below in body's .onAppear once `launchAgent` is available on self.
+    let login = SupabaseOAuthService(client: supabase)
+    _loginService = State(initialValue: login)
+
+    _accountProfileReader = State(initialValue: AccountProfileReader(supabase: supabase))
+    _accountDeletion = State(
+      initialValue: AccountDeletionService(
+        deleteAccount: { try await supabase.deleteSelfAccount() },
+        signOut: { await login.signOut() },
+        deleteIdentity: { try IdentityService.deleteLocalIdentity() }))
+
+    // AI-UI-4 — BYOK-valve router over the SAME SupabaseClient (the session is
+    // the relay-proxy bearer on the included path).
     let aiRouter = AIWiring.backendRouter(
       tokenProvider: SupabaseSessionTokenProvider(client: supabase))
     _aiBackendRouter = State(initialValue: aiRouter)
@@ -682,136 +698,138 @@ struct LeafApp: App {
         DatabaseRecoveryView(info: mismatch)
       } else {
         RootView()
-        .environment(launchAgent)
-        .environment(agentWatchdog)
-        .environment(\.aiBackendRouter, aiBackendRouter)  // AI-UI-4 — BYOK-valve router
-        .environment(watchedFolders)
-        .environment(linearOAuth)
-        .environment(githubOAuth)
-        .environment(githubScopes)  // Phase Track-3 D2 — Task 21
-        .environment(slackOAuth)
-        .environment(slackScopes)  // Phase Track-3 D3 — Task 18
-        .environment(permissions)
-        .environment(updater)
-        .environment(reader)
-        .environment(lastSeenCursor)  // Track-10 T5
-        .environment(whatsNewTracker)  // Phase 3 — in-app What's New auto-present
-        .environment(diagnostics)  // dev-launch-reliability — Settings Diagnostics
-        .environment(routeCoordinator)  // Track-10 — Home/ResumeHero routing
-        .environment(workspaceReader)  // Track 5 S2 Task 10
-        .environment(activeWorkspaceStore)  // Track 5 S2 Task 10
-        // Track 5 / S3 — SupabaseClient is an actor (not @Observable), injected directly
-        // into readers via constructor. UI surfaces consume readers, not the client directly.
-        .environment(inviteOutboxReader)
-        .environment(inviteAcceptReader)
-        .environment(inviteTokensReader)  // M027 invite-redesign
-        .environment(joinRequestsReader)  // M027 invite-redesign
-        .environment(directMessageSendReader)  // Track 5 / S4
-        .environment(handoffDraftReader)  // AI Coworker P4 — Draft with AI
-        .environment(askLeafReader)  // AI-UI-1 — Ask Leaf Q&A tab
-        .environment(directMessageInboxReader)  // Track 5 / S4
-        .environment(apnsRegistrationReader)  // Track 5 / S4
-        .environment(shareRulesReader)  // Track 5 / S5
-        .environment(teamEventBroadcastReader)  // Track 5 / S5
-        .environment(teamEventMirrorReader)  // Track 5 / S5
-        .environment(slackChannelsReader)  // Track 5 / S6
-        .environment(linearTeamsReader)  // Track 5 / S6
-        .environment(linearScopesReader)  // Track 5 / S6
-        // LinearUsersResolver is an actor (not @Observable); plumbed via
-        // explicit closure into Send sheet from OrganizationView call site.
-        .environment(\.linearUsersResolver, linearUsersResolver)
-        .environment(teamFeedReader)  // Track 5 / S7 H.3
-        .environment(crossPostLogReader)  // Track 5 / S7 H.3
-        .environment(feedFilterStore)  // Track 5 / S7 H.3
-        .environment(realtimeService)  // Track 5 / S7 H.3
-        .environment(liveUpdateSignals)  // live-tabs — invalidation counters
-        .environment(chatStore)  // Team chats — hub Chats tab
-        // AttachmentMetadataResolver is an actor (not @Observable);
-        // custom EnvironmentKey threads optional resolver to TeamView.
-        .environment(\.attachmentMetadataResolver, attachmentMetadataResolver)
-        .environment(memberRemovalReader)  // Phase 5.3.E
-        .environment(pendingInvitesReader)  // Phase 5.5.C
-        .environment(inviteURLHandler)  // Phase 5.5.B
-        .environment(tierGateReader)  // Track 5 / S8 / T3
-        .environment(notificationPrefsReader)  // Track 5 / S8 / T9
-        // T4 — UpgradeModal callsites (Sheet/TeamView Free branch/Sidebar
-        // Free state) invoke `submitToWaitlist(email:)` via this env closure.
-        // SupabaseClient is an actor (not @Observable), so we wrap it in a
-        // @Sendable closure here at composition-time; views stay SwiftUI-pure.
-        .environment(
-          \.submitToWaitlist,
-          { [supabaseClient] email in
-            await supabaseClient.submitToWaitlist(email: email)
-          }
-        )
-        // Track 5 / S8 T6 — PendingMarkDoneRetryService threaded as
-        // optional Sendable actor via custom EnvironmentKey (actors
-        // can't conform to Observation tracking). RootView's
-        // .task(id:) daily-tick scheduler reads + invokes .tickIfDueDaily.
-        .environment(\.pendingMarkDoneRetryService, pendingMarkDoneRetryService)
-        // Track 5 / S8 / T8 — WorkspaceCascadeDeleter threaded the same
-        // way; RootView's daily-tick scheduler invokes
-        // `pruneExpiredLeftWorkspaces()` to wipe workspaces past the
-        // 30-day retention threshold (left_at_ms OR deleted_at_ms).
-        .environment(\.workspaceCascadeDeleter, workspaceCascadeDeleter)
-        .environment(windowState)
-        .onAppear {
-          inviteURLHandler.wire(
-            acceptReader: inviteAcceptReader,
-            outboxReader: inviteOutboxReader)
-          // M027 invite-redesign — late-bind reader + WindowState refs.
-          inviteURLHandler.wireM027(
-            joinRequestsReader: joinRequestsReader,
-            windowState: windowState
-          )
-          // Admin roster refreshes immediately after an approve (Bug B inserts
-          // the invitee into the local team_members). Both readers are
-          // app-lifetime; weak capture for symmetry, no retain cycle.
-          let wsReader = workspaceReader
-          joinRequestsReader.wireRosterRefresh { [weak wsReader] in
-            wsReader?.refresh()
-          }
-          // Resume any invite approved while the invitee wasn't on the open
-          // waiting card (dismissed / app quit before approve) — otherwise the
-          // approved+sealed request is stranded forever. Runs AFTER
-          // wireRosterRefresh so materialisation's sidebar refresh hook is set.
-          Task { await joinRequestsReader.resumePendingMaterialisations() }
-        }
-                .task {
-                    // Track-10 T6 (Phase IV.B) — inject ActiveWorkspaceStore
-                    // FIRST (field-only, no refresh) so the cursor configure's
-                    // launch refresh already sees it for the solo-vs-team
-                    // memberCount gate.
-                    reader.configure(activeWorkspaceStore: activeWorkspaceStore)
-                    // Track-10 T5 — two-phase init for LastSeenCursor injection
-                    // (refresh()-triggers first SINCE feed population).
-                    reader.configure(lastSeenCursor: lastSeenCursor)
-                }
-        // Live-tabs — watcher runs only while the main window exists. stop()
-        // fires synchronously at cancellation (onCancel), so a rapid window
-        // close→reopen can't interleave a stale stop() after the new start().
-        .task {
-          databaseChangeObserver.start()
-          await withTaskCancellationHandler {
-            while !Task.isCancelled {
-              try? await Task.sleep(nanoseconds: 3_600_000_000_000)
+          .environment(launchAgent)
+          .environment(agentWatchdog)
+          .environment(loginService)  // Phase 1 — account-login gate
+          .environment(\.supabaseClientForGate, supabaseClient)  // Phase 1 — gate validity probe
+          .environment(\.aiBackendRouter, aiBackendRouter)  // AI-UI-4 — BYOK-valve router
+          .environment(watchedFolders)
+          .environment(linearOAuth)
+          .environment(githubOAuth)
+          .environment(githubScopes)  // Phase Track-3 D2 — Task 21
+          .environment(slackOAuth)
+          .environment(slackScopes)  // Phase Track-3 D3 — Task 18
+          .environment(permissions)
+          .environment(updater)
+          .environment(reader)
+          .environment(lastSeenCursor)  // Track-10 T5
+          .environment(whatsNewTracker)  // Phase 3 — in-app What's New auto-present
+          .environment(diagnostics)  // dev-launch-reliability — Settings Diagnostics
+          .environment(routeCoordinator)  // Track-10 — Home/ResumeHero routing
+          .environment(workspaceReader)  // Track 5 S2 Task 10
+          .environment(activeWorkspaceStore)  // Track 5 S2 Task 10
+          .environment(inviteOutboxReader)
+          .environment(inviteAcceptReader)
+          .environment(inviteTokensReader)  // M027 invite-redesign
+          .environment(joinRequestsReader)  // M027 invite-redesign
+          .environment(directMessageSendReader)  // Track 5 / S4
+          .environment(handoffDraftReader)  // AI Coworker P4 — Draft with AI
+          .environment(askLeafReader)  // AI-UI-1 — Ask Leaf Q&A tab
+          .environment(directMessageInboxReader)  // Track 5 / S4
+          .environment(apnsRegistrationReader)  // Track 5 / S4
+          .environment(shareRulesReader)  // Track 5 / S5
+          .environment(teamEventBroadcastReader)  // Track 5 / S5
+          .environment(teamEventMirrorReader)  // Track 5 / S5
+          .environment(slackChannelsReader)  // Track 5 / S6
+          .environment(linearTeamsReader)  // Track 5 / S6
+          .environment(linearScopesReader)  // Track 5 / S6
+          .environment(\.linearUsersResolver, linearUsersResolver)
+          .environment(teamFeedReader)  // Track 5 / S7 H.3
+          .environment(crossPostLogReader)  // Track 5 / S7 H.3
+          .environment(feedFilterStore)  // Track 5 / S7 H.3
+          .environment(realtimeService)  // Track 5 / S7 H.3
+          .environment(liveUpdateSignals)  // live-tabs — invalidation counters
+          .environment(chatStore)  // Team chats — hub Chats tab
+          .environment(\.attachmentMetadataResolver, attachmentMetadataResolver)
+          .environment(memberRemovalReader)  // Phase 5.3.E
+          .environment(pendingInvitesReader)  // Phase 5.5.C
+          .environment(inviteURLHandler)  // Phase 5.5.B
+          .environment(tierGateReader)  // Track 5 / S8 / T3
+          .environment(notificationPrefsReader)  // Track 5 / S8 / T9
+          .environment(accountProfileReader)  // Track 5 profile parity
+          .environment(\.accountDeletion, accountDeletion)  // Track 5 profile parity
+          .environment(
+            \.submitToWaitlist,
+            { [supabaseClient] email in
+              await supabaseClient.submitToWaitlist(email: email)
             }
-          } onCancel: {
-            databaseChangeObserver.stop()
+          )
+          // Track 5 / S8 T6 — PendingMarkDoneRetryService threaded as
+          // optional Sendable actor via custom EnvironmentKey (actors
+          // can't conform to Observation tracking). RootView's
+          // .task(id:) daily-tick scheduler reads + invokes .tickIfDueDaily.
+          .environment(\.pendingMarkDoneRetryService, pendingMarkDoneRetryService)
+          // Track 5 / S8 / T8 — WorkspaceCascadeDeleter threaded the same
+          // way; RootView's daily-tick scheduler invokes
+          // `pruneExpiredLeftWorkspaces()` to wipe workspaces past the
+          // 30-day retention threshold (left_at_ms OR deleted_at_ms).
+          .environment(\.workspaceCascadeDeleter, workspaceCascadeDeleter)
+          .environment(windowState)
+          .onAppear {
+            inviteURLHandler.wire(
+              acceptReader: inviteAcceptReader,
+              outboxReader: inviteOutboxReader)
+            // M027 invite-redesign — late-bind reader + WindowState refs.
+            inviteURLHandler.wireM027(
+              joinRequestsReader: joinRequestsReader,
+              windowState: windowState
+            )
+            // Admin roster refreshes immediately after an approve (Bug B inserts
+            // the invitee into the local team_members). Both readers are
+            // app-lifetime; weak capture for symmetry, no retain cycle.
+            let wsReader = workspaceReader
+            joinRequestsReader.wireRosterRefresh { [weak wsReader] in
+              wsReader?.refresh()
+            }
+            // Resume any invite approved while the invitee wasn't on the open
+            // waiting card (dismissed / app quit before approve) — otherwise the
+            // approved+sealed request is stranded forever. Runs AFTER
+            // wireRosterRefresh so materialisation's sidebar refresh hook is set.
+            Task { await joinRequestsReader.resumePendingMaterialisations() }
+            // Phase 1 (account-login) — after a successful login, start the
+            // agent (capture begins only post-login); after sign-out, stop it.
+            // The gate's .task(id:) recompute flips RootView between the shell
+            // and LoginGateView. The client-side signOut() clears the persisted
+            // refresh-token file, so the next cold start sees no session.
+            loginService.onAuthenticated = {
+              launchAgent.register()
+            }
+            loginService.onSignedOut = {
+              launchAgent.unregister()
+              // Tear down the Realtime WebSocket + its JWT-refresh timer — the
+              // session is cleared, so leaving them running churns reconnects
+              // against an invalid token until app quit. suspend() (not
+              // unsubscribe) cancels the dispatch loop + refresh timer.
+              Task { await realtimeService.suspend() }
+            }
           }
-        }
-        .onOpenURL { url in
-          inviteURLHandler.handle(url)
-        }
-        .onChange(of: scenePhase) { _, newPhase in
-          // Phase 5.5.B — invitee comes back to Leaf after admin sent invite link;
-          // probe the clipboard for auto-fetch without a manual paste step. Deep-link path
-          // (`.onOpenURL`) covers click-to-open; this covers Cmd-Tab-from-chat-app.
-          guard newPhase == .active else { return }
-          if case .inviteURL(let url) = inviteURLHandler.probeClipboard() {
-            inviteAcceptReader.fetch(inviteURL: url)
+          .task {
+            reader.configure(activeWorkspaceStore: activeWorkspaceStore)
+            reader.configure(lastSeenCursor: lastSeenCursor)
           }
-        }
+          .task {
+            // live-tabs — watcher runs only while the main window exists. stop()
+            // fires synchronously at cancellation so a rapid close→reopen can't
+            // interleave a stale stop() after the new start().
+            databaseChangeObserver.start()
+            await withTaskCancellationHandler {
+              while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 3_600_000_000_000)
+              }
+            } onCancel: {
+              databaseChangeObserver.stop()
+            }
+          }
+          .onOpenURL { url in
+            inviteURLHandler.handle(url)
+          }
+          .onChange(of: scenePhase) { _, newPhase in
+            // Phase 5.5.B — invitee returns to Leaf; probe clipboard for the invite.
+            guard newPhase == .active else { return }
+            if case .inviteURL(let url) = inviteURLHandler.probeClipboard() {
+              inviteAcceptReader.fetch(inviteURL: url)
+            }
+          }
       }
     }
     .defaultSize(width: 1100, height: 720)
@@ -840,21 +858,21 @@ struct LeafApp: App {
           .frame(width: 360)
       } else {
         MenuBarContent()
-        .environment(launchAgent)
-        .environment(agentWatchdog)
-        .environment(watchedFolders)
-        .environment(permissions)
-        .environment(updater)
-        .environment(reader)
-        .environment(lastSeenCursor)  // Track-10 T5
-        .environment(whatsNewTracker)  // Phase 3 — in-app What's New auto-present
-        .environment(diagnostics)  // dev-launch-reliability — Settings Diagnostics
-        .environment(routeCoordinator)  // Track-10 — Home/ResumeHero routing
-        .environment(workspaceReader)  // Track 5 S2 Task 10
-        .environment(activeWorkspaceStore)  // Track 5 S2 Task 10
-        .environment(inviteAcceptReader)
-        .environment(inviteURLHandler)  // Phase 5.5.B
-        .environment(windowState)
+          .environment(launchAgent)
+          .environment(agentWatchdog)
+          .environment(watchedFolders)
+          .environment(permissions)
+          .environment(updater)
+          .environment(reader)
+          .environment(lastSeenCursor)  // Track-10 T5
+          .environment(whatsNewTracker)  // Phase 3 — in-app What's New auto-present
+          .environment(diagnostics)  // dev-launch-reliability — Settings Diagnostics
+          .environment(routeCoordinator)  // Track-10 — Home/ResumeHero routing
+          .environment(workspaceReader)  // Track 5 S2 Task 10
+          .environment(activeWorkspaceStore)  // Track 5 S2 Task 10
+          .environment(inviteAcceptReader)
+          .environment(inviteURLHandler)  // Phase 5.5.B
+          .environment(windowState)
       }
     }
     .menuBarExtraStyle(.window)
@@ -956,7 +974,8 @@ struct LeafApp: App {
       return nil
     } catch let LeafError.databaseSchemaFromFuture(unknown) {
       leafAppLogger.error(
-        "DB schema from future — unknown migrations: \(unknown.joined(separator: ","), privacy: .public)")
+        "DB schema from future — unknown migrations: \(unknown.joined(separator: ","), privacy: .public)"
+      )
       return DatabaseRecoveryInfo(unknownMigrations: unknown, dbPath: url.path)
     } catch {
       // Non-schema open failure (corruption / key) — leave to InsightsReader.

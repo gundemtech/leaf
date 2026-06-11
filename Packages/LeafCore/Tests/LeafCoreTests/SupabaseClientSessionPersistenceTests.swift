@@ -1,5 +1,13 @@
 // Phase Track-5 S4 — SupabaseClient sessionStore load-on-bootstrap coverage.
 // Closes S3 carry-over I3 (refresh_token persistence).
+//
+// Phase 1 (account-login) — the anonymous-bootstrap tests
+// (FreshSignupAndPersist / FallsThroughToFreshSignup /
+// RegisterPubkeyFails409 / NoSessionStore_BackwardsCompatible) were removed
+// here: ensureAuthenticated no longer falls back to anonymous signup. The
+// no-session-throws and post-login-register paths are covered by
+// SupabaseClientNoAnonBootstrapTests. The persisted-refresh-then-return
+// contract below is unchanged and still holds.
 
 import CryptoKit
 import XCTest
@@ -43,62 +51,6 @@ final class SupabaseClientSessionPersistenceTests: XCTestCase {
         .replacingOccurrences(of: "=", with: "")
     }
     return "\(b64url(header)).\(b64url(payload)).fake-sig"
-  }
-
-  // MARK: - First launch — no persisted session → fresh signup + persist
-
-  func testFirstLaunch_NoPersistedSession_FreshSignupAndPersist() async throws {
-    let pubkey = String(repeating: "42", count: 32)
-    let userID = "00000000-0000-0000-0000-000000000aaa"
-    let jwt = makeJWT(pubkey: pubkey, userID: userID)
-
-    MockURLProtocol.handler = { request, _ in
-      let path = request.url?.path ?? ""
-      switch path {
-      case "/auth/v1/signup":
-        return (
-          HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
-          """
-          { "access_token": "tok-1", "refresh_token": "fresh-rt-1",
-            "user": { "id": "\(userID)" }, "expires_at": 9999999999 }
-          """.data(using: .utf8)!
-        )
-      case "/functions/v1/register_pubkey":
-        return (
-          HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
-          Data(#"{"ok":true}"#.utf8)
-        )
-      case "/auth/v1/token":
-        return (
-          HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
-          """
-          { "access_token": "\(jwt)", "refresh_token": "refreshed-rt-1",
-            "user": { "id": "\(userID)" }, "expires_at": 9999999999 }
-          """.data(using: .utf8)!
-        )
-      default:
-        XCTFail("unexpected url \(path)")
-        return (
-          HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!,
-          Data()
-        )
-      }
-    }
-
-    let store = SupabaseSessionStore(at: tempDir)
-    let client = SupabaseClient(
-      baseURL: baseURL, anonKey: anonKey,
-      urlSession: makeSession(),
-      identity: fixedIdentity(),
-      sessionStore: store
-    )
-    let session = try await client.ensureAuthenticated()
-    XCTAssertEqual(session.refreshToken, "refreshed-rt-1")
-
-    // Persisted session captured.
-    let persisted = try store.read()
-    XCTAssertEqual(persisted?.refreshToken, "refreshed-rt-1")
-    XCTAssertEqual(persisted?.userID, userID)
   }
 
   // MARK: - Second launch — persisted session → token refresh shortcut, no signup
@@ -157,199 +109,6 @@ final class SupabaseClientSessionPersistenceTests: XCTestCase {
     // Persisted session updated to new refresh_token.
     let persisted = try store.read()
     XCTAssertEqual(persisted?.refreshToken, "new-rt")
-  }
-
-  // MARK: - Persisted session refresh fails → falls through to fresh signup
-
-  func testPersistedSession_RefreshFails_FallsThroughToFreshSignup() async throws {
-    let pubkey = String(repeating: "42", count: 32)
-    let userID = "00000000-0000-0000-0000-000000000ccc"
-    let jwt = makeJWT(pubkey: pubkey, userID: userID)
-
-    let store = SupabaseSessionStore(at: tempDir)
-    try store.write(PersistedSession(refreshToken: "expired-rt", userID: userID, savedAtMs: 1_000))
-
-    let lock = NSLock()
-    var calls = 0
-    MockURLProtocol.handler = { request, _ in
-      lock.lock()
-      calls += 1
-      let attempt = calls
-      lock.unlock()
-      let path = request.url?.path ?? ""
-
-      switch path {
-      case "/auth/v1/token":
-        // First call uses persisted refresh → 401 (expired).
-        // Second call is part of fresh-signup flow → should succeed.
-        if attempt == 1 {
-          return (
-            HTTPURLResponse(
-              url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!,
-            Data()
-          )
-        }
-        return (
-          HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
-          """
-          { "access_token": "\(jwt)", "refresh_token": "new-after-fallback",
-            "user": { "id": "\(userID)" }, "expires_at": 9999999999 }
-          """.data(using: .utf8)!
-        )
-      case "/auth/v1/signup":
-        return (
-          HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
-          """
-          { "access_token": "fresh-tok", "refresh_token": "fresh-rt",
-            "user": { "id": "\(userID)" }, "expires_at": 9999999999 }
-          """.data(using: .utf8)!
-        )
-      case "/functions/v1/register_pubkey":
-        return (
-          HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
-          Data(#"{"ok":true}"#.utf8)
-        )
-      default:
-        XCTFail("unexpected path \(path)")
-        return (
-          HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!,
-          Data()
-        )
-      }
-    }
-
-    let client = SupabaseClient(
-      baseURL: baseURL, anonKey: anonKey,
-      urlSession: makeSession(),
-      identity: fixedIdentity(),
-      sessionStore: store
-    )
-    let session = try await client.ensureAuthenticated()
-    XCTAssertEqual(session.refreshToken, "new-after-fallback")
-
-    // Persisted session updated to refreshed token from fresh signup flow.
-    let persisted = try store.read()
-    XCTAssertEqual(persisted?.refreshToken, "new-after-fallback")
-  }
-
-  // MARK: - Race-window protection: register fails 409 → initial refresh_token still persisted
-  //
-  // This is the TOFU dead-end fix. Before the persist-up change, when
-  // registerPubkey returned 409 (most often: priv-file survived a partial
-  // local wipe while server-side `pubkey_registry` still held the old
-  // auth_id), bootstrap threw without ever writing supabase-session.json.
-  // The next cold launch would then signInAnonymously again → yet another
-  // auth_id → another 409. User permanently stuck unless they nuked the
-  // priv file manually.
-  //
-  // Fix: persist the refresh_token returned by signInAnonymously
-  // IMMEDIATELY, before any further bootstrap call. If register fails, the
-  // next launch can refresh into the SAME auth_id (Edge Function's
-  // `auth_id_PK` idempotent branch returns 200 for same-pair retry → bootstrap
-  // recovers).
-
-  func testRegisterPubkeyFails409_InitialRefreshTokenStillPersisted() async throws {
-    let store = SupabaseSessionStore(at: tempDir)
-    let userID = "00000000-0000-0000-0000-000000000eee"
-
-    MockURLProtocol.handler = { request, _ in
-      let path = request.url?.path ?? ""
-      switch path {
-      case "/auth/v1/signup":
-        return (
-          HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
-          """
-          { "access_token": "tok-init", "refresh_token": "rt-from-signup",
-            "user": { "id": "\(userID)" }, "expires_at": 9999999999 }
-          """.data(using: .utf8)!
-        )
-      case "/functions/v1/register_pubkey":
-        return (
-          HTTPURLResponse(url: request.url!, statusCode: 409, httpVersion: nil, headerFields: nil)!,
-          #"{ "error": "pubkey_already_registered" }"#.data(using: .utf8)!
-        )
-      default:
-        XCTFail("unexpected path \(path) — should not hit /auth/v1/token before register succeeds")
-        return (
-          HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!,
-          Data()
-        )
-      }
-    }
-
-    let client = SupabaseClient(
-      baseURL: baseURL, anonKey: anonKey,
-      urlSession: makeSession(),
-      identity: fixedIdentity(),
-      sessionStore: store
-    )
-
-    // Bootstrap throws as expected — register collision is a real failure.
-    do {
-      _ = try await client.ensureAuthenticated()
-      XCTFail("expected throw")
-    } catch let error as SupabaseError {
-      XCTAssertEqual(error, .pubkeyAlreadyRegistered)
-    }
-
-    // …but the initial refresh_token from signInAnonymously MUST be
-    // persisted before the register attempt, so the next cold launch
-    // can refresh into the same auth_id instead of getting a new one.
-    let persisted = try store.read()
-    XCTAssertEqual(
-      persisted?.refreshToken, "rt-from-signup",
-      "refresh_token must be persisted between signInAnonymously and registerPubkey"
-    )
-    XCTAssertEqual(persisted?.userID, userID)
-  }
-
-  // MARK: - sessionStore nil → no behavior change (legacy callers)
-
-  func testNoSessionStore_BackwardsCompatible() async throws {
-    let pubkey = String(repeating: "42", count: 32)
-    let userID = "00000000-0000-0000-0000-000000000ddd"
-    let jwt = makeJWT(pubkey: pubkey, userID: userID)
-
-    MockURLProtocol.handler = { request, _ in
-      let path = request.url?.path ?? ""
-      switch path {
-      case "/auth/v1/signup":
-        return (
-          HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
-          """
-          { "access_token": "tok", "refresh_token": "rt",
-            "user": { "id": "\(userID)" }, "expires_at": 9999999999 }
-          """.data(using: .utf8)!
-        )
-      case "/functions/v1/register_pubkey":
-        return (
-          HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
-          Data(#"{"ok":true}"#.utf8)
-        )
-      case "/auth/v1/token":
-        return (
-          HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
-          """
-          { "access_token": "\(jwt)", "refresh_token": "rt2",
-            "user": { "id": "\(userID)" }, "expires_at": 9999999999 }
-          """.data(using: .utf8)!
-        )
-      default:
-        return (
-          HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!,
-          Data()
-        )
-      }
-    }
-
-    let client = SupabaseClient(
-      baseURL: baseURL, anonKey: anonKey,
-      urlSession: makeSession(),
-      identity: fixedIdentity()
-        // no sessionStore
-    )
-    let session = try await client.ensureAuthenticated()
-    XCTAssertEqual(session.refreshToken, "rt2")
   }
 }
 

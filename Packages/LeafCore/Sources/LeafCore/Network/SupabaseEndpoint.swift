@@ -25,6 +25,70 @@ public enum SupabaseEndpoint {
     return components.url!
   }
 
+  /// POST /auth/v1/token?grant_type=password — native email+password login.
+  /// Body carries email/password; the native app sends NO captcha token — the
+  /// shared project runs with global CAPTCHA disabled (SupabaseClient
+  /// .signInWithPassword omits gotrue_meta_security when no token is supplied).
+  public static func signInWithPassword(baseURL: URL) -> URL {
+    var components = URLComponents(
+      url: baseURL.appendingPathComponent("auth/v1/token"),
+      resolvingAgainstBaseURL: false
+    )!
+    components.queryItems = [URLQueryItem(name: "grant_type", value: "password")]
+    return components.url!
+  }
+
+  /// POST /auth/v1/signup — email+password registration. The app does NOT
+  /// register (registration is web-only, spec §2.2); kept for completeness /
+  /// future use and to keep the auth-endpoint surface in one place.
+  public static func signUpWithPassword(baseURL: URL) -> URL {
+    baseURL.appendingPathComponent("auth/v1/signup")
+  }
+
+  /// POST /auth/v1/token?grant_type=pkce — exchange an OAuth authorization
+  /// code (caught on the loopback redirect http://127.0.0.1:47825/callback) for
+  /// a session, using the PKCE code_verifier. Used by SupabaseOAuthService's
+  /// Google/GitHub path.
+  public static func oauthToken(baseURL: URL) -> URL {
+    var components = URLComponents(
+      url: baseURL.appendingPathComponent("auth/v1/token"),
+      resolvingAgainstBaseURL: false
+    )!
+    components.queryItems = [URLQueryItem(name: "grant_type", value: "pkce")]
+    return components.url!
+  }
+
+  /// GET /auth/v1/authorize?provider=...&redirect_to=...&code_challenge=...
+  /// Builds the authorize URL opened in the user's DEFAULT browser to start a
+  /// Google/GitHub OAuth flow (loopback redirect — see SupabaseOAuthService).
+  /// Supabase redirects to `redirect_to` with `?code=...` on success.
+  /// `code_challenge_method` is lowercase `s256` per GoTrue's authorize
+  /// endpoint convention. NB: we do NOT send a caller `state` — GoTrue brokers
+  /// the OAuth flow and owns its own provider-leg state; a caller state breaks
+  /// it with `bad_oauth_state`. CSRF/injection protection is PKCE.
+  public static func oauthAuthorize(
+    baseURL: URL, provider: String, redirectTo: String, codeChallenge: String
+  ) -> URL {
+    var components = URLComponents(
+      url: baseURL.appendingPathComponent("auth/v1/authorize"),
+      resolvingAgainstBaseURL: false
+    )!
+    components.queryItems = [
+      URLQueryItem(name: "provider", value: provider),
+      URLQueryItem(name: "redirect_to", value: redirectTo),
+      URLQueryItem(name: "code_challenge", value: codeChallenge),
+      URLQueryItem(name: "code_challenge_method", value: "s256"),
+    ]
+    return components.url!
+  }
+
+  /// GET /auth/v1/user — the current user object (email, app_metadata.provider,
+  /// user_metadata, created_at). Same data the web dashboard reads from
+  /// session.user. Requires a Bearer access token (authenticatedHeaders).
+  public static func userInfo(baseURL: URL) -> URL {
+    baseURL.appendingPathComponent("auth/v1/user")
+  }
+
   // MARK: - Edge Functions
 
   public static func registerPubkey(baseURL: URL) -> URL {
@@ -59,6 +123,13 @@ public enum SupabaseEndpoint {
       URLQueryItem(name: "select", value: "*"),
     ]
     return components.url!
+  }
+
+  /// POST /rest/v1/rpc/delete_self_account — invoke the server-side
+  /// security-definer function that deletes the calling user's account + data.
+  /// Same RPC the web dashboard calls (`sb.rpc('delete_self_account')`).
+  public static func rpcDeleteSelfAccount(baseURL: URL) -> URL {
+    baseURL.appendingPathComponent("rest/v1/rpc/delete_self_account")
   }
 
   // MARK: - PostgREST tables — Track 5 / S4 (direct_messages + apns_tokens)

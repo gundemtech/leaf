@@ -76,11 +76,24 @@ final class SupabaseClientWorkspaceMutationsTests: XCTestCase {
     }
   }
 
+  /// Phase 1 (account-login) — anonymous bootstrap was removed, so
+  /// ensureAuthenticated() no longer self-establishes a session. These tests
+  /// drive endpoints that require auth, so seed a SupabaseSessionStore with a
+  /// persisted refresh-token: ensureAuthenticated() then takes the
+  /// persisted-refresh path (hits /auth/v1/token, served by wrapWithBootstrap)
+  /// and returns an authenticated session — the no-anonymous equivalent of the
+  /// old signup bootstrap.
   private func makeClient() -> SupabaseClient {
-    SupabaseClient(
+    let dir = FileManager.default.temporaryDirectory
+      .appendingPathComponent("leaf-wsmut-\(UUID().uuidString)", isDirectory: true)
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    let store = SupabaseSessionStore(at: dir)
+    try? store.write(PersistedSession(refreshToken: "seed-rt", userID: userID, savedAtMs: 1))
+    return SupabaseClient(
       baseURL: baseURL, anonKey: anonKey,
       urlSession: makeSession(),
-      identity: fixedIdentity()
+      identity: fixedIdentity(),
+      sessionStore: store
     )
   }
 

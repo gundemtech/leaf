@@ -45,13 +45,25 @@ final class WorkspaceRosterSyncServiceTests: XCTestCase {
     return "\(b64url(#"{"alg":"HS256","typ":"JWT"}"#)).\(b64url(#"{"pubkey":"\#(pubkey)"}"#)).sig"
   }
 
+  // Phase 1 (account-login) — anonymous bootstrap removed; seed a persisted
+  // refresh-token so ensureAuthenticated() takes the persisted-refresh path
+  // (served by wrapWithBootstrap's /auth/v1/token branch) instead of anon signup.
   private func makeSession() -> SupabaseClient {
-    SupabaseClient(
+    let dir = FileManager.default.temporaryDirectory
+      .appendingPathComponent("leaf-test-\(UUID().uuidString)", isDirectory: true)
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    let store = SupabaseSessionStore(at: dir)
+    try? store.write(
+      PersistedSession(
+        refreshToken: "seed-rt",
+        userID: "00000000-0000-0000-0000-000000000000", savedAtMs: 1))
+    return SupabaseClient(
       baseURL: URL(string: "https://test.supabase.co")!, anonKey: "k",
       urlSession: makeURLSession(),
       identity: {
         try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: Data(repeating: 0x01, count: 32))
-      })
+      },
+      sessionStore: store)
   }
 
   private func wrapWithBootstrap(

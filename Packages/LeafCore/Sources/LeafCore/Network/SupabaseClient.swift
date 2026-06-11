@@ -75,33 +75,97 @@ public actor SupabaseClient {
     return nil
   }
 
+  /// Phase 1 — full sign-out: drop in-memory auth state, cancel any pending
+  /// refresh, and delete the persisted refresh_token so the next cold start
+  /// (UI gate + agent) sees no session and shows LoginView / idles. Store
+  /// clear is best-effort: a clear failure must not strand the user in a
+  /// signed-in-looking state, so the in-memory drop always happens.
   public func signOut() {
     state = .notAuthenticated
+    lastRefreshAt = nil
+    inflightFreshSessionTask?.cancel()
+    inflightFreshSessionTask = nil
+    if let store = sessionStore {
+      try? store.clear()
+    }
   }
 
   // MARK: - Public — ensureAuthenticated
 
-  /// Idempotent. Returns cached session if still valid; otherwise performs
-  /// 3-step bootstrap: signInAnonymously → registerPubkey → token refresh.
-  /// Concurrent callers share the in-flight bootstrap via .bootstrapping(task).
+  /// Phase 1 — NO anonymous fallback. Resolution order:
+  ///   1. valid in-memory session (expiresAt > now) → return;
+  ///   2. else persisted refresh_token → tokenRefresh → install + return;
+  ///   3. else throw `.unauthorized` (gate shows LoginView; agent exit(0)).
+  /// Concurrent callers share the in-flight refresh via `.bootstrapping`.
   public func ensureAuthenticated() async throws -> SupabaseAuthSession {
     if case .authenticated(let s) = state, s.expiresAt > now() { return s }
     if case .bootstrapping(let task) = state { return try await task.value }
 
-    let task = Task { try await self.performBootstrap() }
+    let task = Task { try await self.resolvePersistedOrThrow() }
     state = .bootstrapping(task)
     do {
       let session = try await task.value
       state = .authenticated(session)
-      // Bootstrap finishes with a token-refresh round-trip; stamp here so
-      // ensureFreshSession's NTP-skew margin starts ticking from a known
-      // wall-clock anchor instead of the JWT's iat (which we don't read).
       lastRefreshAt = now()
       return session
     } catch {
       state = .notAuthenticated
       throw error
     }
+  }
+
+  /// Step 2/3 of ensureAuthenticated: try persisted refresh, else throw.
+  private func resolvePersistedOrThrow() async throws -> SupabaseAuthSession {
+    if let store = sessionStore, let persisted = readPersistedBestEffort(store: store) {
+      let refreshed = try await performTokenRefresh(refreshToken: persisted.refreshToken)
+      persistSessionBestEffort(store: store, session: refreshed)
+      return refreshed
+    }
+    throw SupabaseError.unauthorized
+  }
+
+  /// Post-login device registration sequence (spec §4). Requires that a
+  /// login (signInWithPassword / exchangeOAuthCode) has already installed an
+  /// authenticated session, OR a persisted refresh exists. Then:
+  ///   1. registerPubkey(accessToken)  — row in pubkey_registry;
+  ///   2. tokenRefresh                 — new JWT with the pubkey claim (JWT hook);
+  ///   3. require pubkey claim present, else throw `.identityClaimMissing`.
+  /// A 409 from registerPubkey (pubkey already in the registry — idempotent
+  /// re-login, or a partial-wipe collision where the priv-key file survived)
+  /// is treated as success and falls through to the refresh; if the key is
+  /// owned by a DIFFERENT account the refreshed JWT won't carry our claim and
+  /// we throw `.deviceKeyOwnedByAnotherAccount` (the UI offers a reset),
+  /// distinct from `.identityClaimMissing` (transient JWT-hook race).
+  /// NB: the 409 path relies on the backend `pubkey_registry` being UNIQUE on
+  /// `pubkey` and the JWT hook scoping the claim to the CALLING auth_id — both
+  /// live in the private register_pubkey edge function (see spec §4).
+  public func ensureAuthenticatedAndPubkeyRegistered() async throws -> SupabaseAuthSession {
+    let current = try await ensureAuthenticated()
+    if let claim = current.pubkeyClaim, !claim.isEmpty { return current }
+    var pubkeyAlreadyClaimed = false
+    do {
+      try await performRegisterPubkey(accessToken: current.accessToken)
+    } catch SupabaseError.pubkeyAlreadyRegistered {
+      // 409: the pubkey is already in the registry. If it's OUR row (same
+      // device re-login) the refresh below carries the claim → success. If it
+      // belongs to another account, the refresh won't → see the guard below.
+      pubkeyAlreadyClaimed = true
+    }
+    let refreshed = try await performTokenRefresh(refreshToken: current.refreshToken)
+    state = .authenticated(refreshed)
+    lastRefreshAt = now()
+    if let store = sessionStore {
+      persistSessionBestEffort(store: store, session: refreshed)
+    }
+    guard let claim = refreshed.pubkeyClaim, !claim.isEmpty else {
+      // No claim after refresh. A 409 means the device key is owned by a
+      // DIFFERENT account (actionable: reset device identity); no 409 means the
+      // JWT hook hasn't propagated yet (transient claim race).
+      throw pubkeyAlreadyClaimed
+        ? SupabaseError.deviceKeyOwnedByAnotherAccount
+        : SupabaseError.identityClaimMissing
+    }
+    return refreshed
   }
 
   // MARK: - ensureFreshSession (P1 hot-fix — JWT refresh for Realtime)
@@ -226,44 +290,6 @@ public actor SupabaseClient {
     public func lastRefreshAtForTesting() -> Date? { lastRefreshAt }
   #endif
 
-  private func performBootstrap() async throws -> SupabaseAuthSession {
-    // Track 5 / S4 — try persisted refresh_token first (closes S3 carry-over I3).
-    // If sessionStore present + has persisted session + refresh succeeds → reuse.
-    // Failure (no store / no persisted / 4xx on refresh) → fall through to fresh signup.
-    if let store = sessionStore, let persisted = readPersistedBestEffort(store: store) {
-      do {
-        let refreshed = try await performTokenRefresh(refreshToken: persisted.refreshToken)
-        persistSessionBestEffort(store: store, session: refreshed)
-        return refreshed
-      } catch {
-        // Persisted refresh failed; fall through to fresh signup below.
-        // (Don't clear yet — next successful auth will overwrite.)
-      }
-    }
-
-    let initial = try await performSignInAnonymously()
-    // Persist refresh_token from the initial signup BEFORE any further
-    // bootstrap step. If registerPubkey returns 409 (TOFU collision —
-    // most commonly: priv-file survived a partial local wipe while
-    // server-side `pubkey_registry` still holds the old auth_id), the
-    // next cold launch will refresh into THIS auth_id and either:
-    //  (a) hit register_pubkey's idempotent branch on retry (auth_id
-    //      PK already paired with the same pubkey → 200), or
-    //  (b) at minimum stay anchored to a single auth_id rather than
-    //      allocating a fresh one every cold launch that re-collides.
-    // Without this early persist, register failure leaves the user
-    // permanently stuck in a TOFU dead-end loop.
-    if let store = sessionStore {
-      persistSessionBestEffort(store: store, session: initial)
-    }
-    try await performRegisterPubkey(accessToken: initial.accessToken)
-    let refreshed = try await performTokenRefresh(refreshToken: initial.refreshToken)
-    if let store = sessionStore {
-      persistSessionBestEffort(store: store, session: refreshed)
-    }
-    return refreshed
-  }
-
   private func readPersistedBestEffort(store: SupabaseSessionStore) -> PersistedSession? {
     do {
       return try store.read()
@@ -280,22 +306,6 @@ public actor SupabaseClient {
       savedAtMs: Int64(now().timeIntervalSince1970 * 1000)
     )
     try? store.write(persisted)
-  }
-
-  // MARK: - Internal HTTP — signInAnonymously
-
-  /// Internal: signs in anonymously via Supabase Auth. Idempotent failure mode —
-  /// network error / 4xx / malformed body throw SupabaseError; state stays
-  /// .notAuthenticated for caller to retry.
-  private func performSignInAnonymously() async throws -> SupabaseAuthSession {
-    let url = SupabaseEndpoint.signupAnonymous(baseURL: baseURL)
-    var request = URLRequest(url: url)
-    request.httpMethod = "POST"
-    for (k, v) in SupabaseEndpoint.anonHeaders(anonKey: anonKey) {
-      request.setValue(v, forHTTPHeaderField: k)
-    }
-    request.httpBody = "{}".data(using: .utf8)
-    return try await decodeAuthResponse(request: request, label: "signupAnonymous")
   }
 
   private func decodeAuthResponse(request: URLRequest, label: String) async throws
@@ -370,14 +380,6 @@ public actor SupabaseClient {
     if http.statusCode == 200 { return }
     throw SupabaseError.fromRegisterPubkey(status: http.statusCode, body: data)
   }
-
-  // MARK: - Test-only DEBUG surface (Task 2 transient — Task 3 superseded by ensureAuthenticated)
-
-  #if DEBUG
-    public func performSignInAnonymouslyForTesting() async throws -> SupabaseAuthSession {
-      try await performSignInAnonymously()
-    }
-  #endif
 
   enum BootstrapState {
     case notAuthenticated
@@ -763,5 +765,125 @@ extension SupabaseAuthSession {
       return nil
     }
     return json["pubkey"] as? String
+  }
+}
+
+// MARK: - Native login — email/password + OAuth code exchange (Phase 1)
+
+extension SupabaseClient {
+  /// Native email+password login. POST /auth/v1/token?grant_type=password.
+  /// `captchaToken` is OPTIONAL: the shared project's global CAPTCHA protection
+  /// is OFF, so the native app does NOT send a captcha token (the macOS app
+  /// renders no Turnstile widget). When `captchaToken` is empty (the default),
+  /// the `gotrue_meta_security` key is omitted from the body entirely; when a
+  /// non-empty token IS supplied (e.g. a future captcha-on configuration), it
+  /// is carried in `gotrue_meta_security.captcha_token`. Updates the actor's
+  /// session state + lastRefreshAt and persists the refresh_token if a store is
+  /// wired, so a subsequent app cold-start reuses it (no second prompt).
+  /// Returns the session (pubkey claim NOT yet present — caller drives
+  /// registerPubkey via `ensureAuthenticatedAndPubkeyRegistered`).
+  public func signInWithPassword(
+    email: String, password: String, captchaToken: String = ""
+  ) async throws -> SupabaseAuthSession {
+    let url = SupabaseEndpoint.signInWithPassword(baseURL: baseURL)
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    for (k, v) in SupabaseEndpoint.anonHeaders(anonKey: anonKey) {
+      request.setValue(v, forHTTPHeaderField: k)
+    }
+    var body: [String: Any] = [
+      "email": email,
+      "password": password,
+    ]
+    if !captchaToken.isEmpty {
+      body["gotrue_meta_security"] = ["captcha_token": captchaToken]
+    }
+    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+    let session = try await decodeAuthResponse(request: request, label: "signInWithPassword")
+    installAuthenticatedSession(session)
+    return session
+  }
+
+  /// Exchange an OAuth authorization code (caught on the loopback redirect
+  /// http://127.0.0.1:47825/callback, opened in the user's default browser) for
+  /// a session. POST /auth/v1/token?grant_type=pkce with `auth_code` +
+  /// `code_verifier`. OAuth (Google/GitHub) sends no captcha token. Updates
+  /// state + persists like signInWithPassword.
+  public func exchangeOAuthCode(
+    code: String, codeVerifier: String, redirectURI: String
+  ) async throws -> SupabaseAuthSession {
+    let url = SupabaseEndpoint.oauthToken(baseURL: baseURL)
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    for (k, v) in SupabaseEndpoint.anonHeaders(anonKey: anonKey) {
+      request.setValue(v, forHTTPHeaderField: k)
+    }
+    let body: [String: Any] = [
+      "auth_code": code,
+      "code_verifier": codeVerifier,
+      "redirect_uri": redirectURI,
+    ]
+    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+    let session = try await decodeAuthResponse(request: request, label: "exchangeOAuthCode")
+    installAuthenticatedSession(session)
+    return session
+  }
+
+  /// GET /auth/v1/user — fetch the account identity (email / provider /
+  /// full_name / created_at) for the Profile surface. Ensures an authenticated,
+  /// reasonably-fresh session before calling; works from both a cold start
+  /// (persisted refresh token) and an already-live in-memory session.
+  public func fetchUserProfile() async throws -> SupabaseUserProfile {
+    let session = try await ensureAuthenticated()
+    let url = SupabaseEndpoint.userInfo(baseURL: baseURL)
+    var request = URLRequest(url: url)
+    request.httpMethod = "GET"
+    for (k, v) in SupabaseEndpoint.authenticatedHeaders(
+      anonKey: anonKey, accessToken: session.accessToken)
+    {
+      request.setValue(v, forHTTPHeaderField: k)
+    }
+    let (data, http) = try await performHTTP(
+      request, retryable: false, refreshable: true, label: "fetchUserProfile")
+    guard http.statusCode == 200 else {
+      throw SupabaseError.fromStatus(http.statusCode, body: data)
+    }
+    do {
+      return try JSONDecoder().decode(SupabaseUserProfile.self, from: data)
+    } catch {
+      throw SupabaseError.decoding(reason: "fetchUserProfile: \(error)")
+    }
+  }
+
+  /// POST /rest/v1/rpc/delete_self_account — invoke the server-side
+  /// security-definer delete function (same RPC the web dashboard calls).
+  /// Caller runs the local teardown after this resolves (AccountDeletionService).
+  public func deleteSelfAccount() async throws {
+    let session = try await ensureAuthenticated()
+    let url = SupabaseEndpoint.rpcDeleteSelfAccount(baseURL: baseURL)
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    for (k, v) in SupabaseEndpoint.authenticatedHeaders(
+      anonKey: anonKey, accessToken: session.accessToken)
+    {
+      request.setValue(v, forHTTPHeaderField: k)
+    }
+    request.httpBody = Data("{}".utf8)
+    let (data, http) = try await performHTTP(
+      request, retryable: false, refreshable: true, label: "deleteSelfAccount")
+    guard (200...299).contains(http.statusCode) else {
+      throw SupabaseError.fromStatus(http.statusCode, body: data)
+    }
+  }
+
+  /// Shared post-login bookkeeping: set `.authenticated`, stamp lastRefreshAt,
+  /// best-effort persist. Private to this extension; mirrors the bootstrap's
+  /// tail in `ensureAuthenticated`.
+  private func installAuthenticatedSession(_ session: SupabaseAuthSession) {
+    state = .authenticated(session)
+    lastRefreshAt = now()
+    if let store = sessionStore {
+      persistSessionBestEffort(store: store, session: session)
+    }
   }
 }

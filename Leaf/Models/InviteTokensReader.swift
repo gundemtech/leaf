@@ -319,6 +319,8 @@ final class InviteTokensReader {
       case .rateLimited: return "Rate limited. Wait and try again."
       case .serverError: return "Server error (5xx)."
       case .pubkeyAlreadyRegistered: return "Pubkey already registered to another auth_id."
+      case .deviceKeyOwnedByAnotherAccount:
+        return "This device is registered to another account."
       case .inviteNotResolvable: return "Invite no longer valid."
       case .gone(let code): return "Invite no longer available (\(code))."
       }

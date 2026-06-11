@@ -125,7 +125,7 @@ public struct DirectMessageService: Sendable {
         )
 
         // 4. Encrypt — keyID is 16-byte raw UUID
-        let keyIDData = Data(uuidStringToRawBytes(activeKey.id))
+        let keyIDData = Data(try uuidStringToRawBytes(activeKey.id))
         let envelope = try codec.encode(plaintext, keyID: keyIDData, teamKey: teamKeyBytes)
 
         // 5. POST to Supabase
@@ -414,9 +414,9 @@ public struct DirectMessageService: Sendable {
         }
     }
 
-    private func uuidStringToRawBytes(_ s: String) -> [UInt8] {
+    private func uuidStringToRawBytes(_ s: String) throws -> [UInt8] {
         guard let uuid = UUID(uuidString: s) else {
-            return Array(repeating: 0, count: 16)
+            throw LeafError.invalidPayload
         }
         return withUnsafeBytes(of: uuid.uuid) { Array($0) }
     }

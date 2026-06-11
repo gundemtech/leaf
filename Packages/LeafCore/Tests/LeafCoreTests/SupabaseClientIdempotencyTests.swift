@@ -321,8 +321,11 @@ final class SupabaseClientIdempotencyTests: XCTestCase {
 
     MockURLProtocol.handler = { [jwt2] request, body in
       let path = request.url?.path ?? ""
+      let query = request.url?.query ?? ""
       switch path {
-      case "/auth/v1/signup":
+      case "/auth/v1/token" where query.contains("grant_type=password"):
+        // Phase 1 — native login installs the initial authenticated session
+        // (replaces the removed anonymous-signup bootstrap).
         let jwt1 = self.makeJWT(pubkey: pubkey)
         let r = HTTPURLResponse(
           url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
@@ -334,13 +337,8 @@ final class SupabaseClientIdempotencyTests: XCTestCase {
            "expires_at":9999999999}
           """.data(using: .utf8)!
         )
-      case "/functions/v1/register_pubkey":
-        return (
-          HTTPURLResponse(
-            url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
-          #"{"ok":true}"#.data(using: .utf8)!
-        )
       case "/auth/v1/token":
+        // grant_type=refresh_token — the 401-recovery refresh.
         tokenCounter.increment()
         let jwt = tokenCounter.value == 1 ? self.makeJWT(pubkey: pubkey) : jwt2
         let r = HTTPURLResponse(
@@ -366,8 +364,8 @@ final class SupabaseClientIdempotencyTests: XCTestCase {
       }
     }
 
-    // Bootstrap auth.
-    _ = try await client.ensureAuthenticated()
+    // Phase 1 — establish an authenticated session via native login.
+    _ = try await client.signInWithPassword(email: "a@b.co", password: "pw", captchaToken: "c")
 
     // Now make a refreshable + idempotent call that triggers a 401.
     _ = try await client._performHTTPForTesting(
@@ -416,35 +414,9 @@ final class SupabaseClientIdempotencyTests: XCTestCase {
       "retryable:true idempotent:false must carry NO Idempotency-Key")
   }
 
-  // MARK: - #13 signInAnonymously (Auth POST) carries NO key
-
-  func test_13_signInAnonymously_noKey() async throws {
-    let client = makeClient()
-    let captured = IdempotencyKeyCapture()
-    MockURLProtocol.handler = { request, _ in
-      captured.append(request.value(forHTTPHeaderField: "Idempotency-Key"))
-      let path = request.url?.path ?? ""
-      if path == "/auth/v1/signup" {
-        return (
-          HTTPURLResponse(
-            url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
-          """
-          {"access_token":"tok","refresh_token":"ref",
-           "user":{"id":"00000000-0000-0000-0000-000000000222"},
-           "expires_at":9999999999}
-          """.data(using: .utf8)!
-        )
-      }
-      return self.resp(500, request)
-    }
-    // Use existing DEBUG surface from SupabaseClient.swift (returns session).
-    _ = try await client.performSignInAnonymouslyForTesting()
-    // Signup path captures headers; none should have Idempotency-Key.
-    let signupKeys = captured.keys
-    XCTAssertFalse(
-      signupKeys.contains(where: { $0 != nil }),
-      "signInAnonymously must NOT inject Idempotency-Key")
-  }
+  // MARK: - #13 removed — anonymous signup path deleted in Phase 1 (account-login).
+  // The "Auth POST carries NO Idempotency-Key" contract stays covered by
+  // #14 (performTokenRefresh) below.
 
   // MARK: - #14 performTokenRefresh (Auth POST) carries NO key
 
@@ -456,10 +428,12 @@ final class SupabaseClientIdempotencyTests: XCTestCase {
 
     MockURLProtocol.handler = { request, _ in
       let path = request.url?.path ?? ""
+      let query = request.url?.query ?? ""
       paths.append(path)
       captured.append(request.value(forHTTPHeaderField: "Idempotency-Key"))
       switch path {
-      case "/auth/v1/signup":
+      case "/auth/v1/token" where query.contains("grant_type=password"):
+        // Phase 1 — native login (replaces removed anonymous signup).
         return (
           HTTPURLResponse(
             url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
@@ -476,6 +450,7 @@ final class SupabaseClientIdempotencyTests: XCTestCase {
           #"{"ok":true}"#.data(using: .utf8)!
         )
       case "/auth/v1/token":
+        // grant_type=refresh_token — post-register refresh.
         let jwt = self.makeJWT(pubkey: pubkey)
         return (
           HTTPURLResponse(
@@ -491,11 +466,13 @@ final class SupabaseClientIdempotencyTests: XCTestCase {
       }
     }
 
-    // Bootstrap drives signup + register_pubkey + token refresh.
-    _ = try await client.ensureAuthenticated()
+    // Phase 1 — native login + post-login pubkey registration drives the auth
+    // POSTs (password login + register_pubkey + token refresh).
+    _ = try await client.signInWithPassword(email: "a@b.co", password: "pw", captchaToken: "c")
+    _ = try await client.ensureAuthenticatedAndPubkeyRegistered()
 
     // Verify that none of the auth endpoints received an Idempotency-Key.
-    let authPaths = ["/auth/v1/signup", "/functions/v1/register_pubkey", "/auth/v1/token"]
+    let authPaths = ["/auth/v1/token", "/functions/v1/register_pubkey"]
     let allPaths = paths.all
     let allKeys = captured.keys
 
