@@ -34,6 +34,23 @@ enum AIWiring {
     #endif
   }
 
+  /// AI-UI-4 — per-call BYOK-valve router for all in-app AI surfaces: key
+  /// present → BYOK Anthropic; otherwise the team pool via the relay proxy
+  /// (`prodAIProxySummarizerMoat`, bearer = the app's Supabase session). The
+  /// session-backed token provider is constructed once by LeafApp (it owns
+  /// the SupabaseClient) and threaded here.
+  static func backendRouter(tokenProvider: any AIInferenceAuthTokenProvider) -> AIBackendRouter {
+    #if LEAF_PROD
+      return AIBackendRouter(
+        keyStore: FileAnthropicKeyStore(),
+        byok: prodAISummarizerMoat(keyStore: FileAnthropicKeyStore()),
+        included: prodAIProxySummarizerMoat(tokenProvider: tokenProvider))
+    #else
+      return AIBackendRouter(
+        keyStore: FileAnthropicKeyStore(), byok: .publicSubstrate, included: .publicSubstrate)
+    #endif
+  }
+
   static func modelGateMoat() -> ModelGateMoat {
     #if LEAF_PROD
       return prodModelGateMoat()

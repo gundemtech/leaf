@@ -15,9 +15,14 @@ struct InboundHandoffContextSheet: View {
 
   @Environment(WindowState.self) private var windowState
   @Environment(\.dismiss) private var dismiss
-  @State private var reader = InboundHandoffContextReader()
+  @State private var reader: InboundHandoffContextReader
 
-  /// Exact-match CTA for the missing-key failure (pattern: AskLeafView).
+  /// AI-UI-4 — reader seeded with the composition-root router (env values
+  /// aren't readable inside a @State initializer; the parent passes it).
+  init(row: DirectMessageMirrorRow, router: AIBackendRouter) {
+    self.row = row
+    _reader = State(initialValue: InboundHandoffContextReader(router: router))
+  }
 
   var body: some View {
     LeafSheetLayout(title: "Context for me", onDismiss: { dismiss() }) {
