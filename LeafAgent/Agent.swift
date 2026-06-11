@@ -881,6 +881,21 @@ enum AgentMain {
     Task { await rotationFetchScheduler.start() }
     Task { await detectorScheduler.start() }
     Task { await gitLogCollector.start() }
+    // Track A2/A3 — one-shot resumable repair sweep: FTS + links over
+    // historical events, then detector replay over already-scanned history.
+    // Finished sweeps are cursor-read no-ops, so firing on every launch is
+    // cheap. Background priority + batched writes keep the live writer
+    // responsive (precedent: KeyRotationService.resumePendingPosts).
+    let memoryBackfillJob = MemoryBackfillJob(
+      database: database,
+      linearPrefixes: { linearPrefixSource.prefixes() },
+      derivers: linkDerivers,
+      detectorMoat: detectorMoat
+    )
+    AgentLifetime.memoryBackfillJob = memoryBackfillJob
+    Task.detached(priority: .background) {
+      await memoryBackfillJob.runToCompletion()
+    }
 
     // fix/dev-launch-reliability — heartbeat writer for the cross-process
     // status pipe. Atomic write every 30s with PID + ax_trusted + CDHash +
@@ -1043,6 +1058,8 @@ enum AgentLifetime {
   nonisolated(unsafe) static var detectorScheduler: DetectorScheduler?
   // Track A1 — local git log polling collector (watched-folder repos).
   nonisolated(unsafe) static var gitLogCollector: GitLogCollector?
+  // Track A2/A3 — one-shot memory repair sweep (FTS/links + detector replay).
+  nonisolated(unsafe) static var memoryBackfillJob: MemoryBackfillJob?
   // Phase Track-3 D1 — Linear warm/cold collectors + their schedulers.
   nonisolated(unsafe) static var linearWarmCollector: LinearWarmCollector?
   nonisolated(unsafe) static var linearWarmScheduler: LinearWarmScheduler?

@@ -142,12 +142,61 @@ public enum DetectorPipeline {
                                         linearPrefixes: Set<String>,
                                         in db: GRDB.Database) throws {
         let cursor = try DetectorOffsetsStore.cursor(detectorKind: kind, in: db)
-        let rows = try Row.fetchAll(db, sql: """
-            SELECT id, ts, signal_type, payload_json
-              FROM events WHERE id > ? ORDER BY id ASC
-            """, arguments: [cursor])
+        let lastID = try scanRange(kind: kind, moat: moat, nowMs: nowMs,
+                                   linearPrefixes: linearPrefixes,
+                                   afterID: cursor, throughID: nil, in: db)
+        try DetectorOffsetsStore.advance(detectorKind: kind,
+                                         toEventID: lastID,
+                                         nowMs: nowMs,
+                                         in: db)
+    }
 
-        var lastID: Int64 = cursor
+    /// Track A3 — bounded replay over an id range WITHOUT touching the live
+    /// `detector_offsets` cursor. Used by `MemoryBackfillJob` to re-scan
+    /// history after detector trigger catalogues / dispatch tables grow.
+    /// Never rewind the live cursor instead: that races the periodic
+    /// incremental pass and (for blockers) can resurrect resolved rows.
+    /// Idempotency comes from UNIQUE(event_id) + INSERT OR IGNORE in the
+    /// detector stores. Returns the last processed event id.
+    ///
+    /// NB broadcast hygiene: detector hits live ONLY in detector tables —
+    /// nothing here emits `events` rows, so replayed history can never reach
+    /// the team-events broadcast cursor.
+    @discardableResult
+    public static func runRange(kind: String,
+                                moat: DetectorMoat,
+                                nowMs: Int64,
+                                linearPrefixes: Set<String> = [],
+                                fromID: Int64,
+                                toID: Int64,
+                                in db: GRDB.Database) throws -> Int64 {
+        try scanRange(kind: kind, moat: moat, nowMs: nowMs,
+                      linearPrefixes: linearPrefixes,
+                      afterID: fromID, throughID: toID, in: db)
+    }
+
+    /// Shared scan loop. `throughID == nil` → unbounded (live incremental pass).
+    private static func scanRange(kind: String,
+                                  moat: DetectorMoat,
+                                  nowMs: Int64,
+                                  linearPrefixes: Set<String>,
+                                  afterID: Int64,
+                                  throughID: Int64?,
+                                  in db: GRDB.Database) throws -> Int64 {
+        let rows: [Row]
+        if let throughID {
+            rows = try Row.fetchAll(db, sql: """
+                SELECT id, ts, signal_type, payload_json
+                  FROM events WHERE id > ? AND id <= ? ORDER BY id ASC
+                """, arguments: [afterID, throughID])
+        } else {
+            rows = try Row.fetchAll(db, sql: """
+                SELECT id, ts, signal_type, payload_json
+                  FROM events WHERE id > ? ORDER BY id ASC
+                """, arguments: [afterID])
+        }
+
+        var lastID: Int64 = afterID
         for row in rows {
             let eventID: Int64 = row["id"]
             let tsMs: Int64 = row["ts"]
@@ -169,11 +218,7 @@ public enum DetectorPipeline {
             }
             lastID = eventID
         }
-
-        try DetectorOffsetsStore.advance(detectorKind: kind,
-                                         toEventID: lastID,
-                                         nowMs: nowMs,
-                                         in: db)
+        return lastID
     }
 
     // MARK: - Body dispatch
