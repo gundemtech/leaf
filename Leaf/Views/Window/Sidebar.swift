@@ -87,7 +87,9 @@ struct Sidebar: View {
   @State private var switcherSectionHeight: CGFloat = 0
 
   private var leafGroupItems: [WindowSection] {
-    showAnalyticsSection ? [.home, .activity, .analytics, .askLeaf] : [.home, .activity, .askLeaf]
+    showAnalyticsSection
+      ? [.home, .activity, .analytics, .search, .askLeaf]
+      : [.home, .activity, .search, .askLeaf]
   }
 
   var body: some View {
