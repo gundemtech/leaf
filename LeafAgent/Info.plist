@@ -22,6 +22,16 @@
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>LSUIElement</key>
 	<true/>
+	<!-- Auth-gate config (account-login phase 1). The agent is a CLI binary
+	     with an EMBEDDED __info_plist section — Bundle.main resolves to the
+	     section, NOT to the surrounding Leaf.app's Contents/Info.plist, so the
+	     Supabase config must live here too (same build-setting values as the
+	     app's plist). Without these the agent crash-loops on SupabaseConfig
+	     preconditionFailure before the auth gate can even log. -->
+	<key>LeafSupabaseURL</key>
+	<string>$(LEAF_SUPABASE_URL)</string>
+	<key>LeafSupabaseAnonKey</key>
+	<string>$(LEAF_SUPABASE_ANON_KEY)</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Leaf reads only whether you're currently in a meeting — never event titles, attendees, or location.</string>
 	<key>NSFocusStatusUsageDescription</key>
