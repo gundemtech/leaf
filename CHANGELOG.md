@@ -13,6 +13,54 @@ the release history and summarised at a feature level.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.36] — 2026-06-12
+
+### Added
+
+- Local commit capture. Leaf now reads your own commit messages straight from
+  the repositories inside your watched folders — authorship is verified, so
+  teammates' commits are never captured — with a one-time history backfill.
+  Commit messages are the densest record of decisions; search and decision
+  recall finally have a real corpus to work with.
+- Handoff context card. Handing work to a teammate now attaches a structured
+  card — last commit, open review, ticket status, last thread — rendered on
+  top of the message for the recipient. You preview exactly what's shared
+  before sending (references and titles only, never message bodies), and the
+  card is attached only with your consent. Teammates on older builds simply
+  see the text.
+- Team brief. The "what shipped" counters now include teammates' shared PR
+  merges and completed tickets alongside your own (no double counting), a
+  contributor count, a "resolved by Tuesday"-style line from real resolution
+  dates, and a "read full brief" view listing everything behind the numbers.
+- Search result cards. Results render as cards with a MATCH badge on the top
+  hit, a result counter, and labeled rows (author / channel / commit / ticket
+  / PR) built from the cross-source link graph. When a search finds nothing
+  because coverage is thin, the empty state says so and names the fix.
+- Nudges in the menu bar. A compact "you · last 24h" panel in the menu-bar
+  popover, plus a global ⌥⌘L shortcut that brings Leaf forward.
+- New `leaf_search` AI tool — one call returning the same ranked results the
+  Search tab shows; `leaf_get_decision` can now return the top N decisions
+  with channel / commit context for broad onboarding questions.
+
+### Fixed
+
+- The memory layer actually fills. Cross-source link derivation was inert in
+  production builds, the full-text index never covered events captured before
+  it existed, and detectors never revisited history — all three repaired with
+  a one-time background sweep. Searching months of work now returns real
+  results instead of a single match.
+- "Current work" no longer names a messenger or music app as the thing you
+  are working on — it looks for your last development app and honestly shows
+  nothing if there wasn't one. The current branch and last commit now always
+  describe the same repository.
+- Search queries containing hyphens or quotes no longer fail (both in-app
+  and through the AI tools).
+- The background agent could crash-loop on launch after the account-login
+  update (its own metadata was missing the service configuration). Caught
+  and fixed before it ever reached a release.
+- Activity and search are no longer drowned by internal telemetry pulses —
+  feeds show work output, not bookkeeping.
+
 ## [1.0.0-alpha.35] — 2026-06-11
 
 ### Added
@@ -266,6 +314,7 @@ deeper activity capture.
 [1.0.0-alpha.31]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.30...v1.0.0-alpha.31
 [1.0.0-alpha.30]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.29...v1.0.0-alpha.30
 [1.0.0-alpha.29]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.28...v1.0.0-alpha.29
+[1.0.0-alpha.36]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.35...v1.0.0-alpha.36
 [1.0.0-alpha.28]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.27...v1.0.0-alpha.28
 [1.0.0-alpha.27]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.26...v1.0.0-alpha.27
 [1.0.0-alpha.26]: https://github.com/gundemtech/leaf/compare/v1.0.0-alpha.25...v1.0.0-alpha.26
