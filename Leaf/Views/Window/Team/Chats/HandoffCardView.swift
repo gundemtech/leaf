@@ -47,7 +47,7 @@ struct HandoffCardView: View {
     }
     .padding(LeafSpace.md)
     .background(
-      RoundedRectangle(cornerRadius: 8, style: .continuous)
+      RoundedRectangle(cornerRadius: LeafRadius.sm, style: .continuous)
         .fill(LeafColor.surface.inset.opacity(0.6))
     )
     .accessibilityElement(children: .combine)
