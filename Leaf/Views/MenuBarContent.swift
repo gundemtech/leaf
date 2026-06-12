@@ -112,6 +112,12 @@ struct MenuBarContent: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         case .loaded(let snapshot, _):
             VStack(alignment: .leading, spacing: LeafSpace.md) {
+                // Track B4 — "am I quietly stuck" panel (landing mockup:
+                // menu bar · you). Hidden entirely when there is nothing to
+                // nudge about.
+                if let nudgesModel = MenuBarNudgesPresentation.compose(nudges: snapshot.nudges) {
+                    menuBarNudges(nudgesModel)
+                }
                 topAppsList(snapshot.topApps)
                 let lines = providerSummaryLines(snapshot)
                 if !lines.isEmpty {
@@ -126,6 +132,47 @@ struct MenuBarContent: View {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    private func menuBarNudges(_ model: MenuBarNudgesPresentation.Model) -> some View {
+        LeafCard(variant: .rest, padding: .tight) {
+            VStack(alignment: .leading, spacing: LeafSpace.sm) {
+                LeafTerminalCardHeader(dotTone: .success, title: model.headerLabel) {
+                    LeafStatusBadge(text: model.countLabel, tone: .warning)
+                }
+                ForEach(model.rows) { nudge in
+                    Button {
+                        if let url = nudge.sourceURL { NSWorkspace.shared.open(url) }
+                    } label: {
+                        HStack(alignment: .firstTextBaseline, spacing: LeafSpace.sm) {
+                            Text("!")
+                                .font(LeafType.mono.small.bold())
+                                .foregroundStyle(LeafColor.status.warning)
+                                .accessibilityHidden(true)
+                            Text(nudge.title)
+                                .font(LeafType.body.small)
+                                .foregroundStyle(LeafColor.text.primary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                            if let detail = nudge.detail {
+                                Text(detail)
+                                    .font(LeafType.mono.small)
+                                    .foregroundStyle(LeafColor.text.quaternary)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                Text(model.footer)
+                    .font(LeafType.mono.small)
+                    .foregroundStyle(LeafColor.text.quaternary)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
     }
