@@ -79,11 +79,12 @@ struct SearchView: View {
       }
       .frame(maxWidth: .infinity, alignment: .center)
       .padding(.top, LeafSpace.xl)
-    case .empty:
+    case .empty(let coverageHint):
       LeafEmptyState(
         icon: LeafIcons.nav.searchSF,
         title: "No matches in the last 90 days.",
-        description: "Try different keywords — search covers text Leaf captured locally."
+        description: coverageHint
+          ?? "Try different keywords — search covers text Leaf captured locally."
       )
     case .error(let message):
       LeafEmptyState(

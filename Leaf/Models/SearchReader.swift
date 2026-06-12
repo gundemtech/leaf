@@ -21,7 +21,9 @@ final class SearchReader {
     case idle
     case searching
     case results(SearchResultsPresentation)
-    case empty
+    /// Track A5 — honest empty state: when coverage gaps explain the silence,
+    /// the hint names the fix ("Connect Slack", "Add a repo folder").
+    case empty(coverageHint: String?)
     case error(String)
   }
 
@@ -79,7 +81,11 @@ final class SearchReader {
 
     switch result {
     case .success(let presentation):
-      state = presentation.rows.isEmpty ? .empty : .results(presentation)
+      if presentation.rows.isEmpty {
+        state = .empty(coverageHint: await Self.coverageHint(dbURL: url))
+      } else {
+        state = .results(presentation)
+      }
     case .failure:
       state = .error("Couldn't search your memory. Try again.")
     }
@@ -88,6 +94,34 @@ final class SearchReader {
   func reset() {
     generation += 1
     state = .idle
+  }
+
+  /// Track A5 — names the capture gap behind an empty result list. nil when
+  /// coverage looks healthy (a genuine no-match).
+  nonisolated private static func coverageHint(dbURL: URL) async -> String? {
+    await Task.detached(priority: .utility) { () -> String? in
+      guard let db = try? LeafCore.Database.openForRead(
+        at: dbURL, config: Self.dbConfig(), encryption: Self.dbEncryption()),
+        let report = try? db.readSQL({ rawDB in
+          try MemoryCoverageReporter.report(
+            lastDays: 30, nowMs: Int64(Date().timeIntervalSince1970 * 1000), in: rawDB)
+        })
+      else { return nil }
+
+      var fixes: [String] = []
+      for source in report.sources where source.suggestedAction != nil {
+        switch source.suggestedAction {
+        case .connectProvider(let provider):
+          fixes.append("connect \(provider.capitalized)")
+        case .addWatchedRepoFolder:
+          fixes.append("add a repo folder in Settings (commit messages live there)")
+        case nil:
+          break
+        }
+      }
+      guard !fixes.isEmpty else { return nil }
+      return "Coverage is thin — \(fixes.joined(separator: ", ")) to widen what Leaf remembers."
+    }.value
   }
 
   // MARK: - Build-flavor wiring (mirrors InsightsReader / MCP tools)
