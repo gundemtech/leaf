@@ -63,20 +63,94 @@ public struct QueryActivityResponse: Codable, Sendable {
 /// `leaf_get_decision` response. `decision == nil` when no FTS match.
 public struct GetDecisionResponse: Codable, Sendable {
     public let schemaVersion: String
+    /// Back-compat: always `decisions.first`.
     public let decision: DecisionDetail?
+    /// Track B2 — top-N decisions (confidence desc, then recency) when the
+    /// caller passes `limit > 1` (new-hire "how does X work" batch answers).
+    public let decisions: [DecisionDetail]
     public let relatedEvents: [ActivityEvent]
     public let truncationNote: TruncationNote?
 
+    public init(
+        schemaVersion: String = QueryEngineSchema.currentVersion,
+        decisions: [DecisionDetail],
+        relatedEvents: [ActivityEvent],
+        truncationNote: TruncationNote?
+    ) {
+        self.schemaVersion = schemaVersion
+        self.decision = decisions.first
+        self.decisions = decisions
+        self.relatedEvents = relatedEvents
+        self.truncationNote = truncationNote
+    }
+
+    /// Back-compat single-decision shape (existing call sites + tests).
     public init(
         schemaVersion: String = QueryEngineSchema.currentVersion,
         decision: DecisionDetail?,
         relatedEvents: [ActivityEvent],
         truncationNote: TruncationNote?
     ) {
+        self.init(
+            schemaVersion: schemaVersion,
+            decisions: decision.map { [$0] } ?? [],
+            relatedEvents: relatedEvents,
+            truncationNote: truncationNote
+        )
+    }
+}
+
+/// Track B2 — context line of the decision card: "Picked Apr 12 in #arch ·
+/// 47 msgs · commit a3f2". Every field nil-degrades; enrichment failures
+/// never block the tool response.
+public struct DecisionContext: Codable, Sendable, Equatable {
+    public let channelName: String?
+    public let threadMessageCount: Int?
+    public let contributorCount: Int?
+    public let commitShaShort: String?
+    /// Originating event ts ("Picked Apr 12") — decision detection may run
+    /// much later than the conversation it describes.
+    public let decidedAtMs: Int64?
+
+    public init(
+        channelName: String?,
+        threadMessageCount: Int?,
+        contributorCount: Int?,
+        commitShaShort: String?,
+        decidedAtMs: Int64?
+    ) {
+        self.channelName = channelName
+        self.threadMessageCount = threadMessageCount
+        self.contributorCount = contributorCount
+        self.commitShaShort = commitShaShort
+        self.decidedAtMs = decidedAtMs
+    }
+}
+
+/// Track B2 — `leaf_search` response: composed result rows (the same shape
+/// the in-app Search tab renders).
+public struct SearchResponse: Codable, Sendable {
+    public let schemaVersion: String
+    public let query: String
+    public let totalCount: Int
+    public let countLabel: String
+    public let topMatchID: String?
+    public let results: [SearchResultRow]
+
+    public init(
+        schemaVersion: String = QueryEngineSchema.currentVersion,
+        query: String,
+        totalCount: Int,
+        countLabel: String,
+        topMatchID: String?,
+        results: [SearchResultRow]
+    ) {
         self.schemaVersion = schemaVersion
-        self.decision = decision
-        self.relatedEvents = relatedEvents
-        self.truncationNote = truncationNote
+        self.query = query
+        self.totalCount = totalCount
+        self.countLabel = countLabel
+        self.topMatchID = topMatchID
+        self.results = results
     }
 }
 
@@ -90,6 +164,10 @@ public struct CurrentWorkResponse: Codable, Sendable {
     public let currentFile: String?
     public let inProgressLinearTicket: LinearTicketRef?
     public let lastCommit: CommitRef?
+    /// Additive (Track B0) — newest still-open own PR.
+    public let openPR: OpenPRRef?
+    /// Additive (Track B0) — latest Slack thread/channel activity.
+    public let lastThread: ThreadRef?
     public let currentOpenQuestions: [OpenQuestionView]
     public let currentBlockers: [BlockerView]
     public let whereStopped: WhereStoppedOutput?
@@ -101,6 +179,8 @@ public struct CurrentWorkResponse: Codable, Sendable {
         currentFile: String?,
         inProgressLinearTicket: LinearTicketRef?,
         lastCommit: CommitRef?,
+        openPR: OpenPRRef? = nil,
+        lastThread: ThreadRef? = nil,
         currentOpenQuestions: [OpenQuestionView],
         currentBlockers: [BlockerView],
         whereStopped: WhereStoppedOutput?
@@ -111,6 +191,8 @@ public struct CurrentWorkResponse: Codable, Sendable {
         self.currentFile = currentFile
         self.inProgressLinearTicket = inProgressLinearTicket
         self.lastCommit = lastCommit
+        self.openPR = openPR
+        self.lastThread = lastThread
         self.currentOpenQuestions = currentOpenQuestions
         self.currentBlockers = currentBlockers
         self.whereStopped = whereStopped
@@ -136,6 +218,9 @@ public struct ActivityEvent: Codable, Sendable, Equatable {
     /// `title` key. Lets consumers render "GUN-12 · Fix relay reconnect"
     /// instead of dumping the body as a headline.
     public let targetTitle: String?
+    /// Additive (Track B1) — Slack channel name when the allowlisted payload
+    /// carries one. Drives the CHANNEL detail row of Search result cards.
+    public let channelName: String?
 
     public init(
         eventID: Int64,
@@ -146,7 +231,8 @@ public struct ActivityEvent: Codable, Sendable, Equatable {
         bodyExcerpt: String?,
         bodyTruncated: Bool,
         targetRef: String? = nil,
-        targetTitle: String? = nil
+        targetTitle: String? = nil,
+        channelName: String? = nil
     ) {
         self.eventID = eventID
         self.tsMs = tsMs
@@ -157,6 +243,7 @@ public struct ActivityEvent: Codable, Sendable, Equatable {
         self.bodyTruncated = bodyTruncated
         self.targetRef = targetRef
         self.targetTitle = targetTitle
+        self.channelName = channelName
     }
 }
 
@@ -192,15 +279,19 @@ public struct DecisionDetail: Codable, Sendable {
     public let decision: DecisionView
     public let originatingEvent: ActivityEvent
     public let linksToImplementation: [LinkView]
+    /// Track B2 — additive enrichment (channel / thread stats / commit sha).
+    public let context: DecisionContext?
 
     public init(
         decision: DecisionView,
         originatingEvent: ActivityEvent,
-        linksToImplementation: [LinkView]
+        linksToImplementation: [LinkView],
+        context: DecisionContext? = nil
     ) {
         self.decision = decision
         self.originatingEvent = originatingEvent
         self.linksToImplementation = linksToImplementation
+        self.context = context
     }
 }
 
@@ -322,12 +413,56 @@ public struct CommitRef: Codable, Sendable, Equatable {
     public let message: String?
     public let branch: String?
     public let pushedAtMs: Int64?
+    /// Additive (Track B0) — first line of the commit message; the full
+    /// `message` may carry body paragraphs once local git capture is on.
+    public let subject: String?
+    /// Additive (Track B0) — "owner/repo" of the commit's repository.
+    public let repoFullName: String?
 
-    public init(sha: String?, message: String?, branch: String?, pushedAtMs: Int64?) {
+    public init(
+        sha: String?, message: String?, branch: String?, pushedAtMs: Int64?,
+        subject: String? = nil, repoFullName: String? = nil
+    ) {
         self.sha = sha
         self.message = message
         self.branch = branch
         self.pushedAtMs = pushedAtMs
+        self.subject = subject
+        self.repoFullName = repoFullName
+    }
+}
+
+/// Track B0 — the user's newest still-open PR ("OPEN REVIEW" line of the
+/// handoff card). All fields nil-degrade.
+public struct OpenPRRef: Codable, Sendable, Equatable {
+    /// "owner/repo#142"
+    public let ref: String
+    public let title: String?
+    public let commentCount: Int?
+    public let url: String?
+    public let openedAtMs: Int64?
+
+    public init(ref: String, title: String?, commentCount: Int?, url: String?, openedAtMs: Int64?) {
+        self.ref = ref
+        self.title = title
+        self.commentCount = commentCount
+        self.url = url
+        self.openedAtMs = openedAtMs
+    }
+}
+
+/// Track B0 — the user's latest Slack thread/channel activity ("LAST THREAD"
+/// line of the handoff card). Channel names are self-visible metadata
+/// (ADR-010: message bodies never surface here).
+public struct ThreadRef: Codable, Sendable, Equatable {
+    public let channelName: String
+    public let messageCount: Int?
+    public let tsMs: Int64?
+
+    public init(channelName: String, messageCount: Int?, tsMs: Int64?) {
+        self.channelName = channelName
+        self.messageCount = messageCount
+        self.tsMs = tsMs
     }
 }
 

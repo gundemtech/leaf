@@ -88,6 +88,11 @@ enum MCPMain {
             dbURL: dbURL, dbConfig: dbConfig,
             dbEncryption: dbEncryption, detectorMoat: detectorMoat
         )
+        // Track B2 — the landing-page `leaf.search(...)` promise, literal.
+        let leafSearchTool = LeafSearchTool(
+            dbURL: dbURL, dbConfig: dbConfig,
+            dbEncryption: dbEncryption, detectorMoat: detectorMoat
+        )
         let currentWorkTool = CurrentWorkTool(
             dbURL: dbURL, dbConfig: dbConfig,
             dbEncryption: dbEncryption, detectorMoat: detectorMoat
@@ -179,6 +184,7 @@ enum MCPMain {
             GetCrossProviderThreadTool.definition,
             QueryActivityTool.definition,
             GetDecisionTool.definition,
+            LeafSearchTool.definition,
             CurrentWorkTool.definition,
             AskAboutMyWorkTool.definition,
             EscalateToAITool.definition,
@@ -200,6 +206,7 @@ enum MCPMain {
             "get_cross_provider_thread": crossProviderThreadTool,
             "leaf_query_activity": queryActivityTool,
             "leaf_get_decision": getDecisionTool,
+            "leaf_search": leafSearchTool,
             "leaf_current_work": currentWorkTool,
             "ask_about_my_work": askAboutMyWorkTool,
             "escalate_to_ai": escalateToAITool,

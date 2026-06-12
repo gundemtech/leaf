@@ -1101,6 +1101,8 @@ final class LeafAppDelegate: NSObject, NSApplicationDelegate, UNUserNotification
   /// lifetime regardless of window state. Populated by LeafApp.init, started
   /// in applicationDidFinishLaunching.
   @MainActor static var agentWatchdog: AgentWatchdogService?
+  /// Track B4 — ⌥⌘L global hotkey (Carbon); registered at launch.
+  @MainActor static let hotKeyCenter = GlobalHotKeyCenter()
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool
   {
@@ -1119,6 +1121,19 @@ final class LeafAppDelegate: NSObject, NSApplicationDelegate, UNUserNotification
     // Agent watchdog — process-lifetime self-heal loop (first tick ~60s in,
     // clear of the launch-time register/approval choreography).
     Self.agentWatchdog?.start()
+
+    // Track B4 — ⌥⌘L "show Leaf": activate + bring the main window forward
+    // on Home (the nudges live at the top of Home; MenuBarExtra popovers
+    // cannot be opened programmatically via public API).
+    Self.hotKeyCenter.registerShowLeaf {
+      Self.windowState?.section = .home
+      NSApp.activate(ignoringOtherApps: true)
+      for window in NSApp.windows
+      where window.identifier?.rawValue.contains("main") == true {
+        window.makeKeyAndOrderFront(nil)
+        break
+      }
+    }
 
     // Track 5 / S4 — APNs registration. Requires aps-environment entitlement
     // (added separately for signed builds). In dev / unsigned builds, the

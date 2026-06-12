@@ -150,3 +150,83 @@ final class SearchResultsComposerTests: XCTestCase {
     XCTAssertTrue(SearchResultsComposer.compose(from: response()).isEmpty)
   }
 }
+
+// MARK: - Track B1 — presentation (count / MATCH / detail rows / noise)
+
+extension SearchResultsComposerTests {
+
+  private func decision(
+    id: Int64 = 1, eventID: Int64 = 42, excerpt: String = "WAL is non-negotiable.",
+    confidence: Double = 0.9, ts: Int64 = 5_000
+  ) -> DecisionView {
+    DecisionView(
+      id: id, eventID: eventID, topicKeywords: ["queue"],
+      reasoningExcerpt: excerpt, confidence: confidence, detectedAtMs: ts)
+  }
+
+  func testPresentation_CountLabelAndTopMatch() {
+    let p = SearchResultsComposer.composePresentation(
+      from: response(
+        events: [event(7, ts: 9_000, kind: "gh_pr_opened", body: "queue refactor")],
+        decisions: [decision()]))
+    XCTAssertEqual(p.totalCount, 2)
+    XCTAssertEqual(p.countLabel, "2 results")
+    XCTAssertEqual(p.topMatchID, "decision:1", "MATCH badge goes to the top-ranked row")
+
+    let single = SearchResultsComposer.composePresentation(
+      from: response(decisions: [decision()]))
+    XCTAssertEqual(single.countLabel, "1 result")
+  }
+
+  func testPresentation_NoiseEventsExcluded() {
+    let p = SearchResultsComposer.composePresentation(
+      from: response(events: [
+        event(1, ts: 2_000, kind: "gh_pr_opened", body: "queue refactor"),
+        event(2, ts: 3_000, kind: "gh_notifications_pulse", body: nil),
+        event(3, ts: 4_000, kind: "claude_tokens_used", body: nil),
+      ]))
+    XCTAssertEqual(p.rows.count, 1)
+    XCTAssertEqual(p.rows.first?.id, "event:1")
+  }
+
+  func testDecisionDetailRows_TicketPRAuthorChannelCommit() {
+    let origin = ActivityEvent(
+      eventID: 42, tsMs: 5_000, signalType: "action", bundleID: nil,
+      eventKind: "slack_thread_reply_aggregate",
+      bodyExcerpt: "WAL is non-negotiable.", bodyTruncated: false,
+      channelName: "ios-architecture")
+    let links = [
+      LinkView(fromEventID: 42, linkKind: Schema.LinkKinds.linearIDInText,
+               targetKind: Schema.TargetKinds.linearIssue, targetRef: "LEA-431", confidence: 0.8),
+      LinkView(fromEventID: 42, linkKind: Schema.LinkKinds.prNumberHashRef,
+               targetKind: Schema.TargetKinds.githubPR, targetRef: "acme/widget#142", confidence: 0.8),
+      LinkView(fromEventID: 42, linkKind: Schema.LinkKinds.reviewerAssigned,
+               targetKind: Schema.TargetKinds.githubUser, targetRef: "alexdev", confidence: 1.0),
+    ]
+    let p = SearchResultsComposer.composePresentation(
+      from: response(events: [origin], decisions: [decision()], links: links))
+
+    let detail = p.rows.first { $0.kind == .decision }?.detailRows ?? []
+    let byLabel = Dictionary(uniqueKeysWithValues: detail.map { ($0.label, $0) })
+    XCTAssertEqual(byLabel[.author]?.value, "alexdev")
+    XCTAssertEqual(byLabel[.author]?.url?.absoluteString, "https://github.com/alexdev")
+    XCTAssertEqual(byLabel[.channel]?.value, "#ios-architecture")
+    XCTAssertEqual(byLabel[.ticket]?.value, "LEA-431")
+    XCTAssertEqual(byLabel[.pr]?.value, "acme/widget#142")
+    XCTAssertEqual(byLabel[.pr]?.url?.absoluteString, "https://github.com/acme/widget/pull/142")
+  }
+
+  func testDecisionDetailRows_CommitOrigin() {
+    let origin = ActivityEvent(
+      eventID: 42, tsMs: 5_000, signalType: "action", bundleID: nil,
+      eventKind: "git_commit_authored",
+      bodyExcerpt: "feat: move to async dispatch queue\n\nbody", bodyTruncated: false,
+      targetRef: "acme/widget")
+    let p = SearchResultsComposer.composePresentation(
+      from: response(events: [origin], decisions: [decision()]))
+
+    let detail = p.rows.first { $0.kind == .decision }?.detailRows ?? []
+    XCTAssertEqual(detail.first { $0.label == .commit }?.value,
+                   "feat: move to async dispatch queue · acme/widget")
+  }
+}

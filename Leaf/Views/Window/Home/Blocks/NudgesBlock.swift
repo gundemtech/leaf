@@ -15,28 +15,26 @@ struct NudgesBlock: View {
 
     var body: some View {
         if !nudges.isEmpty {
-            VStack(alignment: .leading, spacing: LeafSpace.md) {
-                HStack(spacing: LeafSpace.sm) {
-                    Text("NUDGES")
-                        .leafSectionLabel()
-                        .foregroundStyle(LeafColor.text.tertiary)
-                        .accessibilityAddTraits(.isHeader)
-                    LeafPill(title: "\(nudges.count)", tone: .warning)
-                }
-
-                LeafCard(padding: .regular) {
-                    VStack(alignment: .leading, spacing: LeafSpace.sm) {
-                        ForEach(nudges) { nudge in
-                            row(nudge)
-                        }
-                        HStack {
-                            Spacer(minLength: 0)
-                            Text("visible only to you · no manager dashboard")
-                                .font(LeafType.label)
-                                .foregroundStyle(LeafColor.text.quaternary)
-                        }
-                        .padding(.top, LeafSpace.xs)
+            // Track B-UI — terminal-card chrome matching the landing mockup:
+            // "● you · last 24h" header + warning count badge + verbatim
+            // privacy footer.
+            LeafCard(padding: .regular) {
+                VStack(alignment: .leading, spacing: LeafSpace.sm) {
+                    LeafTerminalCardHeader(dotTone: .success, title: "you · last 24h") {
+                        LeafStatusBadge(
+                            text: "\(nudges.count) NUDGE\(nudges.count == 1 ? "" : "S")",
+                            tone: .warning)
                     }
+                    ForEach(nudges) { nudge in
+                        row(nudge)
+                    }
+                    HStack {
+                        Spacer(minLength: 0)
+                        Text("visible only to you · no manager dashboard")
+                            .font(LeafType.mono.small)
+                            .foregroundStyle(LeafColor.text.quaternary)
+                    }
+                    .padding(.top, LeafSpace.xs)
                 }
             }
             .animation(.easeInOut(duration: 0.25), value: nudges)

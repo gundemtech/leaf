@@ -18,6 +18,8 @@ public enum D3ToolSchemas {
         public static let queryActivity = "leaf_query_activity"
         public static let getDecision = "leaf_get_decision"
         public static let currentWork = "leaf_current_work"
+        /// Track B2 — the landing-page promise `leaf.search("...")`, literal.
+        public static let search = "leaf_search"
     }
 
     /// `leaf_query_activity` — period required, filter optional FTS string.
@@ -62,9 +64,46 @@ public enum D3ToolSchemas {
                     "required": ["start_ms", "end_ms"],
                     "additionalProperties": false,
                     "description": "Optional ms-epoch range to scope FTS search."
+                ],
+                "limit": [
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10,
+                    "description": "Top-N decisions (default 1). Use >1 for broad onboarding questions ('how does the payment service work')."
                 ]
             ],
             "required": ["topic"],
+            "additionalProperties": false
+        ]
+    }
+
+    /// `leaf_search` — query required; period + limit optional.
+    public static func search() -> [String: Any] {
+        [
+            "type": "object",
+            "properties": [
+                "query": [
+                    "type": "string",
+                    "description": "Keywords over everything Leaf remembers (decisions rank first, then open questions / blockers, then raw event matches)."
+                ],
+                "period": [
+                    "type": "object",
+                    "properties": [
+                        "start_ms": ["type": "integer"],
+                        "end_ms": ["type": "integer"]
+                    ],
+                    "required": ["start_ms", "end_ms"],
+                    "additionalProperties": false,
+                    "description": "Optional ms-epoch range (default: last 90 days)."
+                ],
+                "limit": [
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50,
+                    "description": "Max result rows (default 20)."
+                ]
+            ],
+            "required": ["query"],
             "additionalProperties": false
         ]
     }

@@ -81,11 +81,12 @@ final class D3ToolHandleTests: XCTestCase {
         _ = try openWriter()
 
         let args: [String: Any] = ["topic": "rate limiter"]
-        guard case .ok(let (topic, period)) = D3ToolParams.decodeGetDecision(arguments: args) else {
+        guard case .ok(let (topic, period, limit)) = D3ToolParams.decodeGetDecision(arguments: args) else {
             return XCTFail("decode failed")
         }
         XCTAssertEqual(topic, "rate limiter")
         XCTAssertNil(period)
+        XCTAssertEqual(limit, 1, "limit defaults to 1 (back-compat top-1)")
 
         let response = try makeEngine().getDecision(topic: topic, period: period)
         let dict = try D3ResponseEncoder.toDict(response)
