@@ -207,6 +207,8 @@ public enum Schema {
         public static let body = "body"
         public static let attachmentKind = "attachment_kind"
         public static let attachmentExternalRef = "attachment_external_ref"
+        /// Track C (UC-4, M033) — JSON HandoffContextSnapshot, NULL otherwise.
+        public static let contextSnapshotJSON = "context_snapshot_json"
         public static let replyTo = "reply_to"
         public static let sentAtMs = "sent_at_ms"
         public static let serverCreatedAtMs = "server_created_at_ms"

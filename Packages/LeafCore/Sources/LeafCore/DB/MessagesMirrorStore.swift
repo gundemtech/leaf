@@ -25,6 +25,7 @@ public struct MessagesMirrorStore: Sendable {
                     \(Schema.MessagesMirror.body),
                     \(Schema.MessagesMirror.attachmentKind),
                     \(Schema.MessagesMirror.attachmentExternalRef),
+                    \(Schema.MessagesMirror.contextSnapshotJSON),
                     \(Schema.MessagesMirror.replyTo),
                     \(Schema.MessagesMirror.sentAtMs),
                     \(Schema.MessagesMirror.serverCreatedAtMs),
@@ -33,7 +34,7 @@ public struct MessagesMirrorStore: Sendable {
                     \(Schema.MessagesMirror.doneByPubkeyHex),
                     \(Schema.MessagesMirror.direction),
                     \(Schema.MessagesMirror.lastSyncedAtMs)
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(\(Schema.MessagesMirror.messageID)) DO UPDATE SET
                     \(Schema.MessagesMirror.readAtMs)        = COALESCE(excluded.\(Schema.MessagesMirror.readAtMs), \(Schema.MessagesMirror.readAtMs)),
                     \(Schema.MessagesMirror.doneAtMs)        = COALESCE(excluded.\(Schema.MessagesMirror.doneAtMs), \(Schema.MessagesMirror.doneAtMs)),
@@ -51,6 +52,7 @@ public struct MessagesMirrorStore: Sendable {
                 row.body,
                 row.attachment?.kind,
                 row.attachment?.externalRef,
+                Self.encodeSnapshot(row.contextSnapshot),
                 row.replyTo,
                 row.sentAtMs,
                 row.serverCreatedAtMs,
@@ -366,6 +368,7 @@ public struct MessagesMirrorStore: Sendable {
                \(Schema.MessagesMirror.body),
                \(Schema.MessagesMirror.attachmentKind),
                \(Schema.MessagesMirror.attachmentExternalRef),
+               \(Schema.MessagesMirror.contextSnapshotJSON),
                \(Schema.MessagesMirror.replyTo),
                \(Schema.MessagesMirror.sentAtMs),
                \(Schema.MessagesMirror.serverCreatedAtMs),
@@ -376,6 +379,20 @@ public struct MessagesMirrorStore: Sendable {
                \(Schema.MessagesMirror.lastSyncedAtMs)
         FROM \(Schema.MessagesMirror.tableName)
         """
+
+    // Track C — JSON helpers for the context snapshot column. Encode failures
+    // map to NULL (the DM body is the source of truth; the card is sugar).
+    static func encodeSnapshot(_ snapshot: HandoffContextSnapshot?) -> String? {
+        guard let snapshot else { return nil }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return (try? encoder.encode(snapshot)).flatMap { String(data: $0, encoding: .utf8) }
+    }
+
+    static func decodeSnapshot(_ json: String) -> HandoffContextSnapshot? {
+        guard let data = json.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(HandoffContextSnapshot.self, from: data)
+    }
 
     private static func mapRow(_ row: Row) -> DirectMessageMirrorRow? {
         guard
@@ -397,6 +414,9 @@ public struct MessagesMirrorStore: Sendable {
 
         let attachmentKind = row[Schema.MessagesMirror.attachmentKind] as String?
         let attachmentExternalRef = row[Schema.MessagesMirror.attachmentExternalRef] as String?
+        // Track C — tolerant: snapshot rot maps to nil, never drops the row.
+        let contextSnapshot = (row[Schema.MessagesMirror.contextSnapshotJSON] as String?)
+            .flatMap { Self.decodeSnapshot($0) }
         let attachment: DirectMessageAttachment?
         if let k = attachmentKind, let r = attachmentExternalRef {
             attachment = DirectMessageAttachment(kind: k, externalRef: r, displayLabel: nil)
@@ -414,6 +434,7 @@ public struct MessagesMirrorStore: Sendable {
             kind: kind,
             body: body,
             attachment: attachment,
+            contextSnapshot: contextSnapshot,
             replyTo: row[Schema.MessagesMirror.replyTo] as String?,
             sentAtMs: sentAtMs,
             serverCreatedAtMs: serverCreatedAtMs,

@@ -17,6 +17,11 @@ public struct DirectMessagePlaintext: Sendable, Equatable, Codable, Hashable {
     public let kind: DirectMessageKind
     public let body: String
     public let attachment: DirectMessageAttachment?
+    /// Track C (UC-4) — structured handoff context (last commit / open
+    /// review / status / last thread). Optional + tolerant: old clients
+    /// never see the key; a malformed snapshot decodes to nil, never failing
+    /// the plaintext (see HandoffContextSnapshot doc).
+    public let contextSnapshot: HandoffContextSnapshot?
     public let replyTo: String?
     public let sentAtMs: Int64
 
@@ -31,6 +36,7 @@ public struct DirectMessagePlaintext: Sendable, Equatable, Codable, Hashable {
         kind: DirectMessageKind,
         body: String,
         attachment: DirectMessageAttachment?,
+        contextSnapshot: HandoffContextSnapshot? = nil,
         replyTo: String?,
         sentAtMs: Int64
     ) {
@@ -44,8 +50,30 @@ public struct DirectMessagePlaintext: Sendable, Equatable, Codable, Hashable {
         self.kind = kind
         self.body = body
         self.attachment = attachment
+        self.contextSnapshot = contextSnapshot
         self.replyTo = replyTo
         self.sentAtMs = sentAtMs
+    }
+
+    /// Track C — custom decode so the snapshot is per-field tolerant while
+    /// every pre-existing field keeps strict semantics (a truly malformed
+    /// plaintext must still throw; only snapshot rot degrades silently).
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.messageID = try c.decode(String.self, forKey: .messageID)
+        self.workspaceID = try c.decode(String.self, forKey: .workspaceID)
+        self.senderMemberID = try c.decode(String.self, forKey: .senderMemberID)
+        self.senderPubkeyHex = try c.decode(String.self, forKey: .senderPubkeyHex)
+        self.senderDisplayName = try c.decode(String.self, forKey: .senderDisplayName)
+        self.recipientMemberID = try c.decodeIfPresent(String.self, forKey: .recipientMemberID)
+        self.recipientPubkeyHex = try c.decode(String.self, forKey: .recipientPubkeyHex)
+        self.kind = try c.decode(DirectMessageKind.self, forKey: .kind)
+        self.body = try c.decode(String.self, forKey: .body)
+        self.attachment = try c.decodeIfPresent(DirectMessageAttachment.self, forKey: .attachment)
+        self.contextSnapshot =
+            try? c.decodeIfPresent(HandoffContextSnapshot.self, forKey: .contextSnapshot)
+        self.replyTo = try c.decodeIfPresent(String.self, forKey: .replyTo)
+        self.sentAtMs = try c.decode(Int64.self, forKey: .sentAtMs)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -59,6 +87,7 @@ public struct DirectMessagePlaintext: Sendable, Equatable, Codable, Hashable {
         case kind
         case body
         case attachment
+        case contextSnapshot    = "context_snapshot"
         case replyTo            = "reply_to"
         case sentAtMs           = "sent_at_ms"
     }

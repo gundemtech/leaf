@@ -123,6 +123,8 @@ public final class Database: @unchecked Sendable {
         migrator.registerMigration031AIEscalationAudit()
         // M032 — Track AI Coworker P4 team-handoff reverse-audit (append-only).
         migrator.registerMigration032HandoffAudit()
+        // M033 — Use-case rebuild Track C: handoff context card on mirrored DMs.
+        migrator.registerMigration033HandoffContextSnapshot()
         return migrator
     }
 

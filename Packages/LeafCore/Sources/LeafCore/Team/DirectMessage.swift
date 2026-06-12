@@ -14,6 +14,9 @@ public struct DirectMessageMirrorRow: Sendable, Equatable {
     public let kind: DirectMessageKind
     public let body: String
     public let attachment: DirectMessageAttachment?
+    /// Track C (UC-4) — structured handoff context card. nil for non-handoff
+    /// kinds, pre-C senders and malformed snapshots (tolerant decode).
+    public let contextSnapshot: HandoffContextSnapshot?
     public let replyTo: String?
     public let sentAtMs: Int64
     public let serverCreatedAtMs: Int64
@@ -53,6 +56,7 @@ public struct DirectMessageMirrorRow: Sendable, Equatable {
         kind: DirectMessageKind,
         body: String,
         attachment: DirectMessageAttachment? = nil,
+        contextSnapshot: HandoffContextSnapshot? = nil,
         replyTo: String? = nil,
         sentAtMs: Int64,
         serverCreatedAtMs: Int64,
@@ -71,6 +75,7 @@ public struct DirectMessageMirrorRow: Sendable, Equatable {
         self.kind = kind
         self.body = body
         self.attachment = attachment
+        self.contextSnapshot = contextSnapshot
         self.replyTo = replyTo
         self.sentAtMs = sentAtMs
         self.serverCreatedAtMs = serverCreatedAtMs
