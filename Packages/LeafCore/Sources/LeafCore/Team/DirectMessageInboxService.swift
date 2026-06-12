@@ -271,6 +271,7 @@ public struct DirectMessageInboxService: Sendable {
             kind: plaintext.kind,          // C4: authenticated plaintext wins
             body: plaintext.body,
             attachment: plaintext.attachment,
+            contextSnapshot: plaintext.contextSnapshot,  // Track C — handoff card
             replyTo: plaintext.replyTo,    // C4: authenticated plaintext wins
             sentAtMs: plaintext.sentAtMs,
             serverCreatedAtMs: serverCreatedAtMs,

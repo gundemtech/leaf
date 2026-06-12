@@ -70,9 +70,12 @@ public struct DirectMessageService: Sendable {
         body: String,
         notify: Bool = true,
         replyTo: String? = nil,
+        contextSnapshot: HandoffContextSnapshot? = nil,
         crossPostSlack: SlackCrossPostRequest? = nil,
         crossPostLinear: LinearCrossPostRequest? = nil
     ) async throws -> SentDirectMessage {
+        // Track C (UC-4) — the structured card is a handoff affordance only.
+        let resolvedSnapshot = kind == .handoff ? contextSnapshot : nil
         // 1. Validate
         let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedBody.isEmpty else { throw LeafError.invalidPayload }
@@ -120,6 +123,7 @@ public struct DirectMessageService: Sendable {
             kind: kind,
             body: body,
             attachment: nil,  // S4 always nil; S5 will populate
+            contextSnapshot: resolvedSnapshot,
             replyTo: replyTo,
             sentAtMs: nowMs
         )
@@ -155,6 +159,7 @@ public struct DirectMessageService: Sendable {
             kind: kind,
             body: body,
             attachment: nil,
+            contextSnapshot: resolvedSnapshot,
             replyTo: replyTo,
             sentAtMs: nowMs,
             serverCreatedAtMs: serverCreatedAtMs,

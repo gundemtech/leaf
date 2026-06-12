@@ -64,6 +64,10 @@ struct SendDirectMessageSheet: View {
     @Environment(HandoffDraftReader.self) private var handoffReader
     @Environment(WindowState.self) private var windowState
     @State private var topicText: String = ""
+    // Track C (UC-4) — handoff context card: computed snapshot + consent toggle
+    // (ON by default; the preview shows bit-for-bit what the recipient sees).
+    @State private var contextSnapshot: HandoffContextSnapshot? = nil
+    @State private var attachContext: Bool = true
     @State private var draftProvenance: HandoffProvenance? = nil
     /// AI-UI-3 — draft period (was fixed 7 days). Drives both the gather and
     /// the provenance period stamped into the M032 audit.
@@ -142,6 +146,17 @@ struct SendDirectMessageSheet: View {
         // discardAndDismiss. Reset on appear so a freshly-opened sheet never shows a
         // prior sheet's stale .drafting/.error/.drafted state (review MEDIUM).
         .onAppear { handoffReader.reset() }
+        // Track C (UC-4) — compute the context snapshot when the sheet enters
+        // (or returns to) the handoff kind; off-main via the reader.
+        .task(id: kind) {
+            guard kind == .handoff else {
+                contextSnapshot = nil
+                return
+            }
+            let trimmedTopic = topicText.trimmingCharacters(in: .whitespacesAndNewlines)
+            contextSnapshot = await reader.buildContextSnapshot(
+                title: trimmedTopic.isEmpty ? nil : trimmedTopic)
+        }
     }
 
     // MARK: - T4 UpgradeChip
@@ -219,6 +234,7 @@ struct SendDirectMessageSheet: View {
             VStack(alignment: .leading, spacing: LeafSpace.lg) {
                 kindPicker
                 if kind == .handoff {
+                    contextCardSection
                     draftWithAISection
                 }
                 bodyTextarea
@@ -309,6 +325,47 @@ struct SendDirectMessageSheet: View {
                 }
             }
             .disabled(topicText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+    }
+
+    // Track C (UC-4) — preview + consent for the structured context card.
+    // The rows render through the SAME presentation the recipient's bubble
+    // uses, so what you approve is exactly what they see.
+    @ViewBuilder
+    private var contextCardSection: some View {
+        if let snapshot = contextSnapshot {
+            VStack(alignment: .leading, spacing: LeafSpace.xs) {
+                HStack(spacing: LeafSpace.sm) {
+                    Text("CONTEXT CARD").leafSectionLabel().foregroundStyle(LeafColor.text.tertiary)
+                    Spacer(minLength: 0)
+                    Toggle("Attach", isOn: $attachContext)
+                        .toggleStyle(.switch)
+                        .controlSize(.mini)
+                        .labelsHidden()
+                        .help("Attach your last commit / open review / status / last thread as a structured card")
+                }
+                if attachContext {
+                    HandoffCardView(snapshot: snapshot, onOpenFull: nil)
+                }
+                Text("Refs only — commit subject, PR number, ticket state, channel name. Never message bodies.")
+                    .font(LeafType.body.small)
+                    .foregroundStyle(LeafColor.text.tertiary)
+            }
+            .task(id: topicText) {
+                // Keep the card title in sync with the topic field (debounced
+                // by SwiftUI task identity; cheap local recompute).
+                if let current = contextSnapshot {
+                    contextSnapshot = HandoffContextSnapshot(
+                        schemaVersion: current.schemaVersion,
+                        title: topicText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            ? nil : topicText,
+                        lastCommit: current.lastCommit,
+                        openReview: current.openReview,
+                        ticket: current.ticket,
+                        lastThread: current.lastThread,
+                        capturedAtMs: current.capturedAtMs)
+                }
+            }
         }
     }
 
@@ -447,6 +504,7 @@ struct SendDirectMessageSheet: View {
             kind: kind,
             body: bodyText,
             notify: notify,
+            contextSnapshot: (kind == .handoff && attachContext) ? contextSnapshot : nil,
             crossPostSlack: slackRequest,
             crossPostLinear: linearRequest
         )

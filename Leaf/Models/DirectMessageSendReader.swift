@@ -72,6 +72,26 @@ final class DirectMessageSendReader {
         state = .idle
     }
 
+    /// Track C (UC-4) — sender-side context snapshot for handoff DMs: projects
+    /// `QueryEngine.currentWork` (work-aware after B0) into the structured
+    /// card. nil when the DB is missing or no line carries data — the sheet
+    /// hides the preview and sends a plain handoff.
+    func buildContextSnapshot(title: String?) async -> HandoffContextSnapshot? {
+        guard FileManager.default.fileExists(atPath: databaseURL.path) else { return nil }
+        let url = databaseURL
+        let config = databaseConfig
+        let encryption = databaseEncryption
+        return await Task.detached(priority: .userInitiated) { () -> HandoffContextSnapshot? in
+            let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+            let engine = QueryEngine(
+                dbURL: url, dbConfig: config, dbEncryption: encryption,
+                detectorMoat: .publicSubstrate)
+            guard let work = try? engine.currentWork(nowMs: nowMs) else { return nil }
+            let snapshot = HandoffSnapshotBuilder.build(from: work, title: title, nowMs: nowMs)
+            return snapshot.hasAnyLine ? snapshot : nil
+        }.value
+    }
+
     /// Track 5 / S6 T12 — extended with `crossPostSlack` / `crossPostLinear`.
     /// Both default to nil (S4 single-channel parity). When the Send sheet
     /// passes one or both, DirectMessageService runs Slack + Linear legs in
@@ -85,6 +105,7 @@ final class DirectMessageSendReader {
         body: String,
         notify: Bool,
         replyTo: String? = nil,
+        contextSnapshot: HandoffContextSnapshot? = nil,
         crossPostSlack: SlackCrossPostRequest? = nil,
         crossPostLinear: LinearCrossPostRequest? = nil
     ) async {
@@ -112,6 +133,7 @@ final class DirectMessageSendReader {
                 body: body,
                 notify: notify,
                 replyTo: replyTo,
+                contextSnapshot: contextSnapshot,
                 crossPostSlack: crossPostSlack,
                 crossPostLinear: crossPostLinear
             )

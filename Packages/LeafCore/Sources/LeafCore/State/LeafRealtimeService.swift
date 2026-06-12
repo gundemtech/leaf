@@ -537,6 +537,7 @@ public final class LeafRealtimeService {
             kind: plaintext.kind,                          // C4 plaintext wins
             body: plaintext.body,
             attachment: plaintext.attachment,
+            contextSnapshot: plaintext.contextSnapshot,  // Track C — handoff card
             replyTo: plaintext.replyTo,                    // C4 plaintext wins
             sentAtMs: plaintext.sentAtMs,
             serverCreatedAtMs: serverCreatedAtMs,

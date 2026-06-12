@@ -300,6 +300,12 @@ private struct ChatBubble: View {
             .foregroundStyle(LeafColor.text.tertiary)
             .onTapGesture { onJumpToQuote(replyTo) }
         }
+        // Track C (UC-4) — structured handoff card above the text: last
+        // commit / open review / status / last thread, the landing mockup.
+        if row.kind == .handoff, let snapshot = row.contextSnapshot,
+           snapshot.hasAnyLine {
+          HandoffCardView(snapshot: snapshot, onOpenFull: onContextForMe)
+        }
         Text(row.body)
           .font(LeafType.body.regular)
           .foregroundStyle(LeafColor.text.primary)

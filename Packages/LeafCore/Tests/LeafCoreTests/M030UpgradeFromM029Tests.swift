@@ -73,7 +73,7 @@ final class M030UpgradeFromM029Tests: XCTestCase {
             XCTAssertTrue(
                 applied.contains("030_google_calendar_typed_event_tracker"),
                 "M030 must apply when an M029-era DB is opened by the M030 binary")
-            XCTAssertEqual(applied.count, 32, "full ledger M001–M032 after upgrade")
+            XCTAssertEqual(applied.count, 33, "full ledger M001–M033 after upgrade")
         }
 
         // 3b. GCal table is back with its PK + partial indexes.

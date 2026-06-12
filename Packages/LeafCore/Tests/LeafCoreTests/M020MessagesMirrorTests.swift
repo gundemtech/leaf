@@ -53,6 +53,8 @@ final class M020MessagesMirrorTests: XCTestCase {
                     Schema.MessagesMirror.body,
                     Schema.MessagesMirror.attachmentKind,
                     Schema.MessagesMirror.attachmentExternalRef,
+                    // Track C (M033) — handoff context card column.
+                    Schema.MessagesMirror.contextSnapshotJSON,
                     Schema.MessagesMirror.replyTo,
                     Schema.MessagesMirror.sentAtMs,
                     Schema.MessagesMirror.serverCreatedAtMs,
