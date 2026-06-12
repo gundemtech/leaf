@@ -128,7 +128,7 @@ public enum SearchResultsComposer {
         SearchResultRow(
           id: "decision:\(d.id)",
           kind: .decision,
-          title: d.reasoningExcerpt,
+          title: cleanDecisionHeadline(d.reasoningExcerpt),
           sourceLabel: "Decision",
           tsMs: d.detectedAtMs,
           links: links,
@@ -197,6 +197,15 @@ public enum SearchResultsComposer {
     rows.append(contentsOf: eventRows)
 
     return rows
+  }
+
+  /// Decision excerpts come from sentence extraction over commit/issue
+  /// bodies — markdown bullets and list markers survive as leading junk
+  /// ("- Spec status…", "* fix(invite)…"). Presentational cleanup only;
+  /// the stored excerpt stays untouched.
+  static func cleanDecisionHeadline(_ excerpt: String) -> String {
+    let cleaned = excerpt.drop { !$0.isLetter && !$0.isNumber }
+    return cleaned.isEmpty ? excerpt : String(cleaned)
   }
 
   /// "GUN-12 · Fix relay reconnect" when the payload carries a structured

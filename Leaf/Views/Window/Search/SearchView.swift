@@ -156,17 +156,21 @@ struct SearchView: View {
           }
         }
 
-        HStack(spacing: LeafSpace.xs) {
-          Text(row.sourceLabel)
-            .font(LeafType.mono.small)
-            .foregroundStyle(LeafColor.text.tertiary)
-          Text(Self.formatRelative(row.tsMs))
-            .font(LeafType.mono.small)
-            .foregroundStyle(LeafColor.text.quaternary)
-          if row.occurrenceCount > 1 {
-            Text("×\(row.occurrenceCount)")
+        // Meta footer only for event rows — detector cards already carry
+        // kind + relative time in the terminal header (was a duplicate line).
+        if row.kind == .event {
+          HStack(spacing: LeafSpace.xs) {
+            Text(row.sourceLabel)
+              .font(LeafType.mono.small)
+              .foregroundStyle(LeafColor.text.tertiary)
+            Text(Self.formatRelative(row.tsMs))
               .font(LeafType.mono.small)
               .foregroundStyle(LeafColor.text.quaternary)
+            if row.occurrenceCount > 1 {
+              Text("×\(row.occurrenceCount)")
+                .font(LeafType.mono.small)
+                .foregroundStyle(LeafColor.text.quaternary)
+            }
           }
         }
       }

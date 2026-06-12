@@ -230,3 +230,19 @@ extension SearchResultsComposerTests {
                    "feat: move to async dispatch queue · acme/widget")
   }
 }
+
+extension SearchResultsComposerTests {
+  func testDecisionHeadline_LeadingBulletJunkStripped() {
+    XCTAssertEqual(
+      SearchResultsComposer.cleanDecisionHeadline("- Spec status APPROVED → SHIPPED."),
+      "Spec status APPROVED → SHIPPED.")
+    XCTAssertEqual(
+      SearchResultsComposer.cleanDecisionHeadline("* fix(invite): atomic"),
+      "fix(invite): atomic")
+    XCTAssertEqual(
+      SearchResultsComposer.cleanDecisionHeadline("plain decision text"),
+      "plain decision text")
+    XCTAssertEqual(SearchResultsComposer.cleanDecisionHeadline("---"), "---",
+                   "all-junk excerpt falls back to the original")
+  }
+}
