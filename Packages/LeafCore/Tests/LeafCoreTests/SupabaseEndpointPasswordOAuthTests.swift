@@ -38,8 +38,28 @@ final class SupabaseEndpointPasswordOAuthTests: XCTestCase {
     XCTAssertEqual(items["redirect_to"], "http://127.0.0.1:47825/callback")
     XCTAssertEqual(items["code_challenge"], "abc123")
     XCTAssertEqual(items["code_challenge_method"], "s256")
+    // GUN-63: force Google's account chooser on every login. We open the user's
+    // real default browser (NSWorkspace), which keeps a live provider session —
+    // without prompt=select_account Google silently reuses the signed-in account
+    // and the picker never appears. GoTrue forwards `prompt` to the provider.
+    XCTAssertEqual(items["prompt"], "select_account")
     // GoTrue brokers the flow and owns the provider-leg state — sending a
     // caller `state` breaks it with bad_oauth_state. Guard against re-adding.
+    XCTAssertNil(items["state"], "must NOT send a caller state to GoTrue /authorize")
+  }
+
+  func testOAuthAuthorizeURL_github_forcesAccountChooser() {
+    // GUN-63: GitHub honours prompt=select_account too (shipped 2024-06), so the
+    // same single param fixes the "can't pick another account" bug for both
+    // providers — no provider-specific branching needed.
+    let url = SupabaseEndpoint.oauthAuthorize(
+      baseURL: baseURL, provider: "github",
+      redirectTo: "http://127.0.0.1:47825/callback", codeChallenge: "xyz789")
+    let comps = URLComponents(url: url, resolvingAgainstBaseURL: false)!
+    let items = Dictionary(
+      uniqueKeysWithValues: (comps.queryItems ?? []).map { ($0.name, $0.value) })
+    XCTAssertEqual(items["provider"], "github")
+    XCTAssertEqual(items["prompt"], "select_account")
     XCTAssertNil(items["state"], "must NOT send a caller state to GoTrue /authorize")
   }
 }
