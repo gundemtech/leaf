@@ -40,6 +40,11 @@ final class SupabaseOAuthService {
     /// Device-identity collision — this Mac's key is registered to a different
     /// account. The gate shows a reset-confirmation prompt (LoginView).
     case deviceConflict
+    /// Account-binding mismatch — the ACCOUNT is registered to a DIFFERENT
+    /// device's key (lost/reinstalled Mac, wiped keystore). The gate offers an
+    /// explicit "make this Mac active" re-key (rebinds the account to this
+    /// device's existing key; the other device is signed out). GUN-65.
+    case deviceRekey
     case error(message: String)
   }
 
@@ -194,6 +199,21 @@ final class SupabaseOAuthService {
     }
   }
 
+  /// GUN-65: the account is bound to another device's key. Re-key rebinds the
+  /// account to THIS Mac's existing key (server-side) — the other device loses
+  /// its claim match and is effectively signed out; shared-workspace access must
+  /// be re-established by re-invite. We do NOT touch the local identity.
+  func rekeyToThisDeviceAndRetry() async {
+    state = .registeringDevice
+    do {
+      _ = try await client.ensureAuthenticatedAndPubkeyRegistered(rekey: true)
+      state = .authenticated
+      onAuthenticated?()
+    } catch {
+      setFailureState(error)
+    }
+  }
+
   /// Dismiss the device-conflict prompt back to the login form. The conflict
   /// path already installed + persisted a session WITHOUT our pubkey claim
   /// (before the throw), and the gate is claim-blind — a plain state reset
@@ -209,6 +229,8 @@ final class SupabaseOAuthService {
   private func setFailureState(_ error: Error) {
     if let supa = error as? SupabaseError, supa == .deviceKeyOwnedByAnotherAccount {
       state = .deviceConflict
+    } else if let supa = error as? SupabaseError, supa == .accountBoundToDifferentDeviceKey {
+      state = .deviceRekey
     } else {
       state = .error(message: friendlyMessage(error))
     }
