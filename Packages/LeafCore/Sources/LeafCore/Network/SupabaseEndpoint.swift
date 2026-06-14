@@ -66,6 +66,14 @@ public enum SupabaseEndpoint {
   /// endpoint convention. NB: we do NOT send a caller `state` — GoTrue brokers
   /// the OAuth flow and owns its own provider-leg state; a caller state breaks
   /// it with `bad_oauth_state`. CSRF/injection protection is PKCE.
+  ///
+  /// GUN-63: we always send `prompt=select_account`. The flow opens the user's
+  /// REAL default browser (NSWorkspace, see SupabaseOAuthService), which keeps a
+  /// live Google/GitHub session, and sign-out only clears Leaf's local session —
+  /// not the browser cookies. Without this param the provider silently reuses the
+  /// signed-in account and the chooser never reappears, so the user can't switch
+  /// accounts. GoTrue forwards `prompt` to the external provider; both Google and
+  /// GitHub (since 2024-06) honour `select_account`, so one param fixes both.
   public static func oauthAuthorize(
     baseURL: URL, provider: String, redirectTo: String, codeChallenge: String
   ) -> URL {
@@ -78,6 +86,7 @@ public enum SupabaseEndpoint {
       URLQueryItem(name: "redirect_to", value: redirectTo),
       URLQueryItem(name: "code_challenge", value: codeChallenge),
       URLQueryItem(name: "code_challenge_method", value: "s256"),
+      URLQueryItem(name: "prompt", value: "select_account"),
     ]
     return components.url!
   }
