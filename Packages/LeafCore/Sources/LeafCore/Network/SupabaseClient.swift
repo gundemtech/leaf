@@ -139,15 +139,20 @@ public actor SupabaseClient {
   /// NB: the 409 path relies on the backend `pubkey_registry` being UNIQUE on
   /// `pubkey` and the JWT hook scoping the claim to the CALLING auth_id — both
   /// live in the private register_pubkey edge function (see spec §4).
-  public func ensureAuthenticatedAndPubkeyRegistered() async throws -> SupabaseAuthSession {
+  public func ensureAuthenticatedAndPubkeyRegistered(rekey: Bool = false) async throws
+    -> SupabaseAuthSession
+  {
     let current = try await ensureAuthenticated()
-    if let claim = current.pubkeyClaim, !claim.isEmpty {
+    // GUN-65: under rekey we DELIBERATELY skip the early claim-match — the whole
+    // point is the account's current claim is a foreign device's key, and we're
+    // about to rebind it to ours.
+    if !rekey, let claim = current.pubkeyClaim, !claim.isEmpty {
       try requireClaimMatchesLocalKey(claim)
       return current
     }
     var pubkeyAlreadyClaimed = false
     do {
-      try await performRegisterPubkey(accessToken: current.accessToken)
+      try await performRegisterPubkey(accessToken: current.accessToken, rekey: rekey)
     } catch SupabaseError.pubkeyAlreadyRegistered {
       // 409: the pubkey is already in the registry. If it's OUR row (same
       // device re-login) the refresh below carries the claim → success. If it
@@ -378,7 +383,7 @@ public actor SupabaseClient {
 
   // MARK: - Internal HTTP — registerPubkey
 
-  private func performRegisterPubkey(accessToken: String) async throws {
+  private func performRegisterPubkey(accessToken: String, rekey: Bool = false) async throws {
     let priv = try identity()
     let pubkeyHex = priv.publicKey.rawRepresentation
       .map { String(format: "%02x", $0) }.joined()
@@ -390,7 +395,9 @@ public actor SupabaseClient {
     {
       request.setValue(v, forHTTPHeaderField: k)
     }
-    let body: [String: String] = ["pubkey": pubkeyHex]
+    // GUN-65: rekey rebinds the account to THIS device's key server-side.
+    var body: [String: String] = ["pubkey": pubkeyHex]
+    if rekey { body["rekey"] = "true" }
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
     let (data, http) = try await performHTTP(request, retryable: false, label: "registerPubkey")

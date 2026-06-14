@@ -34,6 +34,7 @@ struct LoginView: View {
   @State private var password = ""
   @State private var showPassword = false
   @State private var showDeviceConflict = false
+  @State private var showDeviceRekey = false
   @FocusState private var pwFocused: Bool
 
   private var isBusy: Bool {
@@ -66,6 +67,7 @@ struct LoginView: View {
     }
     .onChange(of: service.state) { _, newState in
       if newState == .deviceConflict { showDeviceConflict = true }
+      if newState == .deviceRekey { showDeviceRekey = true }
     }
     .confirmationDialog(
       "This Mac is set up for another account",
@@ -79,6 +81,20 @@ struct LoginView: View {
     } message: {
       Text(
         "This device's Leaf identity belongs to a different account. Reset it to sign in here — this Mac's Leaf identity will be replaced with a fresh one for your account."
+      )
+    }
+    .confirmationDialog(
+      "This account is set up on another Mac",
+      isPresented: $showDeviceRekey,
+      titleVisibility: .visible
+    ) {
+      Button("Make This Mac Active", role: .destructive) {
+        Task { await service.rekeyToThisDeviceAndRetry() }
+      }
+      Button("Cancel", role: .cancel) { Task { await service.cancelDeviceConflict() } }
+    } message: {
+      Text(
+        "Make this Mac the active device for your account? The other Mac will be signed out, and you'll need to rejoin any shared workspaces here."
       )
     }
   }
