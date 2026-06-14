@@ -61,6 +61,22 @@ Cancel: `cancelDeviceConflict`-паттерн (signOut + `.idle`), т.к. на �
 
 Гард: re-key только для **своего** `auth_id` (из JWT). Без re-key-флага поведение `register_pubkey` не меняется (обратная совместимость с обычным логином).
 
+## 5.1. As-built (задеплоено на прод 2026-06-14, project `jwxnhwyqjzjmjnmwpwyq`, verified live)
+
+Факты, снятые с живого прода (резолвят OQ-1/OQ-2):
+- `custom_access_token_hook` читает pubkey **live**: `SELECT pubkey FROM pubkey_registry WHERE auth_id = (event->>'user_id')::uuid` → claim обновляется на следующем refresh. **Триггеров на `pubkey_registry` нет.** Схема: `auth_id` **PK** + `pubkey` **UNIQUE** (один ключ на аккаунт — `multi-device` из §4 account-login спеки аспирационен, по факту single-key).
+- **Upsert НЕ годится** (первая попытка): `upsert({auth_id, pubkey}, {onConflict: auth_id})` ловит **UNIQUE(pubkey) 23505**, если posted-ключ занят ДРУГИМ аккаунтом (тот же физический Mac под другим аккаунтом) → 409 → клиентский loop. Поймано на живом смоуке.
+- **As-built логика (refines variant A) — take over device key:**
+  ```
+  delete from pubkey_registry where pubkey = <posted>;    -- освободить ключ этого Mac от любого аккаунта (legit: приватник есть только на этом Mac)
+  delete from pubkey_registry where auth_id = <caller>;   -- снять старую привязку аккаунта
+  insert into pubkey_registry (auth_id, pubkey) values (<caller>, <posted>);
+  ```
+  Net: ровно один ряд `{auth_id, pubkey}`, конфликтов PK/UNIQUE нет. Семантика «этот Mac теперь мой». Caller обязан владеть приватником posted-ключа (он выводится из локального x25519.priv) → забрать ключ может только тот, кто физически на этом устройстве — не кража.
+- **Verified:** клиент `rekey:true` → 200 `rekeyed` → refresh → claim == локальный ключ → логин довёлся; БД-состояние подтверждено (аккаунт ↔ текущий device-ключ, старые привязки сняты).
+
+⚠️ **Source-tracking gap (Диме):** исходник edge functions **не версионируется ни в одном клоне** (deployed-only). Re-key живёт на проде + в `~/leaf-sb-rekey/` (untracked) + в этой спеке. **Занести `register_pubkey` re-key в канонический backend-source**, иначе перезатрётся при следующем его деплое. Полный as-built TS — по §5.1-логике поверх скачанного `register_pubkey/index.ts`.
+
 ## 6. Безопасность
 
 - Re-key требует **валидной аутентифицированной сессии** (после OAuth/password) — нельзя re-key'нуть чужой аккаунт.
@@ -69,8 +85,8 @@ Cancel: `cancelDeviceConflict`-паттерн (signOut + `.idle`), т.к. на �
 
 ## 7. Open questions (под VPS-верификацию)
 
-1. **JWT-hook claim-selection** при нескольких строках на `auth_id` — определяет выбор (а)/(б) в §5. **Блокер серверной реализации.**
-2. Текущее поведение `register_pubkey` на новый pubkey того же `auth_id` — INSERT (вторая строка) или отказ? (По §4 account-login спеки — multi-device INSERT.)
+1. ~~**JWT-hook claim-selection** при нескольких строках на `auth_id`~~ — **RESOLVED (§5.1):** hook читает live `WHERE auth_id=…`, `auth_id` — PK (один ряд). As-built = delete-by-pubkey + delete-by-auth_id + insert.
+2. ~~Текущее поведение `register_pubkey` на новый pubkey того же `auth_id`~~ — **RESOLVED (§5.1):** `auth_id` PK + `pubkey` UNIQUE → single-key-per-account, не multi-device.
 3. Нужно ли чистить осиротевшие `team_keys`/workspace-membership строки локально на текущем Mac после re-key (косметика; RLS и так отрежет по новому pubkey). По умолчанию — нет (YAGNI).
 
 ## 8. Тестирование
