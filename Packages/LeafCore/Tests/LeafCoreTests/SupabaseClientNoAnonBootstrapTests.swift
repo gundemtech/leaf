@@ -368,4 +368,87 @@ final class SupabaseClientNoAnonBootstrapTests: XCTestCase {
       XCTAssertEqual(error, expect)
     }
   }
+
+  // MARK: - GUN-65 device re-key
+
+  private static func httpOK(_ r: URLRequest) -> HTTPURLResponse { httpStatus(r, 200) }
+  private static func httpStatus(_ r: URLRequest, _ code: Int) -> HTTPURLResponse {
+    HTTPURLResponse(url: r.url!, statusCode: code, httpVersion: nil, headerFields: nil)!
+  }
+  private static func sessionJSON(accessToken: String, userID: String) -> Data {
+    """
+    { "access_token": "\(accessToken)", "refresh_token": "ref-x",
+      "user": { "id": "\(userID)" }, "expires_at": 9999999999 }
+    """.data(using: .utf8)!
+  }
+
+  // GUN-65 (a) rekey:true — account currently bound to a FOREIGN key; re-key
+  // rebinds to THIS device. register_pubkey returns 200 ONLY when the body
+  // carries rekey (so success proves the flag is sent); refresh then carries
+  // OUR local pubkey. Must succeed (no accountBoundToDifferentDeviceKey).
+  func testEnsureAuthenticatedAndPubkeyRegistered_rekeyTrue_rebindsToThisDevice_succeeds()
+    async throws
+  {
+    let userID = "00000000-0000-0000-0000-0000000000e1"
+    let foreignJWT = makeJWT(pubkey: String(repeating: "ab", count: 32), userID: userID)
+    let ourJWT = makeJWT(pubkey: try fixedIdentityPubkeyHex(), userID: userID)
+    MockURLProtocol.handler = { request, bodyData in
+      switch request.url?.path {
+      case "/auth/v1/token" where (request.url?.query ?? "").contains("grant_type=password"):
+        return (Self.httpOK(request), Self.sessionJSON(accessToken: foreignJWT, userID: userID))
+      case "/functions/v1/register_pubkey":
+        let body = String(data: bodyData, encoding: .utf8) ?? ""
+        return (
+          Self.httpStatus(request, body.contains("\"rekey\"") ? 200 : 409),
+          Data(#"{"ok":true}"#.utf8)
+        )
+      case "/auth/v1/token":  // refresh — now stamped with OUR key
+        return (Self.httpOK(request), Self.sessionJSON(accessToken: ourJWT, userID: userID))
+      default:
+        return (Self.httpStatus(request, 500), Data())
+      }
+    }
+    let client = SupabaseClient(
+      baseURL: baseURL, anonKey: anonKey, urlSession: makeSession(),
+      identity: fixedIdentity(), sessionStore: SupabaseSessionStore(at: tempDir))
+    _ = try await client.signInWithPassword(email: "a@b.co", password: "pw", captchaToken: "c")
+    let session = try await client.ensureAuthenticatedAndPubkeyRegistered(rekey: true)
+    XCTAssertEqual(session.userID, UUID(uuidString: userID)!)
+  }
+
+  // GUN-65 (b) Persisted cold-start where the account is bound to a FOREIGN key
+  // — the exact scenario the existing `persistedForeignClaim` test throws on
+  // under the default path. With rekey:true the early claim-match is SKIPPED, the
+  // device rebinds, and the post-register refresh carries OUR key → success.
+  // Proves rekey rescues the dead-end accountBoundToDifferentDeviceKey case.
+  func testEnsureAuthenticatedAndPubkeyRegistered_rekeyTrue_persistedForeignClaim_rebinds_succeeds()
+    async throws
+  {
+    let userID = "00000000-0000-0000-0000-0000000000e2"
+    let foreignJWT = makeJWT(pubkey: String(repeating: "ab", count: 32), userID: userID)
+    let ourJWT = makeJWT(pubkey: try fixedIdentityPubkeyHex(), userID: userID)
+    // 1st token call = bootstrap refresh (foreign claim); after re-key the 2nd
+    // refresh carries OUR key. A box keeps the call count across the handler.
+    final class CallBox: @unchecked Sendable { var n = 0 }
+    let calls = CallBox()
+    MockURLProtocol.handler = { request, _ in
+      switch request.url?.path {
+      case "/auth/v1/token":
+        calls.n += 1
+        let jwt = calls.n == 1 ? foreignJWT : ourJWT
+        return (Self.httpOK(request), Self.sessionJSON(accessToken: jwt, userID: userID))
+      case "/functions/v1/register_pubkey":
+        return (Self.httpOK(request), Data(#"{"ok":true}"#.utf8))
+      default:
+        return (Self.httpStatus(request, 500), Data())
+      }
+    }
+    let store = SupabaseSessionStore(at: tempDir)
+    try store.write(PersistedSession(refreshToken: "persisted-rt", userID: userID, savedAtMs: 1))
+    let client = SupabaseClient(
+      baseURL: baseURL, anonKey: anonKey, urlSession: makeSession(),
+      identity: fixedIdentity(), sessionStore: store)
+    let session = try await client.ensureAuthenticatedAndPubkeyRegistered(rekey: true)
+    XCTAssertEqual(session.userID, UUID(uuidString: userID)!)
+  }
 }
